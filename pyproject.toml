@@ -1,6 +1,6 @@
 [project]
 name = "pyfsr"
-version = "0.1.1"
+version = "0.1.2"
 description = "Python implementation of the FortiSOAR REST API"
 readme = "README.md"
 authors = [
@@ -28,3 +28,7 @@ packages = ["src/pyfsr"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+
+[project.urls]
+"Homepage" = "https://github.com/ftnt-dspille/pyFSR"
+"Bug Tracker" = "https://github.com/ftnt-dspille/pyFSR/issues"
