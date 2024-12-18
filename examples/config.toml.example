@@ -1,0 +1,15 @@
+# FortiSOAR Configuration
+[fortisoar]
+base_url = "https://X.X.X.X"
+verify_ssl = false
+
+# Authentication settings - uncomment the method you want to use
+[fortisoar.auth]
+# API Key authentication
+# type = "api_key"
+# key = "your-api-key"
+
+# Username/Password authentication
+type = "user_pass"
+username = "csadmin"
+password = "password"

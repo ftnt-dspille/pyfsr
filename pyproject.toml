@@ -1,17 +1,30 @@
 [project]
 name = "pyfsr"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.1.1"
+description = "Python implementation of the FortiSOAR REST API"
 readme = "README.md"
 authors = [
     { name = "Dylan Spille", email = "dspille@fortinet.com" }
 ]
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "requests",
+]
 
-[project.scripts]
-pyfsr = "pyfsr:main"
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-mock",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pyfsr"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
