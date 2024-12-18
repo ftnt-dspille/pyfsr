@@ -1,3 +1,4 @@
+# noinspection PyCompatibility
 import tomllib
 from pyfsr import FortiSOAR
 
@@ -12,5 +13,10 @@ client = FortiSOAR(
         config["fortisoar"]["auth"]["username"],
         config["fortisoar"]["auth"]["password"]
     ),
-    verify_ssl=config["fortisoar"].get("verify_ssl", True)
+    verify_ssl=config["fortisoar"].get("verify_ssl", True),
+    supress_insecure_warnings=True
+
 )
+
+alerts = client.alerts.get_all()
+print(alerts)
