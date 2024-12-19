@@ -76,7 +76,3 @@ html_theme_options = {
 # If true, links to the reST sources are added to the pages.
 html_show_sourcelink = True
 
-# GitHub Pages settings
-html_baseurl = '/pyFSR/'
-html_copy_source = True
-html_use_index = True

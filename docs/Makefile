@@ -6,7 +6,7 @@
 SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = source
-SPHINXPROJ    = pyFSR
+SPHINXPROJ    = pyfsr
 BUILDDIR      = build
 
 # Remove everything in build directory

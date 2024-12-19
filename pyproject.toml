@@ -47,5 +47,5 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 
 [project.urls]
-"Homepage" = "https://github.com/ftnt-dspille/pyFSR"
-"Bug Tracker" = "https://github.com/ftnt-dspille/pyFSR/issues"
+"Homepage" = "https://github.com/ftnt-dspille/pyfsr"
+"Bug Tracker" = "https://github.com/ftnt-dspille/pyfsr/issues"
