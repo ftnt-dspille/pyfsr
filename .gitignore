@@ -13,3 +13,5 @@ wheels/
 
 # ignore config.toml
 examples/config.toml
+
+.DS_Store
