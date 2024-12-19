@@ -5,11 +5,33 @@
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
-import os
 import sys
+from pathlib import Path
 
-sys.path.insert(0, os.path.abspath('../../src'))
+# Get the absolute path to the docs/source directory
+current_dir = Path(__file__).parent.absolute()
 
+# Go up two levels to reach the project root (from docs/source to project root)
+project_root = current_dir.parent.parent
+
+# Add the project root and src directories to Python path
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / 'src'))
+
+# Debug: Print paths to verify
+print(f"Project root: {project_root}")
+print(f"Source dir: {project_root / 'src'}")
+print(f"Python path: {sys.path}")
+
+# Try to import the package to verify it's findable
+try:
+    import pyfsr
+
+    print(f"Successfully imported pyfsr from {pyfsr.__file__}")
+except ImportError as e:
+    print(f"Warning: Could not import pyfsr: {e}")
+
+# Project information
 project = 'pyfsr'
 copyright = '2024, Dylan Spille'
 author = 'Dylan Spille'
