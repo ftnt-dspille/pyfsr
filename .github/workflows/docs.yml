@@ -23,11 +23,18 @@ jobs:
           pip install -e .
           pip install ".[docs]"
 
+      - name: Debug PYTHONPATH
+        run: |
+          echo "Python path:"
+          python -c "import sys; print('\n'.join(sys.path))"
+          echo "Checking module import:"
+          python -c "import pyfsr; print(pyfsr)"
+
       - name: Build documentation
         run: |
-          cd docs
-          make clean
-          make html
+          export PYTHONPATH=$PYTHONPATH:$(pwd)/src
+          sphinx-build -b html source build/html
+
 
       - name: Check documentation files
         run: |
