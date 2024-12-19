@@ -199,7 +199,7 @@ wheels = [
 
 [[package]]
 name = "pyfsr"
-version = "0.1.1"
+version = "0.1.4"
 source = { editable = "." }
 dependencies = [
     { name = "requests" },
@@ -217,7 +217,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pytest-mock", marker = "extra == 'dev'" },
-    { name = "requests" },
+    { name = "requests", specifier = ">=2.31.0" },
 ]
 
 [[package]]
