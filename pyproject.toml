@@ -28,6 +28,11 @@ dev = [
     "pytest-cov",
     "pytest-mock",
 ]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+    "sphinx-autodoc-typehints",
+]
 
 [build-system]
 requires = ["hatchling"]
