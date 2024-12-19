@@ -18,6 +18,10 @@ class AlertsAPI(BaseAPI):
         """Get alert by ID"""
         return self._make_request('GET', f'/{self.module}/{alert_id}')
 
+    def get_all(self) -> Dict:
+        """Get All alerts"""
+        return self._make_request('GET', f'/{self.module}')
+
     def update(self, alert_id: str, data: Dict) -> Dict:
         """Update an alert"""
         return self._make_request('PUT', f'/{self.module}/{alert_id}', json=data)
