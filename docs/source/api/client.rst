@@ -45,11 +45,12 @@ Handling Self-Signed Certificates
 
 API Reference
 -------------
-
-.. automodule:: pyfsr.client
+.. currentmodule:: pyfsr.client
+.. autoclass:: FortiSOAR
    :members:
    :undoc-members:
    :show-inheritance:
+   :special-members: __init__
 
 Available APIs
 --------------
