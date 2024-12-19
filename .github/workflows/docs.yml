@@ -24,18 +24,21 @@ jobs:
           pip install -e .
           pip install ".[docs]"
 
-      - name: Debug PYTHONPATH
+      - name: Debug src directory
         run: |
-          export PYTHONPATH=$PYTHONPATH:$(pwd)/src
-          echo "PYTHONPATH is now:"
-          echo $PYTHONPATH
-          python -c "import sys; print('\n'.join(sys.path))"
-          echo "Checking module import:"
-          python -c "import pyfsr; print(pyfsr)"
+          echo "Contents of src directory:"
+          ls -la src
+          echo "Contents of pyfsr directory:"
+          ls -la src/pyfsr
+
+      - name: Test module import
+        run: |
+          export PYTHONPATH=$PYTHONPATH:$(realpath $(pwd)/src)
+          python -c "import pyfsr; print('pyfsr module loaded successfully')"
 
       - name: Build documentation
         run: |
-          export PYTHONPATH=$PYTHONPATH:$(pwd)/src
+          export PYTHONPATH=$PYTHONPATH:$(realpath $(pwd)/src)
           sphinx-build -b html docs/source docs/build/html
 
       - name: Check documentation files
