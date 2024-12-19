@@ -70,9 +70,19 @@ html_theme_options = {
     'sticky_navigation': True,
     'navigation_depth': 4,
     'includehidden': True,
-    'titles_only': False
+    'titles_only': False,
+    'display_version': True,
 }
+
+# Add external links, including GitHub
+html_context = {
+    "display_github": True,
+    "github_user": "ftnt-dspille",
+    "github_repo": "pyfsr",
+    "github_version": "main",
+    "conf_py_path": "/docs/",  # Adjust the path if your docs are in a subdirectory
+}
+
 
 # If true, links to the reST sources are added to the pages.
 html_show_sourcelink = True
-
