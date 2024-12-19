@@ -20,6 +20,9 @@ jobs:
         run: |
           cd docs
           make html
+          # Debug steps
+          echo "Contents of build/html:"
+          ls -la build/html/
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
