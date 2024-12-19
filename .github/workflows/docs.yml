@@ -42,3 +42,4 @@ jobs:
           publish_dir: docs/build/html
           force_orphan: true
           commit_message: 'docs: update documentation'
+
