@@ -80,7 +80,7 @@ html_context = {
     "github_user": "ftnt-dspille",
     "github_repo": "pyfsr",
     "github_version": "main",
-    "conf_py_path": "/docs/",  # Adjust the path if your docs are in a subdirectory
+    "conf_py_path": "/docs/source/",  # Adjust the path if your docs are in a subdirectory
 }
 
 
