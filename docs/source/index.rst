@@ -3,6 +3,8 @@ Welcome to pyfsr documentation
 
 PyFSR is a Python client library for the FortiSOAR REST API, allowing you to interact with FortiSOAR programmatically.
 
+- [GitHub Repository](https://github.com/ftnt-dspille/pyfsr)
+
 Installation
 ------------
 .. code-block:: bash
