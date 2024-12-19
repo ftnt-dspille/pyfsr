@@ -305,7 +305,7 @@ wheels = [
 
 [[package]]
 name = "pyfsr"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "requests" },
@@ -329,9 +329,9 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pytest-mock", marker = "extra == 'dev'" },
     { name = "requests", specifier = ">=2.31.0" },
-    { name = "sphinx", marker = "extra == 'docs'" },
-    { name = "sphinx-autodoc-typehints", marker = "extra == 'docs'" },
-    { name = "sphinx-rtd-theme", marker = "extra == 'docs'" },
+    { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7.0.0" },
+    { name = "sphinx-autodoc-typehints", marker = "extra == 'docs'", specifier = ">=1.25.2" },
+    { name = "sphinx-rtd-theme", marker = "extra == 'docs'", specifier = ">=1.3.0" },
 ]
 
 [[package]]
