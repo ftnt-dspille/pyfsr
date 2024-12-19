@@ -44,8 +44,8 @@ Updating Alerts
     )
 
 API Reference
-------------
-.. automodule:: pyfsr.api.alerts_api
+-------------
+.. automodule:: pyfsr.api.alerts
    :members:
    :undoc-members:
    :show-inheritance:

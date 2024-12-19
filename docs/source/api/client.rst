@@ -41,15 +41,16 @@ Handling Self-Signed Certificates
         auth="your-api-key",
         verify_ssl=False,
         supress_insecure_warnings=True
-    ).. automodule:: pyfsr.client
+    )
 
 API Reference
 -------------
+
 .. automodule:: pyfsr.client
    :members:
    :undoc-members:
    :show-inheritance:
 
 Available APIs
--------------
-- **alerts**: Access the Alerts API interface through ``client.alerts``
+--------------
+- **alerts**: Access the Alerts API interface through ``pyfsr.client.alerts``
