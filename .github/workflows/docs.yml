@@ -24,18 +24,6 @@ jobs:
           pip install -e .
           pip install ".[docs]"
 
-      - name: Debug src directory
-        run: |
-          echo "Contents of src directory:"
-          ls -la src
-          echo "Contents of pyfsr directory:"
-          ls -la src/pyFSR
-
-      - name: Test module import
-        run: |
-          export PYTHONPATH=$PYTHONPATH:$(realpath $(pwd)/src)
-          python -c "import pyfsr; print('pyfsr module loaded successfully')"
-
       - name: Build documentation
         run: |
           export PYTHONPATH=$PYTHONPATH:$(realpath $(pwd)/src)
