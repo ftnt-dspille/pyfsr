@@ -18,5 +18,5 @@ client = FortiSOAR(
 
 )
 
-alerts = client.alerts.get_all()
+alerts = client.alerts.list()
 print(alerts)

@@ -7,6 +7,7 @@ from .api.alerts import AlertsAPI
 from .auth.api_key import APIKeyAuth
 from .auth.user_pass import UserPasswordAuth
 from .constants import API_PATH
+from .utils.file_operations import FileOperations
 
 
 class FortiSOAR:
@@ -41,6 +42,9 @@ class FortiSOAR:
                Raises:
                    ValueError: If the provided authentication method is invalid.
                """
+        # Ensure base_url starts with https://
+        if not base_url.startswith('https://'):
+            base_url = f'https://{base_url}'
         self.base_url = base_url.rstrip('/')
         self.session = requests.Session()
         self.session.verify = verify_ssl
@@ -63,12 +67,16 @@ class FortiSOAR:
         # Initialize API interfaces
         self.alerts = AlertsAPI(self)
 
+        # Initialize file operations utility
+        self.files = FileOperations(self)
+
     def request(
             self,
             method: str,
             endpoint: str,
             params: Optional[Dict] = None,
             data: Optional[Dict] = None,
+            files: Optional[Dict] = None,
             **kwargs
     ) -> requests.Response:
         """
@@ -79,15 +87,10 @@ class FortiSOAR:
             endpoint: API endpoint path
             params: Query parameters
             data: Request body data
+            files: Files to upload
             **kwargs: Additional arguments to pass to requests
-
-        Returns:
-            Response from the API
-
-        Raises:
-            requests.exceptions.RequestException: If the request fails
         """
-        # Ensure endpoint starts with slash for proper URL joining
+        # Ensure endpoint starts with slash
         if not endpoint.startswith('/'):
             endpoint = f'/{endpoint}'
 
@@ -102,7 +105,9 @@ class FortiSOAR:
                 method=method.upper(),
                 url=url,
                 params=params,
-                json=data,
+                json=data if files is None else None,
+                data=data if files is not None else None,
+                files=files,
                 **kwargs
             )
             response.raise_for_status()
@@ -119,9 +124,10 @@ class FortiSOAR:
         response = self.request('GET', endpoint, params=params, **kwargs)
         return response.json()
 
-    def post(self, endpoint: str, data: Dict, params: Optional[Dict] = None, **kwargs) -> Dict[str, Any]:
+    def post(self, endpoint: str, data: Optional[Dict] = None, files: Optional[Dict] = None,
+             params: Optional[Dict] = None, **kwargs) -> Dict[str, Any]:
         """Perform POST request and return JSON response"""
-        response = self.request('POST', endpoint, params=params, data=data, **kwargs)
+        response = self.request('POST', endpoint, params=params, data=data, files=files, **kwargs)
         return response.json()
 
     def put(self, endpoint: str, data: Dict, params: Optional[Dict] = None, **kwargs) -> Dict[str, Any]:
