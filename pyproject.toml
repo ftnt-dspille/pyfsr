@@ -49,4 +49,4 @@ python_files = ["test_*.py"]
 [project.urls]
 "Homepage" = "https://github.com/ftnt-dspille/pyfsr"
 "Bug Tracker" = "https://github.com/ftnt-dspille/pyfsr/issues"
-
+"Docmentation" = "https://ftnt-dspille.github.io/pyfsr/"
