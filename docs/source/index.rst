@@ -21,7 +21,7 @@ Quick Start
    client = FortiSOAR('your-server', 'your-token')
 
    # generic get call to get system info
-    response = client.get('/api/v3/alerts')
+   response = client.get('/api/v3/alerts')
 
    # Create an alert
    alert_data = {
@@ -54,6 +54,7 @@ API Reference
    api/client
    api/auth
    api/alerts
+   api/files
 
 Authentication
 --------------
