@@ -1,0 +1,365 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alerts API &mdash; pyfsr 0.2.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=938c9ccc"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Files API" href="files.html" />
+    <link rel="prev" title="Authentication" href="auth.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search"  style="background: #2980B9" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            pyfsr
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API Documentation:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="client.html">Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="auth.html">Authentication</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Alerts API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#creating-alerts">Creating Alerts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#querying-alerts">Querying Alerts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#updating-alerts">Updating Alerts</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#api-reference">API Reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#pyfsr.api.alerts.AlertsAPI"><code class="docutils literal notranslate"><span class="pre">AlertsAPI</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#pyfsr.api.alerts.AlertsAPI.module"><code class="docutils literal notranslate"><span class="pre">AlertsAPI.module</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pyfsr.api.alerts.AlertsAPI.__init__"><code class="docutils literal notranslate"><span class="pre">AlertsAPI.__init__()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pyfsr.api.alerts.AlertsAPI.create"><code class="docutils literal notranslate"><span class="pre">AlertsAPI.create()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pyfsr.api.alerts.AlertsAPI.delete"><code class="docutils literal notranslate"><span class="pre">AlertsAPI.delete()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pyfsr.api.alerts.AlertsAPI.get"><code class="docutils literal notranslate"><span class="pre">AlertsAPI.get()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pyfsr.api.alerts.AlertsAPI.list"><code class="docutils literal notranslate"><span class="pre">AlertsAPI.list()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pyfsr.api.alerts.AlertsAPI.update"><code class="docutils literal notranslate"><span class="pre">AlertsAPI.update()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="files.html">Files API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu"  style="background: #2980B9" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">pyfsr</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Alerts API</li>
+      <li class="wy-breadcrumbs-aside">
+              <a href="https://github.com/ftnt-dspille/pyfsr/blob/main/docs/source/api/alerts.rst" class="fa fa-github"> Edit on GitHub</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="alerts-api">
+<h1>Alerts API<a class="headerlink" href="#alerts-api" title="Link to this heading"></a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The Alerts API provides methods for managing FortiSOAR alerts including creating, updating, and querying alerts.</p>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
+<section id="creating-alerts">
+<h3>Creating Alerts<a class="headerlink" href="#creating-alerts" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pyfsr</span> <span class="kn">import</span> <span class="n">FortiSOAR</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">FortiSOAR</span><span class="p">(</span><span class="s2">&quot;your-server&quot;</span><span class="p">,</span> <span class="s2">&quot;your-token&quot;</span><span class="p">)</span>
+
+<span class="c1"># Create a new alert</span>
+<span class="n">new_alert</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Suspicious Login&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Multiple failed login attempts detected&quot;</span>
+<span class="p">}</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">alerts</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">new_alert</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="querying-alerts">
+<h3>Querying Alerts<a class="headerlink" href="#querying-alerts" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Get all alerts</span>
+<span class="n">all_alerts</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">alerts</span><span class="o">.</span><span class="n">list</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="updating-alerts">
+<h3>Updating Alerts<a class="headerlink" href="#updating-alerts" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Update alert status</span>
+<span class="n">client</span><span class="o">.</span><span class="n">alerts</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+    <span class="n">alert_id</span><span class="o">=</span><span class="s2">&quot;123&quot;</span><span class="p">,</span>
+    <span class="n">data</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;assignedTo&quot;</span><span class="p">:</span> <span class="s2">&quot;analyst@example.com&quot;</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="api-reference">
+<h2>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="pyfsr.api.alerts.AlertsAPI">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pyfsr.api.alerts.</span></span><span class="sig-name descname"><span class="pre">AlertsAPI</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyfsr/api/alerts.html#AlertsAPI"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.alerts.AlertsAPI" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseAPI</span></code></p>
+<p>AlertsAPI provides methods to interact with FortiSIEM alert endpoints.</p>
+<p>This class handles all alert-related operations including creating, retrieving,
+listing, updating, and deleting alerts in the FortiSIEM system.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pyfsr.api.alerts.AlertsAPI.module">
+<span class="sig-name descname"><span class="pre">module</span></span><a class="headerlink" href="#pyfsr.api.alerts.AlertsAPI.module" title="Link to this definition"></a></dt>
+<dd><p>The API module name, set to ‘alerts’</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.alerts.AlertsAPI.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyfsr/api/alerts.html#AlertsAPI.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.alerts.AlertsAPI.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the AlertsAPI.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>client</strong> – The API client instance used for making requests</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.alerts.AlertsAPI.create">
+<span class="sig-name descname"><span class="pre">create</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyfsr/api/alerts.html#AlertsAPI.create"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.alerts.AlertsAPI.create" title="Link to this definition"></a></dt>
+<dd><p>Create a new alert in FortiSIEM.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>**data</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code></a></span>) – Keyword arguments containing alert configuration:
+- name (str): Name of the alert
+- description (str, optional): Description of the alert
+- severity (str): Alert severity level (‘Critical’, ‘High’, ‘Medium’, ‘Low’)
+- enabled (bool, optional): Whether the alert is active, defaults to True
+- notification_groups (List[str], optional): List of notification group IDs
+- conditions (Dict): Alert triggering conditions</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>The created alert object containing:</dt><dd><ul class="simple">
+<li><p>id (str): Unique identifier of the created alert</p></li>
+<li><p>name (str): Name of the alert</p></li>
+<li><p>created_at (str): Timestamp of alert creation</p></li>
+<li><p>other alert properties as specified in creation</p></li>
+</ul>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dict</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>APIError</strong> – If the alert creation fails</p></li>
+<li><p><strong>ValidationError</strong> – If required fields are missing</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.alerts.AlertsAPI.delete">
+<span class="sig-name descname"><span class="pre">delete</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">alert_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyfsr/api/alerts.html#AlertsAPI.delete"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.alerts.AlertsAPI.delete" title="Link to this definition"></a></dt>
+<dd><p>Delete an alert.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>alert_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>) – The unique identifier of the alert to delete</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>APIError</strong> – If the alert doesn’t exist or deletion fails</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.alerts.AlertsAPI.get">
+<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">alert_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyfsr/api/alerts.html#AlertsAPI.get"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.alerts.AlertsAPI.get" title="Link to this definition"></a></dt>
+<dd><p>Retrieve a specific alert by its ID.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>alert_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>) – The unique identifier of the alert to retrieve</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>The alert object containing:</dt><dd><ul class="simple">
+<li><p>id (str): Alert identifier</p></li>
+<li><p>name (str): Alert name</p></li>
+<li><p>description (str): Alert description</p></li>
+<li><p>severity (str): Alert severity level</p></li>
+<li><p>enabled (bool): Alert status</p></li>
+<li><p>created_at (str): Creation timestamp</p></li>
+<li><p>updated_at (str): Last update timestamp</p></li>
+<li><p>conditions (Dict): Alert conditions</p></li>
+<li><p>notification_groups (List[str]): Associated notification groups</p></li>
+</ul>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dict</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>APIError</strong> – If the alert doesn’t exist or cannot be retrieved</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.alerts.AlertsAPI.list">
+<span class="sig-name descname"><span class="pre">list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyfsr/api/alerts.html#AlertsAPI.list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.alerts.AlertsAPI.list" title="Link to this definition"></a></dt>
+<dd><p>Retrieve all alerts with optional filtering.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>params</strong> (<em>Dict</em><em>, </em><em>optional</em>) – Query parameters to filter alerts:
+- severity (str, optional): Filter by severity level
+- enabled (bool, optional): Filter by enabled status
+- created_after (str, optional): ISO timestamp to filter by creation date
+- page (int, optional): Page number for pagination
+- page_size (int, optional): Number of items per page</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>Dictionary containing:</dt><dd><ul class="simple">
+<li><p>items (List[Dict]): List of alert objects</p></li>
+<li><p>total (int): Total number of alerts</p></li>
+<li><p>page (int): Current page number</p></li>
+<li><p>page_size (int): Number of items per page</p></li>
+</ul>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dict</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>APIError</strong> – If the request fails</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.alerts.AlertsAPI.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">alert_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyfsr/api/alerts.html#AlertsAPI.update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.alerts.AlertsAPI.update" title="Link to this definition"></a></dt>
+<dd><p>Update an existing alert.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>alert_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>) – The unique identifier of the alert to update</p></li>
+<li><p><strong>data</strong> (<em>Dict</em>) – Updated alert properties:
+- name (str, optional): New alert name
+- description (str, optional): New alert description
+- severity (str, optional): New severity level
+- enabled (bool, optional): New enabled status
+- notification_groups (List[str], optional): New notification groups
+- conditions (Dict, optional): New alert conditions</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The updated alert object with all current properties</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dict</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>APIError</strong> – If the alert doesn’t exist or update fails</p></li>
+<li><p><strong>ValidationError</strong> – If provided data is invalid</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="auth.html" class="btn btn-neutral float-left" title="Authentication" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="files.html" class="btn btn-neutral float-right" title="Files API" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Dylan Spille.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

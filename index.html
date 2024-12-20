@@ -1,0 +1,255 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to pyfsr documentation &mdash; pyfsr 0.2.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=938c9ccc"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Client" href="api/client.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search"  style="background: #2980B9" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            pyfsr
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/client.html">Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/auth.html">Authentication</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/alerts.html">Alerts API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/files.html">Files API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu"  style="background: #2980B9" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">pyfsr</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Welcome to pyfsr documentation</li>
+      <li class="wy-breadcrumbs-aside">
+              <a href="https://github.com/ftnt-dspille/pyfsr/blob/main/docs/source/index.rst" class="fa fa-github"> Edit on GitHub</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="welcome-to-pyfsr-documentation">
+<h1>Welcome to pyfsr documentation<a class="headerlink" href="#welcome-to-pyfsr-documentation" title="Link to this heading"></a></h1>
+<p>PyFSR is a Python client library for the FortiSOAR REST API, allowing you to interact with FortiSOAR programmatically.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><a class="reference external" href="https://github.com/ftnt-dspille/pyfsr">GitHub Repository</a></p></li>
+</ul>
+</div></blockquote>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>pyfsr
+</pre></div>
+</div>
+</section>
+<section id="quick-start">
+<h2>Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading"></a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pyfsr</span> <span class="kn">import</span> <span class="n">FortiSOAR</span>
+
+<span class="c1"># Initialize the client</span>
+<span class="n">client</span> <span class="o">=</span> <span class="n">FortiSOAR</span><span class="p">(</span><span class="s1">&#39;your-server&#39;</span><span class="p">,</span> <span class="s1">&#39;your-token&#39;</span><span class="p">)</span>
+
+<span class="c1"># generic get call to get system info</span>
+<span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;/api/v3/alerts&#39;</span><span class="p">)</span>
+
+<span class="c1"># Create an alert</span>
+<span class="n">alert_data</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Test Alert&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;This is a test alert&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;severity&quot;</span><span class="p">:</span> <span class="s2">&quot;High&quot;</span>
+<span class="p">}</span>
+<span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">alerts</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="o">**</span><span class="n">alert_data</span><span class="p">)</span>
+
+<span class="c1"># List all alerts</span>
+<span class="n">alerts</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">alerts</span><span class="o">.</span><span class="n">list</span><span class="p">()</span>
+
+<span class="c1"># Get a specific alert</span>
+<span class="n">alert</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">alerts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;alert-id&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="features">
+<h2>Features<a class="headerlink" href="#features" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Simple and intuitive API interface</p></li>
+<li><p>Support for all FortiSOAR API endpoints</p></li>
+<li><p>Automatic authentication handling</p></li>
+<li><p>Type hints for better IDE support</p></li>
+<li><p>Comprehensive error handling</p></li>
+</ul>
+</section>
+<section id="api-reference">
+<h2>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">API Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/client.html">Client</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/client.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/client.html#basic-usage">Basic Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/client.html#api-reference">API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/client.html#available-apis">Available APIs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/auth.html">Authentication</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/auth.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/auth.html#api-key-authentication">API Key Authentication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/auth.html#username-password-authentication">Username/Password Authentication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/auth.html#api-reference">API Reference</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/alerts.html">Alerts API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/alerts.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/alerts.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/alerts.html#api-reference">API Reference</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/files.html">Files API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/files.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/files.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/files.html#api-reference">API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/files.html#notes">Notes</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="authentication">
+<h2>Authentication<a class="headerlink" href="#authentication" title="Link to this heading"></a></h2>
+<p>PyFSR supports token-based authentication. You can obtain your API token from the FortiSOAR web interface:</p>
+<ol class="arabic simple">
+<li><p>Log in to your FortiSOAR instance</p></li>
+<li><p>Navigate to Settings → API Tokens</p></li>
+<li><p>Create a new API token</p></li>
+<li><p>Use this token when initializing the client</p></li>
+</ol>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
+<section id="list-all-alerts">
+<h3>List All Alerts<a class="headerlink" href="#list-all-alerts" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Get all alerts</span>
+<span class="n">alerts</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">alerts</span><span class="o">.</span><span class="n">list</span><span class="p">()</span>
+
+<span class="c1"># Print alert names</span>
+<span class="k">for</span> <span class="n">alert</span> <span class="ow">in</span> <span class="n">alerts</span><span class="p">[</span><span class="s1">&#39;items&#39;</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">alert</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="create-an-alert">
+<h3>Create an Alert<a class="headerlink" href="#create-an-alert" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create alert with specific properties</span>
+<span class="n">new_alert</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">alerts</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Suspicious Activity&quot;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Detected suspicious login attempts&quot;</span><span class="p">,</span>
+    <span class="n">severity</span><span class="o">=</span><span class="s2">&quot;High&quot;</span><span class="p">,</span>
+    <span class="n">enabled</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="update-an-alert">
+<h3>Update an Alert<a class="headerlink" href="#update-an-alert" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Update alert properties</span>
+<span class="n">client</span><span class="o">.</span><span class="n">alerts</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s2">&quot;alert-id&quot;</span><span class="p">,</span> <span class="p">{</span>
+    <span class="s2">&quot;severity&quot;</span><span class="p">:</span> <span class="s2">&quot;Critical&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Updated description&quot;</span>
+<span class="p">})</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="contributing">
+<h2>Contributing<a class="headerlink" href="#contributing" title="Link to this heading"></a></h2>
+<p>Contributions are welcome! Please feel free to submit a Pull Request.</p>
+</section>
+<section id="license">
+<h2>License<a class="headerlink" href="#license" title="Link to this heading"></a></h2>
+<p>This project is licensed under the MIT License - see the LICENSE file for details.</p>
+</section>
+</section>
+<section id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Link to this heading"></a></h1>
+<ul class="simple">
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
+<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
+<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+</ul>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="api/client.html" class="btn btn-neutral float-right" title="Client" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Dylan Spille.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
