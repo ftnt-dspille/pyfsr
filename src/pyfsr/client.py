@@ -12,14 +12,15 @@ from .utils.file_operations import FileOperations
 
 class FortiSOAR:
     """
-   Main client class for FortiSOAR API
+    Main client class for FortiSOAR API
 
-   Attributes:
-       base_url (str): The base URL for the FortiSOAR API.
-       session (requests.Session): The session object for making HTTP requests.
-       verify_ssl (bool): Whether to verify SSL certificates.
-       auth (Union[APIKeyAuth, UserPasswordAuth]): The authentication method.
-       alerts (AlertsAPI): The Alerts API interface.
+    Attributes:
+        base_url (str): The base URL for the FortiSOAR API.
+        session (requests.Session): The session object for making HTTP requests.
+        verify_ssl (bool): Whether to verify SSL certificates.
+        auth (Union[APIKeyAuth, UserPasswordAuth]): The authentication method.
+        alerts (AlertsAPI): The Alerts API interface.
+        files (FileOperations): The file operations utility.
    """
 
     def __init__(
