@@ -15,3 +15,5 @@ wheels/
 examples/config.toml
 
 .DS_Store
+
+config.toml
