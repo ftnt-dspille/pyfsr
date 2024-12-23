@@ -1,10 +1,5 @@
 # Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
-
-# -- Project information -----------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+import importlib
 import sys
 from pathlib import Path
 
@@ -24,14 +19,13 @@ author = 'Dylan Spille'
 release = '0.2.0'
 
 # -- General configuration ---------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
-
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx_autodoc_typehints',
     'sphinx.ext.viewcode',
-    'sphinx.ext.intersphinx',  # Add this for external references
+    'sphinx.ext.intersphinx',
+    'sphinx.ext.doctest',  # For testable examples
 ]
 
 # Intersphinx configuration
@@ -53,6 +47,11 @@ napoleon_use_param = True
 napoleon_use_rtype = True
 napoleon_type_aliases = None
 
+# Autodoc settings
+autodoc_member_order = 'bysource'
+autodoc_typehints = 'description'
+add_module_names = False
+
 templates_path = ['_templates']
 exclude_patterns = []
 
@@ -65,7 +64,6 @@ html_theme_options = {
     'prev_next_buttons_location': 'bottom',
     'style_external_links': False,
     'style_nav_header_background': '#2980B9',
-    # Toc options
     'collapse_navigation': True,
     'sticky_navigation': True,
     'navigation_depth': 4,
@@ -79,9 +77,112 @@ html_context = {
     "github_user": "ftnt-dspille",
     "github_repo": "pyfsr",
     "github_version": "main",
-    "conf_py_path": "/docs/source/",  # Adjust the path if your docs are in a subdirectory
+    "conf_py_path": "/docs/source/",
 }
 
-
-# If true, links to the reST sources are added to the pages.
 html_show_sourcelink = True
+
+
+# -- Auto API Documentation Generation --------------------------------------
+
+def generate_api_docs(app):
+    """Generate RST files for all API modules"""
+    try:
+        from pyfsr.api import __path__ as api_path
+    except ImportError as e:
+        print(f"Warning: Could not import pyfsr.api: {e}")
+        return
+
+    api_dir = Path(api_path[0])
+    docs_dir = current_dir
+    api_docs_dir = docs_dir / 'api'
+    api_docs_dir.mkdir(exist_ok=True)
+
+    # Only generate index.rst if it doesn't exist
+    index_path = api_docs_dir / 'index.rst'
+    if not index_path.exists():
+        with open(index_path, 'w') as f:
+            f.write('''API Reference
+============
+
+.. toctree::
+   :maxdepth: 2
+
+''')
+
+    # Process each API module
+    for file in api_dir.glob('*.py'):
+        if file.stem == '__init__':
+            continue
+
+        module_name = f'pyfsr.api.{file.stem}'
+        rst_path = api_docs_dir / f'{file.stem}.rst'
+
+        # Skip if RST file already exists
+        if rst_path.exists():
+            continue
+
+        try:
+            # Import module to ensure it exists
+            importlib.import_module(module_name)
+
+            # Write module documentation
+            with open(rst_path, 'w') as f:
+                title = file.stem.replace('_', ' ').title()
+                f.write(f'''{title}
+{'=' * len(title)}
+
+.. automodule:: pyfsr.api.{file.stem}
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+''')
+
+            # Update index only if module RST was newly created
+            with open(index_path, 'a') as f:
+                f.write(f'   {file.stem}\n')
+
+        except ImportError as e:
+            print(f"Warning: Could not import {module_name}: {e}")
+
+
+def setup(app):
+    """Setup Sphinx app with custom configurations"""
+    from sphinx.ext.autodoc import ClassDocumenter
+
+    class APIClassDocumenter(ClassDocumenter):
+        """Custom class documenter for API classes"""
+        objtype = 'apiclass'
+        directivetype = 'class'
+        priority = 10
+
+        @classmethod
+        def can_document_member(cls, member, membername, isattr, parent):
+            return (isinstance(member, type) and
+                    member.__module__.startswith('pyfsr.api'))
+
+    app.add_autodocumenter(APIClassDocumenter)
+    app.connect('builder-inited', generate_api_docs)
+
+    return {
+        'version': '1.0',
+        'parallel_read_safe': True,
+        'parallel_write_safe': True,
+    }
+
+
+# Setup doctest
+doctest_global_setup = '''
+import os
+import sys
+sys.path.insert(0, os.path.abspath('../..'))
+from pyfsr import FortiSOAR
+
+# Mock client for examples
+class MockFortiSOAR(FortiSOAR):
+    def __init__(self):
+        pass
+
+client = MockFortiSOAR()
+'''

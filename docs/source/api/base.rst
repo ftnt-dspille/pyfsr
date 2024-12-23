@@ -1,7 +1,7 @@
-Alerts
-======
+Base
+====
 
-.. automodule:: pyfsr.api.alerts
+.. automodule:: pyfsr.api.base
    :members:
    :undoc-members:
    :show-inheritance:
