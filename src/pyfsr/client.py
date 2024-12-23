@@ -1,3 +1,4 @@
+"""Main client class for FortiSOAR API"""
 from typing import Union, Optional, Dict, Any
 from urllib.parse import urljoin
 

@@ -1,4 +1,3 @@
-import os
 import sys
 from pathlib import Path
 
@@ -24,8 +23,9 @@ extensions = [
 ]
 
 # Autosummary settings
-autosummary_generate = True  # Generate stub pages for all documented items
-autosummary_imported_members = True  # Document imported members
+autosummary_generate = True
+autosummary_imported_members = False  # Don't document imported members
+add_module_names = False  # Remove module names from generated titles
 
 # Autodoc settings
 autodoc_member_order = 'bysource'
@@ -56,65 +56,92 @@ intersphinx_mapping = {
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
-exclude_patterns = []
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']
 
 # -- Options for HTML output -------------------------------------------------
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
 html_theme_options = {
-    'navigation_depth': 4,
-    'titles_only': False,
+    'navigation_depth': 2,  # Limit the depth of the navigation tree
+    'titles_only': True,  # Only show titles in the navigation
+    'collapse_navigation': False,  # Keep the navigation expanded
+    'sticky_navigation': True,
+    'prev_next_buttons_location': 'bottom',
 }
+
+# Clean up the displayed module names
+modindex_common_prefix = ['pyfsr.']
 
 
 def setup(app):
-    """Set up Sphinx app with automatic API documentation generation."""
-    from sphinx.ext.apidoc import main as sphinx_apidoc
+    """Set up Sphinx app with customizations."""
+    # Add custom CSS to clean up the layout
+    app.add_css_file('custom.css')
 
-    # Clean existing API docs
-    api_dir = Path('api')
-    if api_dir.exists():
-        for f in api_dir.glob('*.rst'):
-            f.unlink()
-        for f in api_dir.glob('*.py'):
-            f.unlink()
+    # Create custom CSS file
+    static_dir = Path(__file__).parent / '_static'
+    static_dir.mkdir(exist_ok=True)
 
-    # Auto-generate API documentation
-    module_dir = project_root / 'src' / 'pyfsr'
-    output_dir = Path(__file__).parent / 'api'
-    output_dir.mkdir(exist_ok=True)
+    with open(static_dir / 'custom.css', 'w') as f:
+        f.write("""
+        /* Improve overall navigation appearance */
+        .wy-nav-side {
+            background-color: #2c2c2c;
+        }
 
-    # Call sphinx-apidoc with positional arguments
-    sphinx_apidoc([
-        '--force',  # Overwrite existing files
-        '--separate',  # Create a file for each module
-        '--module-first',  # Module documentation before submodule
-        '--tocfile', 'index',  # Name of the main file
-        '-o', str(output_dir),  # Output directory
-        str(module_dir),  # Module directory
-        str(module_dir / '*/__pycache__'),  # Exclude patterns
-    ])
+        .wy-side-nav-search {
+            background-color: #2980B9;
+        }
 
-    # Create simple index.rst if it doesn't exist
-    index_path = Path(__file__).parent / 'index.rst'
-    if not index_path.exists():
-        with open(index_path, 'w') as f:
-            f.write('''pyfsr Documentation
-=================
+        /* Fix TOC tree padding */
+        .wy-menu-vertical li {
+            margin: 0;
+        }
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+        .wy-menu-vertical a {
+            padding: 0.4045em 1.618em;
+        }
 
-   api/index
+        /* Level 1 items */
+        .wy-menu-vertical li.toctree-l1 > a {
+            padding: 0.4045em 1em;
+        }
 
-Indices and tables
-==================
+        /* Level 2 items */
+        .wy-menu-vertical li.toctree-l2 > a {
+            padding: 0.4045em 1.2em;
+        }
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
-''')
+        /* Level 3 items */
+        .wy-menu-vertical li.toctree-l3 > a {
+            padding: 0.4045em 1.4em;
+        }
+
+        /* Selected/current item */
+        .wy-menu-vertical li.current > a {
+            background: #fcfcfc;
+            padding: 0.4045em 1em;
+        }
+
+        .wy-menu-vertical li.current a {
+            border: none;
+        }
+
+        /* Improve content width */
+        .wy-nav-content {
+            max-width: 1000px;
+        }
+
+        /* Better code block styling */
+        div[class^='highlight'] {
+            border: none;
+            border-radius: 3px;
+        }
+
+        .highlight {
+            background: #f8f8f8;
+        }
+        """)
 
     return {
         'version': '1.0',

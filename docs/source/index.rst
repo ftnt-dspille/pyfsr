@@ -1,11 +1,7 @@
-pyfsr Documentation
-===================
+Welcome to pyfsr
+================
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
-   api/index
+A Python client for the FortiSOAR REST API.
 
 Quick Start
 -----------
@@ -16,7 +12,7 @@ Installation:
 
    pip install pyfsr
 
-Usage:
+Basic Usage:
 
 .. code-block:: python
 
@@ -35,7 +31,33 @@ Usage:
 API Reference
 -------------
 
-The complete API reference is available in the modules section.
+Core Components
+~~~~~~~~~~~~~~~
+
+.. toctree::
+   :maxdepth: 2
+
+   Client <_autosummary/pyfsr.client>
+   Alerts API <_autosummary/pyfsr.api.alerts>
+   Export Configuration <_autosummary/pyfsr.api.export_config>
+   Solution Packs <_autosummary/pyfsr.api.solution_packs>
+
+Authentication
+~~~~~~~~~~~~~~
+
+.. toctree::
+   :maxdepth: 2
+
+   API Key Authentication <_autosummary/pyfsr.auth.api_key>
+   Username/Password Authentication <_autosummary/pyfsr.auth.user_pass>
+
+Utilities
+~~~~~~~~~
+
+.. toctree::
+   :maxdepth: 2
+
+   File Operations <_autosummary/pyfsr.utils.file_operations>
 
 Indices and tables
 ==================
