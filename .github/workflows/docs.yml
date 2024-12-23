@@ -3,8 +3,16 @@ name: Documentation
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'src/pyfsr/**'
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'src/pyfsr/**'
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
 
 jobs:
   docs:
@@ -12,34 +20,60 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0  # Fetch complete history for proper versioning
 
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: '3.10'
 
+      - name: Cache pip dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
-          pip install ".[docs]"
+          pip install -e ".[docs]"
+          pip install sphinx-rtd-theme sphinx-autodoc-typehints
+
+      - name: Setup Doc Directory
+        run: |
+          mkdir -p docs/build/html
+          mkdir -p docs/source/api
+          touch docs/source/api/.gitkeep
 
       - name: Build documentation
         run: |
-          export PYTHONPATH=$PYTHONPATH:$(realpath $(pwd)/src)
-          sphinx-build -b html docs/source docs/build/html
+          cd docs
+          make clean
+          make html SPHINXOPTS="-W --keep-going -n"
 
-      - name: Check documentation files
+      - name: Check build output
         run: |
-          echo "Contents of docs/build/html:"
-          ls -la docs/build/html/
+          if [ ! -f docs/build/html/index.html ]; then
+            echo "Documentation build failed - index.html not found"
+            exit 1
+          fi
 
       - name: Deploy to GitHub Pages
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: docs/build/html
           force_orphan: true
-          commit_message: 'docs: update documentation'
-
+          commit_message: 'docs: update documentation [skip ci]'
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          full_commit_message: |
+            docs: update documentation
+            
+            Updates to the documentation generated from commit ${{ github.sha }}
+            
+            [skip ci]
