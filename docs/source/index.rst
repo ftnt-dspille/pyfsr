@@ -1,113 +1,63 @@
-Welcome to pyfsr documentation
-==============================
+Welcome to pyfsr
+================
 
-PyFSR is a Python client library for the FortiSOAR REST API, allowing you to interact with FortiSOAR programmatically.
+A Python client for the FortiSOAR REST API.
 
- - `GitHub Repository <https://github.com/ftnt-dspille/pyfsr>`_
+Quick Start
+-----------
 
-Installation
-------------
+Installation:
+
 .. code-block:: bash
 
    pip install pyfsr
 
-Quick Start
------------
+Basic Usage:
+
 .. code-block:: python
 
    from pyfsr import FortiSOAR
 
-   # Initialize the client
-   client = FortiSOAR('your-server', 'your-token')
-
-   # generic get call to get system info
-   response = client.get('/api/v3/alerts')
+   # Initialize client
+   client = FortiSOAR('your-fortisoar-instance', 'your-api-key')
 
    # Create an alert
-   alert_data = {
-       "name": "Test Alert",
-       "description": "This is a test alert",
-       "severity": "High"
-   }
-   response = client.alerts.create(**alert_data)
-
-   # List all alerts
-   alerts = client.alerts.list()
-
-   # Get a specific alert
-   alert = client.alerts.get("alert-id")
-
-Features
---------
-- Simple and intuitive API interface
-- Support for all FortiSOAR API endpoints
-- Automatic authentication handling
-- Type hints for better IDE support
-- Comprehensive error handling
+   alert = client.alerts.create(
+       name="Test Alert",
+       description="Test Description",
+       severity="High"
+   )
 
 API Reference
 -------------
+
+Core Components
+~~~~~~~~~~~~~~~
+
 .. toctree::
    :maxdepth: 2
-   :caption: API Documentation:
 
-   api/client
-   api/auth
-   api/alerts
-   api/files
+   Client <_autosummary/pyfsr.client>
+   Alerts API <_autosummary/pyfsr.api.alerts>
+   Export Configuration <_autosummary/pyfsr.api.export_config>
+   Solution Packs <_autosummary/pyfsr.api.solution_packs>
 
 Authentication
---------------
-PyFSR supports token-based authentication. You can obtain your API token from the FortiSOAR web interface:
+~~~~~~~~~~~~~~
 
-1. Log in to your FortiSOAR instance
-2. Navigate to Settings → API Tokens
-3. Create a new API token
-4. Use this token when initializing the client
+.. toctree::
+   :maxdepth: 2
 
-Examples
---------
+   API Key Authentication <_autosummary/pyfsr.auth.api_key>
+   Username/Password Authentication <_autosummary/pyfsr.auth.user_pass>
 
-List All Alerts
-~~~~~~~~~~~~~~~
-.. code-block:: python
+Utilities
+~~~~~~~~~
 
-   # Get all alerts
-   alerts = client.alerts.list()
+.. toctree::
+   :maxdepth: 2
 
-   # Print alert names
-   for alert in alerts['items']:
-       print(alert['name'])
-
-Create an Alert
-~~~~~~~~~~~~~~~
-.. code-block:: python
-
-   # Create alert with specific properties
-   new_alert = client.alerts.create(
-       name="Suspicious Activity",
-       description="Detected suspicious login attempts",
-       severity="High",
-       enabled=True
-   )
-
-Update an Alert
-~~~~~~~~~~~~~~~
-.. code-block:: python
-
-   # Update alert properties
-   client.alerts.update("alert-id", {
-       "severity": "Critical",
-       "description": "Updated description"
-   })
-
-Contributing
-------------
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-License
--------
-This project is licensed under the MIT License - see the LICENSE file for details.
+   File Operations <_autosummary/pyfsr.utils.file_operations>
 
 Indices and tables
 ==================

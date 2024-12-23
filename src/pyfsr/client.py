@@ -1,9 +1,12 @@
+"""Main client class for FortiSOAR API"""
 from typing import Union, Optional, Dict, Any
 from urllib.parse import urljoin
 
 import requests
 
 from .api.alerts import AlertsAPI
+from .api.export_config import ExportConfigAPI
+from .api.solution_packs import SolutionPackAPI
 from .auth.api_key import APIKeyAuth
 from .auth.user_pass import UserPasswordAuth
 from .constants import API_PATH
@@ -71,6 +74,11 @@ class FortiSOAR:
         # Initialize file operations utility
         self.files = FileOperations(self)
 
+        # Add solution packs API
+        self.export_config = ExportConfigAPI(self)
+
+        self.solution_packs = SolutionPackAPI(self, self.export_config)
+
     def request(
             self,
             method: str,
@@ -96,7 +104,7 @@ class FortiSOAR:
             endpoint = f'/{endpoint}'
 
         # For API v3 endpoints, prepend the API path if not already present
-        if not endpoint.startswith(API_PATH) and not endpoint.startswith('/auth'):
+        if not endpoint.startswith(API_PATH) and not (endpoint.startswith('/auth') or endpoint.startswith('/api')):
             endpoint = f"{API_PATH}{endpoint}"
 
         url = urljoin(self.base_url, endpoint)
@@ -120,10 +128,22 @@ class FortiSOAR:
                 error_msg += f"\nResponse: {e.response.text}"
             raise requests.exceptions.RequestException(error_msg)
 
-    def get(self, endpoint: str, params: Optional[Dict] = None, **kwargs) -> Dict[str, Any]:
-        """Perform GET request and return JSON response"""
+    def get(self, endpoint: str, params: Optional[Dict] = None, **kwargs) -> Union[Dict[str, Any], bytes]:
+        """
+        Perform GET request and return response based on content type.
+
+        Returns JSON for application/json responses and bytes for binary responses.
+        """
         response = self.request('GET', endpoint, params=params, **kwargs)
-        return response.json()
+        content_type = response.headers.get('Content-Type', '')
+
+        if 'application/json' in content_type:
+            return response.json()
+        elif any(binary_type in content_type for binary_type in ['application/zip', 'application/octet-stream']):
+            return response.content
+        else:
+            # Default to JSON if content type is not explicitly specified
+            return response.json()
 
     def post(self, endpoint: str, data: Optional[Dict] = None, files: Optional[Dict] = None,
              params: Optional[Dict] = None, **kwargs) -> Dict[str, Any]:
@@ -131,7 +151,8 @@ class FortiSOAR:
         response = self.request('POST', endpoint, params=params, data=data, files=files, **kwargs)
         return response.json()
 
-    def put(self, endpoint: str, data: Dict, params: Optional[Dict] = None, **kwargs) -> Dict[str, Any]:
+    def put(self, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None, **kwargs) -> Dict[
+        str, Any]:
         """Perform PUT request and return JSON response"""
         response = self.request('PUT', endpoint, params=params, data=data, **kwargs)
         return response.json()
