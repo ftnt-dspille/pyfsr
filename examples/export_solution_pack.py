@@ -26,4 +26,4 @@ client = FortiSOAR(
 #
 
 # Export solution pack
-output_path = client.solution_packs.export_pack("FortiManager ZTP Flow", "ztp_framework_export.json")
+output_path = client.solution_packs.export_pack("FortiManager ZTP Flow", "ztp_framework_export.zip")
