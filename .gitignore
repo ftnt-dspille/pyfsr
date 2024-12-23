@@ -17,3 +17,17 @@ examples/config.toml
 .DS_Store
 
 config.toml
+
+# Sphinx documentation
+docs/build/
+docs/source/_autosummary/
+docs/source/api/
+docs/source/_build/
+docs/source/_static/
+docs/source/_templates/*.html
+
+# Keep these files
+!docs/source/_static/.gitkeep
+!docs/source/_templates/.gitkeep
+!docs/source/index.rst
+!docs/source/conf.py

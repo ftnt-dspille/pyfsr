@@ -1,8 +1,0 @@
-Alerts
-======
-
-.. automodule:: pyfsr.api.alerts
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
