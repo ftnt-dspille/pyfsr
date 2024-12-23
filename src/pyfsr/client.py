@@ -4,10 +4,12 @@ from urllib.parse import urljoin
 import requests
 
 from .api.alerts import AlertsAPI
+from .api.export_config import ExportConfigAPI
 from .auth.api_key import APIKeyAuth
 from .auth.user_pass import UserPasswordAuth
 from .constants import API_PATH
 from .utils.file_operations import FileOperations
+from .api.solution_packs import SolutionPackAPI
 
 
 class FortiSOAR:
@@ -71,6 +73,11 @@ class FortiSOAR:
         # Initialize file operations utility
         self.files = FileOperations(self)
 
+        # Add solution packs API
+        self.export_config = ExportConfigAPI(self)
+
+        self.solution_packs = SolutionPackAPI(self, self.export_config)
+
     def request(
             self,
             method: str,
@@ -96,7 +103,7 @@ class FortiSOAR:
             endpoint = f'/{endpoint}'
 
         # For API v3 endpoints, prepend the API path if not already present
-        if not endpoint.startswith(API_PATH) and not endpoint.startswith('/auth'):
+        if not endpoint.startswith(API_PATH) and not (endpoint.startswith('/auth') or endpoint.startswith('/api')):
             endpoint = f"{API_PATH}{endpoint}"
 
         url = urljoin(self.base_url, endpoint)
