@@ -1,0 +1,11 @@
+[fortisoar]
+# Required
+base_url = "https://your-fortisoar-instance"
+
+# Authentication - use either username/password OR auth_token
+username = "your-username"  # Recommended
+password = "your-password"  # Recommended
+# auth_token = "your-api-token"  # Alternative
+
+# Optional
+verify_ssl = trueconfig.toml

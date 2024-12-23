@@ -1,17 +1,41 @@
-from typing import Dict, Optional
+"""The Alerts API provides methods for managing FortiSOAR alerts including creating,
+    updating, and querying alerts."""
+from typing import Dict, Any, Optional
+
 
 from .base import BaseAPI
 
 
 class AlertsAPI(BaseAPI):
     """
-    AlertsAPI provides methods to interact with FortiSIEM alert endpoints.
+    The Alerts API provides methods for managing FortiSOAR alerts including creating, 
+    updating, and querying alerts.
 
-    This class handles all alert-related operations including creating, retrieving,
-    listing, updating, and deleting alerts in the FortiSIEM system.
+    Example:
+        Create a client and use the alerts API:
 
-    Attributes:
-        module (str): The API module name, set to 'alerts'
+        .. code-block:: python
+
+            from pyfsr import FortiSOAR
+
+            # Initialize client
+            client = FortiSOAR("your-server", "your-token")
+
+            # Create new alert
+            new_alert = {
+                "name": "Suspicious Login",
+                "description": "Multiple failed login attempts detected"
+            }
+            result = client.alerts.create(**new_alert)
+
+            # Query alerts
+            all_alerts = client.alerts.list()
+
+            # Update alert
+            client.alerts.update(
+                alert_id="123",
+                data={"assignedTo": "analyst@example.com"}
+            )
     """
 
     def __init__(self, client):
@@ -24,111 +48,102 @@ class AlertsAPI(BaseAPI):
         super().__init__(client)
         self.module = 'alerts'
 
-    def create(self, **data: Dict) -> Dict:
+    def create(self, **data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Create a new alert in FortiSIEM.
+        Create a new alert in FortiSOAR.
 
         Args:
-            **data: Keyword arguments containing alert configuration:
-                - name (str): Name of the alert
-                - description (str, optional): Description of the alert
-                - severity (str): Alert severity level ('Critical', 'High', 'Medium', 'Low')
-                - enabled (bool, optional): Whether the alert is active, defaults to True
-                - notification_groups (List[str], optional): List of notification group IDs
-                - conditions (Dict): Alert triggering conditions
+            **data (Dict[str, Any]): Keyword arguments containing alert configuration.
+                The following keys are expected:
 
+                - **name** (*str*): Name of the alert.
+                - **description** (*str, optional*): Description of the alert.
+                - **severity** (*str*): Alert severity level, one of:
+                    'Critical', 'High', 'Medium', or 'Low'.
         Returns:
-            Dict: The created alert object containing:
-                - id (str): Unique identifier of the created alert
-                - name (str): Name of the alert
-                - created_at (str): Timestamp of alert creation
-                - other alert properties as specified in creation
+            Dict[str, Any]: The created alert object.
 
-        Raises:
-            APIError: If the alert creation fails
-            ValidationError: If required fields are missing
-        """
-        return self._make_request('POST', f'/{self.module}', json=data)
+        Example:
+            .. code-block:: python
 
-    def get(self, alert_id: str) -> Dict:
+                alert_data = {
+                    "name": "Test Alert",
+                    "description": "This is a test alert",
+                    "severity": "High"
+                }
+                response = client.alerts.create(**alert_data)
         """
-        Retrieve a specific alert by its ID.
+        return self.client.post(f'/api/3/{self.module}', data=data)
+
+    def list(self, params: Optional[Dict] = None) -> Dict[str, Any]:
+        """
+        List all alerts with optional filtering.
 
         Args:
-            alert_id (str): The unique identifier of the alert to retrieve
+            params: Optional query parameters for filtering results
 
         Returns:
-            Dict: The alert object containing:
-                - id (str): Alert identifier
-                - name (str): Alert name
-                - description (str): Alert description
-                - severity (str): Alert severity level
-                - enabled (bool): Alert status
-                - created_at (str): Creation timestamp
-                - updated_at (str): Last update timestamp
-                - conditions (Dict): Alert conditions
-                - notification_groups (List[str]): Associated notification groups
+            Dict[str, Any]: List of alerts matching the criteria
 
-        Raises:
-            APIError: If the alert doesn't exist or cannot be retrieved
-        """
-        return self._make_request('GET', f'/{self.module}/{alert_id}')
+        Example:
+            .. code-block:: python
 
-    def list(self, params: Optional[Dict] = None) -> Dict:
+                # List all alerts
+                alerts = client.alerts.list()
+
+                # List with filtering
+                filtered = client.alerts.list({"severity": "High"})
+                """
+        return self.client.get(f'/api/3/{self.module}', params=params)
+
+    def get(self, alert_id: str) -> Dict[str, Any]:
         """
-        Retrieve all alerts with optional filtering.
+        Get a specific alert by ID.
 
         Args:
-            params (Dict, optional): Query parameters to filter alerts:
-                - severity (str, optional): Filter by severity level
-                - enabled (bool, optional): Filter by enabled status
-                - created_after (str, optional): ISO timestamp to filter by creation date
-                - page (int, optional): Page number for pagination
-                - page_size (int, optional): Number of items per page
+            alert_id: The unique identifier of the alert
 
         Returns:
-            Dict: Dictionary containing:
-                - items (List[Dict]): List of alert objects
-                - total (int): Total number of alerts
-                - page (int): Current page number
-                - page_size (int): Number of items per page
+            Dict[str, Any]: The alert object
 
-        Raises:
-            APIError: If the request fails
+        Example:
+            .. code-block:: python
+
+                alert = client.alerts.get("alert-123")
+                print(alert['name'])
         """
-        return self._make_request('GET', f'/{self.module}', params=params)
 
-    def update(self, alert_id: str, data: Dict) -> Dict:
+        return self.client.get(f'/api/3/{self.module}/{alert_id}')
+
+    def update(self, alert_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Update an existing alert.
 
         Args:
-            alert_id (str): The unique identifier of the alert to update
-            data (Dict): Updated alert properties:
-                - name (str, optional): New alert name
-                - description (str, optional): New alert description
-                - severity (str, optional): New severity level
-                - enabled (bool, optional): New enabled status
-                - notification_groups (List[str], optional): New notification groups
-                - conditions (Dict, optional): New alert conditions
+            alert_id: The unique identifier of the alert
+            data: Updated alert properties
 
         Returns:
-            Dict: The updated alert object with all current properties
+            Dict[str, Any]: The updated alert object
 
-        Raises:
-            APIError: If the alert doesn't exist or update fails
-            ValidationError: If provided data is invalid
+        Examples:
+            .. code-block:: python
+
+                client.alerts.update("alert-123", {
+                    "severity": "Critical",
+                  "description": "Updated description"
+                })
         """
-        return self._make_request('PUT', f'/{self.module}/{alert_id}', json=data)
+        return self.client.put(f'/api/3/{self.module}/{alert_id}', data=data)
 
     def delete(self, alert_id: str) -> None:
         """
         Delete an alert.
 
         Args:
-            alert_id (str): The unique identifier of the alert to delete
+            alert_id: The unique identifier of the alert to delete
 
-        Raises:
-            APIError: If the alert doesn't exist or deletion fails
+        Examples:
+            >>> client.alerts.delete("alert-123")
         """
-        return self._make_request('DELETE', f'/{self.module}/{alert_id}')
+        self.client.delete(f'/api/3/{self.module}/{alert_id}')
