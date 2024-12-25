@@ -2,7 +2,7 @@ name: Documentation
 
 on:
   push:
-    branches: [ main, fix-github-pages ]
+    branches: [ main ]
     paths:
       - 'src/pyfsr/**'
       - 'docs/**'
