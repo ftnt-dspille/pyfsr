@@ -1,0 +1,65 @@
+name: Publish Python Package
+
+on:
+  release:
+    types: [ created ]  # Trigger workflow when a new release is created
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.10", "3.11", "3.12", "3.13" ]
+    steps:
+      # Step 1: Checkout the code
+      - uses: actions/checkout@v4
+
+      # Step 2: Set up Python for testing
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip  # Enable caching for pip dependencies
+          cache-dependency-path: '**/pyproject.toml'
+
+      # Step 3: Install test dependencies
+      - name: Install dependencies
+        run: |
+          pip install -e '.[test]'
+
+      # Step 4: Run tests
+      - name: Run tests
+        run: |
+          pytest
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [ test ]  # Ensure tests pass before deployment
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      # Step 1: Checkout the code
+      - uses: actions/checkout@v4
+
+      # Step 2: Set up Python for deployment
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip  # Enable caching for pip dependencies
+          cache-dependency-path: '**/pyproject.toml'
+
+      # Step 3: Install build tools
+      - name: Install dependencies
+        run: |
+          pip install setuptools wheel build
+
+      # Step 4: Build the package
+      - name: Build
+        run: |
+          python -m build
+
+      # Step 5: Publish to PyPI
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
