@@ -16,23 +16,37 @@ Basic Usage:
 
 .. code-block:: python
 
-   from pyfsr import FortiSOAR
+    from pyfsr import FortiSOAR
 
-   # Initialize client
-   client = FortiSOAR('your-fortisoar-instance', 'your-api-key')
+    # Initialize the client
+    client = FortiSOAR('your-server', 'your-token')
 
-   # Create an alert
-   alert = client.alerts.create(
-       name="Test Alert",
-       description="Test Description",
-       severity="High"
-   )
+    # or with username and password
+    client = FortiSOAR('your-server', ('your-username', 'your-password'))
+
+    # Generic get call to Alerts endpoint
+    response = client.get('/api/v3/alerts')
+
+    # Create an alert
+    alert_data = {
+        "name": "Test Alert",
+        "description": "This is a test alert",
+        "severity": "High"
+    }
+    alert_record = client.alerts.create(**alert_data)
+
+    # List all alerts
+    alerts = client.alerts.list()
+
+    # Get a specific alert
+    alert = client.alerts.get("alert-id")
+
 
 API Reference
 -------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 4
 
    autoapi/index
 
