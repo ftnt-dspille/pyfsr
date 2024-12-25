@@ -37,10 +37,15 @@ autoapi_options = [
 ]
 
 # HTML Theme
-html_theme = 'alabaster'  # Or use 'sphinx_rtd_theme'
+html_theme = "pydata_sphinx_theme"
+html_theme_options = {
+    "theme_switcher": True,  # Enables dark mode toggle
+    "navbar_end": ["theme-switcher"],  # Adds the toggle to the navigation bar
+    "primary_color": "blue",
+    "secondary_color": "gray",
+}
 templates_path = ['_templates']
 html_static_path = ['_static']
-
 
 # Custom static files
 html_css_files = [
@@ -49,4 +54,3 @@ html_css_files = [
 
 # Exclude patterns
 exclude_patterns = ['build']
-
