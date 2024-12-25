@@ -1,6 +1,9 @@
-import pytest
+import json
+from pathlib import Path
 
-from pyfsr import FortiSOAR
+import pytest
+import requests
+from requests import Response
 
 
 @pytest.fixture
@@ -39,17 +42,27 @@ def mock_response():
 
 
 @pytest.fixture
-def mock_client():
-    """Create a FortiSOAR client instance for testing."""
+def mock_client(mock_response, monkeypatch):
+    """Create a FortiSOAR client instance for testing with mocked requests."""
     from pyfsr import FortiSOAR
+    from requests.sessions import Session
+
+    def mock_auth_request(self, method, url, **kwargs):
+        if "/auth/authenticate" in url:
+            return mock_response(json_data={"token": "mock-token-123"})
+        return mock_response()  # Default 200 response for other requests
+
+    # Mock the `requests.Session.request` method
+    monkeypatch.setattr(Session, "request", mock_auth_request)
+
+    # Create client with mocked session
     client = FortiSOAR(
         base_url="https://test.fortisoar.com",
         auth=("test_user", "test_pass"),
         verify_ssl=False,
         suppress_insecure_warnings=True
     )
-    # Pre-set the token to avoid auth requests in every test
-    client.auth.token = "mock-jwt-token-123"
+
     return client
 
 
@@ -73,111 +86,3 @@ def pytest_configure(config):
     )
 
 
-# tests/test_auth.py
-def test_user_password_auth(mock_client):
-    """Test authentication with username and password"""
-    assert mock_client.auth.get_auth_headers()["Authorization"].startswith("Bearer ")
-
-
-def test_api_key_auth():
-    """Test authentication with API key"""
-    client = FortiSOAR("https://test.fortisoar.com", "test-api-key")
-    assert client.auth.get_auth_headers()["Authorization"].startswith("API-KEY ")
-
-
-# tests/test_alerts.py
-def test_create_alert(mock_client, mock_response, monkeypatch):
-    """Test creating an alert"""
-    expected_response = {
-        "@id": "/api/3/alerts/123",
-        "@type": "Alert",
-        "name": "Test Alert",
-        "severity": "/api/3/picklists/456"
-    }
-
-    # Mock the post request to return our expected data
-    monkeypatch.setattr(
-        "requests.Session.request",
-        lambda *args, **kwargs: mock_response(json_data=expected_response)
-    )
-
-    alert_data = {
-        "name": "Test Alert",
-        "severity": "/api/3/picklists/456"
-    }
-
-    result = mock_client.alerts.create(**alert_data)
-    assert result["@type"] == "Alert"
-    assert result["name"] == "Test Alert"
-
-
-def test_get_alert(mock_client, mock_response, monkeypatch):
-    """Test retrieving a specific alert"""
-    alert_id = "123"
-    expected_response = {
-        "@id": f"/api/3/alerts/{alert_id}",
-        "@type": "Alert",
-        "name": "Test Alert"
-    }
-
-    monkeypatch.setattr(
-        "requests.Session.request",
-        lambda *args, **kwargs: mock_response(json_data=expected_response)
-    )
-
-    result = mock_client.alerts.get(alert_id)
-    assert result["@id"] == f"/api/3/alerts/{alert_id}"
-
-
-def test_list_alerts(mock_client, mock_response, monkeypatch):
-    """Test listing alerts"""
-    expected_response = {
-        "@context": "/api/3/contexts/Alert",
-        "@id": "/api/3/alerts",
-        "@type": "hydra:PagedCollection",
-        "hydra:member": [
-            {
-                "@id": "/api/3/alerts/123",
-                "@type": "Alert",
-                "name": "Test Alert 1"
-            },
-            {
-                "@id": "/api/3/alerts/456",
-                "@type": "Alert",
-                "name": "Test Alert 2"
-            }
-        ],
-        "hydra:totalItems": 2
-    }
-
-    monkeypatch.setattr(
-        "requests.Session.request",
-        lambda *args, **kwargs: mock_response(json_data=expected_response)
-    )
-
-    result = mock_client.alerts.list()
-    assert len(result["hydra:member"]) == 2
-    assert result["hydra:totalItems"] == 2
-
-
-# tests/test_solution_packs.py
-def test_find_installed_pack(mock_client, mock_response, monkeypatch):
-    """Test finding an installed solution pack"""
-    expected_response = {
-        "@context": "/api/3/contexts/SolutionPack",
-        "hydra:member": [{
-            "name": "SOAR Framework",
-            "label": "SOAR Framework",
-            "version": "1.0.0",
-            "installed": True
-        }]
-    }
-
-    monkeypatch.setattr(
-        "requests.Session.request",
-        lambda *args, **kwargs: mock_response(json_data=expected_response)
-    )
-
-    result = mock_client.solution_packs.find_installed_pack("SOAR Framework")
-    assert result["name"] == "SOAR Framework"
-    assert result["installed"] is True

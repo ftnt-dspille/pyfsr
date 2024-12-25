@@ -10,6 +10,7 @@ from .api.solution_packs import SolutionPackAPI
 from .auth.api_key import APIKeyAuth
 from .auth.user_pass import UserPasswordAuth
 from .utils.file_operations import FileOperations
+from .exceptions import handle_api_error
 
 
 class FortiSOAR:
@@ -107,7 +108,7 @@ class FortiSOAR:
             endpoint = f'/{endpoint}'
 
         # Add API version prefix if not present
-        if not endpoint.startswith(('/api/3/', '/auth/', '/api/public/')):
+        if not endpoint.startswith(('/api/3/', '/auth/', '/api/public/', '/api/')):
             endpoint = f'/api/3{endpoint}'
 
         url = urljoin(self.base_url, endpoint)
