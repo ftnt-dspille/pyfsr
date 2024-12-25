@@ -14,7 +14,7 @@ client = FortiSOAR(
         config["fortisoar"]["auth"]["password"]
     ),
     verify_ssl=config["fortisoar"].get("verify_ssl", True),
-    supress_insecure_warnings=True
+    suppress_insecure_warnings=True
 
 )
 
