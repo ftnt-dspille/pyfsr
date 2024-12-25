@@ -1,8 +1,12 @@
 import os
-import tomllib
 from pathlib import Path
 
 import pytest
+
+try:
+    import tomllib  # Python 3.11+
+except ImportError:
+    import tomli as tomllib  # Backport for older versions
 
 
 def load_config():
