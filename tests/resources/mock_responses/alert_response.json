@@ -1,0 +1,11 @@
+{
+    "@context": "/api/3/contexts/Alert",
+    "@id": "/api/3/alerts/123e4567-e89b-12d3-a456-426614174000",
+    "@type": "Alert",
+    "name": "Test Alert",
+    "description": "Test alert for mock response",
+    "severity": "/api/3/picklists/58d0753f-f7e4-403b-953c-b0f521eab759",
+    "status": "/api/3/picklists/97e9bc03-5a4c-43c6-b3a3-47422b42d288",
+    "createDate": "2024-01-25T10:30:00Z",
+    "modifyDate": "2024-01-25T10:30:00Z"
+}
