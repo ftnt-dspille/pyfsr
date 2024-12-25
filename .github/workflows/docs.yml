@@ -2,7 +2,7 @@ name: Documentation
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, fix-github-pages ]
     paths:
       - 'src/pyfsr/**'
       - 'docs/**'
@@ -21,7 +21,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
         with:
-          fetch-depth: 0  # Fetch complete history for proper versioning
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v2
@@ -36,23 +36,31 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install dependencies
+      - name: Install package and dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[docs]"
-          pip install sphinx-rtd-theme sphinx-autodoc-typehints
+          python -m pip install -e .
+          python -m pip install ".[docs]"
+
+      - name: Verify package installation
+        run: |
+          python -c "import pyfsr; print(pyfsr.__file__)"
+          python -c "from pyfsr.api import alerts; print(alerts.__file__)"
 
       - name: Setup Doc Directory
         run: |
           mkdir -p docs/build/html
-          mkdir -p docs/source/api
-          touch docs/source/api/.gitkeep
+          mkdir -p docs/source/_autosummary
+          mkdir -p docs/source/_static
+          mkdir -p docs/source/_templates
+          touch docs/source/_static/.gitkeep
+          touch docs/source/_templates/.gitkeep
 
       - name: Build documentation
         run: |
           cd docs
           make clean
-          make html SPHINXOPTS="-W --keep-going -n"
+          PYTHONPATH=$PYTHONPATH:${{ github.workspace }}/src make html SPHINXOPTS="-W --keep-going -n"
 
       - name: Check build output
         run: |
@@ -71,9 +79,3 @@ jobs:
           commit_message: 'docs: update documentation [skip ci]'
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
-          full_commit_message: |
-            docs: update documentation
-            
-            Updates to the documentation generated from commit ${{ github.sha }}
-            
-            [skip ci]

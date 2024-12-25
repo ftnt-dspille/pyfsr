@@ -15,6 +15,7 @@ help:
 clean:
 	rm -rf $(BUILDDIR)/*
 	rm -rf $(SOURCEDIR)/api/*.rst
+	rm -rf $(SOURCEDIR)/_autosummary/*.rst
 	@echo "Cleaned build directory and generated API docs"
 
 # Build HTML documentation

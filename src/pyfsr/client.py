@@ -14,18 +14,6 @@ from .utils.file_operations import FileOperations
 
 
 class FortiSOAR:
-    """
-    Main client class for FortiSOAR API
-
-    Attributes:
-        base_url (str): The base URL for the FortiSOAR API.
-        session (requests.Session): The session object for making HTTP requests.
-        verify_ssl (bool): Whether to verify SSL certificates.
-        auth (Union[APIKeyAuth, UserPasswordAuth]): The authentication method.
-        alerts (AlertsAPI): The Alerts API interface.
-        files (FileOperations): The file operations utility.
-   """
-
     def __init__(
             self,
             base_url: str,
@@ -35,17 +23,17 @@ class FortiSOAR:
     ):
 
         """
-               Initialize the FortiSOAR client.
+        Initialize the FortiSOAR client.
 
-               Args:
-                   base_url (str): The base URL for the FortiSOAR API.
-                   auth (Union[str, tuple]): The authentication method, either an API key (str) or a tuple of (username, password).
-                   verify_ssl (bool, optional): Whether to verify SSL certificates. Defaults to True.
-                   supress_insecure_warnings (bool, optional): Whether to suppress insecure request warnings. Defaults to False.
+       Args:
+           base_url (str): The base URL for the FortiSOAR API.
+           auth (Union[str, tuple]): The authentication method, either an API key (str) or a tuple of (username, password).
+           verify_ssl (bool, optional): Whether to verify SSL certificates. Defaults to True.
+           supress_insecure_warnings (bool, optional): Whether to suppress insecure request warnings. Defaults to False.
 
-               Raises:
-                   ValueError: If the provided authentication method is invalid.
-               """
+       Raises:
+           ValueError: If the provided authentication method is invalid.
+       """
         # Ensure base_url starts with https://
         if not base_url.startswith('https://'):
             base_url = f'https://{base_url}'
