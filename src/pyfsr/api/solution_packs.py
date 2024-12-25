@@ -1,9 +1,11 @@
-"""API implementation for FortiSOAR Solution Pack operations"""
-
 from typing import Dict, Any, Optional
 
 
 class SolutionPackAPI:
+    """
+    API implementation for FortiSOAR Solution Pack operations
+    """
+
     def __init__(self, client, export_config):
         self.client = client
         self.export_config = export_config

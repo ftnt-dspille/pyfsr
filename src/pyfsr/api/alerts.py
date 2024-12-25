@@ -1,7 +1,4 @@
-"""The Alerts API provides methods for managing FortiSOAR alerts including creating,
-    updating, and querying alerts."""
 from typing import Dict, Any, Optional
-
 
 from .base import BaseAPI
 
