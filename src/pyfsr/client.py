@@ -14,6 +14,9 @@ from .utils.file_operations import FileOperations
 
 
 class FortiSOAR:
+    """
+    Main FortiSOAR client class for interacting with the FortiSOAR API.
+    """
     def __init__(
             self,
             base_url: str,
@@ -37,7 +40,7 @@ class FortiSOAR:
         # Ensure base_url starts with https://
         if not base_url.startswith('https://'):
             base_url = f'https://{base_url}'
-        self.base_url = base_url.rstrip('/')
+        self.base_url: str = base_url.rstrip('/')
         self.session = requests.Session()
         self.session.verify = verify_ssl
         self.verify_ssl = verify_ssl
@@ -57,15 +60,15 @@ class FortiSOAR:
         self.session.headers.update(self.auth.get_auth_headers())
 
         # Initialize API interfaces
-        self.alerts = AlertsAPI(self)
+        self.alerts: AlertsAPI = AlertsAPI(self)
 
         # Initialize file operations utility
-        self.files = FileOperations(self)
+        self.files: FileOperations = FileOperations(self)
 
         # Add solution packs API
-        self.export_config = ExportConfigAPI(self)
+        self.export_config: ExportConfigAPI = ExportConfigAPI(self)
 
-        self.solution_packs = SolutionPackAPI(self, self.export_config)
+        self.solution_packs: SolutionPackAPI = SolutionPackAPI(self, self.export_config)
 
     def request(
             self,
