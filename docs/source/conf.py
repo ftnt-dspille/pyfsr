@@ -19,6 +19,11 @@ extensions = [
     'sphinx.ext.intersphinx',
 ]
 
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3', None),
+    'requests': ('https://docs.python-requests.org/en/latest/', None),
+}
+
 # AutoAPI configuration
 autoapi_type = 'python'
 autoapi_dirs = ['../../src/pyfsr']  # Relative path to the Python package
