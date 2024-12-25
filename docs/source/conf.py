@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath('../../src'))
 project = 'pyfsr'
 copyright = '2024, Dylan Spille'
 author = 'Dylan Spille'
-release = '0.2.0'
+release = '0.2.2'
 
 # Extensions
 extensions = [
@@ -39,10 +39,7 @@ autoapi_options = [
 # HTML Theme
 html_theme = "pydata_sphinx_theme"
 html_theme_options = {
-    "theme_switcher": True,  # Enables dark mode toggle
     "navbar_end": ["theme-switcher"],  # Adds the toggle to the navigation bar
-    "primary_color": "blue",
-    "secondary_color": "gray",
 }
 templates_path = ['_templates']
 html_static_path = ['_static']
