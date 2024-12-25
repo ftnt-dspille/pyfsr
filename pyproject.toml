@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
+test = [
     "pytest",
     "pytest-cov",
     "pytest-mock",
@@ -47,6 +47,9 @@ packages = ["src/pyfsr"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+#filterwarnings = [
+#    "ignore::DeprecationWarning"
+#]
 
 [project.urls]
 "Homepage" = "https://github.com/ftnt-dspille/pyfsr"
