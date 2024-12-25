@@ -9,7 +9,6 @@ from .api.export_config import ExportConfigAPI
 from .api.solution_packs import SolutionPackAPI
 from .auth.api_key import APIKeyAuth
 from .auth.user_pass import UserPasswordAuth
-from .constants import API_PATH
 from .utils.file_operations import FileOperations
 
 
@@ -17,12 +16,13 @@ class FortiSOAR:
     """
     Main FortiSOAR client class for interacting with the FortiSOAR API.
     """
+
     def __init__(
             self,
             base_url: str,
             auth: Union[str, tuple],
             verify_ssl: bool = True,
-            supress_insecure_warnings: bool = False
+            suppress_insecure_warnings: bool = False
     ):
 
         """
@@ -32,7 +32,7 @@ class FortiSOAR:
            base_url (str): The base URL for the FortiSOAR API.
            auth (Union[str, tuple]): The authentication method, either an API key (str) or a tuple of (username, password).
            verify_ssl (bool, optional): Whether to verify SSL certificates. Defaults to True.
-           supress_insecure_warnings (bool, optional): Whether to suppress insecure request warnings. Defaults to False.
+           suppress_insecure_warnings (bool, optional): Whether to suppress insecure request warnings. Defaults to False.
 
        Raises:
            ValueError: If the provided authentication method is invalid.
@@ -44,7 +44,7 @@ class FortiSOAR:
         self.session = requests.Session()
         self.session.verify = verify_ssl
         self.verify_ssl = verify_ssl
-        if supress_insecure_warnings:
+        if suppress_insecure_warnings:
             requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
 
         # Setup authentication
@@ -77,10 +77,11 @@ class FortiSOAR:
             params: Optional[Dict] = None,
             data: Optional[Dict] = None,
             files: Optional[Dict] = None,
+            headers: Optional[Dict] = None,
             **kwargs
     ) -> requests.Response:
         """
-        Make HTTP request to FortiSOAR API
+        Make a request to the FortiSOAR API.
 
         Args:
             method: HTTP method (GET, POST, PUT, DELETE)
@@ -88,17 +89,33 @@ class FortiSOAR:
             params: Query parameters
             data: Request body data
             files: Files to upload
-            **kwargs: Additional arguments to pass to requests
+            headers: Additional headers
+            **kwargs: Additional arguments passed to requests
+
+        Returns:
+            requests.Response: Response from the API
+
+        Raises:
+            ValidationError: When request data validation fails
+            AuthenticationError: When authentication fails
+            PermissionError: When user lacks required permissions
+            ResourceNotFoundError: When requested resource is not found
+            APIError: For other API errors
         """
-        # Ensure endpoint starts with slash
+        # Ensure endpoint starts with /
         if not endpoint.startswith('/'):
             endpoint = f'/{endpoint}'
 
-        # For API v3 endpoints, prepend the API path if not already present
-        if not endpoint.startswith(API_PATH) and not (endpoint.startswith('/auth') or endpoint.startswith('/api')):
-            endpoint = f"{API_PATH}{endpoint}"
+        # Add API version prefix if not present
+        if not endpoint.startswith(('/api/3/', '/auth/', '/api/public/')):
+            endpoint = f'/api/3{endpoint}'
 
         url = urljoin(self.base_url, endpoint)
+
+        # Merge any additional headers
+        request_headers = self.session.headers.copy()
+        if headers:
+            request_headers.update(headers)
 
         try:
             response = self.session.request(
@@ -108,16 +125,16 @@ class FortiSOAR:
                 json=data if files is None else None,
                 data=data if files is not None else None,
                 files=files,
+                headers=request_headers,
                 **kwargs
             )
             response.raise_for_status()
             return response
 
         except requests.exceptions.RequestException as e:
-            error_msg = f"API request failed: {str(e)}"
-            if hasattr(e.response, 'text'):
-                error_msg += f"\nResponse: {e.response.text}"
-            raise requests.exceptions.RequestException(error_msg)
+            if hasattr(e, 'response'):
+                handle_api_error(e.response)
+            raise
 
     def get(self, endpoint: str, params: Optional[Dict] = None, **kwargs) -> Union[Dict[str, Any], bytes]:
         """
