@@ -18,6 +18,8 @@ from pyfsr import FortiSOAR
 
 # Initialize the client
 client = FortiSOAR('your-server', 'your-token')
+# or
+# client = FortiSOAR('your-server', ('your-username', 'your-password'))
 
 # Generic get call to Alerts endpoint
 response = client.get('/api/v3/alerts')
