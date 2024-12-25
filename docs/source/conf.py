@@ -41,6 +41,7 @@ html_theme = 'alabaster'  # Or use 'sphinx_rtd_theme'
 templates_path = ['_templates']
 html_static_path = ['_static']
 
+
 # Custom static files
 html_css_files = [
     'custom.css',  # Example custom CSS
@@ -48,3 +49,4 @@ html_css_files = [
 
 # Exclude patterns
 exclude_patterns = ['build']
+
