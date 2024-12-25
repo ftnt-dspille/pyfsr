@@ -45,10 +45,19 @@ API Reference
 -------------
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 2
+   :caption: Contents:
+
+   autoapi/index
+
+AutoAPI Contents
+----------------
+
+.. toctree::
+   :maxdepth: 3
+   :caption: API Modules:
 
    autoapi/pyfsr/index
-
 
 Module Overview
 ~~~~~~~~~~~~~~~
