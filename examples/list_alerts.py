@@ -1,5 +1,6 @@
 # noinspection PyCompatibility
 import tomllib
+
 from pyfsr import FortiSOAR
 
 # Load config

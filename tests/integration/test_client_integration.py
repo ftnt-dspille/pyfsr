@@ -1,12 +1,13 @@
 import os
-import pytest
 import tomllib
 from pathlib import Path
+
+import pytest
 
 
 def load_config():
     """Load test configuration from config file"""
-    config_path = Path(__file__).parent.parent / 'resources' / 'config.toml'
+    config_path = Path(__file__).parent.parent.parent / 'examples' / 'config.toml'
     if not config_path.exists():
         pytest.skip("Integration test config not found")
 
@@ -27,7 +28,8 @@ def client():
             config["fortisoar"]["auth"]["username"],
             config["fortisoar"]["auth"]["password"]
         ),
-        verify_ssl=config["fortisoar"].get("verify_ssl", True)
+        verify_ssl=config["fortisoar"].get("verify_ssl", True),
+        suppress_insecure_warnings=True
     )
 
 
@@ -81,7 +83,7 @@ def test_file_upload(client):
         # Upload file
         result = client.files.upload(str(test_file))
         assert result["@type"] == "File"
-        assert result["name"] == test_file.name
+        assert result["filename"] == test_file.name
 
         # Create attachment using uploaded file
         attachment_data = {
@@ -92,6 +94,9 @@ def test_file_upload(client):
 
         attachment = client.post("/api/3/attachments", data=attachment_data)
         assert attachment["name"] == attachment_data["name"]
+
+        # delete attachment
+        client.delete(attachment["@id"])
 
     finally:
         # Cleanup
@@ -105,7 +110,7 @@ def test_export_config(client):
     template = client.export_config.create_simplified_template(
         name="Integration Test Export",
         modules=["alerts"],
-        picklists=["AlertStatus", "AlertSeverity"]
+        picklists=["AlertStatus", "Severity"]
     )
 
     try:
