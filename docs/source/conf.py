@@ -13,30 +13,28 @@ release = '0.2.0'
 
 # -- General configuration ---------------------------------------------------
 extensions = [
-    'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
-    'sphinx_autodoc_typehints',
-    'sphinx.ext.viewcode',
     'sphinx.ext.intersphinx',
-    'sphinx.ext.githubpages',
-    'sphinx.ext.autosummary',
+    'sphinx.ext.viewcode',
+    'sphinx_autodoc_typehints',
+    'autoapi.extension',
 ]
 
-# Autosummary settings
-autosummary_generate = True
-autosummary_imported_members = False  # Don't document imported members
-add_module_names = False  # Remove module names from generated titles
-
-# Autodoc settings
-autodoc_member_order = 'bysource'
-autodoc_typehints = 'description'
-autodoc_default_options = {
-    'members': True,
-    'member-order': 'bysource',
-    'special-members': '__init__',
-    'undoc-members': True,
-    'exclude-members': '__weakref__'
-}
+# AutoAPI settings
+autoapi_type = 'python'
+autoapi_dirs = [str(project_root / 'src' / 'pyfsr')]
+autoapi_options = [
+    'members',
+    'undoc-members',
+    'show-inheritance',
+    'show-module-summary',
+    'special-members',
+]
+autoapi_add_toctree_entry = False
+autoapi_python_use_implicit_namespaces = True
+autoapi_python_class_content = 'init'  # Changed from 'both' to 'init'
+autoapi_member_order = 'groupwise'
+autoapi_template_dir = '_templates/autoapi'  # Custom template directory
 
 # Napoleon settings
 napoleon_google_docstring = True
@@ -56,26 +54,23 @@ intersphinx_mapping = {
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']
+exclude_patterns = []
 
 # -- Options for HTML output -------------------------------------------------
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
 html_theme_options = {
-    'navigation_depth': 2,  # Limit the depth of the navigation tree
-    'titles_only': True,  # Only show titles in the navigation
-    'collapse_navigation': False,  # Keep the navigation expanded
-    'sticky_navigation': True,
+    'navigation_depth': 4,
+    'titles_only': True,
     'prev_next_buttons_location': 'bottom',
+    'style_external_links': True,
+    'collapse_navigation': False,
+    'sticky_navigation': True,
 }
-
-# Clean up the displayed module names
-modindex_common_prefix = ['pyfsr.']
 
 
 def setup(app):
     """Set up Sphinx app with customizations."""
-    # Add custom CSS to clean up the layout
     app.add_css_file('custom.css')
 
     # Create custom CSS file
@@ -84,64 +79,54 @@ def setup(app):
 
     with open(static_dir / 'custom.css', 'w') as f:
         f.write("""
-        /* Improve overall navigation appearance */
-        .wy-nav-side {
-            background-color: #2c2c2c;
-        }
+/* Improve overall navigation appearance */
+.wy-nav-side {
+    background-color: #2c2c2c;
+}
 
-        .wy-side-nav-search {
-            background-color: #2980B9;
-        }
+.wy-side-nav-search {
+    background-color: #2980B9;
+}
 
-        /* Fix TOC tree padding */
-        .wy-menu-vertical li {
-            margin: 0;
-        }
+/* Fix TOC tree padding */
+.wy-menu-vertical li {
+    margin: 0;
+}
 
-        .wy-menu-vertical a {
-            padding: 0.4045em 1.618em;
-        }
+.wy-menu-vertical a {
+    padding: 0.4045em 1.618em;
+}
 
-        /* Level 1 items */
-        .wy-menu-vertical li.toctree-l1 > a {
-            padding: 0.4045em 1em;
-        }
+.wy-menu-vertical li.toctree-l1 > a {
+    padding: 0.4045em 1em;
+}
 
-        /* Level 2 items */
-        .wy-menu-vertical li.toctree-l2 > a {
-            padding: 0.4045em 1.2em;
-        }
+.wy-menu-vertical li.toctree-l2 > a {
+    padding: 0.4045em 1.2em;
+}
 
-        /* Level 3 items */
-        .wy-menu-vertical li.toctree-l3 > a {
-            padding: 0.4045em 1.4em;
-        }
+.wy-menu-vertical li.current > a {
+    background: #fcfcfc;
+    padding: 0.4045em 1em;
+}
 
-        /* Selected/current item */
-        .wy-menu-vertical li.current > a {
-            background: #fcfcfc;
-            padding: 0.4045em 1em;
-        }
+.wy-menu-vertical li.current a {
+    border: none;
+}
 
-        .wy-menu-vertical li.current a {
-            border: none;
-        }
+.wy-nav-content {
+    max-width: 1000px;
+}
 
-        /* Improve content width */
-        .wy-nav-content {
-            max-width: 1000px;
-        }
+div[class^='highlight'] {
+    border: none;
+    border-radius: 3px;
+}
 
-        /* Better code block styling */
-        div[class^='highlight'] {
-            border: none;
-            border-radius: 3px;
-        }
-
-        .highlight {
-            background: #f8f8f8;
-        }
-        """)
+.highlight {
+    background: #f8f8f8;
+}
+""")
 
     return {
         'version': '1.0',
