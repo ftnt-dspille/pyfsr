@@ -41,27 +41,14 @@ Basic Usage:
     # Get a specific alert
     alert = client.alerts.get("alert-id")
 
-
 API Reference
 -------------
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
-   autoapi/index
-
-AutoAPI Contents
-----------------
-
-.. toctree::
-   :maxdepth: 3
-   :caption: API Modules:
+   :maxdepth: 4
 
    autoapi/pyfsr/index
-   autoapi/pyfsr/api/alerts/index
-   autoapi/pyfsr/api/export_config/index
-   autoapi/pyfsr/api/solution_packs/index
+
 
 Module Overview
 ~~~~~~~~~~~~~~~
