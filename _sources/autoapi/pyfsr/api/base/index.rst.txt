@@ -1,0 +1,25 @@
+pyfsr.api.base
+==============
+
+.. py:module:: pyfsr.api.base
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.base.BaseAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: BaseAPI(client)
+
+   Base API class for all module-specific APIs
+
+
+   .. py:attribute:: client
+
+

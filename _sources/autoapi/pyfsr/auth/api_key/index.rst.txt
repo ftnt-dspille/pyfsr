@@ -1,0 +1,34 @@
+pyfsr.auth.api_key
+==================
+
+.. py:module:: pyfsr.auth.api_key
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.auth.api_key.APIKeyAuth
+
+
+Module Contents
+---------------
+
+.. py:class:: APIKeyAuth(api_key: str)
+
+   Bases: :py:obj:`pyfsr.auth.base.BaseAuth`
+
+
+   Base authentication class
+
+
+   .. py:attribute:: api_key
+
+
+   .. py:method:: get_auth_headers() -> dict
+
+      Return authentication headers
+
+
+

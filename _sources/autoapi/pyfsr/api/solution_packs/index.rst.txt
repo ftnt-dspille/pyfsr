@@ -1,0 +1,83 @@
+pyfsr.api.solution_packs
+========================
+
+.. py:module:: pyfsr.api.solution_packs
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.solution_packs.SolutionPackAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: SolutionPackAPI(client, export_config)
+
+   API implementation for FortiSOAR Solution Pack operations
+
+
+   .. py:attribute:: client
+
+
+   .. py:attribute:: export_config
+
+
+   .. py:method:: find_installed_pack(search_term: str) -> Optional[Dict[str, Any]]
+
+      Find an installed solution pack by name, label, or description. This is similar to the find_available_pack
+      method, but only returns installed packs.
+
+      :param search_term: Name, label, or description to search for
+
+      :returns: The solution pack object
+      :rtype: Dict[str, Any]
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          pack = client.solution_packs.find_installed_pack("SOAR Framework")
+
+
+
+   .. py:method:: find_available_pack(search_term: str) -> Optional[Dict[str, Any]]
+
+      Find an available (not necessarily installed) solution pack.
+
+      :param search_term: Name, label, or description to search for
+
+      :returns: The solution pack object
+      :rtype: Dict[str, Any]
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          pack = client.solution_packs.find_available_pack("SOAR Framework")
+
+
+
+   .. py:method:: export_pack(pack_identifier: str, output_path: Optional[str] = None, poll_interval: int = 5) -> str
+
+      Export a solution pack by name, label, or search term.
+
+      :param pack_identifier: Name, label or search term to find the pack
+      :param output_path: Optional path to save exported file
+      :param poll_interval: How often to check export status in seconds
+
+      :returns: Path where the exported file was saved
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          # Export a solution pack by name
+          export_path = client.solution_packs.export_pack("SOAR Framework")
+          print(f"Exported to: {export_path}")
+
+
+

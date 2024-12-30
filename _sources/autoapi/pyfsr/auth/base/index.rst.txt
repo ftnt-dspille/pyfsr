@@ -1,0 +1,33 @@
+pyfsr.auth.base
+===============
+
+.. py:module:: pyfsr.auth.base
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.auth.base.BaseAuth
+
+
+Module Contents
+---------------
+
+.. py:class:: BaseAuth
+
+   Bases: :py:obj:`abc.ABC`
+
+
+   Base authentication class
+
+
+   .. py:method:: get_auth_headers() -> dict
+      :abstractmethod:
+
+
+      Return authentication headers
+
+
+

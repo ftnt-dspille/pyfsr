@@ -1,0 +1,31 @@
+pyfsr.constants
+===============
+
+.. py:module:: pyfsr.constants
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.constants.DEFAULT_API_VERSION
+   pyfsr.constants.API_PATH
+   pyfsr.constants.QUERY_PATH
+
+
+Module Contents
+---------------
+
+.. py:data:: DEFAULT_API_VERSION
+   :value: '3'
+
+
+.. py:data:: API_PATH
+   :value: '/api/3'
+
+
+.. py:data:: QUERY_PATH
+   :value: '/api/query'
+
+

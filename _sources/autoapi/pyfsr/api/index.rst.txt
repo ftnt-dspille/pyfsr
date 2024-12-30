@@ -1,0 +1,18 @@
+pyfsr.api
+=========
+
+.. py:module:: pyfsr.api
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/pyfsr/api/alerts/index
+   /autoapi/pyfsr/api/base/index
+   /autoapi/pyfsr/api/export_config/index
+   /autoapi/pyfsr/api/solution_packs/index
+
+
