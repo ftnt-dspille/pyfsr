@@ -39,8 +39,8 @@ class SolutionPackAPI:
 
         Example:
             .. code-block:: python
-                pack = client.solution_packs.find_installed_pack("SOAR Framework")
 
+                pack = client.solution_packs.find_installed_pack("SOAR Framework")
         """
         query = {
             "sort": [{"field": "label", "direction": "ASC"}],
