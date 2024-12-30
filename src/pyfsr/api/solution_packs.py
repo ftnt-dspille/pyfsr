@@ -11,8 +11,37 @@ class SolutionPackAPI:
         self.export_config = export_config
         self._pack_cache = {}
 
+    def _get_pack_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get a solution pack by its exact name."""
+        if name in self._pack_cache:
+            return self._pack_cache[name]
+
+        pack = self.find_installed_pack(name)
+        if pack and pack['name'] == name:
+            return pack
+
+        pack = self.find_available_pack(name)
+        if pack and pack['name'] == name:
+            return pack
+
+        return None
+
     def find_installed_pack(self, search_term: str) -> Optional[Dict[str, Any]]:
-        """Find an installed solution pack by name, label, or description."""
+        """
+        Find an installed solution pack by name, label, or description. This is similar to the find_available_pack
+        method, but only returns installed packs.
+
+        Args:
+            search_term: Name, label, or description to search for
+
+        Returns:
+            Dict[str, Any]: The solution pack object
+
+        Example:
+            .. code-block:: python
+
+                pack = client.solution_packs.find_installed_pack("SOAR Framework")
+        """
         query = {
             "sort": [{"field": "label", "direction": "ASC"}],
             "limit": 30,
@@ -43,7 +72,20 @@ class SolutionPackAPI:
         return pack
 
     def find_available_pack(self, search_term: str) -> Optional[Dict[str, Any]]:
-        """Find an available (not necessarily installed) solution pack."""
+        """
+        Find an available (not necessarily installed) solution pack.
+
+        Args:
+            search_term: Name, label, or description to search for
+
+        Returns:
+            Dict[str, Any]: The solution pack object
+
+        Example:
+            .. code-block:: python
+
+                pack = client.solution_packs.find_available_pack("SOAR Framework")
+        """
         query = {
             "sort": [
                 {"field": "featured", "direction": "DESC"},
@@ -74,21 +116,6 @@ class SolutionPackAPI:
         self._pack_cache[pack['name']] = pack
         return pack
 
-    def get_pack_by_name(self, name: str) -> Optional[Dict[str, Any]]:
-        """Get a solution pack by its exact name."""
-        if name in self._pack_cache:
-            return self._pack_cache[name]
-
-        pack = self.find_installed_pack(name)
-        if pack and pack['name'] == name:
-            return pack
-
-        pack = self.find_available_pack(name)
-        if pack and pack['name'] == name:
-            return pack
-
-        return None
-
     def export_pack(
             self,
             pack_identifier: str,
@@ -105,18 +132,23 @@ class SolutionPackAPI:
 
         Returns:
             Path where the exported file was saved
+
+        Example:
+            .. code-block:: python
+
+                # Export a solution pack by name
+                export_path = client.solution_packs.export_pack("SOAR Framework")
+                print(f"Exported to: {export_path}")
         """
-        pack = self.get_pack_by_name(pack_identifier)
+        pack = self._get_pack_by_name(pack_identifier)
         if not pack:
             pack = self.find_installed_pack(pack_identifier)
-        if not pack:
-            pack = self.find_available_pack(pack_identifier)
 
         if not pack:
-            raise ValueError(f"Solution pack not found: {pack_identifier}")
+            raise ValueError(f"An Installed Solution pack was not found with the search term: {pack_identifier}")
 
         if not pack.get('template'):
-            raise ValueError(f"Pack {pack_identifier} has no export template")
+            raise ValueError(f"Solution Pack {pack_identifier} has no export template")
 
         template_uuid = pack['template']['uuid']
 
