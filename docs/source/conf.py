@@ -38,9 +38,6 @@ autoapi_options = [
 
 # HTML Theme
 html_theme = "pydata_sphinx_theme"
-html_theme_options = {
-    "navbar_end": ["theme-switcher"],  # Adds the toggle to the navigation bar
-}
 templates_path = ['_templates']
 html_static_path = ['_static']
 
