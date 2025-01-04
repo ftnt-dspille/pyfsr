@@ -4,10 +4,10 @@ from .base import BaseAuth
 
 
 class UserPasswordAuth(BaseAuth):
-    def __init__(self, username: str, password: str, base_url: str, verify_ssl: bool = True):
+    def __init__(self, base_url: str, username: str, password: str, verify_ssl: bool = True):
+        self.base_url = base_url
         self.username = username
         self.password = password
-        self.base_url = base_url
         self.verify_ssl = verify_ssl
         self.token = self._authenticate()
 

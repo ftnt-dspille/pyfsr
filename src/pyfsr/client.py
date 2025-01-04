@@ -50,10 +50,10 @@ class FortiSOAR:
 
         # Setup authentication
         if isinstance(auth, str):
-            self.auth = APIKeyAuth(auth)
+            self.auth = APIKeyAuth(self.base_url, auth, self.verify_ssl)
         elif isinstance(auth, tuple) and len(auth) == 2:
             username, password = auth
-            self.auth = UserPasswordAuth(username, password, self.base_url, self.verify_ssl)
+            self.auth = UserPasswordAuth(self.base_url, username, password, self.verify_ssl)
         else:
             raise ValueError("Invalid authentication provided")
 

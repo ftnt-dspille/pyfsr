@@ -1,6 +1,6 @@
 [project]
 name = "pyfsr"
-version = "0.2.2"
+version = "0.2.3"
 description = "Python implementation of the FortiSOAR REST API"
 readme = "README.md"
 authors = [
