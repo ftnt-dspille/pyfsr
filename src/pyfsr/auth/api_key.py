@@ -1,3 +1,5 @@
+from typing import Optional
+
 import requests
 
 from .base import BaseAuth
@@ -27,7 +29,7 @@ class APIKeyAuth(BaseAuth):
         >>> headers = auth.get_auth_headers()
     """
 
-    def __init__(self, base_url: str, api_key: str, verify_ssl: bool = True):
+    def __init__(self, base_url: str, api_key: str, verify_ssl: Optional[bool] = True):
         self.api_key = api_key
         self.base_url = base_url.rstrip('/')
         self.verify_ssl = verify_ssl
