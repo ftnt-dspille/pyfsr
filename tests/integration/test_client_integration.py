@@ -19,30 +19,108 @@ def load_config():
         return tomllib.load(f)
 
 
+def get_auth_from_config(config):
+    """
+    Extract authentication details from config.
+    Supports both API key and username/password authentication.
+    """
+    auth_config = config["fortisoar"]["auth"]
+
+    # Check for API key first
+    if "api_key" in auth_config:
+        return auth_config["api_key"]
+
+    # Fall back to username/password
+    if "username" in auth_config and "password" in auth_config:
+        return (auth_config["username"], auth_config["password"])
+
+    raise ValueError("No valid authentication configuration found. "
+                     "Please provide either api_key or username/password.")
+
+
 @pytest.fixture(scope="module")
 def client():
-    """Create real FortiSOAR client for integration tests"""
+    """
+    Create FortiSOAR client for integration tests.
+    Supports both API key and username/password authentication.
+
+    Expected config.toml format:
+
+    [fortisoar]
+    base_url = "https://your-fortisoar-instance"
+    verify_ssl = true  # optional
+
+    [fortisoar.auth]
+    # Either:
+    api_key = "your-api-key"
+    # Or:
+    username = "your-username"
+    password = "your-password"
+    """
     from pyfsr import FortiSOAR
 
     config = load_config()
+    auth = get_auth_from_config(config)
 
     return FortiSOAR(
         base_url=config["fortisoar"]["base_url"],
-        auth=(
-            config["fortisoar"]["auth"]["username"],
-            config["fortisoar"]["auth"]["password"]
-        ),
+        auth=auth,
+        verify_ssl=config["fortisoar"].get("verify_ssl", True),
+        suppress_insecure_warnings=True
+    )
+
+
+@pytest.fixture(scope="module")
+def api_key_client():
+    """Fixture that specifically requires API key authentication"""
+    from pyfsr import FortiSOAR
+
+    config = load_config()
+    auth_config = config["fortisoar"]["auth"]
+
+    if "api_key" not in auth_config:
+        pytest.skip("API key authentication not configured")
+
+    return FortiSOAR(
+        base_url=config["fortisoar"]["base_url"],
+        auth=auth_config["api_key"],
+        verify_ssl=config["fortisoar"].get("verify_ssl", True),
+        suppress_insecure_warnings=True
+    )
+
+
+@pytest.fixture(scope="module")
+def user_pass_client():
+    """Fixture that specifically requires username/password authentication"""
+    from pyfsr import FortiSOAR
+
+    config = load_config()
+    auth_config = config["fortisoar"]["auth"]
+
+    if "username" not in auth_config or "password" not in auth_config:
+        pytest.skip("Username/password authentication not configured")
+
+    return FortiSOAR(
+        base_url=config["fortisoar"]["base_url"],
+        auth=(auth_config["username"], auth_config["password"]),
         verify_ssl=config["fortisoar"].get("verify_ssl", True),
         suppress_insecure_warnings=True
     )
 
 
 @pytest.mark.integration
-def test_alert_lifecycle(client):
-    """Test complete alert lifecycle with real API"""
+@pytest.mark.parametrize("client_fixture", [
+    pytest.param("api_key_client", id="api-key"),
+    pytest.param("user_pass_client", id="user-pass")
+])
+def test_alert_lifecycle(request, client_fixture, client):
+    """Test complete alert lifecycle with real API using both auth methods"""
+    # Get the appropriate client fixture
+    client = request.getfixturevalue(client_fixture)
+
     # Create alert
     alert_data = {
-        "name": "Integration Test Alert",
+        "name": f"Integration Test Alert - {client_fixture}",
         "description": "Test alert from integration tests",
         "severity": "/api/3/picklists/58d0753f-f7e4-403b-953c-b0f521eab759"  # High
     }
