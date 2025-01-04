@@ -84,8 +84,8 @@ class APIKeyAuth(BaseAuth):
         Get the authentication headers required for API requests.
 
         Returns:
-            A dictionary containing the necessary authentication headers:
-                - Authorization: API-KEY header with the API key
+            dict: Dictionary containing required headers:
+                - Authorization: API-KEY {api_key}
                 - Content-Type: application/json
         """
         return {
