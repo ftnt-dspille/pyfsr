@@ -167,7 +167,7 @@ class ExportConfigAPI:
             Path where exported file was saved
 
         Raises:
-            UnSupportedOperationError: If the current auth method does not support configuration export
+            UnsupportedAuthOperationError: If the current auth method does not support configuration export
 
         Example:
             >>> client = FortiSOAR('fortisoar.company.com', '<your-api-token>')
@@ -201,7 +201,7 @@ class ExportConfigAPI:
             Path where exported file was saved
 
         Raises:
-            UnSupportedOperationError: If the current auth method does not support configuration export
+            UnsupportedAuthOperationError: If the current auth method does not support configuration export
 
         Example:
             >>> client = FortiSOAR('fortisoar.company.com', '<your-api-token>')
