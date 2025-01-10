@@ -11,8 +11,8 @@ with open("config.toml", "rb") as f:
 client = FortiSOAR(
     base_url=config["fortisoar"]["base_url"],
     auth=(
-        config["fortisoar"]["auth"]["username"],
-        config["fortisoar"]["auth"]["password"]
+    config["fortisoar"]["auth"]["username"],
+    config["fortisoar"]["auth"]["password"]
     ),
     verify_ssl=config["fortisoar"].get("verify_ssl", True),
     suppress_insecure_warnings=True

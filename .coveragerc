@@ -1,0 +1,63 @@
+[run]
+# Configure test coverage collection
+source = src/pyfsr
+
+# Branch coverage tells coverage.py to measure which branches in conditionals have been taken
+branch = True
+
+[paths]
+# Handle source code stored in different locations
+source =
+    src/pyfsr
+    */site-packages/pyfsr
+
+[report]
+# Regexes for lines to exclude from consideration
+exclude_also =
+    # Don't complain about missing debug-only code:
+    def __repr__
+    if self\.debug
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    pass
+    raise AssertionError
+    raise NotImplementedError
+    if False:
+    if typing.TYPE_CHECKING:
+    class .*\bProtocol\):
+    @(abc\.)?abstractmethod
+    if 0:
+
+    # Don't complain about JSON decode error handling
+    except ValueError:
+    except json.JSONDecodeError:
+    # Don't complain about safe exception handling patterns
+    except Exception as e:  # pragma: no cover
+
+# Don't print suggestions for improving coverage
+skip_covered = True
+
+# Don't include empty files in coverage report
+skip_empty = True
+
+# Only show line numbers in HTML report if coverage is less than 100%
+show_missing = True
+
+# Set minimum allowed coverage percentage
+fail_under = 80
+
+[html]
+# Configuration for HTML reports
+directory = coverage_html_report
+skip_covered = False
+skip_empty = True
+title = PyFSR Coverage Report
+
+[xml]
+# Configuration for XML reports (e.g. for CI tools)
+output = coverage.xml
+
+[json]
+# Configuration for JSON reports
+output = coverage.json
+pretty_print = True

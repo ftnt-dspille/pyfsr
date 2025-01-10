@@ -1,4 +1,5 @@
 """Custom exceptions for the FortiSOAR API client."""
+from typing import Optional
 
 
 class FortiSOARException(Exception):
@@ -33,6 +34,16 @@ class PermissionError(FortiSOARException):
 class APIError(FortiSOARException):
     """Generic API error."""
     pass
+
+
+class UnsupportedAuthOperationError(FortiSOARException):
+    """Operation not supported with current authentication method"""
+
+    def __init__(self, operation: str, auth_type: str, message: Optional[str] = None):
+        self.operation = operation
+        self.auth_type = auth_type
+        msg = message or f"Operation '{operation}' is not supported with {auth_type} authentication"
+        super().__init__(msg)
 
 
 def handle_api_error(response):

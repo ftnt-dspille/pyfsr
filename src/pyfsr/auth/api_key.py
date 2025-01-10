@@ -1,65 +1,54 @@
+"""API key authentication for FortiSOAR"""
 import requests
 
 from .base import BaseAuth
-
-
-class APIKeyAuthError(Exception):
-    """Exception raised for API key authentication errors."""
-    pass
+from ..exceptions import APIError
 
 
 class APIKeyAuth(BaseAuth):
     """
     API Key authentication handler for FortiSOAR.
 
-    This class manages API key authentication for FortiSOAR requests. It validates the API key
-    on initialization and provides methods to generate authentication headers.
+    API key authentication has several limitations:
+    - Cannot use /auth endpoints
+    - Cannot export configurations
 
-    Parameters:
-        base_url: Base URL of the FortiSOAR instance
+    Args:
+        base_url: Base URL of the FortiSOAR instance 
         api_key: The FortiSOAR API key
         verify_ssl: Whether to verify SSL certificates. Defaults to True.
 
     Raises:
-        APIKeyAuthError: If API key validation fails
+        APIError: If API key validation fails
 
-    Examples:
-        Create an API key authentication handler:
-
+    Example:
         >>> auth = APIKeyAuth(
         ...     base_url="https://fortisoar.example.com",
         ...     api_key="your-api-key"
         ... )
         >>> headers = auth.get_auth_headers()
-
-        Create with SSL verification disabled:
-
-        >>> auth = APIKeyAuth(
-        ...     base_url="https://fortisoar.example.com",
-        ...     api_key="your-api-key",
-        ...     verify_ssl=False
-        ... )
-
-    Note:
-        The API key is validated immediately upon initialization by making a test
-        request to the FortiSOAR API. This helps catch invalid keys early.
     """
 
-    def __init__(self, base_url: str, api_key: str, verify_ssl: bool = True) -> None:
+    def __init__(self, base_url: str, api_key: str, verify_ssl: bool = True):
+        super().__init__()
         self.api_key = api_key
         self.base_url = base_url.rstrip('/')
         self.verify_ssl = verify_ssl
+
+        # Set unsupported operations
+        self._unsupported_operations = {
+            self.OPERATION_AUTH,
+            self.OPERATION_CONFIG_EXPORT,
+        }
+
         self._validate_api_key()
 
     def _validate_api_key(self) -> None:
         """
         Validates the API key by making a test request to the FortiSOAR API.
 
-        The validation uses the /api/3/people endpoint as it's commonly available
-        and typically has low overhead.
-
         Raises:
-            APIKeyAuthError: If the validation request fails or returns an error status
+            APIError: If validation fails
         """
         headers = self.get_auth_headers()
         try:
@@ -70,23 +59,21 @@ class APIKeyAuth(BaseAuth):
             )
 
             if response.status_code == 401:
-                raise APIKeyAuthError("Invalid API key - authentication failed")
+                raise APIError("Invalid API key - authentication failed")
             elif response.status_code != 200:
-                raise APIKeyAuthError(
+                raise APIError(
                     f"API key validation failed with status {response.status_code}: {response.text}"
                 )
 
         except requests.exceptions.RequestException as e:
-            raise APIKeyAuthError(f"API key validation request failed: {str(e)}")
+            raise APIError(f"API key validation request failed: {str(e)}")
 
     def get_auth_headers(self) -> dict:
         """
         Get the authentication headers required for API requests.
 
         Returns:
-            dict: Dictionary containing required headers:
-                - Authorization: API-KEY {api_key}
-                - Content-Type: application/json
+            dict: Headers including the API key authentication
         """
         return {
             'Authorization': f'API-KEY {self.api_key}',
@@ -98,14 +85,10 @@ class APIKeyAuth(BaseAuth):
         Check if the API key is currently valid.
 
         Returns:
-            True if the API key passes validation, False otherwise.
-
-        Note:
-            This method makes an actual API request to verify the key's validity.
-            Consider caching the result if you need to check validity frequently.
+            bool: True if the API key passes validation, False otherwise
         """
         try:
             self._validate_api_key()
             return True
-        except APIKeyAuthError:
+        except APIError:
             return False
