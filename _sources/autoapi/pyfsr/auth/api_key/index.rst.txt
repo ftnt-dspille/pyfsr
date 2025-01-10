@@ -1,0 +1,77 @@
+pyfsr.auth.api_key
+==================
+
+.. py:module:: pyfsr.auth.api_key
+
+.. autoapi-nested-parse::
+
+   API key authentication for FortiSOAR
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.auth.api_key.APIKeyAuth
+
+
+Module Contents
+---------------
+
+.. py:class:: APIKeyAuth(base_url: str, api_key: str, verify_ssl: bool = True)
+
+   Bases: :py:obj:`pyfsr.auth.base.BaseAuth`
+
+
+   API Key authentication handler for FortiSOAR.
+
+   API key authentication has several limitations:
+   - Cannot use /auth endpoints
+   - Cannot export configurations
+
+   :param base_url: Base URL of the FortiSOAR instance
+   :param api_key: The FortiSOAR API key
+   :param verify_ssl: Whether to verify SSL certificates. Defaults to True.
+
+   :raises APIError: If API key validation fails
+
+   .. rubric:: Example
+
+   >>> auth = APIKeyAuth(
+   ...     base_url="https://fortisoar.example.com",
+   ...     api_key="your-api-key"
+   ... )
+   >>> headers = auth.get_auth_headers()
+
+
+   .. py:attribute:: api_key
+
+
+   .. py:attribute:: base_url
+
+
+   .. py:attribute:: verify_ssl
+      :value: True
+
+
+
+   .. py:method:: get_auth_headers() -> dict
+
+      Get the authentication headers required for API requests.
+
+      :returns: Headers including the API key authentication
+      :rtype: dict
+
+
+
+   .. py:method:: is_valid() -> bool
+
+      Check if the API key is currently valid.
+
+      :returns: True if the API key passes validation, False otherwise
+      :rtype: bool
+
+
+

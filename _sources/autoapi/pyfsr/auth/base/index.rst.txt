@@ -1,0 +1,87 @@
+pyfsr.auth.base
+===============
+
+.. py:module:: pyfsr.auth.base
+
+.. autoapi-nested-parse::
+
+   Base authentication class for FortiSOAR
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.auth.base.BaseAuth
+
+
+Module Contents
+---------------
+
+.. py:class:: BaseAuth
+
+   Bases: :py:obj:`abc.ABC`
+
+
+   Base class for FortiSOAR authentication methods
+
+
+   .. py:attribute:: OPERATION_AUTH
+      :value: 'auth'
+
+
+
+   .. py:attribute:: OPERATION_CONFIG_EXPORT
+      :value: 'config_export'
+
+
+
+   .. py:attribute:: OPERATION_CONFIG_IMPORT
+      :value: 'config_import'
+
+
+
+   .. py:attribute:: OPERATION_PLAYBOOK
+      :value: 'playbook'
+
+
+
+   .. py:attribute:: OPERATION_SOLUTION_PACK
+      :value: 'solution_pack'
+
+
+
+   .. py:property:: auth_type
+      :type: str
+
+
+      Get the authentication type name
+
+
+   .. py:method:: get_auth_headers() -> dict
+      :abstractmethod:
+
+
+      Get authentication headers for requests
+
+
+
+   .. py:property:: unsupported_operations
+      :type: Set[str]
+
+
+      Get set of unsupported operations
+
+
+   .. py:method:: check_operation_supported(operation: str) -> None
+
+      Check if an operation is supported with this authentication method.
+
+      :param operation: Operation to check
+
+      :raises UnsupportedAuthOperationError: If operation is not supported
+
+
+

@@ -1,0 +1,159 @@
+pyfsr.api.alerts
+================
+
+.. py:module:: pyfsr.api.alerts
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.alerts.AlertsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: AlertsAPI(client)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   The Alerts API provides methods for managing FortiSOAR alerts including creating,
+   updating, and querying alerts.
+
+   .. rubric:: Example
+
+   Create a client and use the alerts API:
+
+   .. code-block:: python
+
+       from pyfsr import FortiSOAR
+
+       # Initialize client
+       client = FortiSOAR("your-server", "your-token")
+
+       # Create new alert
+       new_alert = {
+           "name": "Suspicious Login",
+           "description": "Multiple failed login attempts detected"
+       }
+       result = client.alerts.create(**new_alert)
+
+       # Query alerts
+       all_alerts = client.alerts.list()
+
+       # Update alert
+       client.alerts.update(
+           alert_id="123",
+           data={"assignedTo": "analyst@example.com"}
+       )
+
+
+   .. py:attribute:: module
+      :value: 'alerts'
+
+
+
+   .. py:method:: create(**data: Dict[str, Any]) -> Dict[str, Any]
+
+      Create a new alert in FortiSOAR.
+
+      :param \*\*data: Keyword arguments containing alert configuration.
+                       The following keys are expected:
+
+                       - **name** (*str*): Name of the alert.
+                       - **description** (*str, optional*): Description of the alert.
+                       - **severity** (*str*): Alert severity level, one of:
+                           'Critical', 'High', 'Medium', or 'Low'.
+      :type \*\*data: Dict[str, Any]
+
+      :returns: The created alert object.
+      :rtype: Dict[str, Any]
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          alert_data = {
+              "name": "Test Alert",
+              "description": "This is a test alert",
+              "severity": "High"
+          }
+          response = client.alerts.create(**alert_data)
+
+
+
+   .. py:method:: list(params: Optional[Dict] = None) -> Dict[str, Any]
+
+      List all alerts with optional filtering.
+
+      :param params: Optional query parameters for filtering results
+
+      :returns: List of alerts matching the criteria
+      :rtype: Dict[str, Any]
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          # List all alerts
+          alerts = client.alerts.list()
+
+          # List with filtering
+          filtered = client.alerts.list({"severity": "High"})
+
+
+
+   .. py:method:: get(alert_id: str) -> Dict[str, Any]
+
+      Get a specific alert by ID.
+
+      :param alert_id: The unique identifier of the alert
+
+      :returns: The alert object
+      :rtype: Dict[str, Any]
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          alert = client.alerts.get("alert-123")
+          print(alert['name'])
+
+
+
+   .. py:method:: update(alert_id: str, data: Dict[str, Any]) -> Dict[str, Any]
+
+      Update an existing alert.
+
+      :param alert_id: The unique identifier of the alert
+      :param data: Updated alert properties
+
+      :returns: The updated alert object
+      :rtype: Dict[str, Any]
+
+      .. rubric:: Examples
+
+      .. code-block:: python
+
+          client.alerts.update("alert-123", {
+              "severity": "Critical",
+            "description": "Updated description"
+          })
+
+
+
+   .. py:method:: delete(alert_id: str) -> None
+
+      Delete an alert.
+
+      :param alert_id: The unique identifier of the alert to delete
+
+      .. rubric:: Examples
+
+      >>> client.alerts.delete("alert-123")
+
+
+

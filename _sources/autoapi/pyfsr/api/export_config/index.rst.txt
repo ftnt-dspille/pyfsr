@@ -1,0 +1,108 @@
+pyfsr.api.export_config
+=======================
+
+.. py:module:: pyfsr.api.export_config
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.export_config.ExportConfigAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: ExportConfigAPI(client)
+
+   Class to handle FortiSOAR export configuration operations
+
+
+   .. py:attribute:: client
+
+
+   .. py:method:: export_by_template_uuid(template_uuid: str, output_path: Optional[str] = None, poll_interval: int = 5) -> str
+
+      Export configuration using template UUID directly.
+
+      :param template_uuid: UUID of existing export template
+      :param output_path: Optional path to save exported file
+      :param poll_interval: How often to check export status in seconds
+
+      :returns: Path where exported file was saved
+
+      :raises UnsupportedAuthOperationError: If the current auth method does not support configuration export
+
+      .. rubric:: Example
+
+      >>> client = FortiSOAR('fortisoar.company.com', '<your-api-token>')
+      >>> output_file = client.export_config.export_by_template_uuid(
+      ...     template_uuid="123e4567-e89b-12d3-a456-426655440000",
+      ...     output_path="exports/config.zip"
+      ... )
+
+
+
+   .. py:method:: export_by_template_name(template_name: str, output_path: Optional[str] = None, poll_interval: int = 5) -> str
+
+      Export configuration using template name.
+
+      :param template_name: Name of existing export template
+      :param output_path: Optional path to save exported file
+      :param poll_interval: How often to check export status in seconds
+
+      :returns: Path where exported file was saved
+
+      :raises UnsupportedAuthOperationError: If the current auth method does not support configuration export
+
+      .. rubric:: Example
+
+      >>> client = FortiSOAR('fortisoar.company.com', '<your-api-token>')
+      >>> output_file = client.export_config.export_by_template_name(
+      ...     template_name="Alert Configuration",
+      ...     output_path="exports/alert_config.zip"
+      ... )
+
+
+
+   .. py:method:: create_simplified_template(name: str, modules: Optional[List[str]] = None, module_attributes: Optional[Dict[str, List[str]]] = None, picklists: Optional[List[str]] = None, connectors: Optional[List[str]] = None, playbook_collections: Optional[List[str]] = None, view_templates: Optional[List[str]] = None) -> Dict[str, Any]
+
+      Create an export template with simplified inputs - automatically looks up complex values.
+
+      :param name: Name of the export template
+      :param modules: List of module names to export
+      :param module_attributes: Dict of module name to list of attributes to include
+      :param picklists: List of picklist names
+      :param connectors: List of connector names
+      :param playbook_collections: List of playbook collection names
+      :param view_templates: List of view template names (e.g. ["modules-alerts-list"])
+
+      :returns: Dict containing the created export template details
+
+      .. rubric:: Example
+
+      >>> from pyfsr import FortiSOAR
+      >>> client = FortiSOAR('fortisoar.company.com', '<your-api-token>')
+
+      >>> # Simple configuration with automatic lookup
+      >>> template = client.export_config.create_simplified_template(
+      ...     name="Alert Export",
+      ...     modules=["alerts"],
+      ...     module_attributes={
+      ...         "alerts": ["name", "status", "severity", "description"]
+      ...     },
+      ...     picklists=["AlertStatus", "AlertSeverity"],
+      ...     connectors=["OpenAI", "FortiEDR"],
+      ...     playbook_collections=["Incident Response"]
+      ... )
+
+
+
+   .. py:method:: create_export_template(name: str, options: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]
+
+      Create the actual export template - internal method
+
+
+

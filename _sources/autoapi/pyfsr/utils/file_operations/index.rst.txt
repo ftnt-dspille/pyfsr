@@ -1,0 +1,42 @@
+pyfsr.utils.file_operations
+===========================
+
+.. py:module:: pyfsr.utils.file_operations
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.utils.file_operations.FileOperations
+
+
+Module Contents
+---------------
+
+.. py:class:: FileOperations(client)
+
+   Utility class for handling file operations in FortiSOAR
+
+
+   .. py:attribute:: client
+
+
+   .. py:method:: upload(filename: str) -> Dict[str, Any]
+
+      Upload a file to FortiSOAR, mimicking browser file upload behavior
+
+      :param filename: Path to the file to upload
+
+      :returns: Server response
+      :rtype: Dict[str, Any]
+
+
+
+   .. py:method:: upload_many(filenames: list[str]) -> list[Dict[str, Any]]
+
+      Upload multiple files to FortiSOAR
+
+
+

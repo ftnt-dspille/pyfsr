@@ -1,0 +1,113 @@
+pyfsr.exceptions
+================
+
+.. py:module:: pyfsr.exceptions
+
+.. autoapi-nested-parse::
+
+   Custom exceptions for the FortiSOAR API client.
+
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   pyfsr.exceptions.FortiSOARException
+   pyfsr.exceptions.ValidationError
+   pyfsr.exceptions.AuthenticationError
+   pyfsr.exceptions.ResourceNotFoundError
+   pyfsr.exceptions.PermissionError
+   pyfsr.exceptions.APIError
+   pyfsr.exceptions.UnsupportedAuthOperationError
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.exceptions.handle_api_error
+
+
+Module Contents
+---------------
+
+.. py:exception:: FortiSOARException(message: str = None, response=None)
+
+   Bases: :py:obj:`Exception`
+
+
+   Base exception for FortiSOAR API errors.
+
+
+   .. py:attribute:: message
+      :value: None
+
+
+
+   .. py:attribute:: response
+      :value: None
+
+
+
+.. py:exception:: ValidationError(message: str = None, response=None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Raised when API request validation fails.
+
+
+.. py:exception:: AuthenticationError(message: str = None, response=None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Raised when authentication fails.
+
+
+.. py:exception:: ResourceNotFoundError(message: str = None, response=None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Raised when a requested resource is not found.
+
+
+.. py:exception:: PermissionError(message: str = None, response=None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Raised when the user lacks required permissions.
+
+
+.. py:exception:: APIError(message: str = None, response=None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Generic API error.
+
+
+.. py:exception:: UnsupportedAuthOperationError(operation: str, auth_type: str, message: Optional[str] = None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Operation not supported with current authentication method
+
+
+   .. py:attribute:: operation
+
+
+   .. py:attribute:: auth_type
+
+
+.. py:function:: handle_api_error(response)
+
+   Convert API error responses to appropriate exceptions.
+
+

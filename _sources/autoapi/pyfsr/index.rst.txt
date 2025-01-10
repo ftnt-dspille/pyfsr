@@ -1,0 +1,136 @@
+pyfsr
+=====
+
+.. py:module:: pyfsr
+
+.. autoapi-nested-parse::
+
+   PyFSR: Python client for the FortiSOAR REST API.
+
+   For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/pyfsr/api/index
+   /autoapi/pyfsr/auth/index
+   /autoapi/pyfsr/client/index
+   /autoapi/pyfsr/exceptions/index
+   /autoapi/pyfsr/utils/index
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.FortiSOAR
+
+
+Package Contents
+----------------
+
+.. py:class:: FortiSOAR(base_url: str, auth: Union[str, tuple], verify_ssl: bool = True, suppress_insecure_warnings: bool = False, verbose: bool = False)
+
+   Main FortiSOAR client class for interacting with the FortiSOAR API.
+
+
+   .. py:attribute:: verbose
+      :value: False
+
+
+
+   .. py:attribute:: base_url
+      :type:  str
+
+
+   .. py:attribute:: session
+
+
+   .. py:attribute:: verify_ssl
+      :value: True
+
+
+
+   .. py:attribute:: alerts
+      :type:  pyfsr.api.alerts.AlertsAPI
+
+
+   .. py:attribute:: files
+      :type:  pyfsr.utils.file_operations.FileOperations
+
+
+   .. py:attribute:: export_config
+      :type:  pyfsr.api.export_config.ExportConfigAPI
+
+
+   .. py:attribute:: solution_packs
+      :type:  pyfsr.api.solution_packs.SolutionPackAPI
+
+
+   .. py:method:: request(method: str, endpoint: str, params: Optional[Dict] = None, data: Optional[Dict] = None, files: Optional[Dict] = None, headers: Optional[Dict] = None, **kwargs) -> requests.Response
+
+      Make a request to the FortiSOAR API.
+
+      :param method: HTTP method (GET, POST, PUT, DELETE)
+      :param endpoint: API endpoint path
+      :param params: Query parameters
+      :param data: Request body data
+      :param files: Files to upload
+      :param headers: Additional headers
+      :param \*\*kwargs: Additional arguments passed to requests
+
+      :returns: Response from the API
+      :rtype: requests.Response
+
+      :raises ValidationError: When request data validation fails
+      :raises AuthenticationError: When authentication fails
+      :raises PermissionError: When user lacks required permissions
+      :raises ResourceNotFoundError: When requested resource is not found
+      :raises UnsupportedAuthOperationError: When operation is not supported with current authentication method
+      :raises APIError: For other API errors
+
+
+
+   .. py:method:: get(endpoint: str, params: Optional[Dict] = None, **kwargs) -> Union[Dict[str, Any], bytes]
+
+      Perform GET request and return response based on content type.
+
+      Returns JSON for application/json responses and bytes for binary responses.
+
+
+
+   .. py:method:: post(endpoint: str, data: Optional[Dict] = None, files: Optional[Dict] = None, params: Optional[Dict] = None, **kwargs) -> Dict[str, Any]
+
+      Perform POST request and return JSON response
+
+
+
+   .. py:method:: put(endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None, **kwargs) -> Dict[str, Any]
+
+      Perform PUT request and return JSON response
+
+
+
+   .. py:method:: delete(endpoint: str, params: Optional[Dict] = None, **kwargs) -> None
+
+      Perform DELETE request
+
+
+
+   .. py:method:: query(module: str, query_data: Dict) -> Dict[str, Any]
+
+      Execute a query against a module
+
+      :param module: Name of the module to query
+      :param query_data: Query parameters and filters
+
+      :returns: Query results
+
+
+

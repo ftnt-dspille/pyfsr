@@ -1,0 +1,138 @@
+pyfsr.api.solution_packs
+========================
+
+.. py:module:: pyfsr.api.solution_packs
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.solution_packs.SolutionPackAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: SolutionPackAPI(client, export_config)
+
+   API implementation for FortiSOAR Solution Pack operations
+
+
+   .. py:attribute:: client
+
+
+   .. py:attribute:: export_config
+
+
+   .. py:method:: find_installed_pack(search_term: str) -> Optional[Dict[str, Any]]
+
+      Find a single installed solution pack by name, label, or description. Returns only the first
+      matching pack found. For multiple results, use search_installed_packs() instead.
+
+      :param search_term: Name, label, or description to search for
+
+      :returns: The first matching solution pack object, or None if no matches
+      :rtype: Dict[str, Any]
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          # Find single installed pack
+          pack = client.solution_packs.find_installed_pack("SOAR Framework")
+          if pack:
+              print(f"Found pack: {pack['name']}")
+
+
+
+   .. py:method:: search_installed_packs(search_term: str = '', limit: int = 30) -> List[Dict[str, Any]]
+
+      Search for all installed solution packs matching the search criteria.
+
+      :param search_term: Name, label, or description to search for
+      :param limit: Maximum number of results to return (default 30)
+
+      :returns: List of matching solution pack objects
+      :rtype: List[Dict[str, Any]]
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          # Search for multiple installed packs
+          packs = client.solution_packs.search_installed_packs(
+              search_term="SOAR",
+              limit=10
+          )
+          for pack in packs:
+              print(f"Found pack: {pack['name']}")
+
+
+
+   .. py:method:: find_available_pack(search_term: str = '') -> Optional[Dict[str, Any]]
+
+      Find a single available solution pack by name, label, or description. Returns only the first
+      matching pack found. For multiple results, use search_available_packs() instead.
+
+      :param search_term: Name, label, or description to search for
+
+      :returns: The first matching solution pack object, or None if no matches
+      :rtype: Dict[str, Any]
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          # Find single available pack
+          pack = client.solution_packs.find_available_pack("SOAR Framework")
+          if pack:
+              print(f"Found pack: {pack['name']}")
+
+
+
+   .. py:method:: search_available_packs(search_term: str = '', limit: int = 30) -> List[Dict[str, Any]]
+
+      Search for all available solution packs matching the search criteria.
+
+      :param search_term: Name, label, or description to search for
+      :param limit: Maximum number of results to return (default 30)
+
+      :returns: List of matching solution pack objects
+      :rtype: List[Dict[str, Any]]
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          # Search for multiple available packs
+          packs = client.solution_packs.search_available_packs(
+              search_term="SOAR",
+              limit=10
+          )
+          for pack in packs:
+              print(f"Found pack: {pack['name']}")
+
+
+
+   .. py:method:: export_pack(pack_identifier: str, output_path: Optional[str] = None, poll_interval: int = 5) -> str
+
+      Export a solution pack by name, label, or search term.
+
+      :param pack_identifier: Name, label or search term to find the pack
+      :param output_path: Optional path to save exported file
+      :param poll_interval: How often to check export status in seconds
+
+      :returns: Path where the exported file was saved
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          # Export a solution pack by name
+          export_path = client.solution_packs.export_pack("SOAR Framework")
+          print(f"Exported to: {export_path}")
+
+
+

@@ -1,0 +1,743 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pyfsr.api.export_config &#8212; pyfsr 0.2.2 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/custom.css" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../../_static/documentation_options.js?v=000c92bf"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pyfsr/api/export_config';</script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">pyfsr 0.2.2 documentation</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../autoapi/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../autoapi/pyfsr/index.html">
+    pyfsr
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../autoapi/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../autoapi/pyfsr/index.html">
+    pyfsr
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pyfsr.api.export_config</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for pyfsr.api.export_config</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">List</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">..auth.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseAuth</span>
+
+
+<div class="viewcode-block" id="ExportConfigAPI">
+<a class="viewcode-back" href="../../../autoapi/pyfsr/api/export_config/index.html#pyfsr.api.export_config.ExportConfigAPI">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ExportConfigAPI</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Class to handle FortiSOAR export configuration operations&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client</span><span class="p">):</span>
+<div class="viewcode-block" id="ExportConfigAPI.client">
+<a class="viewcode-back" href="../../../autoapi/pyfsr/api/export_config/index.html#pyfsr.api.export_config.ExportConfigAPI.client">[docs]</a>
+        <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">client</span></div>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_picklist_cache</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_connector_cache</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_playbook_cache</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_template_cache</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_auth_support</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Verify if the current auth method supports a specific operation&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">check_operation_supported</span><span class="p">(</span><span class="n">operation</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_picklist_iri</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">picklist_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Look up picklist IRI by name&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">picklist_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_picklist_cache</span><span class="p">:</span>
+            <span class="c1"># Query picklist by name</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;/api/3/picklist_names&#39;</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="n">picklist_name</span><span class="p">})</span>
+            <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s1">&#39;hydra:member&#39;</span><span class="p">]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_picklist_cache</span><span class="p">[</span><span class="n">picklist_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s1">&#39;hydra:member&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s1">&#39;@id&#39;</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Picklist not found: </span><span class="si">{</span><span class="n">picklist_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_picklist_cache</span><span class="p">[</span><span class="n">picklist_name</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_connector_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">connector_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Look up connector details by name&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">connector_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connector_cache</span><span class="p">:</span>
+            <span class="c1"># Query connector info</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;/api/integration/connectors/?page_size=1000&amp;label=&#39;</span> <span class="o">+</span> <span class="n">connector_name</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">connector</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]:</span>
+                <span class="k">if</span> <span class="n">connector</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">connector_name</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_connector_cache</span><span class="p">[</span><span class="n">connector_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                        <span class="s1">&#39;value&#39;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;cyops-connector-</span><span class="si">{</span><span class="n">connector</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">connector</span><span class="p">[</span><span class="s1">&#39;version&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                        <span class="s1">&#39;version&#39;</span><span class="p">:</span> <span class="n">connector</span><span class="p">[</span><span class="s1">&#39;version&#39;</span><span class="p">],</span>
+                        <span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="n">connector</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]</span>
+                    <span class="p">}</span>
+                    <span class="k">break</span>
+            <span class="k">if</span> <span class="n">connector_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connector_cache</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Connector not found: </span><span class="si">{</span><span class="n">connector_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connector_cache</span><span class="p">[</span><span class="n">connector_name</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_playbook_collection_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Look up playbook collection details by name&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">collection_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_playbook_cache</span><span class="p">:</span>
+            <span class="c1"># Query playbook collections</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;/api/3/workflow_collections&#39;</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="n">collection_name</span><span class="p">})</span>
+            <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s1">&#39;hydra:member&#39;</span><span class="p">]:</span>
+                <span class="n">collection</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s1">&#39;hydra:member&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_playbook_cache</span><span class="p">[</span><span class="n">collection_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="n">collection</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">],</span>
+                    <span class="s1">&#39;value&#39;</span><span class="p">:</span> <span class="n">collection</span><span class="p">[</span><span class="s1">&#39;@id&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                <span class="p">}</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Playbook collection not found: </span><span class="si">{</span><span class="n">collection_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_playbook_cache</span><span class="p">[</span><span class="n">collection_name</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_template_uuid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">template_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Look up template UUID by name&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">template_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_template_cache</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;/api/3/export_templates&#39;</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="n">template_name</span><span class="p">})</span>
+            <span class="n">templates</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;hydra:member&#39;</span><span class="p">,</span> <span class="p">[])</span>
+            <span class="n">matching_templates</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">templates</span> <span class="k">if</span> <span class="n">t</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">template_name</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">matching_templates</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Export template not found: </span><span class="si">{</span><span class="n">template_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Get the most recently created template if multiple exist</span>
+            <span class="n">template</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">matching_templates</span><span class="p">,</span>
+                              <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;createDate&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                              <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_template_cache</span><span class="p">[</span><span class="n">template_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">template</span><span class="p">[</span><span class="s1">&#39;@id&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_template_cache</span><span class="p">[</span><span class="n">template_name</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_trigger_export</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">template_uuid</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Trigger the export process using a template&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">filename</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;.zip&#39;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Filename must end in .zip&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;/api/export?fileName=</span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s1">&amp;template=</span><span class="si">{</span><span class="n">template_uuid</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_export_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job_uuid</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the status of an export job&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;/api/3/export_jobs/</span><span class="si">{</span><span class="n">job_uuid</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_download_export</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_iri</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">download_path</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Download the exported configuration file</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            file_iri: File IRI to download</span>
+<span class="sd">            download_path: Optional path to save the file</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Path where the file was saved</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            The response will be binary data (application/zip) which is handled</span>
+<span class="sd">            by the client&#39;s get() method.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">file_iri</span><span class="p">)</span>  <span class="c1"># Will return bytes due to content type</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">download_path</span><span class="p">:</span>
+            <span class="n">filename</span> <span class="o">=</span> <span class="n">file_iri</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">download_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">(),</span> <span class="n">filename</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">download_path</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">):</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected bytes response, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">content</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">download_path</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_poll_export_completion</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job_uuid</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">poll_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Poll until export is complete&quot;&quot;&quot;</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_export_status</span><span class="p">(</span><span class="n">job_uuid</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">status</span><span class="p">[</span><span class="s1">&#39;status&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Export Complete&#39;</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">status</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">poll_interval</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_export_with_template</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">template_uuid</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">output_path</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">filename</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">poll_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Common export workflow using template UUID&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">filename</span><span class="p">:</span>
+            <span class="n">filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;export_</span><span class="si">{</span><span class="n">template_uuid</span><span class="si">}</span><span class="s2">.zip&quot;</span>
+
+        <span class="c1"># Trigger export</span>
+        <span class="n">export_job</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trigger_export</span><span class="p">(</span><span class="n">template_uuid</span><span class="p">,</span> <span class="n">filename</span><span class="p">)</span>
+        <span class="n">job_uuid</span> <span class="o">=</span> <span class="n">export_job</span><span class="p">[</span><span class="s1">&#39;jobUuid&#39;</span><span class="p">]</span>
+
+        <span class="c1"># Poll until complete</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_poll_export_completion</span><span class="p">(</span><span class="n">job_uuid</span><span class="p">,</span> <span class="n">poll_interval</span><span class="p">)</span>
+
+        <span class="c1"># Download file</span>
+        <span class="n">file_iri</span> <span class="o">=</span> <span class="n">status</span><span class="p">[</span><span class="s1">&#39;file&#39;</span><span class="p">][</span><span class="s1">&#39;@id&#39;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_download_export</span><span class="p">(</span><span class="n">file_iri</span><span class="p">,</span> <span class="n">output_path</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ExportConfigAPI.export_by_template_uuid">
+<a class="viewcode-back" href="../../../autoapi/pyfsr/api/export_config/index.html#pyfsr.api.export_config.ExportConfigAPI.export_by_template_uuid">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">export_by_template_uuid</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">template_uuid</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">output_path</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">poll_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Export configuration using template UUID directly.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            template_uuid: UUID of existing export template</span>
+<span class="sd">            output_path: Optional path to save exported file</span>
+<span class="sd">            poll_interval: How often to check export status in seconds</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Path where exported file was saved</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            UnsupportedAuthOperationError: If the current auth method does not support configuration export</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; client = FortiSOAR(&#39;fortisoar.company.com&#39;, &#39;&lt;your-api-token&gt;&#39;)</span>
+<span class="sd">            &gt;&gt;&gt; output_file = client.export_config.export_by_template_uuid(</span>
+<span class="sd">            ...     template_uuid=&quot;123e4567-e89b-12d3-a456-426655440000&quot;,</span>
+<span class="sd">            ...     output_path=&quot;exports/config.zip&quot;</span>
+<span class="sd">            ... )</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_auth_support</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="n">BaseAuth</span><span class="o">.</span><span class="n">OPERATION_CONFIG_EXPORT</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_export_with_template</span><span class="p">(</span>
+            <span class="n">template_uuid</span><span class="o">=</span><span class="n">template_uuid</span><span class="p">,</span>
+            <span class="n">output_path</span><span class="o">=</span><span class="n">output_path</span><span class="p">,</span>
+            <span class="n">poll_interval</span><span class="o">=</span><span class="n">poll_interval</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ExportConfigAPI.export_by_template_name">
+<a class="viewcode-back" href="../../../autoapi/pyfsr/api/export_config/index.html#pyfsr.api.export_config.ExportConfigAPI.export_by_template_name">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">export_by_template_name</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">template_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">output_path</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">poll_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Export configuration using template name.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            template_name: Name of existing export template</span>
+<span class="sd">            output_path: Optional path to save exported file</span>
+<span class="sd">            poll_interval: How often to check export status in seconds</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Path where exported file was saved</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            UnsupportedAuthOperationError: If the current auth method does not support configuration export</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; client = FortiSOAR(&#39;fortisoar.company.com&#39;, &#39;&lt;your-api-token&gt;&#39;)</span>
+<span class="sd">            &gt;&gt;&gt; output_file = client.export_config.export_by_template_name(</span>
+<span class="sd">            ...     template_name=&quot;Alert Configuration&quot;,</span>
+<span class="sd">            ...     output_path=&quot;exports/alert_config.zip&quot;</span>
+<span class="sd">            ... )</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_auth_support</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="n">BaseAuth</span><span class="o">.</span><span class="n">OPERATION_CONFIG_EXPORT</span><span class="p">)</span>
+        <span class="n">template_uuid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_template_uuid</span><span class="p">(</span><span class="n">template_name</span><span class="p">)</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">template_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">.zip&quot;</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">output_path</span> <span class="k">else</span> <span class="kc">None</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_export_with_template</span><span class="p">(</span>
+            <span class="n">template_uuid</span><span class="o">=</span><span class="n">template_uuid</span><span class="p">,</span>
+            <span class="n">output_path</span><span class="o">=</span><span class="n">output_path</span><span class="p">,</span>
+            <span class="n">filename</span><span class="o">=</span><span class="n">filename</span><span class="p">,</span>
+            <span class="n">poll_interval</span><span class="o">=</span><span class="n">poll_interval</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ExportConfigAPI.create_simplified_template">
+<a class="viewcode-back" href="../../../autoapi/pyfsr/api/export_config/index.html#pyfsr.api.export_config.ExportConfigAPI.create_simplified_template">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">create_simplified_template</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">modules</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">module_attributes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">picklists</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">connectors</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">playbook_collections</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">view_templates</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create an export template with simplified inputs - automatically looks up complex values.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            name: Name of the export template</span>
+<span class="sd">            modules: List of module names to export</span>
+<span class="sd">            module_attributes: Dict of module name to list of attributes to include</span>
+<span class="sd">            picklists: List of picklist names</span>
+<span class="sd">            connectors: List of connector names</span>
+<span class="sd">            playbook_collections: List of playbook collection names</span>
+<span class="sd">            view_templates: List of view template names (e.g. [&quot;modules-alerts-list&quot;])</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dict containing the created export template details</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; from pyfsr import FortiSOAR</span>
+<span class="sd">            &gt;&gt;&gt; client = FortiSOAR(&#39;fortisoar.company.com&#39;, &#39;&lt;your-api-token&gt;&#39;)</span>
+
+<span class="sd">            &gt;&gt;&gt; # Simple configuration with automatic lookup</span>
+<span class="sd">            &gt;&gt;&gt; template = client.export_config.create_simplified_template(</span>
+<span class="sd">            ...     name=&quot;Alert Export&quot;,</span>
+<span class="sd">            ...     modules=[&quot;alerts&quot;],</span>
+<span class="sd">            ...     module_attributes={</span>
+<span class="sd">            ...         &quot;alerts&quot;: [&quot;name&quot;, &quot;status&quot;, &quot;severity&quot;, &quot;description&quot;]</span>
+<span class="sd">            ...     },</span>
+<span class="sd">            ...     picklists=[&quot;AlertStatus&quot;, &quot;AlertSeverity&quot;],</span>
+<span class="sd">            ...     connectors=[&quot;OpenAI&quot;, &quot;FortiEDR&quot;],</span>
+<span class="sd">            ...     playbook_collections=[&quot;Incident Response&quot;]</span>
+<span class="sd">            ... )</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Build modules configuration</span>
+        <span class="n">modules_config</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">modules</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">modules</span><span class="p">:</span>
+                <span class="n">module_config</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">module</span><span class="p">,</span>
+                    <span class="s2">&quot;includedAttributes&quot;</span><span class="p">:</span> <span class="n">module_attributes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="p">[])</span> <span class="k">if</span> <span class="n">module_attributes</span> <span class="k">else</span> <span class="p">[]</span>
+                <span class="p">}</span>
+                <span class="n">modules_config</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">module_config</span><span class="p">)</span>
+
+        <span class="c1"># Look up picklist IRIs</span>
+        <span class="n">picklist_iris</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">picklists</span><span class="p">:</span>
+            <span class="n">picklist_iris</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_picklist_iri</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">picklists</span><span class="p">]</span>
+
+        <span class="c1"># Look up connector configurations</span>
+        <span class="n">connector_configs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">connectors</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">connector</span> <span class="ow">in</span> <span class="n">connectors</span><span class="p">:</span>
+                <span class="n">info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_connector_info</span><span class="p">(</span><span class="n">connector</span><span class="p">)</span>
+                <span class="n">connector_configs</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                    <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">info</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">],</span>
+                    <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">info</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">],</span>
+                    <span class="s2">&quot;rpm&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;configurations&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;configCount&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="n">info</span><span class="p">[</span><span class="s1">&#39;version&#39;</span><span class="p">],</span>
+                    <span class="s2">&quot;include&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;recordCount&quot;</span><span class="p">:</span> <span class="mi">0</span>
+                <span class="p">})</span>
+
+        <span class="c1"># Look up playbook collection details</span>
+        <span class="n">playbook_config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;collections&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;globalVariables&quot;</span><span class="p">:</span> <span class="p">[]}</span>
+        <span class="k">if</span> <span class="n">playbook_collections</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">collection</span> <span class="ow">in</span> <span class="n">playbook_collections</span><span class="p">:</span>
+                <span class="n">info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_playbook_collection_info</span><span class="p">(</span><span class="n">collection</span><span class="p">)</span>
+                <span class="n">playbook_config</span><span class="p">[</span><span class="s2">&quot;collections&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                    <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">info</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">],</span>
+                    <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">info</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">],</span>
+                    <span class="s2">&quot;includeGlobalVariables&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;includeSchedules&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;includeVersions&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;include&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;recordCount&quot;</span><span class="p">:</span> <span class="mi">0</span>
+                <span class="p">})</span>
+
+        <span class="c1"># Build complete template</span>
+        <span class="n">options</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;modules&quot;</span><span class="p">:</span> <span class="n">modules_config</span><span class="p">,</span>
+            <span class="s2">&quot;picklistNames&quot;</span><span class="p">:</span> <span class="n">picklist_iris</span><span class="p">,</span>
+            <span class="s2">&quot;connectors&quot;</span><span class="p">:</span> <span class="n">connector_configs</span><span class="p">,</span>
+            <span class="s2">&quot;playbooks&quot;</span><span class="p">:</span> <span class="n">playbook_config</span><span class="p">,</span>
+            <span class="s2">&quot;viewTemplates&quot;</span><span class="p">:</span> <span class="n">view_templates</span> <span class="ow">or</span> <span class="p">[],</span>
+            <span class="c1"># Add empty lists for other optional components</span>
+            <span class="s2">&quot;recordSets&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;views&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;reports&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;dashboards&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;roles&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;teams&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;actors&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;widgets&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;appSettings&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;showOnlyConfigured&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;preprocessingRules&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;ruleChannels&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;rules&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;playbookBlocks&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;blocks&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;includeGlobalVariables&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+        <span class="p">}</span>
+
+        <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;autoSelectPicklists&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_export_template</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ExportConfigAPI.create_export_template">
+<a class="viewcode-back" href="../../../autoapi/pyfsr/api/export_config/index.html#pyfsr.api.export_config.ExportConfigAPI.create_export_template">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">create_export_template</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> \
+            <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the actual export template - internal method&quot;&quot;&quot;</span>
+        <span class="n">template_data</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
+            <span class="s2">&quot;options&quot;</span><span class="p">:</span> <span class="n">options</span><span class="p">,</span>
+            <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{</span><span class="s2">&quot;autoSelectPicklists&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s1">&#39;/api/3/export_templates&#39;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">template_data</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2024, Dylan Spille.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.1.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

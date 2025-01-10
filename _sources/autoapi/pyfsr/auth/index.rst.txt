@@ -1,0 +1,17 @@
+pyfsr.auth
+==========
+
+.. py:module:: pyfsr.auth
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/pyfsr/auth/api_key/index
+   /autoapi/pyfsr/auth/base/index
+   /autoapi/pyfsr/auth/user_pass/index
+
+

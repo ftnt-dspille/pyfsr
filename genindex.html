@@ -1,0 +1,866 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Index &#8212; pyfsr 0.2.2 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="_static/documentation_options.js?v=000c92bf"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'genindex';</script>
+    <link rel="index" title="Index" href="#" />
+    <link rel="search" title="Search" href="search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">pyfsr 0.2.2 documentation</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="autoapi/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="autoapi/pyfsr/index.html">
+    pyfsr
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="autoapi/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="autoapi/pyfsr/index.html">
+    pyfsr
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none"></div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+
+<h1 id="index">Index</h1>
+
+<div class="genindex-jumpbox">
+ <a href="#A"><strong>A</strong></a>
+ | <a href="#B"><strong>B</strong></a>
+ | <a href="#C"><strong>C</strong></a>
+ | <a href="#D"><strong>D</strong></a>
+ | <a href="#E"><strong>E</strong></a>
+ | <a href="#F"><strong>F</strong></a>
+ | <a href="#G"><strong>G</strong></a>
+ | <a href="#H"><strong>H</strong></a>
+ | <a href="#I"><strong>I</strong></a>
+ | <a href="#L"><strong>L</strong></a>
+ | <a href="#M"><strong>M</strong></a>
+ | <a href="#O"><strong>O</strong></a>
+ | <a href="#P"><strong>P</strong></a>
+ | <a href="#Q"><strong>Q</strong></a>
+ | <a href="#R"><strong>R</strong></a>
+ | <a href="#S"><strong>S</strong></a>
+ | <a href="#T"><strong>T</strong></a>
+ | <a href="#U"><strong>U</strong></a>
+ | <a href="#V"><strong>V</strong></a>
+ 
+</div>
+<h2 id="A">A</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.alerts">alerts (pyfsr.client.FortiSOAR attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.alerts">(pyfsr.FortiSOAR attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="autoapi/pyfsr/api/alerts/index.html#pyfsr.api.alerts.AlertsAPI">AlertsAPI (class in pyfsr.api.alerts)</a>
+</li>
+      <li><a href="autoapi/pyfsr/auth/api_key/index.html#pyfsr.auth.api_key.APIKeyAuth.api_key">api_key (pyfsr.auth.api_key.APIKeyAuth attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.APIError">APIError</a>
+</li>
+      <li><a href="autoapi/pyfsr/auth/api_key/index.html#pyfsr.auth.api_key.APIKeyAuth">APIKeyAuth (class in pyfsr.auth.api_key)</a>
+</li>
+      <li><a href="autoapi/pyfsr/auth/base/index.html#pyfsr.auth.base.BaseAuth.auth_type">auth_type (pyfsr.auth.base.BaseAuth property)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.UnsupportedAuthOperationError.auth_type">(pyfsr.exceptions.UnsupportedAuthOperationError attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.AuthenticationError">AuthenticationError</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="B">B</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/auth/api_key/index.html#pyfsr.auth.api_key.APIKeyAuth.base_url">base_url (pyfsr.auth.api_key.APIKeyAuth attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/auth/user_pass/index.html#pyfsr.auth.user_pass.UserPasswordAuth.base_url">(pyfsr.auth.user_pass.UserPasswordAuth attribute)</a>
+</li>
+        <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.base_url">(pyfsr.client.FortiSOAR attribute)</a>
+</li>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.base_url">(pyfsr.FortiSOAR attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/api/base/index.html#pyfsr.api.base.BaseAPI">BaseAPI (class in pyfsr.api.base)</a>
+</li>
+      <li><a href="autoapi/pyfsr/auth/base/index.html#pyfsr.auth.base.BaseAuth">BaseAuth (class in pyfsr.auth.base)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="C">C</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/auth/base/index.html#pyfsr.auth.base.BaseAuth.check_operation_supported">check_operation_supported() (pyfsr.auth.base.BaseAuth method)</a>
+</li>
+      <li><a href="autoapi/pyfsr/api/base/index.html#pyfsr.api.base.BaseAPI.client">client (pyfsr.api.base.BaseAPI attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/api/export_config/index.html#pyfsr.api.export_config.ExportConfigAPI.client">(pyfsr.api.export_config.ExportConfigAPI attribute)</a>
+</li>
+        <li><a href="autoapi/pyfsr/api/solution_packs/index.html#pyfsr.api.solution_packs.SolutionPackAPI.client">(pyfsr.api.solution_packs.SolutionPackAPI attribute)</a>
+</li>
+        <li><a href="autoapi/pyfsr/utils/file_operations/index.html#pyfsr.utils.file_operations.FileOperations.client">(pyfsr.utils.file_operations.FileOperations attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/api/alerts/index.html#pyfsr.api.alerts.AlertsAPI.create">create() (pyfsr.api.alerts.AlertsAPI method)</a>
+</li>
+      <li><a href="autoapi/pyfsr/api/export_config/index.html#pyfsr.api.export_config.ExportConfigAPI.create_export_template">create_export_template() (pyfsr.api.export_config.ExportConfigAPI method)</a>
+</li>
+      <li><a href="autoapi/pyfsr/api/export_config/index.html#pyfsr.api.export_config.ExportConfigAPI.create_simplified_template">create_simplified_template() (pyfsr.api.export_config.ExportConfigAPI method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="D">D</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/api/alerts/index.html#pyfsr.api.alerts.AlertsAPI.delete">delete() (pyfsr.api.alerts.AlertsAPI method)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.delete">(pyfsr.client.FortiSOAR method)</a>
+</li>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.delete">(pyfsr.FortiSOAR method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="E">E</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/api/export_config/index.html#pyfsr.api.export_config.ExportConfigAPI.export_by_template_name">export_by_template_name() (pyfsr.api.export_config.ExportConfigAPI method)</a>
+</li>
+      <li><a href="autoapi/pyfsr/api/export_config/index.html#pyfsr.api.export_config.ExportConfigAPI.export_by_template_uuid">export_by_template_uuid() (pyfsr.api.export_config.ExportConfigAPI method)</a>
+</li>
+      <li><a href="autoapi/pyfsr/api/solution_packs/index.html#pyfsr.api.solution_packs.SolutionPackAPI.export_config">export_config (pyfsr.api.solution_packs.SolutionPackAPI attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.export_config">(pyfsr.client.FortiSOAR attribute)</a>
+</li>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.export_config">(pyfsr.FortiSOAR attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/api/solution_packs/index.html#pyfsr.api.solution_packs.SolutionPackAPI.export_pack">export_pack() (pyfsr.api.solution_packs.SolutionPackAPI method)</a>
+</li>
+      <li><a href="autoapi/pyfsr/api/export_config/index.html#pyfsr.api.export_config.ExportConfigAPI">ExportConfigAPI (class in pyfsr.api.export_config)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="F">F</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/utils/file_operations/index.html#pyfsr.utils.file_operations.FileOperations">FileOperations (class in pyfsr.utils.file_operations)</a>
+</li>
+      <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.files">files (pyfsr.client.FortiSOAR attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.files">(pyfsr.FortiSOAR attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="autoapi/pyfsr/api/solution_packs/index.html#pyfsr.api.solution_packs.SolutionPackAPI.find_available_pack">find_available_pack() (pyfsr.api.solution_packs.SolutionPackAPI method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/api/solution_packs/index.html#pyfsr.api.solution_packs.SolutionPackAPI.find_installed_pack">find_installed_pack() (pyfsr.api.solution_packs.SolutionPackAPI method)</a>
+</li>
+      <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR">FortiSOAR (class in pyfsr)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR">(class in pyfsr.client)</a>
+</li>
+      </ul></li>
+      <li><a href="autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.FortiSOARException">FortiSOARException</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="G">G</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/api/alerts/index.html#pyfsr.api.alerts.AlertsAPI.get">get() (pyfsr.api.alerts.AlertsAPI method)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.get">(pyfsr.client.FortiSOAR method)</a>
+</li>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.get">(pyfsr.FortiSOAR method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/auth/api_key/index.html#pyfsr.auth.api_key.APIKeyAuth.get_auth_headers">get_auth_headers() (pyfsr.auth.api_key.APIKeyAuth method)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/auth/base/index.html#pyfsr.auth.base.BaseAuth.get_auth_headers">(pyfsr.auth.base.BaseAuth method)</a>
+</li>
+        <li><a href="autoapi/pyfsr/auth/user_pass/index.html#pyfsr.auth.user_pass.UserPasswordAuth.get_auth_headers">(pyfsr.auth.user_pass.UserPasswordAuth method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="H">H</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.handle_api_error">handle_api_error() (in module pyfsr.exceptions)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="I">I</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/auth/api_key/index.html#pyfsr.auth.api_key.APIKeyAuth.is_valid">is_valid() (pyfsr.auth.api_key.APIKeyAuth method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="L">L</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/api/alerts/index.html#pyfsr.api.alerts.AlertsAPI.list">list() (pyfsr.api.alerts.AlertsAPI method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.logger">logger (in module pyfsr.client)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="M">M</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.FortiSOARException.message">message (pyfsr.exceptions.FortiSOARException attribute)</a>
+</li>
+      <li>
+    module
+
+      <ul>
+        <li><a href="autoapi/pyfsr/index.html#module-pyfsr">pyfsr</a>
+</li>
+        <li><a href="autoapi/pyfsr/api/index.html#module-pyfsr.api">pyfsr.api</a>
+</li>
+        <li><a href="autoapi/pyfsr/api/alerts/index.html#module-pyfsr.api.alerts">pyfsr.api.alerts</a>
+</li>
+        <li><a href="autoapi/pyfsr/api/base/index.html#module-pyfsr.api.base">pyfsr.api.base</a>
+</li>
+        <li><a href="autoapi/pyfsr/api/export_config/index.html#module-pyfsr.api.export_config">pyfsr.api.export_config</a>
+</li>
+        <li><a href="autoapi/pyfsr/api/solution_packs/index.html#module-pyfsr.api.solution_packs">pyfsr.api.solution_packs</a>
+</li>
+        <li><a href="autoapi/pyfsr/auth/index.html#module-pyfsr.auth">pyfsr.auth</a>
+</li>
+        <li><a href="autoapi/pyfsr/auth/api_key/index.html#module-pyfsr.auth.api_key">pyfsr.auth.api_key</a>
+</li>
+        <li><a href="autoapi/pyfsr/auth/base/index.html#module-pyfsr.auth.base">pyfsr.auth.base</a>
+</li>
+        <li><a href="autoapi/pyfsr/auth/user_pass/index.html#module-pyfsr.auth.user_pass">pyfsr.auth.user_pass</a>
+</li>
+        <li><a href="autoapi/pyfsr/client/index.html#module-pyfsr.client">pyfsr.client</a>
+</li>
+        <li><a href="autoapi/pyfsr/exceptions/index.html#module-pyfsr.exceptions">pyfsr.exceptions</a>
+</li>
+        <li><a href="autoapi/pyfsr/utils/index.html#module-pyfsr.utils">pyfsr.utils</a>
+</li>
+        <li><a href="autoapi/pyfsr/utils/file_operations/index.html#module-pyfsr.utils.file_operations">pyfsr.utils.file_operations</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/api/alerts/index.html#pyfsr.api.alerts.AlertsAPI.module">module (pyfsr.api.alerts.AlertsAPI attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="O">O</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.UnsupportedAuthOperationError.operation">operation (pyfsr.exceptions.UnsupportedAuthOperationError attribute)</a>
+</li>
+      <li><a href="autoapi/pyfsr/auth/base/index.html#pyfsr.auth.base.BaseAuth.OPERATION_AUTH">OPERATION_AUTH (pyfsr.auth.base.BaseAuth attribute)</a>
+</li>
+      <li><a href="autoapi/pyfsr/auth/base/index.html#pyfsr.auth.base.BaseAuth.OPERATION_CONFIG_EXPORT">OPERATION_CONFIG_EXPORT (pyfsr.auth.base.BaseAuth attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/auth/base/index.html#pyfsr.auth.base.BaseAuth.OPERATION_CONFIG_IMPORT">OPERATION_CONFIG_IMPORT (pyfsr.auth.base.BaseAuth attribute)</a>
+</li>
+      <li><a href="autoapi/pyfsr/auth/base/index.html#pyfsr.auth.base.BaseAuth.OPERATION_PLAYBOOK">OPERATION_PLAYBOOK (pyfsr.auth.base.BaseAuth attribute)</a>
+</li>
+      <li><a href="autoapi/pyfsr/auth/base/index.html#pyfsr.auth.base.BaseAuth.OPERATION_SOLUTION_PACK">OPERATION_SOLUTION_PACK (pyfsr.auth.base.BaseAuth attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="P">P</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/auth/user_pass/index.html#pyfsr.auth.user_pass.UserPasswordAuth.password">password (pyfsr.auth.user_pass.UserPasswordAuth attribute)</a>
+</li>
+      <li><a href="autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.PermissionError">PermissionError</a>
+</li>
+      <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.post">post() (pyfsr.client.FortiSOAR method)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.post">(pyfsr.FortiSOAR method)</a>
+</li>
+      </ul></li>
+      <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.put">put() (pyfsr.client.FortiSOAR method)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.put">(pyfsr.FortiSOAR method)</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr
+
+      <ul>
+        <li><a href="autoapi/pyfsr/index.html#module-pyfsr">module</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr.api
+
+      <ul>
+        <li><a href="autoapi/pyfsr/api/index.html#module-pyfsr.api">module</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr.api.alerts
+
+      <ul>
+        <li><a href="autoapi/pyfsr/api/alerts/index.html#module-pyfsr.api.alerts">module</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr.api.base
+
+      <ul>
+        <li><a href="autoapi/pyfsr/api/base/index.html#module-pyfsr.api.base">module</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr.api.export_config
+
+      <ul>
+        <li><a href="autoapi/pyfsr/api/export_config/index.html#module-pyfsr.api.export_config">module</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr.api.solution_packs
+
+      <ul>
+        <li><a href="autoapi/pyfsr/api/solution_packs/index.html#module-pyfsr.api.solution_packs">module</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    pyfsr.auth
+
+      <ul>
+        <li><a href="autoapi/pyfsr/auth/index.html#module-pyfsr.auth">module</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr.auth.api_key
+
+      <ul>
+        <li><a href="autoapi/pyfsr/auth/api_key/index.html#module-pyfsr.auth.api_key">module</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr.auth.base
+
+      <ul>
+        <li><a href="autoapi/pyfsr/auth/base/index.html#module-pyfsr.auth.base">module</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr.auth.user_pass
+
+      <ul>
+        <li><a href="autoapi/pyfsr/auth/user_pass/index.html#module-pyfsr.auth.user_pass">module</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr.client
+
+      <ul>
+        <li><a href="autoapi/pyfsr/client/index.html#module-pyfsr.client">module</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr.exceptions
+
+      <ul>
+        <li><a href="autoapi/pyfsr/exceptions/index.html#module-pyfsr.exceptions">module</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr.utils
+
+      <ul>
+        <li><a href="autoapi/pyfsr/utils/index.html#module-pyfsr.utils">module</a>
+</li>
+      </ul></li>
+      <li>
+    pyfsr.utils.file_operations
+
+      <ul>
+        <li><a href="autoapi/pyfsr/utils/file_operations/index.html#module-pyfsr.utils.file_operations">module</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="Q">Q</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.query">query() (pyfsr.client.FortiSOAR method)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.query">(pyfsr.FortiSOAR method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="R">R</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.request">request() (pyfsr.client.FortiSOAR method)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.request">(pyfsr.FortiSOAR method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.ResourceNotFoundError">ResourceNotFoundError</a>
+</li>
+      <li><a href="autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.FortiSOARException.response">response (pyfsr.exceptions.FortiSOARException attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="S">S</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/api/solution_packs/index.html#pyfsr.api.solution_packs.SolutionPackAPI.search_available_packs">search_available_packs() (pyfsr.api.solution_packs.SolutionPackAPI method)</a>
+</li>
+      <li><a href="autoapi/pyfsr/api/solution_packs/index.html#pyfsr.api.solution_packs.SolutionPackAPI.search_installed_packs">search_installed_packs() (pyfsr.api.solution_packs.SolutionPackAPI method)</a>
+</li>
+      <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.session">session (pyfsr.client.FortiSOAR attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.session">(pyfsr.FortiSOAR attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.solution_packs">solution_packs (pyfsr.client.FortiSOAR attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.solution_packs">(pyfsr.FortiSOAR attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="autoapi/pyfsr/api/solution_packs/index.html#pyfsr.api.solution_packs.SolutionPackAPI">SolutionPackAPI (class in pyfsr.api.solution_packs)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="T">T</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/auth/user_pass/index.html#pyfsr.auth.user_pass.UserPasswordAuth.token">token (pyfsr.auth.user_pass.UserPasswordAuth attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="U">U</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/auth/base/index.html#pyfsr.auth.base.BaseAuth.unsupported_operations">unsupported_operations (pyfsr.auth.base.BaseAuth property)</a>
+</li>
+      <li><a href="autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.UnsupportedAuthOperationError">UnsupportedAuthOperationError</a>
+</li>
+      <li><a href="autoapi/pyfsr/api/alerts/index.html#pyfsr.api.alerts.AlertsAPI.update">update() (pyfsr.api.alerts.AlertsAPI method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/utils/file_operations/index.html#pyfsr.utils.file_operations.FileOperations.upload">upload() (pyfsr.utils.file_operations.FileOperations method)</a>
+</li>
+      <li><a href="autoapi/pyfsr/utils/file_operations/index.html#pyfsr.utils.file_operations.FileOperations.upload_many">upload_many() (pyfsr.utils.file_operations.FileOperations method)</a>
+</li>
+      <li><a href="autoapi/pyfsr/auth/user_pass/index.html#pyfsr.auth.user_pass.UserPasswordAuth.username">username (pyfsr.auth.user_pass.UserPasswordAuth attribute)</a>
+</li>
+      <li><a href="autoapi/pyfsr/auth/user_pass/index.html#pyfsr.auth.user_pass.UserPasswordAuth">UserPasswordAuth (class in pyfsr.auth.user_pass)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="V">V</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.ValidationError">ValidationError</a>
+</li>
+      <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.verbose">verbose (pyfsr.client.FortiSOAR attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.verbose">(pyfsr.FortiSOAR attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/pyfsr/auth/api_key/index.html#pyfsr.auth.api_key.APIKeyAuth.verify_ssl">verify_ssl (pyfsr.auth.api_key.APIKeyAuth attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/pyfsr/auth/user_pass/index.html#pyfsr.auth.user_pass.UserPasswordAuth.verify_ssl">(pyfsr.auth.user_pass.UserPasswordAuth attribute)</a>
+</li>
+        <li><a href="autoapi/pyfsr/client/index.html#pyfsr.client.FortiSOAR.verify_ssl">(pyfsr.client.FortiSOAR attribute)</a>
+</li>
+        <li><a href="autoapi/pyfsr/index.html#pyfsr.FortiSOAR.verify_ssl">(pyfsr.FortiSOAR attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2024, Dylan Spille.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.1.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

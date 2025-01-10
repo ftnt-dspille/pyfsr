@@ -1,0 +1,15 @@
+pyfsr.utils
+===========
+
+.. py:module:: pyfsr.utils
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/pyfsr/utils/file_operations/index
+
+
