@@ -33,4 +33,4 @@ docs/source/autoapi/
 !docs/source/index.rst
 !docs/source/conf.py
 /.coverage
-/logs/fortisoar.log
+fortisoar.log
