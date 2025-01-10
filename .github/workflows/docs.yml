@@ -7,15 +7,18 @@ on:
       - 'src/pyfsr/**'
       - 'docs/**'
       - '.github/workflows/docs.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/pyfsr/**'
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
   workflow_call:
     inputs:
       ref:
         required: false
         type: string
         description: 'The Git ref to checkout'
-    secrets:
-      GITHUB_TOKEN:
-        required: true
 
 jobs:
   docs:
