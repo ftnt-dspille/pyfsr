@@ -3,9 +3,9 @@
 # First we need to upload the file to SOAR, then we can link the file to the attachment.
 
 
-
 # noinspection PyCompatibility
 import tomllib
+
 from pyfsr import FortiSOAR
 
 # Load config
@@ -38,4 +38,3 @@ attachment_data = {
 attachment_record = client.post("/api/3/attachments", data=attachment_data)
 
 print(attachment_record)
-
