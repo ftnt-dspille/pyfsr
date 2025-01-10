@@ -2,6 +2,8 @@ import os
 import time
 from typing import Dict, Any, Optional, List
 
+from ..auth.base import BaseAuth
+
 
 class ExportConfigAPI:
     """Class to handle FortiSOAR export configuration operations"""
@@ -12,6 +14,10 @@ class ExportConfigAPI:
         self._connector_cache = {}
         self._playbook_cache = {}
         self._template_cache = {}
+
+    def _check_auth_support(self, operation: Optional[str] = None) -> None:
+        """Verify if the current auth method supports a specific operation"""
+        self.client.auth.check_operation_supported(operation)
 
     def _get_picklist_iri(self, picklist_name: str) -> str:
         """Look up picklist IRI by name"""
@@ -28,8 +34,8 @@ class ExportConfigAPI:
         """Look up connector details by name"""
         if connector_name not in self._connector_cache:
             # Query connector info
-            response = self.client.get('/api/integration/connectors/')
-            for connector in response['hydra:member']:
+            response = self.client.get('/api/integration/connectors/?page_size=1000&label=' + connector_name)
+            for connector in response['data']:
                 if connector['label'] == connector_name:
                     self._connector_cache[connector_name] = {
                         'value': f"cyops-connector-{connector['name']}-{connector['version']}",
@@ -160,6 +166,9 @@ class ExportConfigAPI:
         Returns:
             Path where exported file was saved
 
+        Raises:
+            UnSupportedOperationError: If the current auth method does not support configuration export
+
         Example:
             >>> client = FortiSOAR('fortisoar.company.com', '<your-api-token>')
             >>> output_file = client.export_config.export_by_template_uuid(
@@ -167,6 +176,7 @@ class ExportConfigAPI:
             ...     output_path="exports/config.zip"
             ... )
         """
+        self._check_auth_support(operation=BaseAuth.OPERATION_CONFIG_EXPORT)
         return self._export_with_template(
             template_uuid=template_uuid,
             output_path=output_path,
@@ -190,6 +200,9 @@ class ExportConfigAPI:
         Returns:
             Path where exported file was saved
 
+        Raises:
+            UnSupportedOperationError: If the current auth method does not support configuration export
+
         Example:
             >>> client = FortiSOAR('fortisoar.company.com', '<your-api-token>')
             >>> output_file = client.export_config.export_by_template_name(
@@ -197,6 +210,7 @@ class ExportConfigAPI:
             ...     output_path="exports/alert_config.zip"
             ... )
         """
+        self._check_auth_support(operation=BaseAuth.OPERATION_CONFIG_EXPORT)
         template_uuid = self._get_template_uuid(template_name)
         filename = f"{template_name.lower().replace(' ', '_')}.zip" if not output_path else None
 
