@@ -5,6 +5,7 @@ from .base import BaseAuth
 
 class UserPasswordAuth(BaseAuth):
     def __init__(self, base_url: str, username: str, password: str, verify_ssl: bool = True):
+        super().__init__()
         self.base_url = base_url
         self.username = username
         self.password = password

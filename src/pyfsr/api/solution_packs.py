@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 class SolutionPackAPI:
@@ -9,12 +9,9 @@ class SolutionPackAPI:
     def __init__(self, client, export_config):
         self.client = client
         self.export_config = export_config
-        self._pack_cache = {}
 
     def _get_pack_by_name(self, name: str) -> Optional[Dict[str, Any]]:
         """Get a solution pack by its exact name."""
-        if name in self._pack_cache:
-            return self._pack_cache[name]
 
         pack = self.find_installed_pack(name)
         if pack and pack['name'] == name:
@@ -28,23 +25,59 @@ class SolutionPackAPI:
 
     def find_installed_pack(self, search_term: str) -> Optional[Dict[str, Any]]:
         """
-        Find an installed solution pack by name, label, or description. This is similar to the find_available_pack
-        method, but only returns installed packs.
+        Find a single installed solution pack by name, label, or description. Returns only the first
+        matching pack found. For multiple results, use search_installed_packs() instead.
 
         Args:
             search_term: Name, label, or description to search for
 
         Returns:
-            Dict[str, Any]: The solution pack object
+            Dict[str, Any]: The first matching solution pack object, or None if no matches
 
         Example:
             .. code-block:: python
 
+                # Find single installed pack
                 pack = client.solution_packs.find_installed_pack("SOAR Framework")
+                if pack:
+                    print(f"Found pack: {pack['name']}")
+        """
+        packs = self.search_installed_packs(search_term, limit=1)
+        if not packs:
+            return None
+
+        pack = packs[0]
+        return pack
+
+    def search_installed_packs(
+            self,
+            search_term: str = "",
+            limit: int = 30
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for all installed solution packs matching the search criteria.
+
+        Args:
+            search_term: Name, label, or description to search for
+            limit: Maximum number of results to return (default 30)
+
+        Returns:
+            List[Dict[str, Any]]: List of matching solution pack objects
+
+        Example:
+            .. code-block:: python
+
+                # Search for multiple installed packs
+                packs = client.solution_packs.search_installed_packs(
+                    search_term="SOAR",
+                    limit=10
+                )
+                for pack in packs:
+                    print(f"Found pack: {pack['name']}")
         """
         query = {
             "sort": [{"field": "label", "direction": "ASC"}],
-            "limit": 30,
+            "limit": limit,
             "logic": "AND",
             "filters": [
                 {"field": "type", "operator": "in", "value": ["solutionpack"]},
@@ -61,37 +94,70 @@ class SolutionPackAPI:
             "search": search_term
         }
 
-        response = self.client.post(f'/api/query/solutionpacks?$limit=30&$page=1&$search={search_term}', data=query)
-        packs = response.get('hydra:member', [])
+        response = self.client.post(
+            f'/api/query/solutionpacks?$limit={limit}&$page=1&$search={search_term}',
+            data=query
+        )
+        return response.get('hydra:member', [])
 
-        if not packs:
-            return None
-
-        pack = packs[0]
-        self._pack_cache[pack['name']] = pack
-        return pack
-
-    def find_available_pack(self, search_term: str) -> Optional[Dict[str, Any]]:
+    def find_available_pack(self, search_term: str = "") -> Optional[Dict[str, Any]]:
         """
-        Find an available (not necessarily installed) solution pack.
+        Find a single available solution pack by name, label, or description. Returns only the first
+        matching pack found. For multiple results, use search_available_packs() instead.
 
         Args:
             search_term: Name, label, or description to search for
 
         Returns:
-            Dict[str, Any]: The solution pack object
+            Dict[str, Any]: The first matching solution pack object, or None if no matches
 
         Example:
             .. code-block:: python
 
+                # Find single available pack
                 pack = client.solution_packs.find_available_pack("SOAR Framework")
+                if pack:
+                    print(f"Found pack: {pack['name']}")
+        """
+        packs = self.search_available_packs(search_term, limit=1)
+        if not packs:
+            return None
+
+        pack = packs[0]
+        return pack
+
+    def search_available_packs(
+            self,
+            search_term: str = "",
+            limit: int = 30
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for all available solution packs matching the search criteria.
+
+        Args:
+            search_term: Name, label, or description to search for
+            limit: Maximum number of results to return (default 30)
+
+        Returns:
+            List[Dict[str, Any]]: List of matching solution pack objects
+
+        Example:
+            .. code-block:: python
+
+                # Search for multiple available packs
+                packs = client.solution_packs.search_available_packs(
+                    search_term="SOAR",
+                    limit=10
+                )
+                for pack in packs:
+                    print(f"Found pack: {pack['name']}")
         """
         query = {
             "sort": [
                 {"field": "featured", "direction": "DESC"},
                 {"field": "label", "direction": "ASC"}
             ],
-            "limit": 30,
+            "limit": limit,
             "logic": "AND",
             "filters": [
                 {"field": "type", "operator": "in", "value": ["solutionpack"]},
@@ -106,15 +172,9 @@ class SolutionPackAPI:
             "search": search_term
         }
 
-        response = self.client.post('/api/query/solutionpacks', data=query)
-        packs = response.get('hydra:member', [])
-
-        if not packs:
-            return None
-
-        pack = packs[0]
-        self._pack_cache[pack['name']] = pack
-        return pack
+        response = self.client.post(f'/api/query/solutionpacks?$limit={limit}&$page=1&$search={search_term}',
+                                    data=query)
+        return response.get('hydra:member', [])
 
     def export_pack(
             self,
