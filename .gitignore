@@ -32,3 +32,5 @@ docs/source/autoapi/
 !docs/source/_templates/.gitkeep
 !docs/source/index.rst
 !docs/source/conf.py
+/.coverage
+/logs/fortisoar.log
