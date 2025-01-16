@@ -1,5 +1,10 @@
 # pyfsr
 
+[![PyPI version](https://badge.fury.io/py/pyfsr.svg)](https://badge.fury.io/py/pyfsr)
+[![Documentation Status](https://github.com/ftnt-dspille/pyfsr/actions/workflows/docs.yml/badge.svg)](https://github.com/ftnt-dspille/pyfsr/actions/workflows/docs.yml)
+[![Tests](https://github.com/ftnt-dspille/pyfsr/actions/workflows/tests.yml/badge.svg)](https://github.com/ftnt-dspille/pyfsr/actions/workflows/tests.yml)
+[![codecov](https://codecov.io/gh/ftnt-dspille/pyfsr/branch/main/graph/badge.svg)](https://codecov.io/gh/ftnt-dspille/pyfsr)
+
 [Documentation](https://ftnt-dspille.github.io/pyfsr/) | [Installation](#installation) | [Quick Start](#quick-start)
 
 **PyFSR** is a Python client library for the FortiSOAR REST API, allowing you to interact with FortiSOAR

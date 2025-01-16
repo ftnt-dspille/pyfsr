@@ -1,4 +1,4 @@
-name: Pull Request Tests
+name: Tests
 
 on:
   pull_request:
@@ -8,6 +8,12 @@ on:
       - 'tests/**'
       - 'pyproject.toml'
       - '.github/workflows/**'
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        type: string
+        description: 'The Git ref to checkout'
 
 jobs:
   test:
@@ -30,7 +36,13 @@ jobs:
           pip install -e '.[test]' tomli
 
       - name: Run tests
-        run: pytest tests
+        run: |
+          pytest tests/ --cov=pyfsr --cov-report=xml
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   docs:
     needs: test
