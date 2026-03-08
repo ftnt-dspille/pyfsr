@@ -87,7 +87,7 @@ def api_key_client():
 
 
 @pytest.fixture(scope="module")
-def user_pass_client() -> FortiSOAR:
+def user_pass_client(request) -> FortiSOAR:
     """Fixture that specifically requires username/password authentication"""
     from pyfsr import FortiSOAR
 
@@ -97,9 +97,16 @@ def user_pass_client() -> FortiSOAR:
     if "username" not in auth_config or "password" not in auth_config:
         pytest.skip("Username/password authentication not configured")
 
-    return FortiSOAR(base_url=config["fortisoar"]["base_url"], auth=(auth_config["username"], auth_config["password"]),
-                     verify_ssl=config["fortisoar"].get("verify_ssl", True), suppress_insecure_warnings=True,
-                     verbose=True)
+    # Get verbose parameter from fixture request or default to False
+    verbose = request.param if hasattr(request, 'param') else False
+
+    return FortiSOAR(
+        base_url=config["fortisoar"]["base_url"],
+        auth=(auth_config["username"], auth_config["password"]),
+        verify_ssl=config["fortisoar"].get("verify_ssl", True),
+        suppress_insecure_warnings=True,
+        verbose=verbose
+    )
 
 
 @pytest.fixture
@@ -228,12 +235,16 @@ def test_file_upload(client):
         test_file.unlink()
 
 
-@pytest.mark.parametrize("client_fixture,should_raise", [
-    ("api_key_client", True),
-    ("user_pass_client", False)
-])
+@pytest.mark.parametrize(
+    "client_fixture,should_raise,verbose",
+    [
+        pytest.param("api_key_client", True, False, id="api-key"),
+        pytest.param("user_pass_client", False, False, id="user-pass")
+    ],
+    indirect=["client_fixture"] if "user_pass_client" in client_fixture else []
+)
 @pytest.mark.integration
-def test_export_config(request, client_fixture, should_raise, client):
+def test_export_config(request, client_fixture, should_raise, verbose):
     """Test configuration export functionality"""
     client = request.getfixturevalue(client_fixture)
     output_path = "test_export.zip"
@@ -262,7 +273,6 @@ def test_export_config(request, client_fixture, should_raise, client):
             assert Path(exported_file).suffix == ".zip"
 
     finally:
-        pass
         if os.path.exists(output_path):
             os.remove(output_path)
 

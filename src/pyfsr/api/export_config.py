@@ -2,6 +2,7 @@ import os
 import time
 from typing import Dict, Any, Optional, List
 
+from .content_hub import ContentHubSearch
 from ..auth.base import BaseAuth
 
 
@@ -10,10 +11,7 @@ class ExportConfigAPI:
 
     def __init__(self, client):
         self.client = client
-        self._picklist_cache = {}
-        self._connector_cache = {}
-        self._playbook_cache = {}
-        self._template_cache = {}
+        self.content_hub = ContentHubSearch(client)
 
     def _check_auth_support(self, operation: Optional[str] = None) -> None:
         """Verify if the current auth method supports a specific operation"""
@@ -21,64 +19,63 @@ class ExportConfigAPI:
 
     def _get_picklist_iri(self, picklist_name: str) -> str:
         """Look up picklist IRI by name"""
-        if picklist_name not in self._picklist_cache:
-            # Query picklist by name
-            response = self.client.get('/api/3/picklist_names', params={'name': picklist_name})
-            if response['hydra:member']:
-                self._picklist_cache[picklist_name] = response['hydra:member'][0]['@id']
-            else:
-                raise ValueError(f"Picklist not found: {picklist_name}")
-        return self._picklist_cache[picklist_name]
+        # Query picklist by name
+        response = self.client.get('/api/3/picklist_names', params={'name': picklist_name})
+        if response['hydra:member']:
+            return response['hydra:member'][0]['@id']
+        else:
+            raise ValueError(f"Picklist not found: {picklist_name}")
 
     def _get_connector_info(self, connector_name: str) -> Dict[str, Any]:
-        """Look up connector details by name"""
-        if connector_name not in self._connector_cache:
-            # Query connector info
-            response = self.client.get('/api/integration/connectors/?page_size=1000&label=' + connector_name)
-            for connector in response['data']:
-                if connector['label'] == connector_name:
-                    self._connector_cache[connector_name] = {
-                        'value': f"cyops-connector-{connector['name']}-{connector['version']}",
-                        'version': connector['version'],
-                        'label': connector['label']
-                    }
-                    break
-            if connector_name not in self._connector_cache:
-                raise ValueError(f"Connector not found: {connector_name}")
-        return self._connector_cache[connector_name]
+        """
+        Look up connector details by name using ContentHubSearch.
+
+        Args:
+            connector_name: Label/name of the connector to find
+
+        Returns:
+            Dict containing connector details in export-compatible format
+
+        Raises:
+            ValueError: If connector is not found
+        """
+        connector = self.content_hub.find_available_connector(connector_name)
+        if connector and connector.get('label') == connector_name:
+            return {
+                'value': f"cyops-connector-{connector['name']}-{connector['version']}",
+                'version': connector['version'],
+                'label': connector['label']
+            }
+
+        raise ValueError(f"Connector not found: {connector_name}")
 
     def _get_playbook_collection_info(self, collection_name: str) -> Dict[str, Any]:
         """Look up playbook collection details by name"""
-        if collection_name not in self._playbook_cache:
-            # Query playbook collections
-            response = self.client.get('/api/3/workflow_collections', params={'name': collection_name})
-            if response['hydra:member']:
-                collection = response['hydra:member'][0]
-                self._playbook_cache[collection_name] = {
-                    'label': collection['name'],
-                    'value': collection['@id'].split('/')[-1]
-                }
-            else:
-                raise ValueError(f"Playbook collection not found: {collection_name}")
-        return self._playbook_cache[collection_name]
+        # Query playbook collections
+        response = self.client.get('/api/3/workflow_collections', params={'name': collection_name})
+        if response['hydra:member']:
+            collection = response['hydra:member'][0]
+            return {
+                'label': collection['name'],
+                'value': collection['@id'].split('/')[-1]
+            }
+        else:
+            raise ValueError(f"Playbook collection not found: {collection_name}")
 
     def _get_template_uuid(self, template_name: str) -> str:
         """Look up template UUID by name"""
-        if template_name not in self._template_cache:
-            response = self.client.get('/api/3/export_templates', params={'name': template_name})
-            templates = response.get('hydra:member', [])
-            matching_templates = [t for t in templates if t['name'] == template_name]
+        response = self.client.get('/api/3/export_templates', params={'name': template_name})
+        templates = response.get('hydra:member', [])
+        matching_templates = [t for t in templates if t['name'] == template_name]
 
-            if not matching_templates:
-                raise ValueError(f"Export template not found: {template_name}")
+        if not matching_templates:
+            raise ValueError(f"Export template not found: {template_name}")
 
-            # Get the most recently created template if multiple exist
-            template = sorted(matching_templates,
-                              key=lambda x: x.get('createDate', 0),
-                              reverse=True)[0]
-            self._template_cache[template_name] = template['@id'].split('/')[-1]
-
-        return self._template_cache[template_name]
+        # Get the most recently created template if multiple exist
+        template = sorted(matching_templates,
+                          key=lambda x: x.get('createDate', 0),
+                          reverse=True)[0]
+        return template['@id'].split('/')[-1]
 
     def _trigger_export(self, template_uuid: str, filename: str) -> Dict[str, Any]:
         """Trigger the export process using a template"""
