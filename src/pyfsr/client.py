@@ -3,7 +3,7 @@ import logging
 import os
 import time
 from typing import Union, Optional, Dict, Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
 
@@ -30,7 +30,8 @@ class FortiSOAR:
             auth: Union[str, tuple],
             verify_ssl: bool = True,
             suppress_insecure_warnings: bool = False,
-            verbose: bool = False
+            verbose: bool = False,
+            port: Optional[int] = None
     ):
         """
         Initialize the FortiSOAR client.
@@ -40,6 +41,7 @@ class FortiSOAR:
            auth (Union[str, tuple]): The authentication method, either an API key (str) or a tuple of (username, password).
            verify_ssl (bool, optional): Whether to verify SSL certificates. Defaults to True.
            suppress_insecure_warnings (bool, optional): Whether to suppress insecure request warnings. Defaults to False.
+           port (int, optional): Port to connect to. Overrides any port in base_url. Defaults to None (uses 443 for HTTPS).
 
         Raises:
             ValueError: If the provided authentication method is invalid.
@@ -79,7 +81,15 @@ class FortiSOAR:
         # Ensure base_url starts with https://
         if not base_url.startswith('https://'):
             base_url = f'https://{base_url}'
-        self.base_url: str = base_url.rstrip('/')
+        base_url = base_url.rstrip('/')
+
+        # Apply explicit port, overriding any port already in the URL
+        if port is not None:
+            parsed = urlparse(base_url)
+            netloc = f"{parsed.hostname}:{port}"
+            base_url = urlunparse(parsed._replace(netloc=netloc))
+
+        self.base_url: str = base_url
 
         if self.verbose:
             logger.info(f"Initializing FortiSOAR client for {self.base_url}")

@@ -21,7 +21,15 @@ class UserPasswordAuth(BaseAuth):
             }
         }
         response = requests.post(auth_url, json=payload, verify=self.verify_ssl)
-        response.raise_for_status()
+        if not response.ok:
+            try:
+                detail = response.json()
+            except Exception:
+                detail = response.text
+            raise requests.exceptions.HTTPError(
+                f"Authentication failed ({response.status_code}): {detail}",
+                response=response
+            )
         return response.json()['token']
 
     def get_auth_headers(self) -> dict:
