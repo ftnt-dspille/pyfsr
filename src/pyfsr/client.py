@@ -11,6 +11,7 @@ import requests
 from .api.alerts import AlertsAPI
 from .api.content_hub import ContentHubSearch
 from .api.export_config import ExportConfigAPI
+from .api.picklists import PicklistsAPI
 from .api.solution_packs import SolutionPackAPI
 from .auth.api_key import APIKeyAuth
 from .auth.base import BaseAuth
@@ -132,6 +133,9 @@ class FortiSOAR:
 
         # Content Hub search (solution packs, connectors, widgets)
         self.content_hub: ContentHubSearch = ContentHubSearch(self)
+
+        # Picklist discovery + friendly-value -> IRI resolution
+        self.picklists: PicklistsAPI = PicklistsAPI(self)
 
         self.solution_packs: SolutionPackAPI = SolutionPackAPI(self, self.export_config)
 
