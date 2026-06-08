@@ -41,6 +41,10 @@ nitpick_ignore = [
     ("py:class", "Ellipsis"),
     ("py:class", "HydraPage"),
     ("py:class", "pyfsr.pagination.HydraPage"),
+    # The optional MCP server's return type lives in the third-party mcp SDK,
+    # which isn't part of the docs intersphinx set.
+    ("py:class", "mcp.server.lowlevel.Server"),
+    ("py:class", "Server"),
 ]
 
 # AutoAPI configuration

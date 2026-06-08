@@ -41,9 +41,15 @@ docs = [
     "pydata-sphinx-theme"
 ]
 
-# One-shot dev setup: linters + the test/docs extras.
+# Optional generic MCP server: `python -m pyfsr.mcp` over the tool registry.
+# Pulls in the Model Context Protocol SDK; the core library never imports it.
+mcp = [
+    "mcp>=1.0",
+]
+
+# One-shot dev setup: linters + the test/docs/mcp extras.
 dev = [
-    "pyfsr[test,docs]",
+    "pyfsr[test,docs,mcp]",
     "ruff>=0.6",
     "pre-commit>=3.5",
 ]
