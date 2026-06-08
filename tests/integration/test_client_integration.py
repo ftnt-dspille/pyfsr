@@ -14,11 +14,11 @@ except ImportError:
 
 def load_config():
     """Load test configuration from config file"""
-    config_path = Path(__file__).parent.parent.parent / 'examples' / 'config.toml'
+    config_path = Path(__file__).parent.parent.parent / "examples" / "config.toml"
     if not config_path.exists():
         pytest.skip("Integration test config not found")
 
-    with open(config_path, 'rb') as f:
+    with open(config_path, "rb") as f:
         return tomllib.load(f)
 
 
@@ -37,8 +37,10 @@ def get_auth_from_config(config):
     if "username" in auth_config and "password" in auth_config:
         return (auth_config["username"], auth_config["password"])
 
-    raise ValueError("No valid authentication configuration found. "
-                     "Please provide either api_key or username/password.")
+    raise ValueError(
+        "No valid authentication configuration found. "
+        "Please provide either api_key or username/password."
+    )
 
 
 @pytest.fixture(scope="module")
@@ -65,9 +67,13 @@ def client():
     config = load_config()
     auth = get_auth_from_config(config)
 
-    return FortiSOAR(base_url=config["fortisoar"]["base_url"], auth=auth,
-                     verify_ssl=config["fortisoar"].get("verify_ssl", True), suppress_insecure_warnings=True,
-                     verbose=True)
+    return FortiSOAR(
+        base_url=config["fortisoar"]["base_url"],
+        auth=auth,
+        verify_ssl=config["fortisoar"].get("verify_ssl", True),
+        suppress_insecure_warnings=True,
+        verbose=True,
+    )
 
 
 @pytest.fixture(scope="module")
@@ -81,13 +87,17 @@ def api_key_client():
     if "api_key" not in auth_config:
         pytest.skip("API key authentication not configured")
 
-    return FortiSOAR(base_url=config["fortisoar"]["base_url"], auth=auth_config["api_key"],
-                     verify_ssl=config["fortisoar"].get("verify_ssl", True), suppress_insecure_warnings=True,
-                     verbose=True)
+    return FortiSOAR(
+        base_url=config["fortisoar"]["base_url"],
+        auth=auth_config["api_key"],
+        verify_ssl=config["fortisoar"].get("verify_ssl", True),
+        suppress_insecure_warnings=True,
+        verbose=True,
+    )
 
 
 @pytest.fixture(scope="module")
-def user_pass_client() -> FortiSOAR:
+def user_pass_client(request) -> FortiSOAR:
     """Fixture that specifically requires username/password authentication"""
     from pyfsr import FortiSOAR
 
@@ -97,9 +107,16 @@ def user_pass_client() -> FortiSOAR:
     if "username" not in auth_config or "password" not in auth_config:
         pytest.skip("Username/password authentication not configured")
 
-    return FortiSOAR(base_url=config["fortisoar"]["base_url"], auth=(auth_config["username"], auth_config["password"]),
-                     verify_ssl=config["fortisoar"].get("verify_ssl", True), suppress_insecure_warnings=True,
-                     verbose=True)
+    # Get verbose parameter from fixture request or default to False
+    verbose = request.param if hasattr(request, "param") else False
+
+    return FortiSOAR(
+        base_url=config["fortisoar"]["base_url"],
+        auth=(auth_config["username"], auth_config["password"]),
+        verify_ssl=config["fortisoar"].get("verify_ssl", True),
+        suppress_insecure_warnings=True,
+        verbose=verbose,
+    )
 
 
 @pytest.fixture
@@ -129,10 +146,13 @@ def test_invalid_auth():
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("client_fixture", [
-    pytest.param("api_key_client", id="api-key"),
-    pytest.param("user_pass_client", id="user-pass")
-])
+@pytest.mark.parametrize(
+    "client_fixture",
+    [
+        pytest.param("api_key_client", id="api-key"),
+        pytest.param("user_pass_client", id="user-pass"),
+    ],
+)
 def test_alert_lifecycle(request, client_fixture, client):
     """Test complete alert lifecycle with real API using both auth methods"""
     # Get the appropriate client fixture
@@ -142,7 +162,7 @@ def test_alert_lifecycle(request, client_fixture, client):
     alert_data = {
         "name": f"Integration Test Alert - {client_fixture}",
         "description": "Test alert from integration tests",
-        "severity": "/api/3/picklists/58d0753f-f7e4-403b-953c-b0f521eab759"  # High
+        "severity": "/api/3/picklists/58d0753f-f7e4-403b-953c-b0f521eab759",  # High
     }
 
     created_alert = client.alerts.create(**alert_data)
@@ -154,9 +174,7 @@ def test_alert_lifecycle(request, client_fixture, client):
         assert retrieved_alert["name"] == alert_data["name"]
 
         # Update alert
-        update_data = {
-            "description": "Updated test description"
-        }
+        update_data = {"description": "Updated test description"}
         updated_alert = client.alerts.update(alert_id, update_data)
         assert updated_alert["description"] == update_data["description"]
 
@@ -167,22 +185,10 @@ def test_alert_lifecycle(request, client_fixture, client):
         query_payload = {
             "logic": "AND",
             "filters": [
-                {
-                    "field": "name",
-                    "operator": "eq",
-                    "value": alert_data["name"]
-                },
-                {
-                    "field": "severity",
-                    "operator": "eq",
-                    "value": alert_data["severity"]
-                },
-                {
-                    "field": "uuid",
-                    "operator": "eq",
-                    "value": alert_id
-                }
-            ]
+                {"field": "name", "operator": "eq", "value": alert_data["name"]},
+                {"field": "severity", "operator": "eq", "value": alert_data["severity"]},
+                {"field": "uuid", "operator": "eq", "value": alert_id},
+            ],
         }
         alerts = client.query("alerts", query_payload)
         assert all(a["@id"].endswith(alert_id) for a in alerts.get("hydra:member", []))
@@ -214,7 +220,7 @@ def test_file_upload(client):
         attachment_data = {
             "name": "Test Attachment",
             "description": "Test attachment from integration tests",
-            "file": result["@id"]
+            "file": result["@id"],
         }
 
         attachment = client.post("/api/3/attachments", data=attachment_data)
@@ -228,49 +234,49 @@ def test_file_upload(client):
         test_file.unlink()
 
 
-@pytest.mark.parametrize("client_fixture,should_raise", [
-    ("api_key_client", True),
-    ("user_pass_client", False)
-])
+@pytest.mark.parametrize(
+    "client_fixture,should_raise,verbose",
+    [
+        pytest.param("api_key_client", True, False, id="api-key"),
+        pytest.param("user_pass_client", False, False, id="user-pass"),
+    ],
+    indirect=["client_fixture"],
+)
 @pytest.mark.integration
-def test_export_config(request, client_fixture, should_raise, client):
+def test_export_config(request, client_fixture, should_raise, verbose):
     """Test configuration export functionality"""
     client = request.getfixturevalue(client_fixture)
     output_path = "test_export.zip"
 
     try:
-        template = client.export_config.create_simplified_template(
+        client.export_config.create_simplified_template(
             name="Integration Test Export",
             modules=["alerts"],
             picklists=["AlertStatus", "Severity"],
             connectors=["Code Snippet"],
-            playbook_collections=["01 - Drafts"]
+            playbook_collections=["01 - Drafts"],
         )
 
         if should_raise:
             with pytest.raises(UnsupportedAuthOperationError):
                 client.export_config.export_by_template_name(
-                    template_name="Integration Test Export",
-                    output_path=output_path
+                    template_name="Integration Test Export", output_path=output_path
                 )
         else:
             exported_file = client.export_config.export_by_template_name(
-                template_name="Integration Test Export",
-                output_path=output_path
+                template_name="Integration Test Export", output_path=output_path
             )
             assert Path(exported_file).exists()
             assert Path(exported_file).suffix == ".zip"
 
     finally:
-        pass
         if os.path.exists(output_path):
             os.remove(output_path)
 
 
-@pytest.mark.parametrize("client_fixture,should_raise", [
-    ("api_key_client", True),
-    ("user_pass_client", False)
-])
+@pytest.mark.parametrize(
+    "client_fixture,should_raise", [("api_key_client", True), ("user_pass_client", False)]
+)
 @pytest.mark.integration
 def test_export_pack(request, client_fixture, should_raise, client):
     """Test solution pack export functionality"""
@@ -380,8 +386,8 @@ def test_search_available_packs(client, known_pack_name):
 @pytest.mark.integration
 def test_auth_endpoints_user_pass(user_pass_client):
     """Test that /auth endpoints are not restricted with username/password"""
-    response = user_pass_client.get('/api/auth/license/?param=license_details')
-    assert type(response) == dict
+    response = user_pass_client.get("/api/auth/license/?param=license_details")
+    assert isinstance(response, dict)
     assert "users" in response
 
 
@@ -389,16 +395,16 @@ def test_auth_endpoints_user_pass(user_pass_client):
 def test_auth_endpoints_license(api_key_client):
     """Test that /auth endpoints are not restricted with username/password"""
     with pytest.raises(UnsupportedAuthOperationError):
-        api_key_client.get('/api/auth/license/?param=license_details')
+        api_key_client.get("/api/auth/license/?param=license_details")
 
 
 @pytest.mark.integration
 def test_get_alerts(client):
     """Test get alerts"""
     alerts = client.get("alerts")
-    assert type(alerts) == dict
+    assert isinstance(alerts, dict)
     assert "hydra:member" in alerts
-    assert type(alerts["hydra:member"]) == list
+    assert isinstance(alerts["hydra:member"], list)
     assert len(alerts["hydra:member"]) > 0
     assert "name" in alerts["hydra:member"][0]
     assert "alerts" in alerts["hydra:member"][0]["@id"]

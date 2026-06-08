@@ -17,6 +17,9 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # hatch-vcs derives the package version from the release tag.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:

@@ -1,4 +1,5 @@
 """Tests for the Alerts API functionality."""
+
 import json
 from pathlib import Path
 
@@ -9,24 +10,23 @@ from pyfsr.exceptions import ValidationError
 
 def load_mock_response(filename):
     """Helper to load mock response data"""
-    path = Path(__file__).parent.parent / 'resources' / 'mock_responses' / filename
+    path = Path(__file__).parent.parent / "resources" / "mock_responses" / filename
     with open(path) as f:
         return json.load(f)
 
 
 def test_create_alert_success(mock_client, mock_response, monkeypatch):
     """Test successful alert creation"""
-    mock_data = load_mock_response('alert_create_response.json')
+    mock_data = load_mock_response("alert_create_response.json")
 
     monkeypatch.setattr(
-        "requests.Session.request",
-        lambda *args, **kwargs: mock_response(json_data=mock_data)
+        "requests.Session.request", lambda *args, **kwargs: mock_response(json_data=mock_data)
     )
 
     alert_data = {
         "name": "Response Capture Test Alert",
         "description": "Test alert for mock response",
-        "severity": "/api/3/picklists/58d0753f-f7e4-403b-953c-b0f521eab759"
+        "severity": "/api/3/picklists/58d0753f-f7e4-403b-953c-b0f521eab759",
     }
 
     result = mock_client.alerts.create(**alert_data)
@@ -36,11 +36,10 @@ def test_create_alert_success(mock_client, mock_response, monkeypatch):
 
 def test_get_alert(mock_client, mock_response, monkeypatch):
     """Test retrieving a single alert"""
-    mock_data = load_mock_response('alert_get_response.json')
+    mock_data = load_mock_response("alert_get_response.json")
 
     monkeypatch.setattr(
-        "requests.Session.request",
-        lambda *args, **kwargs: mock_response(json_data=mock_data)
+        "requests.Session.request", lambda *args, **kwargs: mock_response(json_data=mock_data)
     )
 
     alert_id = mock_data["@id"].split("/")[-1]
@@ -53,11 +52,10 @@ def test_get_alert(mock_client, mock_response, monkeypatch):
 
 def test_list_alerts(mock_client, mock_response, monkeypatch):
     """Test listing alerts with pagination"""
-    mock_data = load_mock_response('alert_list_response.json')
+    mock_data = load_mock_response("alert_list_response.json")
 
     monkeypatch.setattr(
-        "requests.Session.request",
-        lambda *args, **kwargs: mock_response(json_data=mock_data)
+        "requests.Session.request", lambda *args, **kwargs: mock_response(json_data=mock_data)
     )
 
     result = mock_client.alerts.list()
@@ -72,7 +70,7 @@ def test_create_alert_validation_error(mock_client, mock_response, monkeypatch):
     """Test alert creation with invalid data"""
     error_response = {
         "type": "ValidationException",
-        "message": "name: This value should not be blank."
+        "message": "name: This value should not be blank.",
     }
 
     def mock_request(*args, **kwargs):
@@ -90,23 +88,19 @@ def test_create_alert_validation_error(mock_client, mock_response, monkeypatch):
 
 def test_create_alert_with_picklist_values(mock_client, mock_response, monkeypatch):
     """Test creating an alert with proper picklist references"""
-    mock_data = load_mock_response('alert_create_response.json')
-    severity_data = load_mock_response('alert_severity_picklist.json')
-    status_data = load_mock_response('alert_status_picklist.json')
+    mock_data = load_mock_response("alert_create_response.json")
+    severity_data = load_mock_response("alert_severity_picklist.json")
+    status_data = load_mock_response("alert_status_picklist.json")
 
-    responses = {
-        'severity': severity_data,
-        'status': status_data,
-        'create': mock_data
-    }
+    responses = {"severity": severity_data, "status": status_data, "create": mock_data}
 
     def mock_request(*args, **kwargs):
-        url = kwargs.get('url', '')
-        if 'picklists' in url:
-            if 'severity' in url.lower():
-                return mock_response(json_data=responses['severity']['@id'])
-            return mock_response(json_data=responses['status']['@id'])
-        return mock_response(json_data=responses['create'])
+        url = kwargs.get("url", "")
+        if "picklists" in url:
+            if "severity" in url.lower():
+                return mock_response(json_data=responses["severity"]["@id"])
+            return mock_response(json_data=responses["status"]["@id"])
+        return mock_response(json_data=responses["create"])
 
     monkeypatch.setattr("requests.Session.request", mock_request)
 
@@ -114,10 +108,10 @@ def test_create_alert_with_picklist_values(mock_client, mock_response, monkeypat
         "name": "Test Alert",
         "description": "Alert with picklist values",
         "severity": "/api/3/picklists/58d0753f-f7e4-403b-953c-b0f521eab759",
-        "status": "/api/3/picklists/7de816ff-7140-4ee5-bd05-93ce22002146"
+        "status": "/api/3/picklists/7de816ff-7140-4ee5-bd05-93ce22002146",
     }
 
     result = mock_client.alerts.create(**alert_data)
     assert result["@type"] == "Alert"
-    assert result["severity"]['@id'] == alert_data["severity"]
-    assert result["status"]['@id'] == alert_data["status"]
+    assert result["severity"]["@id"] == alert_data["severity"]
+    assert result["status"]["@id"] == alert_data["status"]
