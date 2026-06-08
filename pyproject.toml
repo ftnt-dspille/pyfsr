@@ -31,6 +31,7 @@ test = [
     "pytest",
     "pytest-cov",
     "pytest-mock",
+    "mcp>=1.0",  # exercise the optional pyfsr[mcp] server in CI
 ]
 
 docs = [
