@@ -82,9 +82,12 @@ select = ["E", "W", "F", "I", "B", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-#filterwarnings = [
-#    "ignore::DeprecationWarning"
-#]
+# Integration tests need a live FortiSOAR (examples/config.toml) and are
+# deselected by default. Run them explicitly with: pytest -m integration
+addopts = "-m 'not integration'"
+markers = [
+    "integration: requires a live FortiSOAR instance (examples/config.toml); deselected by default",
+]
 [tool.coverage.run]
 omit = [
     "Applications/PyCharm.app/*",
