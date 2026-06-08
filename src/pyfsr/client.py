@@ -9,9 +9,11 @@ from urllib.parse import urljoin, urlparse, urlunparse
 import requests
 
 from .api.alerts import AlertsAPI
+from .api.connectors import ConnectorsAPI
 from .api.content_hub import ContentHubSearch
 from .api.export_config import ExportConfigAPI
 from .api.picklists import PicklistsAPI
+from .api.playbooks import PlaybooksAPI
 from .api.solution_packs import SolutionPackAPI
 from .auth.api_key import APIKeyAuth
 from .auth.base import BaseAuth
@@ -136,6 +138,12 @@ class FortiSOAR:
 
         # Picklist discovery + friendly-value -> IRI resolution
         self.picklists: PicklistsAPI = PicklistsAPI(self)
+
+        # Connector discovery / health / operation execution
+        self.connectors: ConnectorsAPI = ConnectorsAPI(self)
+
+        # Playbook run history + manual-input resume
+        self.playbooks: PlaybooksAPI = PlaybooksAPI(self)
 
         self.solution_packs: SolutionPackAPI = SolutionPackAPI(self, self.export_config)
 
