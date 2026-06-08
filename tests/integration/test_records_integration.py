@@ -49,3 +49,47 @@ def test_records_query_pagination_total_stable(client):
     if p1.total is not None and p2.total is not None:
         assert p1.total == p2.total
     assert p2.count >= p1.count
+
+
+# -- P4: safe-delete + recycle lifecycle ------------------------------------
+def test_safe_delete_lifecycle(client):
+    """Create a throwaway alert, delete it, and confirm the record is gone.
+
+    Whether a delete is soft (recycle bin) or permanent is a per-module FSR
+    setting. This test validates the always-true contract — delete removes the
+    record from normal reads — and, *if* the module has a recycle bin, exercises
+    the full ``show_deleted`` → ``restore`` → ``delete(hard=True)`` path.
+    """
+    from pyfsr.exceptions import ResourceNotFoundError
+
+    alerts = client.records("alerts", typed=False)
+    uuid = alerts.create({"name": "pyfsr-p4-safe-delete-test"})["uuid"]
+    recycled_ok = False
+    try:
+        alerts.delete(uuid)  # soft-delete
+        with pytest.raises(ResourceNotFoundError):
+            alerts.get(uuid)  # gone from normal reads either way
+
+        try:
+            recycled = alerts.get(uuid, show_deleted=True)
+        except ResourceNotFoundError:
+            # Module has no recycle bin on this box — delete was permanent.
+            return
+        recycled_ok = True
+        assert recycled["uuid"] == uuid
+        assert recycled.get("deletedAt")  # carries a deletion timestamp
+
+        restored = alerts.restore(uuid)
+        assert restored.get("deletedAt") in (None, "")
+        assert alerts.get(uuid)["uuid"] == uuid  # live again
+    finally:
+        if recycled_ok:
+            alerts.delete(uuid, hard=True)  # permanent cleanup
+            with pytest.raises(ResourceNotFoundError):
+                alerts.get(uuid, show_deleted=True)
+
+
+def test_delete_rejects_blank_ref_live(client):
+    """The single-row guard fires before any network call."""
+    with pytest.raises(ValueError):
+        client.records("alerts").delete("")
