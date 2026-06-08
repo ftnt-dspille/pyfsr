@@ -206,7 +206,7 @@ class RecordSet:
         ``data`` may be a dict or a model instance; the created record is
         returned parsed (or raw, with ``raw=True``). Pass
         ``resolve_picklists=True`` to map friendly picklist values (e.g.
-        ``"High"``) to their IRIs via :attr:`client.picklists` before sending.
+        ``"High"``) to their IRIs via ``client.picklists`` before sending.
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)

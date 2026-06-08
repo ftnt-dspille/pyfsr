@@ -48,7 +48,7 @@ def _picklist_name_from_attr(attr: dict) -> str | None:
 class PicklistsAPI(BaseAPI):
     """Live picklist lookups and friendly-value → IRI resolution.
 
-    Accessed as :attr:`client.picklists`. All lookups are cached in-process;
+    Accessed as ``client.picklists``. All lookups are cached in-process;
     construct a new client (or call :meth:`clear_cache`) to refresh.
     """
 
