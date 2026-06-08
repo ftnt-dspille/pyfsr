@@ -40,12 +40,21 @@ INHERITED = {"@id", "@type", "uuid"}
 def _scalar_type(prop: dict) -> str:
     """Map an OpenAPI property to a Python type annotation string."""
     if "$ref" in prop:
-        return "str"  # IRI / UUID refs are strings on the wire
+        # Reference fields are an IRI/UUID *string* on the wire by default, but
+        # come back as an expanded object when relationships are pulled (or for
+        # embedded picklist values). Keep them lenient so the typed model never
+        # breaks on live data — matches the "don't over-harden" doctrine.
+        return "Any | None"
     t = prop.get("type")
     if isinstance(t, list):
         t = next((x for x in t if x != "null"), None)
     if t == "array":
-        return "list[str] | None"  # arrays here are always IRI lists
+        return "list[Any] | None"  # IRI lists, or expanded objects when pulled
+    # Picklist/relationship fields are typed `string` in the spec but flagged in
+    # the description ("IRI to <Picklist> value" / "IRI to /api/3/..."). They come
+    # back as an expanded object when relationships are pulled, so keep lenient.
+    if t == "string" and "IRI to" in (prop.get("description") or ""):
+        return "Any | None"
     return {
         "string": "str | None",
         "integer": "int | None",

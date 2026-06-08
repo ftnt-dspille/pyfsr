@@ -14,9 +14,20 @@ remain reachable as ``rec["@id"]`` for round-tripping.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, get_args
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+def _is_str_annotation(ann: Any) -> bool:
+    """True if ``ann`` is ``str`` or ``str | None`` (a plain string field)."""
+    if ann is str:
+        return True
+    args = get_args(ann)
+    if args:
+        non_none = [a for a in args if a is not type(None)]
+        return non_none == [str]
+    return False
 
 
 class BaseRecord(BaseModel):
@@ -32,6 +43,29 @@ class BaseRecord(BaseModel):
     id_iri: str | None = Field(default=None, alias="@id")
     record_type: str | None = Field(default=None, alias="@type")
     uuid: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _collapse_expanded_refs(cls, data: Any) -> Any:
+        """Collapse expanded relationship objects back to their IRI string.
+
+        FortiSOAR returns a single-relationship field (e.g. ``modifyUser``) as a
+        bare IRI string normally, but as the full ``{"@id": ...}`` object when
+        relationships are pulled. For fields the model types as ``str`` we
+        replace such an object with its ``@id`` so the typed model never breaks;
+        picklist fields typed ``Any`` keep their full expanded value.
+        """
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        for name, info in cls.model_fields.items():
+            if not _is_str_annotation(info.annotation):
+                continue
+            for key in (info.alias, name):
+                value = result.get(key) if key else None
+                if isinstance(value, dict) and "@id" in value:
+                    result[key] = value["@id"]
+        return result
 
     # -- IRI / identity helpers --------------------------------------------
     @property
