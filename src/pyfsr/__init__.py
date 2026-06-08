@@ -5,6 +5,7 @@ For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
 """
 
 from .client import FortiSOAR
+from .models import MODEL_REGISTRY, Alert, BaseRecord, Comment, Incident, Task, model_for
 from .pagination import HydraPage, paginate
 from .query import Query
 from .records import RecordSet
@@ -21,5 +22,12 @@ __all__ = [
     "RecordSet",
     "HydraPage",
     "paginate",
+    "BaseRecord",
+    "Alert",
+    "Incident",
+    "Task",
+    "Comment",
+    "MODEL_REGISTRY",
+    "model_for",
     "__version__",
 ]

@@ -316,13 +316,16 @@ class FortiSOAR:
         """
         return self.post(f"/api/query/{module}", data=query_data)
 
-    def records(self, module: str) -> RecordSet:
+    def records(self, module: str, *, typed: bool = True) -> RecordSet:
         """Return a :class:`~pyfsr.records.RecordSet` for generic CRUD on ``module``.
+
+        Reads come back as typed models (Alert/Incident/Task/Comment, else a
+        dict-compatible ``BaseRecord``); pass ``typed=False`` for raw dicts.
 
         Example:
             >>> incidents = client.records("incidents")
             >>> page = incidents.query(Query().eq("status.itemValue", "Open").limit(50))
-            >>> for rec in incidents.iterate():
-            ...     ...
+            >>> for inc in incidents.iterate():
+            ...     print(inc.uuid, inc["name"])
         """
-        return RecordSet(self, module)
+        return RecordSet(self, module, typed=typed)

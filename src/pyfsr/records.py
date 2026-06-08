@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
+from .models import BaseRecord, model_for
 from .pagination import HydraPage, paginate
 from .query import Query
 
@@ -39,11 +40,43 @@ def resolve_record_path(module: str, ref: str) -> str:
 
 
 class RecordSet:
-    """CRUD operations scoped to a single FortiSOAR module."""
+    """CRUD operations scoped to a single FortiSOAR module.
 
-    def __init__(self, client: FortiSOAR, module: str) -> None:
+    Reads parse responses into typed :class:`~pyfsr.models.BaseRecord` subclasses
+    when one is registered for the module (Alert/Incident/Task/Comment today),
+    falling back to a bare ``BaseRecord`` otherwise. ``BaseRecord`` is
+    dict-compatible (``rec["field"]`` / ``rec.get(...)`` / ``"field" in rec``), so
+    typing is additive. Pass ``model=...`` to force a specific model, ``typed=False``
+    to get raw dicts back, or ``raw=True`` on an individual read for one-off dicts.
+    """
+
+    def __init__(
+        self,
+        client: FortiSOAR,
+        module: str,
+        *,
+        model: type[BaseRecord] | None = None,
+        typed: bool = True,
+    ) -> None:
         self.client = client
         self.module = module
+        if not typed:
+            self.model: type[BaseRecord] | None = None
+        else:
+            self.model = model or model_for(module)
+
+    # -- parsing ------------------------------------------------------------
+    def _parse(self, obj: Any, *, raw: bool) -> Any:
+        """Coerce a record dict into the bound model (unless ``raw``)."""
+        if raw or self.model is None or not isinstance(obj, dict):
+            return obj
+        return self.model.model_validate(obj)
+
+    def _parse_page(self, page: HydraPage, *, raw: bool) -> HydraPage:
+        if raw or self.model is None:
+            return page
+        page.members = [self._parse(m, raw=False) for m in page.members]
+        return page
 
     # -- reads --------------------------------------------------------------
     def get(
@@ -52,13 +85,18 @@ class RecordSet:
         *,
         relationships: bool = False,
         params: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Fetch one record by uuid, ``module:uuid`` shorthand, or IRI."""
+        raw: bool = False,
+    ) -> Any:
+        """Fetch one record by uuid, ``module:uuid`` shorthand, or IRI.
+
+        Returns the bound model (or ``BaseRecord``); pass ``raw=True`` for the
+        plain decoded dict.
+        """
         path = resolve_record_path(self.module, ref)
         query = dict(params or {})
         if relationships:
             query["$relationships"] = "true"
-        return self.client.get(path, params=query or None)
+        return self._parse(self.client.get(path, params=query or None), raw=raw)
 
     def list(
         self,
@@ -66,13 +104,14 @@ class RecordSet:
         limit: int = 30,
         page: int = 1,
         params: dict[str, Any] | None = None,
+        raw: bool = False,
     ) -> HydraPage:
         """List records via ``GET /api/3/<module>`` (one page)."""
         query = dict(params or {})
         query["$limit"] = limit
         query["$page"] = page
         resp = self.client.get(f"/api/3/{self.module}", params=query)
-        return HydraPage.from_response(resp, page=page, limit=limit)
+        return self._parse_page(HydraPage.from_response(resp, page=page, limit=limit), raw=raw)
 
     def search(
         self,
@@ -81,14 +120,17 @@ class RecordSet:
         limit: int = 30,
         page: int = 1,
         params: dict[str, Any] | None = None,
+        raw: bool = False,
     ) -> HydraPage:
         """Free-text search via ``GET /api/3/<module>?$search=<term>``."""
         query = dict(params or {})
         if term:
             query["$search"] = term
-        return self.list(limit=limit, page=page, params=query)
+        return self.list(limit=limit, page=page, params=query, raw=raw)
 
-    def query(self, query: Query | dict[str, Any], *, page: int = 1) -> HydraPage:
+    def query(
+        self, query: Query | dict[str, Any], *, page: int = 1, raw: bool = False
+    ) -> HydraPage:
         """Run a structured query via ``POST /api/query/<module>``.
 
         FortiSOAR paginates this endpoint with the ``$limit``/``$page``/``$search``
@@ -97,7 +139,8 @@ class RecordSet:
         """
         body, params = self._split_query(query, page=page)
         resp = self.client.post(f"/api/query/{self.module}", data=body, params=params)
-        return HydraPage.from_response(resp, page=page, limit=params.get("$limit"))
+        page_obj = HydraPage.from_response(resp, page=page, limit=params.get("$limit"))
+        return self._parse_page(page_obj, raw=raw)
 
     @staticmethod
     def _split_query(
@@ -126,11 +169,13 @@ class RecordSet:
         *,
         page_size: int = 100,
         max_records: int | None = None,
-    ) -> Iterator[dict[str, Any]]:
+        raw: bool = False,
+    ) -> Iterator[Any]:
         """Lazily yield every matching record across all pages.
 
         Uses the structured query endpoint when ``query`` is given, otherwise a
-        plain list. The page size overrides any ``limit`` on the query.
+        plain list. The page size overrides any ``limit`` on the query. Yields
+        typed models unless ``raw=True``.
         """
         if query is None:
 
@@ -145,16 +190,26 @@ class RecordSet:
                 body, params = self._split_query(query, page=page, page_size=page_size)
                 return self.client.post(f"/api/query/{self.module}", data=body, params=params)
 
-        yield from paginate(fetch, page_size=page_size, max_records=max_records)
+        for record in paginate(fetch, page_size=page_size, max_records=max_records):
+            yield self._parse(record, raw=raw)
 
     # -- writes -------------------------------------------------------------
-    def create(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Create a record via ``POST /api/3/<module>``."""
-        return self.client.post(f"/api/3/{self.module}", data=data)
+    def create(self, data: dict[str, Any], *, raw: bool = False) -> Any:
+        """Create a record via ``POST /api/3/<module>``.
 
-    def update(self, ref: str, data: dict[str, Any]) -> dict[str, Any]:
+        ``data`` may be a dict or a model instance; the created record is
+        returned parsed (or raw, with ``raw=True``).
+        """
+        if isinstance(data, BaseRecord):
+            data = data.to_dict(exclude_none=True)
+        return self._parse(self.client.post(f"/api/3/{self.module}", data=data), raw=raw)
+
+    def update(self, ref: str, data: dict[str, Any], *, raw: bool = False) -> Any:
         """Update a record via ``PUT /api/3/<module>/<uuid>``."""
-        return self.client.put(resolve_record_path(self.module, ref), data=data)
+        if isinstance(data, BaseRecord):
+            data = data.to_dict(exclude_none=True)
+        path = resolve_record_path(self.module, ref)
+        return self._parse(self.client.put(path, data=data), raw=raw)
 
     def delete(self, ref: str) -> None:
         """Soft-delete a record via ``DELETE /api/3/<module>/<uuid>``.

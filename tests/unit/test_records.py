@@ -50,8 +50,11 @@ def test_resolve_record_path_module_colon_shorthand():
 def test_get_by_uuid():
     client = FakeClient({"/api/3/incidents/u1": {"uuid": "u1"}})
     rec = RecordSet(client, "incidents").get("u1")
-    assert rec == {"uuid": "u1"}
+    assert rec["uuid"] == "u1"  # dict-compatible access on the typed model
+    assert rec.uuid == "u1"
     assert client.calls[0] == ("GET", "/api/3/incidents/u1", None, None)
+    # raw=True returns the plain dict
+    assert RecordSet(client, "incidents").get("u1", raw=True) == {"uuid": "u1"}
 
 
 def test_get_with_relationships():
@@ -88,7 +91,7 @@ def test_query_posts_to_query_endpoint():
     # limit/page travel as $-params, NOT in the body (FSR ignores body limit).
     assert "limit" not in data
     assert params == {"$page": 1, "$limit": 50}
-    assert page.members == [{"uuid": "x"}]
+    assert page.members[0]["uuid"] == "x"
 
 
 def test_iterate_walks_pages_via_query():
@@ -132,7 +135,7 @@ def test_create():
     client = FakeClient({"/api/3/alerts": {"uuid": "new"}})
     rec = RecordSet(client, "alerts").create({"name": "x"})
     assert client.calls[0] == ("POST", "/api/3/alerts", None, {"name": "x"})
-    assert rec == {"uuid": "new"}
+    assert rec["uuid"] == "new"
 
 
 def test_update_uses_put():
