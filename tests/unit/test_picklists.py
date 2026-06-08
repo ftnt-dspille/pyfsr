@@ -36,21 +36,13 @@ _META = {
                 {
                     "name": "severity",
                     "dataSource": {
-                        "query": {
-                            "filters": [
-                                {"field": "listName__name", "value": "Severity"}
-                            ]
-                        }
+                        "query": {"filters": [{"field": "listName__name", "value": "Severity"}]}
                     },
                 },
                 {
                     "name": "status",
                     "dataSource": {
-                        "query": {
-                            "filters": [
-                                {"field": "listName__name", "value": "AlertStatus"}
-                            ]
-                        }
+                        "query": {"filters": [{"field": "listName__name", "value": "AlertStatus"}]}
                     },
                 },
             ],

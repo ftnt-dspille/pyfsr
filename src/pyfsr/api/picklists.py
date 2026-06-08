@@ -29,10 +29,7 @@ from .base import BaseAPI
 
 # staging_model_metadatas needs $relationships=true to expose each attribute's
 # dataSource (where the bound picklist listName lives).
-_META_PATH = (
-    "/api/3/staging_model_metadatas"
-    "?$limit=2147483647&$orderby=type&$relationships=true"
-)
+_META_PATH = "/api/3/staging_model_metadatas?$limit=2147483647&$orderby=type&$relationships=true"
 
 
 def _picklist_name_from_attr(attr: dict) -> str | None:
@@ -58,8 +55,8 @@ class PicklistsAPI(BaseAPI):
     def __init__(self, client):
         super().__init__(client)
         self._names: list[str] | None = None
-        self._values: dict[str, list[dict]] = {}      # listName -> items
-        self._iri: dict[str, str] = {}                # "ListName:value" -> IRI
+        self._values: dict[str, list[dict]] = {}  # listName -> items
+        self._iri: dict[str, str] = {}  # "ListName:value" -> IRI
         # module -> {field_name: picklist_name (or None)}
         self._module_fields: dict[str, dict[str, str | None]] = {}
 
@@ -85,19 +82,19 @@ class PicklistsAPI(BaseAPI):
         """List a picklist's items as ``[{itemValue, uuid, iri, ordinal}, ...]``."""
         if picklist_name in self._values:
             return self._values[picklist_name]
-        qs = urllib.parse.urlencode(
-            {"listName.name": picklist_name, "$limit": 200}
-        )
+        qs = urllib.parse.urlencode({"listName.name": picklist_name, "$limit": 200})
         data = self.client.get(f"/api/3/picklists?{qs}")
         out: list[dict[str, Any]] = []
         for m in (data or {}).get("hydra:member") or []:
             u = m.get("uuid")
-            out.append({
-                "itemValue": m.get("itemValue"),
-                "uuid": u,
-                "iri": f"/api/3/picklists/{u}" if u else None,
-                "ordinal": m.get("ordinal"),
-            })
+            out.append(
+                {
+                    "itemValue": m.get("itemValue"),
+                    "uuid": u,
+                    "iri": f"/api/3/picklists/{u}" if u else None,
+                    "ordinal": m.get("ordinal"),
+                }
+            )
         self._values[picklist_name] = out
         return out
 
@@ -110,9 +107,12 @@ class PicklistsAPI(BaseAPI):
         data = self.client.get(_META_PATH)
         members = (data or {}).get("hydra:member") or []
         hit = next(
-            (m for m in members
-             if str(m.get("type", "")).lower() == want
-             or str(m.get("module", "")).lower() == want),
+            (
+                m
+                for m in members
+                if str(m.get("type", "")).lower() == want
+                or str(m.get("module", "")).lower() == want
+            ),
             None,
         )
         fmap: dict[str, str | None] = {}
@@ -163,9 +163,7 @@ class PicklistsAPI(BaseAPI):
                 return iri
         return None
 
-    def resolve_record_fields(
-        self, module: str, fields: dict[str, Any]
-    ) -> dict[str, Any]:
+    def resolve_record_fields(self, module: str, fields: dict[str, Any]) -> dict[str, Any]:
         """Return a copy of ``fields`` with picklist-typed values mapped to IRIs.
 
         Only fields the module flags as picklist-backed are touched, and only
