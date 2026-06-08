@@ -1,8 +1,9 @@
 """API key authentication for FortiSOAR"""
+
 import requests
 
-from .base import BaseAuth
 from ..exceptions import APIError
+from .base import BaseAuth
 
 
 class APIKeyAuth(BaseAuth):
@@ -14,7 +15,7 @@ class APIKeyAuth(BaseAuth):
     - Cannot export configurations
 
     Args:
-        base_url: Base URL of the FortiSOAR instance 
+        base_url: Base URL of the FortiSOAR instance
         api_key: The FortiSOAR API key
         verify_ssl: Whether to verify SSL certificates. Defaults to True.
 
@@ -32,7 +33,7 @@ class APIKeyAuth(BaseAuth):
     def __init__(self, base_url: str, api_key: str, verify_ssl: bool = True):
         super().__init__()
         self.api_key = api_key
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.verify_ssl = verify_ssl
 
         # Set unsupported operations
@@ -53,9 +54,7 @@ class APIKeyAuth(BaseAuth):
         headers = self.get_auth_headers()
         try:
             response = requests.get(
-                f"{self.base_url}/api/3/people",
-                headers=headers,
-                verify=self.verify_ssl
+                f"{self.base_url}/api/3/people", headers=headers, verify=self.verify_ssl
             )
 
             if response.status_code == 401:
@@ -66,7 +65,7 @@ class APIKeyAuth(BaseAuth):
                 )
 
         except requests.exceptions.RequestException as e:
-            raise APIError(f"API key validation request failed: {str(e)}")
+            raise APIError(f"API key validation request failed: {str(e)}") from e
 
     def get_auth_headers(self) -> dict:
         """
@@ -75,10 +74,7 @@ class APIKeyAuth(BaseAuth):
         Returns:
             dict: Headers including the API key authentication
         """
-        return {
-            'Authorization': f'API-KEY {self.api_key}',
-            'Content-Type': 'application/json'
-        }
+        return {"Authorization": f"API-KEY {self.api_key}", "Content-Type": "application/json"}
 
     def is_valid(self) -> bool:
         """

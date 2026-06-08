@@ -1,13 +1,15 @@
 """Main client class for FortiSOAR API"""
+
 import logging
 import os
 import time
-from typing import Union, Optional, Dict, Any
+from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
 
 from .api.alerts import AlertsAPI
+from .api.content_hub import ContentHubSearch
 from .api.export_config import ExportConfigAPI
 from .api.solution_packs import SolutionPackAPI
 from .auth.api_key import APIKeyAuth
@@ -16,7 +18,7 @@ from .auth.user_pass import UserPasswordAuth
 from .exceptions import handle_api_error
 from .utils.file_operations import FileOperations
 
-logger = logging.getLogger('pyfsr')
+logger = logging.getLogger("pyfsr")
 
 
 class FortiSOAR:
@@ -25,23 +27,26 @@ class FortiSOAR:
     """
 
     def __init__(
-            self,
-            base_url: str,
-            auth: Union[str, tuple],
-            verify_ssl: bool = True,
-            suppress_insecure_warnings: bool = False,
-            verbose: bool = False,
-            port: Optional[int] = None
+        self,
+        base_url: str,
+        auth: str | tuple,
+        verify_ssl: bool = True,
+        suppress_insecure_warnings: bool = False,
+        verbose: bool = False,
+        port: int | None = None,
     ):
         """
         Initialize the FortiSOAR client.
 
         Args:
            base_url (str): The base URL for the FortiSOAR API.
-           auth (Union[str, tuple]): The authentication method, either an API key (str) or a tuple of (username, password).
+           auth (Union[str, tuple]): The authentication method, either an API key (str)
+               or a tuple of (username, password).
            verify_ssl (bool, optional): Whether to verify SSL certificates. Defaults to True.
-           suppress_insecure_warnings (bool, optional): Whether to suppress insecure request warnings. Defaults to False.
-           port (int, optional): Port to connect to. Overrides any port in base_url. Defaults to None (uses 443 for HTTPS).
+           suppress_insecure_warnings (bool, optional): Whether to suppress insecure request
+               warnings. Defaults to False.
+           port (int, optional): Port to connect to. Overrides any port in base_url.
+               Defaults to None (uses 443 for HTTPS).
 
         Raises:
             ValueError: If the provided authentication method is invalid.
@@ -56,18 +61,14 @@ class FortiSOAR:
         self.verbose = verbose
         if verbose:
             # Create formatter
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
             # Ensure log directory exists
             log_dir = os.path.dirname(os.path.abspath(self._log_file))
             os.makedirs(log_dir, exist_ok=True)
 
             # Create rotating file handler
-            file_handler = logging.FileHandler(
-                self._log_file
-            )
+            file_handler = logging.FileHandler(self._log_file)
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
 
@@ -79,9 +80,9 @@ class FortiSOAR:
             logger.setLevel(self._log_level)
 
         # Ensure base_url starts with https://
-        if not base_url.startswith('https://'):
-            base_url = f'https://{base_url}'
-        base_url = base_url.rstrip('/')
+        if not base_url.startswith("https://"):
+            base_url = f"https://{base_url}"
+        base_url = base_url.rstrip("/")
 
         # Apply explicit port, overriding any port already in the URL
         if port is not None:
@@ -128,9 +129,12 @@ class FortiSOAR:
         # Add solution packs API
         self.export_config: ExportConfigAPI = ExportConfigAPI(self)
 
+        # Content Hub search (solution packs, connectors, widgets)
+        self.content_hub: ContentHubSearch = ContentHubSearch(self)
+
         self.solution_packs: SolutionPackAPI = SolutionPackAPI(self, self.export_config)
 
-    def _log_request(self, method: str, url: str, params: Dict, data: Dict, headers: Dict) -> None:
+    def _log_request(self, method: str, url: str, params: dict, data: dict, headers: dict) -> None:
         """Log request details when verbose mode is enabled."""
         if not self.verbose:
             return
@@ -153,12 +157,12 @@ class FortiSOAR:
         if not self.verbose:
             return
 
-        logger.info(f"\nResponse:")
+        logger.info("\nResponse:")
         logger.info(f"Status Code: {response.status_code}")
         logger.info(f"Elapsed Time: {elapsed:.2f} seconds")
 
-        content_type = response.headers.get('Content-Type', '')
-        if 'application/json' in content_type:
+        content_type = response.headers.get("Content-Type", "")
+        if "application/json" in content_type:
             try:
                 logger.info("Response JSON:")
                 logger.info(f"  {response.json()}")
@@ -171,17 +175,17 @@ class FortiSOAR:
         else:
             logger.info(f"Response Content Length: {len(response.content)} bytes")
 
-        logger.info('=' * 50)
+        logger.info("=" * 50)
 
     def request(
-            self,
-            method: str,
-            endpoint: str,
-            params: Optional[Dict] = None,
-            data: Optional[Dict] = None,
-            files: Optional[Dict] = None,
-            headers: Optional[Dict] = None,
-            **kwargs
+        self,
+        method: str,
+        endpoint: str,
+        params: dict | None = None,
+        data: dict | None = None,
+        files: dict | None = None,
+        headers: dict | None = None,
+        **kwargs,
     ) -> requests.Response:
         """
         Make a request to the FortiSOAR API.
@@ -203,20 +207,21 @@ class FortiSOAR:
             AuthenticationError: When authentication fails
             PermissionError: When user lacks required permissions
             ResourceNotFoundError: When requested resource is not found
-            UnsupportedAuthOperationError: When operation is not supported with current authentication method
+            UnsupportedAuthOperationError: When operation is not supported with current
+                authentication method
             APIError: For other API errors
         """
         # Check operation support based on endpoint
-        if endpoint.startswith('/api/auth/'):
+        if endpoint.startswith("/api/auth/"):
             self.auth.check_operation_supported(BaseAuth.OPERATION_AUTH)
 
         # Ensure endpoint starts with /
-        if not endpoint.startswith('/'):
-            endpoint = f'/{endpoint}'
+        if not endpoint.startswith("/"):
+            endpoint = f"/{endpoint}"
 
         # Add API version prefix if not present
-        if not endpoint.startswith(('/api/3/', '/auth/', '/api/public/', '/api/')):
-            endpoint = f'/api/3{endpoint}'
+        if not endpoint.startswith(("/api/3/", "/auth/", "/api/public/", "/api/")):
+            endpoint = f"/api/3{endpoint}"
 
         url = urljoin(self.base_url, endpoint)
 
@@ -237,7 +242,7 @@ class FortiSOAR:
                 data=data if files is not None else None,
                 files=files,
                 headers=request_headers,
-                **kwargs
+                **kwargs,
             )
             elapsed = time.time() - start_time
             self._log_response(response, elapsed)
@@ -247,47 +252,57 @@ class FortiSOAR:
 
         except requests.exceptions.RequestException as e:
             elapsed = time.time() - start_time
-            if hasattr(e, 'response') and e.response is not None:
+            if hasattr(e, "response") and e.response is not None:
                 self._log_response(e.response, elapsed)
                 handle_api_error(e.response)
             if self.verbose:
-                logger.error(f"Request failed: {str(e)}") # pragma: no cover
+                logger.error(f"Request failed: {str(e)}")  # pragma: no cover
             raise
 
-    def get(self, endpoint: str, params: Optional[Dict] = None, **kwargs) -> Union[Dict[str, Any], bytes]:
+    def get(self, endpoint: str, params: dict | None = None, **kwargs) -> dict[str, Any] | bytes:
         """
         Perform GET request and return response based on content type.
 
         Returns JSON for application/json responses and bytes for binary responses.
         """
-        response = self.request('GET', endpoint, params=params, **kwargs)
-        content_type = response.headers.get('Content-Type', '')
+        response = self.request("GET", endpoint, params=params, **kwargs)
+        content_type = response.headers.get("Content-Type", "")
 
-        if 'application/json' in content_type:
+        if "application/json" in content_type:
             return response.json()
-        elif any(binary_type in content_type for binary_type in ['application/zip', 'application/octet-stream']):
+        elif any(
+            binary_type in content_type
+            for binary_type in ["application/zip", "application/octet-stream"]
+        ):
             return response.content
         else:
             # Default to JSON if content type is not explicitly specified
             return response.json()
 
-    def post(self, endpoint: str, data: Optional[Dict] = None, files: Optional[Dict] = None,
-             params: Optional[Dict] = None, **kwargs) -> Dict[str, Any]:
+    def post(
+        self,
+        endpoint: str,
+        data: dict | None = None,
+        files: dict | None = None,
+        params: dict | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Perform POST request and return JSON response"""
-        response = self.request('POST', endpoint, params=params, data=data, files=files, **kwargs)
+        response = self.request("POST", endpoint, params=params, data=data, files=files, **kwargs)
         return response.json()
 
-    def put(self, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None, **kwargs) -> Dict[
-        str, Any]:
+    def put(
+        self, endpoint: str, data: dict | None = None, params: dict | None = None, **kwargs
+    ) -> dict[str, Any]:
         """Perform PUT request and return JSON response"""
-        response = self.request('PUT', endpoint, params=params, data=data, **kwargs)
+        response = self.request("PUT", endpoint, params=params, data=data, **kwargs)
         return response.json()
 
-    def delete(self, endpoint: str, params: Optional[Dict] = None, **kwargs) -> None:
+    def delete(self, endpoint: str, params: dict | None = None, **kwargs) -> None:
         """Perform DELETE request"""
-        self.request('DELETE', endpoint, params=params, **kwargs)
+        self.request("DELETE", endpoint, params=params, **kwargs)
 
-    def query(self, module: str, query_data: Dict) -> Dict[str, Any]:
+    def query(self, module: str, query_data: dict) -> dict[str, Any]:
         """
         Execute a query against a module
 
@@ -298,4 +313,4 @@ class FortiSOAR:
         Returns:
             Query results
         """
-        return self.post(f'/api/query/{module}', data=query_data)
+        return self.post(f"/api/query/{module}", data=query_data)
