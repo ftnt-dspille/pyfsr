@@ -35,6 +35,16 @@ nitpick_ignore = [
     ("py:obj", "pyfsr.models._generated"),
     ("py:mod", "pyfsr.models._generated"),
     ("py:class", "pydantic.main.BaseModel"),
+    # Typing artifacts autoapi can't resolve under `-n`: the `...` in
+    # ``Callable[..., Any]`` / ``tuple[str, ...]`` renders as an Ellipsis xref,
+    # and HydraPage's xref doesn't resolve from projection's autosummary context.
+    ("py:class", "Ellipsis"),
+    ("py:class", "HydraPage"),
+    ("py:class", "pyfsr.pagination.HydraPage"),
+    # The optional MCP server's return type lives in the third-party mcp SDK,
+    # which isn't part of the docs intersphinx set.
+    ("py:class", "mcp.server.lowlevel.Server"),
+    ("py:class", "Server"),
 ]
 
 # AutoAPI configuration
