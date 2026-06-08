@@ -12,6 +12,7 @@ from .api.alerts import AlertsAPI
 from .api.connectors import ConnectorsAPI
 from .api.content_hub import ContentHubSearch
 from .api.export_config import ExportConfigAPI
+from .api.modules import ModulesAPI
 from .api.picklists import PicklistsAPI
 from .api.playbooks import PlaybooksAPI
 from .api.solution_packs import SolutionPackAPI
@@ -135,6 +136,9 @@ class FortiSOAR:
 
         # Content Hub search (solution packs, connectors, widgets)
         self.content_hub: ContentHubSearch = ContentHubSearch(self)
+
+        # Module / field schema discovery
+        self.modules: ModulesAPI = ModulesAPI(self)
 
         # Picklist discovery + friendly-value -> IRI resolution
         self.picklists: PicklistsAPI = PicklistsAPI(self)
@@ -341,3 +345,19 @@ class FortiSOAR:
             ...     print(inc.uuid, inc["name"])
         """
         return RecordSet(self, module, typed=typed)
+
+    def list_modules(self, *, refresh: bool = False) -> list[dict[str, Any]]:
+        """List every module on the appliance as ``[{type, label, plural}, ...]``.
+
+        Discovery shortcut for :meth:`ModulesAPI.list <pyfsr.api.modules.ModulesAPI.list>`
+        — learn the right module ``type`` (and plural name) before a record lookup.
+        """
+        return self.modules.list(refresh=refresh)
+
+    def describe_module(self, module: str, *, refresh: bool = False) -> dict[str, Any]:
+        """Describe one module's fields (name/type/required/picklist).
+
+        Shortcut for
+        :meth:`ModulesAPI.describe <pyfsr.api.modules.ModulesAPI.describe>`.
+        """
+        return self.modules.describe(module, refresh=refresh)

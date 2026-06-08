@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from .models import BaseRecord, model_for
 from .pagination import HydraPage, paginate
+from .projection import project
 from .query import Query
 
 if TYPE_CHECKING:
@@ -87,12 +88,17 @@ class RecordSet:
         show_deleted: bool = False,
         params: dict[str, Any] | None = None,
         raw: bool = False,
+        fields: list[str] | tuple[str, ...] | None = None,
+        summary: bool = False,
     ) -> Any:
         """Fetch one record by uuid, ``module:uuid`` shorthand, or IRI.
 
         Returns the bound model (or ``BaseRecord``); pass ``raw=True`` for the
         plain decoded dict. Pass ``show_deleted=True`` to read a soft-deleted
         record from the recycle bin (a plain ``get`` 404s on those).
+
+        ``fields=[...]`` / ``summary=True`` trim the result to a token-efficient
+        plain dict (handy for agents); see :mod:`pyfsr.projection`.
         """
         path = resolve_record_path(self.module, ref)
         query = dict(params or {})
@@ -100,7 +106,10 @@ class RecordSet:
             query["$relationships"] = "true"
         if show_deleted:
             query["$showDeleted"] = "true"
-        return self._parse(self.client.get(path, params=query or None), raw=raw)
+        rec = self._parse(self.client.get(path, params=query or None), raw=raw)
+        if fields or summary:
+            return project(rec, fields=fields, summary=summary)
+        return rec
 
     def list(
         self,
@@ -132,12 +141,23 @@ class RecordSet:
         show_deleted: bool = False,
         params: dict[str, Any] | None = None,
         raw: bool = False,
-    ) -> HydraPage:
-        """Free-text search via ``GET /api/3/<module>?$search=<term>``."""
+        fields: list[str] | tuple[str, ...] | None = None,
+        summary: bool = False,
+    ) -> Any:
+        """Free-text search via ``GET /api/3/<module>?$search=<term>``.
+
+        With ``fields=``/``summary=`` the page members are trimmed to a plain
+        ``{members, total, page, has_next}`` dict (see :mod:`pyfsr.projection`).
+        """
         query = dict(params or {})
         if term:
             query["$search"] = term
-        return self.list(limit=limit, page=page, show_deleted=show_deleted, params=query, raw=raw)
+        page_obj = self.list(
+            limit=limit, page=page, show_deleted=show_deleted, params=query, raw=raw
+        )
+        if fields or summary:
+            return project(page_obj, fields=fields, summary=summary)
+        return page_obj
 
     def query(
         self,
@@ -146,7 +166,9 @@ class RecordSet:
         page: int = 1,
         show_deleted: bool = False,
         raw: bool = False,
-    ) -> HydraPage:
+        fields: list[str] | tuple[str, ...] | None = None,
+        summary: bool = False,
+    ) -> Any:
         """Run a structured query via ``POST /api/query/<module>``.
 
         FortiSOAR paginates this endpoint with the ``$limit``/``$page``/``$search``
@@ -154,6 +176,10 @@ class RecordSet:
         they are lifted out of the body and sent as params. Pass
         ``show_deleted=True`` to include recycle-bin records (sent both as the
         ``$showDeleted`` param and the ``showDeleted`` body flag the endpoint wants).
+
+        Returns a :class:`~pyfsr.pagination.HydraPage`; with ``fields=``/``summary=``
+        the members are trimmed and a plain ``{members, total, page, has_next}``
+        dict is returned instead (see :mod:`pyfsr.projection`).
         """
         body, params = self._split_query(query, page=page)
         if show_deleted:
@@ -161,7 +187,10 @@ class RecordSet:
             body["showDeleted"] = True
         resp = self.client.post(f"/api/query/{self.module}", data=body, params=params)
         page_obj = HydraPage.from_response(resp, page=page, limit=params.get("$limit"))
-        return self._parse_page(page_obj, raw=raw)
+        parsed = self._parse_page(page_obj, raw=raw)
+        if fields or summary:
+            return project(parsed, fields=fields, summary=summary)
+        return parsed
 
     @staticmethod
     def _split_query(
