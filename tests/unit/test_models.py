@@ -98,3 +98,25 @@ def test_recordset_create_accepts_model_instance():
     sent_body = client.calls[0][3]
     assert sent_body == {"name": "New incident"}
     assert isinstance(out, Incident) and out.uuid == "new"
+
+
+# -- expanded-relationship collapse (P5 model-leniency fix) -----------------
+def test_str_field_collapses_expanded_relationship_to_iri():
+    # modifyUser is typed str; when the API expands it, collapse to its @id.
+    alert = Alert.model_validate(
+        {"uuid": "a1", "modifyUser": {"@id": "/api/3/people/u-1", "name": "Ann"}}
+    )
+    assert alert.modifyUser == "/api/3/people/u-1"
+
+
+def test_any_picklist_field_keeps_expanded_object():
+    # severity is typed Any (an "IRI to picklist" field); keep the full object.
+    alert = Alert.model_validate(
+        {"uuid": "a1", "severity": {"@id": "/api/3/picklists/p-1", "itemValue": "High"}}
+    )
+    assert alert.severity == {"@id": "/api/3/picklists/p-1", "itemValue": "High"}
+
+
+def test_str_field_plain_iri_unchanged():
+    alert = Alert.model_validate({"uuid": "a1", "modifyUser": "/api/3/people/u-1"})
+    assert alert.modifyUser == "/api/3/people/u-1"
