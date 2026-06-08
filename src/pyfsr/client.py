@@ -7,6 +7,8 @@ from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from .api.alerts import AlertsAPI
 from .api.connectors import ConnectorsAPI
@@ -25,6 +27,25 @@ from .utils.file_operations import FileOperations
 
 logger = logging.getLogger("pyfsr")
 
+# Header names whose values are secrets and must never be logged in full.
+_SENSITIVE_HEADERS = {"authorization", "x-api-key", "cookie", "csrf-token"}
+
+
+def _mask_headers(headers: dict) -> dict:
+    """Return a copy of ``headers`` with sensitive values masked for logging.
+
+    Keeps a short, non-secret prefix (e.g. the ``API-KEY`` / ``Bearer`` scheme)
+    so logs stay diagnosable without exposing the credential.
+    """
+    masked: dict = {}
+    for key, value in headers.items():
+        if key.lower() in _SENSITIVE_HEADERS and isinstance(value, str) and value:
+            scheme = value.split(" ", 1)[0] if " " in value else ""
+            masked[key] = f"{scheme} ***".strip() if scheme else "***"
+        else:
+            masked[key] = value
+    return masked
+
 
 class FortiSOAR:
     """
@@ -39,6 +60,8 @@ class FortiSOAR:
         suppress_insecure_warnings: bool = False,
         verbose: bool = False,
         port: int | None = None,
+        timeout: int | float | None = 30,
+        max_retries: int = 2,
     ):
         """
         Initialize the FortiSOAR client.
@@ -52,6 +75,12 @@ class FortiSOAR:
                warnings. Defaults to False.
            port (int, optional): Port to connect to. Overrides any port in base_url.
                Defaults to None (uses 443 for HTTPS).
+           timeout (int | float, optional): Per-request timeout in seconds applied
+               to every call (individual requests may override via ``timeout=``).
+               Defaults to 30; pass None to disable.
+           max_retries (int, optional): Automatic retries for transient failures
+               (connection errors and 429/5xx) on idempotent methods, with
+               exponential backoff. Defaults to 2; pass 0 to disable.
 
         Raises:
             ValueError: If the provided authentication method is invalid.
@@ -101,9 +130,27 @@ class FortiSOAR:
             logger.info(f"Initializing FortiSOAR client for {self.base_url}")
             logger.info(f"Logging to file: {self._log_file}")
 
+        self.timeout = timeout
         self.session = requests.Session()
         self.session.verify = verify_ssl
         self.verify_ssl = verify_ssl
+
+        # Retry transient failures (connect errors + 429/5xx) on idempotent
+        # methods with exponential backoff; writes are never auto-retried.
+        if max_retries:
+            retry = Retry(
+                total=max_retries,
+                connect=max_retries,
+                read=max_retries,
+                status=max_retries,
+                backoff_factor=0.5,
+                status_forcelist=(429, 500, 502, 503, 504),
+                allowed_methods=frozenset({"GET", "HEAD", "OPTIONS"}),
+                raise_on_status=False,
+            )
+            adapter = HTTPAdapter(max_retries=retry)
+            self.session.mount("https://", adapter)
+            self.session.mount("http://", adapter)
         if suppress_insecure_warnings:
             requests.packages.urllib3.disable_warnings(
                 requests.packages.urllib3.exceptions.InsecureRequestWarning
@@ -159,6 +206,11 @@ class FortiSOAR:
         logger.info(f"\n{'=' * 50}\nRequest:")
         logger.info(f"Method: {method}")
         logger.info(f"URL: {url}")
+
+        if headers:
+            logger.info("Headers:")
+            for key, value in _mask_headers(headers).items():
+                logger.info(f"  {key}: {value}")
 
         if params:
             logger.info("Query Parameters:")
@@ -248,6 +300,9 @@ class FortiSOAR:
             request_headers.update(headers)
 
         self._log_request(method, url, params, data, request_headers)
+
+        # Apply the default timeout unless the caller passed one explicitly.
+        kwargs.setdefault("timeout", self.timeout)
 
         start_time = time.time()
         try:

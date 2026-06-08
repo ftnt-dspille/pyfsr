@@ -8,57 +8,28 @@ from pyfsr import mcp as mcp_mod
 from pyfsr import tools
 
 
-class RecordingFortiSOAR:
-    """Stand-in for FortiSOAR that records constructor args (no network)."""
+# -- client_from_env (delegates to pyfsr.config.EnvConfig) ------------------
+def test_client_from_env_delegates(monkeypatch):
+    captured = {}
 
-    last = None
+    class FakeCfg:
+        @staticmethod
+        def from_env(env):
+            captured["env"] = env
+            return FakeCfg()
 
-    def __init__(self, base_url, auth, **kwargs):
-        RecordingFortiSOAR.last = {"base_url": base_url, "auth": auth, **kwargs}
+        def client(self):
+            return "CLIENT"
 
-
-@pytest.fixture
-def recorder(monkeypatch):
-    RecordingFortiSOAR.last = None
-    monkeypatch.setattr(mcp_mod, "FortiSOAR", RecordingFortiSOAR)
-    return RecordingFortiSOAR
-
-
-# -- client_from_env --------------------------------------------------------
-def test_client_from_env_api_key(recorder):
-    mcp_mod.client_from_env({"FSR_BASE_URL": "soar.example.com", "FSR_API_KEY": "k"})
-    assert recorder.last["base_url"] == "soar.example.com"
-    assert recorder.last["auth"] == "k"
-    assert recorder.last["verify_ssl"] is True
-    assert recorder.last["port"] is None
+    monkeypatch.setattr(mcp_mod, "EnvConfig", FakeCfg)
+    result = mcp_mod.client_from_env({"FSR_BASE_URL": "h", "FSR_API_KEY": "k"})
+    assert result == "CLIENT"
+    assert captured["env"] == {"FSR_BASE_URL": "h", "FSR_API_KEY": "k"}
 
 
-def test_client_from_env_userpass(recorder):
-    mcp_mod.client_from_env(
-        {"FSR_BASE_URL": "h", "FSR_USERNAME": "u", "FSR_PASSWORD": "p", "FSR_PORT": "8443"}
-    )
-    assert recorder.last["auth"] == ("u", "p")
-    assert recorder.last["port"] == 8443
-
-
-def test_client_from_env_verify_ssl_disabled(recorder):
-    mcp_mod.client_from_env({"FSR_BASE_URL": "h", "FSR_API_KEY": "k", "FSR_VERIFY_SSL": "false"})
-    assert recorder.last["verify_ssl"] is False
-
-
-def test_client_from_env_host_alias(recorder):
-    mcp_mod.client_from_env({"FSR_HOST": "h", "FSR_API_KEY": "k"})
-    assert recorder.last["base_url"] == "h"
-
-
-def test_client_from_env_missing_base_url_raises(recorder):
+def test_client_from_env_missing_config_raises():
     with pytest.raises(ValueError, match="FSR_BASE_URL"):
-        mcp_mod.client_from_env({"FSR_API_KEY": "k"})
-
-
-def test_client_from_env_missing_auth_raises(recorder):
-    with pytest.raises(ValueError, match="FSR_API_KEY"):
-        mcp_mod.client_from_env({"FSR_BASE_URL": "h"})
+        mcp_mod.client_from_env({})
 
 
 # -- tool mapping -----------------------------------------------------------
