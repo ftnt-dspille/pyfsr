@@ -15,8 +15,8 @@ class FakeClient:
         self.calls.append(("GET", endpoint, params, None))
         return self._resp(endpoint)
 
-    def post(self, endpoint, data=None, **kwargs):
-        self.calls.append(("POST", endpoint, None, data))
+    def post(self, endpoint, data=None, params=None, **kwargs):
+        self.calls.append(("POST", endpoint, params, data))
         return self._resp(endpoint)
 
     def put(self, endpoint, data=None, **kwargs):
@@ -82,10 +82,12 @@ def test_query_posts_to_query_endpoint():
     )
     q = Query().eq("status.itemValue", "Open").limit(50)
     page = RecordSet(client, "incidents").query(q)
-    method, endpoint, _, data = client.calls[0]
+    method, endpoint, params, data = client.calls[0]
     assert (method, endpoint) == ("POST", "/api/query/incidents")
     assert data["filters"][0]["operator"] == "eq"
-    assert data["limit"] == 50
+    # limit/page travel as $-params, NOT in the body (FSR ignores body limit).
+    assert "limit" not in data
+    assert params == {"$page": 1, "$limit": 50}
     assert page.members == [{"uuid": "x"}]
 
 
@@ -101,9 +103,11 @@ def test_iterate_walks_pages_via_query():
 
     client = FakeClient()
 
-    def post(endpoint, data=None, **kwargs):
-        seen_pages.append(data["page"])
-        return pages.get(data["page"], {"hydra:member": []})
+    def post(endpoint, data=None, params=None, **kwargs):
+        page = params["$page"]
+        seen_pages.append(page)
+        assert params["$limit"] == 2  # page_size drives $limit
+        return pages.get(page, {"hydra:member": []})
 
     client.post = post
     out = list(RecordSet(client, "incidents").iterate(Query().eq("x", 1), page_size=2))

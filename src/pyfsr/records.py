@@ -89,11 +89,36 @@ class RecordSet:
         return self.list(limit=limit, page=page, params=query)
 
     def query(self, query: Query | dict[str, Any], *, page: int = 1) -> HydraPage:
-        """Run a structured query via ``POST /api/query/<module>``."""
+        """Run a structured query via ``POST /api/query/<module>``.
+
+        FortiSOAR paginates this endpoint with the ``$limit``/``$page``/``$search``
+        *query params* — the ``limit``/``search`` keys in the body are ignored — so
+        they are lifted out of the body and sent as params.
+        """
+        body, params = self._split_query(query, page=page)
+        resp = self.client.post(f"/api/query/{self.module}", data=body, params=params)
+        return HydraPage.from_response(resp, page=page, limit=params.get("$limit"))
+
+    @staticmethod
+    def _split_query(
+        query: Query | dict[str, Any], *, page: int, page_size: int | None = None
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Split a query into (POST body, $-prefixed query params).
+
+        ``$limit``/``$page``/``$search`` drive pagination as params; everything
+        else (logic/filters/sort/__selectFields…) stays in the body.
+        """
         body = query.to_body() if isinstance(query, Query) else dict(query)
-        limit = body.get("limit")
-        resp = self.client.post(f"/api/query/{self.module}", data=body)
-        return HydraPage.from_response(resp, page=page, limit=limit)
+        params: dict[str, Any] = {"$page": page}
+        limit = page_size if page_size is not None else body.pop("limit", None)
+        if page_size is not None:
+            body.pop("limit", None)
+        if limit is not None:
+            params["$limit"] = limit
+        search = body.pop("search", None)
+        if search is not None:
+            params["$search"] = search
+        return body, params
 
     def iterate(
         self,
@@ -115,13 +140,10 @@ class RecordSet:
                     params={"$limit": page_size, "$page": page},
                 )
         else:
-            base = query.to_body() if isinstance(query, Query) else dict(query)
 
             def fetch(page: int) -> Any:
-                body = dict(base)
-                body["limit"] = page_size
-                body["page"] = page
-                return self.client.post(f"/api/query/{self.module}", data=body)
+                body, params = self._split_query(query, page=page, page_size=page_size)
+                return self.client.post(f"/api/query/{self.module}", data=body, params=params)
 
         yield from paginate(fetch, page_size=page_size, max_records=max_records)
 
