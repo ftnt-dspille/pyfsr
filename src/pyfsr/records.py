@@ -194,20 +194,43 @@ class RecordSet:
             yield self._parse(record, raw=raw)
 
     # -- writes -------------------------------------------------------------
-    def create(self, data: dict[str, Any], *, raw: bool = False) -> Any:
+    def create(
+        self,
+        data: dict[str, Any],
+        *,
+        raw: bool = False,
+        resolve_picklists: bool = False,
+    ) -> Any:
         """Create a record via ``POST /api/3/<module>``.
 
         ``data`` may be a dict or a model instance; the created record is
-        returned parsed (or raw, with ``raw=True``).
+        returned parsed (or raw, with ``raw=True``). Pass
+        ``resolve_picklists=True`` to map friendly picklist values (e.g.
+        ``"High"``) to their IRIs via ``client.picklists`` before sending.
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
+        if resolve_picklists:
+            data = self.client.picklists.resolve_record_fields(self.module, data)
         return self._parse(self.client.post(f"/api/3/{self.module}", data=data), raw=raw)
 
-    def update(self, ref: str, data: dict[str, Any], *, raw: bool = False) -> Any:
-        """Update a record via ``PUT /api/3/<module>/<uuid>``."""
+    def update(
+        self,
+        ref: str,
+        data: dict[str, Any],
+        *,
+        raw: bool = False,
+        resolve_picklists: bool = False,
+    ) -> Any:
+        """Update a record via ``PUT /api/3/<module>/<uuid>``.
+
+        Pass ``resolve_picklists=True`` to map friendly picklist values to IRIs
+        before sending (see :meth:`create`).
+        """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
+        if resolve_picklists:
+            data = self.client.picklists.resolve_record_fields(self.module, data)
         path = resolve_record_path(self.module, ref)
         return self._parse(self.client.put(path, data=data), raw=raw)
 
