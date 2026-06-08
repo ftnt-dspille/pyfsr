@@ -33,4 +33,12 @@ docs/source/autoapi/
 !docs/source/index.rst
 !docs/source/conf.py
 /.coverage
+coverage.xml
 fortisoar.log
+
+# Test artifacts
+test_export.zip
+*_export.zip
+
+# hatch-vcs generated
+src/pyfsr/_version.py

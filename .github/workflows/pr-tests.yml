@@ -16,13 +16,27 @@ on:
         description: 'The Git ref to checkout'
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v1
+        with:
+          args: check
+      - uses: astral-sh/ruff-action@v1
+        with:
+          args: format --check
+
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ "3.10", "3.11", "3.12" ]
+        python-version: [ "3.10", "3.11", "3.12", "3.13" ]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # hatch-vcs derives the version from tags — need full history + tags.
+          fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5

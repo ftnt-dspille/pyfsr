@@ -1,6 +1,6 @@
 [project]
 name = "pyfsr"
-version = "0.2.4"
+dynamic = ["version"]
 description = "Python implementation of the FortiSOAR REST API"
 readme = "README.md"
 authors = [
@@ -15,6 +15,8 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 requires-python = ">=3.10"
@@ -38,12 +40,44 @@ docs = [
     "pydata-sphinx-theme"
 ]
 
+# One-shot dev setup: linters + the test/docs extras.
+dev = [
+    "pyfsr[test,docs]",
+    "ruff>=0.6",
+    "pre-commit>=3.5",
+]
+
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+# Version is derived from git tags (vX.Y.Z) — single source of truth.
+# Release flow: commit on main -> `git tag vX.Y.Z` -> GitHub Release -> PyPI.
+[tool.hatch.version]
+source = "vcs"
+
+# Only honor clean release tags (vX.Y.Z); ignore stray tags like
+# "v0.2.4-tag" / "v0.2.2-fix" that aren't valid PEP 440 versions.
+[tool.hatch.version.raw-options]
+tag_regex = '^v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)$'
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/pyfsr/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pyfsr"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I isort, B bugbear, UP pyupgrade.
+select = ["E", "W", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -54,9 +88,10 @@ python_files = ["test_*.py"]
 [tool.coverage.run]
 omit = [
     "Applications/PyCharm.app/*",
+    "src/pyfsr/_version.py",
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/ftnt-dspille/pyfsr"
 "Bug Tracker" = "https://github.com/ftnt-dspille/pyfsr/issues"
-"Docmentation" = "https://ftnt-dspille.github.io/pyfsr/"
+"Documentation" = "https://ftnt-dspille.github.io/pyfsr/"
