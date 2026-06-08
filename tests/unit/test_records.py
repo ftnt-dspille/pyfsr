@@ -1,5 +1,7 @@
 """Unit tests for the generic RecordSet CRUD layer."""
 
+import pytest
+
 from pyfsr import Query, RecordSet
 from pyfsr.records import resolve_record_path
 
@@ -19,9 +21,9 @@ class FakeClient:
         self.calls.append(("POST", endpoint, params, data))
         return self._resp(endpoint)
 
-    def put(self, endpoint, data=None, **kwargs):
-        self.calls.append(("PUT", endpoint, None, data))
-        return self._resp(endpoint)
+    def put(self, endpoint, data=None, params=None, **kwargs):
+        self.calls.append(("PUT", endpoint, params, data))
+        return data if data is not None else self._resp(endpoint)
 
     def delete(self, endpoint, params=None, **kwargs):
         self.calls.append(("DELETE", endpoint, params, None))
@@ -148,6 +150,72 @@ def test_delete():
     client = FakeClient()
     RecordSet(client, "alerts").delete("u1")
     assert client.calls[0] == ("DELETE", "/api/3/alerts/u1", None, None)
+
+
+# -- P4: safe deletes + recycle ---------------------------------------------
+def test_hard_delete_sets_param():
+    client = FakeClient()
+    RecordSet(client, "alerts").delete("u1", hard=True)
+    assert client.calls[0] == ("DELETE", "/api/3/alerts/u1", {"$hardDelete": "true"}, None)
+
+
+def test_delete_module_colon_and_iri():
+    client = FakeClient()
+    RecordSet(client, "alerts").delete("incidents:x")
+    RecordSet(client, "alerts").delete("/api/3/alerts/y", hard=True)
+    assert client.calls[0] == ("DELETE", "/api/3/incidents/x", None, None)
+    assert client.calls[1] == ("DELETE", "/api/3/alerts/y", {"$hardDelete": "true"}, None)
+
+
+@pytest.mark.parametrize("bad", ["", "   ", None])
+def test_delete_rejects_blank_ref(bad):
+    client = FakeClient()
+    with pytest.raises(ValueError):
+        RecordSet(client, "alerts").delete(bad)
+    assert client.calls == []  # never reaches the wire
+
+
+def test_restore_clears_deleted_at_and_puts():
+    deleted = {"@id": "/api/3/alerts/u1", "uuid": "u1", "name": "x", "deletedAt": 1234.5}
+    client = FakeClient({"/api/3/alerts/u1": deleted})
+    rec = RecordSet(client, "alerts", typed=False).restore("u1")
+    get_call, put_call = client.calls
+    assert get_call == ("GET", "/api/3/alerts/u1", {"$showDeleted": "true"}, None)
+    method, endpoint, params, data = put_call
+    assert (method, endpoint, params) == ("PUT", "/api/3/alerts/u1", {"$showDeleted": "true"})
+    assert data["deletedAt"] is None
+    assert data["uuid"] == "u1"  # full prior body preserved
+    assert rec["deletedAt"] is None
+
+
+def test_restore_rejects_blank_ref():
+    client = FakeClient()
+    with pytest.raises(ValueError):
+        RecordSet(client, "alerts").restore("")
+
+
+# -- P4: show_deleted plumbing ----------------------------------------------
+def test_get_show_deleted_param():
+    client = FakeClient({"/api/3/alerts/u1": {"uuid": "u1"}})
+    RecordSet(client, "alerts").get("u1", show_deleted=True)
+    assert client.calls[0] == ("GET", "/api/3/alerts/u1", {"$showDeleted": "true"}, None)
+
+
+def test_list_show_deleted_param():
+    client = FakeClient()
+    RecordSet(client, "alerts").list(show_deleted=True)
+    _, endpoint, params, _ = client.calls[0]
+    assert endpoint == "/api/3/alerts"
+    assert params["$showDeleted"] == "true"
+
+
+def test_query_show_deleted_param_and_body():
+    client = FakeClient()
+    RecordSet(client, "alerts").query(Query().limit(5), show_deleted=True)
+    method, endpoint, params, data = client.calls[0]
+    assert method == "POST"
+    assert params["$showDeleted"] == "true"
+    assert data["showDeleted"] is True
 
 
 def test_records_accessor_on_client(mock_client):
