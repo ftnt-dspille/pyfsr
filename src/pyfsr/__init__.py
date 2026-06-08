@@ -5,6 +5,7 @@ For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
 """
 
 from .client import FortiSOAR
+from .config import EnvConfig
 from .models import MODEL_REGISTRY, Alert, BaseRecord, Comment, Incident, Task, model_for
 from .pagination import HydraPage, paginate
 from .projection import SUMMARY_FIELDS, project, project_record, to_jsonable
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover - source checkout without a build
 
 __all__ = [
     "FortiSOAR",
+    "EnvConfig",
     "Query",
     "RecordSet",
     "HydraPage",

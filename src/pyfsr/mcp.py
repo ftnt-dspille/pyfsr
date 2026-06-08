@@ -27,10 +27,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from typing import TYPE_CHECKING, Any
 
 from .client import FortiSOAR
+from .config import EnvConfig
 from .tools import dispatch, tool_schemas
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -38,50 +38,15 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 SERVER_NAME = "pyfsr"
 
-_FALSEY = {"0", "false", "no", "off", ""}
-
-
-def _flag(env: dict[str, str], name: str, default: str) -> bool:
-    """Interpret an ``FSR_*`` env flag as a bool (anything falsey-ish → False)."""
-    return env.get(name, default).strip().lower() not in _FALSEY
-
 
 def client_from_env(env: dict[str, str] | None = None) -> FortiSOAR:
     """Build a :class:`~pyfsr.client.FortiSOAR` client from ``FSR_*`` env vars.
 
-    Reads ``FSR_BASE_URL`` (required) plus either ``FSR_API_KEY`` or
-    ``FSR_USERNAME``/``FSR_PASSWORD`` for auth, and the optional ``FSR_PORT`` /
-    ``FSR_VERIFY_SSL`` / ``FSR_SUPPRESS_INSECURE_WARNINGS`` knobs. Raises
-    ``ValueError`` with an actionable message when required config is missing.
+    Thin wrapper over :meth:`pyfsr.config.EnvConfig.from_env` →
+    :meth:`~pyfsr.config.EnvConfig.client`; see :mod:`pyfsr.config` for the full
+    list of recognized variables. Raises ``ValueError`` when host/auth is missing.
     """
-    env = env if env is not None else dict(os.environ)
-    base_url = env.get("FSR_BASE_URL") or env.get("FSR_HOST")
-    if not base_url:
-        raise ValueError("FSR_BASE_URL (or FSR_HOST) is required to start the pyfsr MCP server")
-
-    api_key = env.get("FSR_API_KEY")
-    username = env.get("FSR_USERNAME")
-    password = env.get("FSR_PASSWORD")
-    if api_key:
-        auth: str | tuple[str, str] = api_key
-    elif username and password:
-        auth = (username, password)
-    else:
-        raise ValueError(
-            "set FSR_API_KEY, or both FSR_USERNAME and FSR_PASSWORD, for the pyfsr MCP server"
-        )
-
-    port_raw = env.get("FSR_PORT")
-    port = int(port_raw) if port_raw else None
-    verify_ssl = _flag(env, "FSR_VERIFY_SSL", "true")
-    suppress = _flag(env, "FSR_SUPPRESS_INSECURE_WARNINGS", "false")
-    return FortiSOAR(
-        base_url,
-        auth,
-        verify_ssl=verify_ssl,
-        suppress_insecure_warnings=suppress,
-        port=port,
-    )
+    return EnvConfig.from_env(env).client()
 
 
 def _mcp_tools() -> list[Any]:
