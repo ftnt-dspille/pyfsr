@@ -22,7 +22,20 @@ extensions = [
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "requests": ("https://docs.python-requests.org/en/latest/", None),
+    "pydantic": ("https://docs.pydantic.dev/latest/", None),
 }
+
+# Cross-references autoapi emits that have no resolvable target (base classes /
+# internal modules pulled in by the nitpicky `-n` build). Listed here so the
+# warnings-as-errors (`-W`) docs build stays green without weakening it elsewhere.
+nitpick_ignore = [
+    ("py:class", "FortiSOAR"),
+    ("py:class", "pyfsr.FortiSOAR"),
+    ("py:class", "pyfsr.models.BaseRecord"),
+    ("py:obj", "pyfsr.models._generated"),
+    ("py:mod", "pyfsr.models._generated"),
+    ("py:class", "pydantic.main.BaseModel"),
+]
 
 # AutoAPI configuration
 autoapi_type = "python"
@@ -33,7 +46,9 @@ autoapi_options = [
     "undoc-members",
     "show-inheritance",
     "show-module-summary",
-    "imported-members",
+    # "imported-members" dropped: it re-documented package-root re-exports
+    # (HydraPage, Query, ...) in both pyfsr and their home modules, producing
+    # "duplicate object description" warnings that fail the `-W` build.
 ]
 
 # HTML Theme

@@ -47,20 +47,17 @@ def extract_total(response: Any) -> int | None:
 
 @dataclass
 class HydraPage:
-    """A single page of a Hydra collection.
+    """A single page of a Hydra collection."""
 
-    Attributes:
-        members: The records on this page.
-        total: ``hydra:totalItems`` across all pages (``None`` if absent).
-        page: 1-based page number this envelope represents.
-        limit: Page size requested (``None`` if unknown).
-        raw: The full decoded response envelope.
-    """
-
+    #: The records on this page.
     members: list[Any]
+    #: ``hydra:totalItems`` across all pages (``None`` if absent).
     total: int | None
+    #: 1-based page number this envelope represents.
     page: int
+    #: Page size requested (``None`` if unknown).
     limit: int | None
+    #: The full decoded response envelope.
     raw: dict[str, Any]
 
     @classmethod

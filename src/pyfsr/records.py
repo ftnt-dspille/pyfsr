@@ -3,10 +3,10 @@
 ``client.records("incidents")`` returns a :class:`RecordSet` bound to that
 module, so callers don't hand-build ``/api/3/<module>`` URLs or unwrap Hydra
 envelopes. This is the generic counterpart to the typed ``client.alerts`` API
-and works for every module on the appliance.
+and works for every module on the appliance::
 
     incidents = client.records("incidents")
-    inc = incidents.get("0d2c…")                     # by uuid
+    inc = incidents.get("0d2c...")                   # by uuid
     page = incidents.query(Query().eq("status.itemValue", "Open").limit(50))
     for rec in incidents.iterate(Query().gt("createDate", ts)):
         ...
