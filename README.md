@@ -1,67 +1,136 @@
 # pyfsr
 
 [![PyPI version](https://badge.fury.io/py/pyfsr.svg)](https://badge.fury.io/py/pyfsr)
+[![Tests](https://github.com/ftnt-dspille/pyfsr/actions/workflows/pr-tests.yml/badge.svg)](https://github.com/ftnt-dspille/pyfsr/actions/workflows/pr-tests.yml)
 [![Documentation Status](https://github.com/ftnt-dspille/pyfsr/actions/workflows/docs.yml/badge.svg)](https://github.com/ftnt-dspille/pyfsr/actions/workflows/docs.yml)
-[![Tests](https://github.com/ftnt-dspille/pyfsr/actions/workflows/tests.yml/badge.svg)](https://github.com/ftnt-dspille/pyfsr/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/ftnt-dspille/pyfsr/branch/main/graph/badge.svg)](https://codecov.io/gh/ftnt-dspille/pyfsr)
 
-[Documentation](https://ftnt-dspille.github.io/pyfsr/) | [Installation](#installation) | [Quick Start](#quick-start)
+[Documentation](https://ftnt-dspille.github.io/pyfsr/) · [Installation](#installation) · [Quick start](#quick-start) · [AI / agents](#ai--agent-friendly)
 
-**PyFSR** is a Python client library for the FortiSOAR REST API, allowing you to interact with FortiSOAR
-programmatically.
+**pyfsr** is a batteries-included Python client for the FortiSOAR REST API. It
+gives you a typed query/CRUD layer over any module, picklist resolution,
+connector execution, playbook-run history, safe deletes — and a ready-made
+**AI/agent surface** (tool-schema registry + an optional MCP server) so an agent
+can drive FortiSOAR with no glue code.
+
+Python 3.10+ · Pydantic v2 · MIT.
 
 ## Installation
 
 ```bash
 pip install pyfsr
+# with the optional generic MCP server:
+pip install 'pyfsr[mcp]'
 ```
 
-## Quick Start
+## Quick start
 
 ```python
-from pyfsr import FortiSOAR
+from pyfsr import FortiSOAR, Query
 
-# Initialize the client
-client = FortiSOAR('your-server', 'your-token')
-# or
-# client = FortiSOAR('your-server', ('your-username', 'your-password'))
+# API-key auth, or ("username", "password")
+client = FortiSOAR("soar.example.com", "your-api-key")
 
-# Generic get call to Alerts endpoint
-response = client.get('/api/v3/alerts')
+# Generic, typed CRUD for ANY module via client.records(module)
+incidents = client.records("incidents")
 
-# Create an alert
-alert_data = {
-    "name": "Test Alert",
-    "description": "This is a test alert",
-    "severity": "High"
-}
-alert_record = client.alerts.create(**alert_data)
+inc = incidents.get("0d2c...")          # by uuid, "module:uuid", or full IRI
+inc["name"], inc.uuid                    # records are dict- AND attribute-accessible
 
-# List all alerts
-alerts = client.alerts.list()
+# Structured queries with a fluent builder -> a HydraPage you can iterate
+page = incidents.query(
+    Query().eq("status.itemValue", "Open").like("name", "phish").limit(50)
+)
+for inc in incidents.iterate(Query().eq("status.itemValue", "Open")):
+    ...                                  # lazily walks every page
 
-# Get a specific alert
-alert = client.alerts.get("alert-id")
+# Create / update / delete (soft by default; hard= for permanent)
+new = incidents.create({"name": "Suspicious login", "severity": "High"},
+                       resolve_picklists=True)   # friendly values -> IRIs
+incidents.update(new.uuid, {"status": "Closed"}, resolve_picklists=True)
+incidents.delete(new.uuid)               # delete(..., hard=True) to purge
+```
+
+### Configure from the environment
+
+```python
+from pyfsr import EnvConfig
+
+# reads FSR_BASE_URL (+ FSR_API_KEY or FSR_USERNAME/FSR_PASSWORD),
+# FSR_PORT, FSR_VERIFY_SSL, FSR_TIMEOUT
+client = EnvConfig.from_env().client()
 ```
 
 ## Features
 
-- Simple API interface
-- Support for all FortiSOAR API endpoints using a generic `get`, `post`, `put`, `delete` methods
-- Authentication handling
-- Type hints for better IDE support
+- **Generic record access** — `client.records(module)` for CRUD on any module;
+  no hand-built `/api/3/...` URLs or Hydra unwrapping.
+- **Query DSL** — `Query().eq(...).in_(...).group(...).sort(...).limit(...)`,
+  compiled to the FortiSOAR query-body shape (pagination handled for you).
+- **Typed models** — Alert/Incident/Task/Comment come back as Pydantic v2
+  models that are also dict-compatible; unknown modules fall back to a lenient
+  `BaseRecord`, so custom fields/modules never break.
+- **Picklists** — `client.picklists` resolves friendly values (`"High"`) to
+  IRIs and discovers which picklist a `(module, field)` binds to.
+- **Connectors** — `client.connectors` lists configured connectors, runs
+  healthchecks, and executes operations.
+- **Playbooks** — `client.playbooks` merges live + historical run history and
+  resumes manual-input steps.
+- **Safe deletes** — soft-delete/restore + guarded single-row hard delete.
+- **Schema discovery** — `client.list_modules()` / `client.describe_module()`.
+- **Resilient transport** — configurable `timeout=`, automatic retry with
+  backoff on idempotent requests (429/5xx), and secrets masked in verbose logs.
+- **Bundled OpenAPI spec** — `pyfsr.spec.load_spec()` for offline reference and
+  `drift(client)` to compare the spec against a live appliance.
 
-## Roadmap
+## AI / agent-friendly
 
-- Add support for more API endpoints
-- Add support for more complex API calls
-    - Filtering
-    - Pagination
-    - Starting Playbooks
-- HMAC Authentication
-- Better Unit Testing
+pyfsr ships a transport-neutral **tool registry** for the core operations, with
+token-efficient results and structured (never-raised) errors — feed it to
+Anthropic tool-use, OpenAI function calling, your own agent loop, or the bundled
+MCP server.
 
-## Important Notes
+```python
+from pyfsr.tools import to_anthropic_tools, to_openai_tools, dispatch
 
-This library is a work in progress and is not yet ready for production use.
+tools = to_anthropic_tools()             # or to_openai_tools(), or tool_schemas()
 
+# ... your model picks a tool ...
+result = dispatch(client, "search_records",
+                  {"module": "alerts", "summary": True, "limit": 10})
+# result is JSON-safe and trimmed; failures come back as {"error": {...}}
+```
+
+Reads accept `summary=True` or `fields=[...]` to keep payloads small:
+
+```python
+client.records("alerts").query(Query().limit(20), summary=True)
+```
+
+### Generic MCP server
+
+Point any MCP-capable agent at any FortiSOAR with one command:
+
+```bash
+pip install 'pyfsr[mcp]'
+FSR_BASE_URL=soar.example.com FSR_API_KEY=... python -m pyfsr.mcp
+```
+
+It exposes the same registry (record CRUD, schema discovery, picklists,
+connectors, playbook runs) as MCP tools — generic and dependency-light,
+distinct from any domain-specific FortiSOAR MCP.
+
+## Development
+
+```bash
+uv sync --extra dev
+uv run pytest -q                 # unit tests (live tests deselected by default)
+uvx ruff check src tests
+```
+
+Live integration tests run with `pytest -m integration` and need an
+`examples/config.toml` pointing at a FortiSOAR instance.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
