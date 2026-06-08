@@ -1,6 +1,6 @@
 """Base authentication class for FortiSOAR"""
+
 from abc import ABC, abstractmethod
-from typing import Set
 
 from ..exceptions import UnsupportedAuthOperationError
 
@@ -17,7 +17,7 @@ class BaseAuth(ABC):
 
     def __init__(self):
         """Initialize base auth class"""
-        self._unsupported_operations: Set[str] = set()
+        self._unsupported_operations: set[str] = set()
 
     @property
     def auth_type(self) -> str:
@@ -30,7 +30,7 @@ class BaseAuth(ABC):
         pass
 
     @property
-    def unsupported_operations(self) -> Set[str]:
+    def unsupported_operations(self) -> set[str]:
         """Get set of unsupported operations"""
         return self._unsupported_operations
 

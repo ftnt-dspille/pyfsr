@@ -1,6 +1,6 @@
 import mimetypes
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 
 class FileOperations:
@@ -15,7 +15,7 @@ class FileOperations:
         """
         self.client = client
 
-    def upload(self, filename: str) -> Dict[str, Any]:
+    def upload(self, filename: str) -> dict[str, Any]:
         """
         Upload a file to FortiSOAR, mimicking browser file upload behavior
 
@@ -32,38 +32,32 @@ class FileOperations:
         # Get proper mime type
         mime_type, _ = mimetypes.guess_type(filename)
         if mime_type is None:
-            mime_type = 'application/octet-stream'
+            mime_type = "application/octet-stream"
 
         # Ensure file is opened in binary mode
-        with open(file_path, 'rb') as f:
-            files = {
-                'file': (
-                    file_path.name,
-                    f,
-                    mime_type
-                )
-            }
+        with open(file_path, "rb") as f:
+            files = {"file": (file_path.name, f, mime_type)}
 
             try:
                 # The key issue - we need to send as multipart/form-data
                 response = self.client.post(
-                    '/api/3/files',
+                    "/api/3/files",
                     files=files,
                     headers={
                         # Remove Content-Type header - let requests set it with boundary
-                        'Content-Type': None
-                    }
+                        "Content-Type": None
+                    },
                 )
                 print(f"File upload successful. Response: {response}")
                 return response
 
             except Exception as e:
                 print(f"Upload failed: {str(e)}")
-                if hasattr(e, 'response') and e.response is not None:
+                if hasattr(e, "response") and e.response is not None:
                     print(f"Response status: {e.response.status_code}")
                     print(f"Response body: {e.response.text}")
                 raise
 
-    def upload_many(self, filenames: list[str]) -> list[Dict[str, Any]]:
+    def upload_many(self, filenames: list[str]) -> list[dict[str, Any]]:
         """Upload multiple files to FortiSOAR"""
         return [self.upload(f) for f in filenames]

@@ -1,11 +1,11 @@
-from typing import Dict, Any, Optional
+from typing import Any
 
 from .base import BaseAPI
 
 
 class AlertsAPI(BaseAPI):
     """
-    The Alerts API provides methods for managing FortiSOAR alerts including creating, 
+    The Alerts API provides methods for managing FortiSOAR alerts including creating,
     updating, and querying alerts.
 
     Example:
@@ -43,9 +43,9 @@ class AlertsAPI(BaseAPI):
             client: The API client instance used for making requests
         """
         super().__init__(client)
-        self.module = 'alerts'
+        self.module = "alerts"
 
-    def create(self, **data: Dict[str, Any]) -> Dict[str, Any]:
+    def create(self, **data: dict[str, Any]) -> dict[str, Any]:
         """
         Create a new alert in FortiSOAR.
 
@@ -70,9 +70,9 @@ class AlertsAPI(BaseAPI):
                 }
                 response = client.alerts.create(**alert_data)
         """
-        return self.client.post(f'/api/3/{self.module}', data=data)
+        return self.client.post(f"/api/3/{self.module}", data=data)
 
-    def list(self, params: Optional[Dict] = None) -> Dict[str, Any]:
+    def list(self, params: dict | None = None) -> dict[str, Any]:
         """
         List all alerts with optional filtering.
 
@@ -90,10 +90,10 @@ class AlertsAPI(BaseAPI):
 
                 # List with filtering
                 filtered = client.alerts.list({"severity": "High"})
-                """
-        return self.client.get(f'/api/3/{self.module}', params=params)
+        """
+        return self.client.get(f"/api/3/{self.module}", params=params)
 
-    def get(self, alert_id: str) -> Dict[str, Any]:
+    def get(self, alert_id: str) -> dict[str, Any]:
         """
         Get a specific alert by ID.
 
@@ -110,9 +110,9 @@ class AlertsAPI(BaseAPI):
                 print(alert['name'])
         """
 
-        return self.client.get(f'/api/3/{self.module}/{alert_id}')
+        return self.client.get(f"/api/3/{self.module}/{alert_id}")
 
-    def update(self, alert_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    def update(self, alert_id: str, data: dict[str, Any]) -> dict[str, Any]:
         """
         Update an existing alert.
 
@@ -131,7 +131,7 @@ class AlertsAPI(BaseAPI):
                   "description": "Updated description"
                 })
         """
-        return self.client.put(f'/api/3/{self.module}/{alert_id}', data=data)
+        return self.client.put(f"/api/3/{self.module}/{alert_id}", data=data)
 
     def delete(self, alert_id: str) -> None:
         """
@@ -143,4 +143,4 @@ class AlertsAPI(BaseAPI):
         Examples:
             >>> client.alerts.delete("alert-123")
         """
-        self.client.delete(f'/api/3/{self.module}/{alert_id}')
+        self.client.delete(f"/api/3/{self.module}/{alert_id}")

@@ -1,5 +1,4 @@
 """Custom exceptions for the FortiSOAR API client."""
-from typing import Optional
 
 
 class FortiSOARException(Exception):
@@ -13,33 +12,38 @@ class FortiSOARException(Exception):
 
 class ValidationError(FortiSOARException):
     """Raised when API request validation fails."""
+
     pass
 
 
 class AuthenticationError(FortiSOARException):
     """Raised when authentication fails."""
+
     pass
 
 
 class ResourceNotFoundError(FortiSOARException):
     """Raised when a requested resource is not found."""
+
     pass
 
 
 class PermissionError(FortiSOARException):
     """Raised when the user lacks required permissions."""
+
     pass
 
 
 class APIError(FortiSOARException):
     """Generic API error."""
+
     pass
 
 
 class UnsupportedAuthOperationError(FortiSOARException):
     """Operation not supported with current authentication method"""
 
-    def __init__(self, operation: str, auth_type: str, message: Optional[str] = None):
+    def __init__(self, operation: str, auth_type: str, message: str | None = None):
         self.operation = operation
         self.auth_type = auth_type
         msg = message or f"Operation '{operation}' is not supported with {auth_type} authentication"
