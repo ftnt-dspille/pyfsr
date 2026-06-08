@@ -75,6 +75,10 @@ version-file = "src/pyfsr/_version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/pyfsr"]
 
+# Ship the bundled OpenAPI spec (gzipped JSON) inside the wheel + sdist.
+[tool.hatch.build]
+artifacts = ["src/pyfsr/resources/*.json.gz"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

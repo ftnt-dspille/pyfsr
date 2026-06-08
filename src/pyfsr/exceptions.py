@@ -2,11 +2,19 @@
 
 
 class FortiSOARException(Exception):
-    """Base exception for FortiSOAR API errors."""
+    """Base exception for FortiSOAR API errors.
 
-    def __init__(self, message: str = None, response=None):
+    Carries the originating ``response`` plus, when available, the HTTP
+    ``status_code`` and the FortiSOAR error ``error_type`` (the ``type`` field
+    of the error body) so callers — and agents — can branch on them without
+    re-parsing the response.
+    """
+
+    def __init__(self, message: str = None, response=None, *, error_type: str | None = None):
         self.message = message
         self.response = response
+        self.error_type = error_type
+        self.status_code = getattr(response, "status_code", None)
         super().__init__(self.message)
 
 
@@ -62,13 +70,13 @@ def handle_api_error(response):
 
     if response.status_code == 400:
         if "ValidationException" in error_type:
-            raise ValidationError(message, response)
-        raise APIError(message, response)
+            raise ValidationError(message, response, error_type=error_type)
+        raise APIError(message, response, error_type=error_type)
     elif response.status_code == 401:
-        raise AuthenticationError(message, response)
+        raise AuthenticationError(message, response, error_type=error_type)
     elif response.status_code == 403:
-        raise PermissionError(message, response)
+        raise PermissionError(message, response, error_type=error_type)
     elif response.status_code == 404:
-        raise ResourceNotFoundError(message, response)
+        raise ResourceNotFoundError(message, response, error_type=error_type)
     else:
-        raise APIError(message, response)
+        raise APIError(message, response, error_type=error_type)
