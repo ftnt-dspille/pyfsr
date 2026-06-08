@@ -2,11 +2,11 @@ import pytest
 import requests
 
 from pyfsr.exceptions import (
-    ValidationError,
+    APIError,
     AuthenticationError,
-    ResourceNotFoundError,
     PermissionError,
-    APIError
+    ResourceNotFoundError,
+    ValidationError,
 )
 
 
@@ -43,10 +43,7 @@ def test_request_binary_response(mock_client, mock_response, monkeypatch):
 
 def test_request_validation_error(mock_client, mock_response, monkeypatch):
     """Test handling of validation errors (400)"""
-    error_response = {
-        "type": "ValidationException",
-        "message": "Invalid alert data"
-    }
+    error_response = {"type": "ValidationException", "message": "Invalid alert data"}
 
     def mock_request(*args, **kwargs):
         return mock_response(status_code=400, json_data=error_response)
@@ -60,9 +57,7 @@ def test_request_validation_error(mock_client, mock_response, monkeypatch):
 
 def test_request_auth_error(mock_client, mock_response, monkeypatch):
     """Test handling of authentication errors (401)"""
-    error_response = {
-        "message": "Invalid API key"
-    }
+    error_response = {"message": "Invalid API key"}
 
     def mock_request(*args, **kwargs):
         return mock_response(status_code=401, json_data=error_response)
@@ -76,9 +71,7 @@ def test_request_auth_error(mock_client, mock_response, monkeypatch):
 
 def test_request_permission_error(mock_client, mock_response, monkeypatch):
     """Test handling of permission errors (403)"""
-    error_response = {
-        "message": "Insufficient permissions"
-    }
+    error_response = {"message": "Insufficient permissions"}
 
     def mock_request(*args, **kwargs):
         return mock_response(status_code=403, json_data=error_response)
@@ -92,9 +85,7 @@ def test_request_permission_error(mock_client, mock_response, monkeypatch):
 
 def test_request_not_found(mock_client, mock_response, monkeypatch):
     """Test handling of not found errors (404)"""
-    error_response = {
-        "message": "Alert not found"
-    }
+    error_response = {"message": "Alert not found"}
 
     def mock_request(*args, **kwargs):
         return mock_response(status_code=404, json_data=error_response)
@@ -108,9 +99,7 @@ def test_request_not_found(mock_client, mock_response, monkeypatch):
 
 def test_request_server_error(mock_client, mock_response, monkeypatch):
     """Test handling of server errors (500)"""
-    error_response = {
-        "message": "Internal server error"
-    }
+    error_response = {"message": "Internal server error"}
 
     def mock_request(*args, **kwargs):
         return mock_response(status_code=500, json_data=error_response)
@@ -207,10 +196,7 @@ def test_request_exception_logging(mock_client, mock_response, monkeypatch):
     """Test logging when RequestException is raised both with and without response"""
 
     # Case 1: RequestException with response
-    error_response = mock_response(
-        status_code=500,
-        json_data={"message": "Server Error"}
-    )
+    error_response = mock_response(status_code=500, json_data={"message": "Server Error"})
     error_with_response = requests.exceptions.RequestException("Test error")
     error_with_response.response = error_response
 
