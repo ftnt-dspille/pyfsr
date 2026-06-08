@@ -42,3 +42,6 @@ test_export.zip
 
 # hatch-vcs generated
 src/pyfsr/_version.py
+
+# Planning docs (may accrue infra detail / creds) — keep local
+docs/plans/
