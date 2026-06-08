@@ -1,4 +1,5 @@
 import tomllib
+
 from pyfsr import FortiSOAR
 
 # Load config
@@ -8,13 +9,9 @@ with open("config.toml", "rb") as f:
 # Initialize client with config settings
 client = FortiSOAR(
     base_url=config["fortisoar"]["base_url"],
-    auth=(
-    config["fortisoar"]["auth"]["username"],
-    config["fortisoar"]["auth"]["password"]
-    ),
+    auth=(config["fortisoar"]["auth"]["username"], config["fortisoar"]["auth"]["password"]),
     verify_ssl=config["fortisoar"].get("verify_ssl", True),
-    suppress_insecure_warnings=True
-
+    suppress_insecure_warnings=True,
 )
 #
 # # Find installed solution pack

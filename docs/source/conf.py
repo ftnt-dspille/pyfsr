@@ -2,31 +2,31 @@ import os
 import sys
 
 # Add the src directory to the system path
-sys.path.insert(0, os.path.abspath('../../src'))
+sys.path.insert(0, os.path.abspath("../../src"))
 
 # -- Project information -----------------------------------------------------
-project = 'pyfsr'
-copyright = '2024, Dylan Spille'
-author = 'Dylan Spille'
-release = '0.2.2'
+project = "pyfsr"
+copyright = "2024, Dylan Spille"
+author = "Dylan Spille"
+release = "0.2.2"
 
 # Extensions
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.viewcode',
-    'autoapi.extension',
-    'sphinx.ext.intersphinx',
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
+    "autoapi.extension",
+    "sphinx.ext.intersphinx",
 ]
 
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
-    'requests': ('https://docs.python-requests.org/en/latest/', None),
+    "python": ("https://docs.python.org/3", None),
+    "requests": ("https://docs.python-requests.org/en/latest/", None),
 }
 
 # AutoAPI configuration
-autoapi_type = 'python'
-autoapi_dirs = ['../../src/pyfsr']  # Relative path to the Python package
+autoapi_type = "python"
+autoapi_dirs = ["../../src/pyfsr"]  # Relative path to the Python package
 autoapi_keep_files = True  # Keep intermediate files for debugging
 autoapi_options = [
     "members",
@@ -38,13 +38,13 @@ autoapi_options = [
 
 # HTML Theme
 html_theme = "pydata_sphinx_theme"
-templates_path = ['_templates']
-html_static_path = ['_static']
+templates_path = ["_templates"]
+html_static_path = ["_static"]
 
 # Custom static files
 html_css_files = [
-    'custom.css',  # Example custom CSS
+    "custom.css",  # Example custom CSS
 ]
 
 # Exclude patterns
-exclude_patterns = ['build']
+exclude_patterns = ["build"]
