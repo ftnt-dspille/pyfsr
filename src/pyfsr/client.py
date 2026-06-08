@@ -16,6 +16,7 @@ from .auth.api_key import APIKeyAuth
 from .auth.base import BaseAuth
 from .auth.user_pass import UserPasswordAuth
 from .exceptions import handle_api_error
+from .records import RecordSet
 from .utils.file_operations import FileOperations
 
 logger = logging.getLogger("pyfsr")
@@ -314,3 +315,14 @@ class FortiSOAR:
             Query results
         """
         return self.post(f"/api/query/{module}", data=query_data)
+
+    def records(self, module: str) -> RecordSet:
+        """Return a :class:`~pyfsr.records.RecordSet` for generic CRUD on ``module``.
+
+        Example:
+            >>> incidents = client.records("incidents")
+            >>> page = incidents.query(Query().eq("status.itemValue", "Open").limit(50))
+            >>> for rec in incidents.iterate():
+            ...     ...
+        """
+        return RecordSet(self, module)
