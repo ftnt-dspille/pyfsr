@@ -84,18 +84,22 @@ class RecordSet:
         ref: str,
         *,
         relationships: bool = False,
+        show_deleted: bool = False,
         params: dict[str, Any] | None = None,
         raw: bool = False,
     ) -> Any:
         """Fetch one record by uuid, ``module:uuid`` shorthand, or IRI.
 
         Returns the bound model (or ``BaseRecord``); pass ``raw=True`` for the
-        plain decoded dict.
+        plain decoded dict. Pass ``show_deleted=True`` to read a soft-deleted
+        record from the recycle bin (a plain ``get`` 404s on those).
         """
         path = resolve_record_path(self.module, ref)
         query = dict(params or {})
         if relationships:
             query["$relationships"] = "true"
+        if show_deleted:
+            query["$showDeleted"] = "true"
         return self._parse(self.client.get(path, params=query or None), raw=raw)
 
     def list(
@@ -103,13 +107,19 @@ class RecordSet:
         *,
         limit: int = 30,
         page: int = 1,
+        show_deleted: bool = False,
         params: dict[str, Any] | None = None,
         raw: bool = False,
     ) -> HydraPage:
-        """List records via ``GET /api/3/<module>`` (one page)."""
+        """List records via ``GET /api/3/<module>`` (one page).
+
+        Pass ``show_deleted=True`` to include recycle-bin records.
+        """
         query = dict(params or {})
         query["$limit"] = limit
         query["$page"] = page
+        if show_deleted:
+            query["$showDeleted"] = "true"
         resp = self.client.get(f"/api/3/{self.module}", params=query)
         return self._parse_page(HydraPage.from_response(resp, page=page, limit=limit), raw=raw)
 
@@ -119,6 +129,7 @@ class RecordSet:
         *,
         limit: int = 30,
         page: int = 1,
+        show_deleted: bool = False,
         params: dict[str, Any] | None = None,
         raw: bool = False,
     ) -> HydraPage:
@@ -126,18 +137,28 @@ class RecordSet:
         query = dict(params or {})
         if term:
             query["$search"] = term
-        return self.list(limit=limit, page=page, params=query, raw=raw)
+        return self.list(limit=limit, page=page, show_deleted=show_deleted, params=query, raw=raw)
 
     def query(
-        self, query: Query | dict[str, Any], *, page: int = 1, raw: bool = False
+        self,
+        query: Query | dict[str, Any],
+        *,
+        page: int = 1,
+        show_deleted: bool = False,
+        raw: bool = False,
     ) -> HydraPage:
         """Run a structured query via ``POST /api/query/<module>``.
 
         FortiSOAR paginates this endpoint with the ``$limit``/``$page``/``$search``
         *query params* — the ``limit``/``search`` keys in the body are ignored — so
-        they are lifted out of the body and sent as params.
+        they are lifted out of the body and sent as params. Pass
+        ``show_deleted=True`` to include recycle-bin records (sent both as the
+        ``$showDeleted`` param and the ``showDeleted`` body flag the endpoint wants).
         """
         body, params = self._split_query(query, page=page)
+        if show_deleted:
+            params["$showDeleted"] = "true"
+            body["showDeleted"] = True
         resp = self.client.post(f"/api/query/{self.module}", data=body, params=params)
         page_obj = HydraPage.from_response(resp, page=page, limit=params.get("$limit"))
         return self._parse_page(page_obj, raw=raw)
@@ -169,25 +190,30 @@ class RecordSet:
         *,
         page_size: int = 100,
         max_records: int | None = None,
+        show_deleted: bool = False,
         raw: bool = False,
     ) -> Iterator[Any]:
         """Lazily yield every matching record across all pages.
 
         Uses the structured query endpoint when ``query`` is given, otherwise a
         plain list. The page size overrides any ``limit`` on the query. Yields
-        typed models unless ``raw=True``.
+        typed models unless ``raw=True``. Pass ``show_deleted=True`` to include
+        recycle-bin records.
         """
         if query is None:
 
             def fetch(page: int) -> Any:
-                return self.client.get(
-                    f"/api/3/{self.module}",
-                    params={"$limit": page_size, "$page": page},
-                )
+                params = {"$limit": page_size, "$page": page}
+                if show_deleted:
+                    params["$showDeleted"] = "true"
+                return self.client.get(f"/api/3/{self.module}", params=params)
         else:
 
             def fetch(page: int) -> Any:
                 body, params = self._split_query(query, page=page, page_size=page_size)
+                if show_deleted:
+                    params["$showDeleted"] = "true"
+                    body["showDeleted"] = True
                 return self.client.post(f"/api/query/{self.module}", data=body, params=params)
 
         for record in paginate(fetch, page_size=page_size, max_records=max_records):
@@ -234,12 +260,55 @@ class RecordSet:
         path = resolve_record_path(self.module, ref)
         return self._parse(self.client.put(path, data=data), raw=raw)
 
-    def delete(self, ref: str) -> None:
-        """Soft-delete a record via ``DELETE /api/3/<module>/<uuid>``.
+    def _single_record_path(self, ref: str, *, action: str) -> str:
+        """Resolve ``ref`` to a single-record path, refusing collection-wide refs.
 
-        Hard-delete / recycle-bin restore land in a later phase (safe-delete).
+        Guards against an empty/blank ``ref`` (or one that resolves to the bare
+        ``/api/3/<module>`` collection) ever reaching a destructive endpoint —
+        FortiSOAR has no safe bulk delete here, and an empty body has bitten
+        before by acting collection-wide.
         """
-        self.client.delete(resolve_record_path(self.module, ref))
+        if not isinstance(ref, str) or not ref.strip():
+            raise ValueError(f"{action}() requires a non-empty record reference")
+        path = resolve_record_path(self.module, ref.strip())
+        if path.rstrip("/") in (f"/api/3/{self.module}", "/api/3"):
+            raise ValueError(f"refusing to {action}: {ref!r} does not identify a single record")
+        return path
+
+    def delete(self, ref: str, *, hard: bool = False) -> None:
+        """Delete one record by uuid, ``module:uuid`` shorthand, or IRI.
+
+        Soft-delete (default) moves the record to the recycle bin via
+        ``DELETE /api/3/<module>/<uuid>``. A soft-deleted row keeps reserving
+        *both* its uuid and any unique name, so re-creating with the same name
+        will collide until it's purged or restored; reverse it with
+        :meth:`restore`.
+
+        Pass ``hard=True`` to permanently delete via ``?$hardDelete=true``. This
+        is a single-row, URL-scoped delete; on relationship-parent modules
+        (e.g. ``workflow_collections``) the server cascades to children. There is
+        deliberately no bulk path — an empty/blank ``ref`` raises.
+        """
+        path = self._single_record_path(ref, action="delete")
+        params = {"$hardDelete": "true"} if hard else None
+        self.client.delete(path, params=params)
+
+    def restore(self, ref: str, *, raw: bool = False) -> Any:
+        """Restore a soft-deleted record from the recycle bin.
+
+        Loads the deleted record (``$showDeleted=true``), clears its
+        ``deletedAt``, and PUTs it back. Returns the restored record. Note: via
+        Doctrine cascade-persist this also re-attaches the record's *original*
+        children, even if your current state has since diverged.
+        """
+        path = self._single_record_path(ref, action="restore")
+        current = self.client.get(path, params={"$showDeleted": "true"})
+        if not isinstance(current, dict):
+            raise ValueError(f"could not load deleted record {ref!r} to restore")
+        body = dict(current)
+        body["deletedAt"] = None
+        restored = self.client.put(path, data=body, params={"$showDeleted": "true"})
+        return self._parse(restored, raw=raw)
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         return f"RecordSet(module={self.module!r})"
