@@ -86,13 +86,16 @@ class PlaybooksAPI(BaseAPI):
         playbook_uuid: str | None = None,
         limit: int = 20,
         raw: bool = False,
+        typed: bool = False,
     ) -> list[dict[str, Any]]:
         """List recent playbook runs, newest first (live + historical merged).
 
         Scope to one playbook by ``playbook`` (name, resolved to uuid) or
         ``playbook_uuid``. Returns shaped dicts
-        (``{task_id, name, status, error_message, modified, uuid, pk, source}``);
-        pass ``raw=True`` for the full unshaped run records.
+        (``{task_id, name, status, error_message, modified, uuid, pk, source}``)
+        by default; pass ``raw=True`` for the full unshaped run records, or
+        ``typed=True`` for ``WorkflowRun`` objects (parsed
+        from the full records, still dict-compatible). ``typed`` wins over ``raw``.
         """
         extra = ""
         if playbook_uuid or playbook:
@@ -102,13 +105,18 @@ class PlaybooksAPI(BaseAPI):
                     return []
             extra = f"&template_iri=/api/3/workflows/{playbook_uuid}"
         members = self._fetch_runs_both(limit=limit, extra_qs=extra)[:limit]
+        if typed:
+            from ..models import WorkflowRun
+
+            return [WorkflowRun(**m) for m in members]
         return members if raw else [_shape_run(m) for m in members]
 
-    def get(self, run_pk: str, *, raw: bool = False) -> dict[str, Any]:
+    def get(self, run_pk: str, *, raw: bool = False, typed: bool = False) -> dict[str, Any]:
         """Fetch one run by its pk (the trailing id of a run's ``@id``).
 
-        Tries the live table first, then historical. Returns a shaped dict
-        (``raw=True`` for the full record).
+        Tries the live table first, then historical. Returns a shaped dict by
+        default; ``raw=True`` for the full record, or ``typed=True`` for a
+        ``WorkflowRun``. ``typed`` wins over ``raw``.
         """
         if not isinstance(run_pk, str) or not run_pk.strip():
             raise ValueError("get() requires a non-empty run pk")
@@ -123,6 +131,10 @@ class PlaybooksAPI(BaseAPI):
             if isinstance(resp, dict) and resp.get("@id"):
                 source = "historical" if "historical" in path else "live"
                 resp["_source"] = source
+                if typed:
+                    from ..models import WorkflowRun
+
+                    return WorkflowRun(**resp)
                 return resp if raw else _shape_run(resp)
         if last_err is not None:
             raise last_err
