@@ -160,3 +160,50 @@ def test_execute_config_name_selects_named():
     api.execute("virustotal", "op", config_name="Alt")
     _, body = _client.post_calls[0]
     assert body["config"] == "vt-alt"
+
+
+# -- definition / operations / files ---------------------------------------
+_DEFINITION = {
+    "name": "virustotal",
+    "version": "3.1.0",
+    "config_schema": {},
+    "operations": [
+        {"operation": "get_reputation_ip", "title": "IP Reputation", "parameters": []},
+        {"operation": "get_reputation_url", "title": "URL Reputation", "parameters": []},
+    ],
+}
+
+
+def test_definition_posts_with_format_json_and_resolves_version():
+    api, client = _api(post_resp=_DEFINITION)
+    defn = api.definition("virustotal")
+    assert defn["operations"][0]["operation"] == "get_reputation_ip"
+    endpoint, body = client.post_calls[0]
+    assert endpoint == "/api/integration/connectors/virustotal/3.1.0/?format=json"
+    assert body == {}
+
+
+def test_definition_explicit_version_overrides():
+    api, client = _api(post_resp=_DEFINITION)
+    api.definition("virustotal", version="9.9.9")
+    assert client.post_calls[0][0] == "/api/integration/connectors/virustotal/9.9.9/?format=json"
+
+
+def test_definition_unconfigured_raises():
+    import pytest
+
+    api, _ = _api()
+    with pytest.raises(ValueError, match="not configured"):
+        api.definition("nope")
+
+
+def test_operations_returns_operation_list():
+    api, _ = _api(post_resp=_DEFINITION)
+    ops = api.operations("virustotal")
+    assert [o["operation"] for o in ops] == ["get_reputation_ip", "get_reputation_url"]
+
+
+def test_files_hits_files_endpoint():
+    api, client = _api(get_map={"/api/integration/connector/dev-7/files/": {"files": []}})
+    assert api.files("dev-7") == {"files": []}
+    assert client.get_calls[-1][0] == "/api/integration/connector/dev-7/files/"

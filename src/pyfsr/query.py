@@ -40,6 +40,10 @@ OPERATORS = frozenset(
         "contains",
         "exists",
         "isnull",
+        # Trigger-condition operators (used by playbook start filters / visual
+        # editor wire shapes). ``changed`` is value-less; ``in_all`` takes a list.
+        "changed",
+        "in_all",
     }
 )
 
@@ -115,6 +119,20 @@ class Query:
 
     def isnull(self, field: str, value: bool = True) -> Query:
         return self.where(field, "isnull", value)
+
+    def changed(self, field: str) -> Query:
+        """Match records whose ``field`` changed (trigger-condition operator).
+
+        Value-less — only meaningful inside a playbook start/update trigger filter.
+        """
+        return self.where(field, "changed")
+
+    def in_all(self, field: str, values: list[Any]) -> Query:
+        """Match records whose ``field`` contains *all* of ``values``.
+
+        Trigger-condition operator (distinct from ``in``, which is any-of).
+        """
+        return self.where(field, "in_all", list(values))
 
     def group(self, query: Query) -> Query:
         """Nest another ``Query`` as a sub-group (its own logic + filters)."""
