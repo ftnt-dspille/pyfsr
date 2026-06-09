@@ -1,0 +1,137 @@
+pyfsr.pagination
+================
+
+.. py:module:: pyfsr.pagination
+
+.. autoapi-nested-parse::
+
+   Helpers for FortiSOAR's Hydra (JSON-LD) collection envelopes.
+
+   List and query endpoints return::
+
+       {
+         "hydra:member": [ {record}, ... ],
+         "hydra:totalItems": 1234,
+         "hydra:view": { "hydra:next": "...", ... }
+       }
+
+   ``HydraPage`` wraps one such envelope; ``paginate`` walks every page lazily.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.pagination.MEMBER_KEY
+   pyfsr.pagination.TOTAL_KEY
+   pyfsr.pagination.VIEW_KEY
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.pagination.HydraPage
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.pagination.extract_members
+   pyfsr.pagination.extract_total
+   pyfsr.pagination.paginate
+
+
+Module Contents
+---------------
+
+.. py:data:: MEMBER_KEY
+   :value: 'hydra:member'
+
+
+.. py:data:: TOTAL_KEY
+   :value: 'hydra:totalItems'
+
+
+.. py:data:: VIEW_KEY
+   :value: 'hydra:view'
+
+
+.. py:function:: extract_members(response: Any) -> list[Any]
+
+   Return the ``hydra:member`` list from a response, or ``[]``.
+
+   Tolerates a bare list (already-unwrapped) and non-dict responses.
+
+
+.. py:function:: extract_total(response: Any) -> int | None
+
+   Return ``hydra:totalItems`` if present, else ``None``.
+
+
+.. py:class:: HydraPage
+
+   A single page of a Hydra collection.
+
+
+   .. py:attribute:: members
+      :type:  list[Any]
+
+
+   .. py:attribute:: total
+      :type:  int | None
+
+
+   .. py:attribute:: page
+      :type:  int
+
+
+   .. py:attribute:: limit
+      :type:  int | None
+
+
+   .. py:attribute:: raw
+      :type:  dict[str, Any]
+
+
+   .. py:method:: from_response(response: Any, page: int = 1, limit: int | None = None) -> HydraPage
+      :classmethod:
+
+
+
+   .. py:property:: count
+      :type: int
+
+
+      Number of records on this page.
+
+
+   .. py:property:: has_next
+      :type: bool
+
+
+      Whether another page is likely available.
+
+      Prefers ``hydra:view.hydra:next``; falls back to a count heuristic
+      (a full page implies there may be more).
+
+
+.. py:function:: paginate(fetch_page: collections.abc.Callable[[int], Any], *, page_size: int = 100, start_page: int = 1, max_records: int | None = None) -> collections.abc.Iterator[Any]
+
+   Lazily yield every record across pages.
+
+   :param fetch_page: Callable taking a 1-based page number and returning the raw
+                      Hydra response for that page (the caller binds limit/query).
+   :param page_size: Page size the caller requested; used for the count heuristic.
+   :param start_page: First page to fetch.
+   :param max_records: Optional ceiling on total records yielded.
+
+   :Yields: Individual records, page after page, stopping when a page is empty,
+            ``has_next`` is false, or ``max_records`` is reached.
+
+

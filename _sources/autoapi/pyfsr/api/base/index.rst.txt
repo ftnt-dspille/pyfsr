@@ -1,0 +1,29 @@
+pyfsr.api.base
+==============
+
+.. py:module:: pyfsr.api.base
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.base.BaseAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: BaseAPI(client)
+
+   Base API class for all module-specific APIs.
+
+   Subclasses make requests via ``self.client`` (the :class:`FortiSOAR`
+   client), which owns the canonical ``request``/``get``/``post``/``put``/
+   ``delete`` methods.
+
+
+   .. py:attribute:: client
+
+

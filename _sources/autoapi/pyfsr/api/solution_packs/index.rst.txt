@@ -1,0 +1,50 @@
+pyfsr.api.solution_packs
+========================
+
+.. py:module:: pyfsr.api.solution_packs
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.solution_packs.SolutionPackAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: SolutionPackAPI(client, export_config)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   API implementation for FortiSOAR Solution Pack operations
+
+
+   .. py:attribute:: export_config
+
+
+   .. py:attribute:: content_hub
+
+
+   .. py:method:: export_pack(pack_identifier: str, output_path: str | None = None, poll_interval: int = 5) -> str
+
+      Export a solution pack by name, label, or search term.
+
+      :param pack_identifier: Name, label or search term to find the pack
+      :param output_path: Optional path to save exported file
+      :param poll_interval: How often to check export status in seconds
+
+      :returns: Path where the exported file was saved
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          export_path = client.solution_packs.export_pack("SOAR Framework")
+          print(f"Exported to: {export_path}")
+
+
+

@@ -1,0 +1,97 @@
+pyfsr.api.picklists
+===================
+
+.. py:module:: pyfsr.api.picklists
+
+.. autoapi-nested-parse::
+
+   Picklist resolution: name discovery, value lookup, IRI mapping.
+
+   Ported from the fsr-playbook-framework runner, de-coupled from its local sqlite
+   reference DB. All discovery is live against the FortiSOAR REST API and cached
+   in-process for the lifetime of the client.
+
+   The hard part FortiSOAR makes you do is turn a *friendly* picklist value (e.g.
+   ``"High"``) into the IRI (``/api/3/picklists/<uuid>``) the API actually stores.
+   This API resolves that, and can auto-discover which picklist a ``(module, field)``
+   pair binds to from the module's field metadata.
+
+   .. rubric:: Example
+
+   >>> client.picklists.list()                       # all picklist names
+   >>> client.picklists.values("AlertStatus")        # its items
+   >>> client.picklists.for_field("alerts", "status") # -> "AlertStatus"
+   >>> client.picklists.resolve("High", picklist="Severity")
+   '/api/3/picklists/...'
+   >>> client.picklists.resolve_record_fields(
+   ...     "alerts", {"name": "x", "severity": "High", "status": "Open"})
+   {'name': 'x', 'severity': '/api/3/picklists/...', 'status': '/api/3/picklists/...'}
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.picklists.PicklistsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: PicklistsAPI(client)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Live picklist lookups and friendly-value → IRI resolution.
+
+   Accessed as ``client.picklists``. All lookups are cached in-process;
+   construct a new client (or call :meth:`clear_cache`) to refresh.
+
+
+   .. py:method:: clear_cache() -> None
+
+      Drop all in-process picklist caches.
+
+
+
+   .. py:method:: list() -> list[str]
+
+      Return every picklist name on the server (sorted, cached).
+
+
+
+   .. py:method:: values(picklist_name: str) -> list[dict[str, Any]]
+
+      List a picklist's items as ``[{itemValue, uuid, iri, ordinal}, ...]``.
+
+
+
+   .. py:method:: for_field(module: str, field: str) -> str | None
+
+      Return the picklist name a ``(module, field)`` binds to, or ``None``.
+
+
+
+   .. py:method:: resolve(value: str, *, picklist: str | None = None, module: str | None = None, field: str | None = None) -> str | None
+
+      Resolve a friendly value (e.g. ``"High"``) to its picklist IRI.
+
+      Provide either an explicit ``picklist`` name, or ``(module, field)`` to
+      auto-discover it. Already-IRI strings pass through unchanged. Returns
+      ``None`` if the value isn't found in the resolved picklist.
+
+
+
+   .. py:method:: resolve_record_fields(module: str, fields: dict[str, Any]) -> dict[str, Any]
+
+      Return a copy of ``fields`` with picklist-typed values mapped to IRIs.
+
+      Only fields the module flags as picklist-backed are touched, and only
+      when their value is a friendly string (not already an IRI). Unresolvable
+      values are left as-is so the caller still sees the original input.
+
+
+

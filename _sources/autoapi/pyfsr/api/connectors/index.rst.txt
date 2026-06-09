@@ -1,0 +1,113 @@
+pyfsr.api.connectors
+====================
+
+.. py:module:: pyfsr.api.connectors
+
+.. autoapi-nested-parse::
+
+   Connector discovery, health, and operation execution.
+
+   Wraps FortiSOAR's ``/api/integration`` surface so callers don't hand-build
+   execute payloads or hunt for a connector's configured version / config UUID.
+
+   Accessed as ``client.connectors``.
+
+   .. rubric:: Example
+
+   >>> client.connectors.list_configured()           # what's installed + configured
+   >>> client.connectors.healthcheck("virustotal")    # is the upstream reachable?
+   >>> client.connectors.execute(
+   ...     "virustotal", "get_reputation_ip", params={"ip": "8.8.8.8"})
+   {'operation': 'get_reputation_ip', 'status': 'Success', 'data': {...}}
+
+   .. warning::
+       Execution is **synchronous only for connectors that run on the FortiSOAR
+       appliance itself**. For connectors bound to a remote *agent*, the
+       ``/api/integration/execute/`` call is fire-and-forget: it returns
+       immediately with an in-progress status and an empty ``data``, and the real
+       result is pushed over a websocket (not pollable here). ``execute()`` does
+       not — and cannot — wait for those; don't treat an empty ``data`` from an
+       agent-bound connector as failure.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.connectors.ConnectorsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: ConnectorsAPI(client)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Live connector listing, healthcheck, and operation execution.
+
+
+   .. py:method:: clear_cache() -> None
+
+      Drop the cached configured-connector listing.
+
+
+
+   .. py:method:: list_configured(*, refresh: bool = False) -> list[dict[str, Any]]
+
+      Installed + configured connectors as
+      ``[{name, version, label, configurations:[{config_id, name, default}]}, ...]``.
+
+      Cached after the first call; pass ``refresh=True`` to re-fetch.
+
+
+
+   .. py:method:: configurations(connector: str) -> list[dict[str, Any]]
+
+      List a connector's configurations (``[{config_id, name, default}]``).
+
+
+
+   .. py:method:: resolve_version(connector: str) -> str | None
+
+      The configured version of ``connector`` (``None`` if not configured).
+
+
+
+   .. py:method:: resolve_config(connector: str, config_name: str | None = None) -> str | None
+
+      Return a config UUID for ``connector``.
+
+      With ``config_name`` given, matches by name; otherwise picks the
+      configuration flagged default (falling back to the first one).
+
+
+
+   .. py:method:: healthcheck(connector: str, *, version: str | None = None, config: str | None = None) -> dict[str, Any]
+
+      Live-check whether a connector configuration is reachable.
+
+      Returns the server's healthcheck payload (typically
+      ``{status, message, ...}``); ``status="Available"`` is green. A 404 is
+      normalized to ``{status: "no-config", http_status: 404}`` meaning the
+      connector isn't configured on this instance.
+
+
+
+   .. py:method:: execute(connector: str, operation: str, *, version: str | None = None, config: str | None = None, config_name: str | None = None, params: dict[str, Any] | None = None) -> dict[str, Any]
+
+      Run a single connector operation via ``POST /api/integration/execute/``.
+
+      ``version`` and ``config`` are resolved from the configured connector
+      when omitted (``config_name`` selects a non-default configuration by
+      name). Returns the server payload, typically
+      ``{operation, status, message, data}``.
+
+      See the module-level warning: for agent-bound connectors this call is
+      fire-and-forget and ``data`` comes back empty — that is not a failure.
+
+
+

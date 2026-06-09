@@ -1,0 +1,75 @@
+pyfsr.api.modules
+=================
+
+.. py:module:: pyfsr.api.modules
+
+.. autoapi-nested-parse::
+
+   Module (schema) discovery: list modules and describe their fields.
+
+   A runtime discovery surface so a caller — or an agent — can learn the appliance's
+   schema before reading/writing records: which modules exist (and the
+   plural-vs-singular name that bites on FortiCloud), and each module's fields with
+   type, required-ness, and the picklist a field binds to.
+
+   Both read FortiSOAR's ``staging_model_metadatas`` (the same source
+   :class:`~pyfsr.api.picklists.PicklistsAPI` uses); results are cached in-process.
+   Accessed as ``client.modules`` (or the ``client.list_modules()`` /
+   ``client.describe_module()`` shortcuts).
+
+   .. rubric:: Example
+
+   >>> client.list_modules()["modules"][:3]
+   [{'type': 'alerts', 'label': 'Alerts', 'plural': 'alerts'}, ...]
+   >>> client.describe_module("incidents")["fields"][0]
+   {'name': 'name', 'title': 'Name', 'type': 'text', 'required': True,
+    'picklist_name': None}
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.modules.ModulesAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: ModulesAPI(client)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Live module + field schema discovery (cached in-process).
+
+
+   .. py:method:: clear_cache() -> None
+
+      Drop the cached module list and per-module descriptions.
+
+
+
+   .. py:method:: list(*, refresh: bool = False) -> list[dict[str, Any]]
+
+      Return every module as ``[{type, label, plural}, ...]`` (sorted).
+
+      ``type`` is the singular module type used in record IRIs; ``plural`` is
+      the collection name (they differ on some appliances). Cached after the
+      first call; pass ``refresh=True`` to re-fetch.
+
+
+
+   .. py:method:: describe(module: str, *, refresh: bool = False) -> dict[str, Any]
+
+      Describe one module's fields.
+
+      Returns ``{module, label, plural, field_count, fields}`` where each field
+      is ``{name, title, type, required, picklist_name}``. If the module isn't
+      found, returns ``{error, available}`` listing the known module types.
+      Cached per module.
+
+
+

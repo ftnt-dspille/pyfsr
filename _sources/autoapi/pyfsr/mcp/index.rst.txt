@@ -1,0 +1,89 @@
+pyfsr.mcp
+=========
+
+.. py:module:: pyfsr.mcp
+
+.. autoapi-nested-parse::
+
+   Generic Model Context Protocol server over the pyfsr tool registry.
+
+   Point an MCP-capable agent at *any* FortiSOAR with one command::
+
+       FSR_BASE_URL=soar.example.com FSR_API_KEY=... python -m pyfsr.mcp
+
+   This is a deliberately thin, generic consumer of :mod:`pyfsr.tools`: it exposes
+   the same 16 core operations (record CRUD, schema discovery, picklists,
+   connectors, playbook runs) as MCP tools, listing them from
+   :func:`pyfsr.tools.tool_schemas` and executing them through
+   :func:`pyfsr.tools.dispatch`. It is intentionally distinct from fsrpb's
+   authoring/domain MCP and the connector's on-platform MCP — no YAML compiler, no
+   agent UX, just raw FortiSOAR access.
+
+   Requires the optional dependency: ``pip install 'pyfsr[mcp]'``.
+
+   Configuration is read from the environment (see :func:`client_from_env`):
+
+   - ``FSR_BASE_URL`` — appliance host or URL (required; ``FSR_HOST`` also accepted).
+   - ``FSR_API_KEY`` — API-key auth, or use ``FSR_USERNAME`` + ``FSR_PASSWORD``.
+   - ``FSR_PORT`` — optional port override.
+   - ``FSR_VERIFY_SSL`` — ``false``/``0``/``no`` to disable TLS verification.
+   - ``FSR_SUPPRESS_INSECURE_WARNINGS`` — silence urllib3 warnings when SSL is off.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.mcp.SERVER_NAME
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.mcp.client_from_env
+   pyfsr.mcp.build_server
+   pyfsr.mcp.serve
+   pyfsr.mcp.main
+
+
+Module Contents
+---------------
+
+.. py:data:: SERVER_NAME
+   :value: 'pyfsr'
+
+
+.. py:function:: client_from_env(env: dict[str, str] | None = None) -> pyfsr.client.FortiSOAR
+
+   Build a :class:`~pyfsr.client.FortiSOAR` client from ``FSR_*`` env vars.
+
+   Thin wrapper over :meth:`pyfsr.config.EnvConfig.from_env` →
+   :meth:`~pyfsr.config.EnvConfig.client`; see :mod:`pyfsr.config` for the full
+   list of recognized variables. Raises ``ValueError`` when host/auth is missing.
+
+
+.. py:function:: build_server(client: pyfsr.client.FortiSOAR) -> mcp.server.lowlevel.Server
+
+   Create an MCP :class:`~mcp.server.lowlevel.Server` bound to ``client``.
+
+   Registers ``list_tools`` (from the registry) and ``call_tool`` (through
+   :func:`pyfsr.tools.dispatch`) handlers. Errors are surfaced as structured
+   JSON content by ``dispatch``, so a tool call never crashes the session.
+
+
+.. py:function:: serve(client: pyfsr.client.FortiSOAR | None = None) -> None
+   :async:
+
+
+   Run the MCP server over stdio until the client disconnects.
+
+
+.. py:function:: main() -> None
+
+   Console entry point: ``python -m pyfsr.mcp``.
+
+

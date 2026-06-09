@@ -1,0 +1,191 @@
+pyfsr.client
+============
+
+.. py:module:: pyfsr.client
+
+.. autoapi-nested-parse::
+
+   Main client class for FortiSOAR API
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.client.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.client.FortiSOAR
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: FortiSOAR(base_url: str, auth: str | tuple, verify_ssl: bool = True, suppress_insecure_warnings: bool = False, verbose: bool = False, port: int | None = None, timeout: int | float | None = 30, max_retries: int = 2)
+
+   Main FortiSOAR client class for interacting with the FortiSOAR API.
+
+
+   .. py:attribute:: verbose
+      :value: False
+
+
+
+   .. py:attribute:: base_url
+      :type:  str
+
+
+   .. py:attribute:: timeout
+      :value: 30
+
+
+
+   .. py:attribute:: session
+
+
+   .. py:attribute:: verify_ssl
+      :value: True
+
+
+
+   .. py:attribute:: alerts
+      :type:  pyfsr.api.alerts.AlertsAPI
+
+
+   .. py:attribute:: files
+      :type:  pyfsr.utils.file_operations.FileOperations
+
+
+   .. py:attribute:: export_config
+      :type:  pyfsr.api.export_config.ExportConfigAPI
+
+
+   .. py:attribute:: content_hub
+      :type:  pyfsr.api.content_hub.ContentHubSearch
+
+
+   .. py:attribute:: modules
+      :type:  pyfsr.api.modules.ModulesAPI
+
+
+   .. py:attribute:: picklists
+      :type:  pyfsr.api.picklists.PicklistsAPI
+
+
+   .. py:attribute:: connectors
+      :type:  pyfsr.api.connectors.ConnectorsAPI
+
+
+   .. py:attribute:: playbooks
+      :type:  pyfsr.api.playbooks.PlaybooksAPI
+
+
+   .. py:attribute:: solution_packs
+      :type:  pyfsr.api.solution_packs.SolutionPackAPI
+
+
+   .. py:method:: request(method: str, endpoint: str, params: dict | None = None, data: dict | None = None, files: dict | None = None, headers: dict | None = None, **kwargs) -> requests.Response
+
+      Make a request to the FortiSOAR API.
+
+      :param method: HTTP method (GET, POST, PUT, DELETE)
+      :param endpoint: API endpoint path
+      :param params: Query parameters
+      :param data: Request body data
+      :param files: Files to upload
+      :param headers: Additional headers
+      :param \*\*kwargs: Additional arguments passed to requests
+
+      :returns: Response from the API
+      :rtype: requests.Response
+
+      :raises ValidationError: When request data validation fails
+      :raises AuthenticationError: When authentication fails
+      :raises PermissionError: When user lacks required permissions
+      :raises ResourceNotFoundError: When requested resource is not found
+      :raises UnsupportedAuthOperationError: When operation is not supported with current
+          authentication method
+      :raises APIError: For other API errors
+
+
+
+   .. py:method:: get(endpoint: str, params: dict | None = None, **kwargs) -> dict[str, Any] | bytes
+
+      Perform GET request and return response based on content type.
+
+      Returns JSON for application/json responses and bytes for binary responses.
+
+
+
+   .. py:method:: post(endpoint: str, data: dict | None = None, files: dict | None = None, params: dict | None = None, **kwargs) -> dict[str, Any]
+
+      Perform POST request and return JSON response
+
+
+
+   .. py:method:: put(endpoint: str, data: dict | None = None, params: dict | None = None, **kwargs) -> dict[str, Any]
+
+      Perform PUT request and return JSON response
+
+
+
+   .. py:method:: delete(endpoint: str, params: dict | None = None, **kwargs) -> None
+
+      Perform DELETE request
+
+
+
+   .. py:method:: query(module: str, query_data: dict) -> dict[str, Any]
+
+      Execute a query against a module
+
+      :param module: Name of the module to query
+      :param query_data: Query parameters and filters
+
+      :returns: Query results
+
+
+
+   .. py:method:: records(module: str, *, typed: bool = True) -> pyfsr.records.RecordSet
+
+      Return a :class:`~pyfsr.records.RecordSet` for generic CRUD on ``module``.
+
+      Reads come back as typed models (Alert/Incident/Task/Comment, else a
+      dict-compatible ``BaseRecord``); pass ``typed=False`` for raw dicts.
+
+      .. rubric:: Example
+
+      >>> incidents = client.records("incidents")
+      >>> page = incidents.query(Query().eq("status.itemValue", "Open").limit(50))
+      >>> for inc in incidents.iterate():
+      ...     print(inc.uuid, inc["name"])
+
+
+
+   .. py:method:: list_modules(*, refresh: bool = False) -> list[dict[str, Any]]
+
+      List every module on the appliance as ``[{type, label, plural}, ...]``.
+
+      Discovery shortcut for :meth:`ModulesAPI.list <pyfsr.api.modules.ModulesAPI.list>`
+      — learn the right module ``type`` (and plural name) before a record lookup.
+
+
+
+   .. py:method:: describe_module(module: str, *, refresh: bool = False) -> dict[str, Any]
+
+      Describe one module's fields (name/type/required/picklist).
+
+      Shortcut for
+      :meth:`ModulesAPI.describe <pyfsr.api.modules.ModulesAPI.describe>`.
+
+
+

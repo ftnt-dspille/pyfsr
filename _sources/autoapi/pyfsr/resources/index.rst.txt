@@ -1,0 +1,11 @@
+pyfsr.resources
+===============
+
+.. py:module:: pyfsr.resources
+
+.. autoapi-nested-parse::
+
+   Bundled reference data shipped with pyfsr (e.g. the curated OpenAPI spec).
+
+
+

@@ -1,0 +1,936 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pyfsr.tools &#8212; pyfsr 0.2.2 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=0790524f97105ba85085" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=0790524f97105ba85085" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/custom.css" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../_static/scripts/fontawesome.js?digest=0790524f97105ba85085"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=0790524f97105ba85085" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=0790524f97105ba85085" />
+
+    <script src="../../_static/documentation_options.js?v=000c92bf"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pyfsr/tools';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../../_static/searchtools.js"></script>
+    <script src="../../_static/language_data.js"></script>
+    <script src="../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">pyfsr 0.2.2 documentation</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../autoapi/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../autoapi/pyfsr/index.html">
+    pyfsr
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../autoapi/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../autoapi/pyfsr/index.html">
+    pyfsr
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pyfsr.tools</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for pyfsr.tools</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Framework-agnostic tool registry for driving FortiSOAR from an LLM agent.</span>
+
+<span class="sd">This is the foundation of pyfsr&#39;s AI/agent surface: a declarative catalogue of</span>
+<span class="sd">the core FortiSOAR operations (record CRUD, discovery, picklists, connectors,</span>
+<span class="sd">playbook runs) as JSON-Schema tool definitions, plus a :func:`dispatch` that</span>
+<span class="sd">executes a tool call against a live :class:`~pyfsr.client.FortiSOAR` client and</span>
+<span class="sd">returns JSON-serializable, token-trimmed results.</span>
+
+<span class="sd">It is deliberately transport-neutral — no MCP, no provider SDK — so it can feed:</span>
+
+<span class="sd">- the optional bundled MCP server (``python -m pyfsr.mcp``, a thin consumer),</span>
+<span class="sd">- Anthropic tool-use (:func:`to_anthropic_tools`),</span>
+<span class="sd">- OpenAI-style function calling (:func:`to_openai_tools`),</span>
+<span class="sd">- or any home-grown agent loop (:func:`tool_schemas` + :func:`dispatch`).</span>
+
+<span class="sd">Example::</span>
+
+<span class="sd">    from pyfsr import FortiSOAR</span>
+<span class="sd">    from pyfsr.tools import to_anthropic_tools, dispatch</span>
+
+<span class="sd">    client = FortiSOAR(&quot;soar.example.com&quot;, api_key)</span>
+<span class="sd">    tools = to_anthropic_tools()                       # feed to Claude</span>
+<span class="sd">    # ... model decides to call a tool ...</span>
+<span class="sd">    result = dispatch(client, &quot;search_records&quot;,</span>
+<span class="sd">                      {&quot;module&quot;: &quot;alerts&quot;, &quot;summary&quot;: True, &quot;limit&quot;: 10})</span>
+
+<span class="sd">Every result is JSON-safe and every failure is returned as a structured</span>
+<span class="sd">``{&quot;error&quot;: {...}}`` dict (never a raised exception), so an agent can read the</span>
+<span class="sd">message and self-correct.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">FortiSOARException</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.projection</span><span class="w"> </span><span class="kn">import</span> <span class="n">project</span><span class="p">,</span> <span class="n">to_jsonable</span>
+
+<span class="c1"># --------------------------------------------------------------------------- spec</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class="viewcode-block" id="ToolSpec">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.ToolSpec">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ToolSpec</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A single agent-callable FortiSOAR operation.</span>
+
+<span class="sd">    ``input_schema`` is a JSON Schema (draft 2020-12 compatible object schema)</span>
+<span class="sd">    describing the tool&#39;s arguments; ``handler`` runs the operation against a</span>
+<span class="sd">    live client and returns a JSON-serializable result.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="ToolSpec.name">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.ToolSpec.name">[docs]</a>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span></div>
+
+<div class="viewcode-block" id="ToolSpec.description">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.ToolSpec.description">[docs]</a>
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span></div>
+
+<div class="viewcode-block" id="ToolSpec.input_schema">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.ToolSpec.input_schema">[docs]</a>
+    <span class="n">input_schema</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="ToolSpec.handler">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.ToolSpec.handler">[docs]</a>
+    <span class="n">handler</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="ToolSpec.to_dict">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.ToolSpec.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generic ``{name, description, input_schema}`` (no handler).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+            <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
+            <span class="s2">&quot;input_schema&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_schema</span><span class="p">,</span>
+        <span class="p">}</span></div>
+</div>
+
+
+
+<span class="c1"># Reusable schema fragments -------------------------------------------------</span>
+
+<span class="n">_MODULE</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Module type, e.g. &#39;alerts&#39; or &#39;incidents&#39;. Use list_modules to discover.&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">_REF</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Record reference: bare uuid, &#39;module:uuid&#39; shorthand, or full /api/3/... IRI.&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">_FIELDS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;array&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">},</span>
+    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Return only these fields (the record&#39;s @id/uuid are always kept).&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">_SUMMARY</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;boolean&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Return a compact identity + triage summary instead of the full record(s).&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">_LIMIT</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;integer&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Maximum number of records to return.&quot;</span><span class="p">,</span> <span class="s2">&quot;minimum&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_obj</span><span class="p">(</span><span class="n">properties</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">required</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+    <span class="n">schema</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span> <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="n">properties</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">required</span><span class="p">:</span>
+        <span class="n">schema</span><span class="p">[</span><span class="s2">&quot;required&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">required</span>
+    <span class="k">return</span> <span class="n">schema</span>
+
+
+<span class="c1"># --------------------------------------------------------------------------- handlers</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_list_modules</span><span class="p">(</span><span class="n">client</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;modules&quot;</span><span class="p">:</span> <span class="n">client</span><span class="o">.</span><span class="n">list_modules</span><span class="p">()}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_describe_module</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">module</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">client</span><span class="o">.</span><span class="n">describe_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_get_record</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">ref</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">summary</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="n">rec</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">records</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">project</span><span class="p">(</span><span class="n">rec</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="n">fields</span><span class="p">,</span> <span class="n">summary</span><span class="o">=</span><span class="n">summary</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_search_records</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">term</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">summary</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="n">page</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">records</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">term</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">project</span><span class="p">(</span><span class="n">page</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="n">fields</span><span class="p">,</span> <span class="n">summary</span><span class="o">=</span><span class="n">summary</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_query_records</span><span class="p">(</span>
+    <span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">filters</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">logic</span><span class="o">=</span><span class="s2">&quot;AND&quot;</span><span class="p">,</span> <span class="n">sort</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">summary</span><span class="o">=</span><span class="kc">False</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="n">body</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;logic&quot;</span><span class="p">:</span> <span class="n">logic</span><span class="p">,</span> <span class="s2">&quot;filters&quot;</span><span class="p">:</span> <span class="n">filters</span> <span class="ow">or</span> <span class="p">[]}</span>
+    <span class="k">if</span> <span class="n">sort</span><span class="p">:</span>
+        <span class="n">body</span><span class="p">[</span><span class="s2">&quot;sort&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sort</span>
+    <span class="k">if</span> <span class="n">limit</span><span class="p">:</span>
+        <span class="n">body</span><span class="p">[</span><span class="s2">&quot;limit&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">limit</span>
+    <span class="n">page</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">records</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">body</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">project</span><span class="p">(</span><span class="n">page</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="n">fields</span><span class="p">,</span> <span class="n">summary</span><span class="o">=</span><span class="n">summary</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_create_record</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">resolve_picklists</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="n">rec</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">records</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">resolve_picklists</span><span class="o">=</span><span class="n">resolve_picklists</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">to_jsonable</span><span class="p">(</span><span class="n">rec</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_update_record</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">ref</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">resolve_picklists</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="n">rec</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">records</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">resolve_picklists</span><span class="o">=</span><span class="n">resolve_picklists</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">to_jsonable</span><span class="p">(</span><span class="n">rec</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_delete_record</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">ref</span><span class="p">,</span> <span class="n">hard</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="n">client</span><span class="o">.</span><span class="n">records</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="n">hard</span><span class="o">=</span><span class="n">hard</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;deleted&quot;</span><span class="p">:</span> <span class="n">ref</span><span class="p">,</span> <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">module</span><span class="p">,</span> <span class="s2">&quot;hard&quot;</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">hard</span><span class="p">)}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_list_picklists</span><span class="p">(</span><span class="n">client</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;picklists&quot;</span><span class="p">:</span> <span class="n">client</span><span class="o">.</span><span class="n">picklists</span><span class="o">.</span><span class="n">list</span><span class="p">()}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_get_picklist_values</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span> <span class="s2">&quot;values&quot;</span><span class="p">:</span> <span class="n">client</span><span class="o">.</span><span class="n">picklists</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="n">name</span><span class="p">)}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_resolve_picklist</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">picklist</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">module</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">field</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="n">iri</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">picklists</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">picklist</span><span class="o">=</span><span class="n">picklist</span><span class="p">,</span> <span class="n">module</span><span class="o">=</span><span class="n">module</span><span class="p">,</span> <span class="n">field</span><span class="o">=</span><span class="n">field</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">value</span><span class="p">,</span> <span class="s2">&quot;iri&quot;</span><span class="p">:</span> <span class="n">iri</span><span class="p">,</span> <span class="s2">&quot;resolved&quot;</span><span class="p">:</span> <span class="n">iri</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_list_connectors</span><span class="p">(</span><span class="n">client</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;connectors&quot;</span><span class="p">:</span> <span class="n">client</span><span class="o">.</span><span class="n">connectors</span><span class="o">.</span><span class="n">list_configured</span><span class="p">()}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_healthcheck_connector</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">connector</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">client</span><span class="o">.</span><span class="n">connectors</span><span class="o">.</span><span class="n">healthcheck</span><span class="p">(</span><span class="n">connector</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_run_connector_operation</span><span class="p">(</span>
+    <span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">connector</span><span class="p">,</span> <span class="n">operation</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">config_name</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">client</span><span class="o">.</span><span class="n">connectors</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+        <span class="n">connector</span><span class="p">,</span> <span class="n">operation</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span> <span class="ow">or</span> <span class="p">{},</span> <span class="n">config_name</span><span class="o">=</span><span class="n">config_name</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_list_playbook_runs</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">playbook</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;runs&quot;</span><span class="p">:</span> <span class="n">client</span><span class="o">.</span><span class="n">playbooks</span><span class="o">.</span><span class="n">runs</span><span class="p">(</span><span class="n">playbook</span><span class="o">=</span><span class="n">playbook</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">)}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_h_get_playbook_run</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">run_pk</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">client</span><span class="o">.</span><span class="n">playbooks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">run_pk</span><span class="p">)</span>
+
+
+<span class="c1"># --------------------------------------------------------------------------- registry</span>
+
+<span class="n">_TOOLS</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ToolSpec</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;list_modules&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;List every module (type/label/plural) on the FortiSOAR appliance. Start here to &quot;</span>
+        <span class="s2">&quot;discover the correct module type before reading or writing records.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">({}),</span>
+        <span class="n">_h_list_modules</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;describe_module&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Describe one module&#39;s fields: name, title, type, required-ness, and the picklist a &quot;</span>
+        <span class="s2">&quot;field binds to. Use before creating/updating records to know the field shape.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">({</span><span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">_MODULE</span><span class="p">},</span> <span class="p">[</span><span class="s2">&quot;module&quot;</span><span class="p">]),</span>
+        <span class="n">_h_describe_module</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;get_record&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Fetch a single record by reference. Pass summary=true or fields=[...] to keep the &quot;</span>
+        <span class="s2">&quot;result small.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">(</span>
+            <span class="p">{</span><span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">_MODULE</span><span class="p">,</span> <span class="s2">&quot;ref&quot;</span><span class="p">:</span> <span class="n">_REF</span><span class="p">,</span> <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="n">_FIELDS</span><span class="p">,</span> <span class="s2">&quot;summary&quot;</span><span class="p">:</span> <span class="n">_SUMMARY</span><span class="p">},</span>
+            <span class="p">[</span><span class="s2">&quot;module&quot;</span><span class="p">,</span> <span class="s2">&quot;ref&quot;</span><span class="p">],</span>
+        <span class="p">),</span>
+        <span class="n">_h_get_record</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;search_records&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Free-text search a module. Returns a page of records; use summary=true to keep the &quot;</span>
+        <span class="s2">&quot;output compact when scanning many results.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">_MODULE</span><span class="p">,</span>
+                <span class="s2">&quot;term&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Free-text search term.&quot;</span><span class="p">},</span>
+                <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">_LIMIT</span><span class="p">,</span>
+                <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="n">_FIELDS</span><span class="p">,</span>
+                <span class="s2">&quot;summary&quot;</span><span class="p">:</span> <span class="n">_SUMMARY</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="p">[</span><span class="s2">&quot;module&quot;</span><span class="p">],</span>
+        <span class="p">),</span>
+        <span class="n">_h_search_records</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;query_records&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Structured query of a module with filter conditions. Each filter is &quot;</span>
+        <span class="s2">&quot;{field, operator, value}; operator is one of eq/neq/gt/gte/lt/lte/in/contains/like/etc.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">_MODULE</span><span class="p">,</span>
+                <span class="s2">&quot;filters&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;array&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Filter conditions, each {field, operator, value}.&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                            <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">},</span>
+                            <span class="s2">&quot;operator&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">},</span>
+                            <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="p">{},</span>
+                        <span class="p">},</span>
+                        <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;field&quot;</span><span class="p">,</span> <span class="s2">&quot;operator&quot;</span><span class="p">],</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;logic&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;enum&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;AND&quot;</span><span class="p">,</span> <span class="s2">&quot;OR&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;How to combine filters (default AND).&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;sort&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;array&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Sort clauses, each {field, direction} (direction ASC/DESC).&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">_LIMIT</span><span class="p">,</span>
+                <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="n">_FIELDS</span><span class="p">,</span>
+                <span class="s2">&quot;summary&quot;</span><span class="p">:</span> <span class="n">_SUMMARY</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="p">[</span><span class="s2">&quot;module&quot;</span><span class="p">],</span>
+        <span class="p">),</span>
+        <span class="n">_h_query_records</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;create_record&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Create a record in a module. data is a field-&gt;value mapping; set resolve_picklists=true &quot;</span>
+        <span class="s2">&quot;to pass friendly picklist values (e.g. &#39;High&#39;) and have them mapped to IRIs.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">_MODULE</span><span class="p">,</span>
+                <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Field -&gt; value mapping for the new record.&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;resolve_picklists&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;boolean&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Map friendly picklist values to IRIs before sending.&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+            <span class="p">[</span><span class="s2">&quot;module&quot;</span><span class="p">,</span> <span class="s2">&quot;data&quot;</span><span class="p">],</span>
+        <span class="p">),</span>
+        <span class="n">_h_create_record</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;update_record&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Update an existing record by reference. data carries the fields to change.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">_MODULE</span><span class="p">,</span>
+                <span class="s2">&quot;ref&quot;</span><span class="p">:</span> <span class="n">_REF</span><span class="p">,</span>
+                <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Field -&gt; value mapping to update.&quot;</span><span class="p">},</span>
+                <span class="s2">&quot;resolve_picklists&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;boolean&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Map friendly picklist values to IRIs before sending.&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+            <span class="p">[</span><span class="s2">&quot;module&quot;</span><span class="p">,</span> <span class="s2">&quot;ref&quot;</span><span class="p">,</span> <span class="s2">&quot;data&quot;</span><span class="p">],</span>
+        <span class="p">),</span>
+        <span class="n">_h_update_record</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;delete_record&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Delete a single record by reference. Soft-delete by default (recycle bin where &quot;</span>
+        <span class="s2">&quot;supported); set hard=true to permanently delete. Never operates collection-wide.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">_MODULE</span><span class="p">,</span>
+                <span class="s2">&quot;ref&quot;</span><span class="p">:</span> <span class="n">_REF</span><span class="p">,</span>
+                <span class="s2">&quot;hard&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;boolean&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Permanently delete instead of soft-delete.&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+            <span class="p">[</span><span class="s2">&quot;module&quot;</span><span class="p">,</span> <span class="s2">&quot;ref&quot;</span><span class="p">],</span>
+        <span class="p">),</span>
+        <span class="n">_h_delete_record</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;list_picklists&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;List every picklist name on the appliance.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">({}),</span>
+        <span class="n">_h_list_picklists</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;get_picklist_values&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;List a picklist&#39;s items (itemValue, uuid, iri, ordinal).&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">(</span>
+            <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Picklist name, e.g. &#39;Severity&#39;.&quot;</span><span class="p">}},</span> <span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+        <span class="p">),</span>
+        <span class="n">_h_get_picklist_values</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;resolve_picklist&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Resolve a friendly picklist value (e.g. &#39;High&#39;) to its IRI. Provide either an explicit &quot;</span>
+        <span class="s2">&quot;picklist name or a (module, field) pair to auto-discover the picklist.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Friendly value to resolve, e.g. &#39;High&#39;.&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;picklist&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Explicit picklist name.&quot;</span><span class="p">},</span>
+                <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">_MODULE</span><span class="p">,</span>
+                <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Field name to discover the picklist from.&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+            <span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">],</span>
+        <span class="p">),</span>
+        <span class="n">_h_resolve_picklist</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;list_connectors&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;List installed + configured connectors with their versions and configurations.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">({}),</span>
+        <span class="n">_h_list_connectors</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;healthcheck_connector&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Live-check whether a connector configuration is reachable. status=&#39;Available&#39; is green; &quot;</span>
+        <span class="s2">&quot;status=&#39;no-config&#39; means it isn&#39;t configured on this instance.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;connector&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Connector name, e.g. &#39;virustotal&#39;.&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;config&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Optional configuration UUID.&quot;</span><span class="p">},</span>
+            <span class="p">},</span>
+            <span class="p">[</span><span class="s2">&quot;connector&quot;</span><span class="p">],</span>
+        <span class="p">),</span>
+        <span class="n">_h_healthcheck_connector</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;run_connector_operation&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Execute one connector operation. For agent-bound connectors the call is fire-and-forget &quot;</span>
+        <span class="s2">&quot;and returns empty data (not a failure).&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;connector&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Connector name, e.g. &#39;virustotal&#39;.&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;operation&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Operation name, e.g. &#39;get_reputation_ip&#39;.&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Operation parameters.&quot;</span><span class="p">},</span>
+                <span class="s2">&quot;config_name&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Select a non-default configuration by name.&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+            <span class="p">[</span><span class="s2">&quot;connector&quot;</span><span class="p">,</span> <span class="s2">&quot;operation&quot;</span><span class="p">],</span>
+        <span class="p">),</span>
+        <span class="n">_h_run_connector_operation</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;list_playbook_runs&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;List recent playbook runs (live + historical, newest first). Scope to one playbook by &quot;</span>
+        <span class="s2">&quot;name.&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;playbook&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Playbook name to scope to (optional).&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">_LIMIT</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">),</span>
+        <span class="n">_h_list_playbook_runs</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">ToolSpec</span><span class="p">(</span>
+        <span class="s2">&quot;get_playbook_run&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Fetch one playbook run by its pk (the trailing id of a run&#39;s @id).&quot;</span><span class="p">,</span>
+        <span class="n">_obj</span><span class="p">({</span><span class="s2">&quot;run_pk&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;The run&#39;s primary key.&quot;</span><span class="p">}},</span> <span class="p">[</span><span class="s2">&quot;run_pk&quot;</span><span class="p">]),</span>
+        <span class="n">_h_get_playbook_run</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+
+<span class="c1">#: Registry keyed by tool name.</span>
+<div class="viewcode-block" id="REGISTRY">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.REGISTRY">[docs]</a>
+<span class="n">REGISTRY</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ToolSpec</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">t</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">t</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">_TOOLS</span><span class="p">}</span></div>
+
+
+
+<span class="c1"># --------------------------------------------------------------------------- public API</span>
+
+
+<div class="viewcode-block" id="list_tools">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.list_tools">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">list_tools</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">ToolSpec</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return every registered :class:`ToolSpec`.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">_TOOLS</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="get_tool">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.get_tool">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_tool</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolSpec</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return one tool by name (raises ``KeyError`` if unknown).&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">REGISTRY</span><span class="p">[</span><span class="n">name</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="tool_schemas">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.tool_schemas">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">tool_schemas</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Generic ``[{name, description, input_schema}, ...]`` for every tool.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">_TOOLS</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="to_anthropic_tools">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.to_anthropic_tools">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">to_anthropic_tools</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Tool definitions in Anthropic tool-use shape (``input_schema`` key).&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">description</span><span class="p">,</span> <span class="s2">&quot;input_schema&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">input_schema</span><span class="p">}</span>
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">_TOOLS</span>
+    <span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="to_openai_tools">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.to_openai_tools">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">to_openai_tools</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Tool definitions in OpenAI function-calling shape (``parameters`` key).&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
+                <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">input_schema</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">_TOOLS</span>
+    <span class="p">]</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_agent_error</span><span class="p">(</span><span class="n">exc</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">tool</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Render an exception as a structured, agent-readable error dict.&quot;&quot;&quot;</span>
+    <span class="n">err</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">exc</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+        <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">exc</span><span class="p">,</span> <span class="s2">&quot;message&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">exc</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">repr</span><span class="p">(</span><span class="n">exc</span><span class="p">),</span>
+        <span class="s2">&quot;tool&quot;</span><span class="p">:</span> <span class="n">tool</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">exc</span><span class="p">,</span> <span class="n">FortiSOARException</span><span class="p">):</span>
+        <span class="n">resp</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">exc</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">resp</span><span class="p">,</span> <span class="s2">&quot;status_code&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">status</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">err</span><span class="p">[</span><span class="s2">&quot;status_code&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">status</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="n">err</span><span class="p">}</span>
+
+
+<div class="viewcode-block" id="dispatch">
+<a class="viewcode-back" href="../../autoapi/pyfsr/tools/index.html#pyfsr.tools.dispatch">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">arguments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Execute a tool call against ``client`` and return a JSON-safe result.</span>
+
+<span class="sd">    Looks ``name`` up in the :data:`REGISTRY` and invokes its handler with</span>
+<span class="sd">    ``**arguments``. Any failure — unknown tool, bad arguments, or an API error —</span>
+<span class="sd">    is returned as a structured ``{&quot;error&quot;: {...}}`` dict rather than raised, so</span>
+<span class="sd">    an agent loop never has to wrap the call in a try/except.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">spec</span> <span class="o">=</span> <span class="n">REGISTRY</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;UnknownTool&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;no such tool </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">; known tools: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">REGISTRY</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;tool&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">spec</span><span class="o">.</span><span class="n">handler</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">**</span><span class="p">(</span><span class="n">arguments</span> <span class="ow">or</span> <span class="p">{}))</span>
+    <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># bad/missing arguments for the handler</span>
+        <span class="k">return</span> <span class="n">_agent_error</span><span class="p">(</span><span class="n">exc</span><span class="p">,</span> <span class="n">tool</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># noqa: BLE001 - surface every failure as data to the agent</span>
+        <span class="k">return</span> <span class="n">_agent_error</span><span class="p">(</span><span class="n">exc</span><span class="p">,</span> <span class="n">tool</span><span class="o">=</span><span class="n">name</span><span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../_static/scripts/bootstrap.js?digest=0790524f97105ba85085"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=0790524f97105ba85085"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2024, Dylan Spille.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.1.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.18.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

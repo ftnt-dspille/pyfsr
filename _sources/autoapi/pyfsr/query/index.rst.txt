@@ -1,0 +1,139 @@
+pyfsr.query
+===========
+
+.. py:module:: pyfsr.query
+
+.. autoapi-nested-parse::
+
+   Fluent builder for the FortiSOAR query DSL.
+
+   FortiSOAR's ad-hoc query endpoint (``POST /api/query/{module}``) takes a body of
+   the shape::
+
+       {
+         "logic": "AND",
+         "filters": [
+           {"field": "severity.itemValue", "operator": "eq", "value": "Critical"},
+           {"logic": "OR", "filters": [ ... ]}        # nested group
+         ],
+         "sort": [{"field": "createDate", "direction": "DESC"}],
+         "__selectFields": ["uuid", "name", "severity"],
+         "limit": 30
+       }
+
+   ``Query`` builds that dict so callers don't hand-assemble it. Every mutator
+   returns ``self`` for chaining::
+
+       Query().eq("status.itemValue", "Open").gt("createDate", ts).sort("createDate").limit(50)
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.query.OPERATORS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.query.Query
+
+
+Module Contents
+---------------
+
+.. py:data:: OPERATORS
+
+.. py:class:: Query(logic: str = 'AND')
+
+   Fluent builder for a FortiSOAR query body.
+
+   :param logic: Top-level logical join for this group's filters (``"AND"`` or ``"OR"``).
+
+
+   .. py:method:: where(field: str, operator: str, value: Any = None) -> Query
+
+      Add a raw leaf filter. Prefer the named helpers (``eq``, ``in_`` …).
+
+
+
+   .. py:method:: eq(field: str, value: Any) -> Query
+
+
+   .. py:method:: neq(field: str, value: Any) -> Query
+
+
+   .. py:method:: lt(field: str, value: Any) -> Query
+
+
+   .. py:method:: lte(field: str, value: Any) -> Query
+
+
+   .. py:method:: gt(field: str, value: Any) -> Query
+
+
+   .. py:method:: gte(field: str, value: Any) -> Query
+
+
+   .. py:method:: in_(field: str, values: list[Any]) -> Query
+
+
+   .. py:method:: nin(field: str, values: list[Any]) -> Query
+
+
+   .. py:method:: like(field: str, value: str) -> Query
+
+
+   .. py:method:: notlike(field: str, value: str) -> Query
+
+
+   .. py:method:: contains(field: str, value: Any) -> Query
+
+
+   .. py:method:: exists(field: str, value: bool = True) -> Query
+
+
+   .. py:method:: isnull(field: str, value: bool = True) -> Query
+
+
+   .. py:method:: group(query: Query) -> Query
+
+      Nest another ``Query`` as a sub-group (its own logic + filters).
+
+
+
+   .. py:method:: sort(field: str, direction: str = 'DESC') -> Query
+
+
+   .. py:method:: select(*fields: str) -> Query
+
+      Allowlist the fields returned per record (``__selectFields``).
+
+
+
+   .. py:method:: ignore(*fields: str) -> Query
+
+      Denylist fields stripped from each record (``__ignoreFields``).
+
+
+
+   .. py:method:: limit(n: int) -> Query
+
+
+   .. py:method:: page(n: int) -> Query
+
+
+   .. py:method:: search(term: str) -> Query
+
+
+   .. py:method:: to_body() -> dict[str, Any]
+
+      Render the query as the dict POSTed to ``/api/query/{module}``.
+
+
+

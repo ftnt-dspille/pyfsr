@@ -1,0 +1,78 @@
+pyfsr.api.playbooks
+===================
+
+.. py:module:: pyfsr.api.playbooks
+
+.. autoapi-nested-parse::
+
+   Playbook run history and manual-input resume.
+
+   Wraps FortiSOAR's workflow-run surface (``/api/wf/api``). Accessed as
+   ``client.playbooks``.
+
+   Run history lives in two tables: ``/workflows/`` holds recent/live runs, but
+   FortiSOAR purges them to ``/historical-workflows/`` every ~30-60 min (the
+   historical table also carries richer inline fields). ``runs()`` queries both
+   and merges them, deduped by IRI and sorted newest-first, so you don't go blind
+   to older runs.
+
+   .. rubric:: Example
+
+   >>> client.playbooks.runs(limit=10)                       # latest runs
+   >>> client.playbooks.runs(playbook="Block IP", limit=5)   # one playbook
+   >>> client.playbooks.get("<run-pk>")                       # one run, full
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.playbooks.PlaybooksAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: PlaybooksAPI(client)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Live playbook-run history and resume.
+
+
+   .. py:method:: runs(*, playbook: str | None = None, playbook_uuid: str | None = None, limit: int = 20, raw: bool = False, typed: bool = False) -> list[dict[str, Any]]
+
+      List recent playbook runs, newest first (live + historical merged).
+
+      Scope to one playbook by ``playbook`` (name, resolved to uuid) or
+      ``playbook_uuid``. Returns shaped dicts
+      (``{task_id, name, status, error_message, modified, uuid, pk, source}``)
+      by default; pass ``raw=True`` for the full unshaped run records, or
+      ``typed=True`` for ``WorkflowRun`` objects (parsed
+      from the full records, still dict-compatible). ``typed`` wins over ``raw``.
+
+
+
+   .. py:method:: get(run_pk: str, *, raw: bool = False, typed: bool = False) -> dict[str, Any]
+
+      Fetch one run by its pk (the trailing id of a run's ``@id``).
+
+      Tries the live table first, then historical. Returns a shaped dict by
+      default; ``raw=True`` for the full record, or ``typed=True`` for a
+      ``WorkflowRun``. ``typed`` wins over ``raw``.
+
+
+
+   .. py:method:: resume(run_pk: str, *, manual_input_id: int, input: Any = None, step_iri: str | None = None, step_id: str | None = None, approved: bool | None = None) -> dict[str, Any]
+
+      Resume a run waiting on manual input / approval.
+
+      POSTs to ``/api/wf/api/workflows/<pk>/wfinput_resume/``. ``input`` is the
+      manual-input value payload; ``approved`` (when set) drives an approval
+      step. The other args identify which waiting step to resume.
+
+
+

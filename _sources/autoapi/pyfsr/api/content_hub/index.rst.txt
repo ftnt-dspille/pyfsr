@@ -1,0 +1,180 @@
+pyfsr.api.content_hub
+=====================
+
+.. py:module:: pyfsr.api.content_hub
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.content_hub.ContentType
+   pyfsr.api.content_hub.ContentHubSearch
+
+
+Module Contents
+---------------
+
+.. py:class:: ContentType
+
+   Bases: :py:obj:`enum.Enum`
+
+
+   Types of content that can be searched for in FortiSOAR Content Hub
+
+
+   .. py:attribute:: SOLUTION_PACK
+      :value: 'solutionpack'
+
+
+
+   .. py:attribute:: CONNECTOR
+      :value: 'connector'
+
+
+
+   .. py:attribute:: WIDGET
+      :value: 'widget'
+
+
+
+.. py:class:: ContentHubSearch(client)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   API implementation for searching FortiSOAR Content Hub items including
+   solution packs, connectors, and widgets.
+
+   Every search/find method takes an opt-in ``typed=True`` to return the
+   matching typed model (``SolutionPack`` /
+   ``ContentHubConnector`` / ``Widget``).
+   Those models subclass ``BaseRecord`` and stay dict-compatible, so the
+   default (``typed=False``, plain dicts) is unchanged.
+
+
+   .. py:method:: find_installed_pack(search_term: str, *, typed: bool = False) -> dict[str, Any] | None
+
+      Find a single installed solution pack by name, label, or description.
+
+      Pass ``typed=True`` for a ``SolutionPack``.
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          pack = content_hub.find_installed_pack("SOAR Framework")
+
+
+
+   .. py:method:: find_available_pack(search_term: str = '', *, typed: bool = False) -> dict[str, Any] | None
+
+      Find a single available solution pack by name, label, or description.
+
+      Pass ``typed=True`` for a ``SolutionPack``.
+
+
+
+   .. py:method:: search_installed_packs(search_term: str = '', limit: int = 30, *, typed: bool = False) -> list[dict[str, Any]]
+
+      Search for all installed solution packs matching the search criteria.
+
+      Pass ``typed=True`` for ``SolutionPack`` objects.
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          packs = content_hub.search_installed_packs("SOAR", limit=10)
+
+
+
+   .. py:method:: search_available_packs(search_term: str = '', limit: int = 30, *, typed: bool = False) -> list[dict[str, Any]]
+
+      Search for all available solution packs matching the search criteria.
+
+      Pass ``typed=True`` for ``SolutionPack`` objects.
+
+
+
+   .. py:method:: find_installed_connector(search_term: str, *, typed: bool = False) -> dict[str, Any] | None
+
+      Find a single installed connector by name, label, or description.
+
+      Pass ``typed=True`` for a ``ContentHubConnector``.
+
+
+
+   .. py:method:: find_available_connector(search_term: str = '', *, typed: bool = False) -> dict[str, Any] | None
+
+      Find a single available connector by name, label, or description.
+
+      Pass ``typed=True`` for a ``ContentHubConnector``.
+
+
+
+   .. py:method:: find_uninstalled_connector(search_term: str, *, typed: bool = False) -> dict[str, Any] | None
+
+      Find a single uninstalled connector by name, label, or description.
+
+      Pass ``typed=True`` for a ``ContentHubConnector``.
+
+
+
+   .. py:method:: search_installed_connectors(search_term: str = '', limit: int = 30, *, typed: bool = False) -> list[dict[str, Any]]
+
+      Search for all installed connectors matching the search criteria.
+
+      Pass ``typed=True`` for ``ContentHubConnector`` objects.
+
+
+
+   .. py:method:: search_available_connectors(search_term: str = '', limit: int = 30, *, typed: bool = False) -> list[dict[str, Any]]
+
+      Search for all available connectors matching the search criteria.
+
+      Pass ``typed=True`` for ``ContentHubConnector`` objects.
+
+
+
+   .. py:method:: search_uninstalled_connectors(search_term: str = '', limit: int = 30, *, typed: bool = False) -> list[dict[str, Any]]
+
+      Search for all uninstalled connectors matching the search criteria.
+
+      Pass ``typed=True`` for ``ContentHubConnector`` objects.
+
+
+
+   .. py:method:: find_installed_widget(search_term: str, *, typed: bool = False) -> dict[str, Any] | None
+
+      Find a single installed widget by name, label, or description.
+
+      Pass ``typed=True`` for a ``Widget``.
+
+
+
+   .. py:method:: find_available_widget(search_term: str = '', *, typed: bool = False) -> dict[str, Any] | None
+
+      Find a single available widget by name, label, or description.
+
+      Pass ``typed=True`` for a ``Widget``.
+
+
+
+   .. py:method:: search_installed_widgets(search_term: str = '', limit: int = 30, *, typed: bool = False) -> list[dict[str, Any]]
+
+      Search for all installed widgets matching the search criteria.
+
+      Pass ``typed=True`` for ``Widget`` objects.
+
+
+
+   .. py:method:: search_available_widgets(search_term: str = '', limit: int = 30, *, typed: bool = False) -> list[dict[str, Any]]
+
+      Search for all available widgets matching the search criteria.
+
+      Pass ``typed=True`` for ``Widget`` objects.
+
+
+

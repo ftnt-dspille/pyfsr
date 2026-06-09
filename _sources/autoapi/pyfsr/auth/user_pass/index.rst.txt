@@ -1,0 +1,48 @@
+pyfsr.auth.user_pass
+====================
+
+.. py:module:: pyfsr.auth.user_pass
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.auth.user_pass.UserPasswordAuth
+
+
+Module Contents
+---------------
+
+.. py:class:: UserPasswordAuth(base_url: str, username: str, password: str, verify_ssl: bool = True)
+
+   Bases: :py:obj:`pyfsr.auth.base.BaseAuth`
+
+
+   Base class for FortiSOAR authentication methods
+
+
+   .. py:attribute:: base_url
+
+
+   .. py:attribute:: username
+
+
+   .. py:attribute:: password
+
+
+   .. py:attribute:: verify_ssl
+      :value: True
+
+
+
+   .. py:attribute:: token
+
+
+   .. py:method:: get_auth_headers() -> dict
+
+      Get authentication headers for requests
+
+
+

@@ -1,0 +1,36 @@
+pyfsr
+=====
+
+.. py:module:: pyfsr
+
+.. autoapi-nested-parse::
+
+   PyFSR: Python client for the FortiSOAR REST API.
+
+   For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/pyfsr/api/index
+   /autoapi/pyfsr/auth/index
+   /autoapi/pyfsr/client/index
+   /autoapi/pyfsr/config/index
+   /autoapi/pyfsr/exceptions/index
+   /autoapi/pyfsr/mcp/index
+   /autoapi/pyfsr/models/index
+   /autoapi/pyfsr/pagination/index
+   /autoapi/pyfsr/projection/index
+   /autoapi/pyfsr/query/index
+   /autoapi/pyfsr/records/index
+   /autoapi/pyfsr/resources/index
+   /autoapi/pyfsr/spec/index
+   /autoapi/pyfsr/tools/index
+   /autoapi/pyfsr/utils/index
+
+

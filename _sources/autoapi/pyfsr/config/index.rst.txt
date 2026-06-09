@@ -1,0 +1,102 @@
+pyfsr.config
+============
+
+.. py:module:: pyfsr.config
+
+.. autoapi-nested-parse::
+
+   Environment-driven client configuration.
+
+   ``EnvConfig.from_env()`` reads the ``FSR_*`` environment variables and
+   ``EnvConfig.client()`` builds a ready :class:`~pyfsr.client.FortiSOAR` from them,
+   so an app (or the bundled MCP server) never hand-wires host/auth/port::
+
+       from pyfsr.config import EnvConfig
+       client = EnvConfig.from_env().client()
+
+   Recognized variables:
+
+   - ``FSR_BASE_URL`` — appliance host or URL (required; ``FSR_HOST`` also accepted).
+   - ``FSR_API_KEY`` — API-key auth, or ``FSR_USERNAME`` + ``FSR_PASSWORD``.
+   - ``FSR_PORT`` — optional port override.
+   - ``FSR_VERIFY_SSL`` — ``false``/``0``/``no``/``off`` disables TLS verification.
+   - ``FSR_SUPPRESS_INSECURE_WARNINGS`` — silence urllib3 warnings when SSL is off.
+   - ``FSR_TIMEOUT`` — per-request timeout in seconds (default 30).
+
+   This is the generic, infra-free counterpart of fsrpb's ``probes/_env.py`` (which
+   also carries SSH/e2e knobs that don't belong in the transport SDK).
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.config.EnvConfig
+
+
+Module Contents
+---------------
+
+.. py:class:: EnvConfig
+
+   Resolved client configuration (host, auth, transport knobs).
+
+   Build it with :meth:`from_env`, then call :meth:`client` for a
+   :class:`~pyfsr.client.FortiSOAR`. ``auth`` is the value passed straight to
+   the client: an API-key string, or a ``(username, password)`` tuple.
+
+
+   .. py:attribute:: base_url
+      :type:  str
+
+
+   .. py:attribute:: auth
+      :type:  str | tuple[str, str]
+
+
+   .. py:attribute:: verify_ssl
+      :type:  bool
+      :value: True
+
+
+
+   .. py:attribute:: suppress_insecure_warnings
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: port
+      :type:  int | None
+      :value: None
+
+
+
+   .. py:attribute:: timeout
+      :type:  int
+      :value: 30
+
+
+
+   .. py:method:: from_env(env: dict[str, str] | None = None) -> EnvConfig
+      :classmethod:
+
+
+      Build configuration from ``FSR_*`` environment variables.
+
+      Raises ``ValueError`` with an actionable message when the host or auth
+      is missing. Pass ``env`` to read from a dict instead of ``os.environ``.
+
+
+
+   .. py:method:: client(**overrides) -> pyfsr.client.FortiSOAR
+
+      Construct a :class:`~pyfsr.client.FortiSOAR` from this config.
+
+      Any keyword in ``overrides`` is passed through to the client constructor,
+      taking precedence over the resolved values.
+
+
+

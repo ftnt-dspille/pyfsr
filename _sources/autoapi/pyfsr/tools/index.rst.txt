@@ -1,0 +1,140 @@
+pyfsr.tools
+===========
+
+.. py:module:: pyfsr.tools
+
+.. autoapi-nested-parse::
+
+   Framework-agnostic tool registry for driving FortiSOAR from an LLM agent.
+
+   This is the foundation of pyfsr's AI/agent surface: a declarative catalogue of
+   the core FortiSOAR operations (record CRUD, discovery, picklists, connectors,
+   playbook runs) as JSON-Schema tool definitions, plus a :func:`dispatch` that
+   executes a tool call against a live :class:`~pyfsr.client.FortiSOAR` client and
+   returns JSON-serializable, token-trimmed results.
+
+   It is deliberately transport-neutral — no MCP, no provider SDK — so it can feed:
+
+   - the optional bundled MCP server (``python -m pyfsr.mcp``, a thin consumer),
+   - Anthropic tool-use (:func:`to_anthropic_tools`),
+   - OpenAI-style function calling (:func:`to_openai_tools`),
+   - or any home-grown agent loop (:func:`tool_schemas` + :func:`dispatch`).
+
+   Example::
+
+       from pyfsr import FortiSOAR
+       from pyfsr.tools import to_anthropic_tools, dispatch
+
+       client = FortiSOAR("soar.example.com", api_key)
+       tools = to_anthropic_tools()                       # feed to Claude
+       # ... model decides to call a tool ...
+       result = dispatch(client, "search_records",
+                         {"module": "alerts", "summary": True, "limit": 10})
+
+   Every result is JSON-safe and every failure is returned as a structured
+   ``{"error": {...}}`` dict (never a raised exception), so an agent can read the
+   message and self-correct.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.tools.REGISTRY
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.tools.ToolSpec
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.tools.list_tools
+   pyfsr.tools.get_tool
+   pyfsr.tools.tool_schemas
+   pyfsr.tools.to_anthropic_tools
+   pyfsr.tools.to_openai_tools
+   pyfsr.tools.dispatch
+
+
+Module Contents
+---------------
+
+.. py:class:: ToolSpec
+
+   A single agent-callable FortiSOAR operation.
+
+   ``input_schema`` is a JSON Schema (draft 2020-12 compatible object schema)
+   describing the tool's arguments; ``handler`` runs the operation against a
+   live client and returns a JSON-serializable result.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: description
+      :type:  str
+
+
+   .. py:attribute:: input_schema
+      :type:  dict[str, Any]
+
+
+   .. py:attribute:: handler
+      :type:  collections.abc.Callable[Ellipsis, Any]
+
+
+   .. py:method:: to_dict() -> dict[str, Any]
+
+      Generic ``{name, description, input_schema}`` (no handler).
+
+
+
+.. py:data:: REGISTRY
+   :type:  dict[str, ToolSpec]
+
+.. py:function:: list_tools() -> list[ToolSpec]
+
+   Return every registered :class:`ToolSpec`.
+
+
+.. py:function:: get_tool(name: str) -> ToolSpec
+
+   Return one tool by name (raises ``KeyError`` if unknown).
+
+
+.. py:function:: tool_schemas() -> list[dict[str, Any]]
+
+   Generic ``[{name, description, input_schema}, ...]`` for every tool.
+
+
+.. py:function:: to_anthropic_tools() -> list[dict[str, Any]]
+
+   Tool definitions in Anthropic tool-use shape (``input_schema`` key).
+
+
+.. py:function:: to_openai_tools() -> list[dict[str, Any]]
+
+   Tool definitions in OpenAI function-calling shape (``parameters`` key).
+
+
+.. py:function:: dispatch(client, name: str, arguments: dict[str, Any] | None = None) -> Any
+
+   Execute a tool call against ``client`` and return a JSON-safe result.
+
+   Looks ``name`` up in the :data:`REGISTRY` and invokes its handler with
+   ``**arguments``. Any failure — unknown tool, bad arguments, or an API error —
+   is returned as a structured ``{"error": {...}}`` dict rather than raised, so
+   an agent loop never has to wrap the call in a try/except.
+
+
