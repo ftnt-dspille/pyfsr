@@ -6,7 +6,22 @@ For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
 
 from .client import FortiSOAR
 from .config import EnvConfig
-from .models import MODEL_REGISTRY, Alert, BaseRecord, Comment, Incident, Task, model_for
+from .models import (
+    MODEL_REGISTRY,
+    Alert,
+    BaseRecord,
+    Comment,
+    ContentHubConnector,
+    ContentHubItem,
+    Incident,
+    SolutionPack,
+    Task,
+    Widget,
+    Workflow,
+    WorkflowCollection,
+    WorkflowRun,
+    model_for,
+)
 from .pagination import HydraPage, paginate
 from .projection import SUMMARY_FIELDS, project, project_record, to_jsonable
 from .query import Query
@@ -40,6 +55,13 @@ __all__ = [
     "Incident",
     "Task",
     "Comment",
+    "Workflow",
+    "WorkflowCollection",
+    "WorkflowRun",
+    "ContentHubItem",
+    "SolutionPack",
+    "ContentHubConnector",
+    "Widget",
     "MODEL_REGISTRY",
     "model_for",
     # projection
