@@ -10,15 +10,27 @@ without a curated model.
 from __future__ import annotations
 
 from ._generated import Alert, Comment, Incident, Task
+from ._system import (
+    ContentHubConnector,
+    ContentHubItem,
+    SolutionPack,
+    Widget,
+    Workflow,
+    WorkflowCollection,
+    WorkflowRun,
+)
 from .base import BaseRecord
 
 # Module (collection) name → model. Keys are the FortiSOAR plural module slugs
-# used in ``/api/3/<module>`` paths.
+# used in ``/api/3/<module>`` paths. The workflow entries are stable,
+# platform-owned schemas (see ``_system`` and the SDK roadmap §7).
 MODEL_REGISTRY: dict[str, type[BaseRecord]] = {
     "alerts": Alert,
     "incidents": Incident,
     "tasks": Task,
     "comments": Comment,
+    "workflows": Workflow,
+    "workflow_collections": WorkflowCollection,
 }
 
 
@@ -33,6 +45,13 @@ __all__ = [
     "Incident",
     "Task",
     "Comment",
+    "Workflow",
+    "WorkflowCollection",
+    "WorkflowRun",
+    "ContentHubItem",
+    "SolutionPack",
+    "ContentHubConnector",
+    "Widget",
     "MODEL_REGISTRY",
     "model_for",
 ]

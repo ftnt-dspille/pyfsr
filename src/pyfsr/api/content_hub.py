@@ -12,10 +12,27 @@ class ContentType(Enum):
     WIDGET = "widget"
 
 
+def _model_for_type(content_type: "ContentType"):
+    """Return the typed model class for a Content Hub ``content_type``."""
+    from ..models import ContentHubConnector, SolutionPack, Widget
+
+    return {
+        ContentType.SOLUTION_PACK: SolutionPack,
+        ContentType.CONNECTOR: ContentHubConnector,
+        ContentType.WIDGET: Widget,
+    }[content_type]
+
+
 class ContentHubSearch(BaseAPI):
     """
     API implementation for searching FortiSOAR Content Hub items including
     solution packs, connectors, and widgets.
+
+    Every search/find method takes an opt-in ``typed=True`` to return the
+    matching typed model (``SolutionPack`` /
+    ``ContentHubConnector`` / ``Widget``).
+    Those models subclass ``BaseRecord`` and stay dict-compatible, so the
+    default (``typed=False``, plain dicts) is unchanged.
     """
 
     def _search_content(
@@ -26,6 +43,7 @@ class ContentHubSearch(BaseAPI):
         limit: int = 30,
         extra_filters: list[dict[str, Any]] | None = None,
         extra_fields: list[str] | None = None,
+        typed: bool = False,
     ) -> list[dict[str, Any]]:
         """
         Generic search method for Content Hub items.
@@ -37,6 +55,10 @@ class ContentHubSearch(BaseAPI):
             limit: Maximum number of results to return
             extra_filters: Additional filters to apply to the query
             extra_fields: Additional fields to include in the response
+            typed: Parse results into the matching typed model
+                (``SolutionPack`` /
+                ``ContentHubConnector`` /
+                ``Widget``). Models stay dict-compatible.
 
         Returns:
             List[Dict[str, Any]]: List of matching content items
@@ -88,64 +110,63 @@ class ContentHubSearch(BaseAPI):
         response = self.client.post(
             f"/api/query/solutionpacks?$limit={limit}&$page=1&$search={search_term}", data=query
         )
-        return response.get("hydra:member", [])
+        members = response.get("hydra:member", [])
+        if typed:
+            model = _model_for_type(content_type)
+            return [model(**m) for m in members]
+        return members
 
     def _find_single_content(
-        self, content_type: ContentType, search_term: str, installed: bool = True
+        self,
+        content_type: ContentType,
+        search_term: str,
+        installed: bool = True,
+        typed: bool = False,
     ) -> dict[str, Any] | None:
         """Find a single content item matching the search criteria."""
         results = self._search_content(
-            content_type=content_type, installed=installed, search_term=search_term, limit=1
+            content_type=content_type,
+            installed=installed,
+            search_term=search_term,
+            limit=1,
+            typed=typed,
         )
         return results[0] if results else None
 
     # Solution Pack Methods
-    def find_installed_pack(self, search_term: str) -> dict[str, Any] | None:
-        """
-        Find a single installed solution pack by name, label, or description.
+    def find_installed_pack(
+        self, search_term: str, *, typed: bool = False
+    ) -> dict[str, Any] | None:
+        """Find a single installed solution pack by name, label, or description.
 
-        Args:
-            search_term: Name, label, or description to search for
-
-        Returns:
-            Dict[str, Any]: The first matching solution pack object, or None if no matches
+        Pass ``typed=True`` for a ``SolutionPack``.
 
         Example:
             .. code-block:: python
 
                 pack = content_hub.find_installed_pack("SOAR Framework")
         """
-        return self._find_single_content(ContentType.SOLUTION_PACK, search_term, installed=True)
+        return self._find_single_content(
+            ContentType.SOLUTION_PACK, search_term, installed=True, typed=typed
+        )
 
-    def find_available_pack(self, search_term: str = "") -> dict[str, Any] | None:
+    def find_available_pack(
+        self, search_term: str = "", *, typed: bool = False
+    ) -> dict[str, Any] | None:
+        """Find a single available solution pack by name, label, or description.
+
+        Pass ``typed=True`` for a ``SolutionPack``.
         """
-        Find a single available solution pack by name, label, or description.
-
-        Args:
-            search_term: Name, label, or description to search for
-
-        Returns:
-            Dict[str, Any]: The first matching solution pack object, or None if no matches
-
-        Example:
-            .. code-block:: python
-
-                pack = content_hub.find_available_pack("SOAR Framework")
-        """
-        return self._find_single_content(ContentType.SOLUTION_PACK, search_term, installed=False)
+        return self._find_single_content(
+            ContentType.SOLUTION_PACK, search_term, installed=False, typed=typed
+        )
 
     def search_installed_packs(
-        self, search_term: str = "", limit: int = 30
+        self, search_term: str = "", limit: int = 30, *, typed: bool = False
     ) -> list[dict[str, Any]]:
-        """
-        Search for all installed solution packs matching the search criteria.
+        """Search for all installed solution packs matching the search criteria.
 
-        Args:
-            search_term: Name, label, or description to search for
-            limit: Maximum number of results to return
-
-        Returns:
-            List[Dict[str, Any]]: List of matching solution pack objects
+        Pass ``typed=True`` for ``SolutionPack`` objects.
 
         Example:
             .. code-block:: python
@@ -153,224 +174,156 @@ class ContentHubSearch(BaseAPI):
                 packs = content_hub.search_installed_packs("SOAR", limit=10)
         """
         return self._search_content(
-            ContentType.SOLUTION_PACK, installed=True, search_term=search_term, limit=limit
+            ContentType.SOLUTION_PACK,
+            installed=True,
+            search_term=search_term,
+            limit=limit,
+            typed=typed,
         )
 
     def search_available_packs(
-        self, search_term: str = "", limit: int = 30
+        self, search_term: str = "", limit: int = 30, *, typed: bool = False
     ) -> list[dict[str, Any]]:
-        """
-        Search for all available solution packs matching the search criteria.
+        """Search for all available solution packs matching the search criteria.
 
-        Args:
-            search_term: Name, label, or description to search for
-            limit: Maximum number of results to return
-
-        Returns:
-            List[Dict[str, Any]]: List of matching solution pack objects
-
-        Example:
-            .. code-block:: python
-
-                packs = content_hub.search_available_packs("SOAR", limit=10)
+        Pass ``typed=True`` for ``SolutionPack`` objects.
         """
         return self._search_content(
-            ContentType.SOLUTION_PACK, installed=False, search_term=search_term, limit=limit
+            ContentType.SOLUTION_PACK,
+            installed=False,
+            search_term=search_term,
+            limit=limit,
+            typed=typed,
         )
 
     # Connector Methods
-    def find_installed_connector(self, search_term: str) -> dict[str, Any] | None:
+    def find_installed_connector(
+        self, search_term: str, *, typed: bool = False
+    ) -> dict[str, Any] | None:
+        """Find a single installed connector by name, label, or description.
+
+        Pass ``typed=True`` for a ``ContentHubConnector``.
         """
-        Find a single installed connector by name, label, or description.
+        return self._find_single_content(
+            ContentType.CONNECTOR, search_term, installed=True, typed=typed
+        )
 
-        Args:
-            search_term: Name, label, or description to search for
+    def find_available_connector(
+        self, search_term: str = "", *, typed: bool = False
+    ) -> dict[str, Any] | None:
+        """Find a single available connector by name, label, or description.
 
-        Returns:
-            Dict[str, Any]: The first matching connector object, or None if no matches
-
-        Example:
-            .. code-block:: python
-
-                connector = content_hub.find_installed_connector("OpenAI")
+        Pass ``typed=True`` for a ``ContentHubConnector``.
         """
-        return self._find_single_content(ContentType.CONNECTOR, search_term, installed=True)
+        return self._find_single_content(
+            ContentType.CONNECTOR, search_term, installed=None, typed=typed
+        )
 
-    def find_available_connector(self, search_term: str = "") -> dict[str, Any] | None:
+    def find_uninstalled_connector(
+        self, search_term: str, *, typed: bool = False
+    ) -> dict[str, Any] | None:
+        """Find a single uninstalled connector by name, label, or description.
+
+        Pass ``typed=True`` for a ``ContentHubConnector``.
         """
-        Find a single available connector by name, label, or description.
-
-        Args:
-            search_term: Name, label, or description to search for
-
-        Returns:
-            Dict[str, Any]: The first matching connector object, or None if no matches
-
-        Example:
-            .. code-block:: python
-
-                connector = content_hub.find_available_connector("OpenAI")
-        """
-        return self._find_single_content(ContentType.CONNECTOR, search_term, installed=None)
-
-    def find_uninstalled_connector(self, search_term: str) -> dict[str, Any] | None:
-        """
-        Find a single uninstalled connector by name, label, or description.
-
-        Args:
-            search_term: Name, label, or description to search for
-
-        Returns:
-            Dict[str, Any]: The first matching connector object, or None if no matches
-
-        Example:
-            .. code-block:: python
-
-                connector = content_hub.find_uninstalled_connector("OpenAI")
-        """
-        return self._find_single_content(ContentType.CONNECTOR, search_term, installed=False)
+        return self._find_single_content(
+            ContentType.CONNECTOR, search_term, installed=False, typed=typed
+        )
 
     def search_installed_connectors(
-        self, search_term: str = "", limit: int = 30
+        self, search_term: str = "", limit: int = 30, *, typed: bool = False
     ) -> list[dict[str, Any]]:
-        """
-        Search for all installed connectors matching the search criteria.
+        """Search for all installed connectors matching the search criteria.
 
-        Args:
-            search_term: Name, label, or description to search for
-            limit: Maximum number of results to return
-
-        Returns:
-            List[Dict[str, Any]]: List of matching connector objects
-
-        Example:
-            .. code-block:: python
-
-                connectors = content_hub.search_installed_connectors("OpenAI")
+        Pass ``typed=True`` for ``ContentHubConnector`` objects.
         """
         return self._search_content(
-            ContentType.CONNECTOR, installed=True, search_term=search_term, limit=limit
+            ContentType.CONNECTOR,
+            installed=True,
+            search_term=search_term,
+            limit=limit,
+            typed=typed,
         )
 
     def search_available_connectors(
-        self, search_term: str = "", limit: int = 30
+        self, search_term: str = "", limit: int = 30, *, typed: bool = False
     ) -> list[dict[str, Any]]:
-        """
-        Search for all available connectors matching the search criteria.
+        """Search for all available connectors matching the search criteria.
 
-        Args:
-            search_term: Name, label, or description to search for
-            limit: Maximum number of results to return
-
-        Returns:
-            List[Dict[str, Any]]: List of matching connector objects
-
-        Example:
-            .. code-block:: python
-
-                connectors = content_hub.search_available_connectors("OpenAI")
+        Pass ``typed=True`` for ``ContentHubConnector`` objects.
         """
         return self._search_content(
-            ContentType.CONNECTOR, installed=None, search_term=search_term, limit=limit
+            ContentType.CONNECTOR,
+            installed=None,
+            search_term=search_term,
+            limit=limit,
+            typed=typed,
         )
 
     def search_uninstalled_connectors(
-        self, search_term: str = "", limit: int = 30
+        self, search_term: str = "", limit: int = 30, *, typed: bool = False
     ) -> list[dict[str, Any]]:
-        """
-        Search for all uninstalled connectors matching the search criteria.
+        """Search for all uninstalled connectors matching the search criteria.
 
-        Args:
-            search_term: Name, label, or description to search for
-            limit: Maximum number of results to return
-
-        Returns:
-            List[Dict[str, Any]]: List of matching connector objects
-
-        Example:
-            .. code-block:: python
-
-                connectors = content_hub.search_uninstalled_connectors("OpenAI")
+        Pass ``typed=True`` for ``ContentHubConnector`` objects.
         """
         return self._search_content(
-            ContentType.CONNECTOR, installed=False, search_term=search_term, limit=limit
+            ContentType.CONNECTOR,
+            installed=False,
+            search_term=search_term,
+            limit=limit,
+            typed=typed,
         )
 
     # Widget Methods
-    def find_installed_widget(self, search_term: str) -> dict[str, Any] | None:
+    def find_installed_widget(
+        self, search_term: str, *, typed: bool = False
+    ) -> dict[str, Any] | None:
+        """Find a single installed widget by name, label, or description.
+
+        Pass ``typed=True`` for a ``Widget``.
         """
-        Find a single installed widget by name, label, or description.
+        return self._find_single_content(
+            ContentType.WIDGET, search_term, installed=True, typed=typed
+        )
 
-        Args:
-            search_term: Name, label, or description to search for
+    def find_available_widget(
+        self, search_term: str = "", *, typed: bool = False
+    ) -> dict[str, Any] | None:
+        """Find a single available widget by name, label, or description.
 
-        Returns:
-            Dict[str, Any]: The first matching widget object, or None if no matches
-
-        Example:
-            .. code-block:: python
-
-                widget = content_hub.find_installed_widget("Stats")
+        Pass ``typed=True`` for a ``Widget``.
         """
-        return self._find_single_content(ContentType.WIDGET, search_term, installed=True)
-
-    def find_available_widget(self, search_term: str = "") -> dict[str, Any] | None:
-        """
-        Find a single available widget by name, label, or description.
-
-        Args:
-            search_term: Name, label, or description to search for
-
-        Returns:
-            Dict[str, Any]: The first matching widget object, or None if no matches
-
-        Example:
-            .. code-block:: python
-
-                widget = content_hub.find_available_widget("Stats")
-        """
-        return self._find_single_content(ContentType.WIDGET, search_term, installed=False)
+        return self._find_single_content(
+            ContentType.WIDGET, search_term, installed=False, typed=typed
+        )
 
     def search_installed_widgets(
-        self, search_term: str = "", limit: int = 30
+        self, search_term: str = "", limit: int = 30, *, typed: bool = False
     ) -> list[dict[str, Any]]:
-        """
-        Search for all installed widgets matching the search criteria.
+        """Search for all installed widgets matching the search criteria.
 
-        Args:
-            search_term: Name, label, or description to search for
-            limit: Maximum number of results to return
-
-        Returns:
-            List[Dict[str, Any]]: List of matching widget objects
-
-        Example:
-            .. code-block:: python
-
-                widgets = content_hub.search_installed_widgets("Stats")
+        Pass ``typed=True`` for ``Widget`` objects.
         """
         return self._search_content(
-            ContentType.WIDGET, installed=True, search_term=search_term, limit=limit
+            ContentType.WIDGET,
+            installed=True,
+            search_term=search_term,
+            limit=limit,
+            typed=typed,
         )
 
     def search_available_widgets(
-        self, search_term: str = "", limit: int = 30
+        self, search_term: str = "", limit: int = 30, *, typed: bool = False
     ) -> list[dict[str, Any]]:
-        """
-        Search for all available widgets matching the search criteria.
+        """Search for all available widgets matching the search criteria.
 
-        Args:
-            search_term: Name, label, or description to search for
-            limit: Maximum number of results to return
-
-        Returns:
-            List[Dict[str, Any]]: List of matching widget objects
-
-        Example:
-            .. code-block:: python
-
-                widgets = content_hub.search_available_widgets("Stats")
+        Pass ``typed=True`` for ``Widget`` objects.
         """
         return self._search_content(
-            ContentType.WIDGET, installed=False, search_term=search_term, limit=limit
+            ContentType.WIDGET,
+            installed=False,
+            search_term=search_term,
+            limit=limit,
+            typed=typed,
         )
