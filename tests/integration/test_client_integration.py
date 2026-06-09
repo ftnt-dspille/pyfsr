@@ -131,6 +131,20 @@ def non_existent_pack() -> str:
     return "Non-existent Pack 12345"
 
 
+@pytest.fixture
+def known_available_pack_name(client) -> str:
+    """Label of a pack that is actually available (uninstalled) on this box.
+
+    The available list excludes already-installed packs, so an installed pack
+    like "SOAR Framework" won't appear there. Discover one at runtime instead
+    of hardcoding a name that may already be installed.
+    """
+    available = client.content_hub.search_available_packs(limit=1)
+    if not available:
+        pytest.skip("No available (uninstalled) solution packs on this box")
+    return available[0]["label"]
+
+
 # test url missing https with invalid auth
 def test_invalid_auth():
     """Test invalid authentication configuration"""
@@ -302,7 +316,7 @@ def test_export_pack(request, client_fixture, should_raise, client):
 def test_find_installed_pack(client, known_pack_name, non_existent_pack):
     """Test finding a single installed solution pack"""
     # Test finding existing pack
-    pack = client.solution_packs.find_installed_pack(known_pack_name)
+    pack = client.content_hub.find_installed_pack(known_pack_name)
     assert pack is not None
     assert pack["label"] == known_pack_name
     assert isinstance(pack, dict)
@@ -310,7 +324,7 @@ def test_find_installed_pack(client, known_pack_name, non_existent_pack):
     assert "version" in pack
 
     # Test non-existent pack
-    missing_pack = client.solution_packs.find_installed_pack(non_existent_pack)
+    missing_pack = client.content_hub.find_installed_pack(non_existent_pack)
     assert missing_pack is None
 
 
@@ -318,68 +332,68 @@ def test_find_installed_pack(client, known_pack_name, non_existent_pack):
 def test_search_installed_packs(client, known_pack_name):
     """Test searching for multiple installed solution packs"""
     # Test default search (all installed packs)
-    all_packs = client.solution_packs.search_installed_packs()
+    all_packs = client.content_hub.search_installed_packs()
     assert isinstance(all_packs, list)
     assert len(all_packs) > 0
     assert all(isinstance(p, dict) for p in all_packs)
     assert all("name" in p for p in all_packs)
 
     # Test searching with known term
-    matching_packs = client.solution_packs.search_installed_packs(known_pack_name)
+    matching_packs = client.content_hub.search_installed_packs(known_pack_name)
     assert len(matching_packs) > 0
     assert any(p["label"] == known_pack_name for p in matching_packs)
 
     # Test limit parameter
-    limited_packs = client.solution_packs.search_installed_packs(limit=1)
+    limited_packs = client.content_hub.search_installed_packs(limit=1)
     assert len(limited_packs) == 1
 
     # Test empty search results
-    empty_results = client.solution_packs.search_installed_packs("zzzzzzz")
+    empty_results = client.content_hub.search_installed_packs("zzzzzzz")
     assert len(empty_results) == 0
 
 
 @pytest.mark.integration
-def test_find_available_pack(client, known_pack_name, non_existent_pack):
+def test_find_available_pack(client, known_available_pack_name, non_existent_pack):
     """Test finding a single available solution pack"""
     # Test finding existing pack
-    pack = client.solution_packs.find_available_pack(known_pack_name)
+    pack = client.content_hub.find_available_pack(known_available_pack_name)
     assert pack is not None
-    assert pack["label"] == known_pack_name
+    assert pack["label"] == known_available_pack_name
     assert isinstance(pack, dict)
     assert "name" in pack
     assert "version" in pack
 
     # Test empty search term (should return first available pack)
-    default_pack = client.solution_packs.find_available_pack()
+    default_pack = client.content_hub.find_available_pack()
     assert default_pack is not None
     assert isinstance(default_pack, dict)
 
     # Test non-existent pack
-    missing_pack = client.solution_packs.find_available_pack(non_existent_pack)
+    missing_pack = client.content_hub.find_available_pack(non_existent_pack)
     assert missing_pack is None
 
 
 @pytest.mark.integration
-def test_search_available_packs(client, known_pack_name):
+def test_search_available_packs(client, known_available_pack_name):
     """Test searching for multiple available solution packs"""
     # Test default search (all available packs)
-    all_packs = client.solution_packs.search_available_packs()
+    all_packs = client.content_hub.search_available_packs()
     assert isinstance(all_packs, list)
     assert len(all_packs) > 0
     assert all(isinstance(p, dict) for p in all_packs)
     assert all("name" in p for p in all_packs)
 
     # Test searching with known term
-    matching_packs = client.solution_packs.search_available_packs(known_pack_name)
+    matching_packs = client.content_hub.search_available_packs(known_available_pack_name)
     assert len(matching_packs) > 0
-    assert any(p["label"] == known_pack_name for p in matching_packs)
+    assert any(p["label"] == known_available_pack_name for p in matching_packs)
 
     # Test limit parameter
-    limited_packs = client.solution_packs.search_available_packs(limit=1)
+    limited_packs = client.content_hub.search_available_packs(limit=1)
     assert len(limited_packs) == 1
 
     # Test empty search results
-    empty_results = client.solution_packs.search_available_packs("zzzzzzz")
+    empty_results = client.content_hub.search_available_packs("zzzzzzz")
     assert len(empty_results) == 0
 
 
