@@ -222,3 +222,26 @@ def test_records_accessor_on_client(mock_client):
     rs = mock_client.records("alerts")
     assert isinstance(rs, RecordSet)
     assert rs.module == "alerts"
+
+
+# -- upsert / bulk_upsert ---------------------------------------------------
+def test_upsert_posts_to_upsert_path():
+    client = FakeClient({"/api/3/upsert/alerts": {"uuid": "u9", "name": "x"}})
+    rec = RecordSet(client, "alerts").upsert({"name": "x"})
+    assert client.calls[0] == ("POST", "/api/3/upsert/alerts", None, {"name": "x"})
+    assert rec["uuid"] == "u9"
+
+
+def test_upsert_raw_returns_plain_dict():
+    client = FakeClient({"/api/3/upsert/alerts": {"uuid": "u9"}})
+    assert RecordSet(client, "alerts").upsert({"name": "x"}, raw=True) == {"uuid": "u9"}
+
+
+def test_bulk_upsert_posts_list_and_returns_raw():
+    client = FakeClient({"/api/3/bulkupsert/workflow_collections": {"hydra:member": [1, 2]}})
+    rows = [{"name": "a"}, {"name": "b"}]
+    out = RecordSet(client, "workflow_collections").bulk_upsert(rows)
+    method, endpoint, _params, data = client.calls[0]
+    assert (method, endpoint) == ("POST", "/api/3/bulkupsert/workflow_collections")
+    assert data == rows
+    assert out == {"hydra:member": [1, 2]}

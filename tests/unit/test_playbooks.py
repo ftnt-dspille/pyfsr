@@ -157,3 +157,34 @@ def test_resume_omits_approved_when_none():
 def test_resume_blank_pk_raises():
     with pytest.raises(ValueError):
         PlaybooksAPI(FakeClient()).resume("", manual_input_id=1)
+
+
+# -- get(step_detail=) / run_env -------------------------------------------
+def _run_with_steps(pk):
+    return {
+        "@id": f"/api/wf/api/workflows/{pk}/",
+        "name": "PB",
+        "status": "finished",
+        "env": {"input": {}, "wf_id": pk},
+        "steps": [
+            {"name": "Start", "status": "finished", "result": {"data": 1}},
+            {"name": "Fetch Email", "status": "finished", "result": {"data": 2}},
+        ],
+    }
+
+
+def test_get_step_detail_passes_flag_and_returns_full():
+    client = FakeClient(workflows=[_run_with_steps("900")])
+    api = PlaybooksAPI(client)
+    full = api.get("900", step_detail=True)
+    assert client.get_calls[0][0] == "/api/wf/api/workflows/900/?format=json&step_detail=true"
+    assert "steps" in full and len(full["steps"]) == 2
+
+
+def test_run_env_reshapes_env_and_steps():
+    client = FakeClient(workflows=[_run_with_steps("901")])
+    api = PlaybooksAPI(client)
+    env = api.run_env("901")
+    assert env["status"] == "finished"
+    assert env["env"]["wf_id"] == "901"
+    assert env["steps"]["Fetch Email"] == {"status": "finished", "result": {"data": 2}}
