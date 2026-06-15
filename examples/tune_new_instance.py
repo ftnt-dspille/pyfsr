@@ -18,8 +18,8 @@ import argparse
 from pyfsr import FortiSOAR
 
 # Tuning targets ---------------------------------------------------------------
-IDLE_TIMEOUT_MIN = 360          # 6 h — the server-enforced maximum for idle_time
-MAX_SESSION_MIN = 1440          # 24 h absolute session cap
+IDLE_TIMEOUT_MIN = 360  # 6 h — the server-enforced maximum for idle_time
+MAX_SESSION_MIN = 1440  # 24 h absolute session cap
 
 
 def tune(client: FortiSOAR) -> None:
