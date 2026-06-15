@@ -9,7 +9,7 @@ Accessed as ``client.schedules``.
 
 Note: each row's ``id`` is a per-request Fernet token that decrypts to a stable
 primary key, so always look the task up by ``name`` (the id from one GET is
-fine to PUT back immediately, which is what :meth:`set_enabled` does).
+fine to PUT back immediately, which is what :meth:`SchedulesAPI.set_enabled` does).
 
 Example:
     >>> [t["name"] for t in client.schedules.list() if t["enabled"]]
