@@ -31,8 +31,23 @@ def get_auth_from_config(config):
 
 @pytest.fixture(scope="session")
 def client():
-    """A live FortiSOAR client built from examples/config.toml."""
+    """A live FortiSOAR client.
+
+    Resolution order, so the suite runs anywhere with no extra files:
+      1. ``FSR_*`` environment variables (``FSR_BASE_URL`` + ``FSR_API_KEY`` or
+         ``FSR_USERNAME``/``FSR_PASSWORD``), via the SDK's own ``EnvConfig`` —
+         the same path documented for end users.
+      2. ``examples/config.toml`` (legacy).
+    If neither is present, the integration suite is skipped.
+    """
+    import os
+
     from pyfsr import FortiSOAR
+
+    if os.environ.get("FSR_BASE_URL") or os.environ.get("FSR_HOST"):
+        from pyfsr.config import EnvConfig
+
+        return EnvConfig.from_env().client()
 
     config = load_config()
     return FortiSOAR(
