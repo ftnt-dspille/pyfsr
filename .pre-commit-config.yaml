@@ -1,12 +1,12 @@
-# Run `pre-commit install` once; hooks then run on every commit.
-# Update hook versions with `pre-commit autoupdate`.
+# Catch CI failures locally before they reach GitHub.
+#
+# One-time setup (installs BOTH the commit-time and push-time hooks):
+#   pre-commit install
+#   pre-commit install -t pre-push
+#
+# Then: lint/format run on every commit; the heavier tests + strict docs build
+# run on every push. Run everything manually with `pre-commit run -a`.
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
-    hooks:
-      - id: ruff           # lint (autofix)
-        args: [--fix]
-      - id: ruff-format    # format
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -15,3 +15,36 @@ repos:
       - id: check-yaml
       - id: check-toml
       - id: check-merge-conflict
+
+  # Lint + format with the EXACT ruff pinned in this project (run via uv), so
+  # local results match CI. Using the ruff-pre-commit mirror instead would pin a
+  # second, independent ruff version that can drift from the lockfile and pass
+  # locally while CI's `ruff format --check` fails (which is what bit us).
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check (project pin, via uv)
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-format
+        name: ruff format (project pin, via uv)
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      # --- pre-push only: mirror the CI jobs that are slow but high-signal ---
+      - id: pytest-unit
+        name: pytest unit suite (mirrors CI test jobs)
+        entry: uv run pytest tests/unit -q -p no:cacheprovider
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+      - id: docs-build
+        name: sphinx docs build -W -n (mirrors CI docs job; catches broken cross-refs)
+        entry: bash -c 'cd docs && PYTHONPATH=../src uv run make html SPHINXOPTS="-W --keep-going -n"'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
