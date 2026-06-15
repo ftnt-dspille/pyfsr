@@ -15,6 +15,7 @@ from .api.connectors import ConnectorsAPI
 from .api.content_hub import ContentHubSearch
 from .api.export_config import ExportConfigAPI
 from .api.modules import ModulesAPI
+from .api.modules_admin import ModulesAdminAPI
 from .api.picklists import PicklistsAPI
 from .api.playbooks import PlaybooksAPI
 from .api.solution_packs import SolutionPackAPI
@@ -187,6 +188,9 @@ class FortiSOAR:
 
         # Module / field schema discovery
         self.modules: ModulesAPI = ModulesAPI(self)
+
+        # Module / field schema administration (create, alter fields, publish)
+        self.modules_admin: ModulesAdminAPI = ModulesAdminAPI(self)
 
         # Picklist discovery + friendly-value -> IRI resolution
         self.picklists: PicklistsAPI = PicklistsAPI(self)

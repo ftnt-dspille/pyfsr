@@ -73,3 +73,56 @@ def test_clear_cache_refetches():
     api.clear_cache()
     api.list()
     assert len(client.calls) == 2
+
+
+def test_search_modules_by_substring():
+    api = ModulesAPI(FakeClient())
+    assert [m["type"] for m in api.search("incid")] == ["incidents"]
+    assert api.search("zzz") == []
+
+
+def test_fields_shortcut():
+    api = ModulesAPI(FakeClient())
+    names = {f["name"] for f in api.fields("incidents")}
+    assert names == {"name", "severity"}
+
+
+def test_find_field_by_name_across_modules():
+    api = ModulesAPI(FakeClient())
+    hits = api.find_field(name="sever")
+    assert [(h["module"], h["field"]["name"]) for h in hits] == [("incidents", "severity")]
+
+
+def test_find_field_by_type():
+    api = ModulesAPI(FakeClient())
+    hits = api.find_field(type="picklist")
+    assert all(h["field"]["type"] == "picklist" for h in hits)
+    assert ("incidents", "severity") in [(h["module"], h["field"]["name"]) for h in hits]
+
+
+def test_format_module_is_readable():
+    out = ModulesAPI(FakeClient()).format_module("incidents")
+    assert "Module: Incidents" in out
+    assert "severity" in out and "picklist" in out
+
+
+_TEMPLATED = {
+    "hydra:member": [
+        {
+            "type": "widgets",
+            "module": "widgets",
+            "displayName": "{{ name }}",
+            "descriptions": {"singular": "Widget"},
+            "attributes": [],
+        }
+    ]
+}
+
+
+def test_friendly_label_skips_jinja_template():
+    class C:
+        def get(self, endpoint, params=None, **kwargs):
+            return _TEMPLATED
+
+    mods = ModulesAPI(C()).list()
+    assert mods[0]["label"] == "Widget"  # not the "{{ name }}" template
