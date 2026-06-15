@@ -18,14 +18,14 @@ Basic Usage:
 
     from pyfsr import FortiSOAR
 
-    # Initialize the client
+    # Initialize the client with an API key
     client = FortiSOAR('your-server', 'your-token')
 
     # or with username and password
     client = FortiSOAR('your-server', ('your-username', 'your-password'))
 
-    # Generic get call to Alerts endpoint
-    response = client.get('/api/v3/alerts')
+    # Generic GET against the v3 API (the path is /api/3/, not /api/v3/)
+    response = client.get('/api/3/alerts')
 
     # Create an alert
     alert_data = {
