@@ -163,13 +163,33 @@ class PicklistsAPI(BaseAPI):
                 return iri
         return None
 
-    def resolve_record_fields(self, module: str, fields: dict[str, Any]) -> dict[str, Any]:
+    def options(self, picklist_name: str) -> list[str]:
+        """The valid friendly values (itemValues) of a picklist — what an AI
+        should choose from. Cached via :meth:`values`."""
+        return [it.get("itemValue") for it in self.values(picklist_name) if it.get("itemValue")]
+
+    def resolve_record_fields(
+        self,
+        module: str,
+        fields: dict[str, Any],
+        *,
+        strict: bool = False,
+        report: list | None = None,
+    ) -> dict[str, Any]:
         """Return a copy of ``fields`` with picklist-typed values mapped to IRIs.
 
         Only fields the module flags as picklist-backed are touched, and only
-        when their value is a friendly string (not already an IRI). Unresolvable
-        values are left as-is so the caller still sees the original input.
+        when their value is a friendly string (not already an IRI).
+
+        Friendly feedback on a miss (a value not in the picklist):
+          - ``strict=True`` raises :class:`~pyfsr.exceptions.PicklistResolutionError`
+            naming the field, bad value, and the valid options.
+          - pass a list as ``report`` to collect misses as
+            ``{field, value, picklist, valid_values}`` without raising.
+          - by default the original value is left in place (back-compatible).
         """
+        from ..exceptions import PicklistResolutionError
+
         fmap = self._field_map(module)
         out: dict[str, Any] = {}
         for k, v in fields.items():
@@ -179,5 +199,12 @@ class PicklistsAPI(BaseAPI):
                 if iri:
                     out[k] = iri
                     continue
+                valid = self.options(picklist)
+                if report is not None:
+                    report.append(
+                        {"field": k, "value": v, "picklist": picklist, "valid_values": valid}
+                    )
+                if strict:
+                    raise PicklistResolutionError(k, v, picklist, valid)
             out[k] = v
         return out

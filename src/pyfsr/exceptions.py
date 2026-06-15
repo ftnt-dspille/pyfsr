@@ -24,6 +24,25 @@ class ValidationError(FortiSOARException):
     pass
 
 
+class PicklistResolutionError(ValidationError):
+    """Raised when a friendly picklist value can't be mapped to an IRI.
+
+    Carries the offending field/value, the picklist name, and the valid options
+    so callers (and AIs) get an actionable message instead of a server 400.
+    """
+
+    def __init__(self, field: str, value, picklist: str, valid_values: list[str]):
+        self.field = field
+        self.value = value
+        self.picklist = picklist
+        self.valid_values = valid_values
+        shown = ", ".join(valid_values[:25]) + ("  …" if len(valid_values) > 25 else "")
+        super().__init__(
+            f"{field}={value!r} is not a valid '{picklist}' value. "
+            f"Valid ({len(valid_values)}): {shown}"
+        )
+
+
 class AuthenticationError(FortiSOARException):
     """Raised when authentication fails."""
 
@@ -58,6 +77,40 @@ class UnsupportedAuthOperationError(FortiSOARException):
         super().__init__(msg)
 
 
+def _extract_message(error_data):
+    """Pull a human-readable message out of a FortiSOAR/Symfony error body.
+
+    FortiSOAR returns at least two error shapes:
+
+    - ``{"message": "..."}`` — the simple form.
+    - Symfony validation errors — ``{"title": "Validation Failed", "detail": "...",
+      "violations": [{"propertyPath": "...", "title": "..."}]}`` with **no** ``message``
+      key. Reading only ``message`` collapsed these to "Unknown error occurred", hiding the
+      real cause (e.g. an invalid attribute ``type`` rejected at ``/api/publish``).
+
+    Prefer ``detail`` (most specific), then a rollup of ``violations``, then ``title``,
+    then ``message``. Returns None if nothing usable is present.
+    """
+    if not isinstance(error_data, dict):
+        return str(error_data) or None
+    if error_data.get("message"):
+        return error_data["message"]
+    if error_data.get("detail"):
+        return error_data["detail"]
+    violations = error_data.get("violations")
+    if isinstance(violations, list) and violations:
+        parts = []
+        for v in violations:
+            if not isinstance(v, dict):
+                continue
+            path, title = v.get("propertyPath"), v.get("title") or v.get("message")
+            parts.append(f"{path}: {title}" if path and title else (title or path or ""))
+        rolled = "; ".join(p for p in parts if p)
+        if rolled:
+            return rolled
+    return error_data.get("title")
+
+
 def handle_api_error(response):
     """Convert API error responses to appropriate exceptions."""
     try:
@@ -66,7 +119,7 @@ def handle_api_error(response):
         error_data = {"message": response.text}
 
     error_type = error_data.get("type", "")
-    message = error_data.get("message", "Unknown error occurred")
+    message = _extract_message(error_data) or "Unknown error occurred"
 
     if response.status_code == 400:
         if "ValidationException" in error_type:
