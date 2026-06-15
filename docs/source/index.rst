@@ -27,12 +27,14 @@ Basic Usage:
     # Generic GET against the v3 API (the path is /api/3/, not /api/v3/)
     response = client.get('/api/3/alerts')
 
-    # Create an alert
-    alert_data = {
+    # Create an alert. Picklist fields (severity/status/...) take an IRI, not a
+    # friendly string, so resolve the friendly values first — the appliance
+    # rejects a raw "High". resolve_record_fields() maps names -> IRIs for you.
+    alert_data = client.picklists.resolve_record_fields("alerts", {
         "name": "Test Alert",
         "description": "This is a test alert",
-        "severity": "High"
-    }
+        "severity": "High",
+    })
     alert_record = client.alerts.create(**alert_data)
 
     # List all alerts

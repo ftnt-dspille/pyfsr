@@ -77,6 +77,27 @@ html_theme = "pydata_sphinx_theme"
 templates_path = ["_templates"]
 html_static_path = ["_static"]
 
+# Keep the navbar brand short. The default title is "{project} {release}
+# documentation"; with hatch-vcs dev versions that becomes
+# "pyfsr 0.3.1.dev4+g… documentation", which overflows and overlaps the nav
+# links. Show just the project name in the bar (the full version still appears
+# in the page metadata / footer).
+html_title = project
+html_short_title = project
+
+html_theme_options = {
+    "navigation_with_keys": True,
+    "show_prev_next": False,
+    # Surface the repo without crowding the brand text.
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/ftnt-dspille/pyfsr",
+            "icon": "fa-brands fa-github",
+        }
+    ],
+}
+
 # Custom static files
 html_css_files = [
     "custom.css",  # Example custom CSS
