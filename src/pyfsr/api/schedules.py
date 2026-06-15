@@ -61,9 +61,7 @@ class SchedulesAPI(BaseAPI):
             raise ValueError(f"No scheduled task named {name!r}")
         body = copy.deepcopy(task)
         body["enabled"] = enabled
-        return self.client.put(
-            f"{_ENDPOINT}{task['id']}/", data=body, params={"format": "json"}
-        )
+        return self.client.put(f"{_ENDPOINT}{task['id']}/", data=body, params={"format": "json"})
 
     def disable(self, name: str) -> dict[str, Any]:
         """Disable the task named ``name``."""

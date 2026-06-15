@@ -88,16 +88,12 @@ class SystemSettingsAPI(BaseAPI):
         uuid = root["uuid"]
         body: dict[str, Any] = {}
         if public_values_patch:
-            body["publicValues"] = _deep_merge(
-                root.get("publicValues") or {}, public_values_patch
-            )
+            body["publicValues"] = _deep_merge(root.get("publicValues") or {}, public_values_patch)
         if private_values_patch:
             body["privateValues"] = _deep_merge(
                 root.get("privateValues") or {}, private_values_patch
             )
-        return self.client.put(
-            f"{self._ENDPOINT}/{uuid}", data=body, params=_RELATIONSHIPS
-        )
+        return self.client.put(f"{self._ENDPOINT}/{uuid}", data=body, params=_RELATIONSHIPS)
 
     # ------------------------------------------------------------- convenience
     def set_workflow_log_filter(
@@ -111,9 +107,7 @@ class SystemSettingsAPI(BaseAPI):
         """
         if operation not in ("exclude", "include"):
             raise ValueError("operation must be 'exclude' or 'include'")
-        return self.update(
-            {"playbook": {"logs": {"tags": tags, "filterOpration": operation}}}
-        )
+        return self.update({"playbook": {"logs": {"tags": tags, "filterOpration": operation}}})
 
     def set_playbook_debug_logging(
         self, enabled: bool = True, *, allow_playbook_override: bool = False
