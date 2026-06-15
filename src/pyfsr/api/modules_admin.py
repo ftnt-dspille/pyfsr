@@ -200,7 +200,9 @@ class ModulesAdminAPI(BaseAPI):
         payload.update(opts)
         return self.client.post(_STAGING, data=payload, params=_REL)
 
-    def _put_attributes(self, mod: dict[str, Any], attributes: list[dict[str, Any]]) -> dict[str, Any]:
+    def _put_attributes(
+        self, mod: dict[str, Any], attributes: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """PUT only the ``attributes`` of a staging record (a full-record PUT is
         rejected — the GET payload carries read-only ``@id``/``@context`` keys)."""
         return self.client.put(

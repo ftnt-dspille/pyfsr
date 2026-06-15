@@ -249,7 +249,8 @@ class ModulesAPI(BaseAPI):
             req = "yes" if f.get("required") else ""
             pick = f"  [picklist: {f['picklist_name']}]" if f.get("picklist_name") else ""
             lines.append(
-                f"  {str(f['name']):<28} {str(f.get('type')):<18} {req:<4} {f.get('title', '')}{pick}"
+                f"  {str(f['name']):<28} {str(f.get('type')):<18} {req:<4} "
+                f"{f.get('title', '')}{pick}"
             )
             vals = f.get("picklist_values")
             if vals:
