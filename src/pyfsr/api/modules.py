@@ -11,8 +11,8 @@ Accessed as ``client.modules`` (or the ``client.list_modules()`` /
 ``client.describe_module()`` shortcuts).
 
 Example:
-    >>> client.list_modules()["modules"][:3]
-    [{'type': 'alerts', 'label': 'Alerts', 'plural': 'alerts'}, ...]
+    >>> client.list_modules()[:3]
+    [{'type': 'agents', 'label': 'Agent', 'plural': 'agents'}, ...]
     >>> client.describe_module("incidents")["fields"][0]
     {'name': 'name', 'title': 'Name', 'type': 'text', 'required': True,
      'picklist_name': None}
