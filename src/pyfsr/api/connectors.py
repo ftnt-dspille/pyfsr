@@ -133,6 +133,45 @@ class ConnectorsAPI(BaseAPI):
                 }
             raise
 
+    # ------------------------------------------------------------- definition
+    def definition(self, connector: str, *, version: str | None = None) -> dict[str, Any]:
+        """Fetch a connector's full definition (config schema + operations).
+
+        ``POST /api/integration/connectors/<name>/<version>/?format=json`` (the
+        endpoint forbids GET). ``version`` is resolved from the configured
+        connector when omitted. The returned dict includes ``config_schema``,
+        ``configuration``, and ``operations`` (each with ``operation``,
+        ``title``, ``parameters``, ``output_schema``).
+
+        Raises ``ValueError`` if the version can't be resolved.
+        """
+        version = version or self.resolve_version(connector)
+        if not version:
+            raise ValueError(
+                f"{connector!r} is not configured; pass version= to fetch its definition"
+            )
+        return self.client.post(
+            f"/api/integration/connectors/{connector}/{version}/?format=json", data={}
+        )
+
+    def operations(self, connector: str, *, version: str | None = None) -> list[dict[str, Any]]:
+        """List a connector's operations (the ``operations`` of :meth:`definition`).
+
+        Each entry carries ``operation`` (the api name), ``title``,
+        ``description``, ``parameters``, and ``output_schema``.
+        """
+        defn = self.definition(connector, version=version)
+        return defn.get("operations") or []
+
+    def files(self, connector_id: str) -> dict[str, Any]:
+        """Fetch a connector's source files (dev) via
+        ``GET /api/integration/connector/<id>/files/``.
+
+        ``connector_id`` is the connector's dev/install id (the ``id`` field of
+        :meth:`definition`). Dev-only; raises on connectors without file access.
+        """
+        return self.client.get(f"/api/integration/connector/{connector_id}/files/")
+
     # ------------------------------------------------------------- execute
     def execute(
         self,

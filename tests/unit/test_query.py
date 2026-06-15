@@ -80,3 +80,13 @@ def test_invalid_logic_and_direction():
         Query("XOR")
     with pytest.raises(ValueError, match="direction must be"):
         Query().sort("f", "sideways")
+
+
+def test_changed_operator_is_valueless():
+    body = Query().changed("status").to_body()
+    assert body["filters"] == [{"field": "status", "operator": "changed"}]
+
+
+def test_in_all_operator_takes_list():
+    body = Query().in_all("tags", ["a", "b"]).to_body()
+    assert body["filters"] == [{"field": "tags", "operator": "in_all", "value": ["a", "b"]}]

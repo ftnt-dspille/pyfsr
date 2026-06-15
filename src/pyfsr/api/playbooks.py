@@ -111,20 +111,33 @@ class PlaybooksAPI(BaseAPI):
             return [WorkflowRun(**m) for m in members]
         return members if raw else [_shape_run(m) for m in members]
 
-    def get(self, run_pk: str, *, raw: bool = False, typed: bool = False) -> dict[str, Any]:
+    def get(
+        self,
+        run_pk: str,
+        *,
+        raw: bool = False,
+        typed: bool = False,
+        step_detail: bool = False,
+    ) -> dict[str, Any]:
         """Fetch one run by its pk (the trailing id of a run's ``@id``).
 
         Tries the live table first, then historical. Returns a shaped dict by
         default; ``raw=True`` for the full record, or ``typed=True`` for a
         ``WorkflowRun``. ``typed`` wins over ``raw``.
+
+        Pass ``step_detail=True`` to ask FortiSOAR for the per-step execution
+        trace (``?step_detail=true``); the step results land under the run
+        record's ``workflow``/``result`` structure. ``step_detail`` implies
+        ``raw`` (the shaped view drops the trace), unless ``typed`` is set.
         """
         if not isinstance(run_pk, str) or not run_pk.strip():
             raise ValueError("get() requires a non-empty run pk")
         run_pk = run_pk.strip()
+        suffix = "&step_detail=true" if step_detail else ""
         last_err: Exception | None = None
         for path in _RUN_PATHS:
             try:
-                resp = self.client.get(f"{path}{run_pk}/?format=json")
+                resp = self.client.get(f"{path}{run_pk}/?format=json{suffix}")
             except Exception as e:  # noqa: BLE001 - fall through to historical
                 last_err = e
                 continue
@@ -135,10 +148,49 @@ class PlaybooksAPI(BaseAPI):
                     from ..models import WorkflowRun
 
                     return WorkflowRun(**resp)
+                if step_detail:
+                    return resp
                 return resp if raw else _shape_run(resp)
         if last_err is not None:
             raise last_err
         raise ValueError(f"run {run_pk!r} not found")
+
+    def run_env(self, run_pk: str) -> dict[str, Any]:
+        """Return a run's execution environment + per-step results.
+
+        Fetches the run with ``step_detail=true`` and reshapes it into the
+        Jinja-context view used when authoring/debugging a playbook::
+
+            {
+              "env":   {...},                      # the run's top-level env dict
+                                                   # (input, request, resources, …)
+              "status": "finished",
+              "steps": {                           # keyed by step display name
+                "Step Name": {"status": ..., "result": {...}},
+                ...
+              },
+            }
+
+        Step names are returned verbatim; in Jinja they are referenced as
+        ``vars.steps.<name with spaces replaced by underscores>``.
+        """
+        full = self.get(run_pk, step_detail=True)
+        steps: dict[str, Any] = {}
+        for s in full.get("steps") or []:
+            if not isinstance(s, dict):
+                continue
+            name = s.get("name")
+            if not name:
+                md = s.get("metadata") or {}
+                name = (md.get("metadata") or {}).get("name") or md.get("name")
+            if not name:
+                continue
+            steps[name] = {"status": s.get("status"), "result": s.get("result")}
+        return {
+            "env": full.get("env") or {},
+            "status": full.get("status"),
+            "steps": steps,
+        }
 
     # ---------------------------------------------------------------- resume
     def resume(
