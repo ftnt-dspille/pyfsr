@@ -10,6 +10,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .api.ai import AIApi
 from .api.alerts import AlertsAPI
 from .api.auth_config import AuthConfigAPI
 from .api.connectors import ConnectorsAPI
@@ -215,6 +216,7 @@ class FortiSOAR:
         self.auth_config: AuthConfigAPI = AuthConfigAPI(self)
         self.schedules: SchedulesAPI = SchedulesAPI(self)
         self.users: UsersAPI = UsersAPI(self)
+        self.ai: AIApi = AIApi(self)
 
     def _log_request(self, method: str, url: str, params: dict, data: dict, headers: dict) -> None:
         """Log request details when verbose mode is enabled."""
