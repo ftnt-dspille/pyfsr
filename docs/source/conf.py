@@ -1,14 +1,25 @@
 import os
 import sys
+from datetime import date
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 
 # Add the src directory to the system path
 sys.path.insert(0, os.path.abspath("../../src"))
 
 # -- Project information -----------------------------------------------------
 project = "pyfsr"
-copyright = "2024, Dylan Spille"
 author = "Dylan Spille"
-release = "0.2.2"
+copyright = f"{date.today().year}, {author}"
+
+# Single source of truth: derive the version from the installed package
+# (hatch-vcs sets it from the git tag), so the docs never drift from a
+# hardcoded number. Falls back gracefully if the package isn't installed.
+try:
+    release = _pkg_version("pyfsr")
+except PackageNotFoundError:  # not installed (e.g. bare checkout)
+    release = "0.0.0+unknown"
+version = ".".join(release.split(".")[:2])  # short X.Y for the header
 
 # Extensions
 extensions = [
