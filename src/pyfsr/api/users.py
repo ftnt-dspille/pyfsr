@@ -116,7 +116,8 @@ class UsersAPI(BaseAPI):
             firstname: First name.
             lastname: Last name.
             email: Email address.
-            roles: Role UUIDs **or** friendly names (e.g. ``["SOC Analyst"]``). At least one required.
+            roles: Role UUIDs **or** friendly names (e.g. ``["SOC Analyst"]``).
+                At least one required.
             access_type: ``"Named"`` (default) or ``"Concurrent"``.
             active: Whether the account is active on creation. Defaults to ``True``.
             department: Optional department name.
