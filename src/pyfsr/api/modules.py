@@ -90,8 +90,9 @@ class ModulesAPI(BaseAPI):
         self._modules = mods
         return mods
 
-    def describe(self, module: str, *, refresh: bool = False,
-                 with_values: bool = False) -> dict[str, Any]:
+    def describe(
+        self, module: str, *, refresh: bool = False, with_values: bool = False
+    ) -> dict[str, Any]:
         """Describe one module's fields.
 
         Returns ``{module, label, plural, field_count, fields}`` where each field
@@ -227,8 +228,7 @@ class ModulesAPI(BaseAPI):
                 hits.append({"module": mod["type"], "field": f})
         return hits
 
-    def format_module(self, module: str, *, refresh: bool = False,
-                      with_values: bool = True) -> str:
+    def format_module(self, module: str, *, refresh: bool = False, with_values: bool = True) -> str:
         """Return a human-readable description of a module and its fields.
 
         Handy for a quick "print one module as a sample" — e.g.

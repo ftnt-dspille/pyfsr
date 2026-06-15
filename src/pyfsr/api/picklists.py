@@ -201,8 +201,9 @@ class PicklistsAPI(BaseAPI):
                     continue
                 valid = self.options(picklist)
                 if report is not None:
-                    report.append({"field": k, "value": v, "picklist": picklist,
-                                   "valid_values": valid})
+                    report.append(
+                        {"field": k, "value": v, "picklist": picklist, "valid_values": valid}
+                    )
                 if strict:
                     raise PicklistResolutionError(k, v, picklist, valid)
             out[k] = v

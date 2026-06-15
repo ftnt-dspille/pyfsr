@@ -9,7 +9,7 @@ in-product editor and the "Clone Module" playbook use:
 - **Published** lives at ``/api/3/model_metadatas`` — the committed schema records read.
 - **Publish** is a single global ``PUT /api/publish`` that promotes *all* pending staged
   changes on the appliance to live. It is **appliance-wide**, not per-module — see
-  :meth:`publish`.
+  :meth:`ModulesAdminAPI.publish`.
 
 A module is a staging record with an ``attributes`` list; each attribute (field) carries a
 ``type`` (the storage type, e.g. ``text`` / ``json`` / ``integer``) and a ``formType`` (the
@@ -270,10 +270,12 @@ class ModulesAdminAPI(BaseAPI):
         status = getattr(exc, "status_code", None)
         if isinstance(status, int) and status >= 500:
             return True
-        text = " ".join(
-            str(getattr(exc, attr, "") or "")
-            for attr in ("message", "error_type")
-        ).lower() or str(exc).lower()
+        text = (
+            " ".join(
+                str(getattr(exc, attr, "") or "") for attr in ("message", "error_type")
+            ).lower()
+            or str(exc).lower()
+        )
         return any(marker in text for marker in _PUBLISH_TRANSIENT_MARKERS)
 
     def _wait_until_ready(self, timeout: float, poll_interval: float) -> None:
@@ -296,8 +298,7 @@ class ModulesAdminAPI(BaseAPI):
                 last_exc = exc
             if time.monotonic() >= deadline:
                 raise TimeoutError(
-                    f"publish did not complete within {timeout}s "
-                    f"(last appliance state: {last_exc})"
+                    f"publish did not complete within {timeout}s (last appliance state: {last_exc})"
                 )
             time.sleep(poll_interval)
 
