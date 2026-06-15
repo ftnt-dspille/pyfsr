@@ -178,6 +178,22 @@ def _h_get_playbook_run(client, *, run_pk) -> Any:
     return client.playbooks.get(run_pk)
 
 
+def _h_investigate_alert(client, *, ref, wait=False, timeout=600) -> Any:
+    return client.ai.investigate_alert(ref, wait=bool(wait), timeout=timeout)
+
+
+def _h_get_investigation_result(client, *, task_id) -> Any:
+    return {"status": client.ai.get_status(task_id), "result": client.ai.get_result(task_id)}
+
+
+def _h_list_ai_config(client) -> Any:
+    return {
+        "features_enabled": client.ai.features_enabled(),
+        "llm_configs": client.ai.list_llm_configs(),
+        "mcp_servers": client.ai.list_mcp_servers(),
+    }
+
+
 # --------------------------------------------------------------------------- registry
 
 _TOOLS: tuple[ToolSpec, ...] = (
@@ -414,6 +430,44 @@ _TOOLS: tuple[ToolSpec, ...] = (
         "Fetch one playbook run by its pk (the trailing id of a run's @id).",
         _obj({"run_pk": {"type": "string", "description": "The run's primary key."}}, ["run_pk"]),
         _h_get_playbook_run,
+    ),
+    ToolSpec(
+        "investigate_alert",
+        "Trigger a FortiAI agentic investigation of an alert (normalize → hypothesize → plan → "
+        "gather evidence over MCP → verdict). Pass an alert reference; set wait=true to block for "
+        "the final verdict, or wait=false to return a {task_id} to poll with "
+        "get_investigation_result.",
+        _obj(
+            {
+                "ref": _REF,
+                "wait": {
+                    "type": "boolean",
+                    "description": "Block until the investigation reaches a verdict.",
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Max seconds to wait when wait=true (default 600).",
+                },
+            },
+            ["ref"],
+        ),
+        _h_investigate_alert,
+    ),
+    ToolSpec(
+        "get_investigation_result",
+        "Fetch the status and current result/verdict of a FortiAI investigation by its task_id.",
+        _obj(
+            {"task_id": {"type": "string", "description": "The investigation task id."}},
+            ["task_id"],
+        ),
+        _h_get_investigation_result,
+    ),
+    ToolSpec(
+        "list_ai_config",
+        "Report the FortiAI configuration: whether AI features are enabled, the configured LLM "
+        "reasoning profiles, and the registered MCP servers the agents can call.",
+        _obj({}),
+        _h_list_ai_config,
     ),
 )
 

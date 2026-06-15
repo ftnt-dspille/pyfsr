@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `client.ai` (`AIApi`): drive the FortiAI agentic investigation service.
+  - `investigate_alert()` / `start_alert_investigation()` / `wait_for_result()` /
+    `get_status()` / `get_result()` — trigger and poll the triage pipeline
+    (normalize → hypothesize → plan → gather over MCP → verdict).
+  - `enable_features()` / `features_enabled()` — the AI features / terms-acceptance
+    gate (`publicValues.ai_feature` in System Settings).
+  - `list_providers()` / `list_llm_configs()` / `create_llm_config()` /
+    `test_llm_config()` / `delete_llm_config()` — LLM reasoning-profile management.
+  - `list_mcp_servers()` / `validate_mcp_server()` / `register_mcp_server()` /
+    `delete_mcp_server()` — MCP-server registration for the investigation agents.
+- Agent tool registry (`pyfsr.tools`, also exposed via `python -m pyfsr.mcp`):
+  `investigate_alert`, `get_investigation_result`, and `list_ai_config` tools.
+
 ## [0.4.0] - 2026-06-15
 
 ### Added
