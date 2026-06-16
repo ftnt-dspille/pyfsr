@@ -45,12 +45,17 @@ class AlertsAPI(BaseAPI):
         super().__init__(client)
         self.module = "alerts"
 
-    def create(self, **data: dict[str, Any]) -> dict[str, Any]:
+    def create(self, *, resolve_picklists: bool = True, **data: Any) -> dict[str, Any]:
         """
         Create a new alert in FortiSOAR.
 
         Args:
-            **data (Dict[str, Any]): Keyword arguments containing alert configuration.
+            resolve_picklists (bool): When True (default), friendly picklist
+                values (e.g. ``severity="High"``) are mapped to the IRIs the API
+                stores before sending. Pass ``resolve_picklists=False`` to skip
+                that (and the metadata lookup it needs) when every value is
+                already an IRI.
+            **data (Any): Keyword arguments containing alert configuration.
                 The following keys are expected:
 
                 - **name** (*str*): Name of the alert.
@@ -63,13 +68,15 @@ class AlertsAPI(BaseAPI):
         Example:
             .. code-block:: python
 
-                alert_data = {
-                    "name": "Test Alert",
-                    "description": "This is a test alert",
-                    "severity": "High"
-                }
-                response = client.alerts.create(**alert_data)
+                # Friendly picklist values are resolved automatically.
+                response = client.alerts.create(
+                    name="Test Alert",
+                    description="This is a test alert",
+                    severity="High",
+                )
         """
+        if resolve_picklists:
+            data = self.client.picklists.resolve_record_fields(self.module, data)
         return self.client.post(f"/api/3/{self.module}", data=data)
 
     def list(self, params: dict | None = None) -> dict[str, Any]:
@@ -112,13 +119,17 @@ class AlertsAPI(BaseAPI):
 
         return self.client.get(f"/api/3/{self.module}/{alert_id}")
 
-    def update(self, alert_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    def update(
+        self, alert_id: str, data: dict[str, Any], *, resolve_picklists: bool = True
+    ) -> dict[str, Any]:
         """
         Update an existing alert.
 
         Args:
             alert_id: The unique identifier of the alert
             data: Updated alert properties
+            resolve_picklists: When True (default), friendly picklist values are
+                mapped to IRIs before sending; pass False to skip that.
 
         Returns:
             Dict[str, Any]: The updated alert object
@@ -128,9 +139,11 @@ class AlertsAPI(BaseAPI):
 
                 client.alerts.update("alert-123", {
                     "severity": "Critical",
-                  "description": "Updated description"
+                    "description": "Updated description",
                 })
         """
+        if resolve_picklists:
+            data = self.client.picklists.resolve_record_fields(self.module, data)
         return self.client.put(f"/api/3/{self.module}/{alert_id}", data=data)
 
     def delete(self, alert_id: str) -> None:

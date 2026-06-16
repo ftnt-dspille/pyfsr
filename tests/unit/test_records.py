@@ -6,12 +6,25 @@ from pyfsr import Query, RecordSet
 from pyfsr.records import resolve_record_path
 
 
+class _NoopPicklists:
+    """Identity picklist resolver, no HTTP call.
+
+    create/update/upsert resolve picklists by default now; these tests exercise
+    write *mechanics*, so resolution is a passthrough that doesn't perturb the
+    recorded call sequence.
+    """
+
+    def resolve_record_fields(self, module, fields, **kwargs):
+        return fields
+
+
 class FakeClient:
     """Records get/post/put/delete calls and returns scripted responses."""
 
     def __init__(self, responses=None):
         self.calls = []
         self.responses = responses or {}
+        self.picklists = _NoopPicklists()
 
     def get(self, endpoint, params=None, **kwargs):
         self.calls.append(("GET", endpoint, params, None))

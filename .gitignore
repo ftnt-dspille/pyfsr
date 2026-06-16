@@ -45,3 +45,9 @@ src/pyfsr/_version.py
 
 # Planning docs (may accrue infra detail / creds) — keep local
 docs/plans/
+
+# Generated investigation dumps (real incident data: internal IPs, hostnames,
+# telemetry) — keep local, never commit
+examples/fortisiem_investigation_*.json
+examples/alert_investigation.txt
+examples/SIEM_MCP_INFLUENCE_REPORT.md
