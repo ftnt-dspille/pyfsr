@@ -52,6 +52,13 @@ Generic CRUD over any module, typed models, and picklist resolution.
 Build FortiSOAR queries fluently with the `Query` DSL and paginate results.
 :::
 
+:::{grid-item-card} 🧱 Module Administration
+:link: guides/module-admin
+:link-type: doc
+
+Create modules, add and alter fields, track pending changes, and publish.
+:::
+
 :::{grid-item-card} 🤖 AI & Agents
 :link: guides/ai-agents
 :link-type: doc
@@ -76,6 +83,7 @@ getting-started
 guides/authentication
 guides/records
 guides/querying
+guides/module-admin
 guides/ai-agents
 ```
 
