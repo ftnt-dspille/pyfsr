@@ -19,16 +19,29 @@ try:
     release = _pkg_version("pyfsr")
 except PackageNotFoundError:  # not installed (e.g. bare checkout)
     release = "0.0.0+unknown"
-version = ".".join(release.split(".")[:2])  # short X.Y for the header
+# Clean X.Y.Z for the header: strip any hatch-vcs dev/local suffix
+# (e.g. "0.4.2.dev9+gbdfbcab0b.d20260616" -> "0.4.2") so the patch number
+# shows without the long, noisy build metadata overflowing the brand.
+version = ".".join(release.split("+")[0].split(".")[:3])
 
-# Extensions
+# -- Extensions --------------------------------------------------------------
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
-    "autoapi.extension",
     "sphinx.ext.intersphinx",
+    "autoapi.extension",
+    "myst_parser",  # author guides in Markdown (.md) alongside .rst
+    "sphinx_design",  # grid cards / tabs on the landing page
+    "sphinx_copybutton",  # one-click copy on code blocks
 ]
+
+# Author guides in Markdown; keep .rst working for the AutoAPI output.
+source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
+
+# MyST niceties: colon-fences (for sphinx-design directives) and smart links.
+myst_enable_extensions = ["colon_fence", "deflist"]
+myst_heading_anchors = 3
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
@@ -58,10 +71,16 @@ nitpick_ignore = [
     ("py:class", "Server"),
 ]
 
-# AutoAPI configuration
+# -- AutoAPI configuration ---------------------------------------------------
 autoapi_type = "python"
-autoapi_dirs = ["../../src/pyfsr"]  # Relative path to the Python package
-autoapi_keep_files = True  # Keep intermediate files for debugging
+autoapi_dirs = ["../../src/pyfsr"]
+# `pyfsr.resources` is a data-only package (ships the bundled OpenAPI spec); it
+# has no public Python API, so AutoAPI would emit an all-but-empty page. Skip it.
+autoapi_ignore = ["*/resources/*"]
+autoapi_keep_files = True
+# Drop AutoAPI's own top-level toctree entry; we surface it under our
+# "API Reference" section instead, so there's a single, unambiguous nav path.
+autoapi_add_toctree_entry = False
 autoapi_options = [
     "members",
     "undoc-members",
@@ -72,36 +91,52 @@ autoapi_options = [
     # "duplicate object description" warnings that fail the `-W` build.
 ]
 
-# HTML Theme
-html_theme = "pydata_sphinx_theme"
+# -- HTML output -------------------------------------------------------------
+html_theme = "furo"
 templates_path = ["_templates"]
 html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 
-# Keep the navbar brand short. The default title is "{project} {release}
-# documentation"; with hatch-vcs dev versions that becomes
-# "pyfsr 0.3.1.dev4+g… documentation", which overflows and overlaps the nav
-# links. Show just the project name in the bar (the full version still appears
-# in the page metadata / footer).
-html_title = project
-html_short_title = project
+html_title = f"pyfsr {version}"
 
+# Furo theme tuning: brand colors (FortiSOAR-ish red/slate), GitHub link,
+# and an edit-friendly footer. Light + dark variants both defined.
 html_theme_options = {
+    "sidebar_hide_name": False,
     "navigation_with_keys": True,
-    "show_prev_next": False,
-    # Surface the repo without crowding the brand text.
-    "icon_links": [
+    "light_css_variables": {
+        "color-brand-primary": "#c8102e",
+        "color-brand-content": "#c8102e",
+    },
+    "dark_css_variables": {
+        "color-brand-primary": "#ff5a6e",
+        "color-brand-content": "#ff5a6e",
+    },
+    "footer_icons": [
         {
             "name": "GitHub",
             "url": "https://github.com/ftnt-dspille/pyfsr",
-            "icon": "fa-brands fa-github",
-        }
+            "html": (
+                '<svg stroke="currentColor" fill="currentColor" '
+                'stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" '
+                'd="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38'
+                "0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13"
+                "-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66"
+                ".07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15"
+                "-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 "
+                "1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 "
+                "1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 "
+                '1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z">'
+                "</path></svg>"
+            ),
+            "class": "",
+        },
     ],
 }
 
-# Custom static files
-html_css_files = [
-    "custom.css",  # Example custom CSS
-]
+# Don't try to copy the prompt characters (>>> / $) when using the copy button.
+copybutton_prompt_text = r">>> |\.\.\. |\$ "
+copybutton_prompt_is_regexp = True
 
 # Exclude patterns
 exclude_patterns = ["build"]

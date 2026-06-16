@@ -126,12 +126,12 @@ def _h_query_records(
     return project(page, fields=fields, summary=summary)
 
 
-def _h_create_record(client, *, module, data, resolve_picklists=False) -> Any:
+def _h_create_record(client, *, module, data, resolve_picklists=True) -> Any:
     rec = client.records(module).create(data, resolve_picklists=resolve_picklists)
     return to_jsonable(rec)
 
 
-def _h_update_record(client, *, module, ref, data, resolve_picklists=False) -> Any:
+def _h_update_record(client, *, module, ref, data, resolve_picklists=True) -> Any:
     rec = client.records(module).update(ref, data, resolve_picklists=resolve_picklists)
     return to_jsonable(rec)
 
@@ -277,8 +277,8 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "create_record",
-        "Create a record in a module. data is a field->value mapping; set resolve_picklists=true "
-        "to pass friendly picklist values (e.g. 'High') and have them mapped to IRIs.",
+        "Create a record in a module. data is a field->value mapping; friendly picklist "
+        "values (e.g. 'High') map to IRIs automatically — set resolve_picklists=false to skip.",
         _obj(
             {
                 "module": _MODULE,
@@ -288,7 +288,8 @@ _TOOLS: tuple[ToolSpec, ...] = (
                 },
                 "resolve_picklists": {
                     "type": "boolean",
-                    "description": "Map friendly picklist values to IRIs before sending.",
+                    "description": "Map friendly picklist values to IRIs before sending "
+                    "(default true; set false to skip).",
                 },
             },
             ["module", "data"],
@@ -305,7 +306,8 @@ _TOOLS: tuple[ToolSpec, ...] = (
                 "data": {"type": "object", "description": "Field -> value mapping to update."},
                 "resolve_picklists": {
                     "type": "boolean",
-                    "description": "Map friendly picklist values to IRIs before sending.",
+                    "description": "Map friendly picklist values to IRIs before sending "
+                    "(default true; set false to skip).",
                 },
             },
             ["module", "ref", "data"],

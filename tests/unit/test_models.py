@@ -4,10 +4,16 @@ from pyfsr import Alert, BaseRecord, Incident, RecordSet, model_for
 from pyfsr.models import MODEL_REGISTRY
 
 
+class _NoopPicklists:
+    def resolve_record_fields(self, module, fields, **kwargs):
+        return fields
+
+
 class FakeClient:
     def __init__(self, responses=None):
         self.calls = []
         self.responses = responses or {}
+        self.picklists = _NoopPicklists()
 
     def get(self, endpoint, params=None, **kwargs):
         self.calls.append(("GET", endpoint, params, None))

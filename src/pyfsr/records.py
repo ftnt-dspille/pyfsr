@@ -254,14 +254,15 @@ class RecordSet:
         data: dict[str, Any],
         *,
         raw: bool = False,
-        resolve_picklists: bool = False,
+        resolve_picklists: bool = True,
     ) -> Any:
         """Create a record via ``POST /api/3/<module>``.
 
         ``data`` may be a dict or a model instance; the created record is
-        returned parsed (or raw, with ``raw=True``). Pass
-        ``resolve_picklists=True`` to map friendly picklist values (e.g.
-        ``"High"``) to their IRIs via ``client.picklists`` before sending.
+        returned parsed (or raw, with ``raw=True``). Friendly picklist values
+        (e.g. ``"High"``) are mapped to their IRIs via ``client.picklists``
+        before sending — pass ``resolve_picklists=False`` to skip that (and the
+        metadata lookup it needs) when every value is already an IRI.
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
@@ -275,12 +276,12 @@ class RecordSet:
         data: dict[str, Any],
         *,
         raw: bool = False,
-        resolve_picklists: bool = False,
+        resolve_picklists: bool = True,
     ) -> Any:
         """Update a record via ``PUT /api/3/<module>/<uuid>``.
 
-        Pass ``resolve_picklists=True`` to map friendly picklist values to IRIs
-        before sending (see :meth:`create`).
+        Friendly picklist values are mapped to IRIs before sending; pass
+        ``resolve_picklists=False`` to skip that (see :meth:`create`).
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
@@ -294,15 +295,15 @@ class RecordSet:
         data: dict[str, Any],
         *,
         raw: bool = False,
-        resolve_picklists: bool = False,
+        resolve_picklists: bool = True,
     ) -> Any:
         """Insert-or-update one record via ``POST /api/3/upsert/<module>``.
 
         FortiSOAR matches an existing row by the record's natural key (its
         ``uuid`` / ``@id`` when present, else the module's unique field) and
         updates it, otherwise creates a new one. ``data`` may be a dict or a
-        model instance; pass ``resolve_picklists=True`` to map friendly picklist
-        values to IRIs first (see :meth:`create`).
+        model instance; friendly picklist values are mapped to IRIs first —
+        pass ``resolve_picklists=False`` to skip that (see :meth:`create`).
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
@@ -314,7 +315,7 @@ class RecordSet:
         self,
         rows: list[dict[str, Any]],
         *,
-        resolve_picklists: bool = False,
+        resolve_picklists: bool = True,
     ) -> dict[str, Any]:
         """Insert-or-update many records via ``POST /api/3/bulkupsert/<module>``.
 
@@ -322,7 +323,8 @@ class RecordSet:
         same way as :meth:`upsert`. The raw server response is returned
         unparsed — bulk endpoints reply with a multi-status (``207``) envelope
         whose per-row results the caller usually wants to inspect directly.
-        Pass ``resolve_picklists=True`` to resolve picklist values on every row.
+        Friendly picklist values are resolved on every row; pass
+        ``resolve_picklists=False`` to skip that.
         """
         payload: list[dict[str, Any]] = []
         for row in rows:

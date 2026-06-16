@@ -216,11 +216,18 @@ def test_recordset_create_resolves_picklists_opt_in():
     assert data["severity"] == "/api/3/picklists/sev-high"
 
 
-def test_recordset_create_no_resolution_by_default():
+def test_recordset_create_resolves_picklists_by_default():
     api, client = _api()
     RecordSet(client, "alerts", typed=False).create({"severity": "High"})
     _, data = client.post_calls[0]
-    assert data["severity"] == "High"  # untouched
+    assert data["severity"] == "/api/3/picklists/sev-high"  # resolved by default
+
+
+def test_recordset_create_resolution_opt_out():
+    api, client = _api()
+    RecordSet(client, "alerts", typed=False).create({"severity": "High"}, resolve_picklists=False)
+    _, data = client.post_calls[0]
+    assert data["severity"] == "High"  # untouched when opted out
 
 
 def test_recordset_update_resolves_picklists_opt_in():
