@@ -25,9 +25,7 @@ from .base import BaseAPI
 
 _RUN_PATHS = ("/api/wf/api/workflows/", "/api/wf/api/historical-workflows/")
 
-_UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
-)
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
 
 def _looks_like_uuid(s: str) -> bool:
