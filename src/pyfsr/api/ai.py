@@ -167,9 +167,7 @@ class AIApi(BaseAPI):
         task_id = (rec or {}).get(ALERT_TRIAGE_TASK_KEY)
         return task_id or None
 
-    def get_alert_investigation_status(
-        self, alert: dict[str, Any] | str
-    ) -> dict[str, Any] | None:
+    def get_alert_investigation_status(self, alert: dict[str, Any] | str) -> dict[str, Any] | None:
         """Return ``{"task_id", "status"}`` for an alert's current investigation.
 
         Convenience over :meth:`get_investigation_for_alert` +

@@ -395,10 +395,18 @@ def test_mcp_tool_catalog_maps_tools_to_servers():
         responses={
             ("GET", "/api/3/mcp_configurations"): {
                 "hydra:member": [
-                    {"uuid": "s1", "name": "FortiSIEM", "url": "https://siem",
-                     "authentication": '{"type":"BEARER","value":"t"}'},
-                    {"uuid": "s2", "name": "SOC Framework", "url": "https://soc",
-                     "authentication": '{"type":"FSR"}'},
+                    {
+                        "uuid": "s1",
+                        "name": "FortiSIEM",
+                        "url": "https://siem",
+                        "authentication": '{"type":"BEARER","value":"t"}',
+                    },
+                    {
+                        "uuid": "s2",
+                        "name": "SOC Framework",
+                        "url": "https://soc",
+                        "authentication": '{"type":"FSR"}',
+                    },
                 ]
             }
         }
@@ -406,7 +414,9 @@ def test_mcp_tool_catalog_maps_tools_to_servers():
     cat = AIApi(c).mcp_tool_catalog()
     assert cat["get_incident_by_id"]["server"] == "FortiSIEM"
     assert cat["hunt_ioc_siem"] == {
-        "server": "SOC Framework", "server_uuid": "s2", "description": "hunt"
+        "server": "SOC Framework",
+        "server_uuid": "s2",
+        "description": "hunt",
     }
 
 
@@ -454,15 +464,28 @@ _RESULT = {
     ],
     "logs": [
         {
-            "index": 2, "question": "IP reputation?", "agent_label": "Threat Intelligence Provider",
-            "agent_hint": "TI", "params": {"ioc": [{"value": "1.2.3.4"}]}, "result": "No",
-            "evidence": "No reputation available.", "status": "success",
-            "supports": [4], "weakens": ["1"], "primary_information_type": ["Threat Intelligence"],
+            "index": 2,
+            "question": "IP reputation?",
+            "agent_label": "Threat Intelligence Provider",
+            "agent_hint": "TI",
+            "params": {"ioc": [{"value": "1.2.3.4"}]},
+            "result": "No",
+            "evidence": "No reputation available.",
+            "status": "success",
+            "supports": [4],
+            "weakens": ["1"],
+            "primary_information_type": ["Threat Intelligence"],
         },
         {
-            "index": 3, "question": "Asset critical?", "agent_label": "Asset Context Provider",
-            "params": {"asset": "host1"}, "result": "Normal", "evidence": "Not critical.",
-            "status": "success", "supports": ["1"], "weakens": [4],
+            "index": 3,
+            "question": "Asset critical?",
+            "agent_label": "Asset Context Provider",
+            "params": {"asset": "host1"},
+            "result": "Normal",
+            "evidence": "Not critical.",
+            "status": "success",
+            "supports": ["1"],
+            "weakens": [4],
         },
     ],
 }
