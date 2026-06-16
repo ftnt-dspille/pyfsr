@@ -41,7 +41,22 @@ list providers                                    ``GET  /api/ai/llm/allowed-pro
 list MCP servers                                  ``GET  /api/ai/mcp``
 validate an MCP server config                     ``POST /api/ai/mcp/validate``
 register an MCP server                            ``POST /api/3/mcp_configurations``
+update a registered MCP server                    ``PUT  /api/3/mcp_configurations/{uuid}``
+list AI agents                                    ``GET  /api/ai/agent/``
+get one AI agent                                  ``GET  /api/ai/agent/{name}/{version}``
+get an agent's configuration                      ``GET  /api/ai/agent/config/{name}/{version}``
+update an agent's configuration                   ``POST /api/ai/agent/config``
+get/update the default agent configuration        ``GET/POST /api/ai/agent/config/default``
+activate/deactivate agents                        ``POST /api/ai/agent/activate``
 ================================================  ==================================================
+
+Agent ↔ MCP binding
+-------------------
+Which MCP servers a triage agent may call is stored on the agent's
+configuration as ``config["mcp_server"]`` — a list of registered MCP-server
+UUIDs. To let an agent reach a newly-registered server (e.g. FortiSIEM), append
+its uuid to that list and ``PUT`` the config back; the high-level
+:meth:`AIApi.allow_mcp_server_for_agent` does the read-modify-write for you.
 """
 
 from __future__ import annotations
@@ -54,6 +69,9 @@ from .base import BaseAPI
 
 #: Triage/agent statuses that mean the pipeline has stopped running.
 TERMINAL_STATUSES = frozenset({"completed", "failed", "error", "cancelled"})
+
+#: Key on an agent's ``config`` dict holding the list of allowed MCP-server UUIDs.
+AGENT_CONFIG_MCP_KEY = "mcp_server"
 
 
 class AIApi(BaseAPI):
@@ -259,9 +277,224 @@ class AIApi(BaseAPI):
             config["authentication"] = json.dumps(auth)
         return self.client.post("/api/3/mcp_configurations", data=config)
 
+    def update_mcp_server(self, uuid: str, config: dict[str, Any]) -> dict[str, Any]:
+        """Update a registered MCP server (``PUT /api/3/mcp_configurations/{uuid}``).
+
+        Use this to rotate a credential whose token expires — e.g. re-stamping a
+        FortiSIEM ``bearer`` value after minting a fresh OAuth token (FortiSOAR's
+        MCP client only forwards a *static* credential; it does not run the
+        OAuth ``client_credentials`` grant itself, so the token must be refreshed
+        out-of-band and written back here).
+
+        ``authentication`` is JSON-encoded for you exactly as in
+        :meth:`register_mcp_server`. As the UI does, ``uuid`` is dropped from the
+        request body (it goes in the URL, not the payload).
+        """
+        config = dict(config)
+        config.pop("uuid", None)  # UI deletes uuid from the body on PUT
+        auth = config.get("authentication")
+        if isinstance(auth, dict):
+            config["authentication"] = json.dumps(auth)
+        return self.client.put(f"/api/3/mcp_configurations/{uuid}", data=config)
+
+    def save_mcp_server(self, config: dict[str, Any], *, validate: bool = True) -> dict[str, Any]:
+        """Validate then persist an MCP server — the exact flow the FortiSOAR UI uses.
+
+        The UI gates *Save* on a successful *Test*, so this mirrors it: it first
+        calls :meth:`validate_mcp_server` (with ``authentication`` as an object)
+        and refuses to persist on failure, then creates or updates the record
+        (``authentication`` JSON-encoded). If ``config`` carries a ``uuid`` it
+        updates that row (``PUT``); otherwise it creates a new one (``POST``).
+
+        Pass ``validate=False`` to skip the probe (e.g. re-saving a server whose
+        token can't be re-validated from a stripped UI form).
+
+        Returns the persisted record.
+        """
+        if validate:
+            result = self.validate_mcp_server(config)
+            if not result.get("valid"):
+                raise ValueError(
+                    f"MCP server did not validate, not saving: {result.get('message') or result}"
+                )
+        uuid = config.get("uuid")
+        if uuid:
+            return self.update_mcp_server(uuid, config)
+        return self.register_mcp_server(config)
+
     def delete_mcp_server(self, uuid: str) -> None:
         """Delete a registered MCP server by uuid."""
         self.client.delete(f"/api/3/mcp_configurations/{uuid}")
+
+    # ----------------------------------------------------------- agents
+    def list_agents(self, **filters: Any) -> list[dict[str, Any]]:
+        """List the installed AI agents (``GET /api/ai/agent/``).
+
+        Optional keyword filters are passed straight through as query params —
+        the service recognizes ``category``, ``status``, ``active``,
+        ``installed``, ``system`` and ``publisher``. Each item is an agent
+        record with ``name``, ``version``, ``label``, ``uuid``, ``active`` etc.
+        """
+        params = {k: v for k, v in filters.items() if v is not None}
+        return _as_list(self.client.get("/api/ai/agent/", params=params or None))
+
+    def get_agent(self, name: str, version: str) -> dict[str, Any]:
+        """Fetch one AI agent's details (``GET /api/ai/agent/{name}/{version}``)."""
+        resp = self.client.get(f"/api/ai/agent/{name}/{version}")
+        return resp if isinstance(resp, dict) else {"agent": resp}
+
+    def get_agent_config(self, name: str, version: str) -> dict[str, Any]:
+        """Fetch an agent's configuration (``GET /api/ai/agent/config/{name}/{version}``).
+
+        Returns the ``AiAgentConfigurationDTO`` shape::
+
+            {"agent_name", "agent_version", "name", "default",
+             "config": {"config_type", "llm_provider",
+                        "mcp_server": [<uuid>, ...], "masking_agent"},
+             "config_id"}
+
+        The ``config["mcp_server"]`` list is the per-agent allowlist of MCP
+        servers the agent may call. An agent on the *default* config reports
+        ``config["config_type"] == "default"``.
+        """
+        resp = self.client.get(f"/api/ai/agent/config/{name}/{version}")
+        return resp if isinstance(resp, dict) else {"config": resp}
+
+    def update_agent_config(
+        self,
+        agent_name: str,
+        agent_version: str,
+        config: dict[str, Any],
+        *,
+        name: str | None = None,
+        config_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist an agent's configuration (``POST /api/ai/agent/config``).
+
+        ``config`` is the inner config dict (``llm_provider``, ``mcp_server``,
+        ``masking_agent`` …). Prefer the higher-level
+        :meth:`allow_mcp_server_for_agent` when all you want is to grant the
+        agent one more MCP server.
+
+        Note: this is a ``POST`` even though it updates — fsr-ai's ``POST
+        /config`` handler upserts, and (importantly) the FortiSOAR API gateway
+        only authorizes ``POST ^agent/config$`` against ``update.ai_agents``; a
+        ``PUT`` matches no ACL rule and is rejected with ``Access Denied``.
+        """
+        body: dict[str, Any] = {
+            "agent_name": agent_name,
+            "agent_version": agent_version,
+            "config": config,
+        }
+        if name is not None:
+            body["name"] = name
+        if config_id is not None:
+            body["config_id"] = config_id
+        return self.client.post("/api/ai/agent/config", data=body)
+
+    def get_default_agent_config(self) -> dict[str, Any]:
+        """Fetch the default agent configuration (``GET /api/ai/agent/config/default``)."""
+        resp = self.client.get("/api/ai/agent/config/default")
+        return resp if isinstance(resp, dict) else {"config": resp}
+
+    def update_default_agent_config(
+        self, config: dict[str, Any], *, name: str | None = None
+    ) -> dict[str, Any]:
+        """Update the default agent configuration (``POST /api/ai/agent/config/default``).
+
+        Agents left on the default config inherit this ``mcp_server`` list, so
+        appending a uuid here grants the server to *every* such agent at once.
+        """
+        body: dict[str, Any] = {"config": config, "default": True}
+        if name is not None:
+            body["name"] = name
+        return self.client.post("/api/ai/agent/config/default", data=body)
+
+    def activate_agent(self, uuids: list[str], *, active: bool = True) -> dict[str, Any]:
+        """Activate or deactivate agents by uuid (``POST /api/ai/agent/activate``)."""
+        return self.client.post(
+            "/api/ai/agent/activate", data={"uuids": uuids}, params={"active": active}
+        )
+
+    # -------------------------------------------------- agent ↔ MCP binding
+    def mcp_server_names(self) -> dict[str, str]:
+        """Return a ``{uuid: name}`` map of every registered MCP server.
+
+        Handy for turning an agent's raw ``mcp_server`` UUID allowlist into
+        human-readable names — see :meth:`list_agent_mcp_servers` with
+        ``friendly=True`` and :meth:`describe_agent_mcp_servers`.
+        """
+        return {
+            (m.get("id") or m.get("uuid")): m.get("name")
+            for m in self.list_mcp_servers()
+            if (m.get("id") or m.get("uuid"))
+        }
+
+    def list_agent_mcp_servers(
+        self, name: str, version: str, *, friendly: bool = False
+    ) -> list[str]:
+        """Return the MCP servers an agent is currently allowed to call.
+
+        By default returns the raw server UUIDs as stored on the agent config.
+        Pass ``friendly=True`` to get the registered server *names* instead
+        (unknown/unregistered UUIDs are returned unchanged).
+        """
+        config = self.get_agent_config(name, version).get("config") or {}
+        uuids = list(config.get(AGENT_CONFIG_MCP_KEY) or [])
+        if not friendly:
+            return uuids
+        names = self.mcp_server_names()
+        return [names.get(u, u) for u in uuids]
+
+    def describe_agent_mcp_servers(self, name: str, version: str) -> list[dict[str, str]]:
+        """Return the agent's allowed MCP servers as ``[{"uuid", "name"}, ...]``.
+
+        Pairs each allowlisted UUID with its registered name (``name`` falls
+        back to the UUID for anything not currently registered).
+        """
+        config = self.get_agent_config(name, version).get("config") or {}
+        uuids = list(config.get(AGENT_CONFIG_MCP_KEY) or [])
+        names = self.mcp_server_names()
+        return [{"uuid": u, "name": names.get(u, u)} for u in uuids]
+
+    def allow_mcp_server_for_agent(self, name: str, version: str, mcp_uuid: str) -> dict[str, Any]:
+        """Grant one agent access to an MCP server (read-modify-write of its config).
+
+        Appends ``mcp_uuid`` to the agent's ``config["mcp_server"]`` allowlist
+        (no-op if already present) and PUTs the config back. If the agent is on
+        the *default* config it is forked into its own config first, seeded from
+        the default, so other agents are unaffected.
+
+        Returns the updated ``AiAgentConfigurationDTO``. Takes effect on the next
+        investigation — no service restart required.
+        """
+        dto = self.get_agent_config(name, version) or {}
+        config = dict(dto.get("config") or {})
+        # An agent reported as "default" has no row of its own yet — seed from
+        # the default config so the write creates a dedicated, non-shared row.
+        if config.get("config_type") == "default" or not config:
+            config = dict((self.get_default_agent_config().get("config")) or {})
+            config.pop("config_type", None)
+        allowed = list(config.get(AGENT_CONFIG_MCP_KEY) or [])
+        if mcp_uuid not in allowed:
+            allowed.append(mcp_uuid)
+        config[AGENT_CONFIG_MCP_KEY] = allowed
+        return self.update_agent_config(
+            name, version, config, name=dto.get("name"), config_id=dto.get("config_id")
+        )
+
+    def disallow_mcp_server_for_agent(
+        self, name: str, version: str, mcp_uuid: str
+    ) -> dict[str, Any]:
+        """Revoke an agent's access to an MCP server (inverse of
+        :meth:`allow_mcp_server_for_agent`)."""
+        dto = self.get_agent_config(name, version) or {}
+        config = dict(dto.get("config") or {})
+        allowed = [u for u in (config.get(AGENT_CONFIG_MCP_KEY) or []) if u != mcp_uuid]
+        config[AGENT_CONFIG_MCP_KEY] = allowed
+        return self.update_agent_config(
+            name, version, config, name=dto.get("name"), config_id=dto.get("config_id")
+        )
 
     # ----------------------------------------------------------- internals
     def _fetch_alert(self, ref: str) -> dict[str, Any]:
