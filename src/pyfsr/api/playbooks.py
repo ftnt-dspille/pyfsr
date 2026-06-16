@@ -17,12 +17,28 @@ Example:
 
 from __future__ import annotations
 
+import re
 import urllib.parse
 from typing import Any
 
 from .base import BaseAPI
 
 _RUN_PATHS = ("/api/wf/api/workflows/", "/api/wf/api/historical-workflows/")
+
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
+)
+
+
+def _looks_like_uuid(s: str) -> bool:
+    return bool(_UUID_RE.match(s.strip()))
+
+
+def _alert_iri(ref: str) -> str:
+    """Expand a bare alert uuid/ref to a full ``/api/3/alerts/<uuid>`` IRI."""
+    if ref.startswith("/api/"):
+        return ref
+    return f"/api/3/alerts/{ref.rstrip('/').split('/')[-1].split(':')[-1]}"
 
 
 def _shape_run(m: dict[str, Any]) -> dict[str, Any]:
@@ -191,6 +207,47 @@ class PlaybooksAPI(BaseAPI):
             "status": full.get("status"),
             "steps": steps,
         }
+
+    # --------------------------------------------------------------- trigger
+    def trigger(
+        self,
+        playbook: str,
+        *,
+        records: list[str] | str | None = None,
+        inputs: dict[str, Any] | None = None,
+        env: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Manually trigger a playbook and return its run handle.
+
+        POSTs to ``/api/triggers/1/notrigger/<playbook_uuid>`` — the route the
+        FortiSOAR UI uses for the *Execute* button on a manual-trigger playbook —
+        and returns ``{"task_id": ...}`` for the started run. Track it with
+        :meth:`runs` / :meth:`get` (the ``task_id`` matches a run record's).
+
+        Args:
+            playbook: the playbook to run — a uuid, or a name resolved to its
+                uuid (the playbook must have a *manual* trigger step).
+            records: record IRI(s) to pass in as the trigger's selected records
+                (e.g. ``"/api/3/alerts/<uuid>"`` or a list). A bare uuid/ref is
+                expanded to an ``/api/3/alerts/`` IRI.
+            inputs: values for the playbook's manual input fields, sent as the
+                request body's ``inputs``.
+            env: extra keys merged into the POST body verbatim, for the rare
+                playbook expecting a custom trigger envelope.
+
+        Returns:
+            The trigger response, typically ``{"task_id": "<run-uuid>"}``.
+        """
+        uuid = playbook if _looks_like_uuid(playbook) else self._resolve_uuid(playbook)
+        if not uuid:
+            raise ValueError(f"playbook {playbook!r} not found")
+        body: dict[str, Any] = dict(env or {})
+        if records is not None:
+            refs = [records] if isinstance(records, str) else list(records)
+            body["records"] = [_alert_iri(r) for r in refs]
+        if inputs is not None:
+            body["inputs"] = inputs
+        return self.client.post(f"/api/triggers/1/notrigger/{uuid}", data=body)
 
     # ---------------------------------------------------------------- resume
     def resume(
