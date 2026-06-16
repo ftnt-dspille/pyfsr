@@ -5,6 +5,7 @@ from pyfsr.api.connectors import ConnectorsAPI, _import_job_id
 _CONFIGURED = {
     "data": [
         {
+            "id": 16,
             "name": "virustotal",
             "version": "3.1.0",
             "label": "VirusTotal",
@@ -14,8 +15,15 @@ _CONFIGURED = {
             ],
         },
         {
+            "id": 22,
             "name": "fortigate",
             "version": "2.0.0",
+            "configuration": [],
+        },
+        {
+            "id": 33,
+            "name": "fortinet-fortisiem",
+            "version": "6.1.0",
             "configuration": [],
         },
     ]
@@ -26,6 +34,7 @@ class FakeClient:
     def __init__(self, *, get_map=None, post_resp=None, raiser=None):
         self.get_calls = []
         self.post_calls = []
+        self.put_calls = []
         self.delete_calls = []
         self._get_map = get_map or {}
         self._post_resp = post_resp or {}
@@ -44,6 +53,10 @@ class FakeClient:
     def post(self, endpoint, data=None, params=None, **kwargs):
         self.post_calls.append((endpoint, data))
         return self._post_resp or {"operation": data.get("operation"), "status": "Success"}
+
+    def put(self, endpoint, data=None, params=None, **kwargs):
+        self.put_calls.append((endpoint, data))
+        return self._post_resp or {"config_id": (data or {}).get("config_id"), "status": "ok"}
 
     def delete(self, endpoint, params=None, **kwargs):
         self.delete_calls.append((endpoint, params))
@@ -242,13 +255,19 @@ _FSIEM_CONFIG = {
 def test_create_configuration_builds_body():
     api, client = _api(post_resp={"config_id": "new-uuid"})
     res = api.create_configuration(
-        "fortinet-fortisiem", _FSIEM_CONFIG, name="prod", version="5.2.1", default=True
+        "fortinet-fortisiem",
+        _FSIEM_CONFIG,
+        name="prod",
+        version="6.1.0",
+        default=True,
+        validate=False,
     )
     assert res["config_id"] == "new-uuid"
     endpoint, body = client.post_calls[0]
     assert endpoint == "/api/integration/configuration/"
+    assert body["connector"] == 33  # integer id resolved from name (endpoint 500s without it)
     assert body["connector_name"] == "fortinet-fortisiem"
-    assert body["connector_version"] == "5.2.1"
+    assert body["connector_version"] == "6.1.0"
     assert body["name"] == "prod"
     assert body["default"] is True
     assert body["config"] == _FSIEM_CONFIG
@@ -258,24 +277,29 @@ def test_create_configuration_builds_body():
 
 def test_create_configuration_resolves_version():
     api, client = _api(post_resp={"config_id": "x"})
-    api.list_configured()  # prime cache (virustotal 3.1.0)
-    api.create_configuration("virustotal", {"key": "v"}, name="c")
+    api.create_configuration("virustotal", {"key": "v"}, name="c", validate=False)
     _, body = client.post_calls[0]
     assert body["connector_version"] == "3.1.0"
+    assert body["connector"] == 16
 
 
-def test_create_configuration_unknown_version_raises():
+def test_create_configuration_unknown_connector_raises():
     import pytest
 
     api, _ = _api()
-    with pytest.raises(ValueError, match="version"):
-        api.create_configuration("brand-new", {"k": "v"}, name="c")
+    with pytest.raises(ValueError, match="not installed"):
+        api.create_configuration("brand-new", {"k": "v"}, name="c", version="1.0", validate=False)
 
 
 def test_create_configuration_with_config_id_and_agent():
     api, client = _api(post_resp={})
     api.create_configuration(
-        "acme", {"k": "v"}, name="c", version="1.0", config_id="cfg-1", agent="agent-9"
+        "virustotal",
+        {"k": "v"},
+        name="c",
+        config_id="cfg-1",
+        agent="agent-9",
+        validate=False,
     )
     _, body = client.post_calls[0]
     assert body["config_id"] == "cfg-1"
@@ -285,17 +309,30 @@ def test_create_configuration_with_config_id_and_agent():
 def test_create_configuration_clears_cache():
     api, client = _api(post_resp={})
     api.list_configured()  # prime
-    api.create_configuration("acme", {"k": "v"}, name="c", version="1.0")
+    api.create_configuration("virustotal", {"k": "v"}, name="c", validate=False)
     api.list_configured()  # should refetch
     assert len([c for c in client.get_calls if "connectors/" in c[0]]) == 2
 
 
-def test_update_configuration_sends_config_id():
-    api, client = _api(post_resp={})
-    api.update_configuration("acme", "cfg-1", {"k": "v2"}, name="c", version="1.0")
-    endpoint, body = client.post_calls[0]
-    assert endpoint == "/api/integration/configuration/"
+def test_create_configuration_validate_missing_raises():
+    import pytest
+
+    # config_schema comes from definition() (a POST returning config_schema.fields)
+    schema = {"config_schema": {"fields": [{"name": "fsm_type", "required": True}]}}
+    api, _ = _api(post_resp=schema)
+    with pytest.raises(ValueError, match="missing required field"):
+        api.create_configuration("virustotal", {}, name="c", version="3.1.0")
+
+
+def test_update_configuration_puts_to_config_id_path():
+    api, client = _api()
+    api.update_configuration(
+        "virustotal", "cfg-1", {"k": "v2"}, name="c", version="3.1.0", validate=False
+    )
+    endpoint, body = client.put_calls[0]
+    assert endpoint == "/api/integration/configuration/cfg-1/"
     assert body["config_id"] == "cfg-1"
+    assert body["connector"] == 16
     assert body["config"] == {"k": "v2"}
 
 
@@ -303,6 +340,67 @@ def test_delete_configuration_trailing_slash():
     api, client = _api()
     api.delete_configuration("cfg-1")
     assert client.delete_calls[-1][0] == "/api/integration/configuration/cfg-1/"
+
+
+# -- config schema / validation ---------------------------------------------
+_SIEM_SCHEMA = {
+    "config_schema": {
+        "fields": [
+            {
+                "name": "fsm_type",
+                "type": "select",
+                "required": True,
+                "onchange": {
+                    "FortiSIEM": [
+                        {"name": "server", "required": True},
+                        {"name": "username", "required": True},
+                        {"name": "password", "required": True},
+                        {"name": "organization", "required": False},
+                    ],
+                },
+            },
+            {"name": "verify_ssl", "type": "checkbox", "required": False},
+        ]
+    }
+}
+
+
+def test_config_schema_returns_fields():
+    api, _ = _api(post_resp=_SIEM_SCHEMA)
+    fields = api.config_schema("virustotal")
+    assert fields[0]["name"] == "fsm_type"
+
+
+def test_required_config_fields_follows_onchange_branch():
+    api, _ = _api(post_resp=_SIEM_SCHEMA)
+    req = api.required_config_fields("virustotal", {"fsm_type": "FortiSIEM"})
+    assert req == ["fsm_type", "server", "username", "password"]
+
+
+def test_validate_config_flags_missing_in_active_branch():
+    api, _ = _api(post_resp=_SIEM_SCHEMA)
+    res = api.validate_config(
+        "virustotal", {"fsm_type": "FortiSIEM", "server": "x", "username": "u"}
+    )
+    assert res["valid"] is False
+    assert res["missing"] == ["password"]
+
+
+def test_validate_config_unknown_keys_when_branch_inactive():
+    api, _ = _api(post_resp=_SIEM_SCHEMA)
+    # no fsm_type -> branch never activates, so server/username are "unknown"
+    res = api.validate_config("virustotal", {"server": "x", "username": "u"})
+    assert res["missing"] == ["fsm_type"]
+    assert set(res["unknown"]) == {"server", "username"}
+
+
+def test_validate_config_valid():
+    api, _ = _api(post_resp=_SIEM_SCHEMA)
+    res = api.validate_config(
+        "virustotal",
+        {"fsm_type": "FortiSIEM", "server": "x", "username": "u", "password": "p"},
+    )
+    assert res == {"valid": True, "missing": [], "unknown": []}
 
 
 # -- definition / operations / files ---------------------------------------
