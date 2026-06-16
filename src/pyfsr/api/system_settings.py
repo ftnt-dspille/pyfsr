@@ -65,6 +65,19 @@ class SystemSettingsAPI(BaseAPI):
         """Return just the root record's ``publicValues`` dict."""
         return self.get_root().get("publicValues") or {}
 
+    def get_named(self, name: str) -> dict[str, Any]:
+        """Return a ``SystemSettings`` record by its ``name``.
+
+        Some settings live in their own named records rather than the root blob
+        (e.g. ``"Advanced Development Settings"``). Raises ``ValueError`` if no
+        record with that name is returned.
+        """
+        resp = self.client.get(self._ENDPOINT, params=_RELATIONSHIPS)
+        for record in (resp or {}).get("hydra:member") or []:
+            if record.get("name") == name:
+                return record
+        raise ValueError(f"No system_settings record named {name!r}")
+
     def update(
         self,
         public_values_patch: dict[str, Any] | None = None,
@@ -96,6 +109,66 @@ class SystemSettingsAPI(BaseAPI):
         return self.client.put(f"{self._ENDPOINT}/{uuid}", data=body, params=_RELATIONSHIPS)
 
     # ------------------------------------------------------------- convenience
+    _DEV_SETTINGS_NAME = "Advanced Development Settings"
+    _DEV_FLAGS = {
+        "connectors": "allowCustomConnector",
+        "widgets": "allowCustomWidget",
+        "agents": "allow_ai_agent",
+    }
+
+    def get_development_mode(self) -> dict[str, bool]:
+        """Return the current dev-edit toggles as ``{connectors, widgets, agents}``.
+
+        Reads the *Advanced Development Settings* record (System Settings →
+        Application Editor → *Advanced Development Settings* in the UI).
+        """
+        entry = self._dev_entry(self.get_named(self._DEV_SETTINGS_NAME))
+        return {arg: bool(entry.get(key)) for arg, key in self._DEV_FLAGS.items()}
+
+    def set_development_mode(
+        self,
+        *,
+        connectors: bool | None = None,
+        widgets: bool | None = None,
+        agents: bool | None = None,
+    ) -> dict[str, Any]:
+        """Enable/disable editing custom connectors, widgets, and AI agents.
+
+        Flips the *Advanced Development Settings* flags that gate the in-product
+        editors — ``allowCustomConnector`` / ``allowCustomWidget`` /
+        ``allow_ai_agent`` — which live in their own named ``SystemSettings``
+        record (``privateValues.values[0]``), not the root blob. Each argument is
+        tri-state: ``True``/``False`` to set, ``None`` (default) to leave as-is.
+
+        Example:
+            >>> client.system_settings.set_development_mode(
+            ...     connectors=True, widgets=True, agents=True)
+
+        Returns the updated record. Raises ``ValueError`` if no flag is given.
+        """
+        wanted = {"connectors": connectors, "widgets": widgets, "agents": agents}
+        if all(v is None for v in wanted.values()):
+            raise ValueError("set_development_mode() needs at least one flag")
+
+        record = self.get_named(self._DEV_SETTINGS_NAME)
+        values = list((record.get("privateValues") or {}).get("values") or [{}])
+        entry = dict(values[0])
+        for arg, value in wanted.items():
+            if value is not None:
+                entry[self._DEV_FLAGS[arg]] = value
+        values[0] = entry
+        return self.client.put(
+            f"{self._ENDPOINT}/{record['uuid']}",
+            data={"privateValues": {"values": values}},
+            params=_RELATIONSHIPS,
+        )
+
+    @staticmethod
+    def _dev_entry(record: dict[str, Any]) -> dict[str, Any]:
+        """The first ``privateValues.values`` entry holding the dev flags."""
+        values = (record.get("privateValues") or {}).get("values") or []
+        return values[0] if values else {}
+
     def set_workflow_log_filter(
         self, tags: list[str], operation: str = "exclude"
     ) -> dict[str, Any]:

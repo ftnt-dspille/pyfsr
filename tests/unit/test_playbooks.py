@@ -46,6 +46,8 @@ class FakeClient:
 
     def post(self, endpoint, data=None, params=None, **kwargs):
         self.post_calls.append((endpoint, data))
+        if "notrigger" in endpoint:
+            return {"task_id": "run-uuid"}
         return {"resumed": True}
 
 
@@ -132,6 +134,42 @@ def test_get_live_then_historical_fallback():
 def test_get_blank_pk_raises():
     with pytest.raises(ValueError):
         PlaybooksAPI(FakeClient()).get("")
+
+
+# -- trigger ----------------------------------------------------------------
+def test_trigger_by_uuid_posts_to_notrigger():
+    client = FakeClient()
+    out = PlaybooksAPI(client).trigger(
+        "f0674018-306d-414a-94da-90ace5d98350",
+        records="alerts:abc-123",
+        inputs={"foo": "bar"},
+    )
+    endpoint, body = client.post_calls[0]
+    assert endpoint == "/api/triggers/1/notrigger/f0674018-306d-414a-94da-90ace5d98350"
+    assert body["records"] == ["/api/3/alerts/abc-123"]
+    assert body["inputs"] == {"foo": "bar"}
+    assert out["task_id"] == "run-uuid"
+
+
+def test_trigger_by_name_resolves_uuid_first():
+    client = FakeClient(name_lookup={"hydra:member": [{"uuid": "pb-uuid"}]})
+    PlaybooksAPI(client).trigger("AI Investigation", records=["/api/3/alerts/x"])
+    assert any("/api/3/workflows?" in c[0] for c in client.get_calls)
+    assert client.post_calls[0][0] == "/api/triggers/1/notrigger/pb-uuid"
+    # already-IRI records are passed through unchanged
+    assert client.post_calls[0][1]["records"] == ["/api/3/alerts/x"]
+
+
+def test_trigger_unknown_playbook_raises():
+    client = FakeClient(name_lookup={"hydra:member": []})
+    with pytest.raises(ValueError):
+        PlaybooksAPI(client).trigger("nope")
+
+
+def test_trigger_without_records_sends_empty_body():
+    client = FakeClient()
+    PlaybooksAPI(client).trigger("f0674018-306d-414a-94da-90ace5d98350")
+    assert client.post_calls[0][1] == {}
 
 
 # -- resume -----------------------------------------------------------------
