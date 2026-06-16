@@ -9,11 +9,13 @@ Accessed as ``client.connectors``.
 
 Example:
     >>> client.connectors.list_configured()           # what's installed + configured
+    >>> client.connectors.install("fortinet-fortisiem", "6.1.0", wait=True)
     >>> client.connectors.create_configuration(        # write FortiSIEM creds
     ...     "fortinet-fortisiem",
-    ...     {"server": "https://siem.example.com", "username": "admin",
-    ...      "password": "secret", "organization": "Super", "verify_ssl": True},
-    ...     name="prod", version="5.2.1", default=True)
+    ...     {"fsm_type": "FortiSIEM", "server": "https://siem.example.com",
+    ...      "username": "admin", "password": "secret",
+    ...      "organization": "Super", "verify_ssl": True},
+    ...     name="prod", version="6.1.0", default=True)
     {'config_id': 'a7c7df29-...', ...}
     >>> client.connectors.healthcheck("fortinet-fortisiem")  # is the upstream reachable?
     >>> client.connectors.execute(
@@ -163,6 +165,7 @@ class ConnectorsAPI(BaseAPI):
             for m in data:
                 out.append(
                     {
+                        "id": m.get("id"),
                         "name": m.get("name"),
                         "version": m.get("version"),
                         "label": m.get("label") or m.get("title"),
@@ -200,6 +203,16 @@ class ConnectorsAPI(BaseAPI):
         """The configured version of ``connector`` (``None`` if not configured)."""
         hit = self._find_configured(connector)
         return hit.get("version") if hit else None
+
+    def resolve_connector_id(self, connector: str) -> int | None:
+        """The integer install id of ``connector`` (``None`` if not installed).
+
+        Required by :meth:`create_configuration` — the
+        ``/api/integration/configuration/`` endpoint 500s on a name-only body
+        and needs this numeric id.
+        """
+        hit = self._find_configured(connector)
+        return hit.get("id") if hit else None
 
     def resolve_config(self, connector: str, config_name: str | None = None) -> str | None:
         """Return a config UUID for ``connector``.
@@ -281,6 +294,95 @@ class ConnectorsAPI(BaseAPI):
         defn = self.definition(connector, version=version)
         return defn.get("operations") or []
 
+    def config_schema(self, connector: str, *, version: str | None = None) -> list[dict[str, Any]]:
+        """Return a connector's configuration field schema (its ``config_schema``).
+
+        Each field carries ``name``, ``type`` (``text``/``password``/``select``/
+        ``checkbox``/…), ``title``, ``required``, a default ``value``, and — for
+        ``select`` fields — an ``onchange`` map whose keys are option values and
+        whose values are the *sub-fields* that become active when that option is
+        chosen (e.g. FortiSIEM's ``fsm_type`` reveals ``server``/``username``/
+        ``password`` only when set to ``"FortiSIEM"``). Feed the same shape to
+        :meth:`validate_config` to check a config before saving.
+        """
+        defn = self.definition(connector, version=version)
+        schema = defn.get("config_schema") or {}
+        return schema.get("fields") or []
+
+    def required_config_fields(
+        self, connector: str, config: dict[str, Any], *, version: str | None = None
+    ) -> list[str]:
+        """The config field names *required* given the selections in ``config``.
+
+        Resolves ``select`` ``onchange`` branches against the values already in
+        ``config`` (so for FortiSIEM with ``fsm_type="FortiSIEM"`` you get
+        ``server``/``username``/``password``, and with ``"FortiSOC"`` you get
+        ``server``/``is_fsoc``). Use it to know which fields a user must supply.
+        """
+        required: list[str] = []
+
+        def walk(fields: list[dict[str, Any]]) -> None:
+            for field in fields:
+                fname = field.get("name")
+                if fname and field.get("required"):
+                    required.append(fname)
+                branch = (field.get("onchange") or {}).get(config.get(fname))
+                if isinstance(branch, list):
+                    walk(branch)
+
+        walk(self.config_schema(connector, version=version))
+        return required
+
+    def validate_config(
+        self, connector: str, config: dict[str, Any], *, version: str | None = None
+    ) -> dict[str, Any]:
+        """Check ``config`` against a connector's schema *before* saving it.
+
+        Returns ``{"valid": bool, "missing": [...], "unknown": [...]}``:
+
+        - ``missing`` — required fields (after resolving ``select`` ``onchange``
+          branches) absent or blank in ``config``.
+        - ``unknown`` — keys in ``config`` that no active schema field declares
+          (often a typo or a field gated behind a different ``select`` value).
+
+        This is a *structural* check (presence of required fields), not a live
+        credential test — follow a clean result with :meth:`healthcheck`. Catches
+        exactly the class of error that makes ``create_configuration`` 500
+        (e.g. omitting FortiSIEM's ``fsm_type``).
+        """
+        missing: list[str] = []
+        known: set[str] = set()
+        self._walk_fields(self.config_schema(connector, version=version), config, missing, known)
+        unknown = [k for k in config if k not in known]
+        return {"valid": not missing, "missing": missing, "unknown": unknown}
+
+    def _walk_fields(
+        self,
+        fields: list[dict[str, Any]],
+        config: dict[str, Any],
+        missing: list[str],
+        known: set[str] | None,
+    ) -> None:
+        """Walk a config schema, collecting required-but-missing field names.
+
+        Recurses into a ``select`` field's ``onchange`` branch that matches the
+        value currently in ``config``. When ``known`` is given, every field name
+        encountered along active branches is recorded there.
+        """
+        for field in fields:
+            fname = field.get("name")
+            if not fname:
+                continue
+            if known is not None:
+                known.add(fname)
+            value = config.get(fname)
+            if field.get("required") and (value is None or value == ""):
+                missing.append(fname)
+            onchange = field.get("onchange") or {}
+            branch = onchange.get(value)
+            if isinstance(branch, list):
+                self._walk_fields(branch, config, missing, known)
+
     # ------------------------------------------------------------- configure
     def create_configuration(
         self,
@@ -292,6 +394,7 @@ class ConnectorsAPI(BaseAPI):
         default: bool = False,
         config_id: str | None = None,
         agent: str | None = None,
+        validate: bool = True,
         refresh: bool = True,
     ) -> dict[str, Any]:
         """Create (or update) a connector configuration — write its credentials.
@@ -320,20 +423,43 @@ class ConnectorsAPI(BaseAPI):
                 (the endpoint upserts on ``config_id``); omit to mint a new one.
             agent: run the connector on a remote *agent* (its uuid); omit to use
                 the appliance's self-agent.
+            validate: structurally check ``config`` against the connector's
+                schema first (via :meth:`validate_config`) and raise on a missing
+                required field — turns the server's opaque 500 into a clear
+                error. Pass ``False`` to skip (default ``True``).
             refresh: drop the cached configured-connector listing afterwards so
                 the new config is visible to :meth:`resolve_config` etc.
                 (default ``True``).
+
+        The integer ``connector`` id the endpoint requires (a name-only body
+        500s) is resolved automatically from ``connector``.
 
         Returns:
             The persisted configuration record (including its ``config_id``).
 
         Raises:
-            ValueError: if ``version`` is omitted and can't be resolved.
+            ValueError: if the connector isn't installed, ``version`` can't be
+                resolved, or (when ``validate``) a required field is missing.
         """
         version = version or self.resolve_version(connector)
         if not version:
             raise ValueError(f"{connector!r} version unknown (not yet configured); pass version=")
+        connector_id = self.resolve_connector_id(connector)
+        if connector_id is None:
+            raise ValueError(
+                f"{connector!r} is not installed; install it before configuring "
+                "(client.connectors.install(name, version))"
+            )
+        if validate:
+            check = self.validate_config(connector, config, version=version)
+            if not check["valid"]:
+                raise ValueError(
+                    f"{connector!r} config is missing required field(s): "
+                    f"{', '.join(check['missing'])} "
+                    "(see client.connectors.config_schema(name))"
+                )
         body: dict[str, Any] = {
+            "connector": connector_id,
             "connector_name": connector,
             "connector_version": version,
             "name": name,
@@ -359,26 +485,50 @@ class ConnectorsAPI(BaseAPI):
         version: str | None = None,
         default: bool = False,
         agent: str | None = None,
+        validate: bool = True,
         refresh: bool = True,
     ) -> dict[str, Any]:
         """Update an existing connector configuration by ``config_id``.
 
-        Thin wrapper over :meth:`create_configuration` with ``config_id`` set —
-        the ``POST /api/integration/configuration/`` endpoint upserts on it. Use
-        this to rotate credentials on a configured connector (e.g. re-stamp a
-        FortiSIEM ``password`` or refreshed token). ``config`` is sent whole, so
-        include every field, not just the changed one.
+        ``PUT /api/integration/configuration/{config_id}/`` (the POST create path
+        *rejects* a known ``config_id`` rather than upserting). Use this to
+        rotate credentials on a configured connector — e.g. re-stamp a FortiSIEM
+        ``password`` or a refreshed token. ``config`` is sent whole, so include
+        every field, not just the changed one.
+
+        Like :meth:`create_configuration`, the integer ``connector`` id is
+        resolved automatically, and ``config`` is structurally validated first
+        unless ``validate=False``.
         """
-        return self.create_configuration(
-            connector,
-            config,
-            name=name,
-            version=version,
-            default=default,
-            config_id=config_id,
-            agent=agent,
-            refresh=refresh,
-        )
+        version = version or self.resolve_version(connector)
+        if not version:
+            raise ValueError(f"{connector!r} version unknown; pass version=")
+        connector_id = self.resolve_connector_id(connector)
+        if connector_id is None:
+            raise ValueError(f"{connector!r} is not installed")
+        if validate:
+            check = self.validate_config(connector, config, version=version)
+            if not check["valid"]:
+                raise ValueError(
+                    f"{connector!r} config is missing required field(s): "
+                    f"{', '.join(check['missing'])} "
+                    "(see client.connectors.config_schema(name))"
+                )
+        body: dict[str, Any] = {
+            "connector": connector_id,
+            "connector_name": connector,
+            "connector_version": version,
+            "name": name,
+            "default": default,
+            "config_id": config_id,
+            "config": config,
+        }
+        if agent is not None:
+            body["agent"] = agent
+        resp = self.client.put(f"/api/integration/configuration/{config_id}/", data=body)
+        if refresh:
+            self.clear_cache()
+        return resp if isinstance(resp, dict) else {"result": resp}
 
     def delete_configuration(self, config_id: str, *, refresh: bool = True) -> None:
         """Delete a connector configuration by id
