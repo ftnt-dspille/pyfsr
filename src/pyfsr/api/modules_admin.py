@@ -778,7 +778,11 @@ class ModulesAdminAPI(BaseAPI):
         ``ownable`` (Team Ownable), ``trackable``, ``indexable``, ``taggable``,
         ``queueable``, ``recycle_bin`` (Enable Recycle Bin → ``softDeleteable``),
         ``multi_tenancy`` (Enable Multi-Tenancy → ``peerReplicable``).
-        ``record_uniqueness`` is a list of field names enforcing uniqueness;
+        ``record_uniqueness`` is a list of field names whose combined value must be
+        unique per record (the editor's "Make Records Unique"). Pass plain field names
+        (e.g. ``["name"]`` or ``["sourceIp", "sourcePort"]``); pyfsr builds the platform's
+        ``uniqueConstraint`` object shape for you. The unique index is created when the
+        module is **published** (it is a DB migration), not at staging time.
         ``default_sort`` is the default sort spec (e.g. ``[{"field": "createDate",
         "direction": "DESC"}]``).
         """
@@ -816,7 +820,7 @@ class ModulesAdminAPI(BaseAPI):
             "queueable": queueable,
             "softDeleteable": recycle_bin,
             "peerReplicable": multi_tenancy,
-            "uniqueConstraint": record_uniqueness or [],
+            "uniqueConstraint": self._unique_constraint(module, record_uniqueness),
             "defaultSort": default_sort or [],
             "system": False,
             "attributes": fields,
@@ -826,6 +830,23 @@ class ModulesAdminAPI(BaseAPI):
         if create_view_templates:
             self.create_view_templates(module)
         return created
+
+    @staticmethod
+    def _unique_constraint(module: str, fields: list[str] | None) -> list[dict[str, Any]]:
+        """Build the platform's ``uniqueConstraint`` value from plain field names.
+
+        FortiSOAR does NOT store record-uniqueness as a flat list of field names; it
+        expects a list of named constraint objects keyed by ``<table>_unique``::
+
+            [{"alerts_unique": {"columns": ["name", "source"]}}]
+
+        (confirmed against live module metadata). Passing a bare ``["name"]`` — as pyfsr
+        did before — is silently ignored and no unique index is ever created. Returns
+        ``[]`` for an empty/None field list (uniqueness off).
+        """
+        if not fields:
+            return []
+        return [{f"{module}_unique": {"columns": list(fields)}}]
 
     def _put_attributes(
         self, mod: dict[str, Any], attributes: list[dict[str, Any]]
@@ -854,9 +875,16 @@ class ModulesAdminAPI(BaseAPI):
 
         Accepts the same friendly names as :meth:`create_module` — ``ownable``,
         ``trackable``, ``indexable``, ``taggable``, ``queueable``, ``recycle_bin``,
-        ``multi_tenancy``, ``display_template``, ``default_sort`` — and PUTs the changed
-        keys to staging. ``ownable`` also syncs ``userOwnable``. Change is staged until
-        :meth:`publish`.
+        ``multi_tenancy``, ``display_template``, ``default_sort``, ``record_uniqueness``
+        — and PUTs the changed keys to staging. ``ownable`` also syncs ``userOwnable``.
+        Change is staged until :meth:`publish`.
+
+        ``record_uniqueness`` takes plain field names (e.g. ``["name"]``) and is converted
+        to the platform's ``uniqueConstraint`` object shape via :meth:`_unique_constraint`.
+        ⚠️ Note: changing record-uniqueness on an **already-published** module requires a
+        DB migration that only runs on :meth:`publish`; the staging PUT records the intent
+        but the unique index is (re)built at publish time, and removing an existing
+        constraint may not drop the live index without backend action.
 
         Verification note: on appliances that auto-mirror staging to ``model_metadatas``
         on every write, the PUT's *response* may surface a sync error even though the
@@ -868,6 +896,9 @@ class ModulesAdminAPI(BaseAPI):
             raise ValueError(f"module {module!r} not found in staging")
         payload: dict[str, Any] = {}
         for friendly, value in settings.items():
+            if friendly == "record_uniqueness":
+                payload["uniqueConstraint"] = self._unique_constraint(module, value)
+                continue
             key = self._MODULE_SETTING_KEYS.get(friendly)
             if key is None:
                 raise ValueError(f"unknown module setting {friendly!r}")
