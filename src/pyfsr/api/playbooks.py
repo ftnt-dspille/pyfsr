@@ -21,15 +21,26 @@ import re
 import urllib.parse
 from typing import Any
 
+from ..pagination import extract_members
 from .base import BaseAPI
 
 _RUN_PATHS = ("/api/wf/api/workflows/", "/api/wf/api/historical-workflows/")
+# Playbook *definitions* (the templates), distinct from the run-history tables above.
+_WORKFLOWS = "/api/3/workflows"
+# A hard delete must also reach already-recycled rows; together they skip the recycle bin.
+_HARD_DELETE = {"$hardDelete": "true", "$showDeleted": "true"}
 
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
 
 def _looks_like_uuid(s: str) -> bool:
     return bool(_UUID_RE.match(s.strip()))
+
+
+def _require_uuid(uuid: str, op: str) -> str:
+    if not isinstance(uuid, str) or not uuid.strip():
+        raise ValueError(f"{op}() requires a non-empty playbook uuid")
+    return uuid.strip()
 
 
 def _alert_iri(ref: str) -> str:
@@ -68,9 +79,60 @@ class PlaybooksAPI(BaseAPI):
     # --------------------------------------------------------------- helpers
     def _resolve_uuid(self, playbook: str) -> str | None:
         qs = urllib.parse.urlencode({"name": playbook, "$limit": 5})
-        resp = self.client.get(f"/api/3/workflows?{qs}")
+        resp = self.client.get(f"{_WORKFLOWS}?{qs}")
         members = (resp or {}).get("hydra:member") or []
         return members[0].get("uuid") if members else None
+
+    # ------------------------------------------------------ definition CRUD
+    def list(
+        self,
+        *,
+        name: str | None = None,
+        collection: str | None = None,
+        limit: int = 50,
+        relationships: bool = False,
+    ) -> list[dict[str, Any]]:
+        """List playbook **definitions** (``GET /api/3/workflows``), newest table order.
+
+        These are the playbook templates, not run history (see :meth:`runs`). Filter by
+        ``name`` (exact) or ``collection`` (a collection uuid; the bare uuid or a full
+        ``/api/3/workflow_collections/<uuid>`` IRI both work). ``relationships=True`` adds
+        ``$relationships=true`` so each workflow's ``steps``/``routes`` come back inline
+        (heavier). Returns the ``hydra:member`` array.
+        """
+        params: dict[str, Any] = {"$limit": limit}
+        if name is not None:
+            params["name"] = name
+        if collection is not None:
+            params["collection"] = collection.rstrip("/").rsplit("/", 1)[-1]
+        if relationships:
+            params["$relationships"] = "true"
+        return extract_members(self.client.get(_WORKFLOWS, params=params))
+
+    def update(self, uuid: str, **fields: Any) -> dict[str, Any]:
+        """Partially update a playbook definition (``PUT /api/3/workflows/{uuid}``).
+
+        Pass only the keys to change, e.g. ``debug=True``, ``isActive=False``,
+        ``name=...``. Note there is **no standalone create** for a playbook — a new
+        playbook is created by nesting it in a collection via
+        ``client.workflow_collections.create`` (see
+        :class:`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI`).
+        """
+        uuid = _require_uuid(uuid, "update")
+        if not fields:
+            raise ValueError("update() requires at least one field to change")
+        return self.client.put(f"{_WORKFLOWS}/{uuid}", data=fields)
+
+    def delete(self, uuid: str, *, hard: bool = True) -> None:
+        """Delete a playbook definition. ``hard=True`` (default) bypasses the recycle bin.
+
+        Sends **no request body** — the appliance silently no-ops a delete carrying a ``{}``
+        body and leaks the row, so this never passes one. ``hard=False`` does a soft
+        (recycle-bin) delete.
+        """
+        uuid = _require_uuid(uuid, "delete")
+        params = dict(_HARD_DELETE) if hard else None
+        self.client.delete(f"{_WORKFLOWS}/{uuid}", params=params)
 
     def _fetch_runs_both(self, *, limit: int, extra_qs: str = "") -> list[dict[str, Any]]:
         """Fetch + merge ``/workflows/`` and ``/historical-workflows/``."""

@@ -226,3 +226,69 @@ def test_run_env_reshapes_env_and_steps():
     assert env["status"] == "finished"
     assert env["env"]["wf_id"] == "901"
     assert env["steps"]["Fetch Email"] == {"status": "finished", "result": {"data": 2}}
+
+
+class CrudClient:
+    """Records GET/PUT/DELETE for definition-CRUD tests."""
+
+    def __init__(self):
+        self.calls = []
+
+    def get(self, endpoint, params=None, **kw):
+        self.calls.append(("GET", endpoint, params))
+        return {"hydra:member": [{"uuid": "w-1", "name": "Block IP"}], "hydra:totalItems": 1}
+
+    def put(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("PUT", endpoint, data))
+        return {"ok": True, **(data or {})}
+
+    def delete(self, endpoint, params=None, **kw):
+        self.calls.append(("DELETE", endpoint, params))
+
+
+def test_list_definitions_filters_and_returns_members():
+    c = CrudClient()
+    out = PlaybooksAPI(c).list(name="Block IP", limit=10)
+    assert out == [{"uuid": "w-1", "name": "Block IP"}]
+    method, endpoint, params = c.calls[-1]
+    assert method == "GET" and endpoint == "/api/3/workflows"
+    assert params == {"$limit": 10, "name": "Block IP"}
+
+
+def test_list_collection_accepts_uuid_or_iri():
+    c = CrudClient()
+    PlaybooksAPI(c).list(collection="/api/3/workflow_collections/col-9", relationships=True)
+    params = c.calls[-1][2]
+    assert params["collection"] == "col-9" and params["$relationships"] == "true"
+    PlaybooksAPI(c).list(collection="col-9")
+    assert c.calls[-1][2]["collection"] == "col-9"
+
+
+def test_update_definition_puts_partial_fields():
+    c = CrudClient()
+    PlaybooksAPI(c).update("w-1", debug=True, isActive=False)
+    method, endpoint, data = c.calls[-1]
+    assert method == "PUT" and endpoint == "/api/3/workflows/w-1"
+    assert data == {"debug": True, "isActive": False}
+
+
+def test_update_requires_a_field():
+    with pytest.raises(ValueError):
+        PlaybooksAPI(CrudClient()).update("w-1")
+
+
+def test_delete_definition_hard_and_soft():
+    c = CrudClient()
+    PlaybooksAPI(c).delete("w-1")
+    method, endpoint, params = c.calls[-1]
+    assert method == "DELETE" and endpoint == "/api/3/workflows/w-1"
+    assert params == {"$hardDelete": "true", "$showDeleted": "true"}
+    PlaybooksAPI(c).delete("w-1", hard=False)
+    assert c.calls[-1][2] is None
+
+
+def test_definition_crud_uuid_validation():
+    a = PlaybooksAPI(CrudClient())
+    for op in (lambda: a.update("", debug=True), lambda: a.delete("  ")):
+        with pytest.raises(ValueError):
+            op()
