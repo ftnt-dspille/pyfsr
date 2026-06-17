@@ -70,8 +70,31 @@ def test_create_module_settings_map_to_metadata_keys():
     assert data["ownable"] is True and data["userOwnable"] is True
     assert data["softDeleteable"] is True  # Enable Recycle Bin
     assert data["peerReplicable"] is True  # Enable Multi-Tenancy
-    assert data["uniqueConstraint"] == ["name"]
+    # record_uniqueness is built into the platform's named-constraint object shape,
+    # NOT a flat field-name list (a flat list is silently ignored by FortiSOAR).
+    assert data["uniqueConstraint"] == [{"widgets_unique": {"columns": ["name"]}}]
     assert data["defaultSort"] == [{"field": "createDate", "direction": "DESC"}]
+
+
+def test_create_module_uniqueness_off_when_empty():
+    c = RecordingClient()
+    ModulesAdminAPI(c).create_module("widgets", create_view_templates=False)
+    _, _, data = c.calls[-1]
+    assert data["uniqueConstraint"] == []
+
+
+def test_set_module_settings_record_uniqueness_builds_constraint(monkeypatch):
+    c = RecordingClient()
+    api = ModulesAdminAPI(c)
+    expected = [{"alerts_unique": {"columns": ["name", "source"]}}]
+    # set_module_settings verifies by re-reading staging; reflect the applied value.
+    monkeypatch.setattr(
+        api, "get_staging", lambda module: {"uuid": "u-1", "uniqueConstraint": expected}
+    )
+    api.set_module_settings("alerts", record_uniqueness=["name", "source"])
+    method, endpoint, data = c.calls[-1]
+    assert method == "PUT" and endpoint == "/api/3/staging_model_metadatas/u-1"
+    assert data["uniqueConstraint"] == expected
 
 
 def test_create_module_also_creates_view_templates():
