@@ -10,6 +10,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .api.agents import AgentsAPI
 from .api.ai import AIApi
 from .api.alerts import AlertsAPI
 from .api.auth_config import AuthConfigAPI
@@ -23,6 +24,7 @@ from .api.playbooks import PlaybooksAPI
 from .api.schedules import SchedulesAPI
 from .api.solution_packs import SolutionPackAPI
 from .api.system_settings import SystemSettingsAPI
+from .api.tags import TagsAPI
 from .api.users import UsersAPI
 from .api.wf_tools import WfToolsAPI
 from .api.workflow_collections import WorkflowCollectionsAPI
@@ -221,6 +223,10 @@ class FortiSOAR:
         self.schedules: SchedulesAPI = SchedulesAPI(self)
         self.users: UsersAPI = UsersAPI(self)
         self.ai: AIApi = AIApi(self)
+
+        # Tag names + execution-agent listing
+        self.tags: TagsAPI = TagsAPI(self)
+        self.agents: AgentsAPI = AgentsAPI(self)
 
     def _log_request(self, method: str, url: str, params: dict, data: dict, headers: dict) -> None:
         """Log request details when verbose mode is enabled."""
