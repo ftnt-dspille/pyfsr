@@ -142,6 +142,24 @@ def test_typed_builders_map_widget_to_storage_type():
     assert ModulesAdminAPI.object_field("x")["type"] == "object"
 
 
+def test_full_field_type_coverage():
+    # every non-relationship widget the in-product editor offers maps to a builder
+    cases = {
+        "decimal_field": ("float", "decimal"),
+        "domain_field": ("string", "domain"),
+        "ipv4_field": ("string", "ipv4"),
+        "ipv6_field": ("string", "ipv6"),
+        "filehash_field": ("string", "filehash"),
+        "file_field": ("string", "file"),
+        "json_field": ("object", "json"),
+        "object_field": ("object", "object"),
+        "password_field": ("string", "password"),
+    }
+    for builder_name, (storage, widget) in cases.items():
+        f = getattr(ModulesAdminAPI, builder_name)("x")
+        assert f["type"] == storage and f["formType"] == widget, builder_name
+
+
 def test_typed_field_rejects_relationship_widgets():
     import pytest
 

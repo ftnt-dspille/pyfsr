@@ -16,14 +16,15 @@ A module is a staging record with an ``attributes`` list; each attribute (field)
 axes and a correct field needs both:
 
 - ``type`` is the Postgres column type the platform actually stores:
-  ``string`` / ``integer`` / ``boolean`` / ``picklists`` / ``object`` / ``array`` or a
-  *module type name* for a relationship (e.g. ``alerts``). **There is no ``text`` storage
-  type** — text widgets store ``string``. Publishing a field whose ``type`` is ``text``
-  fails validation ("Attribute type 'text' does not exist").
+  ``string`` / ``integer`` / ``float`` / ``boolean`` / ``picklists`` / ``object`` /
+  ``array`` or a *module type name* for a relationship (e.g. ``alerts``). **There is no
+  ``text`` storage type** — text widgets store ``string``. Publishing a field whose ``type``
+  is ``text`` fails validation ("Attribute type 'text' does not exist").
 - ``formType`` is the editor widget: ``text`` / ``textarea`` / ``richtext`` / ``html`` /
-  ``integer`` / ``datetime`` / ``checkbox`` / ``email`` / ``url`` / ``phone`` /
-  ``password`` / ``filehash`` / ``ipv4`` / ``file`` / ``picklist`` /
-  ``multiselectpicklist`` / ``lookup`` / ``manyToMany`` / ``oneToMany`` / ``object``.
+  ``email`` / ``url`` / ``phone`` / ``domain`` / ``filehash`` / ``ipv4`` / ``ipv6`` /
+  ``password`` / ``integer`` / ``decimal`` / ``datetime`` / ``checkbox`` / ``file`` /
+  ``json`` / ``object`` / ``picklist`` / ``multiselectpicklist`` / ``lookup`` /
+  ``manyToMany`` / ``oneToMany``.
 
 Use the **typed builders** (:meth:`ModulesAdminAPI.text_field`,
 :meth:`~ModulesAdminAPI.integer_field`, :meth:`~ModulesAdminAPI.datetime_field`,
@@ -88,12 +89,16 @@ WIDGET_STORAGE_TYPE: dict[str, str] = {
     "password": "string",
     "filehash": "string",
     "ipv4": "string",
+    "ipv6": "string",
+    "domain": "string",
     "file": "string",
     "integer": "integer",
+    "decimal": "float",  # the Decimal Field widget stores a 'float' column
     "datetime": "integer",  # stored as an epoch-millis integer
     "checkbox": "boolean",
     "picklist": "picklists",
     "multiselectpicklist": "picklists",
+    "json": "object",  # the JSON widget; a distinct widget from the raw 'object' one
     "object": "object",
     "array": "array",
 }
@@ -254,9 +259,9 @@ class ModulesAdminAPI(BaseAPI):
 
         Mirrors the Field **Properties** panel of the in-product editor:
 
-        - ``db_type`` — **storage** type (``string``/``integer``/``boolean``/``picklists``/
-          ``object``/``array`` or a target module type); ``form_type`` is the UI widget
-          (defaults to ``db_type``). Prefer the typed builders (:meth:`text_field` etc.) —
+        - ``db_type`` — **storage** type (``string``/``integer``/``float``/``boolean``/
+          ``picklists``/``object``/``array`` or a target module type); ``form_type`` is the
+          UI widget (defaults to ``db_type``). Prefer the typed builders (:meth:`text_field` etc.) —
           they pick the right pair; ``"text"``/``"json"`` are widgets, not storage types,
           and are rejected here.
         - ``label`` — the **Field Title** (``name`` is the immutable **Field API Key**).
@@ -402,6 +407,12 @@ class ModulesAdminAPI(BaseAPI):
         return cls.typed_field(name, "integer", label=label, **opts)
 
     @classmethod
+    def decimal_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build a Decimal Field (``float`` storage, ``decimal`` widget) for fractional
+        numbers — the floating-point counterpart of :meth:`integer_field`."""
+        return cls.typed_field(name, "decimal", label=label, **opts)
+
+    @classmethod
     def datetime_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
         """Build a date/time field. Stored as an epoch-millis ``integer`` behind a
         ``datetime`` widget — that storage type is intentional, not a bug."""
@@ -431,14 +442,47 @@ class ModulesAdminAPI(BaseAPI):
         return cls.typed_field(name, "phone", label=label, **opts)
 
     @classmethod
+    def domain_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build a Domain field (``string`` storage, ``domain`` widget)."""
+        return cls.typed_field(name, "domain", label=label, **opts)
+
+    @classmethod
+    def ipv4_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build an IPv4 field (``string`` storage, ``ipv4`` widget)."""
+        return cls.typed_field(name, "ipv4", label=label, **opts)
+
+    @classmethod
+    def ipv6_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build an IPv6 field (``string`` storage, ``ipv6`` widget)."""
+        return cls.typed_field(name, "ipv6", label=label, **opts)
+
+    @classmethod
+    def filehash_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build a FileHash field (``string`` storage, ``filehash`` widget)."""
+        return cls.typed_field(name, "filehash", label=label, **opts)
+
+    @classmethod
+    def file_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build a file-attachment field (``string`` storage, ``file`` widget)."""
+        return cls.typed_field(name, "file", label=label, **opts)
+
+    @classmethod
     def password_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
         """Build a masked password field. Pass ``encrypted=True`` to store it encrypted
         at rest (encrypted fields cannot be ``searchable``)."""
         return cls.typed_field(name, "password", label=label, **opts)
 
     @classmethod
+    def json_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build a JSON field (``object`` storage, ``json`` widget) — the editor's "JSON"
+        type with a JSON editor control. See also :meth:`object_field` (the raw ``object``
+        widget): both store ``object`` and differ only in the UI control."""
+        return cls.typed_field(name, "json", label=label, **opts)
+
+    @classmethod
     def object_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build a JSON/object field (``object`` storage, ``object`` widget)."""
+        """Build a raw object field (``object`` storage, ``object`` widget). For the editor's
+        "JSON" field type (a JSON editor control) use :meth:`json_field` instead."""
         return cls.typed_field(name, "object", label=label, **opts)
 
     # ---------------------------------------------------- relationship/refs
