@@ -21,6 +21,7 @@ from .api.modules import ModulesAPI
 from .api.modules_admin import ModulesAdminAPI
 from .api.picklists import PicklistsAPI
 from .api.playbooks import PlaybooksAPI
+from .api.routers import RoutersAPI
 from .api.schedules import SchedulesAPI
 from .api.solution_packs import SolutionPackAPI
 from .api.system_settings import SystemSettingsAPI
@@ -224,9 +225,10 @@ class FortiSOAR:
         self.users: UsersAPI = UsersAPI(self)
         self.ai: AIApi = AIApi(self)
 
-        # Tag names + execution-agent listing
+        # Tag names + execution-agent lifecycle (agents need a router at create time)
         self.tags: TagsAPI = TagsAPI(self)
         self.agents: AgentsAPI = AgentsAPI(self)
+        self.routers: RoutersAPI = RoutersAPI(self)
 
     def _log_request(self, method: str, url: str, params: dict, data: dict, headers: dict) -> None:
         """Log request details when verbose mode is enabled."""
