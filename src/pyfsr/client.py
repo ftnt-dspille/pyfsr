@@ -25,6 +25,7 @@ from .api.solution_packs import SolutionPackAPI
 from .api.system_settings import SystemSettingsAPI
 from .api.users import UsersAPI
 from .api.wf_tools import WfToolsAPI
+from .api.workflow_collections import WorkflowCollectionsAPI
 from .auth.api_key import APIKeyAuth
 from .auth.base import BaseAuth
 from .auth.user_pass import UserPasswordAuth
@@ -205,6 +206,9 @@ class FortiSOAR:
 
         # Playbook run history + manual-input resume
         self.playbooks: PlaybooksAPI = PlaybooksAPI(self)
+
+        # Playbook (workflow) collection CRUD
+        self.workflow_collections: WorkflowCollectionsAPI = WorkflowCollectionsAPI(self)
 
         # Workflow-engine authoring helpers (Jinja render, global variables)
         self.wf_tools: WfToolsAPI = WfToolsAPI(self)
