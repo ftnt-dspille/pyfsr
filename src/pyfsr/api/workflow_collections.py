@@ -8,11 +8,12 @@ stepping on the load-bearing gotchas below. Accessed as ``client.workflow_collec
 Two shapes are intentionally asymmetric, matching the appliance:
 
 - **create** takes an *import-style envelope* (``{"type": ..., "data": [{...}]}``), the same
-  payload the product's *Import* uses — not a bare record POST. :meth:`create` builds that
-  envelope for you from a name + nested workflows.
+  payload the product's *Import* uses — not a bare record POST.
+  :meth:`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI.create` builds that envelope
+  for you from a name + nested workflows.
 - **delete** must send **no body** and ``$hardDelete=true&$showDeleted=true``. A ``{}`` body
   silently no-ops and leaks the collection; pyfsr's ``client.delete()`` already sends no body,
-  and :meth:`delete` sets the params.
+  and :meth:`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI.delete` sets the params.
 
 Example::
 

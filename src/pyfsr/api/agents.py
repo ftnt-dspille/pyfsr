@@ -76,9 +76,10 @@ class AgentsAPI(BaseAPI):
         """Register a new agent (``POST /api/3/agents``); returns the created record.
 
         ``router`` is the secure-message-exchange router the agent connects through — pass a
-        router record (from :meth:`RoutersAPI.first`/``list``), its ``@id`` IRI, or its bare
-        uuid. ``installer_type`` is ``"docker"`` (default) or ``"bash"``, or a full picklist
-        IRI. Creating the record does **not** install anything; follow with :meth:`installer`.
+        router record (from :meth:`~pyfsr.api.routers.RoutersAPI.first`/``list``), its ``@id``
+        IRI, or its bare uuid. ``installer_type`` is ``"docker"`` (default) or ``"bash"``, or a
+        full picklist IRI. Creating the record does **not** install anything; follow with
+        :meth:`installer`.
         """
         if not isinstance(name, str) or not name.strip():
             raise ValueError("create() requires a non-empty agent name")
