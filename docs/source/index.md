@@ -59,6 +59,13 @@ Build FortiSOAR queries fluently with the `Query` DSL and paginate results.
 Create modules, add and alter fields, track pending changes, and publish.
 :::
 
+:::{grid-item-card} 🧩 Field Schema Reference
+:link: guides/module-field-schema
+:link-type: doc
+
+Every field type, its properties, and how relationship fields wire to other modules.
+:::
+
 :::{grid-item-card} 🤖 AI & Agents
 :link: guides/ai-agents
 :link-type: doc
@@ -84,6 +91,7 @@ guides/authentication
 guides/records
 guides/querying
 guides/module-admin
+guides/module-field-schema
 guides/ai-agents
 ```
 
