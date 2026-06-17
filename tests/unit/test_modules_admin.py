@@ -113,6 +113,112 @@ def test_relationship_field_targets_module():
     f = ModulesAdminAPI.relationship_field("relatedalerts", "alerts")
     assert f["type"] == "alerts" and f["formType"] == "manyToMany"
     assert f["collection"] is True and f["dataSource"] == {"model": "alerts"}
+    # default many-to-many owns the relationship (its reverse auto-creates on the target)
+    assert f["ownsRelationship"] is True
+
+
+def test_typed_builders_map_widget_to_storage_type():
+    # widgets that all store "string"
+    for builder, widget in [
+        (ModulesAdminAPI.text_field, "text"),
+        (ModulesAdminAPI.email_field, "email"),
+        (ModulesAdminAPI.url_field, "url"),
+        (ModulesAdminAPI.phone_field, "phone"),
+        (ModulesAdminAPI.password_field, "password"),
+    ]:
+        f = builder("x")
+        assert f["type"] == "string" and f["formType"] == widget
+    # text variants
+    assert ModulesAdminAPI.text_field("x", area=True)["formType"] == "textarea"
+    assert ModulesAdminAPI.text_field("x", rich=True)["formType"] == "richtext"
+    assert ModulesAdminAPI.text_field("x", html=True)["formType"] == "html"
+    # non-string storage types
+    assert ModulesAdminAPI.integer_field("x")["type"] == "integer"
+    # datetime is stored as an integer behind a datetime widget
+    dt = ModulesAdminAPI.datetime_field("x")
+    assert dt["type"] == "integer" and dt["formType"] == "datetime"
+    cb = ModulesAdminAPI.checkbox_field("x")
+    assert cb["type"] == "boolean" and cb["formType"] == "checkbox"
+    assert ModulesAdminAPI.object_field("x")["type"] == "object"
+
+
+def test_typed_field_rejects_relationship_widgets():
+    import pytest
+
+    with pytest.raises(ValueError):
+        ModulesAdminAPI.typed_field("x", "manyToMany")
+
+
+def test_lookup_field_is_single_ref_with_no_reverse():
+    f = ModulesAdminAPI.lookup_field("owner", "people")
+    assert f["type"] == "people" and f["formType"] == "lookup"
+    # a lookup is a single many-to-one ref: not a collection, owns nothing
+    assert f["collection"] is False and f["ownsRelationship"] is False
+    assert f["dataSource"] == {"model": "people"}
+
+
+def test_relationship_field_custom_inverse_and_one_to_many():
+    f = ModulesAdminAPI.relationship_field("agents", "agents", many=False, inversed_field="router")
+    assert f["formType"] == "oneToMany" and f["collection"] is True
+    assert f["inversedField"] == "router"
+    # a non-owning mirror of an existing relationship
+    g = ModulesAdminAPI.relationship_field("x", "alerts", owns_relationship=False)
+    assert g["ownsRelationship"] is False
+
+
+def test_field_rejects_invalid_names_and_types():
+    import pytest
+
+    # invalid API keys (would only fail at publish on the appliance)
+    for bad in ["bad name", "1leading", "has-hyphen", "has.dot", ""]:
+        with pytest.raises(ValueError):
+            ModulesAdminAPI.text_field(bad)
+    # non-existent storage types people reach for by habit
+    for bad_type in ["text", "json", "datetime", "bool"]:
+        with pytest.raises(ValueError):
+            ModulesAdminAPI.field("x", db_type=bad_type)
+    # encrypted and searchable are mutually exclusive
+    with pytest.raises(ValueError):
+        ModulesAdminAPI.text_field("secret", encrypted=True, searchable=True)
+    # valid names/types pass (camelCase, underscores, digits after a letter)
+    assert ModulesAdminAPI.text_field("goodName")["name"] == "goodName"
+    assert ModulesAdminAPI.field("x_1", db_type="string")["type"] == "string"
+
+
+def test_create_module_rejects_invalid_module_names():
+    import pytest
+
+    c = RecordingClient()
+    admin = ModulesAdminAPI(c)
+    for bad in ["BadCase", "bad name", "9mod", "bad-mod"]:
+        with pytest.raises(ValueError):
+            admin.create_module(bad)
+    with pytest.raises(ValueError):
+        admin.create_module("goodmod", fields=[])  # empty field list
+
+
+def test_find_invalid_drafts_and_publish_precheck():
+    import pytest
+
+    class BadDraftClient(RecordingClient):
+        def get(self, endpoint, params=None, **kw):
+            self.calls.append(("GET", endpoint, params))
+            if endpoint == "/api/3/staging_model_metadatas":
+                return {
+                    "hydra:member": [
+                        {"type": "widgets", "uuid": "u-ok"},  # valid
+                        {"type": "9probe", "uuid": "u-bad"},  # invalid: leading digit
+                    ]
+                }
+            return super().get(endpoint, params=params, **kw)
+
+    admin = ModulesAdminAPI(BadDraftClient())
+    bad = admin.find_invalid_drafts()
+    assert bad == [{"module": "9probe", "uuid": "u-bad", "problem": "invalid module name"}]
+    # publish must refuse before issuing the destructive appliance-wide PUT
+    with pytest.raises(ValueError, match="9probe"):
+        admin.publish()
+    assert not any(c[0] == "PUT" for c in admin.client.calls)
 
 
 def test_pending_changes_diffs_staging_vs_published():
@@ -149,10 +255,25 @@ def test_set_field_type_puts_only_attributes():
 
 
 def test_publish_hits_global_endpoint():
-    c = RecordingClient()
-    # wait=False → fire-and-forget, no readiness polling after the PUT.
-    ModulesAdminAPI(c).publish(wait=False)
-    assert c.calls[-1] == ("PUT", "/api/publish", {})
+    class PublishClient(RecordingClient):
+        def __init__(self):
+            super().__init__()
+            self._ts = 100
+
+        def get(self, endpoint, params=None, **kw):
+            self.calls.append(("GET", endpoint, params))
+            # /api/publish/error: advance last_publish_time on each read so the post-PUT
+            # poll sees a fresh, successful publish and publish() confirms completion.
+            if endpoint == "/api/publish/error":
+                self._ts += 1
+                return {"status": "Success", "last_publish_time": self._ts}
+            return super().get(endpoint, params=params, **kw)
+
+    c = PublishClient()
+    result = ModulesAdminAPI(c).publish(poll_interval=0)
+    # PUT to the global endpoint, then confirmation read of /api/publish/error.
+    assert ("PUT", "/api/publish", {}) in c.calls
+    assert result["status"] == "Success"
 
 
 def test_set_module_settings_maps_keys_and_syncs_owner():

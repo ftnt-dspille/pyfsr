@@ -52,19 +52,39 @@ admin.get_field("alerts", "name")
 
 ## Building fields
 
-{meth}`~pyfsr.api.modules_admin.ModulesAdminAPI.field` builds an attribute dict with
-sane defaults. `db_type` is the storage type (`text`/`json`/`integer`/…); `form_type`
-is the UI widget (defaults to `db_type`).
+```{tip}
+For the **full field-type catalogue** — every widget, its storage type, properties, and
+relationship/reverse-field semantics — see {doc}`module-field-schema`. This section is a
+quick start; that page is the authoring reference.
+```
+
+Prefer the **typed builders**, which set the storage `type` and UI `formType` to a
+matching pair for you (e.g. a `datetime` widget must store `integer`; a `text` widget must
+store `string`):
 
 ```python
-admin.field("payload", db_type="json", form_type="json", label="Payload")
+admin.text_field("summary", area=True)     # string / textarea
+admin.integer_field("score")                # integer / integer
+admin.datetime_field("detectedOn")          # integer / datetime
+admin.checkbox_field("isExternal")          # boolean / checkbox
+admin.object_field("payload", label="Payload")   # object / object
 ```
+
+```{warning}
+There is **no `text` storage type** (and no `json` type). Text widgets store `string`;
+JSON stores `object`. Hand-setting `db_type="text"` stages fine but **fails at publish**
+("Attribute type 'text' does not exist"). The typed builders avoid this entirely.
+```
+
+{meth}`~pyfsr.api.modules_admin.ModulesAdminAPI.field` is the low-level escape hatch where
+you set both axes yourself; `admin.typed_field(name, form_type)` derives the storage type
+for any scalar widget. The object field above produces:
 
 ```json
 {
   "name": "payload",
-  "type": "json",
-  "formType": "json",
+  "type": "object",
+  "formType": "object",
   "descriptions": {"singular": "Payload"},
   "displayName": "{{ payload }}",
   "searchable": false,
@@ -100,15 +120,24 @@ admin.field(
 
 ### Picklist and relationship fields
 
-Two builders cover the common rich field types:
-
 ```python
 # single- or multi-select picklist, bound to a picklist list name
 admin.picklist_field("severity", "AlertSeverity", grid_column=True)
 admin.picklist_field("tags", "AlertType", multi=True)   # -> multiselectpicklist
 
-# a many-to-many relationship to another module
+# a single reference to one record of another module (many-to-one, no reverse field)
+admin.lookup_field("owner", "people", label="Owner")
+
+# a many-to-many relationship to another module (reverse field auto-created on target)
 admin.relationship_field("relatedalerts", "alerts", label="Related Alerts")
+```
+
+```{important}
+Relationships are the part where FortiSOAR "sometimes" creates a field on the *other*
+module and sometimes doesn't — a `lookup` never does, a default `manyToMany` does, a
+custom-inverse `manyToMany` doesn't, and a `oneToMany` needs the reverse `lookup` to exist
+first. The rules and verification (`reverse_field()`) are documented in detail in
+{doc}`module-field-schema`.
 ```
 
 ## Creating a module
@@ -124,8 +153,8 @@ admin.create_module(
     label="Widget",
     plural="Widgets",
     fields=[
-        admin.field("name", db_type="text", form_type="text", required=True, grid_column=True),
-        admin.field("payload", db_type="text", form_type="textarea"),
+        admin.text_field("name", required=True, grid_column=True),
+        admin.text_field("payload", area=True),
         admin.picklist_field("severity", "AlertSeverity"),
         admin.relationship_field("relatedalerts", "alerts"),
     ],
@@ -150,11 +179,11 @@ admin.get_view_templates("widgets")
 Edit staged fields before publishing:
 
 ```python
-admin.add_field("widgets", admin.field("severity", db_type="text", form_type="select"))
-admin.set_field_type("widgets", "payload", db_type="json", form_type="json")
+admin.add_field("widgets", admin.email_field("reporter"))
+admin.set_field_type("widgets", "payload", db_type="object", form_type="object")
 
 [(a["name"], a["type"], a["formType"]) for a in admin.get_staging("widgets")["attributes"]]
-# [('name', 'text', 'text'), ('payload', 'json', 'json'), ('severity', 'text', 'select')]
+# [('name', 'string', 'text'), ('payload', 'object', 'object'), ('reporter', 'string', 'email')]
 ```
 
 ### Editing settings on an existing module
@@ -203,10 +232,23 @@ An empty list means the appliance is fully published — nothing for `publish()`
 admin.publish()   # appliance-wide commit; blocks until the migrate cycle finishes
 ```
 
-By default `publish()` is synchronous: it tolerates the transient 5xx / "Decrypt
-Database" / "Cleaning Up Old Backups" states the appliance returns mid-migrate, then
-polls until reads succeed, so you can read the published schema immediately on return.
-Pass `wait=False` for fire-and-forget.
+`PUT /api/publish` only *starts* the publish — its response is `{"status": "started"}` —
+and the backup + DB migrate then runs asynchronously, during which the **whole API
+(`/api/3`) returns 503** for ~30–60s. By default `publish()` is synchronous: it waits out
+that outage and confirms the result via `/api/publish/error` (a fresh `last_publish_time`
+with `status: "Success"`), returning that body so you can read the published schema
+immediately. It is always synchronous — during the migrate the whole appliance is down, so
+there is nothing else to do but wait.
+
+```{note}
+**Validation errors are raised synchronously, before any migrate.** A field whose `type`
+does not exist, or a `oneToMany` with no matching lookup on its target, comes back as an
+{class}`~pyfsr.exceptions.APIError` (HTTP 400) on the PUT itself — its message is the
+appliance's own (e.g. *"there is no lookup field present in 'alerts' module"*), so surface
+it to the user. If the *async* publish fails instead, `publish()` raises
+{class}`~pyfsr.exceptions.FortiSOARException` with the status from `/api/publish/error`; a
+publish that never reports back raises `TimeoutError`.
+```
 
 ## Discarding an unpublished draft
 

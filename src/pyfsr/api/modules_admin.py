@@ -12,22 +12,44 @@ in-product editor and the "Clone Module" playbook use:
   :meth:`ModulesAdminAPI.publish`.
 
 A module is a staging record with an ``attributes`` list; each attribute (field) carries a
-``type`` (the storage type, e.g. ``text`` / ``json`` / ``integer``) and a ``formType`` (the
-UI widget, e.g. ``text`` / ``textarea`` / ``json`` / ``datetime``).
+**storage type** (``type``) and a **UI widget** (``formType``). These are two different
+axes and a correct field needs both:
+
+- ``type`` is the Postgres column type the platform actually stores:
+  ``string`` / ``integer`` / ``boolean`` / ``picklists`` / ``object`` / ``array`` or a
+  *module type name* for a relationship (e.g. ``alerts``). **There is no ``text`` storage
+  type** — text widgets store ``string``. Publishing a field whose ``type`` is ``text``
+  fails validation ("Attribute type 'text' does not exist").
+- ``formType`` is the editor widget: ``text`` / ``textarea`` / ``richtext`` / ``html`` /
+  ``integer`` / ``datetime`` / ``checkbox`` / ``email`` / ``url`` / ``phone`` /
+  ``password`` / ``filehash`` / ``ipv4`` / ``file`` / ``picklist`` /
+  ``multiselectpicklist`` / ``lookup`` / ``manyToMany`` / ``oneToMany`` / ``object``.
+
+Use the **typed builders** (:meth:`ModulesAdminAPI.text_field`,
+:meth:`~ModulesAdminAPI.integer_field`, :meth:`~ModulesAdminAPI.datetime_field`,
+:meth:`~ModulesAdminAPI.lookup_field`, ...) which set the right storage type for each
+widget for you. :meth:`~ModulesAdminAPI.field` is the low-level escape hatch where you
+pass both axes yourself. See :data:`WIDGET_STORAGE_TYPE` for the full widget→storage map.
+
+For the field-type catalogue and relationship/reverse-field semantics from an authoring
+perspective, see ``docs/source/guides/module-field-schema.md``.
 
 Example::
 
     admin = client.modules_admin
     admin.create_module("widgets", label="Widget", fields=[
-        admin.field("name", db_type="text", form_type="text", required=True),
-        admin.field("payload", db_type="text", form_type="textarea"),
+        admin.text_field("name", required=True),
+        admin.text_field("payload", area=True),
+        admin.integer_field("score"),
+        admin.picklist_field("status", "WidgetStatus"),
+        admin.relationship_field("relatedAlerts", "alerts"),  # many-to-many
     ])
-    admin.set_field_type("widgets", "payload", db_type="json", form_type="json")
     admin.publish()                      # appliance-wide commit
 """
 
 from __future__ import annotations
 
+import re
 import time
 import uuid as _uuid
 from typing import Any
@@ -38,10 +60,62 @@ from .base import BaseAPI
 _STAGING = "/api/3/staging_model_metadatas"
 _PUBLISHED = "/api/3/model_metadatas"
 _PUBLISH = "/api/publish"
+# After a publish is kicked off, ``/api/3`` (the API entrypoint) returns 503 for the whole
+# backup + migrate window and 200 once it completes — the same signal the in-product UI
+# polls. ``/api/publish/error`` reports the *last* publish's outcome
+# (``{"status": "Success"|..., "last_publish_time": <epoch>}``); a fresh ``last_publish_time``
+# with ``status == "Success"`` means this publish committed, any other status is a failure.
+_ENTRYPOINT = "/api/3"
+_PUBLISH_ERROR = "/api/publish/error"
 _VIEW_TEMPLATES = "/api/3/system_view_templates"
 _VIEW_TEMPLATES_BULK = "/api/3/bulkupsert/system_view_templates"
 _REL = {"$relationships": "true"}
 _ALL = {"$limit": 2147483647}
+
+# UI widget (``formType``) -> storage column type (``type``). This is the mapping the
+# in-product editor applies under the hood: many distinct widgets all store ``string``,
+# datetime stores an epoch ``integer``, a checkbox stores ``boolean``, etc. Relationship
+# widgets (lookup/manyToMany/oneToMany) store the *target module type* and are handled by
+# the relationship builders, so they are intentionally absent here.
+WIDGET_STORAGE_TYPE: dict[str, str] = {
+    "text": "string",
+    "textarea": "string",
+    "richtext": "string",
+    "html": "string",
+    "email": "string",
+    "url": "string",
+    "phone": "string",
+    "password": "string",
+    "filehash": "string",
+    "ipv4": "string",
+    "file": "string",
+    "integer": "integer",
+    "datetime": "integer",  # stored as an epoch-millis integer
+    "checkbox": "boolean",
+    "picklist": "picklists",
+    "multiselectpicklist": "picklists",
+    "object": "object",
+    "array": "array",
+}
+
+# A field's ``name`` is its immutable **API key** — it must start with a letter and contain
+# only letters, digits, or underscores (it becomes a DB column / JSON key). The appliance
+# accepts spaces/special chars into *staging* but then fails the **publish** migrate, so we
+# reject them up front to avoid the slow, appliance-wide round-trip. A module ``type`` is a
+# table name and is additionally lower-cased by convention.
+_FIELD_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+_MODULE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_MAX_NAME_LEN = 63  # Postgres identifier limit
+
+# Non-existent storage types people reach for by habit; both fail the publish validator
+# ("Attribute type 'text' does not exist"). Map each to the right builder/storage type.
+_BOGUS_DB_TYPES = {
+    "text": "a text widget stores 'string' — use text_field()/typed_field(), or db_type='string'",
+    "json": "JSON stores 'object' — use object_field(), or db_type='object'",
+    "datetime": "datetime stores an epoch 'integer' — use datetime_field()",
+    "date": "dates store an epoch 'integer' — use datetime_field()",
+    "bool": "booleans store 'boolean' — use checkbox_field()",
+}
 
 # Substrings the appliance returns (as 5xx bodies / error messages) while a publish
 # is mid-flight — it runs a full backup + DB migrate cycle and the API is briefly
@@ -124,12 +198,42 @@ class ModulesAdminAPI(BaseAPI):
             return None
         return next((a for a in mod.get("attributes", []) if a.get("name") == field), None)
 
+    def reverse_field(
+        self, source_module: str, source_field: str, *, published: bool = False
+    ) -> dict[str, Any] | None:
+        """Resolve the reverse (inverse) attribute on the *target* of a relationship.
+
+        Given ``source_field`` on ``source_module`` (a ``manyToMany`` / ``oneToMany`` /
+        ``lookup``), return the matching attribute on the target module that points back —
+        or ``None`` if the platform did not create one. Use this to confirm whether a
+        relationship's reverse field was auto-created (it is **not** always — see
+        :meth:`relationship_field`). Reads staging by default; pass ``published=True`` to
+        check the live schema after :meth:`publish`.
+
+        Resolution: the source field's ``type`` is the target module; its ``inversedField``
+        (or, for an un-customised many-to-many, this module's name) is the expected reverse
+        field name.
+        """
+        getter = self.get_published if published else self.get_staging
+        src = self.get_field(source_module, source_field)
+        if not src:
+            return None
+        target = src.get("type")
+        inverse_name = src.get("inversedField") or source_module
+        target_mod = getter(target)
+        if not target_mod:
+            return None
+        return next(
+            (a for a in target_mod.get("attributes", []) if a.get("name") == inverse_name),
+            None,
+        )
+
     # ------------------------------------------------------------- helpers
     @staticmethod
     def field(
         name: str,
         *,
-        db_type: str = "text",
+        db_type: str = "string",
         form_type: str | None = None,
         label: str | None = None,
         required: bool | dict[str, Any] = False,
@@ -150,8 +254,11 @@ class ModulesAdminAPI(BaseAPI):
 
         Mirrors the Field **Properties** panel of the in-product editor:
 
-        - ``db_type`` — storage type (``text``/``json``/``integer``/``picklists``/...);
-          ``form_type`` is the UI widget/sub-type (defaults to ``db_type``).
+        - ``db_type`` — **storage** type (``string``/``integer``/``boolean``/``picklists``/
+          ``object``/``array`` or a target module type); ``form_type`` is the UI widget
+          (defaults to ``db_type``). Prefer the typed builders (:meth:`text_field` etc.) —
+          they pick the right pair; ``"text"``/``"json"`` are widgets, not storage types,
+          and are rejected here.
         - ``label`` — the **Field Title** (``name`` is the immutable **Field API Key**).
         - ``editable`` — UI "Editable" (maps to ``writeable``).
         - ``searchable`` / ``grid_column`` / ``encrypted`` — the **Field Options** row.
@@ -166,7 +273,25 @@ class ModulesAdminAPI(BaseAPI):
         - ``bulk_edit`` — UI "Allow Bulk Edit" (maps to ``bulkAction.allow``).
 
         Extra keys override the defaults (e.g. ``collection=True``, ``dataSource={...}``).
+
+        Raises:
+            ValueError: if ``name`` is not a valid API key, if ``db_type`` is a non-existent
+                storage type (e.g. ``"text"``), or if ``encrypted`` and ``searchable`` are
+                both set — all of which the appliance would only reject at publish time.
         """
+        if not isinstance(name, str) or not _FIELD_NAME_RE.match(name):
+            raise ValueError(
+                f"invalid field name {name!r}: a field API key must start with a letter and "
+                "contain only letters, digits, or underscores (no spaces or punctuation)"
+            )
+        if len(name) > _MAX_NAME_LEN:
+            raise ValueError(f"field name {name!r} exceeds {_MAX_NAME_LEN} characters")
+        if db_type in _BOGUS_DB_TYPES:
+            raise ValueError(
+                f"db_type={db_type!r} is not a storage type: {_BOGUS_DB_TYPES[db_type]}"
+            )
+        if encrypted and searchable:
+            raise ValueError(f"field {name!r} cannot be both encrypted and searchable — pick one")
         validation: dict[str, Any] = {
             "required": required,
             "minlength": minlength,
@@ -234,6 +359,128 @@ class ModulesAdminAPI(BaseAPI):
         }
         return attr
 
+    # ------------------------------------------------ typed scalar builders
+    @classmethod
+    def typed_field(
+        cls, name: str, form_type: str, *, label: str | None = None, **opts: Any
+    ) -> dict[str, Any]:
+        """Build a scalar field by **widget**, deriving the storage ``type`` for you.
+
+        ``form_type`` is any key of :data:`WIDGET_STORAGE_TYPE` (``text``, ``datetime``,
+        ``checkbox``, ``email``, ...). This is the recommended way to build non-relationship
+        fields — it guarantees ``type``/``formType`` agree, avoiding the
+        "Attribute type 'text' does not exist" publish error you get from hand-setting
+        ``db_type``. For relationships/picklists use the dedicated builders instead.
+        """
+        db_type = WIDGET_STORAGE_TYPE.get(form_type)
+        if db_type is None:
+            raise ValueError(
+                f"unknown scalar widget {form_type!r}; use a key of WIDGET_STORAGE_TYPE, "
+                "or picklist_field / lookup_field / relationship_field for non-scalars"
+            )
+        return cls.field(name, db_type=db_type, form_type=form_type, label=label, **opts)
+
+    @classmethod
+    def text_field(
+        cls,
+        name: str,
+        *,
+        area: bool = False,
+        rich: bool = False,
+        html: bool = False,
+        label: str | None = None,
+        **opts: Any,
+    ) -> dict[str, Any]:
+        """Build a string field: single-line (default), ``textarea``, ``richtext`` or
+        ``html``. ``area``/``rich``/``html`` pick the widget (all store ``string``)."""
+        widget = "html" if html else "richtext" if rich else "textarea" if area else "text"
+        return cls.typed_field(name, widget, label=label, **opts)
+
+    @classmethod
+    def integer_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build an integer field (``integer`` storage, ``integer`` widget)."""
+        return cls.typed_field(name, "integer", label=label, **opts)
+
+    @classmethod
+    def datetime_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build a date/time field. Stored as an epoch-millis ``integer`` behind a
+        ``datetime`` widget — that storage type is intentional, not a bug."""
+        return cls.typed_field(name, "datetime", label=label, **opts)
+
+    @classmethod
+    def checkbox_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build a boolean checkbox field (``boolean`` storage, ``checkbox`` widget)."""
+        return cls.typed_field(name, "checkbox", label=label, **opts)
+
+    # alias: the editor labels this widget "checkbox"; "boolean" reads naturally too
+    boolean_field = checkbox_field
+
+    @classmethod
+    def email_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build an email field (``string`` storage, ``email`` widget with email validation)."""
+        return cls.typed_field(name, "email", label=label, **opts)
+
+    @classmethod
+    def url_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build a URL field (``string`` storage, ``url`` widget)."""
+        return cls.typed_field(name, "url", label=label, **opts)
+
+    @classmethod
+    def phone_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build a phone field (``string`` storage, ``phone`` widget)."""
+        return cls.typed_field(name, "phone", label=label, **opts)
+
+    @classmethod
+    def password_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build a masked password field. Pass ``encrypted=True`` to store it encrypted
+        at rest (encrypted fields cannot be ``searchable``)."""
+        return cls.typed_field(name, "password", label=label, **opts)
+
+    @classmethod
+    def object_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+        """Build a JSON/object field (``object`` storage, ``object`` widget)."""
+        return cls.typed_field(name, "object", label=label, **opts)
+
+    # ---------------------------------------------------- relationship/refs
+    @classmethod
+    def lookup_field(
+        cls,
+        name: str,
+        target_module: str,
+        *,
+        label: str | None = None,
+        ownable_filter: bool = False,
+        owning_module: str | None = None,
+        **opts: Any,
+    ) -> dict[str, Any]:
+        """Build a **lookup** (many-to-one) field: a *single* reference to one record of
+        ``target_module``.
+
+        Unlike :meth:`relationship_field`, a lookup is **not a collection** and does **not**
+        own a relationship, so the platform creates **no reverse field** on the target
+        module — it is a one-directional pointer. Two lookups from different modules to the
+        same target are independent.
+
+        A lookup is also what a ``oneToMany`` relationship needs on its *target* side: a
+        ``oneToMany`` field will not publish unless a matching lookup already exists on the
+        target module (see :meth:`relationship_field`).
+
+        ``ownable_filter`` adds the ``isOwnable``/``modulePermissions`` ``dataSourceFilters``
+        the in-product editor sets for team-ownable lookups (``owning_module`` defaults to
+        the module being edited; set it when building fields ahead of the module).
+        """
+        attr = cls.field(name, db_type=target_module, form_type="lookup", label=label, **opts)
+        attr["collection"] = False
+        attr["ownsRelationship"] = False
+        attr["dataSource"] = {"model": target_module}
+        if ownable_filter:
+            attr["dataSourceFilters"] = {
+                "isOwnable": True,
+                "modulePermissions": owning_module,
+                "modulePermissionsType": {"canUpdate": True, "canRead": True},
+            }
+        return attr
+
     @classmethod
     def relationship_field(
         cls,
@@ -242,11 +489,31 @@ class ModulesAdminAPI(BaseAPI):
         *,
         many: bool = True,
         label: str | None = None,
+        inversed_field: str | None = None,
+        owns_relationship: bool = True,
         **opts: Any,
     ) -> dict[str, Any]:
-        """Build a **relationship** field to ``target_module`` (its module ``type``).
+        """Build a **collection** relationship to ``target_module`` (its module ``type``).
 
         ``many`` selects ``manyToMany`` (default) vs ``oneToMany``; both are collections.
+
+        **Reverse-field behavior** (the part that "sometimes" creates a field on the other
+        module — verify it with :meth:`reverse_field` after :meth:`publish`):
+
+        - ``manyToMany`` with the **default** inverse (``inversed_field=None``): the editor
+          auto-creates a reverse many-to-many field on ``target_module`` named after *this*
+          module, wired at staging time. This is the common "it auto-created the field" case.
+        - ``manyToMany`` with a **custom** ``inversed_field``: the reverse field is **not**
+          auto-created — you must add it to the target yourself (another
+          ``relationship_field`` pointing back). This is the common "it did *not* create the
+          field" case.
+        - ``oneToMany``: requires a matching **lookup** (many-to-one) field to already exist
+          on ``target_module`` (its name = ``inversed_field``). Publish fails with
+          "there is no lookup field present in '<target>'" if it is missing — create it with
+          :meth:`lookup_field` on the target *before* publishing.
+
+        ``owns_relationship`` (default True) marks this as the owning side of the join.
+        Pass ``owns_relationship=False`` for the non-owning mirror of an existing relation.
         """
         attr = cls.field(
             name,
@@ -256,6 +523,9 @@ class ModulesAdminAPI(BaseAPI):
             **opts,
         )
         attr["collection"] = True
+        attr["ownsRelationship"] = owns_relationship
+        if inversed_field is not None:
+            attr["inversedField"] = inversed_field
         attr["dataSource"] = {"model": target_module}
         return attr
 
@@ -377,6 +647,43 @@ class ModulesAdminAPI(BaseAPI):
                 changes.append({"module": mod, "change": "modified"})
         return changes
 
+    def find_invalid_drafts(self, *, deep: bool = False) -> list[dict[str, Any]]:
+        """Scan **staging** for drafts whose names would break the next publish.
+
+        Because :meth:`publish` is appliance-wide, a single staged module or field with an
+        illegal identifier (e.g. a module ``9probe`` or a field ``"bad name"`` added through
+        the UI) makes the whole publish fail mid-migrate with a cryptic Postgres error like
+        ``syntax error, unexpected integer "9", expecting identifier`` — and the error does
+        **not** name the offender. Run this first to find it.
+
+        Returns one entry per problem: ``{"module", "uuid", "problem"}`` (and ``"field"`` for
+        a bad attribute). ``deep=False`` (default) checks only module names — one cheap list
+        read; ``deep=True`` also fetches every draft's attributes to validate field names
+        (one read per module). An empty list means nothing staged would fail name validation.
+
+        pyfsr's own builders reject these inputs up front, so a hit here is typically a draft
+        created in the in-product editor or by another tool.
+        """
+        problems: list[dict[str, Any]] = []
+        members = (self.client.get(_STAGING, params=_ALL) or {}).get("hydra:member", [])
+        for m in members:
+            t = m.get("type") or ""
+            uuid = m.get("uuid")
+            if not _MODULE_NAME_RE.match(t):
+                problems.append({"module": t, "uuid": uuid, "problem": "invalid module name"})
+            elif len(t) > _MAX_NAME_LEN:
+                problems.append({"module": t, "uuid": uuid, "problem": "module name too long"})
+            if not deep:
+                continue
+            full = self.client.get(f"{_STAGING}/{uuid}", params=_REL) or {}
+            for a in full.get("attributes", []) or []:
+                n = a.get("name") or ""
+                if not _FIELD_NAME_RE.match(n):
+                    problems.append(
+                        {"module": t, "uuid": uuid, "field": n, "problem": "invalid field name"}
+                    )
+        return problems
+
     @staticmethod
     def _differs(staged: dict[str, Any], published: dict[str, Any]) -> bool:
         """True if a staged record differs from its published one, ignoring the
@@ -431,9 +738,21 @@ class ModulesAdminAPI(BaseAPI):
         ``default_sort`` is the default sort spec (e.g. ``[{"field": "createDate",
         "direction": "DESC"}]``).
         """
+        if not isinstance(module, str) or not _MODULE_NAME_RE.match(module):
+            raise ValueError(
+                f"invalid module name {module!r}: a module type must start with a lowercase "
+                "letter and contain only lowercase letters, digits, or underscores "
+                "(e.g. 'customwidgets', 'threat_reports')"
+            )
+        if len(module) > _MAX_NAME_LEN:
+            raise ValueError(f"module name {module!r} exceeds {_MAX_NAME_LEN} characters")
+        if fields is not None and not fields:
+            raise ValueError(
+                "a module needs at least one field; pass fields=None for a default 'name'"
+            )
         label = label or module
         if fields is None:
-            fields = [self.field("name", db_type="text", form_type="text", required=True)]
+            fields = [self.text_field("name", required=True)]
         if display_template is None:
             names = [f.get("name") for f in fields if f.get("name")]
             anchor = "name" if "name" in names else (names[0] if names else "name")
@@ -604,69 +923,131 @@ class ModulesAdminAPI(BaseAPI):
         )
         return any(marker in text for marker in _PUBLISH_TRANSIENT_MARKERS)
 
-    def _wait_until_ready(self, timeout: float, poll_interval: float) -> None:
-        """Poll a cheap read until the appliance finishes the publish/migrate cycle.
-
-        Raises :class:`TimeoutError` if it does not recover within ``timeout`` seconds, or
-        re-raises any non-transient error encountered while probing.
-        """
-        deadline = time.monotonic() + timeout
-        last_exc: Exception | None = None
-        while True:
-            try:
-                self.client.get(_PUBLISHED, params={"$limit": 1})
-                return
-            except FortiSOARException as exc:
-                if not self._is_publish_transient(exc):
-                    raise
-                last_exc = exc
-            except Exception as exc:  # network drop mid-restart counts as transient
-                last_exc = exc
-            if time.monotonic() >= deadline:
-                raise TimeoutError(
-                    f"publish did not complete within {timeout}s (last appliance state: {last_exc})"
-                )
-            time.sleep(poll_interval)
+    def _last_publish_time(self) -> int | None:
+        """Best-effort read of the last publish's ``last_publish_time`` (epoch), or None."""
+        try:
+            body = self.client.get(_PUBLISH_ERROR)
+        except Exception:
+            return None
+        return body.get("last_publish_time") if isinstance(body, dict) else None
 
     def publish(
         self,
         *,
-        wait: bool = True,
         timeout: float = 600.0,
         poll_interval: float = 10.0,
-    ) -> dict[str, Any] | None:
+        precheck: bool = True,
+    ) -> dict[str, Any]:
         """Commit **all** pending staged schema changes to live (``PUT /api/publish``).
 
         ⚠️ Appliance-wide: this publishes every pending change in staging across the whole
         instance, not just modules you touched. On a shared appliance, confirm nothing else
         is mid-edit before calling.
 
-        The publish triggers a full backup + DB migrate cycle during which the API is
-        briefly unavailable, returning 5xx and transient state strings ("Decrypt Database",
-        "Cleaning Up Old Backups", ...). By default this method is **synchronous**: it
-        tolerates those transient states on the initial call and then polls until the
-        appliance has finished, so callers can safely read back the published schema
-        immediately on return.
+        Because it is appliance-wide, **one** illegally-named staged draft anywhere (e.g. a
+        module ``9probe`` created in the UI) makes the whole publish fail mid-migrate with a
+        cryptic Postgres error (``syntax error, unexpected integer "9", expecting identifier``)
+        — and ``/api/publish/error`` may even still report ``Success`` while nothing actually
+        commits. To avoid that, ``precheck`` (default True) runs
+        :meth:`find_invalid_drafts` first and raises a clear, named ``ValueError`` *before*
+        the destructive PUT. Set ``precheck=False`` to skip it.
+
+        **Always synchronous.** The PUT only *starts* the publish (the response is
+        ``{"status": "started"}``); the backup + DB migrate + commit then runs server-side,
+        during which the **entire API — including ``/api/3`` — returns 503**. Since the whole
+        appliance is unusable for that window there is nothing a caller could do concurrently,
+        so this method blocks: it waits out the outage and confirms the result via
+        ``/api/publish/error``, returning only once the schema is actually live (or raising).
+
+        Note that *schema validation* errors (e.g. a relationship with no matching lookup on
+        the target, or a field whose ``type`` does not exist) are returned **synchronously**
+        as an :class:`~pyfsr.exceptions.APIError` on the PUT itself, before any migrate runs.
+        A :class:`~pyfsr.exceptions.FortiSOARException` from :meth:`publish` therefore carries
+        the appliance's own validation message — surface it verbatim to the user.
 
         Args:
-            wait: If True (default), block until the publish/migrate cycle completes. If
-                False, fire-and-forget — return as soon as the PUT is accepted (legacy
-                behavior; the caller must handle transient states themselves).
-            timeout: Max seconds to wait for completion when ``wait`` is True.
+            timeout: Max seconds to wait for the publish to complete.
             poll_interval: Seconds between readiness probes.
+            precheck: If True (default), refuse to publish when any staged draft has an
+                invalid module name (see :meth:`find_invalid_drafts`).
 
         Returns:
-            The publish response when available; ``None`` if the PUT response was consumed
-            by the transient migrate cycle but the publish otherwise completed.
+            The final ``/api/publish/error`` body
+            (``{"status": "Success", "last_publish_time": ...}``).
+
+        Raises:
+            ValueError: if ``precheck`` finds an invalid staged draft that would wedge the
+                appliance-wide migrate.
+            FortiSOARException: if the PUT is rejected by schema validation, or if the
+                publish finishes in any state other than ``Success``.
+            TimeoutError: if the publish does not complete within ``timeout``.
         """
-        result: dict[str, Any] | None = None
+        if precheck:
+            bad = self.find_invalid_drafts()
+            if bad:
+                names = ", ".join(f"{b['module']!r} ({b['problem']})" for b in bad)
+                raise ValueError(
+                    "refusing to publish: invalid staged draft(s) would fail the "
+                    f"appliance-wide migrate: {names}. Fix or discard them "
+                    "(discard_staging_draft), or pass precheck=False to override."
+                )
+        prev_time = self._last_publish_time()
         try:
-            result = self.client.put(_PUBLISH, data={})
+            self.client.put(_PUBLISH, data={})
         except FortiSOARException as exc:
-            # The PUT itself can return a transient migrate-state body; that means the
-            # publish was accepted and is running, not that it failed.
-            if not (wait and self._is_publish_transient(exc)):
+            # A 5xx body here is the migrate cycle already starting (the publish was
+            # accepted); anything else — notably a 400 with a validation message — is a
+            # real rejection the caller needs to see.
+            if not self._is_publish_transient(exc):
                 raise
-        if wait:
-            self._wait_until_ready(timeout, poll_interval)
-        return result
+        return self._wait_for_publish(prev_time, timeout, poll_interval)
+
+    def _wait_for_publish(
+        self, prev_time: int | None, timeout: float, poll_interval: float
+    ) -> dict[str, Any]:
+        """Block until the async publish finishes, using ``/api/publish/error`` as the truth.
+
+        Polls ``/api/publish/error`` until ``last_publish_time`` advances past ``prev_time``.
+        Returns the final body on ``status == "Success"``; raises
+        :class:`~pyfsr.exceptions.FortiSOARException` with the appliance's reported
+        status/error on any other terminal state, or :class:`TimeoutError` if it never
+        reports back.
+
+        While the migrate runs the **whole API is unstable** — ``/api/publish/error`` itself
+        may return 503s, gateway errors, or unparseable bodies ("Unknown error occurred").
+        Every such failure is treated as "still in progress, keep waiting": only a cleanly
+        parsed 200 body is allowed to decide the outcome. That is why a publish error is
+        reported from the JSON ``status`` field, never inferred from a failed poll.
+        """
+        deadline = time.monotonic() + timeout
+        last: dict[str, Any] | None = None
+        saw_outage = False
+        while True:
+            body: dict[str, Any] | None = None
+            try:
+                got = self.client.get(_PUBLISH_ERROR)
+                body = got if isinstance(got, dict) else None
+            except Exception:
+                # API down / unparseable mid-migrate — the outage itself is the signal that
+                # the publish is running; keep polling until it stabilises or we time out.
+                saw_outage = True
+            if body is not None:
+                last = body
+                status = str(body.get("status", "")).lower()
+                # This publish is done once its outcome is fresh: either the timestamp moved
+                # past what we captured, or we have ridden through the 503 migrate outage and
+                # come out the other side (covers the case where ``prev_time`` was unreadable
+                # — never trust a stale "Success" that predates this publish).
+                fresh = body.get("last_publish_time") != prev_time or saw_outage
+                if fresh and status == "success":
+                    return body
+                if fresh and status not in ("", "started", "in progress", "inprogress"):
+                    raise FortiSOARException(
+                        f"publish failed: {body.get('status')} "
+                        f"({body.get('message') or body.get('error') or body})"
+                    )
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"publish did not complete within {timeout}s (last state: {last})"
+                )
+            time.sleep(poll_interval)
