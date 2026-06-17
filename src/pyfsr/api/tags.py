@@ -2,8 +2,8 @@
 
 FortiSOAR stores a tag's human name in its ``uuid`` column — there is no separate name
 field — and the list endpoint only returns rows when ``$export=true`` is set. This wrapper
-hides both footguns: :meth:`list` returns plain tag-name strings. Accessed as
-``client.tags``.
+hides both footguns: :meth:`~pyfsr.api.tags.TagsAPI.list` returns plain tag-name strings.
+Accessed as ``client.tags``.
 
 Example::
 

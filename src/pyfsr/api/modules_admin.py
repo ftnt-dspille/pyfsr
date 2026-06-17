@@ -880,7 +880,7 @@ class ModulesAdminAPI(BaseAPI):
         Change is staged until :meth:`publish`.
 
         ``record_uniqueness`` takes plain field names (e.g. ``["name"]``) and is converted
-        to the platform's ``uniqueConstraint`` object shape via :meth:`_unique_constraint`.
+        to the platform's ``uniqueConstraint`` object shape via the ``_unique_constraint`` helper.
         ⚠️ Note: changing record-uniqueness on an **already-published** module requires a
         DB migration that only runs on :meth:`publish`; the staging PUT records the intent
         but the unique index is (re)built at publish time, and removing an existing
