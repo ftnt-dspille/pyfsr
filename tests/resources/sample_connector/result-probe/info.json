@@ -1,0 +1,80 @@
+{
+  "name": "result-probe",
+  "version": "1.0.0",
+  "label": "Result Probe",
+  "description": "Minimal connector that returns the same payload three different ways (bare dict, Result.set_data, Result.set_result) so we can observe how FortiSOAR normalizes each into the execute envelope.",
+  "publisher": "pyfsr-tests",
+  "icon_small_name": "small.png",
+  "icon_large_name": "large.png",
+  "category": "Utilities",
+  "configuration": {
+    "fields": [
+      {
+        "name": "marker",
+        "title": "Marker",
+        "type": "text",
+        "editable": true,
+        "visible": true,
+        "required": true,
+        "value": "probe",
+        "tooltip": "Arbitrary value echoed back so we can confirm config reaches the operation."
+      }
+    ]
+  },
+  "operations": [
+    {
+      "operation": "return_bare_dict",
+      "title": "Return Bare Dict",
+      "description": "Returns a plain dict. The platform should wrap it under the envelope's data key.",
+      "parameters": [
+        {
+          "name": "echo",
+          "title": "Echo",
+          "type": "text",
+          "editable": true,
+          "visible": true,
+          "required": false,
+          "value": "hi"
+        }
+      ],
+      "enabled": true,
+      "output_schema": {
+        "echo": "",
+        "marker": "",
+        "style": ""
+      }
+    },
+    {
+      "operation": "return_result_set_data",
+      "title": "Return Result.set_data",
+      "description": "Returns a Result() with set_status/set_message/set_data — the pattern the building guide recommends.",
+      "parameters": [
+        {
+          "name": "echo",
+          "title": "Echo",
+          "type": "text",
+          "editable": true,
+          "visible": true,
+          "required": false,
+          "value": "hi"
+        }
+      ],
+      "enabled": true,
+      "output_schema": {
+        "echo": "",
+        "marker": "",
+        "style": ""
+      }
+    },
+    {
+      "operation": "return_result_set_result",
+      "title": "Return Result.set_result",
+      "description": "Returns a Result() using set_result(status, message) only — the status-without-data pattern seen in real connectors.",
+      "parameters": [],
+      "enabled": true
+    }
+  ],
+  "cs_approved": false,
+  "cs_compatible": true,
+  "help_online": ""
+}
