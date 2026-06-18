@@ -292,3 +292,91 @@ def test_definition_crud_uuid_validation():
     for op in (lambda: a.update("", debug=True), lambda: a.delete("  ")):
         with pytest.raises(ValueError):
             op()
+
+
+# -- run control / manual input / named triggers ----------------------------
+class _Rec:
+    def __init__(self, resp=None):
+        self.calls = []
+        self._resp = resp if resp is not None else {}
+
+    def get(self, endpoint, params=None, **kw):
+        self.calls.append(("GET", endpoint, None, params))
+        return self._resp
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("POST", endpoint, data, params))
+        return self._resp
+
+    def put(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("PUT", endpoint, data, params))
+        return self._resp
+
+
+def test_start_retry_post_empty_body():
+    c = _Rec()
+    PlaybooksAPI(c).start("pk-1")
+    assert c.calls[-1][:3] == ("POST", "/api/wf/api/workflows/pk-1/start/", {})
+    PlaybooksAPI(c).retry("pk-1")
+    assert c.calls[-1][:3] == ("POST", "/api/wf/api/workflows/pk-1/retry/", {})
+
+
+def test_approval_body():
+    c = _Rec()
+    PlaybooksAPI(c).approval("pk-1", decision="approved", comment="ok")
+    assert c.calls[-1][:3] == (
+        "POST",
+        "/api/wf/api/workflows/pk-1/approval/",
+        {"decision": "approved", "comment": "ok"},
+    )
+
+
+def test_count_passes_logs_param():
+    c = _Rec(resp={"count": 5})
+    PlaybooksAPI(c).count(logs="recent")
+    assert c.calls[-1] == ("GET", "/api/wf/api/workflows/count/", None, {"logs": "recent"})
+
+
+def test_log_list_keys_on_task_id():
+    c = _Rec()
+    PlaybooksAPI(c).log_list(task_id="t-1", status="finished")
+    method, endpoint, data, params = c.calls[-1]
+    assert endpoint == "/api/wf/api/workflows/log_list/"
+    assert params["task_id"] == "t-1" and params["status"] == "finished"
+
+
+def test_query_logs_body_and_logs_param():
+    c = _Rec()
+    PlaybooksAPI(c).query_logs(filters=[{"field": "status"}], logic="OR", logs="historical")
+    method, endpoint, data, params = c.calls[-1]
+    assert endpoint == "/api/wf/api/query/workflow_logs/"
+    assert data == {"logic": "OR", "filters": [{"field": "status"}]}
+    assert params == {"logs": "historical"}
+
+
+def test_manual_inputs_and_retrieve():
+    c = _Rec(resp={"hydra:member": [{"id": 7, "step_id": "s1"}]})
+    rows = PlaybooksAPI(c).manual_inputs()
+    assert rows == [{"id": 7, "step_id": "s1"}]
+    assert c.calls[-1][1] == "/api/wf/api/manual-wf-input/list_wfinput/"
+    PlaybooksAPI(c).retrieve_manual_input("mi-1")
+    assert c.calls[-1][1] == "/api/wf/api/manual-wf-input/mi-1/retrieve_wfinput/"
+
+
+def test_update_manual_input_uses_put():
+    c = _Rec()
+    PlaybooksAPI(c).update_manual_input("mi-1", value="x")
+    assert c.calls[-1][:3] == ("PUT", "/api/wf/api/manual-wf-input/mi-1/", {"value": "x"})
+
+
+def test_trigger_by_name_and_deferred():
+    c = _Rec(resp={"task_id": "t1"})
+    PlaybooksAPI(c).trigger_by_name("my-hook", body={"a": 1})
+    assert c.calls[-1][:3] == ("POST", "/api/triggers/1/my-hook", {"a": 1})
+    PlaybooksAPI(c).trigger_by_name("my-hook", deferred=True)
+    assert c.calls[-1][1] == "/api/triggers/1/deferred/my-hook"
+
+
+def test_trigger_by_name_rejects_blank():
+    with pytest.raises(ValueError):
+        PlaybooksAPI(_Rec()).trigger_by_name("")

@@ -39,7 +39,9 @@ Example:
 
 from __future__ import annotations
 
+import mimetypes
 import time
+from pathlib import Path
 from typing import Any
 
 from .base import BaseAPI
@@ -108,6 +110,66 @@ class ConnectorsAPI(BaseAPI):
             self.clear_cache()
         return final
 
+    def install_from_file(
+        self,
+        path: str,
+        *,
+        replace: bool = False,
+        wait: bool = False,
+        interval: float = 3.0,
+        timeout: float = 300.0,
+    ) -> dict[str, Any]:
+        """Install a connector by uploading its ``.tgz`` bundle.
+
+        The multipart-upload form of ``POST /api/3/solutionpacks/install`` (the
+        same endpoint :meth:`install` posts a name to). Sends the archive as
+        ``file`` with the required ``$type=connector`` query parameter; pass
+        ``replace=True`` to re-install over an existing version (``$replace=true``).
+        The response carries the full connector record — including the integer
+        ``id`` other calls need.
+
+        Use this for connectors not in Content Hub (a locally built or
+        custom ``.tgz``); use :meth:`install` to pull a published one by name.
+
+        Args:
+            path: filesystem path to the connector ``.tgz``.
+            replace: overwrite an already-installed version of the same name.
+            wait: block until the import job reaches a terminal status.
+            interval: seconds between polls when ``wait`` (default 3).
+            timeout: give up waiting after this many seconds (default 300).
+
+        Returns:
+            With ``wait=False``, the install response (the connector record,
+            carrying any import-job id). With ``wait=True``, the final
+            :meth:`install_status` payload. The configured-connector cache is
+            dropped on a successful upload/wait.
+
+        Raises:
+            FileNotFoundError: if ``path`` doesn't exist.
+        """
+        file_path = Path(path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"connector bundle not found: {file_path}")
+        params = {"$type": "connector"}
+        if replace:
+            params["$replace"] = "true"
+        mime_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+        with open(file_path, "rb") as f:
+            resp = self.client.post(
+                "/api/3/solutionpacks/install",
+                files={"file": (file_path.name, f, mime_type)},
+                params=params,
+                headers={"Content-Type": None},
+            )
+        resp = resp if isinstance(resp, dict) else {"result": resp}
+        self.clear_cache()
+        if not wait:
+            return resp
+        job_id = _import_job_id(resp)
+        if not job_id:
+            return resp
+        return self.wait_for_install(job_id, interval=interval, timeout=timeout)
+
     def install_status(self, job_id: str) -> dict[str, Any]:
         """Fetch a connector install's import-job progress.
 
@@ -137,6 +199,45 @@ class ConnectorsAPI(BaseAPI):
             time.sleep(interval)
             status = self.install_status(job_id)
         return status
+
+    def uninstall(self, connector: str, *, refresh: bool = True) -> None:
+        """Uninstall a connector from the **appliance** (its self-agent).
+
+        ``DELETE /api/integration/connectors/{id}/`` — the integer install id is
+        resolved from ``connector`` (a name-only call won't work). The trailing
+        slash is mandatory; the endpoint returns 204 on success. To remove a
+        connector from a remote *agent* instead, use
+        :meth:`~pyfsr.api.agents.AgentsAPI.uninstall_connector`.
+
+        Raises ``ValueError`` if the connector isn't installed.
+        """
+        connector_id = self.resolve_connector_id(connector)
+        if connector_id is None:
+            raise ValueError(f"{connector!r} is not installed")
+        self.client.delete(f"/api/integration/connectors/{connector_id}/")
+        if refresh:
+            self.clear_cache()
+
+    def connector_detail(self, connector: str) -> dict[str, Any]:
+        """Fetch a connector's full record by id (operations-discovery endpoint).
+
+        ``POST /api/integration/connectors/{id}/`` with a ``{}`` body — the
+        spec-canonical way to enumerate a connector's installed operations.
+        Returns the full record: ``operations[]`` (each with ``operation``,
+        ``title``, ``description``, ``parameters[]``, ``output_schema``),
+        ``configuration[]`` (each with ``config_id``, ``name``, ``config``,
+        ``agent``), and ``config_schema``. GET is forbidden and an empty body
+        415s, so this always POSTs ``{}``.
+
+        Prefer this over :meth:`definition` when you have an installed connector
+        and want exactly what the appliance reports for it. Raises ``ValueError``
+        if the connector isn't installed.
+        """
+        connector_id = self.resolve_connector_id(connector)
+        if connector_id is None:
+            raise ValueError(f"{connector!r} is not installed")
+        resp = self.client.post(f"/api/integration/connectors/{connector_id}/", data={})
+        return resp if isinstance(resp, dict) else {"result": resp}
 
     # ------------------------------------------------------------- discovery
     def list_configured(self, *, refresh: bool = False) -> list[dict[str, Any]]:
@@ -190,6 +291,34 @@ class ConnectorsAPI(BaseAPI):
             page += 1
         self._configured = out
         return out
+
+    def list_configurations(
+        self,
+        *,
+        name: str | None = None,
+        active: bool | None = None,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List connector configuration records via ``GET /api/integration/configuration/``.
+
+        The dedicated, filterable configurations endpoint (distinct from the
+        connector-derived view of :meth:`configurations`). Each entry carries
+        ``id`` (int), ``config_id`` (uuid), ``connector`` (int connector id),
+        ``agent`` (set when remote), and ``config`` (the field map). Filter with
+        ``name`` (connector name) and/or ``active``. Returns the ``data[]`` array
+        (this endpoint is the custom ``{status, totalItems, data[]}`` envelope,
+        not Hydra).
+        """
+        params: dict[str, Any] = {"page": page, "page_size": page_size}
+        if name is not None:
+            params["name"] = name
+        if active is not None:
+            params["active"] = active
+        resp = self.client.get("/api/integration/configuration/", params=params) or {}
+        if isinstance(resp, dict):
+            return resp.get("data") or []
+        return resp if isinstance(resp, list) else []
 
     def _find_configured(self, connector: str) -> dict[str, Any] | None:
         return next((c for c in self.list_configured() if c.get("name") == connector), None)
@@ -541,14 +670,83 @@ class ConnectorsAPI(BaseAPI):
         if refresh:
             self.clear_cache()
 
-    def files(self, connector_id: str) -> dict[str, Any]:
-        """Fetch a connector's source files (dev) via
-        ``GET /api/integration/connector/<id>/files/``.
+    # --------------------------------------------------------- connector studio
+    # The Connector Studio development workspace: list checked-out connectors,
+    # open one for editing, read/write its source files, then publish to land
+    # the changes on the running appliance. ``entity_id`` is the dev-workspace
+    # entity id (from :meth:`dev_list`), not the integer install id.
+    _DEV_BASE = "/api/integration/connector/development/entity"
 
-        ``connector_id`` is the connector's dev/install id (the ``id`` field of
-        :meth:`definition`). Dev-only; raises on connectors without file access.
+    def dev_list(self) -> list[dict[str, Any]]:
+        """List connectors checked out into the Connector Studio dev workspace.
+
+        ``GET /api/integration/connector/development/entity/`` — the same set
+        shown in the Studio's left-hand tree. Returns the ``data[]`` entries.
         """
-        return self.client.get(f"/api/integration/connector/{connector_id}/files/")
+        resp = self.client.get(f"{self._DEV_BASE}/") or {}
+        if isinstance(resp, dict):
+            return resp.get("data") or resp.get("hydra:member") or []
+        return resp if isinstance(resp, list) else []
+
+    def dev_edit(self, entity_id: str) -> dict[str, Any]:
+        """Open a dev-workspace connector for editing (Studio's *Edit* action).
+
+        ``POST .../entity/{id}/`` with ``{"edit_repo_connector": true}``. Returns
+        the entity's full operations + configuration schema + file tree. Follow
+        with :meth:`dev_read_file`/:meth:`dev_write_file`, then :meth:`dev_publish`.
+        """
+        resp = self.client.post(
+            f"{self._DEV_BASE}/{entity_id}/", data={"edit_repo_connector": True}
+        )
+        return resp if isinstance(resp, dict) else {"result": resp}
+
+    def dev_read_file(self, entity_id: str, xpath: str) -> dict[str, Any]:
+        """Read one source file from a dev-workspace connector.
+
+        ``POST .../entity/{id}/files/`` with ``{"xpath": ...}``. ``xpath`` is
+        relative to the connector's dev-workspace root and starts with
+        ``/<name>_<vtag>_dev/...``. Returns the file payload.
+        """
+        resp = self.client.post(f"{self._DEV_BASE}/{entity_id}/files/", data={"xpath": xpath})
+        return resp if isinstance(resp, dict) else {"result": resp}
+
+    def dev_write_file(self, entity_id: str, file_data: dict[str, Any]) -> dict[str, Any]:
+        """Write one source file in a dev-workspace connector (Studio *Save*).
+
+        ``PUT .../entity/{id}/files/`` with ``{"fileData": ...}``. ``file_data``
+        is the editor's file object (path + contents). Saved changes are staged
+        in the workspace and do **not** affect playbook execution until
+        :meth:`dev_publish` is called.
+        """
+        resp = self.client.put(f"{self._DEV_BASE}/{entity_id}/files/", data={"fileData": file_data})
+        return resp if isinstance(resp, dict) else {"result": resp}
+
+    def dev_publish(
+        self,
+        entity_id: str,
+        *,
+        replace: bool = False,
+        discard: bool = False,
+        refresh: bool = True,
+    ) -> dict[str, Any]:
+        """Publish a dev-workspace connector onto the running appliance.
+
+        ``POST .../entity/{id}/publish/``. Lands the workspace contents into the
+        live installed-connectors area and refreshes the integrations service so
+        subsequent playbook runs pick up the new code immediately. ``replace``
+        overwrites an existing installed version of the same name + version.
+        ``discard`` controls the dev-workspace twin's lifecycle (not whether
+        edits are published). This is also the supported escape hatch when a
+        same-version tgz upload left stale code cached in the integrations
+        service (the standard ``$replace=true`` install path does not refresh it).
+        """
+        resp = self.client.post(
+            f"{self._DEV_BASE}/{entity_id}/publish/",
+            data={"replace": replace, "discard": discard},
+        )
+        if refresh:
+            self.clear_cache()
+        return resp if isinstance(resp, dict) else {"result": resp}
 
     # ------------------------------------------------------------- execute
     def execute(

@@ -66,6 +66,13 @@ Create modules, add and alter fields, track pending changes, and publish.
 Every field type, its properties, and how relationship fields wire to other modules.
 :::
 
+:::{grid-item-card} 🧩 Connectors & Agents
+:link: guides/connectors
+:link-type: doc
+
+Discover, configure, execute, and install connectors; manage remote agents.
+:::
+
 :::{grid-item-card} 🤖 AI & Agents
 :link: guides/ai-agents
 :link-type: doc
@@ -92,6 +99,7 @@ guides/records
 guides/querying
 guides/module-admin
 guides/module-field-schema
+guides/connectors
 guides/ai-agents
 ```
 
