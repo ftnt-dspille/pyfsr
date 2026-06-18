@@ -258,3 +258,14 @@ def test_bulk_upsert_posts_list_and_returns_raw():
     assert (method, endpoint) == ("POST", "/api/3/bulkupsert/workflow_collections")
     assert data == rows
     assert out == {"hydra:member": [1, 2]}
+
+
+# -- comments ---------------------------------------------------------------
+def test_comments_scopes_to_record_path():
+    c = FakeClient({"/api/3/alerts/abc-123/comments": {"hydra:member": [{"id": "c1"}]}})
+    rs = RecordSet(c, "alerts")
+    out = rs.comments("abc-123", limit=10, orderby="-createDate")
+    assert out == [{"id": "c1"}]
+    method, endpoint, params, _ = c.calls[-1]
+    assert method == "GET" and endpoint == "/api/3/alerts/abc-123/comments"
+    assert params["$limit"] == 10 and params["$orderby"] == "-createDate"

@@ -13,19 +13,25 @@ from urllib3.util.retry import Retry
 from .api.agents import AgentsAPI
 from .api.ai import AIApi
 from .api.alerts import AlertsAPI
+from .api.api_users import ApiKeyUsersAPI
+from .api.audit import AuditAPI
 from .api.auth_config import AuthConfigAPI
 from .api.connectors import ConnectorsAPI
 from .api.content_hub import ContentHubSearch
 from .api.export_config import ExportConfigAPI
+from .api.feeds import IngestFeedsAPI
 from .api.modules import ModulesAPI
 from .api.modules_admin import ModulesAdminAPI
 from .api.picklists import PicklistsAPI
 from .api.playbooks import PlaybooksAPI
 from .api.routers import RoutersAPI
 from .api.schedules import SchedulesAPI
+from .api.search import SearchAPI
 from .api.solution_packs import SolutionPackAPI
+from .api.system import SystemAPI
 from .api.system_settings import SystemSettingsAPI
 from .api.tags import TagsAPI
+from .api.taxii import TaxiiAPI
 from .api.users import UsersAPI
 from .api.wf_tools import WfToolsAPI
 from .api.workflow_collections import WorkflowCollectionsAPI
@@ -229,6 +235,16 @@ class FortiSOAR:
         self.tags: TagsAPI = TagsAPI(self)
         self.agents: AgentsAPI = AgentsAPI(self)
         self.routers: RoutersAPI = RoutersAPI(self)
+
+        # Threat-intel / bulk ingest, TAXII sharing, audit log
+        self.feeds: IngestFeedsAPI = IngestFeedsAPI(self)
+        self.taxii: TaxiiAPI = TaxiiAPI(self)
+        self.audit: AuditAPI = AuditAPI(self)
+
+        # API-key user lifecycle, appliance introspection/licensing, global search
+        self.api_users: ApiKeyUsersAPI = ApiKeyUsersAPI(self)
+        self.system: SystemAPI = SystemAPI(self)
+        self.search: SearchAPI = SearchAPI(self)
 
     def _log_request(self, method: str, url: str, params: dict, data: dict, headers: dict) -> None:
         """Log request details when verbose mode is enabled."""

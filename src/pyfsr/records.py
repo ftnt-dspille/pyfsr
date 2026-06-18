@@ -111,6 +111,34 @@ class RecordSet:
             return project(rec, fields=fields, summary=summary)
         return rec
 
+    def comments(
+        self,
+        ref: str,
+        *,
+        limit: int = 30,
+        page: int = 1,
+        orderby: str | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """List comments on a record (``GET /api/3/<module>/<uuid>/comments``).
+
+        The server scopes the comment query to the parent record for you — cheaper
+        than ``GET /api/3/comments?<module>.uuid=<uuid>``. ``ref`` is a uuid,
+        ``module:uuid`` shorthand, or IRI. Returns the ``hydra:member`` array.
+
+        Note: comments are read-only on this path (create 405s); to add one,
+        ``client.records("comments").create({...})`` against ``/api/3/comments``.
+        """
+        from .pagination import extract_members
+
+        path = resolve_record_path(self.module, ref).rstrip("/") + "/comments"
+        query = dict(params or {})
+        query["$limit"] = limit
+        query["$page"] = page
+        if orderby is not None:
+            query["$orderby"] = orderby
+        return extract_members(self.client.get(path, params=query))
+
     def list(
         self,
         *,

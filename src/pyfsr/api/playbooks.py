@@ -43,6 +43,13 @@ def _require_uuid(uuid: str, op: str) -> str:
     return uuid.strip()
 
 
+def _pk(pk: str) -> str:
+    """Validate + normalize a run / manual-input pk."""
+    if not isinstance(pk, str) or not pk.strip():
+        raise ValueError("a non-empty pk is required")
+    return pk.strip()
+
+
 def _alert_iri(ref: str) -> str:
     """Expand a bare alert uuid/ref to a full ``/api/3/alerts/<uuid>`` IRI."""
     if ref.startswith("/api/"):
@@ -340,3 +347,130 @@ class PlaybooksAPI(BaseAPI):
             f"/api/wf/api/workflows/{run_pk.strip()}/wfinput_resume/?format=json",
             data=body,
         )
+
+    # ------------------------------------------------------- run control verbs
+    def start(self, run_pk: str) -> dict[str, Any]:
+        """Manually queue a workflow run (``POST .../workflows/{pk}/start/``)."""
+        return self.client.post(f"/api/wf/api/workflows/{_pk(run_pk)}/start/", data={})
+
+    def retry(self, run_pk: str) -> dict[str, Any]:
+        """Retry a failed run from its failed step (``POST .../workflows/{pk}/retry/``)."""
+        return self.client.post(f"/api/wf/api/workflows/{_pk(run_pk)}/retry/", data={})
+
+    def approval(self, run_pk: str, *, decision: str, comment: str | None = None) -> dict[str, Any]:
+        """Drive an approval step (``POST .../workflows/{pk}/approval/``).
+
+        ``decision`` is the approval choice (e.g. ``"approved"``/``"rejected"``);
+        ``comment`` is an optional note. For input-style resumes use :meth:`resume`.
+        """
+        body: dict[str, Any] = {"decision": decision}
+        if comment is not None:
+            body["comment"] = comment
+        return self.client.post(f"/api/wf/api/workflows/{_pk(run_pk)}/approval/", data=body)
+
+    def count(self, *, logs: str = "all") -> dict[str, Any]:
+        """Total run count (``GET .../workflows/count/``).
+
+        ``logs`` is ``"all"`` (recent + historical, default), ``"recent"``, or
+        ``"historical"``. The trailing slash matters (the slashless path 403s).
+        """
+        return self.client.get("/api/wf/api/workflows/count/", params={"logs": logs})
+
+    def log_list(
+        self,
+        *,
+        task_id: str | None = None,
+        status: str | None = None,
+        limit: int = 30,
+        **filters: Any,
+    ) -> dict[str, Any]:
+        """Status lookup for executing playbooks (``POST .../workflows/log_list/``).
+
+        Primarily keyed by ``task_id`` (what :meth:`trigger`/:meth:`trigger_by_name`
+        return). Other query filters (``status``, ``template_iri``, ``records``,
+        ``created_after``, ``tags_include``, …) pass through verbatim as
+        ``filters``; ``limit`` caps the page.
+        """
+        params: dict[str, Any] = {"limit": limit, **filters}
+        if task_id is not None:
+            params["task_id"] = task_id
+        if status is not None:
+            params["status"] = status
+        return self.client.post("/api/wf/api/workflows/log_list/", data={}, params=params)
+
+    def query_logs(
+        self,
+        *,
+        filters: list[dict[str, Any]] | None = None,
+        logic: str = "AND",
+        limit: int | None = None,
+        sort: list[dict[str, Any]] | None = None,
+        aggregates: list[dict[str, Any]] | None = None,
+        logs: str = "all",
+    ) -> dict[str, Any]:
+        """Query the playbook log store by body filter (``POST .../query/workflow_logs/``).
+
+        ``filters`` is a list of filter dicts combined by ``logic`` (``"AND"``/
+        ``"OR"``); ``sort``/``aggregates`` follow the engine's query shape. ``logs``
+        restricts the source (``"all"``/``"recent"``/``"historical"``).
+        """
+        body: dict[str, Any] = {"logic": logic}
+        if filters is not None:
+            body["filters"] = filters
+        if sort is not None:
+            body["sort"] = sort
+        if aggregates is not None:
+            body["aggregates"] = aggregates
+        if limit is not None:
+            body["limit"] = limit
+        return self.client.post(
+            "/api/wf/api/query/workflow_logs/", data=body, params={"logs": logs}
+        )
+
+    # ----------------------------------------------------------- manual inputs
+    def manual_inputs(self) -> list[dict[str, Any]]:
+        """List runs awaiting manual input (``POST .../manual-wf-input/list_wfinput/``).
+
+        Each entry carries ``id`` (the ``manual_input_id`` for :meth:`resume`) and
+        ``step_id``. Buttons/options are omitted here — fetch them per-record with
+        :meth:`retrieve_manual_input`. (POST-only; GET 405s.)
+        """
+        return extract_members(
+            self.client.post("/api/wf/api/manual-wf-input/list_wfinput/", data={})
+        )
+
+    def retrieve_manual_input(self, pk: str) -> dict[str, Any]:
+        """Fetch one manual-input record with its buttons/options.
+
+        ``POST .../manual-wf-input/{pk}/retrieve_wfinput/``. Returns the full
+        record including ``response_mapping.options[]`` (each option's label and
+        ``step_iri``) — which :meth:`manual_inputs` omits, so you need this to know
+        what to send when resuming via :meth:`resume`.
+        """
+        return self.client.post(f"/api/wf/api/manual-wf-input/{_pk(pk)}/retrieve_wfinput/", data={})
+
+    def update_manual_input(self, pk: str, **fields: Any) -> dict[str, Any]:
+        """Update a manual-input record (``PUT .../manual-wf-input/{pk}/``).
+
+        .. warning::
+            This updates the record but does **not** advance an ``awaiting`` run.
+            To actually resume, use :meth:`resume`.
+        """
+        return self.client.put(f"/api/wf/api/manual-wf-input/{_pk(pk)}/", data=fields)
+
+    # --------------------------------------------------------- named triggers
+    def trigger_by_name(
+        self, name: str, *, body: dict[str, Any] | None = None, deferred: bool = False
+    ) -> dict[str, Any]:
+        """Fire a playbook by its trigger's endpoint name.
+
+        ``POST /api/triggers/1/{name}`` (or ``/api/triggers/1/deferred/{name}``
+        when ``deferred=True``, which always 202s and runs on a worker). This is
+        the named-webhook trigger route — distinct from :meth:`trigger`, which
+        uses the manual-execute (``notrigger``) route by playbook uuid. Returns
+        the trigger response (typically ``{"task_id": ...}``).
+        """
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("trigger_by_name() requires a non-empty name")
+        prefix = "/api/triggers/1/deferred/" if deferred else "/api/triggers/1/"
+        return self.client.post(f"{prefix}{name.strip('/ ')}", data=body or {})

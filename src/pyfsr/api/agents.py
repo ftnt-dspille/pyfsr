@@ -155,6 +155,50 @@ class AgentsAPI(BaseAPI):
         }
         return self.client.post(_INSTALL_CONNECTOR, data=body)
 
+    def upgrade_connector(self, agent_id: str, *, name: str, version: str) -> dict[str, Any]:
+        """Upgrade an installed connector on a remote agent to ``version``.
+
+        ``PUT /api/integration/install-connector/`` — same body shape the install
+        proxy uses (``{name, version, agent_id}``). The appliance proxies the
+        upgrade to ``agent_id`` over SME; poll :meth:`connector_install_status`
+        for progress. To go the other way (downgrade/reinstall) pass the target
+        ``version`` explicitly.
+        """
+        if not isinstance(agent_id, str) or not agent_id.strip():
+            raise ValueError("upgrade_connector() requires a non-empty agent_id")
+        body = {"name": name, "version": version, "agent_id": agent_id}
+        return self.client.put(_INSTALL_CONNECTOR, data=body)
+
+    def uninstall_connector(self, agent_id: str, *, name: str, version: str) -> dict[str, Any]:
+        """Uninstall a connector from a remote agent.
+
+        ``DELETE /api/integration/install-connector/`` with ``{name, version,
+        agent_id}``. Distinct from the appliance-level
+        :meth:`~pyfsr.api.connectors.ConnectorsAPI.uninstall`, which removes a
+        connector from the appliance's self-agent by integer id.
+        """
+        if not isinstance(agent_id, str) or not agent_id.strip():
+            raise ValueError("uninstall_connector() requires a non-empty agent_id")
+        body = {"name": name, "version": version, "agent_id": agent_id}
+        resp = self.client.request("DELETE", _INSTALL_CONNECTOR, data=body)
+        try:
+            return resp.json()
+        except ValueError:
+            return {}
+
+    def heartbeat(self, agent_id: str) -> dict[str, Any]:
+        """Probe a remote agent's liveness over the secure-message bus.
+
+        ``GET /api/integration/agent-heartbeat/{agent}/`` — round-trips a
+        heartbeat to the named agent and returns its response. This reflects the
+        *current* SME-bus state, independent of the agent record's asynchronously
+        updated ``configurationHealth.itemValue`` field.
+        """
+        if not isinstance(agent_id, str) or not agent_id.strip():
+            raise ValueError("heartbeat() requires a non-empty agent_id")
+        resp = self.client.get(f"/api/integration/agent-heartbeat/{agent_id}/")
+        return resp if isinstance(resp, dict) else {"result": resp}
+
     def connector_install_status(
         self,
         connector: str,

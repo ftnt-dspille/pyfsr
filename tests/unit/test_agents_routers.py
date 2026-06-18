@@ -35,12 +35,18 @@ class RecordingClient:
             return self._post_payload
         return {"uuid": "ag-1", **(data or {})}
 
+    def put(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("PUT", endpoint, data))
+        if self._post_payload is not None:
+            return self._post_payload
+        return {**(data or {})}
+
     def delete(self, endpoint, params=None, **kw):
         self.calls.append(("DELETE", endpoint, params))
 
     def request(self, method, endpoint, data=None, **kw):
         self.calls.append((method, endpoint, data))
-        return _Resp(content=self._raw)
+        return _Resp(content=self._raw, payload=self._post_payload)
 
 
 # --------------------------------------------------------------------- agents
@@ -154,3 +160,41 @@ def test_routers_first_orders_by_name():
 def test_routers_first_none_when_empty():
     c = RecordingClient(members=[])
     assert RoutersAPI(c).first() is None
+
+
+# ------------------------------------------- connector upgrade/uninstall/heartbeat
+def test_upgrade_connector_puts_spec_body():
+    c = RecordingClient(post_payload={"status": "ok"})
+    AgentsAPI(c).upgrade_connector("hash-1", name="hello-world", version="1.0.4")
+    assert c.calls[-1] == (
+        "PUT",
+        "/api/integration/install-connector/?format=json",
+        {"name": "hello-world", "version": "1.0.4", "agent_id": "hash-1"},
+    )
+
+
+def test_uninstall_connector_deletes_with_body():
+    c = RecordingClient(post_payload={"status": "ok"})
+    AgentsAPI(c).uninstall_connector("hash-1", name="hello-world", version="1.0.4")
+    assert c.calls[-1] == (
+        "DELETE",
+        "/api/integration/install-connector/?format=json",
+        {"name": "hello-world", "version": "1.0.4", "agent_id": "hash-1"},
+    )
+
+
+def test_heartbeat_hits_agent_path():
+    c = RecordingClient(get_payload={"status": "alive"})
+    out = AgentsAPI(c).heartbeat("hash-1")
+    assert out == {"status": "alive"}
+    assert c.calls[-1] == ("GET", "/api/integration/agent-heartbeat/hash-1/", None)
+
+
+def test_connector_lifecycle_requires_agent_id():
+    c = RecordingClient()
+    for fn in ("upgrade_connector", "uninstall_connector", "heartbeat"):
+        with pytest.raises(ValueError):
+            if fn == "heartbeat":
+                getattr(AgentsAPI(c), fn)("")
+            else:
+                getattr(AgentsAPI(c), fn)("", name="x", version="1")

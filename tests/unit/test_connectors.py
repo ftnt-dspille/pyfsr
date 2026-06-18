@@ -1,5 +1,7 @@
 """Unit tests for ConnectorsAPI (discovery / health / execute)."""
 
+import pytest
+
 from pyfsr.api.connectors import ConnectorsAPI, _import_job_id
 
 _CONFIGURED = {
@@ -52,6 +54,8 @@ class FakeClient:
 
     def post(self, endpoint, data=None, params=None, **kwargs):
         self.post_calls.append((endpoint, data))
+        self.last_post_params = params
+        self.last_post_files = kwargs.get("files")
         return self._post_resp or {"operation": data.get("operation"), "status": "Success"}
 
     def put(self, endpoint, data=None, params=None, **kwargs):
@@ -444,7 +448,67 @@ def test_operations_returns_operation_list():
     assert [o["operation"] for o in ops] == ["get_reputation_ip", "get_reputation_url"]
 
 
-def test_files_hits_files_endpoint():
-    api, client = _api(get_map={"/api/integration/connector/dev-7/files/": {"files": []}})
-    assert api.files("dev-7") == {"files": []}
-    assert client.get_calls[-1][0] == "/api/integration/connector/dev-7/files/"
+def test_install_from_file_uploads_tgz(tmp_path):
+    bundle = tmp_path / "hello-world-1.0.0.tgz"
+    bundle.write_bytes(b"\x1f\x8b\x08fake-tgz")
+    api, client = _api(post_resp={"id": 42, "name": "hello-world"})
+    out = api.install_from_file(str(bundle), replace=True)
+    assert out["id"] == 42
+    assert client.post_calls[-1][0] == "/api/3/solutionpacks/install"
+    assert client.last_post_params == {"$type": "connector", "$replace": "true"}
+    assert client.last_post_files["file"][0] == "hello-world-1.0.0.tgz"
+
+
+def test_install_from_file_missing_path_raises():
+    api, _ = _api()
+    with pytest.raises(FileNotFoundError):
+        api.install_from_file("/no/such/bundle.tgz")
+
+
+def test_uninstall_resolves_id_and_deletes():
+    api, client = _api()
+    api.uninstall("virustotal")
+    assert client.delete_calls[-1][0] == "/api/integration/connectors/16/"
+
+
+def test_uninstall_unknown_connector_raises():
+    api, _ = _api()
+    with pytest.raises(ValueError):
+        api.uninstall("nope")
+
+
+def test_connector_detail_posts_empty_body_to_id():
+    api, client = _api(post_resp={"operations": []})
+    api.connector_detail("virustotal")
+    assert client.post_calls[-1] == ("/api/integration/connectors/16/", {})
+
+
+def test_list_configurations_filters():
+    api, client = _api()
+    api.list_configurations(name="virustotal", active=True)
+    endpoint, params = client.get_calls[-1]
+    assert endpoint == "/api/integration/configuration/"
+    assert params["name"] == "virustotal" and params["active"] is True
+
+
+def test_dev_read_and_write_file():
+    api, client = _api(post_resp={"data": "x"})
+    api.dev_read_file("dev-7", "/foo_1_0_0_dev/info.json")
+    assert client.post_calls[-1] == (
+        "/api/integration/connector/development/entity/dev-7/files/",
+        {"xpath": "/foo_1_0_0_dev/info.json"},
+    )
+    api.dev_write_file("dev-7", {"path": "info.json", "content": "{}"})
+    assert client.put_calls[-1] == (
+        "/api/integration/connector/development/entity/dev-7/files/",
+        {"fileData": {"path": "info.json", "content": "{}"}},
+    )
+
+
+def test_dev_publish_sends_flags():
+    api, client = _api(post_resp={"status": "ok"})
+    api.dev_publish("dev-7", replace=True, discard=False)
+    assert client.post_calls[-1] == (
+        "/api/integration/connector/development/entity/dev-7/publish/",
+        {"replace": True, "discard": False},
+    )
