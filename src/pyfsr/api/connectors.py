@@ -39,19 +39,135 @@ Example:
 
 from __future__ import annotations
 
+import json
 import mimetypes
 import re
+import tarfile
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
 
 from .base import BaseAPI
 
+
+def pack_connector(source_dir: str, output: str | None = None) -> str:
+    """Bundle a connector source folder into a SOAR-importable ``.tgz``.
+
+    FortiSOAR expects a connector archive to contain exactly **one top-level
+    directory** (named for the connector) holding ``info.json``, ``connector.py``,
+    ``operations.py``, etc. — e.g. ``flatten-json/info.json``. This packs
+    ``source_dir`` as that top-level directory, preserving its own name.
+
+    ``__pycache__`` directories and ``*.pyc`` files are excluded so a freshly
+    built bundle doesn't smuggle stale bytecode onto the appliance.
+
+    Args:
+        source_dir: path to the connector folder (the one containing ``info.json``).
+        output: destination ``.tgz`` path. Defaults to ``<source_dir>.tgz``
+            alongside the folder.
+
+    Returns:
+        The path to the written ``.tgz``.
+
+    Raises:
+        FileNotFoundError: if ``source_dir`` doesn't exist.
+        ValueError: if ``source_dir`` has no ``info.json`` (not a connector).
+    """
+    src = Path(source_dir).resolve()
+    if not src.is_dir():
+        raise FileNotFoundError(f"connector source folder not found: {src}")
+    if not (src / "info.json").exists():
+        raise ValueError(f"{src} has no info.json — not a connector source folder")
+    out = Path(output) if output else src.with_suffix(".tgz")
+
+    def _filter(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
+        name = Path(info.name).name
+        if "__pycache__" in Path(info.name).parts or name.endswith(".pyc"):
+            return None
+        return info
+
+    with tarfile.open(out, "w:gz") as tar:
+        # arcname == folder name so the archive has a single top-level dir.
+        tar.add(src, arcname=src.name, filter=_filter)
+    return str(out)
+
+
 #: Import-job statuses that mean a Content-Hub install has stopped running.
 _INSTALL_TERMINAL = frozenset({"import complete", "completed", "failed", "error"})
 
 #: Fields worth fetching when polling an install/import job's progress.
 _INSTALL_FIELDS = "errorMessage,status,progressPercent,file,currentlyImporting,options"
+
+
+def _field_label(field: dict[str, Any]) -> str:
+    """Human label for a config field — its ``title``, falling back to ``name``."""
+    return field.get("title") or field.get("name") or "?"
+
+
+def _option_values(field: dict[str, Any]) -> list[Any]:
+    """The accepted values of a ``select`` field. Options are usually plain
+    strings, but tolerate ``{"value"/"title": ...}`` dict forms too."""
+    out: list[Any] = []
+    for opt in field.get("options") or []:
+        if isinstance(opt, dict):
+            out.append(opt.get("value", opt.get("title")))
+        else:
+            out.append(opt)
+    return out
+
+
+def _value_fits_type(ftype: str, value: Any) -> bool:
+    """Best-effort type check for a *present* config value. Lenient on purpose —
+    FortiSOAR stores most values as strings — flagging only clearly-wrong ones.
+    Emptiness is handled separately by the required check."""
+    if ftype == "integer":
+        if isinstance(value, bool):
+            return False
+        if isinstance(value, int):
+            return True
+        return isinstance(value, str) and value.strip().lstrip("+-").isdigit()
+    if ftype == "checkbox":
+        return isinstance(value, bool) or (
+            isinstance(value, str)
+            and value.strip().lower() in {"true", "false", "1", "0", "yes", "no"}
+        )
+    if ftype == "json":
+        if isinstance(value, (dict, list)):
+            return True
+        if isinstance(value, str):
+            try:
+                json.loads(value)
+                return True
+            except (ValueError, TypeError):
+                return False
+        return False
+    # text / password / select(no options) / email / etc. — no value constraint here.
+    return True
+
+
+def _missing_message(field: dict[str, Any], condition: dict[str, Any] | None) -> str:
+    """Guidance for a missing required field, naming the selection that requires
+    it when the field lives in a conditional ``onchange`` branch."""
+    msg = f"{_field_label(field)} is required"
+    if condition:
+        msg += f" when {condition['label']} = {condition['value']!r}"
+    return msg
+
+
+def _format_validation_error(connector: str, check: dict[str, Any]) -> str:
+    """Render a :meth:`ConnectorsAPI.validate_config` result as a multi-line,
+    user-facing error for the create/update raise path."""
+    lines = [f"{connector!r} configuration is invalid:"]
+    for err in check.get("errors") or []:
+        if err.get("code") == "unknown_field":
+            continue  # non-fatal; don't fail the write on extra keys
+        suffix = ""
+        if err.get("valid_options") is not None:
+            suffix = f" (valid: {', '.join(map(str, err['valid_options']))})"
+        lines.append(f"  - {err['message']}{suffix}")
+    lines.append("(see client.connectors.config_schema(name) for the full schema)")
+    return "\n".join(lines)
 
 
 class ConnectorsAPI(BaseAPI):
@@ -170,6 +286,31 @@ class ConnectorsAPI(BaseAPI):
         if not job_id:
             return resp
         return self.wait_for_install(job_id, interval=interval, timeout=timeout)
+
+    def install_from_dir(
+        self,
+        source_dir: str,
+        *,
+        replace: bool = True,
+        wait: bool = False,
+        interval: float = 3.0,
+        timeout: float = 300.0,
+    ) -> dict[str, Any]:
+        """Pack a connector source folder and upload it in one step.
+
+        Bundles ``source_dir`` with :func:`pack_connector` into a temporary
+        ``.tgz`` and hands it to :meth:`install_from_file`. Convenience for the
+        build-test loop on a locally edited connector; defaults to
+        ``replace=True`` since you're almost always re-pushing the same name.
+
+        Args mirror :meth:`install_from_file` plus ``source_dir`` (the connector
+        folder containing ``info.json``). Returns the install response.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            tgz = pack_connector(source_dir, output=str(Path(tmp) / "bundle.tgz"))
+            return self.install_from_file(
+                tgz, replace=replace, wait=wait, interval=interval, timeout=timeout
+            )
 
     def install_status(self, job_id: str) -> dict[str, Any]:
         """Fetch a connector install's import-job progress.
@@ -502,50 +643,136 @@ class ConnectorsAPI(BaseAPI):
     ) -> dict[str, Any]:
         """Check ``config`` against a connector's schema *before* saving it.
 
-        Returns ``{"valid": bool, "missing": [...], "unknown": [...]}``:
+        Returns ``{"valid", "missing", "invalid", "unknown", "errors"}``:
 
         - ``missing`` — required fields (after resolving ``select`` ``onchange``
           branches) absent or blank in ``config``.
+        - ``invalid`` — fields whose *value* is wrong: a ``select`` value not in
+          its ``options``, or a value that doesn't fit the field ``type``
+          (``integer`` / ``checkbox`` / ``json``).
         - ``unknown`` — keys in ``config`` that no active schema field declares
-          (often a typo or a field gated behind a different ``select`` value).
+          (often a typo, or a field gated behind a different ``select`` value).
+        - ``errors`` — one structured, human-readable entry per problem
+          (``{"field", "code", "message", ...}``) to guide the user: e.g. a
+          missing field names *which selection* requires it, and an invalid
+          ``select`` lists its ``valid_options``.
 
-        This is a *structural* check (presence of required fields), not a live
-        credential test — follow a clean result with :meth:`healthcheck`. Catches
-        exactly the class of error that makes ``create_configuration`` 500
-        (e.g. omitting FortiSIEM's ``fsm_type``).
+        ``valid`` is ``True`` only when there are no ``missing`` and no
+        ``invalid`` fields. ``unknown`` keys are reported (the appliance ignores
+        them) but do not by themselves make a config invalid.
+
+        This is a *structural* check, not a live credential test — follow a clean
+        result with :meth:`healthcheck`. Catches the class of error that makes
+        ``create_configuration`` 500 (e.g. omitting FortiSIEM's ``fsm_type``, or
+        a mistyped ``Authentication Type``).
         """
         missing: list[str] = []
+        invalid: list[str] = []
         known: set[str] = set()
-        self._walk_fields(self.config_schema(connector, version=version), config, missing, known)
+        errors: list[dict[str, Any]] = []
+        self._collect_field_problems(
+            self.config_schema(connector, version=version),
+            config,
+            condition=None,
+            missing=missing,
+            invalid=invalid,
+            known=known,
+            errors=errors,
+        )
         unknown = [k for k in config if k not in known]
-        return {"valid": not missing, "missing": missing, "unknown": unknown}
+        for key in unknown:
+            errors.append(
+                {
+                    "field": key,
+                    "code": "unknown_field",
+                    "message": (
+                        f"{key!r} is not a recognized configuration field "
+                        "(typo, or gated behind a different selection)"
+                    ),
+                }
+            )
+        return {
+            "valid": not missing and not invalid,
+            "missing": missing,
+            "invalid": invalid,
+            "unknown": unknown,
+            "errors": errors,
+        }
 
-    def _walk_fields(
+    def _collect_field_problems(
         self,
         fields: list[dict[str, Any]],
         config: dict[str, Any],
+        *,
+        condition: dict[str, Any] | None,
         missing: list[str],
-        known: set[str] | None,
+        invalid: list[str],
+        known: set[str],
+        errors: list[dict[str, Any]],
     ) -> None:
-        """Walk a config schema, collecting required-but-missing field names.
+        """Walk a config schema collecting required/invalid/known field info.
 
-        Recurses into a ``select`` field's ``onchange`` branch that matches the
-        value currently in ``config``. When ``known`` is given, every field name
-        encountered along active branches is recorded there.
+        Recurses only into a ``select`` field's ``onchange`` branch that matches
+        the value currently in ``config`` — so conditionally-revealed fields are
+        evaluated only when their controlling selection is active. ``condition``
+        carries the controlling field that revealed the current branch, for
+        guidance messages.
         """
         for field in fields:
             fname = field.get("name")
             if not fname:
                 continue
-            if known is not None:
-                known.add(fname)
+            known.add(fname)
+            ftype = (field.get("type") or "text").lower()
             value = config.get(fname)
-            if field.get("required") and (value is None or value == ""):
+            present = value is not None and value != ""
+
+            if field.get("required") and not present:
                 missing.append(fname)
-            onchange = field.get("onchange") or {}
-            branch = onchange.get(value)
+                errors.append(
+                    {
+                        "field": fname,
+                        "code": "missing_required",
+                        "message": _missing_message(field, condition),
+                    }
+                )
+            elif present:
+                if ftype == "select" and field.get("options"):
+                    allowed = _option_values(field)
+                    if value not in allowed:
+                        invalid.append(fname)
+                        errors.append(
+                            {
+                                "field": fname,
+                                "code": "invalid_option",
+                                "message": (
+                                    f"{_field_label(field)}: {value!r} is not a valid option"
+                                ),
+                                "valid_options": allowed,
+                            }
+                        )
+                elif not _value_fits_type(ftype, value):
+                    invalid.append(fname)
+                    errors.append(
+                        {
+                            "field": fname,
+                            "code": "wrong_type",
+                            "message": (f"{_field_label(field)}: expected {ftype}, got {value!r}"),
+                            "expected": ftype,
+                        }
+                    )
+
+            branch = (field.get("onchange") or {}).get(value)
             if isinstance(branch, list):
-                self._walk_fields(branch, config, missing, known)
+                self._collect_field_problems(
+                    branch,
+                    config,
+                    condition={"name": fname, "label": _field_label(field), "value": value},
+                    missing=missing,
+                    invalid=invalid,
+                    known=known,
+                    errors=errors,
+                )
 
     # ------------------------------------------------------------- configure
     def create_configuration(
@@ -617,11 +844,7 @@ class ConnectorsAPI(BaseAPI):
         if validate:
             check = self.validate_config(connector, config, version=version)
             if not check["valid"]:
-                raise ValueError(
-                    f"{connector!r} config is missing required field(s): "
-                    f"{', '.join(check['missing'])} "
-                    "(see client.connectors.config_schema(name))"
-                )
+                raise ValueError(_format_validation_error(connector, check))
         body: dict[str, Any] = {
             "connector": connector_id,
             "connector_name": connector,
@@ -673,11 +896,7 @@ class ConnectorsAPI(BaseAPI):
         if validate:
             check = self.validate_config(connector, config, version=version)
             if not check["valid"]:
-                raise ValueError(
-                    f"{connector!r} config is missing required field(s): "
-                    f"{', '.join(check['missing'])} "
-                    "(see client.connectors.config_schema(name))"
-                )
+                raise ValueError(_format_validation_error(connector, check))
         body: dict[str, Any] = {
             "connector": connector_id,
             "connector_name": connector,

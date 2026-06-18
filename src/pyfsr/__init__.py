@@ -4,6 +4,7 @@ PyFSR: Python client for the FortiSOAR REST API.
 For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
 """
 
+from .api.connectors import pack_connector
 from .client import FortiSOAR
 from .config import EnvConfig
 from .models import (
@@ -46,6 +47,7 @@ except ImportError:  # pragma: no cover - source checkout without a build
 __all__ = [
     "FortiSOAR",
     "EnvConfig",
+    "pack_connector",
     "Query",
     "RecordSet",
     "HydraPage",

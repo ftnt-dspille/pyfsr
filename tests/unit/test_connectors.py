@@ -351,9 +351,13 @@ def test_create_configuration_validate_missing_raises():
     import pytest
 
     # config_schema comes from definition() (a POST returning config_schema.fields)
-    schema = {"config_schema": {"fields": [{"name": "fsm_type", "required": True}]}}
+    schema = {
+        "config_schema": {
+            "fields": [{"name": "fsm_type", "title": "FortiSIEM Type", "required": True}]
+        }
+    }
     api, _ = _api(post_resp=schema)
-    with pytest.raises(ValueError, match="missing required field"):
+    with pytest.raises(ValueError, match="is required"):
         api.create_configuration("virustotal", {}, name="c", version="3.1.0")
 
 
@@ -433,7 +437,119 @@ def test_validate_config_valid():
         "virustotal",
         {"fsm_type": "FortiSIEM", "server": "x", "username": "u", "password": "p"},
     )
-    assert res == {"valid": True, "missing": [], "unknown": []}
+    assert res["valid"] is True
+    assert res["missing"] == []
+    assert res["unknown"] == []
+    assert res["invalid"] == []
+    assert res["errors"] == []
+
+
+# -- enhanced validation: conditional visibility, invalid options, types -------
+# Mirrors the http connector's option-driven required fields (auth_type select
+# reveals more required fields per selection), plus typed fields.
+_HTTP_SCHEMA = {
+    "config_schema": {
+        "fields": [
+            {"name": "server_url", "title": "Server URL", "type": "text", "required": False},
+            {"name": "port", "title": "Port", "type": "integer", "required": False},
+            {
+                "name": "auth_type",
+                "title": "Authentication Type",
+                "type": "select",
+                "required": True,
+                "options": ["None", "Basic", "Bearer Token"],
+                "onchange": {
+                    "None": [],
+                    "Basic": [
+                        {"name": "basic_username", "title": "Username", "required": True},
+                        {
+                            "name": "basic_password",
+                            "title": "Password",
+                            "type": "password",
+                            "required": True,
+                        },
+                    ],
+                    "Bearer Token": [
+                        {
+                            "name": "bearer_token",
+                            "title": "Bearer Token",
+                            "type": "password",
+                            "required": True,
+                        },
+                    ],
+                },
+            },
+            {"name": "verify_ssl", "title": "Verify SSL", "type": "checkbox", "required": False},
+        ]
+    }
+}
+
+
+def test_validate_config_conditional_required_revealed_by_selection():
+    api, _ = _api(post_resp=_HTTP_SCHEMA)
+    res = api.validate_config("http", {"auth_type": "Basic"}, version="1.0.0")
+    # The Basic branch reveals two required fields.
+    assert res["valid"] is False
+    assert set(res["missing"]) == {"basic_username", "basic_password"}
+    # Guidance names the selection that requires them.
+    msgs = {e["field"]: e["message"] for e in res["errors"]}
+    assert "Authentication Type = 'Basic'" in msgs["basic_password"]
+
+
+def test_validate_config_inactive_branch_value_is_unknown():
+    api, _ = _api(post_resp=_HTTP_SCHEMA)
+    # bearer_token belongs to the Bearer Token branch, not Basic.
+    res = api.validate_config(
+        "http",
+        {
+            "auth_type": "Basic",
+            "basic_username": "u",
+            "basic_password": "p",
+            "bearer_token": "leaked",
+        },
+        version="1.0.0",
+    )
+    assert res["valid"] is True  # all active required fields present
+    assert "bearer_token" in res["unknown"]
+
+
+def test_validate_config_invalid_select_option():
+    api, _ = _api(post_resp=_HTTP_SCHEMA)
+    res = api.validate_config("http", {"auth_type": "Bsaic"}, version="1.0.0")  # typo
+    assert res["valid"] is False
+    assert "auth_type" in res["invalid"]
+    err = next(e for e in res["errors"] if e["field"] == "auth_type")
+    assert err["code"] == "invalid_option"
+    assert err["valid_options"] == ["None", "Basic", "Bearer Token"]
+
+
+def test_validate_config_wrong_type():
+    api, _ = _api(post_resp=_HTTP_SCHEMA)
+    res = api.validate_config(
+        "http", {"auth_type": "None", "port": "not-a-number"}, version="1.0.0"
+    )
+    assert res["valid"] is False
+    assert "port" in res["invalid"]
+    assert next(e for e in res["errors"] if e["field"] == "port")["code"] == "wrong_type"
+
+
+def test_validate_config_accepts_string_integer_and_bool_checkbox():
+    api, _ = _api(post_resp=_HTTP_SCHEMA)
+    res = api.validate_config(
+        "http", {"auth_type": "None", "port": "443", "verify_ssl": True}, version="1.0.0"
+    )
+    assert res["valid"] is True
+    assert res["invalid"] == []
+
+
+def test_create_configuration_raises_with_guidance_on_invalid_option():
+    # 'virustotal' is in the mock's configured list (resolves version + id); the
+    # schema is served from post_resp regardless of name.
+    api, _ = _api(post_resp=_HTTP_SCHEMA)
+    with pytest.raises(ValueError) as exc:
+        api.create_configuration("virustotal", {"auth_type": "Bsaic"}, name="t", version="3.1.0")
+    assert "not a valid option" in str(exc.value)
+    assert "Basic" in str(exc.value)  # lists valid options
 
 
 # -- definition / operations / files ---------------------------------------
