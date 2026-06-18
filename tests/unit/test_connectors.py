@@ -95,6 +95,35 @@ def test_resolve_version():
     assert api.resolve_version("nope") is None
 
 
+def test_find_installed_connectors_partial_and_label():
+    api, _ = _api()
+    # case-insensitive substring on name
+    assert [c["name"] for c in api.find_installed_connectors("forti")] == [
+        "fortigate",
+        "fortinet-fortisiem",
+    ]
+    # substring on label (name has no "virus")
+    assert [c["name"] for c in api.find_installed_connectors("virus")] == ["virustotal"]
+    # no match -> empty
+    assert api.find_installed_connectors("nope") == []
+
+
+def test_find_installed_connectors_separator_and_case_folding():
+    api, _ = _api()
+    # underscores/spaces/casing fold to the hyphenated name
+    assert [c["name"] for c in api.find_installed_connectors("Fortinet_FortiSIEM")] == [
+        "fortinet-fortisiem"
+    ]
+
+
+def test_find_installed_connectors_exact_name_sorts_first():
+    api, _ = _api()
+    # "fortigate" is an exact name and also a prefix of nothing else here, but
+    # it must rank ahead of any non-exact match for the same query token.
+    hits = api.find_installed_connectors("fortigate")
+    assert hits[0]["name"] == "fortigate"
+
+
 def test_resolve_config_default_and_named():
     api, _ = _api()
     assert api.resolve_config("virustotal") == "vt-default"  # default flag
