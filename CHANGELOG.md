@@ -60,4 +60,3 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Issue with `APIKeyAuth` not validating the API Key correctly.
-
