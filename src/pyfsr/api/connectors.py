@@ -40,6 +40,7 @@ Example:
 from __future__ import annotations
 
 import mimetypes
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -322,6 +323,40 @@ class ConnectorsAPI(BaseAPI):
 
     def _find_configured(self, connector: str) -> dict[str, Any] | None:
         return next((c for c in self.list_configured() if c.get("name") == connector), None)
+
+    def find_installed_connectors(self, query: str) -> list[dict[str, Any]]:
+        """Search *installed* connectors by partial, case-insensitive match.
+
+        Scoped to connectors installed on this appliance (the
+        :meth:`list_configured` set) — it does **not** see the Content Hub
+        catalog of installable-but-not-installed connectors. For that, use
+        ``client.content_hub.search_available_connectors(...)``.
+
+        Matches ``query`` as a substring of either the connector ``name`` or its
+        ``label`` — so ``"fortigate"`` finds ``fortigate-firewall`` (label
+        ``"Fortinet FortiGate"``) regardless of hyphen/underscore or casing.
+        Returns the matching :meth:`list_configured` entries (possibly empty),
+        ordered with exact ``name`` matches first.
+
+        Useful when you don't know a connector's exact machine name — note that
+        :meth:`resolve_version` and friends require the exact ``name``, while the
+        human-facing label differs (``"Fortinet FortiGate"`` vs
+        ``"fortigate-firewall"``).
+        """
+
+        def norm(s: str) -> str:
+            # fold case and treat '-', '_', and whitespace as interchangeable so
+            # 'fortigate_firewall', 'FortiGate', and 'forti gate' all match.
+            return re.sub(r"[-_\s]+", "-", (s or "").strip().lower())
+
+        q = norm(query)
+        hits = [
+            c
+            for c in self.list_configured()
+            if q in norm(c.get("name")) or q in norm(c.get("label"))
+        ]
+        hits.sort(key=lambda c: norm(c.get("name")) != q)
+        return hits
 
     def configurations(self, connector: str) -> list[dict[str, Any]]:
         """List a connector's configurations (``[{config_id, name, default}]``)."""
