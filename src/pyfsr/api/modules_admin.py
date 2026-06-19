@@ -53,10 +53,13 @@ from __future__ import annotations
 import re
 import time
 import uuid as _uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..exceptions import FortiSOARException
 from .base import BaseAPI
+
+if TYPE_CHECKING:
+    from ..models import AttributeMetadata, PublishedModelMetadata, StagingModelMetadata
 
 _STAGING = "/api/3/staging_model_metadatas"
 _PUBLISHED = "/api/3/model_metadatas"
@@ -155,21 +158,32 @@ class ModulesAdminAPI(BaseAPI):
                 return m
         return None
 
-    def get_staging(self, module: str) -> dict[str, Any] | None:
+    def get_staging(
+        self, module: str, *, typed: bool = False
+    ) -> dict[str, Any] | StagingModelMetadata | None:
         """Return the full staging metadata record (incl. ``attributes``) for ``module``.
 
         ``module`` is the module ``type`` (or plural ``module`` name). Returns None if no
-        staging record exists.
+        staging record exists. Pass ``typed=True`` for a
+        :class:`~pyfsr.models.StagingModelMetadata`.
         """
         lite = self._staging_lite(module)
         if not lite:
             return None
-        return self.client.get(f"{_STAGING}/{lite['uuid']}", params=_REL)
+        raw = self.client.get(f"{_STAGING}/{lite['uuid']}", params=_REL)
+        if typed and raw:
+            from ..models import StagingModelMetadata
 
-    def get_published(self, module: str) -> dict[str, Any] | None:
+            return StagingModelMetadata(**raw)
+        return raw
+
+    def get_published(
+        self, module: str, *, typed: bool = False
+    ) -> dict[str, Any] | PublishedModelMetadata | None:
         """Return the full *published* metadata record for ``module``, or None.
 
         None means the module has never been published (it may still exist in staging).
+        Pass ``typed=True`` for a :class:`~pyfsr.models.PublishedModelMetadata`.
         """
         want = module.strip().lower()
         data = self.client.get(_PUBLISHED, params=_ALL)
@@ -184,7 +198,12 @@ class ModulesAdminAPI(BaseAPI):
         )
         if not lite:
             return None
-        return self.client.get(f"{_PUBLISHED}/{lite['uuid']}", params=_REL)
+        raw = self.client.get(f"{_PUBLISHED}/{lite['uuid']}", params=_REL)
+        if typed and raw:
+            from ..models import PublishedModelMetadata
+
+            return PublishedModelMetadata(**raw)
+        return raw
 
     def is_published(self, module: str) -> bool:
         """True if ``module`` exists in the published schema (``model_metadatas``).
@@ -196,12 +215,22 @@ class ModulesAdminAPI(BaseAPI):
         """
         return self.get_published(module) is not None
 
-    def get_field(self, module: str, field: str) -> dict[str, Any] | None:
-        """Return one staged attribute (field) dict by ``name``, or None."""
+    def get_field(
+        self, module: str, field: str, *, typed: bool = False
+    ) -> dict[str, Any] | AttributeMetadata | None:
+        """Return one staged attribute (field) dict by ``name``, or None.
+
+        Pass ``typed=True`` for an :class:`~pyfsr.models.AttributeMetadata`.
+        """
         mod = self.get_staging(module)
         if not mod:
             return None
-        return next((a for a in mod.get("attributes", []) if a.get("name") == field), None)
+        raw = next((a for a in mod.get("attributes", []) if a.get("name") == field), None)
+        if typed and raw:
+            from ..models import AttributeMetadata
+
+            return AttributeMetadata(**raw)
+        return raw
 
     def reverse_field(
         self, source_module: str, source_field: str, *, published: bool = False
@@ -830,6 +859,16 @@ class ModulesAdminAPI(BaseAPI):
         if create_view_templates:
             self.create_view_templates(module)
         return created
+
+    def get_staging_typed(self, module: str) -> StagingModelMetadata | None:
+        """Typed convenience wrapper for :meth:`get_staging` — always returns
+        a :class:`~pyfsr.models.StagingModelMetadata` (or None)."""
+        return self.get_staging(module, typed=True)  # type: ignore[return-value]
+
+    def get_published_typed(self, module: str) -> PublishedModelMetadata | None:
+        """Typed convenience wrapper for :meth:`get_published` — always returns
+        a :class:`~pyfsr.models.PublishedModelMetadata` (or None)."""
+        return self.get_published(module, typed=True)  # type: ignore[return-value]
 
     @staticmethod
     def _unique_constraint(module: str, fields: list[str] | None) -> list[dict[str, Any]]:
