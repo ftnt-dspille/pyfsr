@@ -50,7 +50,7 @@ class Workflow(BaseRecord):
     createDate: float | None = None
     modifyUser: Any | None = None
     modifyDate: float | None = None
-    deletedAt: Any | None = None
+    deletedAt: float | None = None  # soft-delete epoch (like create/modifyDate); null until deleted
     importedBy: list[Any] | None = None
     recordTags: list[Any] | None = None
     id: int | None = None
@@ -70,7 +70,7 @@ class WorkflowCollection(BaseRecord):
     createDate: float | None = None
     modifyUser: Any | None = None
     modifyDate: float | None = None
-    deletedAt: Any | None = None
+    deletedAt: float | None = None  # soft-delete epoch (like create/modifyDate); null until deleted
     importedBy: list[Any] | None = None
     recordTags: list[Any] | None = None
     id: int | None = None
@@ -131,6 +131,97 @@ class ContentHubItem(BaseRecord):
     modifyDate: float | None = None
     recordTags: list[Any] | None = None
     importedBy: list[Any] | None = None
+
+
+class User(BaseRecord):
+    """A FortiSOAR **user** (``Person``) record from ``/api/3/people/``.
+
+    This is the entity behind every ``createUser`` / ``modifyUser`` /
+    ``assignedTo`` relationship: when a record is pulled with relationships
+    expanded those fields arrive as a full Person object, and
+    :meth:`BaseRecord.create_user` / :meth:`~BaseRecord.modify_user` /
+    :meth:`~BaseRecord.assigned_to` parse them into this model. ``@type`` on the
+    wire is ``Person``; the module slug is ``people``.
+    """
+
+    firstname: str | None = None
+    lastname: str | None = None
+    title: str | None = None
+    email: str | None = None
+    department: str | None = None
+    description: str | None = None
+    phoneWork: str | None = None
+    phoneMobile: str | None = None
+    phoneHome: str | None = None
+    phoneFax: str | None = None
+    csActive: bool | None = None
+    accessType: str | None = None  # license seat: "Named" / "Concurrent" (live-verified str)
+    userType: Any | None = None  # not in the people module schema; null on observed boxes
+    type: Any | None = None  # picklist relationship (IRI str or expanded dict per $relationships)
+    avatar: Any | None = None  # not in the people module schema; null on observed boxes
+    companyId: Any | None = None  # 'companies' single-relationship (IRI str or expanded dict)
+    userId: str | None = None
+    createUser: Any | None = None
+    createDate: float | None = None
+    modifyUser: Any | None = None
+    modifyDate: float | None = None
+    id: int | None = None
+
+    @property
+    def name(self) -> str | None:
+        """Display name (``"firstname lastname"``), or ``None`` if neither is set."""
+        parts = [p for p in (self.firstname, self.lastname) if p]
+        return " ".join(parts) or None
+
+
+class Team(BaseRecord):
+    """A FortiSOAR **team** record from ``/api/3/teams/``.
+
+    Teams own records (the ``owners`` relationship) and scope visibility. The
+    module slug is ``teams``; ``@type`` on the wire is ``Team``. The schema is
+    deliberately slim — verified against a live 7.6.5 box, a team record carries
+    only ``name``/``description``/``importedBy`` beyond the JSON-LD/uuid envelope.
+    """
+
+    name: str | None = None
+    description: str | None = None
+    importedBy: list[Any] | None = None
+
+
+class Role(BaseRecord):
+    """A FortiSOAR **role** record from ``/api/3/roles/``.
+
+    A role bundles module permissions and is assigned to users. The module slug
+    is ``roles``; ``@type`` on the wire is ``Role``. ``modulePermissions`` is
+    only populated when the record is fetched with ``$relationships=true``
+    (verified against a live 7.6.5 box).
+    """
+
+    name: str | None = None
+    description: str | None = None
+    modulePermissions: list[Any] | None = None
+    importedBy: list[Any] | None = None
+
+
+class FileRecord(BaseRecord):
+    """A ``/api/3/files`` record, returned by :meth:`FileOperations.upload`.
+
+    Stable platform schema. The ``@id`` IRI (``rec.iri``) is what attachment,
+    import, and similar payloads reference as their ``file`` field. ``filename``
+    and ``mimeType`` are the most-used typed fields; the rest of the storage
+    metadata (size, content path, thumbnails) stays in ``extra``.
+    """
+
+    filename: str | None = None
+    mimeType: str | None = None
+    size: int | None = None
+    file: Any | None = None
+    metadata: Any | None = None
+    createUser: Any | None = None
+    createDate: float | None = None
+    modifyUser: Any | None = None
+    modifyDate: float | None = None
+    id: int | None = None
 
 
 class SolutionPack(ContentHubItem):

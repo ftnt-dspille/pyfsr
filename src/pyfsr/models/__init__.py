@@ -1,19 +1,52 @@
-"""Typed Pydantic models for FortiSOAR records.
+"""Typed Pydantic models for FortiSOAR records and API result shapes.
 
-``BaseRecord`` is the dict-compatible base; the concrete entity models live in
-the generated :mod:`pyfsr.models._generated` module. ``MODEL_REGISTRY`` maps a
-module (collection) name to its model so :class:`~pyfsr.records.RecordSet` can
-parse responses into the right type, falling back to ``BaseRecord`` for modules
-without a curated model.
+``BaseRecord`` is the dict-compatible base for entity records; concrete models
+live in :mod:`pyfsr.models._generated`.  ``ApiResult`` is the lighter base for
+typed integration API response shapes (connector configs, job statuses, etc.)
+defined in :mod:`pyfsr.models._integration`.
+
+``MODEL_REGISTRY`` maps a module (collection) name to its model so
+:class:`~pyfsr.records.RecordSet` can parse responses into the right type,
+falling back to ``BaseRecord`` for modules without a curated model.
 """
 
 from __future__ import annotations
 
+from ._agents import Agent, AgentConnectorStatus
 from ._generated import Alert, Comment, Incident, Task
+from ._integration import (
+    ApiResult,
+    ConfigValidationError,
+    ConfigValidationResult,
+    ConnectorConfig,
+    ConnectorConfigSummary,
+    EnsureVersionResult,
+    ExecuteResult,
+    ExportJobResult,
+    HealthcheckResult,
+    ImportJobResult,
+    InstalledConnector,
+    InstallJobStatus,
+    LogMessage,
+)
+from ._modules_admin import (
+    AttributeBulkAction,
+    AttributeMetadata,
+    AttributeValidation,
+    DefaultSortEntry,
+    ModuleDescriptions,
+    ModuleMetadata,
+    PublishedModelMetadata,
+    StagingModelMetadata,
+)
 from ._system import (
     ContentHubConnector,
     ContentHubItem,
+    FileRecord,
+    Role,
     SolutionPack,
+    Team,
+    User,
     Widget,
     Workflow,
     WorkflowCollection,
@@ -31,6 +64,10 @@ MODEL_REGISTRY: dict[str, type[BaseRecord]] = {
     "comments": Comment,
     "workflows": Workflow,
     "workflow_collections": WorkflowCollection,
+    "files": FileRecord,
+    "people": User,
+    "teams": Team,
+    "roles": Role,
 }
 
 
@@ -40,7 +77,26 @@ def model_for(module: str) -> type[BaseRecord]:
 
 
 __all__ = [
+    # base classes
     "BaseRecord",
+    "ApiResult",
+    # agent records
+    "Agent",
+    "AgentConnectorStatus",
+    # integration API result shapes
+    "InstalledConnector",
+    "ConnectorConfigSummary",
+    "ConnectorConfig",
+    "ConfigValidationResult",
+    "ConfigValidationError",
+    "HealthcheckResult",
+    "ExecuteResult",
+    "InstallJobStatus",
+    "EnsureVersionResult",
+    "ImportJobResult",
+    "ExportJobResult",
+    "LogMessage",
+    # entity records
     "Alert",
     "Incident",
     "Task",
@@ -48,10 +104,23 @@ __all__ = [
     "Workflow",
     "WorkflowCollection",
     "WorkflowRun",
+    "FileRecord",
+    "User",
+    "Team",
+    "Role",
     "ContentHubItem",
     "SolutionPack",
     "ContentHubConnector",
     "Widget",
     "MODEL_REGISTRY",
     "model_for",
+    # module admin
+    "AttributeValidation",
+    "AttributeBulkAction",
+    "AttributeMetadata",
+    "DefaultSortEntry",
+    "ModuleDescriptions",
+    "ModuleMetadata",
+    "StagingModelMetadata",
+    "PublishedModelMetadata",
 ]
