@@ -85,6 +85,76 @@ class BaseRecord(BaseModel):
             return value.rsplit("/", 1)[-1]
         return None
 
+    # -- relationship accessors --------------------------------------------
+    def as_record(self, field: str, model: type[BaseModel]) -> Any:
+        """Coerce relationship ``field`` into ``model``, whether expanded or an IRI.
+
+        A single-relationship field comes back either as a bare IRI string (not
+        expanded) or as the full nested object (relationships pulled). This
+        normalizes both into a ``model`` instance — an IRI string yields a thin
+        instance carrying only ``@id`` (so ``.iri`` works) — and returns ``None``
+        when the field is absent/null.
+        """
+        value = self.get(field)
+        if value is None:
+            return None
+        if isinstance(value, model):
+            return value
+        if isinstance(value, str):
+            return model.model_validate({"@id": value})
+        if isinstance(value, dict):
+            return model.model_validate(value)
+        return None
+
+    def _as_records(self, field: str, model: type[BaseModel]) -> list[Any]:
+        """List variant of :meth:`as_record` for to-many relationships."""
+        value = self.get(field)
+        if not isinstance(value, list):
+            return []
+        out = []
+        for item in value:
+            if isinstance(item, model):
+                out.append(item)
+            elif isinstance(item, str):
+                out.append(model.model_validate({"@id": item}))
+            elif isinstance(item, dict):
+                out.append(model.model_validate(item))
+        return out
+
+    @property
+    def create_user(self) -> Any:
+        """The ``createUser`` relationship as a :class:`~pyfsr.models.User`, or ``None``."""
+        from ._system import User
+
+        return self.as_record("createUser", User)
+
+    @property
+    def modify_user(self) -> Any:
+        """The ``modifyUser`` relationship as a :class:`~pyfsr.models.User`, or ``None``."""
+        from ._system import User
+
+        return self.as_record("modifyUser", User)
+
+    @property
+    def assigned_to(self) -> Any:
+        """The assignee as a :class:`~pyfsr.models.User`, or ``None``.
+
+        Reads ``assignedTo`` (alerts/incidents) and falls back to
+        ``assignedToPerson`` (tasks).
+        """
+        from ._system import User
+
+        if self.get("assignedTo") is not None:
+            return self.as_record("assignedTo", User)
+        return self.as_record("assignedToPerson", User)
+
+    @property
+    def owner_teams(self) -> list[Any]:
+        """The ``owners`` relationship as a list of :class:`~pyfsr.models.Team`."""
+        from ._system import Team
+
+        return self._as_records("owners", Team)
+
     # -- dict-compatibility shims ------------------------------------------
     def _lookup_attr(self, key: str) -> tuple[bool, Any]:
         """Resolve ``key`` against field names, aliases, then extras."""
