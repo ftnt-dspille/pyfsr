@@ -3,6 +3,7 @@
 import logging
 import os
 import time
+import warnings
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
@@ -20,10 +21,12 @@ from .api.connectors import ConnectorsAPI
 from .api.content_hub import ContentHubSearch
 from .api.export_config import ExportConfigAPI
 from .api.feeds import IngestFeedsAPI
+from .api.import_config import ImportConfigAPI
 from .api.modules import ModulesAPI
 from .api.modules_admin import ModulesAdminAPI
 from .api.picklists import PicklistsAPI
 from .api.playbooks import PlaybooksAPI
+from .api.roles import RolesAPI
 from .api.routers import RoutersAPI
 from .api.schedules import SchedulesAPI
 from .api.search import SearchAPI
@@ -72,7 +75,12 @@ class FortiSOAR:
     def __init__(
         self,
         base_url: str,
-        auth: str | tuple,
+        auth: str | tuple | None = None,
+        *,
+        username: str | None = None,
+        password: str | None = None,
+        token: str | None = None,
+        api_key: str | None = None,
         verify_ssl: bool = True,
         suppress_insecure_warnings: bool = False,
         verbose: bool = False,
@@ -85,8 +93,15 @@ class FortiSOAR:
 
         Args:
            base_url (str): The base URL for the FortiSOAR API.
-           auth (Union[str, tuple]): The authentication method, either an API key (str)
-               or a tuple of (username, password).
+           auth (str | tuple, optional): **Deprecated.** Legacy positional auth —
+               an API-key ``str`` or a ``(username, password)`` tuple. Prefer the
+               explicit keywords below.
+           username (str, optional): Login user, paired with ``password`` for
+               credential auth.
+           password (str, optional): Login password. Given *without* ``username``
+               it is treated as an API key (a lone secret is almost always a key).
+           token (str, optional): API key for token auth. ``api_key`` is an alias.
+           api_key (str, optional): Alias for ``token``.
            verify_ssl (bool, optional): Whether to verify SSL certificates. Defaults to True.
            suppress_insecure_warnings (bool, optional): Whether to suppress insecure request
                warnings. Defaults to False.
@@ -174,17 +189,12 @@ class FortiSOAR:
             )
 
         # Setup authentication
-        if isinstance(auth, str):
-            if self.verbose:
-                logger.info("Using API key authentication")
-            self.auth = APIKeyAuth(self.base_url, auth, self.verify_ssl)
-        elif isinstance(auth, tuple) and len(auth) == 2:
-            if self.verbose:
-                logger.info("Using username/password authentication")
-            username, password = auth
-            self.auth = UserPasswordAuth(self.base_url, username, password, self.verify_ssl)
-        else:
-            raise ValueError("Invalid authentication provided")
+        self.auth = self._resolve_auth(
+            auth=auth,
+            username=username,
+            password=password,
+            token=token or api_key,
+        )
 
         # Apply authentication headers
         self.session.headers.update(self.auth.get_auth_headers())
@@ -197,6 +207,9 @@ class FortiSOAR:
 
         # Add solution packs API
         self.export_config: ExportConfigAPI = ExportConfigAPI(self)
+
+        # Configuration import (re-apply an export .zip)
+        self.import_config: ImportConfigAPI = ImportConfigAPI(self)
 
         # Content Hub search (solution packs, connectors, widgets)
         self.content_hub: ContentHubSearch = ContentHubSearch(self)
@@ -234,6 +247,7 @@ class FortiSOAR:
         # Tag names + execution-agent lifecycle (agents need a router at create time)
         self.tags: TagsAPI = TagsAPI(self)
         self.agents: AgentsAPI = AgentsAPI(self)
+        self.roles: RolesAPI = RolesAPI(self)
         self.routers: RoutersAPI = RoutersAPI(self)
 
         # Threat-intel / bulk ingest, TAXII sharing, audit log
@@ -293,6 +307,73 @@ class FortiSOAR:
             logger.info(f"Response Content Length: {len(response.content)} bytes")
 
         logger.info("=" * 50)
+
+    def _resolve_auth(
+        self,
+        *,
+        auth: str | tuple | None,
+        username: str | None,
+        password: str | None,
+        token: str | None,
+    ) -> BaseAuth:
+        """Pick the auth strategy from the (several) ways it can be supplied.
+
+        Preferred form is explicit keywords — ``username``/``password`` for
+        credential auth, ``token`` (or ``api_key``) for API-key auth. As a
+        convenience, **a lone ``password`` with no ``username`` is read as an API
+        key** — passing a single secret almost always means a key, not half of a
+        login. The legacy positional ``auth`` (``str`` key or ``(user, pass)``
+        tuple) is still accepted but deprecated.
+        """
+        # Legacy positional form — keep working, nudge toward keywords.
+        if auth is not None:
+            if username or password or token:
+                raise ValueError(
+                    "Pass auth either positionally or via username/password/token "
+                    "keywords — not both."
+                )
+            warnings.warn(
+                "Passing auth positionally is deprecated; use "
+                "FortiSOAR(url, username=..., password=...) or "
+                "FortiSOAR(url, token=...).",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            if isinstance(auth, str):
+                token = auth
+            elif isinstance(auth, tuple) and len(auth) == 2:
+                username, password = auth
+            else:
+                raise ValueError(
+                    "Positional auth must be an API-key str or a (username, password) tuple."
+                )
+
+        # Explicit API key wins.
+        if token:
+            if username:
+                raise ValueError("Provide either token/api_key or username/password, not both.")
+            if self.verbose:
+                logger.info("Using API key authentication")
+            return APIKeyAuth(self.base_url, token, self.verify_ssl)
+
+        # Username + password → credential login.
+        if username and password:
+            if self.verbose:
+                logger.info("Using username/password authentication")
+            return UserPasswordAuth(self.base_url, username, password, self.verify_ssl)
+
+        # A lone secret with no username → treat it as an API key.
+        if password and not username:
+            if self.verbose:
+                logger.info("No username given; treating the lone secret as an API key")
+            return APIKeyAuth(self.base_url, password, self.verify_ssl)
+
+        if username and not password:
+            raise ValueError("username was given without a password.")
+
+        raise ValueError(
+            "No authentication provided — pass token=<api-key> or username=<user>, password=<pass>."
+        )
 
     def request(
         self,

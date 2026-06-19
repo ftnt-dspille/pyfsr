@@ -3,6 +3,7 @@ import time
 from typing import Any
 
 from ..auth.base import BaseAuth
+from ..models._integration import ExportJobResult
 from .base import BaseAPI
 from .content_hub import ContentHubSearch
 
@@ -79,9 +80,10 @@ class ExportConfigAPI(BaseAPI):
             raise ValueError("Filename must end in .zip")
         return self.client.put(f"/api/export?fileName={filename}&template={template_uuid}")
 
-    def _get_export_status(self, job_uuid: str) -> dict[str, Any]:
+    def _get_export_status(self, job_uuid: str) -> ExportJobResult:
         """Get the status of an export job"""
-        return self.client.get(f"/api/3/export_jobs/{job_uuid}")
+        resp = self.client.get(f"/api/3/export_jobs/{job_uuid}")
+        return ExportJobResult.model_validate(resp if isinstance(resp, dict) else {"result": resp})
 
     def _download_export(self, file_iri: str, download_path: str | None = None) -> str:
         """
@@ -98,7 +100,10 @@ class ExportConfigAPI(BaseAPI):
             The response will be binary data (application/zip) which is handled
             by the client's get() method.
         """
-        content = self.client.get(file_iri)  # Will return bytes due to content type
+        # The files endpoint returns JSON metadata by default and only streams the
+        # raw archive when asked for octet-stream — without this header the GET
+        # comes back as a dict and the write below would fail.
+        content = self.client.get(file_iri, headers={"Accept": "application/octet-stream"})
 
         if not download_path:
             filename = file_iri.split("/")[-1]
@@ -112,11 +117,11 @@ class ExportConfigAPI(BaseAPI):
 
         return download_path
 
-    def _poll_export_completion(self, job_uuid: str, poll_interval: int = 5) -> dict[str, Any]:
+    def _poll_export_completion(self, job_uuid: str, poll_interval: int = 5) -> ExportJobResult:
         """Poll until export is complete"""
         while True:
             status = self._get_export_status(job_uuid)
-            if status["status"] == "Export Complete":
+            if status.status == "Export Complete":
                 return status
             time.sleep(poll_interval)
 
@@ -339,3 +344,86 @@ class ExportConfigAPI(BaseAPI):
             "metadata": metadata or {"autoSelectPicklists": True},
         }
         return self.client.post("/api/3/export_templates", data=template_data)
+
+    def delete_template(self, template_uuid: str) -> None:
+        """Delete an export template by uuid (``DELETE /api/3/export_templates/<uuid>``)."""
+        self.client.delete(f"/api/3/export_templates/{template_uuid}")
+
+    def export_connector(
+        self,
+        connector_name: str,
+        output_path: str | None = None,
+        *,
+        include_configurations: bool = True,
+        cleanup_template: bool = True,
+        poll_interval: int = 3,
+    ) -> str:
+        """Export a single **installed** connector (with its configs) to a ``.zip``.
+
+        Builds a one-connector export template straight from the installed
+        connector record (so it works for installed-only connectors that the
+        Content Hub search wouldn't surface), triggers the export, downloads the
+        archive, and — unless ``cleanup_template=False`` — deletes the throwaway
+        template it created.
+
+        The downloaded ``.zip`` contains ``<file>/connectors/data.json`` whose
+        ``configurations[]`` preserve each ``config_id`` and carry secrets in the
+        appliance's encrypted form — feed it straight to
+        ``client.import_config.import_file`` to restore.
+
+        Args:
+            connector_name: connector machine name (e.g. ``"code-snippet"``).
+            output_path: where to write the ``.zip`` (default: cwd, derived name).
+            include_configurations: include the connector's saved configs
+                (default True — the whole point of a backup).
+            cleanup_template: delete the temporary export template afterwards.
+            poll_interval: seconds between export-status polls.
+
+        Returns:
+            Path to the downloaded ``.zip``.
+
+        Raises:
+            ValueError: if ``connector_name`` is not installed.
+        """
+        self._check_auth_support(operation=BaseAuth.OPERATION_CONFIG_EXPORT)
+
+        resp = self.client.get("/api/integration/connectors/", params={"name": connector_name})
+        data = (resp or {}).get("data") or []
+        record = next((c for c in data if c.get("name") == connector_name), None)
+        if record is None:
+            raise ValueError(f"{connector_name!r} is not installed")
+
+        version = record["version"]
+        entry = {
+            "label": record.get("label") or connector_name,
+            "value": f"cyops-connector-{connector_name}-{version}",
+            "version": version,
+            # system/RPM-shipped connectors install via RPM; uploaded ones don't.
+            "rpm": bool(record.get("system") or record.get("rpm_installed")),
+            "include": True,
+            "configurations": include_configurations,
+            "configCount": record.get("config_count") or 0,
+            "recordCount": 0,
+        }
+
+        template_name = f"pyfsr_export_{connector_name}_{version}".replace(".", "_")
+        template = self.create_export_template(name=template_name, options={"connectors": [entry]})
+        template_uuid = template["@id"].split("/")[-1]
+
+        try:
+            if not output_path:
+                output_path = os.path.join(
+                    os.getcwd(), f"{connector_name}-{version}.zip".replace("/", "_")
+                )
+            return self._export_with_template(
+                template_uuid=template_uuid,
+                output_path=output_path,
+                filename=f"{template_name}.zip",
+                poll_interval=poll_interval,
+            )
+        finally:
+            if cleanup_template:
+                try:
+                    self.delete_template(template_uuid)
+                except Exception:  # pragma: no cover - cleanup is best-effort
+                    pass

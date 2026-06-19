@@ -171,11 +171,11 @@ def _h_run_connector_operation(
 
 
 def _h_list_playbook_runs(client, *, playbook=None, limit=20) -> Any:
-    return {"runs": client.playbooks.runs(playbook=playbook, limit=limit)}
+    return {"runs": client.playbooks.execution_history(playbook=playbook, limit=limit)}
 
 
 def _h_get_playbook_run(client, *, run_pk) -> Any:
-    return client.playbooks.get(run_pk)
+    return client.playbooks.get_execution(run_pk)
 
 
 def _h_investigate_alert(client, *, ref, wait=False, timeout=600) -> Any:

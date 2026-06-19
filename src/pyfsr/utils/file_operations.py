@@ -1,6 +1,10 @@
+import logging
 import mimetypes
 from pathlib import Path
-from typing import Any
+
+from ..models import FileRecord
+
+logger = logging.getLogger("pyfsr")
 
 
 class FileOperations:
@@ -15,7 +19,7 @@ class FileOperations:
         """
         self.client = client
 
-    def upload(self, filename: str) -> dict[str, Any]:
+    def upload(self, filename: str) -> FileRecord:
         """
         Upload a file to FortiSOAR, mimicking browser file upload behavior
 
@@ -23,7 +27,9 @@ class FileOperations:
             filename: Path to the file to upload
 
         Returns:
-            Dict[str, Any]: Server response
+            FileRecord: The created ``/api/3/files`` record. Stays
+            dict-compatible (``rec["@id"]``) while exposing typed fields
+            (``rec.iri``, ``rec.filename``).
         """
         file_path = Path(filename)
         if not file_path.exists():
@@ -48,16 +54,19 @@ class FileOperations:
                         "Content-Type": None
                     },
                 )
-                print(f"File upload successful. Response: {response}")
-                return response
+                record = (
+                    FileRecord.model_validate(response) if isinstance(response, dict) else response
+                )
+                logger.debug("File upload successful: %s", record.get("@id"))
+                return record
 
             except Exception as e:
-                print(f"Upload failed: {str(e)}")
+                logger.error("File upload failed for %s: %s", file_path, e)
                 if hasattr(e, "response") and e.response is not None:
-                    print(f"Response status: {e.response.status_code}")
-                    print(f"Response body: {e.response.text}")
+                    logger.error("Response status: %s", e.response.status_code)
+                    logger.debug("Response body: %s", e.response.text)
                 raise
 
-    def upload_many(self, filenames: list[str]) -> list[dict[str, Any]]:
+    def upload_many(self, filenames: list[str]) -> list[FileRecord]:
         """Upload multiple files to FortiSOAR"""
         return [self.upload(f) for f in filenames]
