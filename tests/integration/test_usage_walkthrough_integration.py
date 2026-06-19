@@ -125,7 +125,7 @@ def test_walkthrough_connectors(client):
 
 
 def test_walkthrough_playbooks(client):
-    runs = client.playbooks.runs(limit=3)
+    runs = client.playbooks.execution_history(limit=3)
     assert isinstance(runs, list) or "hydra:member" in runs
 
 

@@ -58,7 +58,8 @@ def mock_client(mock_response, monkeypatch):
     # Create client with mocked session
     client = FortiSOAR(
         base_url="https://test.fortisoar.com",
-        auth=("test_user", "test_pass"),
+        username="test_user",
+        password="test_pass",
         verify_ssl=False,
         suppress_insecure_warnings=True,
     )

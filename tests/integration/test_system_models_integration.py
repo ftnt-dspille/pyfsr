@@ -30,7 +30,7 @@ def test_records_workflow_collections_returns_typed_model(client):
 
 
 def test_playbook_runs_typed(client):
-    runs = client.playbooks.runs(limit=3, typed=True)
+    runs = client.playbooks.execution_history(limit=3, typed=True)
     if not runs:
         pytest.skip("no playbook runs on box")
     assert all(isinstance(r, WorkflowRun) for r in runs)

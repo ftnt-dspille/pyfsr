@@ -28,11 +28,11 @@ def test_healthcheck_a_configured_connector(client):
 
 
 def test_playbook_runs_and_get(client):
-    runs = client.playbooks.runs(limit=5)
+    runs = client.playbooks.execution_history(limit=5)
     assert isinstance(runs, list)
     if not runs:
         pytest.skip("no playbook runs on this box")
     first = runs[0]
     assert {"task_id", "name", "status", "pk", "source"} <= set(first)
-    fetched = client.playbooks.get(first["pk"])
+    fetched = client.playbooks.get_execution(first["pk"])
     assert fetched["pk"] == first["pk"]

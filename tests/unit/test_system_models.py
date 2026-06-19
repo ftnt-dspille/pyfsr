@@ -146,7 +146,7 @@ def test_playbooks_runs_typed_returns_workflowrun():
             "&parent_wf__isnull=True": {"hydra:member": [_RUN]},
         }
     )
-    runs = PlaybooksAPI(client).runs(typed=True)
+    runs = PlaybooksAPI(client).execution_history(typed=True)
     assert len(runs) == 1
     assert isinstance(runs[0], WorkflowRun)
     assert runs[0].status == "finished"
@@ -160,7 +160,7 @@ def test_playbooks_runs_default_returns_shaped_dict():
             "&parent_wf__isnull=True": {"hydra:member": [_RUN]},
         }
     )
-    runs = PlaybooksAPI(client).runs()
+    runs = PlaybooksAPI(client).execution_history()
     assert isinstance(runs[0], dict)
     assert set(runs[0]) == {
         "task_id",
@@ -176,6 +176,6 @@ def test_playbooks_runs_default_returns_shaped_dict():
 
 def test_playbooks_get_typed():
     client = FakeClient({"/api/wf/api/workflows/run-1/?format=json": _RUN})
-    run = PlaybooksAPI(client).get("run-1", typed=True)
+    run = PlaybooksAPI(client).get_execution("run-1", typed=True)
     assert isinstance(run, WorkflowRun)
     assert run.name == "Block IP"
