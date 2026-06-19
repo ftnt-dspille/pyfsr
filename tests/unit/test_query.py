@@ -90,3 +90,32 @@ def test_changed_operator_is_valueless():
 def test_in_all_operator_takes_list():
     body = Query().in_all("tags", ["a", "b"]).to_body()
     assert body["filters"] == [{"field": "tags", "operator": "in_all", "value": ["a", "b"]}]
+
+
+def test_arity_validation_rejects_scalar_for_list_op():
+    with pytest.raises(ValueError, match="needs a list"):
+        Query().where("tags", "in", "not-a-list")
+
+
+def test_deprecated_operator_gives_guidance():
+    with pytest.raises(ValueError, match="isnull"):
+        Query().where("deletedAt", "isnotnull")
+
+
+def test_model_returns_typed_query_body():
+    from pyfsr.query_models import QueryBody
+
+    q = Query().eq("name", "x").limit(5)
+    model = q.model()
+    assert isinstance(model, QueryBody)
+    assert model.limit == 5
+
+
+def test_module_field_validation_rejects_unknown_field():
+    with pytest.raises(ValueError, match="no field"):
+        Query(module="alerts").eq("not_a_real_field_xyz", "x")
+
+
+def test_module_field_validation_allows_relationship_dot_walk():
+    body = Query(module="alerts").eq("severity.itemValue", "Critical").to_body()
+    assert body["filters"][0]["field"] == "severity.itemValue"
