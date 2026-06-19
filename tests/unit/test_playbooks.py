@@ -86,7 +86,7 @@ def test_runs_merges_and_dedupes():
             _run("/api/wf/api/historical-workflows/b/", "B", "finished", "2026-06-08T01:00"),
         ],
     )
-    runs = PlaybooksAPI(client).runs(limit=10)
+    runs = PlaybooksAPI(client).execution_history(limit=10)
     pks = [r["pk"] for r in runs]
     assert pks == ["a", "dup", "b"]  # sorted by modified desc, deduped
     assert {r["source"] for r in runs} == {"live", "historical"}
@@ -94,7 +94,7 @@ def test_runs_merges_and_dedupes():
 
 def test_runs_respects_limit():
     wf = [_run(f"/api/wf/api/workflows/{i}/", f"n{i}", "finished", f"t{i}") for i in range(5)]
-    runs = PlaybooksAPI(FakeClient(workflows=wf)).runs(limit=2)
+    runs = PlaybooksAPI(FakeClient(workflows=wf)).execution_history(limit=2)
     assert len(runs) == 2
 
 
@@ -103,7 +103,7 @@ def test_runs_by_playbook_name_resolves_uuid():
         workflows=[_run("/api/wf/api/workflows/a/", "A", "failed", "t")],
         name_lookup={"hydra:member": [{"uuid": "pb-uuid"}]},
     )
-    PlaybooksAPI(client).runs(playbook="Block IP")
+    PlaybooksAPI(client).execution_history(playbook="Block IP")
     # name lookup happened, and the run fetch carried the template_iri filter
     assert any("/api/3/workflows?" in c[0] for c in client.get_calls)
     assert any("template_iri=/api/3/workflows/pb-uuid" in c[0] for c in client.get_calls)
@@ -111,12 +111,12 @@ def test_runs_by_playbook_name_resolves_uuid():
 
 def test_runs_unknown_playbook_returns_empty():
     client = FakeClient(name_lookup={"hydra:member": []})
-    assert PlaybooksAPI(client).runs(playbook="nope") == []
+    assert PlaybooksAPI(client).execution_history(playbook="nope") == []
 
 
 def test_runs_raw_returns_unshaped():
     client = FakeClient(workflows=[_run("/api/wf/api/workflows/a/", "A", "failed", "t")])
-    runs = PlaybooksAPI(client).runs(raw=True)
+    runs = PlaybooksAPI(client).execution_history(raw=True)
     assert "@id" in runs[0]
 
 
@@ -126,14 +126,14 @@ def test_get_live_then_historical_fallback():
         workflows=[],
         historical=[_run("/api/wf/api/historical-workflows/h1/", "H", "failed", "t", uuid="u")],
     )
-    run = PlaybooksAPI(client).get("h1")
+    run = PlaybooksAPI(client).get_execution("h1")
     assert run["pk"] == "h1"
     assert run["source"] == "historical"
 
 
 def test_get_blank_pk_raises():
     with pytest.raises(ValueError):
-        PlaybooksAPI(FakeClient()).get("")
+        PlaybooksAPI(FakeClient()).get_execution("")
 
 
 # -- trigger ----------------------------------------------------------------
@@ -214,7 +214,7 @@ def _run_with_steps(pk):
 def test_get_step_detail_passes_flag_and_returns_full():
     client = FakeClient(workflows=[_run_with_steps("900")])
     api = PlaybooksAPI(client)
-    full = api.get("900", step_detail=True)
+    full = api.get_execution("900", step_detail=True)
     assert client.get_calls[0][0] == "/api/wf/api/workflows/900/?format=json&step_detail=true"
     assert "steps" in full and len(full["steps"]) == 2
 
@@ -242,6 +242,10 @@ class CrudClient:
         self.calls.append(("PUT", endpoint, data))
         return {"ok": True, **(data or {})}
 
+    def post(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("POST", endpoint, data))
+        return {"ok": True, "endpoint": endpoint, "data": data}
+
     def delete(self, endpoint, params=None, **kw):
         self.calls.append(("DELETE", endpoint, params))
 
@@ -262,6 +266,33 @@ def test_list_collection_accepts_uuid_or_iri():
     assert params["collection"] == "col-9" and params["$relationships"] == "true"
     PlaybooksAPI(c).list(collection="col-9")
     assert c.calls[-1][2]["collection"] == "col-9"
+
+
+def test_list_passes_extra_query_params():
+    c = CrudClient()
+    PlaybooksAPI(c).list(
+        limit=5,
+        params={"triggerStep.stepType.name": "cybersponse.post_create", "$fields": "uuid,name"},
+    )
+    _, endpoint, params = c.calls[-1]
+    assert endpoint == "/api/3/workflows"
+    assert params["$limit"] == 5
+    assert params["triggerStep.stepType.name"] == "cybersponse.post_create"
+    assert params["$fields"] == "uuid,name"
+
+
+def test_get_definition_fetches_one_workflow():
+    class _DefinitionClient(CrudClient):
+        def get(self, endpoint, params=None, **kw):
+            self.calls.append(("GET", endpoint, params))
+            return {"@id": endpoint, "uuid": "w-1", "name": "Block IP"}
+
+    c = _DefinitionClient()
+    out = PlaybooksAPI(c).get_definition("w-1")
+    assert out["uuid"] == "w-1"
+    assert c.calls[-1][0] == "GET"
+    assert c.calls[-1][1] == "/api/3/workflows/w-1"
+    assert c.calls[-1][2] == {"$relationships": "true"}
 
 
 def test_update_definition_puts_partial_fields():
@@ -287,9 +318,44 @@ def test_delete_definition_hard_and_soft():
     assert c.calls[-1][2] is None
 
 
+def test_create_playbooks_posts_rows_to_bulk_path():
+    c = CrudClient()
+    payload = [{"uuid": "w-1", "name": "Block IP"}]
+    out = PlaybooksAPI(c).create_playbooks(payload)
+    method, endpoint, data = c.calls[-1]
+    assert method == "POST" and endpoint == "/api/3/bulkupsert/workflows"
+    assert data == payload
+    assert out["ok"] is True
+
+
+def test_query_posts_to_workflow_query_endpoint():
+    class _QueryClient(CrudClient):
+        def post(self, endpoint, data=None, params=None, **kw):
+            self.calls.append(("POST", endpoint, data, params))
+            return {"hydra:member": [{"uuid": "w-1", "name": "Block IP"}], "hydra:totalItems": 1}
+
+    c = _QueryClient()
+    out = PlaybooksAPI(c).query(
+        {
+            "logic": "AND",
+            "filters": [{"field": "triggerStep.stepType.name", "value": "start"}],
+            "limit": 3,
+        }
+    )
+    assert len(out) == 1 and out[0]["uuid"] == "w-1"
+    method, endpoint, data, params = c.calls[-1]
+    assert method == "POST" and endpoint == "/api/query/workflows"
+    assert data["logic"] == "AND"
+    assert params == {"$page": 1, "$limit": 3}
+
+
 def test_definition_crud_uuid_validation():
     a = PlaybooksAPI(CrudClient())
-    for op in (lambda: a.update("", debug=True), lambda: a.delete("  ")):
+    for op in (
+        lambda: a.update("", debug=True),
+        lambda: a.delete("  "),
+        lambda: a.get_definition(""),
+    ):
         with pytest.raises(ValueError):
             op()
 
@@ -380,3 +446,233 @@ def test_trigger_by_name_and_deferred():
 def test_trigger_by_name_rejects_blank():
     with pytest.raises(ValueError):
         PlaybooksAPI(_Rec()).trigger_by_name("")
+
+
+# -- wait / trigger(follow=True) --------------------------------------------
+class _PollClient:
+    """Simulates log_list returning running then finished."""
+
+    def __init__(self, statuses):
+        self.statuses = list(statuses)
+        self.calls = []
+
+    def get(self, endpoint, params=None, **kw):
+        self.calls.append(("GET", endpoint, params))
+        return {}
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("POST", endpoint, params))
+        if "log_list" in endpoint:
+            status = self.statuses.pop(0) if self.statuses else "finished"
+            return {
+                "hydra:member": [
+                    {
+                        "@id": "/api/wf/api/workflows/42/",
+                        "name": "PB",
+                        "status": status,
+                        "modified": "2026-06-19",
+                    }
+                ]
+            }
+        if "notrigger" in endpoint:
+            return {"task_id": "run-uuid"}
+        return {}
+
+
+def test_wait_polls_until_terminal(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    c = _PollClient(["Running", "Running", "finished"])
+    run = PlaybooksAPI(c).wait("run-uuid", interval=0)
+    assert run["status"] == "finished"
+    log_list_calls = [call for call in c.calls if "log_list" in call[1]]
+    assert len(log_list_calls) == 3
+
+
+def test_wait_raises_on_timeout(monkeypatch):
+    calls = iter([0.0, 0.0, 999.0])
+    monkeypatch.setattr("time.monotonic", lambda: next(calls))
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    c = _PollClient(["Running"] * 10)
+    with pytest.raises(TimeoutError):
+        PlaybooksAPI(c).wait("run-uuid", timeout=1, interval=0)
+
+
+def test_wait_rejects_blank_task_id():
+    with pytest.raises(ValueError):
+        PlaybooksAPI(_Rec()).wait("")
+
+
+def test_trigger_follow_returns_shaped_run(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    monkeypatch.setattr("time.monotonic", lambda: 0.0)
+    c = _PollClient(["finished"])
+
+    class _WithUuid:
+        """Client that also handles the uuid lookup GET."""
+
+        def __init__(self, inner):
+            self._inner = inner
+            self.calls = inner.calls
+
+        def get(self, endpoint, params=None, **kw):
+            self.calls.append(("GET", endpoint, params))
+            if "/api/3/workflows" in endpoint:
+                return {"hydra:member": [{"uuid": "pb-uuid"}]}
+            return {}
+
+        def post(self, *a, **kw):
+            return self._inner.post(*a, **kw)
+
+    run = PlaybooksAPI(_WithUuid(c)).trigger("My PB", follow=True, interval=0)
+    assert run["status"] == "finished"
+
+
+def test_trigger_follow_false_returns_task_id():
+    c = _Rec(resp={"task_id": "t99"})
+    resp = PlaybooksAPI(c).trigger("aabbccdd-0000-0000-0000-000000000000", follow=False)
+    assert resp == {"task_id": "t99"}
+
+
+# -- trigger_action -----------------------------------------------------------
+def test_trigger_action_posts_correct_body():
+    c = _Rec(resp={"task_id": "ta1"})
+    resp = PlaybooksAPI(c).trigger_action(
+        "route-uuid-1234",
+        module="alerts",
+        record_uuid="rec-uuid",
+        playbook_uuid="pb-uuid",
+    )
+    method, endpoint, body, params = c.calls[-1]
+    assert endpoint == "/api/triggers/1/action/route-uuid-1234"
+    assert body["singleRecordExecution"] is True
+    assert body["__resource"] == "alerts"
+    assert body["records"] == ["/api/3/alerts/rec-uuid"]
+    assert body["__uuid"] == "pb-uuid"
+    assert resp == {"task_id": "ta1"}
+
+
+def test_trigger_action_omits_playbook_uuid_when_not_given():
+    c = _Rec(resp={})
+    PlaybooksAPI(c).trigger_action("r-uuid", module="incidents", record_uuid="r1")
+    _, _, body, _ = c.calls[-1]
+    assert "__uuid" not in body
+
+
+# -- search_executions -------------------------------------------------------
+class _SearchRec:
+    """Records POST calls; returns log_list-shaped response."""
+
+    def __init__(self, members=None):
+        self.calls = []
+        self._members = members or []
+
+    def get(self, endpoint, params=None, **kw):
+        self.calls.append(("GET", endpoint, None, params))
+        if "/api/3/workflows" in endpoint:
+            return {"hydra:member": [{"uuid": "pb-uuid"}]}
+        return {}
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("POST", endpoint, data, params))
+        return {"hydra:member": self._members}
+
+
+def test_search_executions_free_text_query():
+    member = {
+        "@id": "/api/wf/api/workflows/1/",
+        "name": "PB",
+        "status": "finished",
+        "modified": "t",
+    }
+    c = _SearchRec(members=[member])
+    results = PlaybooksAPI(c).search_executions("High Risk")
+    _, endpoint, _, params = c.calls[-1]
+    assert endpoint == "/api/wf/api/workflows/log_list/"
+    assert params["search"] == "High Risk"
+    assert results[0]["name"] == "PB"
+
+
+def test_search_executions_tags_include_and_exclude():
+    c = _SearchRec()
+    PlaybooksAPI(c).search_executions(tags_include=["critical", "phishing"], tags_exclude="noise")
+    _, _, _, params = c.calls[-1]
+    assert params["tags_include"] == "critical,phishing"
+    assert params["tags_exclude"] == "noise"
+
+
+def test_search_executions_status_filter():
+    c = _SearchRec()
+    PlaybooksAPI(c).search_executions(status="failed", limit=5, offset=10)
+    _, _, _, params = c.calls[-1]
+    assert params["status"] == "failed"
+    assert params["limit"] == 5
+    assert params["offset"] == 10
+
+
+def test_search_executions_by_playbook_name_resolves_uuid():
+    c = _SearchRec()
+    PlaybooksAPI(c).search_executions(playbook="Block IP")
+    _, _, _, params = c.calls[-1]
+    assert params["template_iri"] == "/api/3/workflows/pb-uuid"
+
+
+def test_search_executions_by_playbook_uuid_skips_lookup():
+    c = _SearchRec()
+    PlaybooksAPI(c).search_executions(playbook_uuid="my-uuid")
+    _, _, _, params = c.calls[-1]
+    assert params["template_iri"] == "/api/3/workflows/my-uuid"
+    get_calls = [call for call in c.calls if call[0] == "GET"]
+    assert not get_calls  # no name-lookup GET needed
+
+
+def test_trigger_action_rejects_blank_route():
+    with pytest.raises(ValueError):
+        PlaybooksAPI(_Rec()).trigger_action("", module="alerts", record_uuid="r")
+
+
+# -- historical_steps ---------------------------------------------------------
+def test_historical_steps_calls_correct_endpoint():
+    c = _Rec(resp={"hydra:member": [{"name": "Start", "status": "finished"}]})
+    steps = PlaybooksAPI(c).historical_steps("task-abc", limit=50)
+    method, endpoint, data, params = c.calls[-1]
+    assert endpoint == "/api/wf/api/historical-steps/"
+    assert params["task_id"] == "task-abc"
+    assert params["limit"] == 50
+    assert params["ordering"] == "created"
+    assert steps == [{"name": "Start", "status": "finished"}]
+
+
+def test_historical_steps_passes_status_and_name_filters():
+    c = _Rec(resp={"hydra:member": []})
+    PlaybooksAPI(c).historical_steps("t1", status="failed", name="Enrich IP")
+    _, _, _, params = c.calls[-1]
+    assert params["status"] == "failed"
+    assert params["name"] == "Enrich IP"
+
+
+def test_historical_steps_rejects_blank_task_id():
+    with pytest.raises(ValueError):
+        PlaybooksAPI(_Rec()).historical_steps("")
+
+
+# -- render_jinja -------------------------------------------------------------
+def test_render_jinja_returns_result_field():
+    c = _Rec(resp={"result": "hello world"})
+    out = PlaybooksAPI(c).render_jinja("{{ greeting }}", values={"greeting": "hello world"})
+    method, endpoint, body, params = c.calls[-1]
+    assert endpoint == "/api/wf/api/jinja-editor/"
+    assert body["template"] == "{{ greeting }}"
+    assert body["values"] == {"greeting": "hello world"}
+    assert out == "hello world"
+
+
+def test_render_jinja_falls_back_to_json_dump():
+    c = _Rec(resp={"unknown_key": "data"})
+    out = PlaybooksAPI(c).render_jinja("{{ x }}")
+    assert "unknown_key" in out  # fell back to json.dumps
+
+
+def test_render_jinja_handles_string_response():
+    c = _Rec(resp="raw string")
+    out = PlaybooksAPI(c).render_jinja("{{ x }}")
+    assert out == "raw string"

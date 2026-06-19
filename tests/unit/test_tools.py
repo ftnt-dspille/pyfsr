@@ -59,10 +59,10 @@ class FakeConnectors:
 
 
 class FakePlaybooks:
-    def runs(self, playbook=None, limit=20):
+    def execution_history(self, playbook=None, limit=20):
         return [{"name": playbook or "any", "status": "finished"}]
 
-    def get(self, run_pk):
+    def get_execution(self, run_pk):
         return {"pk": run_pk, "status": "finished"}
 
 

@@ -60,7 +60,7 @@ class FakeClient:
 
     def put(self, endpoint, data=None, params=None, **kwargs):
         self.put_calls.append((endpoint, data))
-        return self._post_resp or {"config_id": (data or {}).get("config_id"), "status": "ok"}
+        return self._post_resp or {"config_id": (data or {}).get("config_id"), "status": 1}
 
     def delete(self, endpoint, params=None, **kwargs):
         self.delete_calls.append((endpoint, params))
@@ -324,8 +324,13 @@ def test_create_configuration_unknown_connector_raises():
         api.create_configuration("brand-new", {"k": "v"}, name="c", version="1.0", validate=False)
 
 
+# A realistic POST response from /api/integration/configuration/ — the saved
+# config record (status is the int active-flag, not a string "Success").
+_CREATED_CONFIG = {"config_id": "cfg-1", "name": "c", "status": 1, "connector": 16}
+
+
 def test_create_configuration_with_config_id_and_agent():
-    api, client = _api(post_resp={})
+    api, client = _api(post_resp=_CREATED_CONFIG)
     api.create_configuration(
         "virustotal",
         {"k": "v"},
@@ -340,7 +345,7 @@ def test_create_configuration_with_config_id_and_agent():
 
 
 def test_create_configuration_clears_cache():
-    api, client = _api(post_resp={})
+    api, client = _api(post_resp=_CREATED_CONFIG)
     api.list_configured()  # prime
     api.create_configuration("virustotal", {"k": "v"}, name="c", validate=False)
     api.list_configured()  # should refetch

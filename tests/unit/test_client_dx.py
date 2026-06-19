@@ -36,7 +36,8 @@ def test_configured_timeout(mock_client, mock_response, monkeypatch):
     # client (userpass auth) won't hit the network.
     client = FortiSOAR(
         base_url="https://t.example.com",
-        auth=("u", "p"),
+        username="u",
+        password="p",
         verify_ssl=False,
         timeout=7,
     )
@@ -64,7 +65,8 @@ def test_retry_adapter_mounted_by_default(mock_client):
 def test_retry_disabled(mock_client):
     client = FortiSOAR(
         base_url="https://t.example.com",
-        auth=("u", "p"),
+        username="u",
+        password="p",
         verify_ssl=False,
         max_retries=0,
     )

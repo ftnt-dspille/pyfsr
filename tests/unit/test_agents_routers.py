@@ -128,7 +128,9 @@ def test_connector_install_status_filters_by_agent():
     ]
     c = RecordingClient(post_payload=rows)
     out = AgentsAPI(c).connector_install_status("cyops_utilities", "3.7.1", agent_id="a1")
-    assert out == [{"agent": "a1", "status": "Completed"}]
+    assert len(out) == 1
+    assert out[0].agent == "a1"
+    assert out[0].status == "Completed"
     endpoint = c.calls[-1][1]
     assert endpoint == (
         "/api/integration/connectors/agents/cyops_utilities/3.7.1/?format=json&active=true"
@@ -138,7 +140,8 @@ def test_connector_install_status_filters_by_agent():
 def test_connector_install_status_unwraps_dict_payload():
     c = RecordingClient(post_payload={"data": [{"agent": "a1"}]})
     out = AgentsAPI(c).connector_install_status("c", "1.0", active=False)
-    assert out == [{"agent": "a1"}]
+    assert len(out) == 1
+    assert out[0].agent == "a1"
     assert c.calls[-1][1].endswith("/c/1.0/?format=json")
 
 
