@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Query DSL: pydantic-backed `QueryBody`/`FilterLeaf`/`FilterGroup`/`SortSpec` models
+  (`Query.model()` returns the typed body), an operator knowledge base
+  (`OPERATOR_SPECS` with per-operator arity/category) that validates value shape and
+  suggests fixes for unsupported operators (e.g. `isnotnull` → `isnull value=False`),
+  and a shipped field/relationship KB (`pyfsr.fields`) so `Query(module=...)` can
+  validate field paths and relationship dot-walks.
 - `PlaybooksAPI.get_definition()` / `bulk_upsert()` / `query()` for the playbook-definition
   surface at `/api/3/workflows`, including the bulk re-push path and body-filter queries.
 - `client.ai` (`AIApi`): drive the FortiAI agentic investigation service.

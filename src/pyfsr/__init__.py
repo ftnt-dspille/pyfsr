@@ -37,6 +37,7 @@ from .models import (
 from .pagination import HydraPage, paginate
 from .projection import SUMMARY_FIELDS, project, project_record, to_jsonable
 from .query import Query
+from .query_models import OPERATOR_SPECS, QueryBody
 from .records import RecordSet
 from .tools import (
     REGISTRY,
@@ -60,6 +61,8 @@ __all__ = [
     "EnvConfig",
     "pack_connector",
     "Query",
+    "QueryBody",
+    "OPERATOR_SPECS",
     "RecordSet",
     "HydraPage",
     "paginate",
