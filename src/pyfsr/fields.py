@@ -26,6 +26,31 @@ from typing import Any
 
 _RESOURCE = "query_fields.json.gz"
 
+#: Framework fields present on every module but absent from per-module schema
+#: attributes (the JSON-LD envelope + audit/soft-delete columns).
+_SYSTEM_FIELDS = frozenset(
+    {
+        "uuid",
+        "id",
+        "@id",
+        "@type",
+        "createDate",
+        "modifyDate",
+        "lastModifyDate",
+        "deletedAt",
+        "recordTags",
+        "importedBy",
+    }
+)
+
+#: System relationship fields → their target module (so audit dot-walks like
+#: ``createUser.name`` or ``owners.name`` validate).
+_SYSTEM_RELATIONSHIPS = {
+    "createUser": "people",
+    "modifyUser": "people",
+    "owners": "teams",
+}
+
 
 @lru_cache(maxsize=1)
 def _kb() -> dict[str, Any]:
@@ -83,8 +108,8 @@ def validate_field_path(module: str, path: str) -> None:
         if entry is None:
             return  # unknown module: can't validate further, accept
         is_last = i == len(segs) - 1
-        rels = entry.get("relationships", {})
-        fields = set(entry.get("fields", []))
+        rels = {**_SYSTEM_RELATIONSHIPS, **entry.get("relationships", {})}
+        fields = set(entry.get("fields", [])) | _SYSTEM_FIELDS
         if is_last:
             if seg not in fields and seg not in rels:
                 raise ValueError(

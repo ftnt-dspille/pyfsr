@@ -65,3 +65,15 @@ def test_validate_dot_walk_into_scalar_raises():
 def test_validate_unknown_module_is_lenient():
     # unknown module: cannot validate, must not raise
     fields.validate_field_path("custom_module_xyz", "whatever.path")
+
+
+def test_validate_system_fields_accepted():
+    # framework fields aren't in per-module schema attributes but are always valid
+    for f in ("createDate", "modifyDate", "uuid", "id", "deletedAt"):
+        fields.validate_field_path("alerts", f)
+
+
+def test_validate_system_relationship_dot_walk():
+    # audit relationships resolve to people (createUser/modifyUser -> people)
+    fields.validate_field_path("alerts", "createUser.firstname")
+    fields.validate_field_path("alerts", "modifyUser.firstname")
