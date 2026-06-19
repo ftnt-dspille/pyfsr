@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `PlaybooksAPI.get_definition()` / `bulk_upsert()` / `query()` for the playbook-definition
+  surface at `/api/3/workflows`, including the bulk re-push path and body-filter queries.
 - `client.ai` (`AIApi`): drive the FortiAI agentic investigation service.
   - `investigate_alert()` / `start_alert_investigation()` / `wait_for_result()` /
     `get_status()` / `get_result()` — trigger and poll the triage pipeline
@@ -25,6 +27,8 @@ All notable changes to this project will be documented in this file.
   operators.
 - `RecordSet.upsert()` and `RecordSet.bulk_upsert()` (insert-or-update via
   `/api/3/upsert/<module>` and `/api/3/bulkupsert/<module>`).
+- `WorkflowCollectionsAPI.upsert()` / `bulk_upsert()` / `restore()` for the
+  collection-specific re-push and recycle-bin lifecycle.
 - `PlaybooksAPI.get(step_detail=True)` and `PlaybooksAPI.run_env()` for the per-step
   execution trace + Jinja run-context.
 - `ConnectorsAPI.definition()` / `operations()` / `files()` for connector
