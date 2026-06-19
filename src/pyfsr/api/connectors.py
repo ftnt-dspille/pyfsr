@@ -48,6 +48,16 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..models._integration import (
+    ConfigValidationResult,
+    ConnectorConfig,
+    ConnectorConfigSummary,
+    EnsureVersionResult,
+    ExecuteResult,
+    HealthcheckResult,
+    InstalledConnector,
+    InstallJobStatus,
+)
 from .base import BaseAPI
 
 
@@ -155,17 +165,17 @@ def _missing_message(field: dict[str, Any], condition: dict[str, Any] | None) ->
     return msg
 
 
-def _format_validation_error(connector: str, check: dict[str, Any]) -> str:
+def _format_validation_error(connector: str, check: ConfigValidationResult) -> str:
     """Render a :meth:`ConnectorsAPI.validate_config` result as a multi-line,
     user-facing error for the create/update raise path."""
     lines = [f"{connector!r} configuration is invalid:"]
-    for err in check.get("errors") or []:
-        if err.get("code") == "unknown_field":
+    for err in check.errors or []:
+        if err.code == "unknown_field":
             continue  # non-fatal; don't fail the write on extra keys
         suffix = ""
-        if err.get("valid_options") is not None:
-            suffix = f" (valid: {', '.join(map(str, err['valid_options']))})"
-        lines.append(f"  - {err['message']}{suffix}")
+        if err.valid_options is not None:
+            suffix = f" (valid: {', '.join(map(str, err.valid_options))})"
+        lines.append(f"  - {err.message}{suffix}")
     lines.append("(see client.connectors.config_schema(name) for the full schema)")
     return "\n".join(lines)
 
@@ -175,7 +185,7 @@ class ConnectorsAPI(BaseAPI):
 
     def __init__(self, client):
         super().__init__(client)
-        self._configured: list[dict[str, Any]] | None = None
+        self._configured: list[InstalledConnector] | None = None
 
     def clear_cache(self) -> None:
         """Drop the cached configured-connector listing."""
@@ -223,7 +233,7 @@ class ConnectorsAPI(BaseAPI):
         if not job_id:
             return resp
         final = self.wait_for_install(job_id, interval=interval, timeout=timeout)
-        if str(final.get("status", "")).strip().lower() in _INSTALL_TERMINAL:
+        if str(final.status or "").strip().lower() in _INSTALL_TERMINAL:
             self.clear_cache()
         return final
 
@@ -312,21 +322,20 @@ class ConnectorsAPI(BaseAPI):
                 tgz, replace=replace, wait=wait, interval=interval, timeout=timeout
             )
 
-    def install_status(self, job_id: str) -> dict[str, Any]:
+    def install_status(self, job_id: str) -> InstallJobStatus:
         """Fetch a connector install's import-job progress.
 
         ``GET /api/3/import_jobs/{job_id}`` (selecting just the progress fields).
-        Returns ``{status, progressPercent, errorMessage, currentlyImporting,
-        ...}``; ``status == "Import Complete"`` means the install finished.
+        ``status == "Import Complete"`` means the install finished.
         """
         resp = self.client.get(
             f"/api/3/import_jobs/{job_id}", params={"__selectFields": _INSTALL_FIELDS}
         )
-        return resp if isinstance(resp, dict) else {"result": resp}
+        return InstallJobStatus.model_validate(resp if isinstance(resp, dict) else {"result": resp})
 
     def wait_for_install(
         self, job_id: str, *, interval: float = 3.0, timeout: float = 300.0
-    ) -> dict[str, Any]:
+    ) -> InstallJobStatus:
         """Poll an install import job until it reaches a terminal status.
 
         Returns the latest :meth:`install_status` payload. On timeout, returns
@@ -335,7 +344,7 @@ class ConnectorsAPI(BaseAPI):
         deadline = time.monotonic() + timeout
         status = self.install_status(job_id)
         while (
-            str(status.get("status", "")).strip().lower() not in _INSTALL_TERMINAL
+            str(status.status or "").strip().lower() not in _INSTALL_TERMINAL
             and time.monotonic() < deadline
         ):
             time.sleep(interval)
@@ -360,6 +369,150 @@ class ConnectorsAPI(BaseAPI):
         if refresh:
             self.clear_cache()
 
+    def ensure_version(
+        self,
+        name: str,
+        version: str,
+        *,
+        bundle_path: str | None = None,
+        backup_dir: str | None = None,
+        allow_uninstall_fallback: bool = False,
+        wait: bool = True,
+        interval: float = 3.0,
+        timeout: float = 600.0,
+    ) -> dict[str, Any]:
+        """Make ``name`` be installed at exactly ``version``, preserving configs.
+
+        The safe way to change a connector's version — including a **downgrade** —
+        without losing its saved configurations. An in-place install (upgrade or
+        downgrade) preserves configs on its own; this method additionally takes a
+        Configuration-Export backup first and, if the version swap drops or
+        shrinks the config set, restores it from that backup (re-creating configs
+        with their original ``config_id`` so playbook references survive).
+
+        Steps:
+
+        1. If already at ``version``, no-op.
+        2. If installed *and* configured, export a backup ``.zip`` (configs +
+           encrypted secrets) via ``client.export_config.export_connector``.
+        3. Install ``version`` in place — from ``bundle_path`` if given (a local
+           ``.tgz``/zip, needed when the Content Hub won't serve the target),
+           else by name from Content Hub.
+        4. Verify. If configs survived, done. If they didn't (downgrade schema
+           drift, or a forced replace), re-import the backup.
+        5. Only if the in-place install didn't reach ``version`` *and*
+           ``allow_uninstall_fallback`` is set: uninstall (destroys configs),
+           reinstall, then restore configs from the backup.
+
+        Args:
+            name: connector machine name (e.g. ``"code-snippet"``).
+            version: target version (e.g. ``"2.1.5"``).
+            bundle_path: optional local connector archive to install instead of
+                pulling ``version`` from Content Hub (use when the repo no longer
+                serves the older version).
+            backup_dir: directory to write the backup ``.zip`` into (default cwd).
+            allow_uninstall_fallback: permit the destructive uninstall→reinstall
+                path if an in-place install can't reach ``version``. Off by
+                default — leaving the connector untouched is safer than a wipe.
+            wait: block on installs/imports (default True).
+            interval: poll interval for the install wait.
+            timeout: per-install/-import timeout in seconds.
+
+        Returns:
+            A summary dict::
+
+                {"action": "noop"|"in_place"|"restored"|"reinstalled"|"failed",
+                 "from": <old version or None>, "to": <resolved version>,
+                 "target": version, "backup": <path or None>,
+                 "configs_before": N, "configs_after": M}
+        """
+        import os
+
+        cur = self.resolve_version(name)
+        if cur == version:
+            n = len(self.configurations(name))
+            return {
+                "action": "noop",
+                "from": cur,
+                "to": cur,
+                "backup": None,
+                "configs_before": n,
+                "configs_after": n,
+            }
+
+        installed = cur is not None
+        configs_before = self.configurations(name) if installed else []
+
+        backup_path: str | None = None
+        if configs_before:
+            out = os.path.join(backup_dir, f"{name}-{cur}-backup.zip") if backup_dir else None
+            backup_path = self.client.export_config.export_connector(name, output_path=out)
+
+        def _do_install() -> None:
+            if bundle_path:
+                self.install_from_file(
+                    bundle_path, replace=True, wait=wait, interval=interval, timeout=timeout
+                )
+            else:
+                self.install(name, version, wait=wait, interval=interval, timeout=timeout)
+
+        _do_install()
+        self.clear_cache()
+        new = self.resolve_version(name)
+        configs_after = self.configurations(name)
+
+        # In-place install reached the target — restore configs only if the swap
+        # lost some (a clean in-place change keeps them).
+        if new == version:
+            if backup_path and len(configs_after) < len(configs_before):
+                self.client.import_config.import_file(backup_path, wait=True)
+                self.clear_cache()
+                configs_after = self.configurations(name)
+                return self._ensure_summary(
+                    "restored", cur, version, backup_path, configs_before, configs_after
+                )
+            return self._ensure_summary(
+                "in_place", cur, version, backup_path, configs_before, configs_after
+            )
+
+        # In-place didn't take — destructive fallback, only if allowed.
+        if allow_uninstall_fallback:
+            if self.resolve_connector_id(name) is not None:
+                self.uninstall(name)
+            _do_install()
+            self.clear_cache()
+            new = self.resolve_version(name)
+            if backup_path:
+                self.client.import_config.import_file(backup_path, wait=True)
+                self.clear_cache()
+            configs_after = self.configurations(name)
+            action = "reinstalled" if new == version else "failed"
+            return self._ensure_summary(
+                action, cur, new, backup_path, configs_before, configs_after
+            )
+
+        return self._ensure_summary("failed", cur, new, backup_path, configs_before, configs_after)
+
+    @staticmethod
+    def _ensure_summary(
+        action: str,
+        old: str | None,
+        new: str | None,
+        backup: str | None,
+        before: list,
+        after: list,
+    ) -> EnsureVersionResult:
+        return EnsureVersionResult.model_validate(
+            {
+                "action": action,
+                "from": old,
+                "to": new,
+                "backup": backup,
+                "configs_before": len(before),
+                "configs_after": len(after),
+            }
+        )
+
     def connector_detail(self, connector: str) -> dict[str, Any]:
         """Fetch a connector's full record by id (operations-discovery endpoint).
 
@@ -382,9 +535,8 @@ class ConnectorsAPI(BaseAPI):
         return resp if isinstance(resp, dict) else {"result": resp}
 
     # ------------------------------------------------------------- discovery
-    def list_configured(self, *, refresh: bool = False) -> list[dict[str, Any]]:
-        """Installed + configured connectors as
-        ``[{name, version, label, configurations:[{config_id, name, default}]}, ...]``.
+    def list_configured(self, *, refresh: bool = False) -> list[InstalledConnector]:
+        """Installed + configured connectors.
 
         Cached after the first call; pass ``refresh=True`` to re-fetch.
         """
@@ -393,7 +545,7 @@ class ConnectorsAPI(BaseAPI):
         # The endpoint pages at ``page_size`` (default 30) and ignores ``$limit``
         # — walk every page so a connector past the first 30 isn't silently
         # dropped (which would make resolve_version/healthcheck miss it).
-        out: list[dict[str, Any]] = []
+        out: list[InstalledConnector] = []
         page = 1
         page_size = 100
         while True:
@@ -406,22 +558,10 @@ class ConnectorsAPI(BaseAPI):
             )
             data = resp.get("data") or []
             for m in data:
-                out.append(
-                    {
-                        "id": m.get("id"),
-                        "name": m.get("name"),
-                        "version": m.get("version"),
-                        "label": m.get("label") or m.get("title"),
-                        "configurations": [
-                            {
-                                "config_id": c.get("config_id"),
-                                "name": c.get("name"),
-                                "default": bool(c.get("default")),
-                            }
-                            for c in (m.get("configuration") or [])
-                        ],
-                    }
-                )
+                # Normalise: API uses "configuration" (list), model uses "configuration"
+                if "label" not in m and "title" in m:
+                    m = dict(m, label=m["title"])
+                out.append(InstalledConnector.model_validate(m))
             total = resp.get("totalItems")
             if not data:
                 break
@@ -441,7 +581,7 @@ class ConnectorsAPI(BaseAPI):
         active: bool | None = None,
         page: int = 1,
         page_size: int = 100,
-    ) -> list[dict[str, Any]]:
+    ) -> list[ConnectorConfig]:
         """List connector configuration records via ``GET /api/integration/configuration/``.
 
         The dedicated, filterable configurations endpoint (distinct from the
@@ -458,14 +598,17 @@ class ConnectorsAPI(BaseAPI):
         if active is not None:
             params["active"] = active
         resp = self.client.get("/api/integration/configuration/", params=params) or {}
+        rows: list[dict[str, Any]] = []
         if isinstance(resp, dict):
-            return resp.get("data") or []
-        return resp if isinstance(resp, list) else []
+            rows = resp.get("data") or []
+        elif isinstance(resp, list):
+            rows = resp
+        return [ConnectorConfig.model_validate(r) for r in rows]
 
-    def _find_configured(self, connector: str) -> dict[str, Any] | None:
-        return next((c for c in self.list_configured() if c.get("name") == connector), None)
+    def _find_configured(self, connector: str) -> InstalledConnector | None:
+        return next((c for c in self.list_configured() if c.name == connector), None)
 
-    def find_installed_connectors(self, query: str) -> list[dict[str, Any]]:
+    def find_installed_connectors(self, query: str) -> list[InstalledConnector]:
         """Search *installed* connectors by partial, case-insensitive match.
 
         Scoped to connectors installed on this appliance (the
@@ -485,29 +628,25 @@ class ConnectorsAPI(BaseAPI):
         ``"fortigate-firewall"``).
         """
 
-        def norm(s: str) -> str:
+        def norm(s: str | None) -> str:
             # fold case and treat '-', '_', and whitespace as interchangeable so
             # 'fortigate_firewall', 'FortiGate', and 'forti gate' all match.
             return re.sub(r"[-_\s]+", "-", (s or "").strip().lower())
 
         q = norm(query)
-        hits = [
-            c
-            for c in self.list_configured()
-            if q in norm(c.get("name")) or q in norm(c.get("label"))
-        ]
-        hits.sort(key=lambda c: norm(c.get("name")) != q)
+        hits = [c for c in self.list_configured() if q in norm(c.name) or q in norm(c.label)]
+        hits.sort(key=lambda c: norm(c.name) != q)
         return hits
 
-    def configurations(self, connector: str) -> list[dict[str, Any]]:
+    def configurations(self, connector: str) -> list[ConnectorConfigSummary]:
         """List a connector's configurations (``[{config_id, name, default}]``)."""
         hit = self._find_configured(connector)
-        return hit["configurations"] if hit else []
+        return hit.configurations if hit else []
 
     def resolve_version(self, connector: str) -> str | None:
         """The configured version of ``connector`` (``None`` if not configured)."""
         hit = self._find_configured(connector)
-        return hit.get("version") if hit else None
+        return hit.version if hit else None
 
     def resolve_connector_id(self, connector: str) -> int | None:
         """The integer install id of ``connector`` (``None`` if not installed).
@@ -517,7 +656,7 @@ class ConnectorsAPI(BaseAPI):
         and needs this numeric id.
         """
         hit = self._find_configured(connector)
-        return hit.get("id") if hit else None
+        return hit.id if hit else None
 
     def resolve_config(self, connector: str, config_name: str | None = None) -> str | None:
         """Return a config UUID for ``connector``.
@@ -530,43 +669,41 @@ class ConnectorsAPI(BaseAPI):
             return None
         chosen = None
         if config_name:
-            chosen = next((c for c in configs if c.get("name") == config_name), None)
+            chosen = next((c for c in configs if c.name == config_name), None)
         if chosen is None:
-            chosen = next((c for c in configs if c.get("default")), None) or configs[0]
-        return chosen.get("config_id") if chosen else None
+            chosen = next((c for c in configs if c.default), None) or configs[0]
+        return chosen.config_id if chosen else None
 
     # ------------------------------------------------------------- health
     def healthcheck(
         self, connector: str, *, version: str | None = None, config: str | None = None
-    ) -> dict[str, Any]:
+    ) -> HealthcheckResult:
         """Live-check whether a connector configuration is reachable.
 
-        Returns the server's healthcheck payload (typically
-        ``{status, message, ...}``); ``status="Available"`` is green. A 404 is
-        normalized to ``{status: "no-config", http_status: 404}`` meaning the
-        connector isn't configured on this instance.
+        ``status="Available"`` is green. A 404 is normalized to
+        ``status="no-config"`` meaning the connector isn't configured.
         """
         version = version or self.resolve_version(connector)
         if not version:
-            return {
-                "name": connector,
-                "status": "no-config",
-                "message": f"{connector!r} is not configured on this instance",
-            }
+            return HealthcheckResult(
+                name=connector,
+                status="no-config",
+                message=f"{connector!r} is not configured on this instance",
+            )
         path = f"/api/integration/connectors/healthcheck/{connector}/{version}/"
         params = {"config": config} if config else None
         try:
-            return self.client.get(path, params=params)
+            return HealthcheckResult.model_validate(self.client.get(path, params=params))
         except Exception as e:  # noqa: BLE001 - normalize "not configured" to data
             resp = getattr(e, "response", None)
             if resp is not None and getattr(resp, "status_code", None) == 404:
-                return {
-                    "name": connector,
-                    "version": version,
-                    "status": "no-config",
-                    "http_status": 404,
-                    "message": "no configuration on this instance",
-                }
+                return HealthcheckResult(
+                    name=connector,
+                    version=version,
+                    status="no-config",
+                    message="no configuration on this instance",
+                    http_status=404,
+                )
             raise
 
     # ------------------------------------------------------------- definition
@@ -640,31 +777,19 @@ class ConnectorsAPI(BaseAPI):
 
     def validate_config(
         self, connector: str, config: dict[str, Any], *, version: str | None = None
-    ) -> dict[str, Any]:
+    ) -> ConfigValidationResult:
         """Check ``config`` against a connector's schema *before* saving it.
 
-        Returns ``{"valid", "missing", "invalid", "unknown", "errors"}``:
+        Returns a :class:`~pyfsr.models.ConfigValidationResult` with:
 
-        - ``missing`` — required fields (after resolving ``select`` ``onchange``
-          branches) absent or blank in ``config``.
-        - ``invalid`` — fields whose *value* is wrong: a ``select`` value not in
-          its ``options``, or a value that doesn't fit the field ``type``
-          (``integer`` / ``checkbox`` / ``json``).
-        - ``unknown`` — keys in ``config`` that no active schema field declares
-          (often a typo, or a field gated behind a different ``select`` value).
-        - ``errors`` — one structured, human-readable entry per problem
-          (``{"field", "code", "message", ...}``) to guide the user: e.g. a
-          missing field names *which selection* requires it, and an invalid
-          ``select`` lists its ``valid_options``.
+        - ``missing`` — required fields absent or blank in ``config``.
+        - ``invalid`` — fields with wrong values (bad select option, wrong type).
+        - ``unknown`` — keys in ``config`` not declared by the active schema.
+        - ``errors`` — one structured entry per problem with ``field``, ``code``,
+          ``message``, and (for select fields) ``valid_options``.
 
-        ``valid`` is ``True`` only when there are no ``missing`` and no
-        ``invalid`` fields. ``unknown`` keys are reported (the appliance ignores
-        them) but do not by themselves make a config invalid.
-
-        This is a *structural* check, not a live credential test — follow a clean
-        result with :meth:`healthcheck`. Catches the class of error that makes
-        ``create_configuration`` 500 (e.g. omitting FortiSIEM's ``fsm_type``, or
-        a mistyped ``Authentication Type``).
+        ``valid`` is ``True`` only when ``missing`` and ``invalid`` are empty.
+        ``unknown`` keys are reported but don't make the config invalid.
         """
         missing: list[str] = []
         invalid: list[str] = []
@@ -691,13 +816,13 @@ class ConnectorsAPI(BaseAPI):
                     ),
                 }
             )
-        return {
-            "valid": not missing and not invalid,
-            "missing": missing,
-            "invalid": invalid,
-            "unknown": unknown,
-            "errors": errors,
-        }
+        return ConfigValidationResult(
+            valid=not missing and not invalid,
+            missing=missing,
+            invalid=invalid,
+            unknown=unknown,
+            errors=errors,
+        )
 
     def _collect_field_problems(
         self,
@@ -843,7 +968,7 @@ class ConnectorsAPI(BaseAPI):
             )
         if validate:
             check = self.validate_config(connector, config, version=version)
-            if not check["valid"]:
+            if not check.valid:
                 raise ValueError(_format_validation_error(connector, check))
         body: dict[str, Any] = {
             "connector": connector_id,
@@ -860,7 +985,8 @@ class ConnectorsAPI(BaseAPI):
         resp = self.client.post("/api/integration/configuration/", data=body)
         if refresh:
             self.clear_cache()
-        return resp if isinstance(resp, dict) else {"result": resp}
+        raw = resp if isinstance(resp, dict) else {"result": resp}
+        return ConnectorConfig.model_validate(raw)
 
     def update_configuration(
         self,
@@ -895,7 +1021,7 @@ class ConnectorsAPI(BaseAPI):
             raise ValueError(f"{connector!r} is not installed")
         if validate:
             check = self.validate_config(connector, config, version=version)
-            if not check["valid"]:
+            if not check.valid:
                 raise ValueError(_format_validation_error(connector, check))
         body: dict[str, Any] = {
             "connector": connector_id,
@@ -911,7 +1037,8 @@ class ConnectorsAPI(BaseAPI):
         resp = self.client.put(f"/api/integration/configuration/{config_id}/", data=body)
         if refresh:
             self.clear_cache()
-        return resp if isinstance(resp, dict) else {"result": resp}
+        raw = resp if isinstance(resp, dict) else {"result": resp}
+        return ConnectorConfig.model_validate(raw)
 
     def delete_configuration(self, config_id: str, *, refresh: bool = True) -> None:
         """Delete a connector configuration by id
@@ -1033,7 +1160,8 @@ class ConnectorsAPI(BaseAPI):
             "config": config or "",
             "params": params or {},
         }
-        return self.client.post("/api/integration/execute/", data=body)
+        resp = self.client.post("/api/integration/execute/", data=body)
+        return ExecuteResult.model_validate(resp if isinstance(resp, dict) else {"result": resp})
 
 
 def _import_job_id(resp: dict[str, Any]) -> str | None:

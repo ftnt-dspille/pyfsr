@@ -1,7 +1,12 @@
 from enum import Enum
 from typing import Any
 
+import requests
+
 from .base import BaseAPI
+
+_REPO_HOST = "https://repo.fortisoar.fortinet.com"
+_REPO_BASE = f"{_REPO_HOST}/content-hub"
 
 
 class ContentType(Enum):
@@ -327,3 +332,57 @@ class ContentHubSearch(BaseAPI):
             limit=limit,
             typed=typed,
         )
+
+    def connector_versions(self, name: str) -> dict[str, Any]:
+        """Return all published versions of a connector from Fortinet's public repo.
+
+        Searches the local solutionpacks API for ``name`` (fuzzy — partial
+        matches work), then follows the ``infoPath`` on the best-matching cloud
+        record to fetch ``{repo}/latest/info.json``. That public endpoint
+        requires no authentication and returns ``availableVersions`` listing
+        every version ever published.
+
+        ``name`` is a connector slug or partial name (e.g. ``"code-snippet"``
+        or ``"code"``). Raises ``ValueError`` if nothing cloud-backed is found
+        (box may not have FDN access, or name doesn't match any connector).
+
+        Returns the full info.json payload including ``availableVersions``,
+        ``operations``, ``releaseNotes``, etc.
+
+        Example::
+
+            info = client.content_hub.connector_versions("code-snippet")
+            print(info["availableVersions"])
+            # ['1.2.0', '1.2.1', ..., '2.2.1']
+        """
+        results = self._search_content(
+            ContentType.CONNECTOR,
+            installed=None,
+            search_term=name,
+            limit=10,
+            extra_fields=["latestAvailableVersion", "infoPath"],
+        )
+        cloud = [r for r in results if not r.get("local")]
+        if not cloud:
+            raise ValueError(
+                f"no cloud-backed connector found for {name!r} "
+                "(box may not have FDN access, or name doesn't match any connector)"
+            )
+        # Prefer exact name match; otherwise take first cloud result
+        match = next((r for r in cloud if r.get("name") == name), cloud[0])
+
+        # Build the repo URL. If the record advertises a latestAvailableVersion use
+        # that to get the most current info.json; otherwise derive from infoPath.
+        latest = match.get("latestAvailableVersion")
+        if latest:
+            connector_name = match.get("name", name)
+            url = f"{_REPO_BASE}/{connector_name}-{latest}/latest/info.json"
+        else:
+            info_path: str = match["infoPath"]
+            if not info_path.startswith("http"):
+                info_path = f"{_REPO_HOST}{info_path}"
+            repo_base = info_path.rsplit("/", 1)[0]  # drop the buildNumber
+            url = f"{repo_base}/latest/info.json"
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        return resp.json()

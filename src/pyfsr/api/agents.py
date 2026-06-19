@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..models._agents import Agent, AgentConnectorStatus
 from ..pagination import extract_members
 from .base import BaseAPI
 
@@ -49,21 +50,23 @@ _ALL_LIMIT = 2147483647
 class AgentsAPI(BaseAPI):
     """List, create, delete execution agents; download installers; push connectors."""
 
-    def list(self, *, active_only: bool = False, limit: int = _ALL_LIMIT) -> list[dict[str, Any]]:
+    def list(self, *, active_only: bool = False, limit: int = _ALL_LIMIT) -> list[Agent]:
         """Return agent records (the ``hydra:member`` array).
 
         ``active_only=True`` filters to agents whose ``active`` flag is truthy. Each record
         carries at least ``uuid``, ``agentId``, and ``active``.
         """
         members = extract_members(self.client.get(_BASE, params={"$limit": limit}))
+        agents = [Agent.model_validate(a) for a in members if isinstance(a, dict)]
         if active_only:
-            members = [a for a in members if isinstance(a, dict) and a.get("active")]
-        return members
+            agents = [a for a in agents if a.active]
+        return agents
 
-    def get(self, uuid: str) -> dict[str, Any]:
+    def get(self, uuid: str) -> Agent:
         """Fetch a single agent record by ``uuid`` (``GET /api/3/agents/{uuid}``)."""
         uuid = _require_uuid(uuid, "get")
-        return self.client.get(f"{_BASE}/{uuid}")
+        resp = self.client.get(f"{_BASE}/{uuid}")
+        return Agent.model_validate(resp if isinstance(resp, dict) else {"uuid": uuid})
 
     def create(
         self,
@@ -72,7 +75,7 @@ class AgentsAPI(BaseAPI):
         router: str | dict[str, Any],
         installer_type: str = "docker",
         description: str = "",
-    ) -> dict[str, Any]:
+    ) -> Agent:
         """Register a new agent (``POST /api/3/agents``); returns the created record.
 
         ``router`` is the secure-message-exchange router the agent connects through — pass a
@@ -89,7 +92,8 @@ class AgentsAPI(BaseAPI):
             "installerType": _INSTALLER_PICKLISTS.get(installer_type, installer_type),
             "description": description,
         }
-        return self.client.post(_BASE, data=body)
+        resp = self.client.post(_BASE, data=body)
+        return Agent.model_validate(resp if isinstance(resp, dict) else {})
 
     def delete(self, uuid: str) -> None:
         """Delete an agent record (``DELETE /api/3/agents/{uuid}``). Sends no body."""
@@ -206,7 +210,7 @@ class AgentsAPI(BaseAPI):
         *,
         agent_id: str | None = None,
         active: bool = True,
-    ) -> list[dict[str, Any]]:
+    ) -> list[AgentConnectorStatus]:
         """Per-agent connector install status rows (awaiting → in-progress → Completed).
 
         ``POST /api/integration/connectors/agents/<connector>/<version>/?format=json`` — this
@@ -222,7 +226,7 @@ class AgentsAPI(BaseAPI):
         rows = [r for r in (rows or []) if isinstance(r, dict)]
         if agent_id is not None:
             rows = [r for r in rows if r.get("agent") == agent_id]
-        return rows
+        return [AgentConnectorStatus.model_validate(r) for r in rows]
 
 
 def _require_uuid(uuid: str, op: str) -> str:
