@@ -89,9 +89,7 @@ class InstalledConnector(ApiResult):
     system: bool | None = None
     config_count: int | None = None
     status: str | None = None
-    configurations: list[ConnectorConfigSummary] = Field(
-        default_factory=list, alias="configuration"
-    )
+    configurations: list[ConnectorConfigSummary] = Field(default_factory=list, alias="configuration")
     ingestion_supported: bool | None = None
     tags: list[Any] = Field(default_factory=list)
     agent: str | None = None

@@ -136,9 +136,7 @@ def _extract_payload(content: str):
     return _deep_parse(obj)
 
 
-def tool_calls_with_outputs(
-    client: FortiSOAR, task_id: str, catalog: dict | None = None
-) -> list[dict]:
+def tool_calls_with_outputs(client: FortiSOAR, task_id: str, catalog: dict | None = None) -> list[dict]:
     """Tool calls of one investigation, each paired with its REAL observed output.
 
     The ``llm_activity_logs`` for a run are a sequence of triples:
@@ -184,11 +182,7 @@ def tool_calls_with_outputs(
             prompt = nxt.get("prompt")
             prompt = as_obj(prompt) if isinstance(prompt, str) else prompt
             if isinstance(prompt, list):
-                users = [
-                    m.get("content")
-                    for m in prompt
-                    if isinstance(m, dict) and m.get("role") == "user"
-                ]
+                users = [m.get("content") for m in prompt if isinstance(m, dict) and m.get("role") == "user"]
                 user = users[-1] if users else ""
         calls.append(
             {
@@ -226,16 +220,10 @@ def _pretty(value, indent: str = "    ") -> str:
 
 def _preview(value, limit: int = 600, indent: str = "    ", outfile: str = "") -> str:
     """Prettified, length-capped view for the console; points to the file for the rest."""
-    text = (
-        value
-        if isinstance(value, str)
-        else json.dumps(value, indent=2, ensure_ascii=False, default=str)
-    )
+    text = value if isinstance(value, str) else json.dumps(value, indent=2, ensure_ascii=False, default=str)
     if len(text) > limit:
         more = len(text) - limit
-        tail = (
-            f"\n… [+{more} chars — full output in {outfile}]" if outfile else f"\n… [+{more} chars]"
-        )
+        tail = f"\n… [+{more} chars — full output in {outfile}]" if outfile else f"\n… [+{more} chars]"
         text = text[:limit] + tail
     return text.replace("\n", "\n" + indent)
 
@@ -267,9 +255,7 @@ def _siem_signal_tokens(calls: list[dict]) -> tuple[set[str], set[str]]:
     return siem, (siem - other)
 
 
-def siem_influence_report(
-    calls: list[dict], questions: list[dict], chain: dict, alert: dict
-) -> dict:
+def siem_influence_report(calls: list[dict], questions: list[dict], chain: dict, alert: dict) -> dict:
     """Flag whether the FortiSIEM MCP server actually affected the investigation.
 
     The hard part is the confounder: the alert page *already* carries most of the
@@ -347,8 +333,7 @@ def main() -> None:
     )
     ap.add_argument(
         "--out",
-        help="path to write the full (untruncated) tool I/O report "
-        "(default: fortisiem_investigation_<task_id>.json)",
+        help="path to write the full (untruncated) tool I/O report (default: fortisiem_investigation_<task_id>.json)",
     )
     args = ap.parse_args()
 
@@ -360,10 +345,7 @@ def main() -> None:
 
     alert = find_fortisiem_alert(client, args.alert)
     alert_uuid = alert["@id"].split("/")[-1]
-    print(
-        f"Alert id={alert.get('id')} uuid={alert_uuid} | "
-        f"source={alert.get('source')!r} | {alert.get('name')!r}\n"
-    )
+    print(f"Alert id={alert.get('id')} uuid={alert_uuid} | source={alert.get('source')!r} | {alert.get('name')!r}\n")
 
     # 1-3: trigger (or reuse) + poll
     if args.reuse:
@@ -409,10 +391,7 @@ def main() -> None:
             fortisiem_used.append(call["tool_name"])
         tool_args = call.get("tool_args")
         output = call.get("output")
-        print(
-            f"\n[{i + 1}] {call['tool_name']}  <- {server}  "
-            f"(consumed by: {call.get('consumed_by')})"
-        )
+        print(f"\n[{i + 1}] {call['tool_name']}  <- {server}  (consumed by: {call.get('consumed_by')})")
         print(f"    input :\n    {_preview(tool_args, limit=400, outfile=outfile)}")
         print(f"    output:\n    {_preview(output, limit=600, outfile=outfile)}")
         call_records.append(
@@ -445,10 +424,7 @@ def main() -> None:
     chain = client.ai.hypothesis_evidence(task_id)
     print(f"\n--- Hypothesis weighting -> VERDICT: {chain['classification']} ---")
     for h in chain["hypotheses"]:
-        print(
-            f"\n  H{h['id']} [{h['status']}] "
-            f"(+{h['support_count']} / -{h['weaken_count']})  {h['name']}"
-        )
+        print(f"\n  H{h['id']} [{h['status']}] (+{h['support_count']} / -{h['weaken_count']})  {h['name']}")
         for s in h["supported_by"]:
             print(f"     + Q{s['index']} ({s['agent']}): {(s['evidence'] or '')[:90]}")
         for w in h["weakened_by"]:
@@ -464,10 +440,7 @@ def main() -> None:
     siem = siem_influence_report(call_records, questions, chain, alert)
     print(f"FortiSIEM tool calls: {siem['siem_tool_calls']}  {siem['siem_tools']}")
     print(f"SIEM-returned tokens (sample): {siem['siem_returned_tokens'][:12]}")
-    print(
-        "NET-NEW vs alert page (only MCP could surface these): "
-        f"{siem['net_new_tokens'][:12] or '(none)'}"
-    )
+    print(f"NET-NEW vs alert page (only MCP could surface these): {siem['net_new_tokens'][:12] or '(none)'}")
     g = siem["questions_citing_siem_data"]
     print(
         f"\nQuestions citing SIEM-returned data: {len(g)}/{len(questions)}"
@@ -491,10 +464,7 @@ def main() -> None:
         print("\n>>> FLAG: INCONCLUSIVE — answers cite SIEM values that are ALSO on the")
         print("    alert page; can't distinguish MCP output from alert source-data.")
     elif siem["siem_tool_calls"]:
-        print(
-            "\n>>> FLAG: SIEM tools ran but NO answer cites their output — "
-            "not measurably affecting the page."
-        )
+        print("\n>>> FLAG: SIEM tools ran but NO answer cites their output — not measurably affecting the page.")
     else:
         print("\n>>> FLAG: NO FortiSIEM tool was called — SIEM MCP server had zero effect.")
 

@@ -66,9 +66,7 @@ def _iter_docstring_examples():
         for node in ast.walk(mod):
             doc = (
                 ast.get_docstring(node, clean=True)
-                if isinstance(
-                    node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
-                )
+                if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
                 else None
             )
             if not doc or ">>>" not in doc:
@@ -102,12 +100,8 @@ def _iter_rst_examples():
     if not INDEX_RST.exists():
         return
     text = INDEX_RST.read_text()
-    for i, m in enumerate(
-        re.finditer(r"\.\. code-block:: python\n\n(.*?)(?:\n\S|\Z)", text, re.DOTALL)
-    ):
-        block = "\n".join(
-            line[4:] if line.startswith("    ") else line for line in m.group(1).splitlines()
-        )
+    for i, m in enumerate(re.finditer(r"\.\. code-block:: python\n\n(.*?)(?:\n\S|\Z)", text, re.DOTALL)):
+        block = "\n".join(line[4:] if line.startswith("    ") else line for line in m.group(1).splitlines())
         yield (f"docs/source/index.rst::block{i}", block.strip())
 
 
@@ -165,11 +159,7 @@ def _assert_chain_resolves(chain: list[str], label: str):
     if second in SUBAPIS:
         if len(chain) >= 3:
             cls = SUBAPIS[second]
-            assert hasattr(cls, chain[2]), (
-                f"{label}: client.{second}.{chain[2]} — {cls.__name__} has no '{chain[2]}'"
-            )
+            assert hasattr(cls, chain[2]), f"{label}: client.{second}.{chain[2]} — {cls.__name__} has no '{chain[2]}'"
         return
     # otherwise it's a top-level client method (get/post/records/list_modules/...)
-    assert hasattr(FortiSOAR, second), (
-        f"{label}: client.{second} is not a FortiSOAR attribute/method"
-    )
+    assert hasattr(FortiSOAR, second), f"{label}: client.{second} is not a FortiSOAR attribute/method"

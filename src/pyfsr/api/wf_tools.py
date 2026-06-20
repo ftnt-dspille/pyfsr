@@ -56,9 +56,7 @@ class WfToolsAPI(BaseAPI):
         ``[{id, name, value, default_value}, ...]`` (referenced in playbooks as
         ``{{ globalVars.<name> }}``).
         """
-        resp = self.client.get(
-            "/api/wf/api/dynamic-variable/", params={"offset": 0, "limit": 2147483647}
-        )
+        resp = self.client.get("/api/wf/api/dynamic-variable/", params={"offset": 0, "limit": 2147483647})
         return (resp or {}).get("hydra:member") or []
 
     def dynamic_variable(self, name: str) -> str | None:

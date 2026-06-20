@@ -107,6 +107,4 @@ def test_result_return_formats(configured):
     if setd_data.get("style") == "result_set_data":
         print("[result] CONFIRMED: Result.set_data lands under data.* like a bare dict")
     else:
-        print(
-            f"[result] DIVERGENCE: Result.set_data did NOT normalize to data.* — got {setd_data!r}"
-        )
+        print(f"[result] DIVERGENCE: Result.set_data did NOT normalize to data.* — got {setd_data!r}")

@@ -51,9 +51,7 @@ def test_from_env_verify_ssl_disabled():
 
 
 def test_from_env_api_key_takes_precedence_over_userpass():
-    cfg = EnvConfig.from_env(
-        {"FSR_BASE_URL": "h", "FSR_API_KEY": "k", "FSR_USERNAME": "u", "FSR_PASSWORD": "p"}
-    )
+    cfg = EnvConfig.from_env({"FSR_BASE_URL": "h", "FSR_API_KEY": "k", "FSR_USERNAME": "u", "FSR_PASSWORD": "p"})
     assert cfg.auth == "k"
 
 

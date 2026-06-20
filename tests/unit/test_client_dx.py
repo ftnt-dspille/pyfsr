@@ -78,9 +78,7 @@ def test_retry_disabled(mock_client):
 
 # -- auth-header masking ----------------------------------------------------
 def test_mask_headers_keeps_scheme_hides_secret():
-    masked = _mask_headers(
-        {"Authorization": "API-KEY supersecretvalue", "Content-Type": "application/json"}
-    )
+    masked = _mask_headers({"Authorization": "API-KEY supersecretvalue", "Content-Type": "application/json"})
     assert masked["Authorization"] == "API-KEY ***"
     assert "supersecretvalue" not in masked["Authorization"]
     assert masked["Content-Type"] == "application/json"  # untouched

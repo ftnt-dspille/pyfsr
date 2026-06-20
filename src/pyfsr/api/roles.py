@@ -86,9 +86,7 @@ class RolesAPI(BaseAPI):
     def _module_by_type(self) -> dict[str, dict[str, Any]]:
         if self._module_cache is None:
             resp = self.client.get(_MODULES, params={"$limit": 2147483647})
-            self._module_cache = {
-                m["type"]: m for m in (resp or {}).get("hydra:member", []) if m.get("type")
-            }
+            self._module_cache = {m["type"]: m for m in (resp or {}).get("hydra:member", []) if m.get("type")}
         return self._module_cache
 
     def _resolve_role_uuid(self, role: str) -> str:

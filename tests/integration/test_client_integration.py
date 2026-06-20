@@ -37,10 +37,7 @@ def get_auth_from_config(config):
     if "username" in auth_config and "password" in auth_config:
         return (auth_config["username"], auth_config["password"])
 
-    raise ValueError(
-        "No valid authentication configuration found. "
-        "Please provide either api_key or username/password."
-    )
+    raise ValueError("No valid authentication configuration found. Please provide either api_key or username/password.")
 
 
 @pytest.fixture(scope="module")
@@ -288,9 +285,7 @@ def test_export_config(request, client_fixture, should_raise, verbose):
             os.remove(output_path)
 
 
-@pytest.mark.parametrize(
-    "client_fixture,should_raise", [("api_key_client", True), ("user_pass_client", False)]
-)
+@pytest.mark.parametrize("client_fixture,should_raise", [("api_key_client", True), ("user_pass_client", False)])
 @pytest.mark.integration
 def test_export_pack(request, client_fixture, should_raise, client):
     """Test solution pack export functionality"""

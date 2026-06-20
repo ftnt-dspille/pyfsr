@@ -41,12 +41,7 @@ def main() -> None:
     # ---- discovery -----------------------------------------------------------
     print("== installed + configured connectors ==")
     for c in conn.list_configured():
-        cfgs = (
-            ", ".join(
-                f"{x['name']}({'default' if x['default'] else '-'})" for x in c["configurations"]
-            )
-            or "(none)"
-        )
+        cfgs = ", ".join(f"{x['name']}({'default' if x['default'] else '-'})" for x in c["configurations"]) or "(none)"
         print(f"  {c['name']:30} v{c['version']:8} id={c['id']}  configs: {cfgs}")
 
     version = CONNECTOR_VERSION or conn.resolve_version(CONNECTOR_NAME)

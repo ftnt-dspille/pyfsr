@@ -14,9 +14,7 @@ _META = {
                     "name": "severity",
                     "title": "Severity",
                     "type": "picklist",
-                    "dataSource": {
-                        "query": {"filters": [{"field": "listName__name", "value": "Severity"}]}
-                    },
+                    "dataSource": {"query": {"filters": [{"field": "listName__name", "value": "Severity"}]}},
                 },
             ],
         },

@@ -36,9 +36,7 @@ class SchedulesAPI(BaseAPI):
         A single ``limit``-unbounded fetch (the wf API ignores ``page`` but
         honours ``offset``/``limit``).
         """
-        resp = self.client.get(
-            _ENDPOINT, params={"format": "json", "offset": 0, "limit": 2147483647}
-        )
+        resp = self.client.get(_ENDPOINT, params={"format": "json", "offset": 0, "limit": 2147483647})
         if isinstance(resp, dict):
             return resp.get("hydra:member") or resp.get("results") or []
         return resp or []

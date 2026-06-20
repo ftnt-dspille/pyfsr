@@ -88,9 +88,7 @@ def test_set_module_settings_record_uniqueness_builds_constraint(monkeypatch):
     api = ModulesAdminAPI(c)
     expected = [{"alerts_unique": {"columns": ["name", "source"]}}]
     # set_module_settings verifies by re-reading staging; reflect the applied value.
-    monkeypatch.setattr(
-        api, "get_staging", lambda module: {"uuid": "u-1", "uniqueConstraint": expected}
-    )
+    monkeypatch.setattr(api, "get_staging", lambda module: {"uuid": "u-1", "uniqueConstraint": expected})
     api.set_module_settings("alerts", record_uniqueness=["name", "source"])
     method, endpoint, data = c.calls[-1]
     assert method == "PUT" and endpoint == "/api/3/staging_model_metadatas/u-1"

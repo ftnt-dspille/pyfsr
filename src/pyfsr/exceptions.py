@@ -37,10 +37,7 @@ class PicklistResolutionError(ValidationError):
         self.picklist = picklist
         self.valid_values = valid_values
         shown = ", ".join(valid_values[:25]) + ("  …" if len(valid_values) > 25 else "")
-        super().__init__(
-            f"{field}={value!r} is not a valid '{picklist}' value. "
-            f"Valid ({len(valid_values)}): {shown}"
-        )
+        super().__init__(f"{field}={value!r} is not a valid '{picklist}' value. Valid ({len(valid_values)}): {shown}")
 
 
 class AuthenticationError(FortiSOARException):
@@ -115,10 +112,7 @@ def is_migrate_transient(exc: Exception) -> bool:
     status = getattr(exc, "status_code", None)
     if isinstance(status, int) and status >= 500:
         return True
-    text = (
-        " ".join(str(getattr(exc, attr, "") or "") for attr in ("message", "error_type")).lower()
-        or str(exc).lower()
-    )
+    text = " ".join(str(getattr(exc, attr, "") or "") for attr in ("message", "error_type")).lower() or str(exc).lower()
     return any(marker in text for marker in _MIGRATE_TRANSIENT_MARKERS)
 
 

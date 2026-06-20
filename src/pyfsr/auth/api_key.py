@@ -53,16 +53,12 @@ class APIKeyAuth(BaseAuth):
         """
         headers = self.get_auth_headers()
         try:
-            response = requests.get(
-                f"{self.base_url}/api/3/people", headers=headers, verify=self.verify_ssl
-            )
+            response = requests.get(f"{self.base_url}/api/3/people", headers=headers, verify=self.verify_ssl)
 
             if response.status_code == 401:
                 raise APIError("Invalid API key - authentication failed")
             elif response.status_code != 200:
-                raise APIError(
-                    f"API key validation failed with status {response.status_code}: {response.text}"
-                )
+                raise APIError(f"API key validation failed with status {response.status_code}: {response.text}")
 
         except requests.exceptions.RequestException as e:
             raise APIError(f"API key validation request failed: {str(e)}") from e

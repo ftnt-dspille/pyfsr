@@ -84,15 +84,11 @@ def test_api_key_ssl_verification(mocker):
     mock_get.return_value.status_code = 200
     mock_get.return_value.json.return_value = {"status": "success"}
 
-    auth = APIKeyAuth(
-        base_url="https://test.fortisoar.com", api_key="test-key-123", verify_ssl=False
-    )
+    auth = APIKeyAuth(base_url="https://test.fortisoar.com", api_key="test-key-123", verify_ssl=False)
 
     assert auth.verify_ssl is False
     # Verify the request was made with verify=False
-    mock_get.assert_called_with(
-        "https://test.fortisoar.com/api/3/people", headers=mocker.ANY, verify=False
-    )
+    mock_get.assert_called_with("https://test.fortisoar.com/api/3/people", headers=mocker.ANY, verify=False)
 
 
 def test_api_key_unsupported_operations(mocker):

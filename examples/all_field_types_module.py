@@ -88,14 +88,10 @@ def _main_fields(ma: MA) -> list[dict]:
         ma.object_field("fObject", label="Object (raw widget)"),
         # --- picklists ---
         ma.picklist_field("fPicklist", EXISTING_PICKLIST, label="Picklist (single)"),
-        ma.picklist_field(
-            "fMultiPicklist", EXISTING_PICKLIST, multi=True, label="Picklist (multi-select)"
-        ),
+        ma.picklist_field("fMultiPicklist", EXISTING_PICKLIST, multi=True, label="Picklist (multi-select)"),
         # --- relationships (target = HELPER_MODULE_API) ---
         ma.lookup_field("fLookup", HELPER_MODULE_API, label="Lookup (many-to-one)"),
-        ma.relationship_field(
-            "fManyToMany", HELPER_MODULE_API, many=True, label="Relationship (manyToMany)"
-        ),
+        ma.relationship_field("fManyToMany", HELPER_MODULE_API, many=True, label="Relationship (manyToMany)"),
         ma.relationship_field(
             "fOneToMany",
             HELPER_MODULE_API,

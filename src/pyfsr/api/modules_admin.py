@@ -139,9 +139,7 @@ class ModulesAdminAPI(BaseAPI):
                 return m
         return None
 
-    def get_staging(
-        self, module: str, *, typed: bool = False
-    ) -> dict[str, Any] | StagingModelMetadata | None:
+    def get_staging(self, module: str, *, typed: bool = False) -> dict[str, Any] | StagingModelMetadata | None:
         """Return the full staging metadata record (incl. ``attributes``) for ``module``.
 
         ``module`` is the module ``type`` (or plural ``module`` name). Returns None if no
@@ -158,9 +156,7 @@ class ModulesAdminAPI(BaseAPI):
             return StagingModelMetadata(**raw)
         return raw
 
-    def get_published(
-        self, module: str, *, typed: bool = False
-    ) -> dict[str, Any] | PublishedModelMetadata | None:
+    def get_published(self, module: str, *, typed: bool = False) -> dict[str, Any] | PublishedModelMetadata | None:
         """Return the full *published* metadata record for ``module``, or None.
 
         None means the module has never been published (it may still exist in staging).
@@ -172,8 +168,7 @@ class ModulesAdminAPI(BaseAPI):
             (
                 m
                 for m in (data or {}).get("hydra:member", [])
-                if str(m.get("type", "")).lower() == want
-                or str(m.get("module", "")).lower() == want
+                if str(m.get("type", "")).lower() == want or str(m.get("module", "")).lower() == want
             ),
             None,
         )
@@ -196,9 +191,7 @@ class ModulesAdminAPI(BaseAPI):
         """
         return self.get_published(module) is not None
 
-    def get_field(
-        self, module: str, field: str, *, typed: bool = False
-    ) -> dict[str, Any] | AttributeMetadata | None:
+    def get_field(self, module: str, field: str, *, typed: bool = False) -> dict[str, Any] | AttributeMetadata | None:
         """Return one staged attribute (field) dict by ``name``, or None.
 
         Pass ``typed=True`` for an :class:`~pyfsr.models.AttributeMetadata`.
@@ -213,9 +206,7 @@ class ModulesAdminAPI(BaseAPI):
             return AttributeMetadata(**raw)
         return raw
 
-    def reverse_field(
-        self, source_module: str, source_field: str, *, published: bool = False
-    ) -> dict[str, Any] | None:
+    def reverse_field(self, source_module: str, source_field: str, *, published: bool = False) -> dict[str, Any] | None:
         """Resolve the reverse (inverse) attribute on the *target* of a relationship.
 
         Given ``source_field`` on ``source_module`` (a ``manyToMany`` / ``oneToMany`` /
@@ -302,9 +293,7 @@ class ModulesAdminAPI(BaseAPI):
         if len(name) > _MAX_NAME_LEN:
             raise ValueError(f"field name {name!r} exceeds {_MAX_NAME_LEN} characters")
         if db_type in _BOGUS_DB_TYPES:
-            raise ValueError(
-                f"db_type={db_type!r} is not a storage type: {_BOGUS_DB_TYPES[db_type]}"
-            )
+            raise ValueError(f"db_type={db_type!r} is not a storage type: {_BOGUS_DB_TYPES[db_type]}")
         if encrypted and searchable:
             raise ValueError(f"field {name!r} cannot be both encrypted and searchable — pick one")
         validation: dict[str, Any] = {
@@ -376,9 +365,7 @@ class ModulesAdminAPI(BaseAPI):
 
     # ------------------------------------------------ typed scalar builders
     @classmethod
-    def typed_field(
-        cls, name: str, form_type: str, *, label: str | None = None, **opts: Any
-    ) -> dict[str, Any]:
+    def typed_field(cls, name: str, form_type: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
         """Build a scalar field by **widget**, deriving the storage ``type`` for you.
 
         ``form_type`` is any key of :data:`WIDGET_STORAGE_TYPE` (``text``, ``datetime``,
@@ -733,9 +720,7 @@ class ModulesAdminAPI(BaseAPI):
             for a in full.get("attributes", []) or []:
                 n = a.get("name") or ""
                 if not _FIELD_NAME_RE.match(n):
-                    problems.append(
-                        {"module": t, "uuid": uuid, "field": n, "problem": "invalid field name"}
-                    )
+                    problems.append({"module": t, "uuid": uuid, "field": n, "problem": "invalid field name"})
         return problems
 
     @staticmethod
@@ -805,9 +790,7 @@ class ModulesAdminAPI(BaseAPI):
         if len(module) > _MAX_NAME_LEN:
             raise ValueError(f"module name {module!r} exceeds {_MAX_NAME_LEN} characters")
         if fields is not None and not fields:
-            raise ValueError(
-                "a module needs at least one field; pass fields=None for a default 'name'"
-            )
+            raise ValueError("a module needs at least one field; pass fields=None for a default 'name'")
         label = label or module
         if fields is None:
             fields = [self.text_field("name", required=True)]
@@ -868,14 +851,10 @@ class ModulesAdminAPI(BaseAPI):
             return []
         return [{f"{module}_unique": {"columns": list(fields)}}]
 
-    def _put_attributes(
-        self, mod: dict[str, Any], attributes: list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def _put_attributes(self, mod: dict[str, Any], attributes: list[dict[str, Any]]) -> dict[str, Any]:
         """PUT only the ``attributes`` of a staging record (a full-record PUT is
         rejected — the GET payload carries read-only ``@id``/``@context`` keys)."""
-        return self.client.put(
-            f"{_STAGING}/{mod['uuid']}", data={"attributes": attributes}, params=_REL
-        )
+        return self.client.put(f"{_STAGING}/{mod['uuid']}", data={"attributes": attributes}, params=_REL)
 
     # friendly setting name -> metadata key, for set_module_settings
     _MODULE_SETTING_KEYS = {
@@ -934,9 +913,7 @@ class ModulesAdminAPI(BaseAPI):
         updated = self.get_staging(module) or {}
         not_applied = {k: v for k, v in payload.items() if updated.get(k) != v}
         if not_applied:
-            raise FortiSOARException(
-                f"module settings did not apply for {module!r}: {sorted(not_applied)}"
-            )
+            raise FortiSOARException(f"module settings did not apply for {module!r}: {sorted(not_applied)}")
         return updated
 
     def add_field(self, module: str, field: dict[str, Any]) -> dict[str, Any]:
@@ -947,9 +924,7 @@ class ModulesAdminAPI(BaseAPI):
         attrs = mod.get("attributes", []) + [field]
         return self._put_attributes(mod, attrs)
 
-    def set_field_type(
-        self, module: str, field: str, *, db_type: str, form_type: str | None = None
-    ) -> dict[str, Any]:
+    def set_field_type(self, module: str, field: str, *, db_type: str, form_type: str | None = None) -> dict[str, Any]:
         """Change a staged field's storage ``type`` (and ``formType``).
 
         Edits go through a PUT of the whole staging record — individual
@@ -1237,9 +1212,7 @@ class ModulesAdminAPI(BaseAPI):
                 raise
         return self._wait_for_publish(prev_time, timeout, poll_interval)
 
-    def _wait_for_publish(
-        self, prev_time: int | None, timeout: float, poll_interval: float
-    ) -> dict[str, Any]:
+    def _wait_for_publish(self, prev_time: int | None, timeout: float, poll_interval: float) -> dict[str, Any]:
         """Block until the async publish finishes, using ``/api/publish/error`` as the truth.
 
         Polls ``/api/publish/error`` until ``last_publish_time`` advances past ``prev_time``.
@@ -1278,12 +1251,8 @@ class ModulesAdminAPI(BaseAPI):
                     return body
                 if fresh and status not in ("", "started", "in progress", "inprogress"):
                     raise FortiSOARException(
-                        describe_migrate_failure(
-                            body.get("status"), body.get("message") or body.get("error") or body
-                        )
+                        describe_migrate_failure(body.get("status"), body.get("message") or body.get("error") or body)
                     )
             if time.monotonic() >= deadline:
-                raise TimeoutError(
-                    f"publish did not complete within {timeout}s (last state: {last})"
-                )
+                raise TimeoutError(f"publish did not complete within {timeout}s (last state: {last})")
             time.sleep(poll_interval)

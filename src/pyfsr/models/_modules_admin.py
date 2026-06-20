@@ -83,15 +83,11 @@ class AttributeMetadata(BaseRecord):
 
     # Data source (picklist / relationship / lookup)
     data_source: dict[str, Any] | list | None = Field(default=None, alias="dataSource")
-    data_source_filters: dict[str, Any] | list | None = Field(
-        default=None, alias="dataSourceFilters"
-    )
+    data_source_filters: dict[str, Any] | list | None = Field(default=None, alias="dataSourceFilters")
 
     # Validation / bulk action
     validation: AttributeValidation | dict[str, Any] | None = None
-    bulk_action: AttributeBulkAction | dict[str, Any] | None = Field(
-        default=None, alias="bulkAction"
-    )
+    bulk_action: AttributeBulkAction | dict[str, Any] | None = Field(default=None, alias="bulkAction")
 
     # Misc
     default_value: Any = Field(default=None, alias="defaultValue")
@@ -180,9 +176,7 @@ class ModuleMetadata(BaseRecord):
     replication_filters: list[Any] = Field(default_factory=list, alias="replicationFilters")
 
     # Schema
-    default_sort: list[DefaultSortEntry | dict[str, Any]] = Field(
-        default_factory=list, alias="defaultSort"
-    )
+    default_sort: list[DefaultSortEntry | dict[str, Any]] = Field(default_factory=list, alias="defaultSort")
     unique_constraint: list[dict[str, Any]] = Field(default_factory=list, alias="uniqueConstraint")
 
     # Display

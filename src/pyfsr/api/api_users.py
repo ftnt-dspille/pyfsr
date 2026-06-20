@@ -118,10 +118,6 @@ class ApiKeyUsersAPI(BaseAPI):
         """Regenerate an API-key user's key (lifecycle ``REGENERATE``)."""
         return self.lifecycle(uuid, "REGENERATE", key_type=key_type)
 
-    def reset_validity(
-        self, uuid: str, api_key_validity: int, *, key_type: str = "api_key"
-    ) -> dict[str, Any]:
+    def reset_validity(self, uuid: str, api_key_validity: int, *, key_type: str = "api_key") -> dict[str, Any]:
         """Reset an API-key user's validity window (lifecycle ``RESET_VALIDITY``)."""
-        return self.lifecycle(
-            uuid, "RESET_VALIDITY", key_type=key_type, api_key_validity=api_key_validity
-        )
+        return self.lifecycle(uuid, "RESET_VALIDITY", key_type=key_type, api_key_validity=api_key_validity)

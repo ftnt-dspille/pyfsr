@@ -25,10 +25,7 @@ import yaml
 # Entities to emit, in order. Keys must match component schema names.
 ENTITIES = ["Alert", "Incident", "Task", "Comment"]
 
-DEFAULT_SPEC = (
-    Path.home()
-    / "PycharmProjects/Miscellaneous/fortisoar-api-docs/build/fortisoar.curated.openapi.yaml"
-)
+DEFAULT_SPEC = Path.home() / "PycharmProjects/Miscellaneous/fortisoar-api-docs/build/fortisoar.curated.openapi.yaml"
 OUT = Path(__file__).resolve().parent.parent / "src/pyfsr/models/_generated.py"
 
 # Reserved/awkward field names → safe Python attribute names (kept aliased).

@@ -35,15 +35,11 @@ _META = {
                 {"name": "name"},
                 {
                     "name": "severity",
-                    "dataSource": {
-                        "query": {"filters": [{"field": "listName__name", "value": "Severity"}]}
-                    },
+                    "dataSource": {"query": {"filters": [{"field": "listName__name", "value": "Severity"}]}},
                 },
                 {
                     "name": "status",
-                    "dataSource": {
-                        "query": {"filters": [{"field": "listName__name", "value": "AlertStatus"}]}
-                    },
+                    "dataSource": {"query": {"filters": [{"field": "listName__name", "value": "AlertStatus"}]}},
                 },
             ],
         }
@@ -208,9 +204,7 @@ def test_clear_cache():
 # --- RecordSet opt-in integration -----------------------------------------
 def test_recordset_create_resolves_picklists_opt_in():
     api, client = _api()
-    RecordSet(client, "alerts", typed=False).create(
-        {"name": "x", "severity": "High"}, resolve_picklists=True
-    )
+    RecordSet(client, "alerts", typed=False).create({"name": "x", "severity": "High"}, resolve_picklists=True)
     endpoint, data = client.post_calls[0]
     assert endpoint == "/api/3/alerts"
     assert data["severity"] == "/api/3/picklists/sev-high"
@@ -232,9 +226,7 @@ def test_recordset_create_resolution_opt_out():
 
 def test_recordset_update_resolves_picklists_opt_in():
     api, client = _api()
-    RecordSet(client, "alerts", typed=False).update(
-        "u1", {"status": "Open"}, resolve_picklists=True
-    )
+    RecordSet(client, "alerts", typed=False).update("u1", {"status": "Open"}, resolve_picklists=True)
     endpoint, data = client.put_calls[0]
     assert endpoint == "/api/3/alerts/u1"
     assert data["status"] == "/api/3/picklists/st-open"

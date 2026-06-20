@@ -111,9 +111,7 @@ def test_find_installed_connectors_partial_and_label():
 def test_find_installed_connectors_separator_and_case_folding():
     api, _ = _api()
     # underscores/spaces/casing fold to the hyphenated name
-    assert [c["name"] for c in api.find_installed_connectors("Fortinet_FortiSIEM")] == [
-        "fortinet-fortisiem"
-    ]
+    assert [c["name"] for c in api.find_installed_connectors("Fortinet_FortiSIEM")] == ["fortinet-fortisiem"]
 
 
 def test_find_installed_connectors_exact_name_sorts_first():
@@ -356,11 +354,7 @@ def test_create_configuration_validate_missing_raises():
     import pytest
 
     # config_schema comes from definition() (a POST returning config_schema.fields)
-    schema = {
-        "config_schema": {
-            "fields": [{"name": "fsm_type", "title": "FortiSIEM Type", "required": True}]
-        }
-    }
+    schema = {"config_schema": {"fields": [{"name": "fsm_type", "title": "FortiSIEM Type", "required": True}]}}
     api, _ = _api(post_resp=schema)
     with pytest.raises(ValueError, match="is required"):
         api.create_configuration("virustotal", {}, name="c", version="3.1.0")
@@ -368,9 +362,7 @@ def test_create_configuration_validate_missing_raises():
 
 def test_update_configuration_puts_to_config_id_path():
     api, client = _api()
-    api.update_configuration(
-        "virustotal", "cfg-1", {"k": "v2"}, name="c", version="3.1.0", validate=False
-    )
+    api.update_configuration("virustotal", "cfg-1", {"k": "v2"}, name="c", version="3.1.0", validate=False)
     endpoint, body = client.put_calls[0]
     assert endpoint == "/api/integration/configuration/cfg-1/"
     assert body["config_id"] == "cfg-1"
@@ -421,9 +413,7 @@ def test_required_config_fields_follows_onchange_branch():
 
 def test_validate_config_flags_missing_in_active_branch():
     api, _ = _api(post_resp=_SIEM_SCHEMA)
-    res = api.validate_config(
-        "virustotal", {"fsm_type": "FortiSIEM", "server": "x", "username": "u"}
-    )
+    res = api.validate_config("virustotal", {"fsm_type": "FortiSIEM", "server": "x", "username": "u"})
     assert res["valid"] is False
     assert res["missing"] == ["password"]
 
@@ -530,9 +520,7 @@ def test_validate_config_invalid_select_option():
 
 def test_validate_config_wrong_type():
     api, _ = _api(post_resp=_HTTP_SCHEMA)
-    res = api.validate_config(
-        "http", {"auth_type": "None", "port": "not-a-number"}, version="1.0.0"
-    )
+    res = api.validate_config("http", {"auth_type": "None", "port": "not-a-number"}, version="1.0.0")
     assert res["valid"] is False
     assert "port" in res["invalid"]
     assert next(e for e in res["errors"] if e["field"] == "port")["code"] == "wrong_type"
@@ -540,9 +528,7 @@ def test_validate_config_wrong_type():
 
 def test_validate_config_accepts_string_integer_and_bool_checkbox():
     api, _ = _api(post_resp=_HTTP_SCHEMA)
-    res = api.validate_config(
-        "http", {"auth_type": "None", "port": "443", "verify_ssl": True}, version="1.0.0"
-    )
+    res = api.validate_config("http", {"auth_type": "None", "port": "443", "verify_ssl": True}, version="1.0.0")
     assert res["valid"] is True
     assert res["invalid"] == []
 

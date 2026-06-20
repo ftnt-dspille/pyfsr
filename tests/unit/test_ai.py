@@ -24,9 +24,7 @@ class FakeAlerts:
         self.updates = []
 
     def get(self, uuid):
-        return self.records.get(
-            uuid, {"uuid": uuid, "name": "alert", "@id": f"/api/3/alerts/{uuid}"}
-        )
+        return self.records.get(uuid, {"uuid": uuid, "name": "alert", "@id": f"/api/3/alerts/{uuid}"})
 
     def update(self, uuid, data):
         self.updates.append((uuid, data))
@@ -198,9 +196,7 @@ def test_register_mcp_server_json_encodes_dict_authentication():
 def test_update_mcp_server_puts_and_json_encodes_auth():
     c = RecordingClient()
     ai = AIApi(c)
-    ai.update_mcp_server(
-        "m-9", {"name": "FortiSIEM", "authentication": {"type": "bearer", "value": "tok"}}
-    )
+    ai.update_mcp_server("m-9", {"name": "FortiSIEM", "authentication": {"type": "bearer", "value": "tok"}})
     put = [call for call in c.calls if call[0] == "PUT"][0]
     assert put[1] == "/api/3/mcp_configurations/m-9"
     assert put[2]["authentication"] == '{"type": "bearer", "value": "tok"}'
@@ -223,9 +219,7 @@ def test_save_mcp_server_validates_then_creates_when_new():
         }
     )
     ai = AIApi(c)
-    out = ai.save_mcp_server(
-        {"name": "FortiSIEM", "authentication": {"type": "bearer", "value": "t"}}
-    )
+    out = ai.save_mcp_server({"name": "FortiSIEM", "authentication": {"type": "bearer", "value": "t"}})
     assert out["uuid"] == "new-1"
     methods = [call[0:2] for call in c.calls]
     # validated first, then POSTed to create
@@ -243,9 +237,7 @@ def test_save_mcp_server_updates_when_uuid_present():
 
 
 def test_save_mcp_server_refuses_on_invalid():
-    c = RecordingClient(
-        responses={("POST", "/api/ai/mcp/validate"): {"valid": False, "message": "no"}}
-    )
+    c = RecordingClient(responses={("POST", "/api/ai/mcp/validate"): {"valid": False, "message": "no"}})
     ai = AIApi(c)
     try:
         ai.save_mcp_server({"name": "bad"})

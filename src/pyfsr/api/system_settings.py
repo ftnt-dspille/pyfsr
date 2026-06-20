@@ -103,9 +103,7 @@ class SystemSettingsAPI(BaseAPI):
         if public_values_patch:
             body["publicValues"] = _deep_merge(root.get("publicValues") or {}, public_values_patch)
         if private_values_patch:
-            body["privateValues"] = _deep_merge(
-                root.get("privateValues") or {}, private_values_patch
-            )
+            body["privateValues"] = _deep_merge(root.get("privateValues") or {}, private_values_patch)
         return self.client.put(f"{self._ENDPOINT}/{uuid}", data=body, params=_RELATIONSHIPS)
 
     # ------------------------------------------------------------- convenience
@@ -169,9 +167,7 @@ class SystemSettingsAPI(BaseAPI):
         values = (record.get("privateValues") or {}).get("values") or []
         return values[0] if values else {}
 
-    def set_workflow_log_filter(
-        self, tags: list[str], operation: str = "exclude"
-    ) -> dict[str, Any]:
+    def set_workflow_log_filter(self, tags: list[str], operation: str = "exclude") -> dict[str, Any]:
         """Set the playbook execution-log tag filter (Settings → Playbooks → Logs).
 
         ``operation`` is ``"exclude"`` or ``"include"``. Note the FortiSOAR key

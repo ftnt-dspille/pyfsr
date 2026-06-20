@@ -140,9 +140,7 @@ class ContentHubSearch(BaseAPI):
         return results[0] if results else None
 
     # Solution Pack Methods
-    def find_installed_pack(
-        self, search_term: str, *, typed: bool = False
-    ) -> dict[str, Any] | None:
+    def find_installed_pack(self, search_term: str, *, typed: bool = False) -> dict[str, Any] | None:
         """Find a single installed solution pack by name, label, or description.
 
         Pass ``typed=True`` for a ``SolutionPack``.
@@ -152,20 +150,14 @@ class ContentHubSearch(BaseAPI):
 
                 pack = content_hub.find_installed_pack("SOAR Framework")
         """
-        return self._find_single_content(
-            ContentType.SOLUTION_PACK, search_term, installed=True, typed=typed
-        )
+        return self._find_single_content(ContentType.SOLUTION_PACK, search_term, installed=True, typed=typed)
 
-    def find_available_pack(
-        self, search_term: str = "", *, typed: bool = False
-    ) -> dict[str, Any] | None:
+    def find_available_pack(self, search_term: str = "", *, typed: bool = False) -> dict[str, Any] | None:
         """Find a single available solution pack by name, label, or description.
 
         Pass ``typed=True`` for a ``SolutionPack``.
         """
-        return self._find_single_content(
-            ContentType.SOLUTION_PACK, search_term, installed=False, typed=typed
-        )
+        return self._find_single_content(ContentType.SOLUTION_PACK, search_term, installed=False, typed=typed)
 
     def search_installed_packs(
         self, search_term: str = "", limit: int = 30, *, typed: bool = False
@@ -203,38 +195,26 @@ class ContentHubSearch(BaseAPI):
         )
 
     # Connector Methods
-    def find_installed_connector(
-        self, search_term: str, *, typed: bool = False
-    ) -> dict[str, Any] | None:
+    def find_installed_connector(self, search_term: str, *, typed: bool = False) -> dict[str, Any] | None:
         """Find a single installed connector by name, label, or description.
 
         Pass ``typed=True`` for a ``ContentHubConnector``.
         """
-        return self._find_single_content(
-            ContentType.CONNECTOR, search_term, installed=True, typed=typed
-        )
+        return self._find_single_content(ContentType.CONNECTOR, search_term, installed=True, typed=typed)
 
-    def find_available_connector(
-        self, search_term: str = "", *, typed: bool = False
-    ) -> dict[str, Any] | None:
+    def find_available_connector(self, search_term: str = "", *, typed: bool = False) -> dict[str, Any] | None:
         """Find a single available connector by name, label, or description.
 
         Pass ``typed=True`` for a ``ContentHubConnector``.
         """
-        return self._find_single_content(
-            ContentType.CONNECTOR, search_term, installed=None, typed=typed
-        )
+        return self._find_single_content(ContentType.CONNECTOR, search_term, installed=None, typed=typed)
 
-    def find_uninstalled_connector(
-        self, search_term: str, *, typed: bool = False
-    ) -> dict[str, Any] | None:
+    def find_uninstalled_connector(self, search_term: str, *, typed: bool = False) -> dict[str, Any] | None:
         """Find a single uninstalled connector by name, label, or description.
 
         Pass ``typed=True`` for a ``ContentHubConnector``.
         """
-        return self._find_single_content(
-            ContentType.CONNECTOR, search_term, installed=False, typed=typed
-        )
+        return self._find_single_content(ContentType.CONNECTOR, search_term, installed=False, typed=typed)
 
     def search_installed_connectors(
         self, search_term: str = "", limit: int = 30, *, typed: bool = False
@@ -282,27 +262,19 @@ class ContentHubSearch(BaseAPI):
         )
 
     # Widget Methods
-    def find_installed_widget(
-        self, search_term: str, *, typed: bool = False
-    ) -> dict[str, Any] | None:
+    def find_installed_widget(self, search_term: str, *, typed: bool = False) -> dict[str, Any] | None:
         """Find a single installed widget by name, label, or description.
 
         Pass ``typed=True`` for a ``Widget``.
         """
-        return self._find_single_content(
-            ContentType.WIDGET, search_term, installed=True, typed=typed
-        )
+        return self._find_single_content(ContentType.WIDGET, search_term, installed=True, typed=typed)
 
-    def find_available_widget(
-        self, search_term: str = "", *, typed: bool = False
-    ) -> dict[str, Any] | None:
+    def find_available_widget(self, search_term: str = "", *, typed: bool = False) -> dict[str, Any] | None:
         """Find a single available widget by name, label, or description.
 
         Pass ``typed=True`` for a ``Widget``.
         """
-        return self._find_single_content(
-            ContentType.WIDGET, search_term, installed=False, typed=typed
-        )
+        return self._find_single_content(ContentType.WIDGET, search_term, installed=False, typed=typed)
 
     def search_installed_widgets(
         self, search_term: str = "", limit: int = 30, *, typed: bool = False

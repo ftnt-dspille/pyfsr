@@ -162,12 +162,8 @@ def _h_healthcheck_connector(client, *, connector, config=None) -> Any:
     return client.connectors.healthcheck(connector, config=config)
 
 
-def _h_run_connector_operation(
-    client, *, connector, operation, params=None, config_name=None
-) -> Any:
-    return client.connectors.execute(
-        connector, operation, params=params or {}, config_name=config_name
-    )
+def _h_run_connector_operation(client, *, connector, operation, params=None, config_name=None) -> Any:
+    return client.connectors.execute(connector, operation, params=params or {}, config_name=config_name)
 
 
 def _h_list_playbook_runs(client, *, playbook=None, limit=20) -> Any:
@@ -213,8 +209,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "get_record",
-        "Fetch a single record by reference. Pass summary=true or fields=[...] to keep the "
-        "result small.",
+        "Fetch a single record by reference. Pass summary=true or fields=[...] to keep the result small.",
         _obj(
             {"module": _MODULE, "ref": _REF, "fields": _FIELDS, "summary": _SUMMARY},
             ["module", "ref"],
@@ -340,9 +335,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "get_picklist_values",
         "List a picklist's items (itemValue, uuid, iri, ordinal).",
-        _obj(
-            {"name": {"type": "string", "description": "Picklist name, e.g. 'Severity'."}}, ["name"]
-        ),
+        _obj({"name": {"type": "string", "description": "Picklist name, e.g. 'Severity'."}}, ["name"]),
         _h_get_picklist_values,
     ),
     ToolSpec(
@@ -414,8 +407,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "list_playbook_runs",
-        "List recent playbook runs (live + historical, newest first). Scope to one playbook by "
-        "name.",
+        "List recent playbook runs (live + historical, newest first). Scope to one playbook by name.",
         _obj(
             {
                 "playbook": {
@@ -497,10 +489,7 @@ def tool_schemas() -> list[dict[str, Any]]:
 
 def to_anthropic_tools() -> list[dict[str, Any]]:
     """Tool definitions in Anthropic tool-use shape (``input_schema`` key)."""
-    return [
-        {"name": t.name, "description": t.description, "input_schema": t.input_schema}
-        for t in _TOOLS
-    ]
+    return [{"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in _TOOLS]
 
 
 def to_openai_tools() -> list[dict[str, Any]]:

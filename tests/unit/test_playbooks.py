@@ -175,9 +175,7 @@ def test_trigger_without_records_sends_empty_body():
 # -- resume -----------------------------------------------------------------
 def test_resume_posts_to_wfinput_resume():
     client = FakeClient()
-    PlaybooksAPI(client).resume(
-        "run-1", manual_input_id=7, input={"choice": "yes"}, step_id="s1", approved=True
-    )
+    PlaybooksAPI(client).resume("run-1", manual_input_id=7, input={"choice": "yes"}, step_id="s1", approved=True)
     endpoint, body = client.post_calls[0]
     assert endpoint == "/api/wf/api/workflows/run-1/wfinput_resume/?format=json"
     assert body["manual_input_id"] == 7

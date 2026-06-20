@@ -260,9 +260,7 @@ class ExportConfigAPI(BaseAPI):
             for module in modules:
                 module_config = {
                     "value": module,
-                    "includedAttributes": module_attributes.get(module, [])
-                    if module_attributes
-                    else [],
+                    "includedAttributes": module_attributes.get(module, []) if module_attributes else [],
                 }
                 modules_config.append(module_config)
 
@@ -412,9 +410,7 @@ class ExportConfigAPI(BaseAPI):
 
         try:
             if not output_path:
-                output_path = os.path.join(
-                    os.getcwd(), f"{connector_name}-{version}.zip".replace("/", "_")
-                )
+                output_path = os.path.join(os.getcwd(), f"{connector_name}-{version}.zip".replace("/", "_"))
             return self._export_with_template(
                 template_uuid=template_uuid,
                 output_path=output_path,
