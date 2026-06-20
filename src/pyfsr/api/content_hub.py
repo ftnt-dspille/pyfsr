@@ -91,6 +91,7 @@ class ContentHubSearch(BaseAPI):
 
         # Add fields selection if provided
         fields = [
+            "uuid",
             "name",
             "installed",
             "type",

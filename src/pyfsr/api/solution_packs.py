@@ -1,8 +1,8 @@
 import time
 
 from ..models._integration import InstallJobStatus
+from ..models._system import SolutionPackInstallResponse
 from .base import BaseAPI
-from .connectors import _import_job_id
 from .content_hub import ContentHubSearch
 
 _INSTALL_TERMINAL = {"import complete", "import failed", "error"}
@@ -66,14 +66,12 @@ class SolutionPackAPI(BaseAPI):
         wait: bool = False,
         interval: float = 3.0,
         timeout: float = 300.0,
-    ) -> InstallJobStatus:
+    ) -> SolutionPackInstallResponse | InstallJobStatus:
         """Install a solution pack from Content Hub by ``name`` + ``version``.
 
         Posts ``{"name", "version"}`` to ``POST /api/3/solutionpacks/install`` —
         the same call the Content Hub *Install* button makes. The install runs
-        asynchronously as an import job; with ``wait=True`` this method blocks
-        until the job reaches a terminal status and returns the final
-        :class:`~pyfsr.models.InstallJobStatus`.
+        asynchronously as an import job.
 
         Discover installable packs via
         ``client.content_hub.search_available_packs()``.
@@ -86,24 +84,30 @@ class SolutionPackAPI(BaseAPI):
             timeout: give up waiting after this many seconds (default 300).
 
         Returns:
-            ``InstallJobStatus`` — immediately after the POST if ``wait=False``
-            (only ``status`` is populated from the response), or the final
-            polled status when ``wait=True``.
+            :class:`~pyfsr.models.SolutionPackInstallResponse` (the SolutionPack
+            record plus ``importJob``) when ``wait=False`` so callers can access
+            ``.job_id`` for polling. :class:`~pyfsr.models.InstallJobStatus` when
+            ``wait=True`` — check ``status == "Import Complete"`` for success.
 
         Example:
             .. code-block:: python
 
-                status = client.solution_packs.install("SOAR Framework", "2.2.1", wait=True)
+                resp = client.solution_packs.install("SOAR Framework", "2.2.1")
+                status = client.solution_packs.wait_for_install(resp.job_id)
                 print(status.status)  # "Import Complete"
+
+                # or in one call:
+                status = client.solution_packs.install("SOAR Framework", "2.2.1", wait=True)
         """
         resp = self.client.post(
             "/api/3/solutionpacks/install", data={"name": name, "version": version}
         )
-        job_id = _import_job_id(resp) if isinstance(resp, dict) else None
-        if not wait or not job_id:
-            status_val = resp.get("status") if isinstance(resp, dict) else None
-            return InstallJobStatus(status=status_val)
-        return self.wait_for_install(job_id, interval=interval, timeout=timeout)
+        if not isinstance(resp, dict):
+            return SolutionPackInstallResponse()
+        install_resp = SolutionPackInstallResponse.model_validate(resp)
+        if not wait or not install_resp.job_id:
+            return install_resp
+        return self.wait_for_install(install_resp.job_id, interval=interval, timeout=timeout)
 
     def install_status(self, job_id: str) -> InstallJobStatus:
         """Fetch a solution pack install's import-job progress.
@@ -133,3 +137,34 @@ class SolutionPackAPI(BaseAPI):
             time.sleep(interval)
             status = self.install_status(job_id)
         return status
+
+    def uninstall(self, name: str) -> None:
+        """Uninstall a solution pack by name.
+
+        Looks up the installed pack by ``name``, then sends
+        ``DELETE /api/3/solutionpacks/{uuid}``. The appliance marks the pack
+        as uninstalled (or removes it if it's a local/dev pack) and strips its
+        import job, export job, template, and file references.
+
+        Args:
+            name: solution pack name or search term (e.g. ``"SOAR Framework"``).
+
+        Raises:
+            ValueError: if no installed pack matching ``name`` is found.
+
+        Example:
+            .. code-block:: python
+
+                client.solution_packs.uninstall("SOAR Framework")
+        """
+        pack = self.content_hub.find_installed_pack(name)
+        if not pack:
+            raise ValueError(f"No installed solution pack found matching {name!r}")
+        uuid = pack.get("uuid") or (
+            pack.get("@id", "").rstrip("/").split("/")[-1] if "/" in pack.get("@id", "") else None
+        )
+        if not uuid:
+            raise ValueError(
+                f"Cannot resolve UUID for solution pack {name!r} — try fetching it with typed=True"
+            )
+        self.client.delete(f"/api/3/solutionpacks/{uuid}")

@@ -21,9 +21,9 @@ class Agent(BaseRecord):
     description: str | None = None
     created: str | None = None
     modified: str | None = None
-    router: Any = None
-    installerType: Any = None
-    configurationHealth: Any = None
+    router: Any = None  # Router entity relationship — IRI or expanded dict
+    installerType: str | None = None  # picklist IRI /api/3/picklists/...
+    configurationHealth: str | None = None  # picklist IRI /api/3/picklists/...
 
 
 class AgentConnectorStatus(BaseRecord):

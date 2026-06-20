@@ -106,6 +106,21 @@ class BaseRecord(BaseModel):
             return model.model_validate(value)
         return None
 
+    def _as_actor(
+        self, field: str, user_model: type[BaseModel], appliance_model: type[BaseModel]
+    ) -> Any:
+        """Coerce an actor field (createUser/modifyUser) to User or Appliance by ``@type``."""
+        value = self.get(field)
+        if value is None:
+            return None
+        atype = None
+        if isinstance(value, dict):
+            atype = value.get("@type")
+        elif hasattr(value, "record_type"):
+            atype = value.record_type
+        model = appliance_model if atype == "Appliance" else user_model
+        return self.as_record(field, model)
+
     def _as_records(self, field: str, model: type[BaseModel]) -> list[Any]:
         """List variant of :meth:`as_record` for to-many relationships."""
         value = self.get(field)
@@ -123,17 +138,26 @@ class BaseRecord(BaseModel):
 
     @property
     def create_user(self) -> Any:
-        """The ``createUser`` relationship as a :class:`~pyfsr.models.User`, or ``None``."""
-        from ._system import User
+        """The ``createUser`` as a :class:`~pyfsr.models.User` or :class:`~pyfsr.models.Appliance`.
 
-        return self.as_record("createUser", User)
+        Dispatches on ``@type``: ``"Appliance"`` records (playbook-engine actors)
+        return an :class:`~pyfsr.models.Appliance`; everything else returns a
+        :class:`~pyfsr.models.User`. Both share ``BaseRecord`` so ``.iri`` and
+        ``.uuid`` always work.
+        """
+        from ._system import Appliance, User
+
+        return self._as_actor("createUser", User, Appliance)
 
     @property
     def modify_user(self) -> Any:
-        """The ``modifyUser`` relationship as a :class:`~pyfsr.models.User`, or ``None``."""
-        from ._system import User
+        """The ``modifyUser`` as a :class:`~pyfsr.models.User` or :class:`~pyfsr.models.Appliance`.
 
-        return self.as_record("modifyUser", User)
+        See :attr:`create_user` for dispatch logic.
+        """
+        from ._system import Appliance, User
+
+        return self._as_actor("modifyUser", User, Appliance)
 
     @property
     def assigned_to(self) -> Any:

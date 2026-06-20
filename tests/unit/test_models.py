@@ -115,12 +115,13 @@ def test_str_field_collapses_expanded_relationship_to_iri():
     assert alert.modifyUser == "/api/3/people/u-1"
 
 
-def test_any_picklist_field_keeps_expanded_object():
-    # severity is typed Any (an "IRI to picklist" field); keep the full object.
+def test_str_picklist_field_collapses_to_iri():
+    # severity is typed str — the collapse validator flattens the expanded picklist
+    # object to its @id IRI; callers use picklist_uuid() to extract the UUID.
     alert = Alert.model_validate(
         {"uuid": "a1", "severity": {"@id": "/api/3/picklists/p-1", "itemValue": "High"}}
     )
-    assert alert.severity == {"@id": "/api/3/picklists/p-1", "itemValue": "High"}
+    assert alert.severity == "/api/3/picklists/p-1"
 
 
 def test_str_field_plain_iri_unchanged():

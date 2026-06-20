@@ -42,17 +42,17 @@ class Workflow(BaseRecord):
     lastModifyDate: int | None = None
     collection: str | None = None
     triggerStep: str | None = None
-    priority: Any | None = None
-    playbookOrigin: Any | None = None
+    priority: str | None = None  # picklist IRI
+    playbookOrigin: str | None = None  # picklist IRI
     isEditable: bool | None = None
     isPrivate: bool | None = None
-    createUser: Any | None = None
+    createUser: str | dict[str, Any] | None = None
     createDate: float | None = None
-    modifyUser: Any | None = None
+    modifyUser: str | dict[str, Any] | None = None
     modifyDate: float | None = None
     deletedAt: float | None = None  # soft-delete epoch (like create/modifyDate); null until deleted
     importedBy: list[Any] | None = None
-    recordTags: list[Any] | None = None
+    recordTags: list[str] | None = None  # tag name strings
     id: int | None = None
 
 
@@ -66,13 +66,13 @@ class WorkflowCollection(BaseRecord):
     description: str | None = None
     visible: bool | None = None
     image: Any | None = None
-    createUser: Any | None = None
+    createUser: str | dict[str, Any] | None = None
     createDate: float | None = None
-    modifyUser: Any | None = None
+    modifyUser: str | dict[str, Any] | None = None
     modifyDate: float | None = None
     deletedAt: float | None = None  # soft-delete epoch (like create/modifyDate); null until deleted
     importedBy: list[Any] | None = None
-    recordTags: list[Any] | None = None
+    recordTags: list[str] | None = None  # tag name strings
     id: int | None = None
 
 
@@ -121,16 +121,35 @@ class ContentHubItem(BaseRecord):
     dependencies: list[Any] | None = None
     category: list[Any] | None = None
     iconLarge: str | None = None
-    publishedDate: int | None = None
+    publishedDate: float | None = None
     buildNumber: int | None = None
     configCount: int | None = None
-    status: Any | None = None
-    createUser: Any | None = None
+    status: str | None = None  # plain string e.g. "Completed"
+    createUser: str | dict[str, Any] | None = None
     createDate: float | None = None
-    modifyUser: Any | None = None
+    modifyUser: str | dict[str, Any] | None = None
     modifyDate: float | None = None
-    recordTags: list[Any] | None = None
+    recordTags: Any | None = None
     importedBy: list[Any] | None = None
+
+
+class Appliance(BaseRecord):
+    """A FortiSOAR **appliance** actor from ``/api/3/appliances/``.
+
+    Appears as ``createUser`` / ``modifyUser`` on records created by the
+    playbook engine itself (``@type == "Appliance"``). Distinct from a human
+    :class:`User` (``@type == "Person"``). ``name`` is typically ``"Playbook"``.
+    """
+
+    name: str | None = None
+    userType: Any | None = None
+    avatar: Any | None = None
+    userId: str | None = None
+    createUser: str | dict[str, Any] | None = None
+    createDate: float | None = None
+    modifyUser: str | dict[str, Any] | None = None
+    modifyDate: float | None = None
+    id: int | None = None
 
 
 class User(BaseRecord):
@@ -161,9 +180,9 @@ class User(BaseRecord):
     avatar: Any | None = None  # not in the people module schema; null on observed boxes
     companyId: Any | None = None  # 'companies' single-relationship (IRI str or expanded dict)
     userId: str | None = None
-    createUser: Any | None = None
+    createUser: str | dict[str, Any] | None = None
     createDate: float | None = None
-    modifyUser: Any | None = None
+    modifyUser: str | dict[str, Any] | None = None
     modifyDate: float | None = None
     id: int | None = None
 
@@ -217,15 +236,41 @@ class FileRecord(BaseRecord):
     size: int | None = None
     file: Any | None = None
     metadata: Any | None = None
-    createUser: Any | None = None
+    createUser: str | dict[str, Any] | None = None
     createDate: float | None = None
-    modifyUser: Any | None = None
+    modifyUser: str | dict[str, Any] | None = None
     modifyDate: float | None = None
-    id: int | None = None
+    id: int | str | None = None
 
 
 class SolutionPack(ContentHubItem):
     """A Content Hub **solution pack** (``type == "solutionpack"``)."""
+
+
+class SolutionPackInstallResponse(SolutionPack):
+    """The SolutionPack record returned by ``POST /api/3/solutionpacks/install``.
+
+    The install response is the full SolutionPack entity with an embedded
+    ``importJob`` object tracking the async install. Use :attr:`job_id` to
+    get the UUID for :meth:`~pyfsr.api.solution_packs.SolutionPackAPI.install_status`
+    and :meth:`~pyfsr.api.solution_packs.SolutionPackAPI.wait_for_install` calls.
+    """
+
+    importJob: Any | None = None
+
+    @property
+    def job_id(self) -> str | None:
+        """UUID of the async import job, parsed from the embedded ``importJob``."""
+        job = self.importJob
+        if not isinstance(job, dict):
+            return None
+        uuid = job.get("uuid")
+        if isinstance(uuid, str) and uuid:
+            return uuid
+        iri = job.get("@id")
+        if isinstance(iri, str) and iri:
+            return iri.rstrip("/").split("/")[-1]
+        return None
 
 
 class ContentHubConnector(ContentHubItem):
