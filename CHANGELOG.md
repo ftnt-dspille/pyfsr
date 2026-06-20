@@ -4,12 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-06-20
+
 ### Added
+- `client.user_settings`: per-user preferences API (`UserSettingsAPI`). `all()` /
+  `get(key, default=)` read the calling user's `@settings` blob via
+  `GET /api/3/actors/current` (with `/`-separated key traversal); `set(key, value)`
+  writes via the only path that persists, `PUT /api/3/user_settings/current/<key>`.
+  The module docstring encodes the known footguns (the `/current/`-only write path,
+  500/405 on `…/<uuid>`, 404 on `/api/3/settings`, and the silent no-op when writing
+  `@settings` on `actors/current`). Live read+write validated.
 - `pyfsr playbook check-fresh`: Level-1 catalog freshness probe. Compares the cached
   `fsr_playbooks` reference catalog's provenance (`_catalog_meta`) against a live SOAR
   via cheap GETs (`/api/version`, `/api/publish/error`, `$limit=0` row counts) and reports
   publish/version/add-delete drift. Exit 0 = fresh, 2 = drift, 1 = unstamped/error. New
   `pyfsr.playbook_freshness` module holds the unit-testable comparison logic.
+
+### Fixed
+- `pyfsr appliance logs`: corrected the service→log-path map for FortiSOAR 7.6.x — the
+  auth log is `cyops-auth/das.log` (not `cyops-auth.log`), the api app log is `prod.log`,
+  the workflow engine is `fsr-workflow.log`, and postman moved under `cyops-routing-agent/`;
+  added `gateway`/`notifier`/`connectors`/`celery` aliases and corrected the `logs scan`
+  systemd unit names. `logs tail` now raises `FileNotFoundError` on a missing path instead
+  of returning an empty string. Validated live against FSR 7.6.5.
+- `pyfsr appliance` device-UUID resolution: read the install-time `/home/csadmin/device_uuid`
+  file (the value the `cyberpgsql`/`elastic` passwords were provisioned with) **before**
+  falling back to `csadm license --get-device-uuid`. On an entitlement-drifted box the latter
+  returns a different UUID that fails Postgres auth, which broke every `db` verb and content-DB
+  discovery. Fixes DB access on drifted appliances; validated live.
 
 ## [0.6.3] - 2026-06-20
 
