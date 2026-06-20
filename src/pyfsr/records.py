@@ -15,7 +15,7 @@ and works for every module on the appliance::
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, overload
 
 from .models import BaseRecord, model_for
 from .pagination import HydraPage, paginate
@@ -24,6 +24,8 @@ from .query import Query
 
 if TYPE_CHECKING:
     from .client import FortiSOAR
+
+T = TypeVar("T", bound=BaseRecord)
 
 
 def resolve_record_path(module: str, ref: str) -> str:
@@ -40,15 +42,20 @@ def resolve_record_path(module: str, ref: str) -> str:
     return f"/api/3/{module}/{ref}"
 
 
-class RecordSet:
+class RecordSet(Generic[T]):
     """CRUD operations scoped to a single FortiSOAR module.
 
-    Reads parse responses into typed :class:`~pyfsr.models.BaseRecord` subclasses
-    when one is registered for the module (Alert/Incident/Task/Comment today),
-    falling back to a bare ``BaseRecord`` otherwise. ``BaseRecord`` is
-    dict-compatible (``rec["field"]`` / ``rec.get(...)`` / ``"field" in rec``), so
-    typing is additive. Pass ``model=...`` to force a specific model, ``typed=False``
-    to get raw dicts back, or ``raw=True`` on an individual read for one-off dicts.
+    ``T`` is the bound model type (e.g. ``Alert``, ``Incident``).  Reads parse
+    responses into typed :class:`~pyfsr.models.BaseRecord` subclasses when one
+    is registered for the module, falling back to a bare ``BaseRecord``
+    otherwise.  ``BaseRecord`` is dict-compatible (``rec["field"]`` /
+    ``rec.get(...)`` / ``"field" in rec``), so typing is additive.
+
+    Pass ``model=...`` to force a specific model, ``typed=False`` to get raw
+    dicts back, or ``raw=True`` on an individual call for one-off dicts.
+
+    The ``raw=True`` overloads narrow the return type to ``dict[str, Any]``
+    so type checkers know exactly which shape they're getting.
     """
 
     def __init__(
@@ -56,15 +63,15 @@ class RecordSet:
         client: FortiSOAR,
         module: str,
         *,
-        model: type[BaseRecord] | None = None,
+        model: type[T] | None = None,
         typed: bool = True,
     ) -> None:
         self.client = client
         self.module = module
         if not typed:
-            self.model: type[BaseRecord] | None = None
+            self.model: type[T] | None = None
         else:
-            self.model = model or model_for(module)
+            self.model = model or model_for(module)  # type: ignore[assignment]
 
     # -- parsing ------------------------------------------------------------
     def _parse(self, obj: Any, *, raw: bool) -> Any:
@@ -73,13 +80,39 @@ class RecordSet:
             return obj
         return self.model.model_validate(obj)
 
-    def _parse_page(self, page: HydraPage, *, raw: bool) -> HydraPage:
+    def _parse_page(self, page: HydraPage[Any], *, raw: bool) -> HydraPage[Any]:
         if raw or self.model is None:
             return page
         page.members = [self._parse(m, raw=False) for m in page.members]
         return page
 
     # -- reads --------------------------------------------------------------
+    @overload
+    def get(
+        self,
+        ref: str,
+        *,
+        relationships: bool = ...,
+        show_deleted: bool = ...,
+        params: dict[str, Any] | None = ...,
+        raw: Literal[True],
+        fields: list[str] | tuple[str, ...] | None = ...,
+        summary: bool = ...,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    def get(
+        self,
+        ref: str,
+        *,
+        relationships: bool = ...,
+        show_deleted: bool = ...,
+        params: dict[str, Any] | None = ...,
+        raw: Literal[False] = ...,
+        fields: list[str] | tuple[str, ...] | None = ...,
+        summary: bool = ...,
+    ) -> T: ...
+
     def get(
         self,
         ref: str,
@@ -139,6 +172,28 @@ class RecordSet:
             query["$orderby"] = orderby
         return extract_members(self.client.get(path, params=query))
 
+    @overload
+    def list(
+        self,
+        *,
+        limit: int = ...,
+        page: int = ...,
+        show_deleted: bool = ...,
+        params: dict[str, Any] | None = ...,
+        raw: Literal[True],
+    ) -> HydraPage[dict[str, Any]]: ...
+
+    @overload
+    def list(
+        self,
+        *,
+        limit: int = ...,
+        page: int = ...,
+        show_deleted: bool = ...,
+        params: dict[str, Any] | None = ...,
+        raw: Literal[False] = ...,
+    ) -> HydraPage[T]: ...
+
     def list(
         self,
         *,
@@ -147,7 +202,7 @@ class RecordSet:
         show_deleted: bool = False,
         params: dict[str, Any] | None = None,
         raw: bool = False,
-    ) -> HydraPage:
+    ) -> HydraPage[Any]:
         """List records via ``GET /api/3/<module>`` (one page).
 
         Pass ``show_deleted=True`` to include recycle-bin records.
@@ -241,6 +296,28 @@ class RecordSet:
             params["$search"] = search
         return body, params
 
+    @overload
+    def iterate(
+        self,
+        query: Query | dict[str, Any] | None = ...,
+        *,
+        page_size: int = ...,
+        max_records: int | None = ...,
+        show_deleted: bool = ...,
+        raw: Literal[True],
+    ) -> Iterator[dict[str, Any]]: ...
+
+    @overload
+    def iterate(
+        self,
+        query: Query | dict[str, Any] | None = ...,
+        *,
+        page_size: int = ...,
+        max_records: int | None = ...,
+        show_deleted: bool = ...,
+        raw: Literal[False] = ...,
+    ) -> Iterator[T]: ...
+
     def iterate(
         self,
         query: Query | dict[str, Any] | None = None,
@@ -277,6 +354,24 @@ class RecordSet:
             yield self._parse(record, raw=raw)
 
     # -- writes -------------------------------------------------------------
+    @overload
+    def create(
+        self,
+        data: dict[str, Any],
+        *,
+        raw: Literal[True],
+        resolve_picklists: bool = ...,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    def create(
+        self,
+        data: dict[str, Any],
+        *,
+        raw: Literal[False] = ...,
+        resolve_picklists: bool = ...,
+    ) -> T: ...
+
     def create(
         self,
         data: dict[str, Any],
@@ -298,6 +393,26 @@ class RecordSet:
             data = self.client.picklists.resolve_record_fields(self.module, data)
         return self._parse(self.client.post(f"/api/3/{self.module}", data=data), raw=raw)
 
+    @overload
+    def update(
+        self,
+        ref: str,
+        data: dict[str, Any],
+        *,
+        raw: Literal[True],
+        resolve_picklists: bool = ...,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    def update(
+        self,
+        ref: str,
+        data: dict[str, Any],
+        *,
+        raw: Literal[False] = ...,
+        resolve_picklists: bool = ...,
+    ) -> T: ...
+
     def update(
         self,
         ref: str,
@@ -317,6 +432,24 @@ class RecordSet:
             data = self.client.picklists.resolve_record_fields(self.module, data)
         path = resolve_record_path(self.module, ref)
         return self._parse(self.client.put(path, data=data), raw=raw)
+
+    @overload
+    def upsert(
+        self,
+        data: dict[str, Any],
+        *,
+        raw: Literal[True],
+        resolve_picklists: bool = ...,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    def upsert(
+        self,
+        data: dict[str, Any],
+        *,
+        raw: Literal[False] = ...,
+        resolve_picklists: bool = ...,
+    ) -> T: ...
 
     def upsert(
         self,
@@ -395,6 +528,12 @@ class RecordSet:
         path = self._single_record_path(ref, action="delete")
         params = {"$hardDelete": "true"} if hard else None
         self.client.delete(path, params=params)
+
+    @overload
+    def restore(self, ref: str, *, raw: Literal[True]) -> dict[str, Any]: ...
+
+    @overload
+    def restore(self, ref: str, *, raw: Literal[False] = ...) -> T: ...
 
     def restore(self, ref: str, *, raw: bool = False) -> Any:
         """Restore a soft-deleted record from the recycle bin.

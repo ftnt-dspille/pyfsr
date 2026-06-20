@@ -107,12 +107,13 @@ def test_recordset_create_accepts_model_instance():
 
 
 # -- expanded-relationship collapse (P5 model-leniency fix) -----------------
-def test_str_field_collapses_expanded_relationship_to_iri():
-    # modifyUser is typed str; when the API expands it, collapse to its @id.
+def test_dict_field_preserves_expanded_relationship():
+    # modifyUser is typed RecordIRI | dict; expanded dicts are kept as-is so
+    # _as_actor can read @type and dispatch to User vs Appliance correctly.
     alert = Alert.model_validate(
         {"uuid": "a1", "modifyUser": {"@id": "/api/3/people/u-1", "name": "Ann"}}
     )
-    assert alert.modifyUser == "/api/3/people/u-1"
+    assert alert.modifyUser == {"@id": "/api/3/people/u-1", "name": "Ann"}
 
 
 def test_str_picklist_field_collapses_to_iri():

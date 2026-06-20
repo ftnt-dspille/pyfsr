@@ -19,14 +19,26 @@ from typing import Any, get_args
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+def _is_str_like(t: Any) -> bool:
+    """True if ``t`` is ``str`` or a NewType whose supertype chain reaches ``str``."""
+    if t is str:
+        return True
+    sup = getattr(t, "__supertype__", None)
+    while sup is not None:
+        if sup is str:
+            return True
+        sup = getattr(sup, "__supertype__", None)
+    return False
+
+
 def _is_str_annotation(ann: Any) -> bool:
-    """True if ``ann`` is ``str`` or ``str | None`` (a plain string field)."""
-    if ann is str:
+    """True if ``ann`` is ``str | None`` (or a str-NewType variant)."""
+    if _is_str_like(ann):
         return True
     args = get_args(ann)
     if args:
         non_none = [a for a in args if a is not type(None)]
-        return non_none == [str]
+        return len(non_none) == 1 and _is_str_like(non_none[0])
     return False
 
 

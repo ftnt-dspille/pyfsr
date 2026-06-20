@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from ._system import User
 from .base import BaseRecord
+from .types import PicklistIRI, RecordIRI
 
 
 class Alert(BaseRecord):
@@ -21,13 +23,13 @@ class Alert(BaseRecord):
     sourceId: str | None = None
     source: str | None = None
     description: str | None = None
-    type: str | None = None  # picklist IRI
-    severity: str | None = None  # picklist IRI
-    status: str | None = None  # picklist IRI
-    assignedTo: Any | None = None
+    type: PicklistIRI | None = None
+    severity: PicklistIRI | None = None
+    status: PicklistIRI | None = None
+    assignedTo: RecordIRI | User | None = None
     dueDate: int | None = None
     createUser: str | dict[str, Any] | None = None
-    modifyUser: str | None = None
+    modifyUser: RecordIRI | dict[str, Any] | None = None
     createDate: float | None = None
     modifyDate: float | None = None
     id: int | None = None
@@ -46,11 +48,11 @@ class Incident(BaseRecord):
     mitregroups: list[Any] | None = None
     mitretactics: list[Any] | None = None
     mitresoftware: list[Any] | None = None
-    state: str | None = None  # picklist IRI
+    state: PicklistIRI | None = None
     escalated: str | None = None  # picklist IRI (not a bool — uses Yes/No picklist)
     ticketID: str | None = None
     impactROI: int | None = None
-    wasPersonalDataAffected: str | None = None  # picklist IRI
+    wasPersonalDataAffected: PicklistIRI | None = None
     warrooms: list[Any] | None = None
     incRemainingRespSLA: int | None = None
     incRemainingAckSLA: int | None = None
@@ -66,13 +68,13 @@ class Incident(BaseRecord):
     filehash: str | None = None
     identificationDate: float | None = None
     impactAssessments: str | None = None
-    incidentLead: Any | None = None  # entity relationship (Person)
+    incidentLead: RecordIRI | User | None = None
     incidentsummary: str | None = None
     indicators: list[Any] | None = None
     metrics: str | None = None
     nextsteps: str | None = None
     persons: list[Any] | None = None
-    phase: str | None = None  # picklist IRI
+    phase: PicklistIRI | None = None
     incidentphase: str | None = None
     recoveryDate: float | None = None
     resDate: float | None = None
@@ -81,14 +83,14 @@ class Incident(BaseRecord):
     recoveryTime: int | None = None
     resolution: str | None = None
     resolveddate: float | None = None
-    resSla: str | None = None  # picklist IRI
+    resSla: PicklistIRI | None = None
     resPercentSla: int | None = None
     senderDomain: str | None = None
-    severity: str | None = None  # picklist IRI
+    severity: PicklistIRI | None = None
     sourceId: str | None = None
     targetAsset: str | None = None
     tasks: list[Any] | None = None
-    category: str | None = None  # picklist IRI
+    category: PicklistIRI | None = None
     ackDueDate: float | None = None
     responseDate: float | None = None
     otherLogs: str | None = None
@@ -107,7 +109,7 @@ class Incident(BaseRecord):
     affectedHost: str | None = None
     pcapFile: str | None = None
     ackDate: float | None = None
-    slaState: str | None = None  # picklist IRI
+    slaState: PicklistIRI | None = None
     slaPercentage: int | None = None
     aftermathDate: float | None = None
     assigneddate: float | None = None
@@ -115,7 +117,7 @@ class Incident(BaseRecord):
     containmentDate: float | None = None
     containmentTime: int | None = None
     dateOfIncident: float | None = None
-    deliveryVector: str | None = None  # picklist IRI
+    deliveryVector: PicklistIRI | None = None
     description: str | None = None
     destinationIP: str | None = None
     deviceUID: str | None = None
@@ -125,7 +127,7 @@ class Incident(BaseRecord):
     sourcedata: str | None = None
     sourceIP: str | None = None
     cVEs: list[Any] | None = None
-    status: str | None = None  # picklist IRI
+    status: PicklistIRI | None = None
     vulnerabilities: list[Any] | None = None
 
 
@@ -134,18 +136,18 @@ class Task(BaseRecord):
     Flags: ownable, taggable, queueable.
     """
 
-    submittedBy: Any | None = None  # entity relationship (Person)
+    submittedBy: RecordIRI | User | None = None
     name: str | None = None
     description: str | None = None
-    type: str | None = None  # picklist IRI
+    type: PicklistIRI | None = None
     dueBy: float | None = None
     assignedOnDate: float | None = None
     startDate: float | None = None
     completedOnDate: float | None = None
     actualMinutes: int | None = None
-    priority: str | None = None  # picklist IRI
-    status: str | None = None  # picklist IRI
-    assignedToPerson: Any | None = None  # entity relationship (Person)
+    priority: PicklistIRI | None = None
+    status: PicklistIRI | None = None
+    assignedToPerson: RecordIRI | User | None = None
     companies: list[Any] | None = None
     persons: list[Any] | None = None
     alerts: list[Any] | None = None
@@ -177,7 +179,7 @@ class Comment(BaseRecord):
     content: str | None = None
     tasks: list[Any] | None = None
     people: list[Any] | None = None
-    type: str | None = None  # picklist IRI
+    type: PicklistIRI | None = None
     alerts: list[Any] | None = None
     isDeleted: str | None = None
     assets: list[Any] | None = None

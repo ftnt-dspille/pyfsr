@@ -16,6 +16,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .types import RecordIRI
+
 
 class ApiResult(BaseModel):
     """Dict-compatible base for typed API result shapes.
@@ -267,7 +269,7 @@ class ImportJobResult(ApiResult):
     errorMessage: str | None = None
     logMessages: list[LogMessage] = Field(default_factory=list)
     options: dict[str, Any] | list = Field(default_factory=dict)
-    file: Any = None
+    file: RecordIRI | dict[str, Any] | None = None
 
 
 class ExportJobResult(ApiResult):
@@ -289,4 +291,4 @@ class ExportJobResult(ApiResult):
     progressPercent: int | None = None
     currentlyExporting: str | None = None
     type: str | None = None
-    file: Any = None
+    file: RecordIRI | dict[str, Any] | None = None
