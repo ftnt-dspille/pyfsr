@@ -266,7 +266,7 @@ class ImportJobResult(ApiResult):
     status: str | None = None
     errorMessage: str | None = None
     logMessages: list[LogMessage] = Field(default_factory=list)
-    options: dict[str, Any] = Field(default_factory=dict)
+    options: dict[str, Any] | list = Field(default_factory=dict)
     file: Any = None
 
 

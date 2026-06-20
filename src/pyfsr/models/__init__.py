@@ -40,11 +40,13 @@ from ._modules_admin import (
     StagingModelMetadata,
 )
 from ._system import (
+    Appliance,
     ContentHubConnector,
     ContentHubItem,
     FileRecord,
     Role,
     SolutionPack,
+    SolutionPackInstallResponse,
     Team,
     User,
     Widget,
@@ -97,6 +99,7 @@ __all__ = [
     "ExportJobResult",
     "LogMessage",
     # entity records
+    "Appliance",
     "Alert",
     "Incident",
     "Task",
@@ -110,6 +113,7 @@ __all__ = [
     "Role",
     "ContentHubItem",
     "SolutionPack",
+    "SolutionPackInstallResponse",
     "ContentHubConnector",
     "Widget",
     "MODEL_REGISTRY",

@@ -21,12 +21,12 @@ class Alert(BaseRecord):
     sourceId: str | None = None
     source: str | None = None
     description: str | None = None
-    type: Any | None = None
-    severity: Any | None = None
-    status: Any | None = None
+    type: str | None = None  # picklist IRI
+    severity: str | None = None  # picklist IRI
+    status: str | None = None  # picklist IRI
     assignedTo: Any | None = None
     dueDate: int | None = None
-    createUser: Any | None = None
+    createUser: str | dict[str, Any] | None = None
     modifyUser: str | None = None
     createDate: float | None = None
     modifyDate: float | None = None
@@ -46,11 +46,11 @@ class Incident(BaseRecord):
     mitregroups: list[Any] | None = None
     mitretactics: list[Any] | None = None
     mitresoftware: list[Any] | None = None
-    state: Any | None = None
-    escalated: Any | None = None
+    state: str | None = None  # picklist IRI
+    escalated: str | None = None  # picklist IRI (not a bool — uses Yes/No picklist)
     ticketID: str | None = None
     impactROI: int | None = None
-    wasPersonalDataAffected: Any | None = None
+    wasPersonalDataAffected: str | None = None  # picklist IRI
     warrooms: list[Any] | None = None
     incRemainingRespSLA: int | None = None
     incRemainingAckSLA: int | None = None
@@ -66,13 +66,13 @@ class Incident(BaseRecord):
     filehash: str | None = None
     identificationDate: float | None = None
     impactAssessments: str | None = None
-    incidentLead: Any | None = None
+    incidentLead: Any | None = None  # entity relationship (Person)
     incidentsummary: str | None = None
     indicators: list[Any] | None = None
     metrics: str | None = None
     nextsteps: str | None = None
     persons: list[Any] | None = None
-    phase: Any | None = None
+    phase: str | None = None  # picklist IRI
     incidentphase: str | None = None
     recoveryDate: float | None = None
     resDate: float | None = None
@@ -81,14 +81,14 @@ class Incident(BaseRecord):
     recoveryTime: int | None = None
     resolution: str | None = None
     resolveddate: float | None = None
-    resSla: Any | None = None
+    resSla: str | None = None  # picklist IRI
     resPercentSla: int | None = None
     senderDomain: str | None = None
-    severity: Any | None = None
+    severity: str | None = None  # picklist IRI
     sourceId: str | None = None
     targetAsset: str | None = None
     tasks: list[Any] | None = None
-    category: Any | None = None
+    category: str | None = None  # picklist IRI
     ackDueDate: float | None = None
     responseDate: float | None = None
     otherLogs: str | None = None
@@ -107,7 +107,7 @@ class Incident(BaseRecord):
     affectedHost: str | None = None
     pcapFile: str | None = None
     ackDate: float | None = None
-    slaState: Any | None = None
+    slaState: str | None = None  # picklist IRI
     slaPercentage: int | None = None
     aftermathDate: float | None = None
     assigneddate: float | None = None
@@ -115,7 +115,7 @@ class Incident(BaseRecord):
     containmentDate: float | None = None
     containmentTime: int | None = None
     dateOfIncident: float | None = None
-    deliveryVector: Any | None = None
+    deliveryVector: str | None = None  # picklist IRI
     description: str | None = None
     destinationIP: str | None = None
     deviceUID: str | None = None
@@ -125,7 +125,7 @@ class Incident(BaseRecord):
     sourcedata: str | None = None
     sourceIP: str | None = None
     cVEs: list[Any] | None = None
-    status: Any | None = None
+    status: str | None = None  # picklist IRI
     vulnerabilities: list[Any] | None = None
 
 
@@ -134,18 +134,18 @@ class Task(BaseRecord):
     Flags: ownable, taggable, queueable.
     """
 
-    submittedBy: Any | None = None
+    submittedBy: Any | None = None  # entity relationship (Person)
     name: str | None = None
     description: str | None = None
-    type: Any | None = None
+    type: str | None = None  # picklist IRI
     dueBy: float | None = None
     assignedOnDate: float | None = None
     startDate: float | None = None
     completedOnDate: float | None = None
     actualMinutes: int | None = None
-    priority: Any | None = None
-    status: Any | None = None
-    assignedToPerson: Any | None = None
+    priority: str | None = None  # picklist IRI
+    status: str | None = None  # picklist IRI
+    assignedToPerson: Any | None = None  # entity relationship (Person)
     companies: list[Any] | None = None
     persons: list[Any] | None = None
     alerts: list[Any] | None = None
@@ -177,7 +177,7 @@ class Comment(BaseRecord):
     content: str | None = None
     tasks: list[Any] | None = None
     people: list[Any] | None = None
-    type: Any | None = None
+    type: str | None = None  # picklist IRI
     alerts: list[Any] | None = None
     isDeleted: str | None = None
     assets: list[Any] | None = None
