@@ -33,9 +33,9 @@ import os
 
 from pyfsr import FortiSOAR
 
-FSR_BASE_URL = os.environ.get("FSR_BASE_URL", "10.99.249.205")
+FSR_BASE_URL = os.environ.get("FSR_BASE_URL", "fortisoar.example.com")
 FSR_USERNAME = os.environ.get("FSR_USERNAME", "csadmin")
-FSR_PASSWORD = os.environ.get("FSR_PASSWORD", "fortinet")
+FSR_PASSWORD = os.environ.get("FSR_PASSWORD", "changeme")
 
 CONNECTOR_NAME = os.environ.get("CONNECTOR_NAME", "code-snippet")
 TARGET_VERSION = os.environ.get("TARGET_VERSION", "")  # blank -> only export a backup

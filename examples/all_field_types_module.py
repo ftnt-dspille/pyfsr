@@ -17,7 +17,7 @@ Field types covered:
 
 Usage:
     python examples/all_field_types_module.py \\
-        --host 10.99.249.205 --user csadmin --password fortinet
+        --host fortisoar.example.com --user csadmin --password changeme
 
     # Keep the module after the run (skip auto-delete):
     python examples/all_field_types_module.py ... --keep

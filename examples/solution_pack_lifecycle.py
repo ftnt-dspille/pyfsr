@@ -30,7 +30,7 @@ fsr = config["fortisoar"]
 client = FortiSOAR(
     base_url=fsr["base_url"],
     username=fsr.get("username", "csadmin"),
-    password=fsr.get("password", "fortinet"),
+    password=fsr.get("password", "changeme"),
     verify_ssl=fsr.get("verify_ssl", True),
     suppress_insecure_warnings=True,
 )
