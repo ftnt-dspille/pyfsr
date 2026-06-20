@@ -966,6 +966,143 @@ class ModulesAdminAPI(BaseAPI):
         attr["formType"] = form_type or db_type
         return self._put_attributes(mod, mod["attributes"])
 
+    def remove_field(self, module: str, field: str, *, missing_ok: bool = False) -> dict[str, Any]:
+        """Remove a field from ``module`` in **staging** (staged until :meth:`publish`).
+
+        The inverse of :meth:`add_field`. Removing a **relationship** field also removes its
+        join behaviour on publish; removing the field that another module's relationship was
+        *inverse* to is the first step of :meth:`delete_module` (a dangling reverse field
+        fails the publish validator with "Attribute type '<module>' does not exist").
+
+        Raises ``ValueError`` if the field is absent, unless ``missing_ok`` is True.
+        """
+        mod = self.get_staging(module)
+        if not mod:
+            raise ValueError(f"module {module!r} not found in staging")
+        attrs = mod.get("attributes", [])
+        kept = [a for a in attrs if a.get("name") != field]
+        if len(kept) == len(attrs):
+            if missing_ok:
+                return mod
+            raise ValueError(f"field {field!r} not found on module {module!r}")
+        return self._put_attributes(mod, kept)
+
+    def find_relationship_referrers(self, module: str) -> list[tuple[str, list[str]]]:
+        """Return every *staged* module that has a relationship field pointing **at**
+        ``module``, as ``[(referrer_type, [field_names]), ...]``.
+
+        A relationship attribute stores its target module in ``type``; this scans all staged
+        modules for attributes whose ``type`` equals ``module``. These are the reverse fields
+        (e.g. the ``alerts`` field auto-created on a many-to-many target) that must be removed
+        **before** the module can be deleted — otherwise :meth:`publish` rejects the delete
+        synchronously ("Attribute type '<module>' does not exist as core or custom model
+        metadata"). Used by :meth:`delete_module`.
+        """
+        want = module.strip().lower()
+        data = self.client.get(_STAGING, params={**_ALL, **_REL})
+        out: list[tuple[str, list[str]]] = []
+        for m in (data or {}).get("hydra:member", []):
+            if str(m.get("type", "")).lower() == want:
+                continue  # the module's own fields are going away with it
+            hits = [
+                a.get("name")
+                for a in (m.get("attributes") or [])
+                if str(a.get("type", "")).lower() == want and a.get("name")
+            ]
+            if hits:
+                out.append((m.get("type"), hits))
+        return out
+
+    def delete_module(
+        self,
+        module: str,
+        *,
+        detach_relationships: bool = False,
+        publish: bool = True,
+        drop_view_templates: bool = True,
+        timeout: float = 600.0,
+        poll_interval: float = 10.0,
+    ) -> dict[str, Any]:
+        """Delete a module — the **only** API path that actually removes one, verified live.
+
+        FortiSOAR exposes **no** ``DELETE`` on the published endpoint
+        (``DELETE /api/3/model_metadatas/{uuid}`` → 405 *Method Not Allowed, Allow: GET*).
+        The real mechanism, confirmed against a live appliance, is:
+
+        1. **Detach reverse relationships.** Any other module with a relationship field
+           pointing at ``module`` (see :meth:`find_relationship_referrers`) must have that
+           field removed first, or the publish below fails synchronously with
+           "Attribute type '<module>' does not exist as core or custom model metadata".
+        2. **Discard the module's own staging draft** (``DELETE`` on staging), leaving a
+           *published-without-staging* record.
+        3. **Publish.** The appliance-wide migrate then drops the module: its
+           ``model_metadatas`` / ``staging_model_metadatas`` rows and ``attribute_metadatas``
+           (including the reverse fields detached in step 1) all disappear and the module
+           vanishes from the API.
+
+        ⚠️ **The physical Postgres tables are NOT dropped.** Verified: after the module is
+        gone from the API, its base table and its relationship/ownership **join** tables
+        (e.g. ``<table>``, ``<table>_<target>``, ``<table>_team``, ``<table>_actor``) remain
+        as orphans. pyfsr cannot drop them over the API. They are harmless **except** that a
+        future module reusing the same ``tableName`` collides on the leftover index names
+        (Postgres ``42P07``) and wedges that publish — reclaim them with a backend
+        ``DROP TABLE ... CASCADE`` if you intend to recreate the module. The returned
+        ``orphan_table`` names the base table for this cleanup.
+
+        Args:
+            detach_relationships: If reverse fields point at this module, remove them first.
+                Defaults to **False** — with referrers present the method **refuses** (raising
+                with the list) rather than silently editing other modules. Set True to proceed.
+            publish: If True (default) run the appliance-wide :meth:`publish` to commit the
+                delete. If False, the staging changes are staged but the module is not yet
+                gone (you must publish later).
+            drop_view_templates: Also delete the module's ``system_view_templates``.
+            timeout / poll_interval: Passed to :meth:`publish`.
+
+        Returns:
+            ``{"module", "detached": [...], "orphan_table": <str|None>,
+            "published": <publish result|None>}``.
+
+        Raises:
+            ValueError: if the module is not found.
+            FortiSOARException: if referrers exist and ``detach_relationships`` is False.
+        """
+        pub = self.get_published(module)
+        stg = self.get_staging(module)
+        if not pub and not stg:
+            raise ValueError(f"module {module!r} not found in staging or published")
+        source = pub or stg
+        orphan_table = source.get("tableName") or source.get("module") or module
+
+        referrers = self.find_relationship_referrers(module)
+        if referrers and not detach_relationships:
+            listing = "; ".join(f"{t}: {', '.join(fs)}" for t, fs in referrers)
+            raise FortiSOARException(
+                f"cannot delete {module!r}: other modules have relationship fields pointing "
+                f"at it ({listing}). Publishing the delete would fail validation. Pass "
+                f"detach_relationships=True to remove these reverse fields first, or remove "
+                f"them yourself with remove_field()."
+            )
+
+        detached: list[str] = []
+        for ref_type, fields in referrers:
+            for f in fields:
+                self.remove_field(ref_type, f, missing_ok=True)
+                detached.append(f"{ref_type}.{f}")
+
+        if stg:
+            self.discard_staging_draft(module, drop_view_templates=drop_view_templates)
+
+        result: dict[str, Any] = {
+            "module": module,
+            "detached": detached,
+            "orphan_table": orphan_table,
+            "published": None,
+        }
+        if publish:
+            result["published"] = self.publish(timeout=timeout, poll_interval=poll_interval)
+        return result
+
     def discard_staging_draft(self, module: str, *, drop_view_templates: bool = True) -> bool:
         """Discard a module's editable **staging draft** (``DELETE`` on staging). Returns
         False if no draft existed.
@@ -973,14 +1110,16 @@ class ModulesAdminAPI(BaseAPI):
         This is the same call the in-product editor's "Revert" fires for an unpublished
         module (``DELETE /api/3/staging_model_metadatas/{uuid}``).
 
-        ⚠️ **This only undoes an UNPUBLISHED draft — it is not a module delete.** FortiSOAR
-        has no supported delete-module operation:
+        ⚠️ **This only undoes the draft — on its own it is not a module delete.**
 
         - If the module was **never published**, this effectively removes it (no table was
           ever created).
-        - If the module **was published**, the live module and its Postgres table REMAIN —
-          you just orphan them by removing the draft, with **no API path to fully delete**
-          them (requires backend CLI/SQL). Prefer leaving the draft in place.
+        - If the module **was published**, discarding the draft leaves a
+          *published-without-staging* record. On the **next** :meth:`publish` that record is
+          deleted (the module disappears from the API) — so discarding a published module's
+          draft and then publishing **does** delete it. To do this safely (detach reverse
+          relationships first, and understand that the physical Postgres tables are left
+          orphaned), use :meth:`delete_module` rather than calling this directly.
 
         For a clean throwaway, do NOT publish it; then discarding the draft removes it.
 

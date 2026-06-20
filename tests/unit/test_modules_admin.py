@@ -357,3 +357,135 @@ def test_set_field_type_unknown_field_raises():
         assert False, "expected ValueError"
     except ValueError as e:
         assert "nope" in str(e)
+
+
+# --------------------------------------------------------------- delete_module
+
+
+class DeleteClient:
+    """Fake client modelling staging/published lists for delete_module tests.
+
+    ``referrer`` toggles whether another module ('alerts') has a relationship field
+    pointing at the target ('widgets').
+    """
+
+    def __init__(self, *, published=True, staging=True, referrer=False):
+        self.calls = []
+        self._published = published
+        self._staging = staging
+        widget_rec = {
+            "uuid": "w-1",
+            "type": "widgets",
+            "module": "widgets",
+            "tableName": "widgets",
+            "attributes": [{"name": "name", "type": "string"}],
+        }
+        alerts_attrs = [{"name": "name", "type": "string"}]
+        if referrer:
+            alerts_attrs.append({"name": "widgets", "type": "widgets", "formType": "manyToMany"})
+        self._alerts = {
+            "uuid": "a-1",
+            "type": "alerts",
+            "module": "alerts",
+            "tableName": "alerts",
+            "attributes": alerts_attrs,
+        }
+        self._widget = widget_rec
+
+    def get(self, endpoint, params=None, **kw):
+        self.calls.append(("GET", endpoint, params))
+        if endpoint.endswith("/w-1"):
+            return self._widget
+        if endpoint.endswith("/a-1"):
+            return self._alerts
+        members = [self._alerts]
+        if endpoint.startswith("/api/3/staging_model_metadatas") and self._staging:
+            members = [self._widget, self._alerts]
+        if endpoint.startswith("/api/3/model_metadatas") and self._published:
+            members = [self._widget, self._alerts]
+        elif endpoint.startswith("/api/3/model_metadatas"):
+            members = [self._alerts]
+        return {"hydra:member": members}
+
+    def put(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("PUT", endpoint, data))
+        return {"ok": True, **(data or {})}
+
+    def delete(self, endpoint, params=None, **kw):
+        self.calls.append(("DELETE", endpoint, params))
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("POST", endpoint, data))
+        return {"uuid": "x", **(data or {})}
+
+
+def test_remove_field_drops_attribute_and_puts_remainder():
+    c = RecordingClient()
+    ModulesAdminAPI(c).remove_field("widgets", "payload")
+    put = next(call for call in c.calls if call[0] == "PUT")
+    names = [a["name"] for a in put[2]["attributes"]]
+    assert names == ["name"]
+
+
+def test_remove_field_missing_raises_unless_ok():
+    c = RecordingClient()
+    api = ModulesAdminAPI(c)
+    try:
+        api.remove_field("widgets", "ghost")
+        assert False, "expected ValueError"
+    except ValueError as e:
+        assert "ghost" in str(e)
+    # missing_ok swallows it
+    api.remove_field("widgets", "ghost", missing_ok=True)
+
+
+def test_find_relationship_referrers_locates_reverse_field():
+    c = DeleteClient(referrer=True)
+    refs = ModulesAdminAPI(c).find_relationship_referrers("widgets")
+    assert refs == [("alerts", ["widgets"])]
+
+
+def test_find_relationship_referrers_empty_when_none():
+    c = DeleteClient(referrer=False)
+    assert ModulesAdminAPI(c).find_relationship_referrers("widgets") == []
+
+
+def test_delete_module_refuses_when_referrers_and_no_detach():
+    from pyfsr.exceptions import FortiSOARException
+
+    c = DeleteClient(referrer=True)
+    api = ModulesAdminAPI(c)
+    try:
+        api.delete_module("widgets", publish=False)
+        assert False, "expected refusal"
+    except FortiSOARException as e:
+        assert "detach_relationships=True" in str(e)
+        assert "alerts" in str(e)
+    # nothing was deleted
+    assert not any(call[0] == "DELETE" for call in c.calls)
+
+
+def test_delete_module_detaches_then_deletes(monkeypatch):
+    c = DeleteClient(referrer=True)
+    api = ModulesAdminAPI(c)
+    published = {"sentinel": "published"}
+    monkeypatch.setattr(api, "publish", lambda **kw: published)
+    # avoid view-template lookups during discard
+    monkeypatch.setattr(api, "get_view_templates", lambda module: [])
+
+    res = api.delete_module("widgets", detach_relationships=True)
+    assert res["detached"] == ["alerts.widgets"]
+    assert res["orphan_table"] == "widgets"
+    assert res["published"] is published
+    # the reverse field was PUT-removed from alerts, and the target staging DELETEd
+    assert any(call[0] == "PUT" and "a-1" in call[1] for call in c.calls)
+    assert any(call[0] == "DELETE" and "w-1" in call[1] for call in c.calls)
+
+
+def test_delete_module_not_found_raises():
+    c = DeleteClient(published=False, staging=False)
+    try:
+        ModulesAdminAPI(c).delete_module("widgets", publish=False)
+        assert False, "expected ValueError"
+    except ValueError as e:
+        assert "not found" in str(e)
