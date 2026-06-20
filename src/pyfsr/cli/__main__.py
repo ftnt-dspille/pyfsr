@@ -10,6 +10,7 @@ import argparse
 import sys
 
 from . import _output
+from . import playbook as playbook_cmds
 from .appliance import db as db_cmds
 from .appliance import info as info_cmds
 from .appliance import logs as logs_cmds
@@ -178,6 +179,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_logs_scan.add_argument("--minutes", type=int, default=30, help="window (default 30)")
     p_logs_scan.set_defaults(func=cmd_logs_scan)
 
+    # --- playbook group (top-level; API-based, distinct from the SSH appliance group) ---
+    p_pb = sub.add_parser("playbook", help="author playbooks in YAML and deploy via the API")
+    pbsub = p_pb.add_subparsers(dest="pb_command", required=True)
+    playbook_cmds.build_subparser(pbsub)
+
     return parser
 
 
@@ -331,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (TransportError, ValueError, PermissionError) as exc:
+    except (TransportError, ValueError, PermissionError, ImportError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

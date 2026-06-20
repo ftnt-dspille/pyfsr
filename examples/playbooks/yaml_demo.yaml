@@ -1,0 +1,26 @@
+# A minimal playbook authored entirely in YAML.
+#
+# Compile it offline with:
+#     pyfsr playbook compile examples/playbooks/yaml_demo.yaml
+# or deploy it to an appliance with:
+#     pyfsr playbook deploy examples/playbooks/yaml_demo.yaml --replace
+#
+# See examples/deploy_playbook_from_yaml.py for the equivalent Python API flow.
+
+collection: pyfsr YAML Demo
+description: Authored in YAML, deployed with pyfsr.
+visible: true
+
+playbooks:
+  - name: pyfsr YAML Demo - Stamp Result
+    is_active: false
+    steps:
+      - name: Start
+        type: start
+        next: Set Result
+
+      - name: Set Result
+        type: set_variable
+        vars:
+          greeting: hello from pyfsr
+          source: yaml

@@ -2,13 +2,13 @@
 
 Repeatable, idempotent settings pass for a fresh appliance. Everything here is
 REST-driven via pyfsr EXCEPT setting the admin password to a non-compliant
-value like "fortinet" — FortiSOAR's password-complexity check rejects that on
+value like "changeme" — FortiSOAR's password-complexity check rejects that on
 every REST path, so it must be written directly to the DAS user table over the
 appliance shell (see PASSWORD note at the bottom).
 
 Usage:
     python examples/tune_new_instance.py fortisoar.example.com --port 13002 \
-        --user csadmin --password <redacted>
+        --user csadmin --password changeme
 """
 
 from __future__ import annotations
@@ -54,11 +54,11 @@ def main() -> None:
     )
     tune(client)
     print("\nDone. Note: setting the admin password to a non-compliant value")
-    print("(e.g. 'fortinet') is NOT possible over REST — run on the appliance:")
+    print("(e.g. 'changeme') is NOT possible over REST — run on the appliance:")
     print(r"""
   # peppered-bcrypt hash must come from the box's csbcrypt (fixed global pepper):
   HASH=$(sudo -u cyops-auth /opt/cyops-auth/.env/bin/python3 -c \
-    "import utilities.csbcrypt as b; print(b.CSBcrypt().get_hash('fortinet'))")
+    "import utilities.csbcrypt as b; print(b.CSBcrypt().get_hash('changeme'))")
   sudo -u postgres psql -d das -c \
     "UPDATE users SET password='$HASH' WHERE login_id='csadmin';"
   # then clear any lockout so the new password takes effect immediately:

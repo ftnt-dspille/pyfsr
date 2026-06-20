@@ -15,7 +15,7 @@ What this does, all through ``client.ai``:
 
 Configure via env (or edit the constants below):
   FSR_BASE_URL, FSR_USERNAME, FSR_PASSWORD         -> FortiSOAR appliance
-  FORTISIEM_BASE_URL                               -> e.g. https://fortisoar.example.com:13001/phoenix
+  FORTISIEM_BASE_URL                               -> e.g. https://fortisiem.example.com:13001/phoenix
   FORTISIEM_CLIENT_ID, FORTISIEM_CLIENT_SECRET     -> FortiSIEM API token values
 """
 
@@ -29,9 +29,9 @@ from pyfsr import FortiSOAR
 
 FSR_BASE_URL = os.environ.get("FSR_BASE_URL", "fortisoar.example.com:13002")
 FSR_USERNAME = os.environ.get("FSR_USERNAME", "csadmin")
-FSR_PASSWORD = os.environ.get("FSR_PASSWORD", "<redacted>")
+FSR_PASSWORD = os.environ.get("FSR_PASSWORD", "changeme")
 
-FSIEM_BASE = os.environ.get("FORTISIEM_BASE_URL", "https://fortisoar.example.com:13001/phoenix").rstrip("/")
+FSIEM_BASE = os.environ.get("FORTISIEM_BASE_URL", "https://fortisiem.example.com:13001/phoenix").rstrip("/")
 FSIEM_CLIENT_ID = os.environ.get("FORTISIEM_CLIENT_ID", "2e6920c8-a148-4a2e-b592-65a7c3c2418c")
 FSIEM_CLIENT_SECRET = os.environ.get("FORTISIEM_CLIENT_SECRET", "")
 

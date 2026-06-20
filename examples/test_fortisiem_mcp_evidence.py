@@ -65,7 +65,7 @@ def main() -> None:
         base_url=os.environ.get("FSR_BASE_URL", "fortisoar.example.com:13002"),
         auth=(
             os.environ.get("FSR_USERNAME", "csadmin"),
-            os.environ.get("FSR_PASSWORD", "<redacted>"),
+            os.environ.get("FSR_PASSWORD", "changeme"),
         ),
         verify_ssl=False,
         suppress_insecure_warnings=True,

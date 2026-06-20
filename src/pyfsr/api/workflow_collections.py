@@ -28,8 +28,13 @@ Example::
     client.workflow_collections.create_collections([...])            # re-push many
     client.workflow_collections.import_export(data)           # replay an export dict
     client.workflow_collections.import_from_file("export.json")
+    client.workflow_collections.import_from_yaml("pb.yaml")    # compile YAML then import
     client.workflow_collections.update("<uuid>", name="Renamed")
     client.workflow_collections.delete("<uuid>")              # hard delete, no recycle bin
+
+``import_from_yaml`` (optional ``pyfsr[playbooks]`` compiler) authors a playbook
+from YAML: it compiles the YAML to the same export envelope and replays it through
+``import_export``. Use ``compile_yaml`` to compile without deploying.
 """
 
 from __future__ import annotations
@@ -204,6 +209,62 @@ class WorkflowCollectionsAPI(BaseAPI):
             raise ValueError(f"export file is not valid JSON: {path}: {exc}") from exc
         return self.import_export(data, replace=replace)
 
+    def compile_yaml(self, source: str | Path, *, db_path: str | Path | None = None):
+        """Compile playbook YAML into the FortiSOAR import envelope (no network).
+
+        ``source`` is either YAML text or a path (``str``/``Path``) to a ``.yaml``/
+        ``.yml`` file. Returns a :class:`~pyfsr.authoring.CompiledPlaybook` whose
+        ``fsr_json`` is ready for :meth:`import_export`; inspect ``ok``/``errors``/
+        ``warnings`` before deploying. Pass ``db_path`` to override the reference
+        catalog (defaults to the packaged one).
+
+        Requires the optional compiler — install with ``pip install
+        "pyfsr[playbooks]"`` (raises
+        :class:`~pyfsr.authoring.PlaybooksExtraNotInstalled` otherwise).
+        """
+        from ..authoring import compile_playbook_yaml
+
+        text = _read_yaml_source(source)
+        return compile_playbook_yaml(text, db_path=db_path)
+
+    def import_from_yaml(
+        self,
+        source: str | Path,
+        *,
+        replace: bool = False,
+        db_path: str | Path | None = None,
+        strict_warnings: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Compile playbook YAML and import the result onto the appliance.
+
+        Compiles ``source`` (YAML text or a ``.yaml`` path) via :meth:`compile_yaml`
+        then hands the envelope to :meth:`import_export` — the same write path the
+        UI's import uses, with its recycle-bin and clean-key handling.
+
+        ``replace=True`` hard-deletes any existing collection whose uuid matches
+        before re-creating it. ``strict_warnings=True`` treats compiler warnings as
+        blocking. ``db_path`` overrides the reference catalog.
+
+        Raises:
+            ValueError: if compilation produces blocking errors (or warnings when
+                ``strict_warnings`` is set).
+            pyfsr.authoring.PlaybooksExtraNotInstalled: if the compiler extra is
+                not installed.
+
+        Returns:
+            List of created collection records (one per compiled collection).
+        """
+        result = self.compile_yaml(source, db_path=db_path)
+        blocking = list(result.blocking)
+        if strict_warnings:
+            blocking += result.warnings
+        if blocking or not result.fsr_json:
+            from ..authoring import format_diagnostic
+
+            detail = "; ".join(format_diagnostic(d) for d in blocking) or "no envelope produced"
+            raise ValueError(f"playbook YAML failed to compile: {detail}")
+        return self.import_export(result.fsr_json, replace=replace)
+
     def restore(self, uuid: str) -> dict[str, Any]:
         """Restore a soft-deleted collection from the recycle bin.
 
@@ -250,3 +311,19 @@ def _require_uuid(uuid: str, op: str) -> str:
     if not isinstance(uuid, str) or not uuid.strip():
         raise ValueError(f"{op}() requires a non-empty collection uuid")
     return uuid.strip()
+
+
+def _read_yaml_source(source: str | Path) -> str:
+    """Return YAML text from ``source`` — a ``Path``, a ``*.yaml``/``*.yml`` path
+    string (read from disk), or raw YAML text (returned as-is)."""
+    if isinstance(source, Path):
+        return source.read_text(encoding="utf-8")
+    if isinstance(source, str):
+        stripped = source.strip()
+        if "\n" not in stripped and stripped.lower().endswith((".yaml", ".yml")):
+            path = Path(source)
+            if path.exists():
+                return path.read_text(encoding="utf-8")
+            raise FileNotFoundError(f"YAML file not found: {source}")
+        return source
+    raise TypeError(f"expected YAML text or a path, got {type(source).__name__}")
