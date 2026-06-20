@@ -4,7 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-20
+
 ### Added
+- `modules_admin`: verified `delete_module()` (discard-staging + relationship-referrer
+  detach, then publish) and `remove_field()`, plus a relationship-referrer scan; correct
+  `uniqueConstraint` object shape on field create.
+- `import_config` / `export_config`: treat config import as a publish — 503 tolerance
+  during migrate, refusal on risky (table-rename) changes, and post-import verification.
+- Typed `solution_packs` install/uninstall, an `Appliance` actor, and picklist IRI
+  tightening; semantic IRI NewTypes (`PicklistIRI` / `RecordIRI`) across the records
+  surface.
+- Roles + import-config APIs and an expanded connector/playbook/collection surface;
+  `find_installed_connectors()` partial-match search; `pack_connector` bundler with
+  connector-config validation.
 - Query DSL: pydantic-backed `QueryBody`/`FilterLeaf`/`FilterGroup`/`SortSpec` models
   (`Query.model()` returns the typed body), an operator knowledge base
   (`OPERATOR_SPECS` with per-operator arity/category) that validates value shape and
