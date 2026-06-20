@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .base import BaseRecord
+from .types import PicklistIRI, RecordIRI
 
 
 class Agent(BaseRecord):
@@ -21,9 +22,9 @@ class Agent(BaseRecord):
     description: str | None = None
     created: str | None = None
     modified: str | None = None
-    router: Any = None  # Router entity relationship — IRI or expanded dict
-    installerType: str | None = None  # picklist IRI /api/3/picklists/...
-    configurationHealth: str | None = None  # picklist IRI /api/3/picklists/...
+    router: RecordIRI | dict[str, Any] | None = None
+    installerType: PicklistIRI | None = None
+    configurationHealth: PicklistIRI | None = None
 
 
 class AgentConnectorStatus(BaseRecord):

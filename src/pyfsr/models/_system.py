@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from .base import BaseRecord
+from .types import PicklistIRI
 
 # Relationship / embedded-object fields (createUser, modifyUser, priority, ...)
 # come back as expanded dicts; keep them ``Any`` so the model never breaks.
@@ -42,8 +43,8 @@ class Workflow(BaseRecord):
     lastModifyDate: int | None = None
     collection: str | None = None
     triggerStep: str | None = None
-    priority: str | None = None  # picklist IRI
-    playbookOrigin: str | None = None  # picklist IRI
+    priority: PicklistIRI | None = None
+    playbookOrigin: PicklistIRI | None = None
     isEditable: bool | None = None
     isPrivate: bool | None = None
     createUser: str | dict[str, Any] | None = None

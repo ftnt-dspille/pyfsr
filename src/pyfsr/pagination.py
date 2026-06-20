@@ -14,12 +14,14 @@ List and query endpoints return::
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Generic, TypeVar
 
 MEMBER_KEY = "hydra:member"
 TOTAL_KEY = "hydra:totalItems"
 VIEW_KEY = "hydra:view"
+
+T = TypeVar("T")
 
 
 def extract_members(response: Any) -> list[Any]:
@@ -46,11 +48,17 @@ def extract_total(response: Any) -> int | None:
 
 
 @dataclass
-class HydraPage:
-    """A single page of a Hydra collection."""
+class HydraPage(Generic[T]):
+    """A single page of a Hydra collection.
+
+    ``T`` is the element type — ``BaseRecord`` subclass when parsed by
+    :class:`~pyfsr.records.RecordSet`, ``dict[str, Any]`` when raw.
+    ``from_response`` always produces ``HydraPage[Any]``; ``RecordSet``
+    narrows the type after parsing members.
+    """
 
     #: The records on this page.
-    members: list[Any]
+    members: list[T]
     #: ``hydra:totalItems`` across all pages (``None`` if absent).
     total: int | None
     #: 1-based page number this envelope represents.
@@ -58,10 +66,12 @@ class HydraPage:
     #: Page size requested (``None`` if unknown).
     limit: int | None
     #: The full decoded response envelope.
-    raw: dict[str, Any]
+    raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_response(cls, response: Any, page: int = 1, limit: int | None = None) -> HydraPage:
+    def from_response(
+        cls, response: Any, page: int = 1, limit: int | None = None
+    ) -> HydraPage[Any]:
         return cls(
             members=extract_members(response),
             total=extract_total(response),
@@ -89,7 +99,7 @@ class HydraPage:
             return self.count >= self.limit
         return False
 
-    def __iter__(self) -> Iterator[Any]:
+    def __iter__(self) -> Iterator[T]:
         return iter(self.members)
 
     def __len__(self) -> int:

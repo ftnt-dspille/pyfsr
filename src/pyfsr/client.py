@@ -4,7 +4,7 @@ import logging
 import os
 import time
 import warnings
-from typing import Any
+from typing import Any, Literal, overload
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
@@ -42,6 +42,18 @@ from .auth.api_key import APIKeyAuth
 from .auth.base import BaseAuth
 from .auth.user_pass import UserPasswordAuth
 from .exceptions import handle_api_error
+from .models import (
+    Alert,
+    Comment,
+    FileRecord,
+    Incident,
+    Role,
+    Task,
+    Team,
+    User,
+    Workflow,
+    WorkflowCollection,
+)
 from .records import RecordSet
 from .utils.file_operations import FileOperations
 
@@ -516,7 +528,35 @@ class FortiSOAR:
         """
         return self.post(f"/api/query/{module}", data=query_data)
 
-    def records(self, module: str, *, typed: bool = True) -> RecordSet:
+    @overload
+    def records(self, module: Literal["alerts"], *, typed: bool = ...) -> RecordSet[Alert]: ...
+    @overload
+    def records(
+        self, module: Literal["incidents"], *, typed: bool = ...
+    ) -> RecordSet[Incident]: ...
+    @overload
+    def records(self, module: Literal["tasks"], *, typed: bool = ...) -> RecordSet[Task]: ...
+    @overload
+    def records(self, module: Literal["comments"], *, typed: bool = ...) -> RecordSet[Comment]: ...
+    @overload
+    def records(
+        self, module: Literal["workflows"], *, typed: bool = ...
+    ) -> RecordSet[Workflow]: ...
+    @overload
+    def records(
+        self, module: Literal["workflow_collections"], *, typed: bool = ...
+    ) -> RecordSet[WorkflowCollection]: ...
+    @overload
+    def records(self, module: Literal["files"], *, typed: bool = ...) -> RecordSet[FileRecord]: ...
+    @overload
+    def records(self, module: Literal["people"], *, typed: bool = ...) -> RecordSet[User]: ...
+    @overload
+    def records(self, module: Literal["teams"], *, typed: bool = ...) -> RecordSet[Team]: ...
+    @overload
+    def records(self, module: Literal["roles"], *, typed: bool = ...) -> RecordSet[Role]: ...
+    @overload
+    def records(self, module: str, *, typed: bool = ...) -> RecordSet[Any]: ...
+    def records(self, module: str, *, typed: bool = True) -> RecordSet[Any]:
         """Return a :class:`~pyfsr.records.RecordSet` for generic CRUD on ``module``.
 
         Reads come back as typed models (Alert/Incident/Task/Comment, else a

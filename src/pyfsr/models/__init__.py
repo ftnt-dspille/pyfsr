@@ -55,6 +55,7 @@ from ._system import (
     WorkflowRun,
 )
 from .base import BaseRecord
+from .types import PicklistIRI, RecordIRI
 
 # Module (collection) name → model. Keys are the FortiSOAR plural module slugs
 # used in ``/api/3/<module>`` paths. The workflow entries are stable,
@@ -82,6 +83,9 @@ __all__ = [
     # base classes
     "BaseRecord",
     "ApiResult",
+    # IRI NewTypes
+    "PicklistIRI",
+    "RecordIRI",
     # agent records
     "Agent",
     "AgentConnectorStatus",

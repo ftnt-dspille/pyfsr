@@ -1,3 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..client import FortiSOAR
+
+
 class BaseAPI:
     """Base API class for all module-specific APIs.
 
@@ -6,5 +14,5 @@ class BaseAPI:
     ``delete`` methods.
     """
 
-    def __init__(self, client):
-        self.client = client
+    def __init__(self, client: FortiSOAR) -> None:
+        self.client: FortiSOAR = client

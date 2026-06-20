@@ -14,6 +14,7 @@ from typing import Any
 from pydantic import Field
 
 from .base import BaseRecord
+from .types import RecordIRI
 
 # ---------------------------------------------------------------------------
 # Attribute (field) models
@@ -100,7 +101,7 @@ class AttributeMetadata(BaseRecord):
     imported_by: list[Any] = Field(default_factory=list, alias="importedBy")
 
     # Parent staging module — IRI string or condensed object
-    sattrib: str | dict[str, Any] | None = None
+    sattrib: RecordIRI | dict[str, Any] | None = None
 
     @property
     def label(self) -> str | None:
