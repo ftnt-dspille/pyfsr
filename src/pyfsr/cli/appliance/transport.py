@@ -28,6 +28,22 @@ DEFAULT_TIMEOUT = 60.0
 _ONBOX_MARKER = "/opt/cyops"
 
 
+def _sudo_wrap(argv: list[str], env: dict[str, str] | None) -> list[str]:
+    """Wrap ``argv`` in ``sudo -S`` for privileged appliance commands (``csadm``,
+    ``rabbitmqctl``, ``journalctl``, …).
+
+    ``-S`` reads the password from stdin; ``-p ''`` suppresses the prompt so it
+    doesn't pollute captured stderr. Because sudo runs with ``env_reset`` by
+    default, any ``env`` vars the caller needs are re-applied **inside** the
+    privileged context via a leading ``env K=V`` so they actually reach the
+    target command (a plain shell ``export`` would be stripped by sudo).
+    """
+    prefix = ["sudo", "-S", "-p", ""]
+    if env:
+        prefix += ["env", *[f"{k}={v}" for k, v in env.items()]]
+    return [*prefix, *argv]
+
+
 @dataclass
 class CommandResult:
     """Outcome of a single transport command."""
@@ -44,10 +60,7 @@ class CommandResult:
     def check(self) -> CommandResult:
         """Raise :class:`TransportError` unless the command exited 0."""
         if not self.ok:
-            raise TransportError(
-                f"command failed ({self.returncode}): "
-                f"{shlex.join(self.argv)}\n{self.stderr.strip()}"
-            )
+            raise TransportError(f"command failed ({self.returncode}): {shlex.join(self.argv)}\n{self.stderr.strip()}")
         return self
 
 
@@ -94,13 +107,16 @@ class LocalTransport(Transport):
         sudo: bool = False,
     ) -> CommandResult:
         full_env = {**os.environ, **(env or {})}
-        cmd = list(argv)
         stdin = input_text
         if sudo:
-            cmd = ["sudo", "-S", *cmd]
-            # -S reads the password from stdin; prepend it if we have one.
+            cmd = _sudo_wrap(list(argv), env)
+            # -S reads the password from stdin; prepend it if we have one. (With
+            # NOPASSWD sudo this extra line is ignored by our env/csadm targets,
+            # which don't read stdin.)
             if self.sudo_password is not None:
                 stdin = f"{self.sudo_password}\n{input_text or ''}"
+        else:
+            cmd = list(argv)
         try:
             proc = subprocess.run(
                 cmd,
@@ -173,9 +189,7 @@ class SSHTransport(Transport):
         base = ["ssh", *opts, f"{self.user}@{self.host}"]
         if self.password and not self.key_path:
             if not shutil.which("sshpass"):
-                raise TransportError(
-                    "password auth needs `sshpass` on PATH (or use --key/an agent key)"
-                )
+                raise TransportError("password auth needs `sshpass` on PATH (or use --key/an agent key)")
             # Pass the password via env (-e) so it never lands in argv.
             return ["sshpass", "-e", *base]
         return base
@@ -189,15 +203,15 @@ class SSHTransport(Transport):
         timeout: float = DEFAULT_TIMEOUT,
         sudo: bool = False,
     ) -> CommandResult:
-        # Build the remote command string: export env, then run.
-        parts: list[str] = []
-        for k, v in (env or {}).items():
-            parts.append(f"export {k}={shlex.quote(v)};")
-        inner = shlex.join(argv)
+        # Build the remote command string. For sudo, _sudo_wrap re-applies env
+        # *inside* the privileged context (sudo's env_reset strips a shell
+        # export); for non-sudo we export env into the remote shell so it reaches
+        # the command (e.g. PGPASSWORD for psql).
         if sudo:
-            inner = f"sudo -S {inner}"
-        parts.append(inner)
-        remote_cmd = " ".join(parts)
+            remote_cmd = shlex.join(_sudo_wrap(list(argv), env))
+        else:
+            exports = "".join(f"export {k}={shlex.quote(v)}; " for k, v in (env or {}).items())
+            remote_cmd = exports + shlex.join(argv)
 
         local_env = dict(os.environ)
         if self.password and not self.key_path:

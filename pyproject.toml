@@ -1,6 +1,6 @@
 [project]
 name = "pyfsr"
-dynamic = ["version"]
+version = "0.6.1"
 description = "Python implementation of the FortiSOAR REST API"
 readme = "README.md"
 authors = [
@@ -31,7 +31,7 @@ test = [
     "pytest",
     "pytest-cov",
     "pytest-mock",
-    "mcp>=1.0",  # exercise the optional pyfsr[mcp] server in CI
+    "mcp>=1.0", # exercise the optional pyfsr[mcp] server in CI
 ]
 
 docs = [
@@ -60,22 +60,6 @@ dev = [
 [project.scripts]
 pyfsr = "pyfsr.cli.__main__:main"
 
-[build-system]
-requires = ["hatchling", "hatch-vcs"]
-build-backend = "hatchling.build"
-
-# Version is derived from git tags (vX.Y.Z) — single source of truth.
-# Release flow: commit on main -> `git tag vX.Y.Z` -> GitHub Release -> PyPI.
-[tool.hatch.version]
-source = "vcs"
-
-# Only honor clean release tags (vX.Y.Z); ignore stray tags like
-# "v0.2.4-tag" / "v0.2.2-fix" that aren't valid PEP 440 versions.
-[tool.hatch.version.raw-options]
-tag_regex = '^v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)$'
-
-[tool.hatch.build.hooks.vcs]
-version-file = "src/pyfsr/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pyfsr"]
@@ -85,7 +69,7 @@ packages = ["src/pyfsr"]
 artifacts = ["src/pyfsr/resources/*.json.gz"]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py310"
 src = ["src", "tests"]
 

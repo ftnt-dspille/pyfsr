@@ -205,6 +205,9 @@ class RecordSet(Generic[T]):
     ) -> HydraPage[Any]:
         """List records via ``GET /api/3/<module>`` (one page).
 
+        For structured filtering use :meth:`filter` (or :meth:`query` with a
+        :class:`~pyfsr.query.Query`); for free-text search use :meth:`search`;
+        to page through all results lazily use :meth:`iterate`.
         Pass ``show_deleted=True`` to include recycle-bin records.
         """
         query = dict(params or {})
@@ -235,9 +238,7 @@ class RecordSet(Generic[T]):
         query = dict(params or {})
         if term:
             query["$search"] = term
-        page_obj = self.list(
-            limit=limit, page=page, show_deleted=show_deleted, params=query, raw=raw
-        )
+        page_obj = self.list(limit=limit, page=page, show_deleted=show_deleted, params=query, raw=raw)
         if fields or summary:
             return project(page_obj, fields=fields, summary=summary)
         return page_obj
@@ -551,6 +552,108 @@ class RecordSet(Generic[T]):
         body["deletedAt"] = None
         restored = self.client.put(path, data=body, params={"$showDeleted": "true"})
         return self._parse(restored, raw=raw)
+
+    # -- convenience shortcuts ---------------------------------------------
+
+    def filter(
+        self,
+        query: Query | dict[str, Any],
+        *,
+        page: int = 1,
+        show_deleted: bool = False,
+        raw: bool = False,
+        fields: list[str] | tuple[str, ...] | None = None,
+        summary: bool = False,
+    ) -> Any:
+        """Alias for :meth:`query` — filter records with a structured query.
+
+        Example::
+
+            from pyfsr import Query
+            open_alerts = client.records("alerts").filter(
+                Query().eq("status.itemValue", "Open").sort("createDate", "DESC").limit(50)
+            )
+            for alert in open_alerts:
+                print(alert.name, alert.severity)
+        """
+        return self.query(query, page=page, show_deleted=show_deleted, raw=raw, fields=fields, summary=summary)
+
+    def first(
+        self,
+        query: Query | dict[str, Any] | None = None,
+        *,
+        show_deleted: bool = False,
+        raw: bool = False,
+    ) -> T | dict[str, Any] | None:
+        """Return the first matching record, or ``None`` if there are none.
+
+        With no ``query``, returns the first record in the default server order.
+        Pass a :class:`~pyfsr.query.Query` to filter and/or sort first::
+
+            latest = client.records("alerts").first(
+                Query().eq("status.itemValue", "Open").sort("createDate", "DESC")
+            )
+        """
+        if query is None:
+            page = self.list(limit=1, show_deleted=show_deleted, raw=raw)
+        else:
+            if isinstance(query, Query):
+                query = query.limit(1)
+            else:
+                query = dict(query)
+                query["limit"] = 1
+            page = self.query(query, show_deleted=show_deleted, raw=raw)
+        return page.members[0] if page.members else None
+
+    def count(
+        self,
+        query: Query | dict[str, Any] | None = None,
+        *,
+        show_deleted: bool = False,
+    ) -> int | None:
+        """Return ``hydra:totalItems`` for the module (or a filtered subset).
+
+        Fetches a single-record page (``limit=1``) — cheap, just the envelope
+        metadata. Returns ``None`` when the server omits ``hydra:totalItems``.
+
+        Example::
+
+            n = client.records("alerts").count(Query().eq("status.itemValue", "Open"))
+        """
+        if query is None:
+            page = self.list(limit=1, show_deleted=show_deleted, raw=True)
+        else:
+            if isinstance(query, Query):
+                query = query.limit(1)
+            else:
+                query = dict(query)
+                query["limit"] = 1
+            page = self.query(query, show_deleted=show_deleted, raw=True)
+        return page.total
+
+    def exists(
+        self,
+        query: Query | dict[str, Any] | None = None,
+        *,
+        show_deleted: bool = False,
+    ) -> bool:
+        """Return ``True`` if at least one matching record exists.
+
+        Uses a ``limit=1`` fetch — avoids pulling unnecessary data::
+
+            if client.records("alerts").exists(Query().eq("sourceId", sid)):
+                ...
+        """
+        if query is None:
+            page = self.list(limit=1, show_deleted=show_deleted, raw=True)
+        else:
+            if isinstance(query, Query):
+                query = query.limit(1)
+            else:
+                query = dict(query)
+                query["limit"] = 1
+            page = self.query(query, show_deleted=show_deleted, raw=True)
+        return bool(page.members)
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         return f"RecordSet(module={self.module!r})"

@@ -7,7 +7,7 @@ See ``docs/plans/APPLIANCE_CLI_PLAN.md`` for the full intended surface.
 
 from __future__ import annotations
 
-from . import db, facts, info, transport
+from . import db, facts, info, logs, mq, service, transport
 from .facts import Facts
 from .transport import (
     CommandResult,
@@ -22,6 +22,9 @@ __all__ = [
     "db",
     "facts",
     "info",
+    "logs",
+    "mq",
+    "service",
     "transport",
     "Facts",
     "Transport",

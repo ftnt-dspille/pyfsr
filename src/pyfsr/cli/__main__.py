@@ -12,8 +12,11 @@ import sys
 from . import _output
 from .appliance import db as db_cmds
 from .appliance import info as info_cmds
+from .appliance import logs as logs_cmds
+from .appliance import mq as mq_cmds
+from .appliance import service as service_cmds
 from .appliance.facts import Facts
-from .appliance.transport import TransportError, make_transport
+from .appliance.transport import Transport, TransportError, make_transport
 
 
 def _add_connection_args(p: argparse.ArgumentParser) -> None:
@@ -36,8 +39,8 @@ def _add_target_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--db", help="explicit DB name (overrides --role)")
 
 
-def _make_facts(args) -> Facts:
-    transport = make_transport(
+def _make_transport(args) -> Transport:
+    return make_transport(
         host=args.host,
         user=args.user,
         password=args.password,
@@ -45,7 +48,10 @@ def _make_facts(args) -> Facts:
         key_path=args.key_path,
         insecure_skip_host_key_check=args.insecure_skip_host_key_check,
     )
-    return Facts(transport)
+
+
+def _make_facts(args) -> Facts:
+    return Facts(_make_transport(args))
 
 
 def _emit_target(dbname: str, fmt: str) -> None:
@@ -116,6 +122,62 @@ def build_parser() -> argparse.ArgumentParser:
     p_drop.add_argument("--yes", action="store_true", help="skip confirmation")
     p_drop.set_defaults(func=cmd_db_drop_module_tables)
 
+    # --- service group ---
+    p_svc = asub.add_parser("service", help="systemd / cyops service verbs")
+    svcsub = p_svc.add_subparsers(dest="svc_command", required=True)
+
+    p_svc_status = svcsub.add_parser("status", help="csadm services --status")
+    _add_connection_args(p_svc_status)
+    p_svc_status.add_argument("name", nargs="?", help="limit to one service")
+    p_svc_status.set_defaults(func=cmd_service_status)
+
+    p_svc_live = svcsub.add_parser("liveness", help="probe endpoints for active-but-wedged")
+    _add_connection_args(p_svc_live)
+    _add_fmt(p_svc_live)
+    p_svc_live.set_defaults(func=cmd_service_liveness)
+
+    p_svc_restart = svcsub.add_parser("restart", help="restart a cyops service (gated)")
+    _add_connection_args(p_svc_restart)
+    p_svc_restart.add_argument("name", help="service to restart")
+    p_svc_restart.add_argument("--yes", action="store_true", help="skip confirmation")
+    p_svc_restart.set_defaults(func=cmd_service_restart)
+
+    p_svc_listen = svcsub.add_parser("listeners", help="listening ports + owning process")
+    _add_connection_args(p_svc_listen)
+    _add_fmt(p_svc_listen)
+    p_svc_listen.set_defaults(func=cmd_service_listeners)
+
+    # --- mq group ---
+    p_mq = asub.add_parser("mq", help="RabbitMQ verbs (rabbitmqctl)")
+    mqsub = p_mq.add_subparsers(dest="mq_command", required=True)
+    for verb, helptext in [
+        ("status", "rabbitmqctl status"),
+        ("queues", "queues with depth/consumers (flags backlog + zero-consumer)"),
+        ("consumers", "list consumers"),
+        ("vhosts", "list virtual hosts"),
+        ("permissions", "per-vhost permissions"),
+    ]:
+        sp = mqsub.add_parser(verb, help=helptext)
+        _add_connection_args(sp)
+        if verb != "status":
+            _add_fmt(sp)
+        sp.set_defaults(func=_MQ_HANDLERS[verb])
+
+    # --- logs group ---
+    p_logs = asub.add_parser("logs", help="log tail / error scan")
+    logssub = p_logs.add_subparsers(dest="logs_command", required=True)
+
+    p_logs_tail = logssub.add_parser("tail", help="tail a cyops service log")
+    _add_connection_args(p_logs_tail)
+    p_logs_tail.add_argument("service", help=f"service alias ({', '.join(logs_cmds.LOG_PATHS)}) or path")
+    p_logs_tail.add_argument("-n", "--lines", type=int, default=100, help="lines (default 100)")
+    p_logs_tail.set_defaults(func=cmd_logs_tail)
+
+    p_logs_scan = logssub.add_parser("scan", help="roll up recent journal errors")
+    _add_connection_args(p_logs_scan)
+    p_logs_scan.add_argument("--minutes", type=int, default=30, help="window (default 30)")
+    p_logs_scan.set_defaults(func=cmd_logs_scan)
+
     return parser
 
 
@@ -179,8 +241,7 @@ def cmd_db_drop_module_tables(args) -> int:
     facts = _make_facts(args)
     planned = db_cmds.find_module_tables(facts, args.table)
     print(
-        f"# plan: DROP TABLE CASCADE in {facts.content_db()!r}: "
-        f"{', '.join(planned) or '(none found)'}",
+        f"# plan: DROP TABLE CASCADE in {facts.content_db()!r}: {', '.join(planned) or '(none found)'}",
         file=sys.stderr,
     )
     result = db_cmds.drop_module_tables(facts, args.table, yes=args.yes)
@@ -188,6 +249,80 @@ def cmd_db_drop_module_tables(args) -> int:
         {"db": result["db"], "dropped": ", ".join(result["dropped"]) or "(none)"},
         fmt=args.fmt,
     )
+    return 0
+
+
+# --- service handlers ----------------------------------------------------
+def cmd_service_status(args) -> int:
+    print(service_cmds.status(_make_transport(args), args.name))
+    return 0
+
+
+def cmd_service_liveness(args) -> int:
+    probes = service_cmds.liveness(_make_transport(args))
+    rows = [[p.label, f"{p.method} {p.path}", p.code, p.verdict] for p in probes]
+    _output.render(rows, ["service", "endpoint", "code", "verdict"], fmt=args.fmt)
+    # Non-zero exit if anything is wedged, so it's usable as a health gate.
+    return 1 if any(p.code == 0 for p in probes) else 0
+
+
+def cmd_service_restart(args) -> int:
+    out = service_cmds.restart(_make_transport(args), args.name, yes=args.yes)
+    print(out or f"restarted {args.name}")
+    return 0
+
+
+def cmd_service_listeners(args) -> int:
+    headers, rows = service_cmds.listeners(_make_transport(args))
+    _output.render(rows, headers, fmt=args.fmt)
+    return 0
+
+
+# --- mq handlers ---------------------------------------------------------
+def cmd_mq_status(args) -> int:
+    print(mq_cmds.status(_make_transport(args)))
+    return 0
+
+
+def _mq_table(args, fn) -> int:
+    headers, rows = fn(_make_transport(args))
+    _output.render(rows, headers, fmt=args.fmt)
+    return 0
+
+
+def cmd_mq_queues(args) -> int:
+    return _mq_table(args, mq_cmds.queues)
+
+
+def cmd_mq_consumers(args) -> int:
+    return _mq_table(args, mq_cmds.consumers)
+
+
+def cmd_mq_vhosts(args) -> int:
+    return _mq_table(args, mq_cmds.vhosts)
+
+
+def cmd_mq_permissions(args) -> int:
+    return _mq_table(args, mq_cmds.permissions)
+
+
+_MQ_HANDLERS = {
+    "status": cmd_mq_status,
+    "queues": cmd_mq_queues,
+    "consumers": cmd_mq_consumers,
+    "vhosts": cmd_mq_vhosts,
+    "permissions": cmd_mq_permissions,
+}
+
+
+# --- logs handlers -------------------------------------------------------
+def cmd_logs_tail(args) -> int:
+    print(logs_cmds.tail(_make_transport(args), args.service, lines=args.lines), end="")
+    return 0
+
+
+def cmd_logs_scan(args) -> int:
+    print(logs_cmds.scan(_make_transport(args), minutes=args.minutes))
     return 0
 
 
