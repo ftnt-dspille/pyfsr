@@ -1,6 +1,9 @@
 # Appliance CLI Validation & Examples
 
-**Status**: P2 shipped and fully tested — all service, MQ, and log commands validated end-to-end.
+**Status**: P2 shipped; unit-tested in full and **live-validated against a real
+appliance (10.99.249.205, FSR 7.6.5) on 2026-06-20** for the SSH / service / MQ /
+log layers. See the *Live validation* section below for what the live run actually
+proved, the bug it surfaced and fixed, and the **DB-layer blocker still open**.
 
 ## Summary
 
@@ -167,15 +170,67 @@ pyfsr appliance db list
 - **Tests**: `tests/unit/test_appliance_cli.py` (45 tests, all passing)
 - **Examples**: `examples/appliance_cli_{test_demo,live_example}.py`
 
+## Live validation (10.99.249.205, FSR 7.6.5 — 2026-06-20)
+
+First real-appliance run, read-only verbs, over `SSHTransport` (`csadmin`, sudo via
+`-S`). Drove `examples/appliance_cli_live_example.py` + the `pyfsr appliance`
+console group directly.
+
+**Confirmed working live:**
+- **Transport / sudo** — SSH connect, `sudo -S`, and env-in-sudo all behaved as designed.
+- **`service status`** — real `csadm services --status` table (16 services).
+- **`service liveness`** — probes ran; flagged auth `POST /auth/authenticate` 500 and
+  `GET /api/3` 403 (expected without API auth) vs `das` license 200.
+- **`service listeners`** — real `ss -tlnp` output.
+- **`mq status` / `mq vhosts`** — real `rabbitmqctl` output (13 vhosts).
+- **`logs scan`** — journalctl roll-up clean.
+- **`facts.device_uuid()`** — parsed.
+
+**Bug found and fixed:** `logs.py` `LOG_PATHS` were stale guesses. On 7.6.5 the real
+files differ — auth → `cyops-auth/das.log` (not `cyops-auth.log`), api → `prod.log`,
+workflow → `fsr-workflow.log`, postman moved under `cyops-routing-agent/`. The old
+map tailed non-existent files and returned **empty silently**. Fixed the map to the
+verified paths, added `gateway`/`notifier`/`connectors`/`celery` aliases, corrected
+`_SCAN_UNITS` to the real systemd unit names (`fsr-api-consumer`/`fsr-workflow`/…),
+and made `tail` raise `FileNotFoundError` on a missing path instead of empty-string.
+Re-verified live (`logs tail workflow` returns content; missing path errors). +2 unit
+tests.
+
+**`mq queues`/`consumers`/`permissions` returned empty** — not a bug: they target the
+default `/` vhost, which is empty here (real queues live in the per-tenant `vhost_*`).
+This matches the known limitation (FOLLOWUPS: "MQ commands only cover the `/` vhost").
+
+**DB layer — blocker found AND fixed (live-validated):** initially every `db` verb
+and content-DB discovery failed on 205 with `FATAL: password authentication failed for
+user "cyberpgsql"`. Root cause: `facts.py` resolved the device UUID (= the pg/ES
+password) from `csadm license --get-device-uuid` **first**, but on a box whose
+entitlement has drifted (FortiCloud re-issue) that returns the *current* UUID, which
+differs from the **original install-time UUID** the DB was provisioned with. Proven
+live on 205: the two values **differ**, and only the file value authenticates.
+
+Fix: `facts.device_uuid()` now reads `/home/csadmin/device_uuid` (the install-time
+file, csadmin-readable, no sudo) **first**, with `csadm license` as fallback. After the
+fix, live on 205: `db list` correctly fingerprints `venom` as the content DB and
+resolves the role DBs (`das`/`connectors`/`notifier`/`gateway`); `db query "SELECT
+count(*) FROM model_metadatas"` → 65; the write-guard correctly refuses `DROP TABLE`
+via `db query` (directs to `db exec --write --yes`); `info` resolves version/content
+DB/UUID. The destructive `db drop-module-tables` / `delete_module(drop_orphan_tables=…)`
+path still needs a run against a real orphan, but its auth + gating are now proven live.
+
+**Packaging note (not a code bug):** the *installed* `pyfsr` console script is a stale
+wheel without the appliance connection flags (`--host/--user/...`); the CLI must be run
+from a `pip install -e .` checkout until the appliance CLI is released.
+
 ## Next Steps
 
-1. **Commit & push** — P2 is done and tested, ready for review
-2. **Live testing** — Try against 10.99.249.159 (lab) or test box if available
-3. **CLI wiring** — Ensure Click commands surface all verbs correctly
-4. **Doc updates** — Add to user guides / troubleshooting docs as reference
+1. **Orphan-table drop** — the only `db` path not yet run live (it mutates); exercise
+   `db drop-module-tables` / `delete_module(drop_orphan_tables=…)` against a real orphan.
+2. **Doc updates** — fold into user guides / troubleshooting docs as reference.
 
 ---
 
-**Last validated**: 2026-06-20
-**Test status**: 45/45 passing
+**Last validated**: 2026-06-20 (live, 10.99.249.205, FSR 7.6.5 — read-only verbs across
+service/mq/logs/db, incl. content-DB discovery after the device-UUID fix)
+**Test status**: full unit suite green; `logs` path fix + device-UUID file-first fix
+(+ split device-uuid test into primary/fallback)
 **Demo status**: Offline + live examples working
