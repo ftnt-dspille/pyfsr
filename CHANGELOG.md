@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `pyfsr playbook check-fresh`: Level-1 catalog freshness probe. Compares the cached
+  `fsr_playbooks` reference catalog's provenance (`_catalog_meta`) against a live SOAR
+  via cheap GETs (`/api/version`, `/api/publish/error`, `$limit=0` row counts) and reports
+  publish/version/add-delete drift. Exit 0 = fresh, 2 = drift, 1 = unstamped/error. New
+  `pyfsr.playbook_freshness` module holds the unit-testable comparison logic.
+
 ## [0.6.3] - 2026-06-20
 
 ### Added
