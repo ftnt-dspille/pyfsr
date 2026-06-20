@@ -9,7 +9,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from pyfsr.api.import_config import ImportConfigAPI, _job_uuid, connectors_only
+from pyfsr.api.import_config import (
+    ImportConfigAPI,
+    _job_uuid,
+    connectors_only,
+    inspect_changes,
+    keep_existing,
+    overwrite_all,
+    skip_schema_changes,
+)
+from pyfsr.exceptions import FortiSOARException
 
 
 class FakeClient:
@@ -120,6 +129,67 @@ def test_wait_for_import_returns_last_poll_on_timeout():
     assert job.status == "Reviewing"  # non-terminal, returned rather than raised
 
 
+def test_wait_for_import_rides_through_migrate_503s():
+    # First poll succeeds (still importing), then the appliance goes into its
+    # backup/migrate cycle and throws 503s, then comes back Complete. The 503s
+    # must be tolerated, not raised.
+    seq = iter(
+        [
+            {"status": "Reviewing"},
+            FortiSOARException("System Backup", response=SimpleNamespace(status_code=503)),
+            FortiSOARException("Clearing Cache", response=SimpleNamespace(status_code=503)),
+            {"status": "Import Complete"},
+        ]
+    )
+
+    def handler(m, u, **k):
+        nxt = next(seq)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return nxt
+
+    api, _ = _api(handler)
+    job = api.wait_for_import("job-1", interval=0.0, timeout=5.0)
+    assert job.status == "Import Complete"
+
+
+def test_wait_for_import_reraises_non_transient_error():
+    def handler(m, u, **k):
+        raise FortiSOARException("Bad Request", response=SimpleNamespace(status_code=400))
+
+    api, _ = _api(handler)
+    with pytest.raises(FortiSOARException):
+        api.wait_for_import("job-1", interval=0.0, timeout=5.0)
+
+
+def test_wait_until_ready_settles_after_cache_rebuild():
+    seq = iter(
+        [
+            FortiSOARException("Clearing Cache", response=SimpleNamespace(status_code=503)),
+            FortiSOARException("Schema Update", response=SimpleNamespace(status_code=503)),
+            {"hydra:member": []},
+        ]
+    )
+
+    def handler(m, u, **k):
+        nxt = next(seq)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return nxt
+
+    api, c = _api(handler)
+    assert api.wait_until_ready(interval=0.0, timeout=5.0) is True
+    assert c.calls[-1][1] == "/api/3/staging_model_metadatas"
+
+
+def test_wait_until_ready_returns_false_on_timeout():
+    def handler(m, u, **k):
+        raise FortiSOARException("System Backup", response=SimpleNamespace(status_code=503))
+
+    api, _ = _api(handler)
+    assert api.wait_until_ready(interval=0.0, timeout=0.0) is False
+
+
 def test_trigger_starts_run():
     api, c = _api(lambda m, u, **k: {})
     api.trigger("job-1")
@@ -203,3 +273,169 @@ def test_import_file_raises_when_upload_returns_no_iri():
     api, _ = _api(_lifecycle_handler(), upload=lambda path: {})
     with pytest.raises(ValueError, match="file upload returned no @id"):
         api.import_file("backup.zip", options_timeout=1.0)
+
+
+# ----------------------------------------------------------- module merge options
+
+
+def _module_options():
+    """Generated options mirroring the wizard's module-merge screen (real shape)."""
+    return {
+        "modules": {
+            "include": True,
+            "values": [
+                {
+                    "type": "oguraly_test_processes",
+                    "name": "Oguraly Test Processes",
+                    "include": True,
+                    "exists": True,
+                    "_schema": True,
+                    "changes": [
+                        {
+                            "field": "tableName",
+                            "message": "tableName changed from oguraly_test_processes "
+                            "to oguraly_test_process",
+                        }
+                    ],
+                    "attributes": [
+                        {
+                            "name": "playbooktype",
+                            "title": "playbook_type",
+                            "exists": True,
+                            "include": True,
+                            "_include": "yes",
+                            "inUniqueConstraint": False,
+                            "changes": {"playbooktype": [{"field": "searchable", "new": True}]},
+                        },
+                        {
+                            "name": "identifier",
+                            "title": "identifier",
+                            "exists": True,
+                            "include": True,
+                            "_include": "yes",
+                            "inUniqueConstraint": True,
+                            "changes": {"identifier": [{"field": "validation", "new": {}}]},
+                        },
+                        {
+                            "name": "testint",
+                            "title": "testint",
+                            "exists": True,
+                            "include": True,
+                            "_include": "yes",
+                            "inUniqueConstraint": False,
+                            "changes": {"testint": [{"field": "type", "new": "integer"}]},
+                        },
+                    ],
+                }
+            ],
+        }
+    }
+
+
+def test_inspect_changes_flags_rename_type_and_unique_constraint():
+    risks = inspect_changes(_module_options())
+    kinds = {r["kind"] for r in risks}
+    assert "tableName change" in kinds  # module rename → index collision risk
+    assert "field type change" in kinds  # testint text→integer column rewrite
+    assert "unique-constraint field change" in kinds  # identifier
+    # a benign "searchable" flip on playbooktype is NOT flagged
+    assert all(r["field"] != "playbooktype" for r in risks)
+
+
+def test_inspect_changes_empty_when_safe():
+    assert inspect_changes({"modules": {"values": []}}) == []
+    assert inspect_changes({"connectors": {"include": True}}) == []
+
+
+def test_overwrite_all_sets_include_yes():
+    opts = _module_options()
+    keep_existing(opts)  # first flip everything to keep
+    overwrite_all(opts)
+    attrs = opts["modules"]["values"][0]["attributes"]
+    assert all(a["include"] is True and a["_include"] == "yes" for a in attrs)
+
+
+def test_keep_existing_targets_named_field_only():
+    opts = _module_options()
+    keep_existing(opts, ["playbook_id", "identifier"])  # matched on title
+    attrs = {a["name"]: a for a in opts["modules"]["values"][0]["attributes"]}
+    assert attrs["identifier"]["include"] is False and attrs["identifier"]["_include"] == "no"
+    assert attrs["testint"]["include"] is True  # untouched
+
+
+def test_skip_schema_changes_clears_schema_flag():
+    opts = skip_schema_changes(_module_options())
+    assert opts["modules"]["values"][0]["_schema"] is False
+
+
+def _module_lifecycle_handler(status="Import Complete", error=""):
+    def handler(method, url, **kw):
+        if method == "POST" and url == "/api/3/import_jobs":
+            return {"uuid": "job-1"}
+        if method == "GET" and url.startswith("/api/3/import_jobs/"):
+            return {
+                "uuid": "job-1",
+                "status": status,
+                "errorMessage": error,
+                "options": _module_options(),
+            }
+        return {}
+
+    return handler
+
+
+def test_import_file_refuses_risky_schema_changes_by_default():
+    api, c = _api(_module_lifecycle_handler())
+    with pytest.raises(ValueError, match="refusing to import"):
+        api.import_file("m.zip", interval=0.0, timeout=1.0, options_timeout=1.0)
+    # never triggered the run
+    assert ("PUT", "/api/import/job-1") not in [(m, u) for m, u, _ in c.calls]
+
+
+def test_import_file_resolve_skip_schema_proceeds_and_sets_flag():
+    api, c = _api(_module_lifecycle_handler())
+    api.import_file("m.zip", resolve="skip_schema", interval=0.0, timeout=1.0, options_timeout=1.0)
+    puts = [d for m, u, d in c.calls if m == "PUT" and u == "/api/3/import_jobs/job-1"]
+    assert puts and puts[0]["options"]["modules"]["values"][0]["_schema"] is False
+    assert ("PUT", "/api/import/job-1") in [(m, u) for m, u, _ in c.calls]
+
+
+def test_import_file_rejects_unknown_resolve():
+    api, _ = _api(_module_lifecycle_handler())
+    with pytest.raises(ValueError, match="unknown resolve strategy"):
+        api.import_file("m.zip", resolve="bogus", options_timeout=1.0)
+
+
+def test_import_file_allow_schema_changes_bypasses_refusal():
+    api, c = _api(_module_lifecycle_handler())
+    api.import_file(
+        "m.zip", allow_schema_changes=True, interval=0.0, timeout=1.0, options_timeout=1.0
+    )
+    assert ("PUT", "/api/import/job-1") in [(m, u) for m, u, _ in c.calls]
+
+
+def test_import_file_verify_raises_on_failed_migrate():
+    err = (
+        "Publish failed with exception: An exception occurred while executing "
+        "'CREATE INDEX oguraly_test_processes_modifydate_idx ON oguraly_test_process "
+        "(modifydate)': SQLSTATE[42P07]: Duplicate table: 7 ERROR: relation "
+        '"oguraly_test_processes_modifydate_idx" already exists'
+    )
+    api, _ = _api(_module_lifecycle_handler(status="Error", error=err))
+    with pytest.raises(FortiSOARException, match="half-applied migration"):
+        api.import_file(
+            "m.zip", allow_schema_changes=True, interval=0.0, timeout=1.0, options_timeout=1.0
+        )
+
+
+def test_import_file_verify_false_returns_failed_job():
+    api, _ = _api(_module_lifecycle_handler(status="Error", error="boom"))
+    job = api.import_file(
+        "m.zip",
+        allow_schema_changes=True,
+        verify=False,
+        interval=0.0,
+        timeout=1.0,
+        options_timeout=1.0,
+    )
+    assert job.status == "Error"
