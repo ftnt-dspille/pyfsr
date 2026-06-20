@@ -35,6 +35,7 @@ from .api.system import SystemAPI
 from .api.system_settings import SystemSettingsAPI
 from .api.tags import TagsAPI
 from .api.taxii import TaxiiAPI
+from .api.user_settings import UserSettingsAPI
 from .api.users import UsersAPI
 from .api.wf_tools import WfToolsAPI
 from .api.workflow_collections import WorkflowCollectionsAPI
@@ -249,6 +250,7 @@ class FortiSOAR:
 
         # Appliance tuning: system settings, DAS auth config, periodic schedules
         self.system_settings: SystemSettingsAPI = SystemSettingsAPI(self)
+        self.user_settings: UserSettingsAPI = UserSettingsAPI(self)
         self.auth_config: AuthConfigAPI = AuthConfigAPI(self)
         self.schedules: SchedulesAPI = SchedulesAPI(self)
         self.users: UsersAPI = UsersAPI(self)
