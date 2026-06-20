@@ -71,7 +71,11 @@ jobs:
           fi
 
       - name: Deploy to GitHub Pages
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        # Deploy on release so the public site always reflects the published
+        # version (hatch-vcs derives a clean ``X.Y.Z`` only at the tagged commit).
+        # A plain main push builds for verification but does not deploy — that
+        # would re-publish a ``X.Y.Z+1.devN`` title between releases.
+        if: github.event_name == 'release'
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
