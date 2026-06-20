@@ -47,7 +47,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e '.[test]' tomli
+          pip install -e '.[test,playbooks]' tomli
 
       - name: Run tests
         run: |
