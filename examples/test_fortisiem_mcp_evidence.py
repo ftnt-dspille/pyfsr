@@ -62,10 +62,10 @@ def scan_logs(client: FortiSOAR, since_epoch: float) -> list[dict]:
 def main() -> None:
     alert_uuid = sys.argv[1] if len(sys.argv) > 1 else "740a751c"
     client = FortiSOAR(
-        base_url=os.environ.get("FSR_BASE_URL", "10.99.249.159:13002"),
+        base_url=os.environ.get("FSR_BASE_URL", "fortisoar.example.com:13002"),
         auth=(
             os.environ.get("FSR_USERNAME", "csadmin"),
-            os.environ.get("FSR_PASSWORD", "fortinet"),
+            os.environ.get("FSR_PASSWORD", "changeme"),
         ),
         verify_ssl=False,
         suppress_insecure_warnings=True,

@@ -12,7 +12,7 @@ default it hard-deletes the collection at the end so the run is safe to repeat.
 
 Usage:
     python examples/create_safe_playbook.py \
-        --host 10.99.249.159 --user csadmin --password '...' --port 13002
+        --host fortisoar.example.com --user csadmin --password '...' --port 13002
 
 Environment variables:
     FSR_BASE_URL   base URL, e.g. https://fsr.example.com:13002

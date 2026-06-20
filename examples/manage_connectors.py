@@ -21,9 +21,9 @@ import os
 
 from pyfsr import FortiSOAR
 
-FSR_BASE_URL = os.environ.get("FSR_BASE_URL", "10.99.249.159:13002")
+FSR_BASE_URL = os.environ.get("FSR_BASE_URL", "fortisoar.example.com:13002")
 FSR_USERNAME = os.environ.get("FSR_USERNAME", "csadmin")
-FSR_PASSWORD = os.environ.get("FSR_PASSWORD", "fortinet")
+FSR_PASSWORD = os.environ.get("FSR_PASSWORD", "changeme")
 
 CONNECTOR_NAME = os.environ.get("CONNECTOR_NAME", "cyops_utilities")
 CONNECTOR_VERSION = os.environ.get("CONNECTOR_VERSION", "")  # blank -> resolve installed
