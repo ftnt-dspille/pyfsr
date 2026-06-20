@@ -43,10 +43,17 @@ class FakeTransport(Transport):
 
     def run(self, argv, *, input_text=None, env=None, timeout=60.0, sudo=False):
         self.commands.append((argv, env, sudo))
+        # `test -f <path>` existence probe (used by logs.tail): a path containing
+        # "missing" reports absent (returncode 1), everything else present.
+        if argv[:2] == ["test", "-f"]:
+            return CommandResult(argv, 1 if "missing" in argv[-1] else 0, "", "")
         out = self._dispatch(argv, env)
         return CommandResult(argv, 0, out, "")
 
     def _dispatch(self, argv, env) -> str:
+        if argv[:2] == ["cat", "/home/csadmin/device_uuid"]:
+            # Primary device-UUID source (install-time file = the DB/ES password).
+            return f"{UUID}\n"
         if argv[:3] == ["csadm", "license", "--get-device-uuid"]:
             return f"Device UUID: {UUID}\n"
         if argv[:3] == ["csadm", "services", "--status"]:
@@ -126,7 +133,7 @@ class FakeTransport(Transport):
 
     def _tail_response(self, argv) -> str:
         """Fake tail output from log files."""
-        if "/var/log/cyops/cyops-auth/cyops-auth.log" in argv:
+        if "/var/log/cyops/cyops-auth/das.log" in argv:
             return "[INFO] 2026-06-20 12:30:45 auth service started\n[INFO] successful login\n"
         if "/var/log/nginx/error.log" in argv:
             return "[warn] low memory condition\n[info] connection opened\n"
@@ -284,9 +291,27 @@ def test_sudo_wrap_reapplies_env_inside_privileged_context():
     assert cmd.index("env") < cmd.index("psql")
 
 
-def test_facts_device_uuid_runs_csadm_with_sudo():
+def test_facts_device_uuid_reads_install_file_first():
+    # The DB/ES password is the install-time UUID in /home/csadmin/device_uuid,
+    # which can differ from (drifted) `csadm license`; the file is the primary source.
     facts = Facts(FakeTransport())
-    facts.device_uuid()
+    assert facts.device_uuid() == UUID
+    cmds = [argv for argv, _env, _sudo in facts.transport.commands]
+    assert ["cat", "/home/csadmin/device_uuid"] in cmds
+    # csadm is only a fallback — not called when the file resolves.
+    assert not any(argv[0] == "csadm" and "--get-device-uuid" in argv for argv in cmds)
+
+
+def test_facts_device_uuid_falls_back_to_csadm_with_sudo():
+    # When the file is absent/unreadable, fall back to `csadm license` (sudo).
+    class NoFile(FakeTransport):
+        def run(self, argv, **kw):
+            if argv[:2] == ["cat", "/home/csadmin/device_uuid"]:
+                return CommandResult(argv, 1, "", "No such file")
+            return super().run(argv, **kw)
+
+    facts = Facts(NoFile())
+    assert facts.device_uuid() == UUID
     csadm = next((argv, sudo) for argv, _env, sudo in facts.transport.commands if argv[0] == "csadm")
     assert csadm[1] is True  # sudo flag
 
@@ -458,6 +483,19 @@ def test_logs_tail_with_raw_path(facts):
 def test_logs_tail_unknown_service_raises(facts):
     with pytest.raises(ValueError):
         logs_cmds.tail(facts.transport, "bogus_service")
+
+
+def test_logs_tail_missing_file_raises(facts):
+    # A resolvable path that doesn't exist on the box must error, not silently
+    # return "" (a stale alias / version mismatch should be loud).
+    with pytest.raises(FileNotFoundError):
+        logs_cmds.tail(facts.transport, "/var/log/cyops/missing.log")
+
+
+def test_logs_tail_auth_alias_resolves_to_das_log(facts):
+    logs_cmds.tail(facts.transport, "auth")
+    tail_calls = [argv for argv, _e, _s in facts.transport.commands if argv[0] == "tail"]
+    assert any("/var/log/cyops/cyops-auth/das.log" in argv for argv in tail_calls)
 
 
 def test_logs_tail_defaults_lines(facts):

@@ -39,18 +39,26 @@ class Facts:
     # --- device identity -------------------------------------------------
     def device_uuid(self) -> str:
         """The 32-char device UUID. This doubles as the ``cyberpgsql`` /
-        ``elastic`` password, so it is read into memory and never logged."""
+        ``elastic`` password, so it is read into memory and never logged.
+
+        Primary source is the on-disk ``/home/csadmin/device_uuid`` file, which
+        holds the **original install-time UUID** that the Postgres/ES passwords
+        were provisioned with. ``csadm license --get-device-uuid`` is only a
+        fallback: on a box whose entitlement has been re-issued (FortiCloud
+        drift) it returns the *current* device UUID, which differs from the file
+        and **fails** ``cyberpgsql`` auth (verified live on fortisoar.example.com,
+        2026-06-20). The file is csadmin-readable (no sudo needed)."""
         if self._device_uuid:
             return self._device_uuid
-        # Primary: csadm (needs root). Fallback: the cached file (csadmin-readable,
-        # so tried without then with sudo).
-        res = self.transport.run(["csadm", "license", "--get-device-uuid"], sudo=True)
+        # Primary: the install-time file (the actual DB/ES password). Fallback:
+        # csadm (needs root) — may report a drifted entitlement UUID, so last.
+        res = self.transport.run(["cat", "/home/csadmin/device_uuid"])
         uuid = _extract_uuid(res.stdout) if res.ok else None
         if not uuid:
-            res = self.transport.run(["cat", "/home/csadmin/device_uuid"])
+            res = self.transport.run(["csadm", "license", "--get-device-uuid"], sudo=True)
             uuid = _extract_uuid(res.stdout) if res.ok else None
         if not uuid:
-            raise TransportError("could not resolve device UUID (csadm + /home/csadmin/device_uuid both failed)")
+            raise TransportError("could not resolve device UUID (/home/csadmin/device_uuid + csadm both failed)")
         self._device_uuid = uuid
         return uuid
 
