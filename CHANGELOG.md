@@ -7,9 +7,12 @@ All notable changes to this project will be documented in this file.
 ## [0.6.0] - 2026-06-20
 
 ### Added
+- `pyfsr` console CLI with an `appliance` command group (`db` / `facts` / `transport` /
+  `info`) for SSH-driven appliance operations, including a write-guarded `db` verb.
 - `modules_admin`: verified `delete_module()` (discard-staging + relationship-referrer
   detach, then publish) and `remove_field()`, plus a relationship-referrer scan; correct
-  `uniqueConstraint` object shape on field create.
+  `uniqueConstraint` object shape on field create. `delete_module(drop_orphan_tables=...)`
+  reclaims the physical tables the API leaves orphaned, via the appliance CLI.
 - `import_config` / `export_config`: treat config import as a publish — 503 tolerance
   during migrate, refusal on risky (table-rename) changes, and post-import verification.
 - Typed `solution_packs` install/uninstall, an `Appliance` actor, and picklist IRI
