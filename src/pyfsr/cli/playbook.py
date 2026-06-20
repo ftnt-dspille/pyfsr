@@ -137,6 +137,69 @@ def cmd_deploy(args) -> int:
     return 0
 
 
+def _catalog_conn(args):
+    """Open the fsr_playbooks reference catalog (read/write) for freshness ops.
+
+    Honors ``--db`` then the package's own resolution (``$FSRPB_DB`` → dev DB →
+    packaged slim DB). Raises the same clear error as the compiler when the
+    optional ``fsr_playbooks`` extra is absent."""
+    import sqlite3
+
+    from ..authoring import _load_compiler  # reuses the missing-dep message
+
+    _, default_db_path = _load_compiler()
+    db = getattr(args, "db", None) or str(default_db_path())
+    conn = sqlite3.connect(db)
+    conn.row_factory = sqlite3.Row
+    return conn, db
+
+
+def cmd_check_fresh(args) -> int:
+    """Level-1 freshness probe: compare the cached catalog's provenance against
+    a live SOAR. Exit 0 = fresh, 2 = drift detected, 1 = error / unstamped."""
+    from fsr_playbooks import _catalog_meta
+
+    from ..playbook_freshness import compare, probe_live
+
+    conn, db = _catalog_conn(args)
+    try:
+        stored = _catalog_meta.get_all(conn)
+    finally:
+        conn.close()
+    if not stored.get("base_url_hash"):
+        print(
+            f"catalog {db} carries no provenance stamp — run `warmup` against a target SOAR first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    client = _make_client(args)
+    live = probe_live(client)
+    report = compare(stored, live)
+
+    _output.kv(
+        {
+            "catalog": db,
+            "instance": report.instance_label or "(unlabeled)",
+            "fsr_version": f"{stored.get('fsr_version')} -> {live.get('version')}",
+            "result": "FRESH" if report.is_fresh else "STALE",
+        },
+        fmt="table",
+        file=sys.stderr,
+    )
+    if report.drift:
+        print("drift detected:", file=sys.stderr)
+        for line in report.drift:
+            print(f"  - {line}", file=sys.stderr)
+        print(
+            "re-run `warmup` against the target to refresh the catalog.",
+            file=sys.stderr,
+        )
+        return 2
+    print("catalog is up to date with the live instance.", file=sys.stderr)
+    return 0
+
+
 def _workflows_of(result, collection_name: str) -> list[str]:
     for col in (result.fsr_json or {}).get("data", []):
         if col.get("name") == collection_name:
@@ -162,3 +225,11 @@ def build_subparser(asub) -> None:
     p_deploy.add_argument("--replace", action="store_true", help="hard-delete + recreate if it exists")
     p_deploy.add_argument("--dry-run", action="store_true", help="compile and list what would be created")
     p_deploy.set_defaults(func=cmd_deploy)
+
+    p_fresh = asub.add_parser(
+        "check-fresh",
+        help="compare the cached compile catalog against a live SOAR (Level-1 probe)",
+    )
+    add_connection_args(p_fresh)
+    p_fresh.add_argument("--db", help="reference catalog path (default: packaged/dev DB)")
+    p_fresh.set_defaults(func=cmd_check_fresh)
