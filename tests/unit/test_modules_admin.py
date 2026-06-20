@@ -482,6 +482,36 @@ def test_delete_module_detaches_then_deletes(monkeypatch):
     assert any(call[0] == "DELETE" and "w-1" in call[1] for call in c.calls)
 
 
+def test_delete_module_drops_orphan_tables_when_appliance_given(monkeypatch):
+    c = DeleteClient(referrer=False)
+    api = ModulesAdminAPI(c)
+    monkeypatch.setattr(api, "publish", lambda **kw: {"ok": True})
+    monkeypatch.setattr(api, "get_view_templates", lambda module: [])
+
+    dropped_for = {}
+
+    def fake_drop(facts, base_table, *, yes):
+        dropped_for["table"] = base_table
+        dropped_for["yes"] = yes
+        return {"db": "venom", "dropped": [base_table, f"{base_table}_team"], "planned": []}
+
+    monkeypatch.setattr("pyfsr.cli.appliance.db.drop_module_tables", fake_drop)
+
+    sentinel_facts = object()
+    res = api.delete_module("widgets", drop_orphan_tables=sentinel_facts)
+    assert dropped_for == {"table": "widgets", "yes": True}
+    assert res["dropped_tables"] == ["widgets", "widgets_team"]
+
+
+def test_delete_module_skips_table_drop_when_no_appliance(monkeypatch):
+    c = DeleteClient(referrer=False)
+    api = ModulesAdminAPI(c)
+    monkeypatch.setattr(api, "publish", lambda **kw: {"ok": True})
+    monkeypatch.setattr(api, "get_view_templates", lambda module: [])
+    res = api.delete_module("widgets")
+    assert res["dropped_tables"] is None
+
+
 def test_delete_module_not_found_raises():
     c = DeleteClient(published=False, staging=False)
     try:

@@ -1020,6 +1020,7 @@ class ModulesAdminAPI(BaseAPI):
         detach_relationships: bool = False,
         publish: bool = True,
         drop_view_templates: bool = True,
+        drop_orphan_tables: Any | None = None,
         timeout: float = 600.0,
         poll_interval: float = 10.0,
     ) -> dict[str, Any]:
@@ -1057,11 +1058,21 @@ class ModulesAdminAPI(BaseAPI):
                 delete. If False, the staging changes are staged but the module is not yet
                 gone (you must publish later).
             drop_view_templates: Also delete the module's ``system_view_templates``.
-            timeout / poll_interval: Passed to :meth:`publish`.
+            drop_orphan_tables: Optional :class:`pyfsr.cli.appliance.Facts` (an
+                appliance transport context). When given **and** ``publish`` is
+                True, the orphaned physical Postgres tables (base + join tables)
+                are dropped with ``DROP TABLE ... CASCADE`` after the publish
+                commits the delete — the only way to fully reclaim a module's
+                ``tableName`` so a future module can reuse it. Left None, the
+                tables are reported in ``orphan_table`` but not dropped (the API
+                cannot touch them; see the warning above).
+            timeout: Passed to :meth:`publish`.
+            poll_interval: Passed to :meth:`publish`.
 
         Returns:
-            ``{"module", "detached": [...], "orphan_table": <str|None>,
-            "published": <publish result|None>}``.
+            A dict with keys ``module``, ``detached`` (list), ``orphan_table``
+            (``str`` or ``None``), ``published`` (publish result or ``None``),
+            and ``dropped_tables`` (``list`` or ``None``).
 
         Raises:
             ValueError: if the module is not found.
@@ -1098,9 +1109,17 @@ class ModulesAdminAPI(BaseAPI):
             "detached": detached,
             "orphan_table": orphan_table,
             "published": None,
+            "dropped_tables": None,
         }
         if publish:
             result["published"] = self.publish(timeout=timeout, poll_interval=poll_interval)
+            if drop_orphan_tables is not None and orphan_table:
+                # Lazy import: keeps the API client free of the CLI/SSH/psql layer
+                # unless an appliance context is actually handed in.
+                from ..cli.appliance import db as _appliance_db
+
+                drop = _appliance_db.drop_module_tables(drop_orphan_tables, orphan_table, yes=True)
+                result["dropped_tables"] = drop["dropped"]
         return result
 
     def discard_staging_draft(self, module: str, *, drop_view_templates: bool = True) -> bool:
