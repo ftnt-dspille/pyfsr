@@ -48,8 +48,10 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e '.[test]' tomli
-          # The playbooks extra (fsr_playbooks) needs Python >=3.12; install it
-          # best-effort so the authoring tests run where supported and skip elsewhere.
+          # The playbooks extra (fsr_playbooks) floor was lowered to Python
+          # >=3.10. Until that release is on PyPI the pin may still resolve to a
+          # 3.12-only build on older Pythons, so install best-effort — authoring
+          # tests run where the extra installs and skip elsewhere.
           pip install '.[playbooks]' || echo "playbooks extra unavailable on this Python; authoring tests will skip"
 
       - name: Run tests
