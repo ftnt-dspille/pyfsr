@@ -50,9 +50,15 @@ mcp = [
     "mcp>=1.0",
 ]
 
-# One-shot dev setup: linters + the test/docs/mcp extras.
+# Author playbooks in YAML and deploy them (`pyfsr playbook`, import_from_yaml).
+# Pulls in the fsr_playbooks compiler; the core library never imports it.
+playbooks = [
+    "fsr_playbooks>=0.3.68",
+]
+
+# One-shot dev setup: linters + the test/docs/mcp/playbooks extras.
 dev = [
-    "pyfsr[test,docs,mcp]",
+    "pyfsr[test,docs,mcp,playbooks]",
     "ruff>=0.6",
     "pre-commit>=3.5",
 ]

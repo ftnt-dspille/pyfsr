@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Author playbooks in YAML and deploy them to FortiSOAR. New `pyfsr.authoring.compile_playbook_yaml()`
+  bridges the `fsr_playbooks` compiler (YAML → FSR import envelope), and
+  `client.workflow_collections.compile_yaml()` / `import_from_yaml()` compile + push via the
+  existing `import_export` write path.
+- `pyfsr playbook` CLI group: `compile` (offline), `validate` (offline), and `deploy`
+  (`--replace`, `--dry-run`) over the API client.
+- Optional extra `pyfsr[playbooks]` pulling in the `fsr_playbooks` compiler; the core
+  library never imports it.
+
 ## [0.6.2] - 2026-06-20
 
 ### Added
