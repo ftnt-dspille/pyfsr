@@ -6,9 +6,19 @@ Covers ``pyfsr.authoring`` (the compile bridge) and the
 
 from __future__ import annotations
 
+import importlib.util
+
 import pytest
 
 from pyfsr.api.workflow_collections import WorkflowCollectionsAPI
+
+# The YAML compiler lives in the optional ``fsr_playbooks`` extra, which requires
+# Python >=3.12. Tests that exercise real compilation skip when it is absent;
+# the missing-extra test below stubs the import and always runs.
+requires_compiler = pytest.mark.skipif(
+    importlib.util.find_spec("fsr_playbooks") is None,
+    reason="fsr_playbooks (playbooks extra) not installed",
+)
 
 # A minimal playbook that compiles cleanly against the packaged reference catalog.
 GOOD_YAML = """collection: PyfsrTest Pack
@@ -58,6 +68,7 @@ def api():
 
 
 # --- pyfsr.authoring -----------------------------------------------------
+@requires_compiler
 def test_compile_good_yaml_produces_envelope():
     from pyfsr.authoring import compile_playbook_yaml
 
@@ -69,6 +80,7 @@ def test_compile_good_yaml_produces_envelope():
     assert result.blocking == []
 
 
+@requires_compiler
 def test_compile_bad_yaml_reports_blocking_errors():
     from pyfsr.authoring import compile_playbook_yaml
 
@@ -96,6 +108,7 @@ def test_missing_extra_raises_friendly_error(monkeypatch):
 
 
 # --- WorkflowCollectionsAPI.compile_yaml / import_from_yaml --------------
+@requires_compiler
 def test_api_compile_yaml_accepts_text():
     a, _ = api()
     result = a.compile_yaml(GOOD_YAML)
@@ -103,6 +116,7 @@ def test_api_compile_yaml_accepts_text():
     assert result.collection_names == ["PyfsrTest Pack"]
 
 
+@requires_compiler
 def test_import_from_yaml_posts_compiled_envelope():
     a, c = api()
     out = a.import_from_yaml(GOOD_YAML)
@@ -113,6 +127,7 @@ def test_import_from_yaml_posts_compiled_envelope():
     assert out[0]["uuid"] == "col-1"
 
 
+@requires_compiler
 def test_import_from_yaml_forwards_replace(monkeypatch):
     a, _ = api()
     seen = {}
@@ -127,6 +142,7 @@ def test_import_from_yaml_forwards_replace(monkeypatch):
     assert seen == {"replace": True, "type": "workflow_collections"}
 
 
+@requires_compiler
 def test_import_from_yaml_raises_on_compile_error():
     a, c = api()
     with pytest.raises(ValueError, match="failed to compile"):
@@ -134,6 +150,7 @@ def test_import_from_yaml_raises_on_compile_error():
     assert [call for call in c.calls if call[0] == "POST"] == []
 
 
+@requires_compiler
 def test_read_yaml_source_reads_file(tmp_path):
     f = tmp_path / "pb.yaml"
     f.write_text(GOOD_YAML, encoding="utf-8")

@@ -47,7 +47,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e '.[test,playbooks]' tomli
+          pip install -e '.[test]' tomli
+          # The playbooks extra (fsr_playbooks) needs Python >=3.12; install it
+          # best-effort so the authoring tests run where supported and skip elsewhere.
+          pip install '.[playbooks]' || echo "playbooks extra unavailable on this Python; authoring tests will skip"
 
       - name: Run tests
         run: |
