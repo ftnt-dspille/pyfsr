@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-06-20
+
+### Added
+- `pyfsr appliance service`: status, liveness (wedge detection via endpoint probes), restart, and listeners.
+- `pyfsr appliance mq`: RabbitMQ diagnostics — queue health (messages, consumers, backlogs), consumers, vhosts, and permissions.
+- `pyfsr appliance logs`: tail (service aliases + raw paths) and error scanning (journalctl rollup).
+- Comprehensive validation suite: 45 unit tests covering all appliance CLI families, offline demo, and live example script.
+
 ## [0.6.0] - 2026-06-20
 
 ### Added
