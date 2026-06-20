@@ -42,16 +42,15 @@ class Facts:
         ``elastic`` password, so it is read into memory and never logged."""
         if self._device_uuid:
             return self._device_uuid
-        # Primary: csadm. Fallback: the cached file.
-        res = self.transport.run(["csadm", "license", "--get-device-uuid"])
+        # Primary: csadm (needs root). Fallback: the cached file (csadmin-readable,
+        # so tried without then with sudo).
+        res = self.transport.run(["csadm", "license", "--get-device-uuid"], sudo=True)
         uuid = _extract_uuid(res.stdout) if res.ok else None
         if not uuid:
             res = self.transport.run(["cat", "/home/csadmin/device_uuid"])
             uuid = _extract_uuid(res.stdout) if res.ok else None
         if not uuid:
-            raise TransportError(
-                "could not resolve device UUID (csadm + /home/csadmin/device_uuid both failed)"
-            )
+            raise TransportError("could not resolve device UUID (csadm + /home/csadmin/device_uuid both failed)")
         self._device_uuid = uuid
         return uuid
 
@@ -74,9 +73,7 @@ class Facts:
             return FIXED_ROLE_DBS[role]
         if role == CONTENT_ROLE:
             return self.content_db()
-        raise TransportError(
-            f"unknown DB role {role!r}; known roles: content, {', '.join(FIXED_ROLE_DBS)}"
-        )
+        raise TransportError(f"unknown DB role {role!r}; known roles: content, {', '.join(FIXED_ROLE_DBS)}")
 
     def content_db(self) -> str:
         """Discover the install-specific content DB (the one holding
@@ -88,9 +85,7 @@ class Facts:
             if self._db_has_table(name, _CONTENT_FINGERPRINT):
                 self._content_db = name
                 return name
-        raise TransportError(
-            f"could not find the content DB (no DB among {names} has {_CONTENT_FINGERPRINT})"
-        )
+        raise TransportError(f"could not find the content DB (no DB among {names} has {_CONTENT_FINGERPRINT})")
 
     def _psql_env(self) -> dict[str, str]:
         return {"PGPASSWORD": self.db_password}

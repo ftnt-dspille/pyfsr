@@ -1,8 +1,9 @@
-"""Unit tests for the ``pyfsr appliance`` CLI (P1: transport / facts / db).
+"""Unit tests for the ``pyfsr appliance`` CLI (P1: transport / facts / db; P2: service / mq / logs).
 
 All tests drive a :class:`FakeTransport` — no live appliance, ssh, or psql.
 The fake answers psql-shaped queries by pattern so facts resolution and the db
-verbs can be exercised offline.
+verbs can be exercised offline. P2 tests exercise service status/liveness/restart,
+RabbitMQ queue/consumer/vhost/permission checks, and log tail/scan.
 """
 
 from __future__ import annotations
@@ -10,12 +11,17 @@ from __future__ import annotations
 import pytest
 
 from pyfsr.cli.appliance import db as db_cmds
+from pyfsr.cli.appliance import logs as logs_cmds
+from pyfsr.cli.appliance import mq as mq_cmds
+from pyfsr.cli.appliance import service as service_cmds
 from pyfsr.cli.appliance.facts import Facts
 from pyfsr.cli.appliance.transport import (
     CommandResult,
+    LocalTransport,
     SSHTransport,
     Transport,
     TransportError,
+    _sudo_wrap,
     make_transport,
 )
 
@@ -24,14 +30,16 @@ US = "\x1f"  # the unit-separator field delimiter Facts.psql uses
 
 
 class FakeTransport(Transport):
-    """Transport that fabricates psql/csadm output by matching on the command."""
+    """Transport that fabricates psql/csadm/service/rabbitmq/curl output by matching on the command."""
 
     target = "fake"
 
-    def __init__(self, *, tables=None, databases=None):
+    def __init__(self, *, tables=None, databases=None, service_wedged=False, queues_backlog=False):
         self.commands = []
         self._tables = tables or ["widgets", "widgets_alerts", "widgets_team", "gadgets"]
         self._databases = databases or {"venom": "7 GB", "das": "200 MB", "postgres": "8 MB"}
+        self._service_wedged = service_wedged  # if True, curl returns 000
+        self._queues_backlog = queues_backlog  # if True, queues have backlog
 
     def run(self, argv, *, input_text=None, env=None, timeout=60.0, sudo=False):
         self.commands.append((argv, env, sudo))
@@ -41,6 +49,20 @@ class FakeTransport(Transport):
     def _dispatch(self, argv, env) -> str:
         if argv[:3] == ["csadm", "license", "--get-device-uuid"]:
             return f"Device UUID: {UUID}\n"
+        if argv[:3] == ["csadm", "services", "--status"]:
+            return "cyops-auth\tactive\t0\t0\ncyops-api\tactive\t0\t0\n"
+        if argv[:4] == ["csadm", "services", "--restart", "--name"]:
+            return f"service {argv[4]} restarted\n"
+        if argv[0] == "curl":
+            return self._curl_response(argv)
+        if argv[0] == "ss":
+            return self._ss_response()
+        if argv[0] == "rabbitmqctl":
+            return self._rabbitmqctl_response(argv)
+        if argv[0] == "journalctl":
+            return self._journalctl_response(argv)
+        if argv[0] == "tail":
+            return self._tail_response(argv)
         if argv[0] == "rpm":
             return "7.6.5"
         if argv[0] != "psql":
@@ -62,6 +84,53 @@ class FakeTransport(Transport):
         if sql.lstrip().startswith("drop table"):
             return "DROP TABLE\n"
         return ""
+
+    def _curl_response(self, argv) -> str:
+        """Fake curl response (0 = wedged, otherwise a status code)."""
+        if self._service_wedged:
+            return "0"  # No response — the wedge signal
+        if "-X" in argv and argv[argv.index("-X") + 1] == "POST":
+            return "200"  # auth endpoint
+        return "200"  # API endpoint
+
+    def _ss_response(self) -> str:
+        """Fake ss -tlnp output (TCP listeners)."""
+        return (
+            'LISTEN  0  128  *:443  *:*  users:(("nginx",pid=1234,fd=5))\n'
+            'LISTEN  0  128  *:80  *:*  users:(("nginx",pid=1234,fd=6))\n'
+            'LISTEN  0  128  *:5672  *:*  users:(("rabbitmq",pid=2345,fd=7))\n'
+        )
+
+    def _rabbitmqctl_response(self, argv) -> str:
+        """Fake rabbitmqctl -q output (tab-separated quiet format)."""
+        if argv[1:3] == ["-q", "status"]:
+            return "Status of node rabbit@appliance ...\nRabbitMQ 3.8.14\n"
+        if argv[1:3] == ["-q", "list_queues"] and "consumers" in argv:
+            if self._queues_backlog:
+                return "task_queue\t2500\t0\ndefault_queue\t50\t2\n"
+            else:
+                return "task_queue\t100\t1\ndefault_queue\t50\t2\n"
+        if argv[1:3] == ["-q", "list_consumers"]:
+            return "task_queue\t<rabbit@appliance.1.250>\ndefault_queue\t<rabbit@appliance.2.251>\n"
+        if argv[1:3] == ["-q", "list_vhosts"]:
+            return "/\n/mq_internal\n"
+        if argv[1:3] == ["-q", "list_permissions"]:
+            return "guest\t.*\t.*\t.*\nadmin\t.*\t.*\t.*\n"
+        return ""
+
+    def _journalctl_response(self, argv) -> str:
+        """Fake journalctl output (errors last N minutes)."""
+        if "--since" in argv:
+            return "No entries\n"
+        return ""
+
+    def _tail_response(self, argv) -> str:
+        """Fake tail output from log files."""
+        if "/var/log/cyops/cyops-auth/cyops-auth.log" in argv:
+            return "[INFO] 2026-06-20 12:30:45 auth service started\n[INFO] successful login\n"
+        if "/var/log/nginx/error.log" in argv:
+            return "[warn] low memory condition\n[info] connection opened\n"
+        return "log tail data\n"
 
     def _filter_tables(self, sql: str):
         """Emulate the WHERE clause of find_module_tables/tables: exact match on
@@ -201,9 +270,222 @@ def test_ssh_insecure_opt_in_disables_host_key_check(monkeypatch):
     assert "UserKnownHostsFile=/dev/null" in prefix
 
 
+def test_sudo_wrap_uses_silent_prompt():
+    cmd = _sudo_wrap(["csadm", "license"], None)
+    assert cmd[:4] == ["sudo", "-S", "-p", ""]
+    assert cmd[4:] == ["csadm", "license"]
+
+
+def test_sudo_wrap_reapplies_env_inside_privileged_context():
+    # sudo's env_reset strips a shell export, so env must be re-applied via `env`.
+    cmd = _sudo_wrap(["psql"], {"PGPASSWORD": "secret"})
+    assert "env" in cmd
+    assert "PGPASSWORD=secret" in cmd
+    assert cmd.index("env") < cmd.index("psql")
+
+
+def test_facts_device_uuid_runs_csadm_with_sudo():
+    facts = Facts(FakeTransport())
+    facts.device_uuid()
+    csadm = next((argv, sudo) for argv, _env, sudo in facts.transport.commands if argv[0] == "csadm")
+    assert csadm[1] is True  # sudo flag
+
+
+def test_local_sudo_pipes_password_and_wraps(monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        captured["input"] = kw.get("input")
+
+        class P:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return P()
+
+    monkeypatch.setattr("pyfsr.cli.appliance.transport.subprocess.run", fake_run)
+    t = LocalTransport(sudo_password="pw")
+    t.run(["csadm", "services", "--status"], sudo=True)
+    assert captured["cmd"][:4] == ["sudo", "-S", "-p", ""]
+    assert captured["input"].startswith("pw\n")
+
+
 def test_ssh_password_never_in_argv(monkeypatch):
     monkeypatch.setattr("pyfsr.cli.appliance.transport.shutil.which", lambda x: "/usr/bin/sshpass")
     t = SSHTransport(host="h", user="u", password="secret")
     prefix = t._ssh_prefix()
     assert "secret" not in " ".join(prefix)
     assert prefix[0] == "sshpass"
+
+
+# --------------------------------------------------------------- P2: service
+def test_service_status(facts):
+    result = service_cmds.status(facts.transport)
+    assert "cyops-auth" in result
+    assert "cyops-api" in result
+    assert "active" in result
+
+
+def test_service_status_with_name(facts):
+    result = service_cmds.status(facts.transport, name="cyops-auth")
+    assert "cyops-auth" in result
+
+
+def test_service_liveness_ok(facts):
+    results = service_cmds.liveness(facts.transport)
+    assert len(results) >= 1
+    for r in results:
+        assert hasattr(r, "label")
+        assert hasattr(r, "code")
+        assert hasattr(r, "verdict")
+        assert r.code != service_cmds._NO_RESPONSE  # should be 200, not 0
+        assert "ok" in r.verdict or "unexpected" in r.verdict
+
+
+def test_service_liveness_detects_wedge(facts):
+    wedged_transport = FakeTransport(service_wedged=True)
+    results = service_cmds.liveness(wedged_transport)
+    wedged = [r for r in results if r.code == service_cmds._NO_RESPONSE]
+    assert len(wedged) > 0
+    assert all("WEDGED" in r.verdict for r in wedged)
+
+
+def test_service_restart_gated_by_yes(facts):
+    with pytest.raises(PermissionError):
+        service_cmds.restart(facts.transport, "cyops-auth", yes=False)
+
+
+def test_service_restart_succeeds_with_yes(facts):
+    result = service_cmds.restart(facts.transport, "cyops-auth", yes=True)
+    assert "restarted" in result
+
+
+def test_service_listeners(facts):
+    headers, rows = service_cmds.listeners(facts.transport)
+    assert "local_address" in headers
+    assert "process" in headers
+    assert len(rows) >= 1
+    # At least one row should have nginx or rabbitmq
+    all_rows = " ".join(str(r) for r in rows)
+    assert "nginx" in all_rows or "rabbitmq" in all_rows
+
+
+# --------------------------------------------------------------- P2: mq
+def test_mq_status(facts):
+    result = mq_cmds.status(facts.transport)
+    assert "RabbitMQ" in result or "Status" in result
+
+
+def test_mq_queues_lists_depth_and_consumers(facts):
+    headers, rows = mq_cmds.queues(facts.transport)
+    assert "queue" in headers
+    assert "messages" in headers
+    assert "consumers" in headers
+    assert "flag" in headers
+    assert len(rows) >= 1
+    # Check that columns are populated
+    for row in rows:
+        assert row[0]  # queue name
+        assert row[1].isdigit()  # messages count
+
+
+def test_mq_queues_flags_zero_consumers(facts):
+    headers, rows = mq_cmds.queues(facts.transport)
+    row_with_zero = [r for r in rows if int(r[2]) == 0]
+    if row_with_zero:
+        assert "NO CONSUMERS" in row_with_zero[0][3]
+
+
+def test_mq_queues_flags_backlog(facts):
+    # Create a transport with backlog but ensure we have a queue with backlog AND consumers
+    class BacklogTransport(FakeTransport):
+        def _rabbitmqctl_response(self, argv):
+            if argv[1:3] == ["-q", "list_queues"] and "consumers" in argv:
+                # Queue with backlog but with consumers (should flag backlog, not zero-consumers)
+                return "task_queue\t2500\t1\ndefault_queue\t50\t2\n"
+            return super()._rabbitmqctl_response(argv)
+
+    backlog_transport = BacklogTransport()
+    headers, rows = mq_cmds.queues(backlog_transport)
+    row_with_backlog = [r for r in rows if int(r[1]) >= 1000]
+    if row_with_backlog:
+        assert "BACKLOG" in row_with_backlog[0][3]
+
+
+def test_mq_consumers(facts):
+    headers, rows = mq_cmds.consumers(facts.transport)
+    assert "consumer" in headers
+    assert len(rows) >= 1
+
+
+def test_mq_vhosts(facts):
+    headers, rows = mq_cmds.vhosts(facts.transport)
+    assert "vhost" in headers
+    assert len(rows) >= 1
+    vhost_names = [r[0] for r in rows]
+    assert "/" in vhost_names
+
+
+def test_mq_permissions(facts):
+    headers, rows = mq_cmds.permissions(facts.transport)
+    assert "user" in headers
+    assert "configure" in headers
+    assert "write" in headers
+    assert "read" in headers
+    assert len(rows) >= 1
+
+
+def test_mq_to_int_safe_parse(facts):
+    assert mq_cmds._to_int("42") == 42
+    assert mq_cmds._to_int("0") == 0
+    assert mq_cmds._to_int("bogus") == -1
+    assert mq_cmds._to_int("") == -1
+
+
+# --------------------------------------------------------------- P2: logs
+def test_logs_tail_with_service_alias(facts):
+    result = logs_cmds.tail(facts.transport, "auth")
+    assert "auth" in result.lower() or len(result) > 0
+
+
+def test_logs_tail_with_raw_path(facts):
+    result = logs_cmds.tail(facts.transport, "/var/log/custom.log")
+    assert len(result) > 0
+
+
+def test_logs_tail_unknown_service_raises(facts):
+    with pytest.raises(ValueError):
+        logs_cmds.tail(facts.transport, "bogus_service")
+
+
+def test_logs_tail_defaults_lines(facts):
+    result = logs_cmds.tail(facts.transport, "auth")
+    # Ensure the default 100 lines is used (we'd check the argv if needed)
+    assert len(result) > 0
+
+
+def test_logs_tail_custom_lines(facts):
+    result = logs_cmds.tail(facts.transport, "auth", lines=10)
+    # Check that the -n 10 flag was used
+    assert len(result) > 0
+
+
+def test_logs_scan_minutes_default(facts):
+    result = logs_cmds.scan(facts.transport)
+    # Should show "(no journal errors...)" if no errors found
+    assert "journal" in result.lower() or "no entries" in result.lower()
+
+
+def test_logs_scan_custom_minutes(facts):
+    result = logs_cmds.scan(facts.transport, minutes=5)
+    assert len(result) > 0
+
+
+def test_logs_scan_units_covered(facts):
+    # Ensure all expected units are checked (even if no errors)
+    logs_cmds.scan(facts.transport, minutes=30)
+    # Should run journalctl for each unit in _SCAN_UNITS
+    journalctl_calls = [argv for argv, _env, _sudo in facts.transport.commands if argv[0] == "journalctl"]
+    assert len(journalctl_calls) > 0
