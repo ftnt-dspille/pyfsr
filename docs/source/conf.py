@@ -69,6 +69,30 @@ nitpick_ignore = [
     # which isn't part of the docs intersphinx set.
     ("py:class", "mcp.server.lowlevel.Server"),
     ("py:class", "Server"),
+    # Bare TypeVar in generic signatures (RecordSet[T], HydraPage[T]) — autoapi
+    # emits the TypeVar name as an xref with no resolvable target under `-n`.
+    ("py:class", "T"),
+    # Short re-export / nested-class names autoapi renders from annotations but
+    # documents under their canonical (longer) path.
+    ("py:class", "Facts"),
+    ("py:class", "Transport"),
+    ("py:class", "QueryBody"),
+    ("py:class", "FileRecord"),
+    # Bare method names in cross-module docstring xrefs (e.g. :meth:`runs`)
+    # that resolve at runtime but not in autoapi's per-page context.
+    ("py:meth", "run"),
+    ("py:meth", "runs"),
+    ("py:meth", "get"),
+    ("py:meth", "pyfsr.api.modules_admin.ModulesAdminAPI._wait_for_publish"),
+]
+
+# Type annotations autoapi renders as xrefs that resolve at runtime but not
+# under `-n`: model classes are documented at their canonical module path, so
+# the package-root / private-module annotation forms have no target here.
+nitpick_ignore_regex = [
+    (r"py:class", r"pyfsr\.models[\._].*"),
+    (r"py:mod", r"pyfsr\.models\._.*"),
+    (r"py:(class|func)", r"pyfsr\.cli\..*"),
 ]
 
 # -- AutoAPI configuration ---------------------------------------------------

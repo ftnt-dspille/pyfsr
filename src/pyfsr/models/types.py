@@ -8,7 +8,7 @@ accept a module record IRI, and vice-versa.
 from typing import NewType
 
 PicklistIRI = NewType("PicklistIRI", str)
-"""An IRI pointing to a picklist item: ``/api/3/picklists/<uuid>``."""
+"""IRI of a picklist item — e.g. ``/api/3/picklists/<uuid>``."""
 
 RecordIRI = NewType("RecordIRI", str)
-"""An IRI pointing to a module record: ``/api/3/<module>/<uuid>``."""
+"""IRI of a module record — e.g. ``/api/3/<module>/<uuid>``."""

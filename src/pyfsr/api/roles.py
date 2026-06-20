@@ -160,8 +160,11 @@ class RolesAPI(BaseAPI):
         Args:
             role: Role uuid or friendly name (e.g. ``"Full App Permissions"``).
             module: Module type (e.g. ``"oguraly_test_processes"``) or full module IRI.
-            can_read / can_create / can_update / can_delete / can_execute: Permission
-                flags; all default to ``True``.
+            can_read: Read permission flag (defaults to ``True``).
+            can_create: Create permission flag (defaults to ``True``).
+            can_update: Update permission flag (defaults to ``True``).
+            can_delete: Delete permission flag (defaults to ``True``).
+            can_execute: Execute permission flag (defaults to ``True``).
         """
         role_uuid = self._resolve_role_uuid(role)
         module_iri = self._resolve_module_iri(module)
