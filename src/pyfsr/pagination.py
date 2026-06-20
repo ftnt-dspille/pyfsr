@@ -69,9 +69,7 @@ class HydraPage(Generic[T]):
     raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_response(
-        cls, response: Any, page: int = 1, limit: int | None = None
-    ) -> HydraPage[Any]:
+    def from_response(cls, response: Any, page: int = 1, limit: int | None = None) -> HydraPage[Any]:
         return cls(
             members=extract_members(response),
             total=extract_total(response),

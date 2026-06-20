@@ -71,9 +71,7 @@ def test_user_accessor_handles_bare_iri():
 
 
 def test_assigned_to_falls_back_to_assigned_to_person():
-    task = Task.model_validate(
-        {"@id": "/api/3/tasks/t1", "@type": "Task", "assignedToPerson": _PERSON}
-    )
+    task = Task.model_validate({"@id": "/api/3/tasks/t1", "@type": "Task", "assignedToPerson": _PERSON})
     assert isinstance(task.assigned_to, User)
     assert task.assigned_to.email == "admin@example.com"
 

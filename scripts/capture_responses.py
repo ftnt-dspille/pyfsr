@@ -35,15 +35,11 @@ class ResponseCapture:
     def capture_picklists(self):
         """Capture picklist responses"""
         # Get alert severity picklist
-        severity_response = self.client.get(
-            "/api/3/picklists", params={"listName__name": "Severity"}
-        )
+        severity_response = self.client.get("/api/3/picklists", params={"listName__name": "Severity"})
         self.save_response("alert_severity_picklist.json", severity_response)
 
         # Get alert status picklist
-        status_response = self.client.get(
-            "/api/3/picklists", params={"listName__name": "AlertStatus"}
-        )
+        status_response = self.client.get("/api/3/picklists", params={"listName__name": "AlertStatus"})
         self.save_response("alert_status_picklist.json", status_response)
 
     def capture_alert_responses(self):

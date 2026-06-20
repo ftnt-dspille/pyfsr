@@ -123,8 +123,7 @@ def validate_field_path(module: str, path: str) -> None:
             current = rels[seg]
         elif seg in fields:
             raise ValueError(
-                f"{current!r} field {seg!r} is a scalar, not a relationship; "
-                f"cannot dot-walk into it in path {path!r}"
+                f"{current!r} field {seg!r} is a scalar, not a relationship; cannot dot-walk into it in path {path!r}"
             )
         else:
             raise ValueError(f"{current!r} has no relationship {seg!r} in path {path!r}")

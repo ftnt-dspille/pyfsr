@@ -72,9 +72,7 @@ class SystemAPI(BaseAPI):
         """
         return self.client.post("/api/auth/license", data={"license_key": license_key})
 
-    def deploy_license_public(
-        self, license_key: str, *, node_id: str | None = None
-    ) -> dict[str, Any]:
+    def deploy_license_public(self, license_key: str, *, node_id: str | None = None) -> dict[str, Any]:
         """First-time license activation (``POST /api/public/license``, no auth).
 
         Installs a license on a fresh/unlicensed appliance (``action:

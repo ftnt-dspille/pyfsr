@@ -43,17 +43,13 @@ class UsersAPI(BaseAPI):
     def role_map(self) -> dict[str, str]:
         """Return ``{name: uuid}`` for all roles, cached for the lifetime of this instance."""
         if self._role_map is None:
-            self._role_map = {
-                r["name"]: r["uuid"] for r in self.list_roles() if r.get("name") and r.get("uuid")
-            }
+            self._role_map = {r["name"]: r["uuid"] for r in self.list_roles() if r.get("name") and r.get("uuid")}
         return self._role_map
 
     def team_map(self) -> dict[str, str]:
         """Return ``{name: uuid}`` for all teams, cached for the lifetime of this instance."""
         if self._team_map is None:
-            self._team_map = {
-                t["name"]: t["uuid"] for t in self.list_teams() if t.get("name") and t.get("uuid")
-            }
+            self._team_map = {t["name"]: t["uuid"] for t in self.list_teams() if t.get("name") and t.get("uuid")}
         return self._team_map
 
     def _resolve_roles(self, roles: list[str]) -> list[str]:

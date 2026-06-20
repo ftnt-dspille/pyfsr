@@ -293,8 +293,7 @@ def _module_options():
                     "changes": [
                         {
                             "field": "tableName",
-                            "message": "tableName changed from oguraly_test_processes "
-                            "to oguraly_test_process",
+                            "message": "tableName changed from oguraly_test_processes to oguraly_test_process",
                         }
                     ],
                     "attributes": [
@@ -408,9 +407,7 @@ def test_import_file_rejects_unknown_resolve():
 
 def test_import_file_allow_schema_changes_bypasses_refusal():
     api, c = _api(_module_lifecycle_handler())
-    api.import_file(
-        "m.zip", allow_schema_changes=True, interval=0.0, timeout=1.0, options_timeout=1.0
-    )
+    api.import_file("m.zip", allow_schema_changes=True, interval=0.0, timeout=1.0, options_timeout=1.0)
     assert ("PUT", "/api/import/job-1") in [(m, u) for m, u, _ in c.calls]
 
 
@@ -423,9 +420,7 @@ def test_import_file_verify_raises_on_failed_migrate():
     )
     api, _ = _api(_module_lifecycle_handler(status="Error", error=err))
     with pytest.raises(FortiSOARException, match="half-applied migration"):
-        api.import_file(
-            "m.zip", allow_schema_changes=True, interval=0.0, timeout=1.0, options_timeout=1.0
-        )
+        api.import_file("m.zip", allow_schema_changes=True, interval=0.0, timeout=1.0, options_timeout=1.0)
 
 
 def test_import_file_verify_false_returns_failed_job():

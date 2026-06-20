@@ -196,9 +196,7 @@ class FortiSOAR:
             self.session.mount("https://", adapter)
             self.session.mount("http://", adapter)
         if suppress_insecure_warnings:
-            requests.packages.urllib3.disable_warnings(
-                requests.packages.urllib3.exceptions.InsecureRequestWarning
-            )
+            requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
 
         # Setup authentication
         self.auth = self._resolve_auth(
@@ -340,10 +338,7 @@ class FortiSOAR:
         # Legacy positional form — keep working, nudge toward keywords.
         if auth is not None:
             if username or password or token:
-                raise ValueError(
-                    "Pass auth either positionally or via username/password/token "
-                    "keywords — not both."
-                )
+                raise ValueError("Pass auth either positionally or via username/password/token keywords — not both.")
             warnings.warn(
                 "Passing auth positionally is deprecated; use "
                 "FortiSOAR(url, username=..., password=...) or "
@@ -356,9 +351,7 @@ class FortiSOAR:
             elif isinstance(auth, tuple) and len(auth) == 2:
                 username, password = auth
             else:
-                raise ValueError(
-                    "Positional auth must be an API-key str or a (username, password) tuple."
-                )
+                raise ValueError("Positional auth must be an API-key str or a (username, password) tuple.")
 
         # Explicit API key wins.
         if token:
@@ -383,9 +376,7 @@ class FortiSOAR:
         if username and not password:
             raise ValueError("username was given without a password.")
 
-        raise ValueError(
-            "No authentication provided — pass token=<api-key> or username=<user>, password=<pass>."
-        )
+        raise ValueError("No authentication provided — pass token=<api-key> or username=<user>, password=<pass>.")
 
     def request(
         self,
@@ -483,10 +474,7 @@ class FortiSOAR:
 
         if "application/json" in content_type:
             return response.json()
-        elif any(
-            binary_type in content_type
-            for binary_type in ["application/zip", "application/octet-stream"]
-        ):
+        elif any(binary_type in content_type for binary_type in ["application/zip", "application/octet-stream"]):
             return response.content
         else:
             # Default to JSON if content type is not explicitly specified
@@ -504,9 +492,7 @@ class FortiSOAR:
         response = self.request("POST", endpoint, params=params, data=data, files=files, **kwargs)
         return response.json()
 
-    def put(
-        self, endpoint: str, data: dict | None = None, params: dict | None = None, **kwargs
-    ) -> dict[str, Any]:
+    def put(self, endpoint: str, data: dict | None = None, params: dict | None = None, **kwargs) -> dict[str, Any]:
         """Perform PUT request and return JSON response"""
         response = self.request("PUT", endpoint, params=params, data=data, **kwargs)
         return response.json()
@@ -531,17 +517,13 @@ class FortiSOAR:
     @overload
     def records(self, module: Literal["alerts"], *, typed: bool = ...) -> RecordSet[Alert]: ...
     @overload
-    def records(
-        self, module: Literal["incidents"], *, typed: bool = ...
-    ) -> RecordSet[Incident]: ...
+    def records(self, module: Literal["incidents"], *, typed: bool = ...) -> RecordSet[Incident]: ...
     @overload
     def records(self, module: Literal["tasks"], *, typed: bool = ...) -> RecordSet[Task]: ...
     @overload
     def records(self, module: Literal["comments"], *, typed: bool = ...) -> RecordSet[Comment]: ...
     @overload
-    def records(
-        self, module: Literal["workflows"], *, typed: bool = ...
-    ) -> RecordSet[Workflow]: ...
+    def records(self, module: Literal["workflows"], *, typed: bool = ...) -> RecordSet[Workflow]: ...
     @overload
     def records(
         self, module: Literal["workflow_collections"], *, typed: bool = ...

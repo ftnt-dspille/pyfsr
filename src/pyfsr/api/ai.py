@@ -94,9 +94,7 @@ class AIApi(BaseAPI):
         ai = (self.client.system_settings.get_public_values() or {}).get("ai_feature") or {}
         return bool(ai.get("enable"))
 
-    def enable_features(
-        self, enabled: bool = True, *, modified_by: str | None = None
-    ) -> dict[str, Any]:
+    def enable_features(self, enabled: bool = True, *, modified_by: str | None = None) -> dict[str, Any]:
         """Enable (or disable) FortiAI features — the AI terms-acceptance gate.
 
         This is the programmatic equivalent of toggling *Enable AI Features* in
@@ -118,9 +116,7 @@ class AIApi(BaseAPI):
         return self.client.system_settings.update(patch)
 
     # ----------------------------------------------------------- investigation
-    def start_alert_investigation(
-        self, alert: dict[str, Any] | str, *, link: bool = True
-    ) -> dict[str, Any]:
+    def start_alert_investigation(self, alert: dict[str, Any] | str, *, link: bool = True) -> dict[str, Any]:
         """Kick off an asynchronous AI investigation of one alert.
 
         ``alert`` may be the full alert record (a dict, as returned by
@@ -273,14 +269,10 @@ class AIApi(BaseAPI):
                 continue
             hid = str(hyp.get("id"))
             supported = [
-                {k: q[k] for k in ("index", "question", "agent", "evidence")}
-                for q in questions
-                if hid in q["supports"]
+                {k: q[k] for k in ("index", "question", "agent", "evidence")} for q in questions if hid in q["supports"]
             ]
             weakened = [
-                {k: q[k] for k in ("index", "question", "agent", "evidence")}
-                for q in questions
-                if hid in q["weakens"]
+                {k: q[k] for k in ("index", "question", "agent", "evidence")} for q in questions if hid in q["weakens"]
             ]
             hyps.append(
                 {
@@ -300,9 +292,7 @@ class AIApi(BaseAPI):
             "hypotheses": hyps,
         }
 
-    def wait_for_result(
-        self, task_id: str, *, interval: float = 5.0, timeout: float = 600.0
-    ) -> dict[str, Any]:
+    def wait_for_result(self, task_id: str, *, interval: float = 5.0, timeout: float = 600.0) -> dict[str, Any]:
         """Poll a triage task until it reaches a terminal status, then return it.
 
         Args:
@@ -505,9 +495,7 @@ class AIApi(BaseAPI):
         out: list[dict[str, Any]] = []
         for call in self.investigation_tool_calls(task_id):
             owner = catalog.get(call.get("tool_name")) or {}
-            out.append(
-                {**call, "server": owner.get("server"), "server_uuid": owner.get("server_uuid")}
-            )
+            out.append({**call, "server": owner.get("server"), "server_uuid": owner.get("server_uuid")})
         return out
 
     def register_mcp_server(self, config: dict[str, Any]) -> dict[str, Any]:
@@ -566,9 +554,7 @@ class AIApi(BaseAPI):
         if validate:
             result = self.validate_mcp_server(config)
             if not result.get("valid"):
-                raise ValueError(
-                    f"MCP server did not validate, not saving: {result.get('message') or result}"
-                )
+                raise ValueError(f"MCP server did not validate, not saving: {result.get('message') or result}")
         uuid = config.get("uuid")
         if uuid:
             return self.update_mcp_server(uuid, config)
@@ -649,9 +635,7 @@ class AIApi(BaseAPI):
         resp = self.client.get("/api/ai/agent/config/default")
         return resp if isinstance(resp, dict) else {"config": resp}
 
-    def update_default_agent_config(
-        self, config: dict[str, Any], *, name: str | None = None
-    ) -> dict[str, Any]:
+    def update_default_agent_config(self, config: dict[str, Any], *, name: str | None = None) -> dict[str, Any]:
         """Update the default agent configuration (``POST /api/ai/agent/config/default``).
 
         Agents left on the default config inherit this ``mcp_server`` list, so
@@ -664,9 +648,7 @@ class AIApi(BaseAPI):
 
     def activate_agent(self, uuids: list[str], *, active: bool = True) -> dict[str, Any]:
         """Activate or deactivate agents by uuid (``POST /api/ai/agent/activate``)."""
-        return self.client.post(
-            "/api/ai/agent/activate", data={"uuids": uuids}, params={"active": active}
-        )
+        return self.client.post("/api/ai/agent/activate", data={"uuids": uuids}, params={"active": active})
 
     # -------------------------------------------------- agent ↔ MCP binding
     def mcp_server_names(self) -> dict[str, str]:
@@ -682,9 +664,7 @@ class AIApi(BaseAPI):
             if (m.get("id") or m.get("uuid"))
         }
 
-    def list_agent_mcp_servers(
-        self, name: str, version: str, *, friendly: bool = False
-    ) -> list[str]:
+    def list_agent_mcp_servers(self, name: str, version: str, *, friendly: bool = False) -> list[str]:
         """Return the MCP servers an agent is currently allowed to call.
 
         By default returns the raw server UUIDs as stored on the agent config.
@@ -731,22 +711,16 @@ class AIApi(BaseAPI):
         if mcp_uuid not in allowed:
             allowed.append(mcp_uuid)
         config[AGENT_CONFIG_MCP_KEY] = allowed
-        return self.update_agent_config(
-            name, version, config, name=dto.get("name"), config_id=dto.get("config_id")
-        )
+        return self.update_agent_config(name, version, config, name=dto.get("name"), config_id=dto.get("config_id"))
 
-    def disallow_mcp_server_for_agent(
-        self, name: str, version: str, mcp_uuid: str
-    ) -> dict[str, Any]:
+    def disallow_mcp_server_for_agent(self, name: str, version: str, mcp_uuid: str) -> dict[str, Any]:
         """Revoke an agent's access to an MCP server (inverse of
         :meth:`allow_mcp_server_for_agent`)."""
         dto = self.get_agent_config(name, version) or {}
         config = dict(dto.get("config") or {})
         allowed = [u for u in (config.get(AGENT_CONFIG_MCP_KEY) or []) if u != mcp_uuid]
         config[AGENT_CONFIG_MCP_KEY] = allowed
-        return self.update_agent_config(
-            name, version, config, name=dto.get("name"), config_id=dto.get("config_id")
-        )
+        return self.update_agent_config(name, version, config, name=dto.get("name"), config_id=dto.get("config_id"))
 
     # -------------------------------------------------- tool-usage evidence
     def tool_usage(
@@ -827,9 +801,7 @@ class AIApi(BaseAPI):
             :meth:`investigation_tool_calls` to see what that run invoked.
         """
         uuid = _uuid_from_ref(alert)
-        resp = self.client.get(
-            "/api/3/llm_activity_logs", params={"$search": uuid, "$limit": limit}
-        )
+        resp = self.client.get("/api/3/llm_activity_logs", params={"$search": uuid, "$limit": limit})
         records = resp.get("hydra:member") if isinstance(resp, dict) else (resp or [])
         counts: dict[str, int] = {}
         for rec in records or []:

@@ -182,11 +182,7 @@ class PlaybooksAPI(BaseAPI):
             raise ValueError("create_playbook() requires a non-empty name")
         if not isinstance(collection, str) or not collection.strip():
             raise ValueError("create_playbook() requires a collection uuid or IRI")
-        coll_iri = (
-            collection
-            if collection.startswith("/api/")
-            else f"/api/3/workflow_collections/{collection}"
-        )
+        coll_iri = collection if collection.startswith("/api/") else f"/api/3/workflow_collections/{collection}"
         body: dict[str, Any] = {
             "name": name.strip(),
             "collection": coll_iri,
@@ -261,9 +257,7 @@ class PlaybooksAPI(BaseAPI):
         if typed:
             from ..models import Workflow
 
-            page_obj.members = [
-                Workflow(**m) if isinstance(m, dict) else m for m in page_obj.members
-            ]
+            page_obj.members = [Workflow(**m) if isinstance(m, dict) else m for m in page_obj.members]
             if raw:
                 return page_obj
             return page_obj.members
@@ -417,13 +411,9 @@ class PlaybooksAPI(BaseAPI):
         if status is not None:
             params["status"] = status
         if tags_include is not None:
-            params["tags_include"] = (
-                ",".join(tags_include) if isinstance(tags_include, list) else tags_include
-            )
+            params["tags_include"] = ",".join(tags_include) if isinstance(tags_include, list) else tags_include
         if tags_exclude is not None:
-            params["tags_exclude"] = (
-                ",".join(tags_exclude) if isinstance(tags_exclude, list) else tags_exclude
-            )
+            params["tags_exclude"] = ",".join(tags_exclude) if isinstance(tags_exclude, list) else tags_exclude
         if playbook_uuid or playbook:
             if not playbook_uuid:
                 playbook_uuid = self._resolve_uuid(playbook)
@@ -672,9 +662,7 @@ class PlaybooksAPI(BaseAPI):
             body["aggregates"] = aggregates
         if limit is not None:
             body["limit"] = limit
-        return self.client.post(
-            "/api/wf/api/query/workflow_logs/", data=body, params={"logs": logs}
-        )
+        return self.client.post("/api/wf/api/query/workflow_logs/", data=body, params={"logs": logs})
 
     # ----------------------------------------------------------- manual inputs
     def manual_inputs(self) -> list[dict[str, Any]]:
@@ -684,9 +672,7 @@ class PlaybooksAPI(BaseAPI):
         ``step_id``. Buttons/options are omitted here — fetch them per-record with
         :meth:`retrieve_manual_input`. (POST-only; GET 405s.)
         """
-        return extract_members(
-            self.client.post("/api/wf/api/manual-wf-input/list_wfinput/", data={})
-        )
+        return extract_members(self.client.post("/api/wf/api/manual-wf-input/list_wfinput/", data={}))
 
     def retrieve_manual_input(self, pk: str) -> dict[str, Any]:
         """Fetch one manual-input record with its buttons/options.
@@ -826,12 +812,7 @@ class PlaybooksAPI(BaseAPI):
             data={"template": template, "values": values or {}},
         )
         if isinstance(resp, dict):
-            out = (
-                resp.get("result")
-                or resp.get("output")
-                or resp.get("rendered")
-                or resp.get("value")
-            )
+            out = resp.get("result") or resp.get("output") or resp.get("rendered") or resp.get("value")
             if out is not None:
                 return str(out)
             import json as _json

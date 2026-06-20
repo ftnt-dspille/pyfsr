@@ -122,9 +122,7 @@ class WorkflowCollectionsAPI(BaseAPI):
     # timestamps (``createDate``/``modifyDate``) are server-assigned and rejected on
     # write; the appliance ignores ``id``/``deletedAt``/``importedBy`` but we strip
     # them for cleanliness too.
-    _STRIP_KEYS: frozenset[str] = frozenset(
-        {"@context", "createDate", "modifyDate", "deletedAt", "importedBy", "id"}
-    )
+    _STRIP_KEYS: frozenset[str] = frozenset({"@context", "createDate", "modifyDate", "deletedAt", "importedBy", "id"})
 
     @classmethod
     def _clean_item(cls, obj: Any) -> Any:
@@ -166,8 +164,7 @@ class WorkflowCollectionsAPI(BaseAPI):
             raise ValueError("import_export() expects a dict (the export envelope)")
         if "data" not in data:
             raise ValueError(
-                "import_export() expects an export envelope with a 'data' key; "
-                "got keys: " + ", ".join(sorted(data))
+                "import_export() expects an export envelope with a 'data' key; got keys: " + ", ".join(sorted(data))
             )
         results: list[dict[str, Any]] = []
         for raw_col in data["data"]:

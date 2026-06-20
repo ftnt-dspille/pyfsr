@@ -96,9 +96,7 @@ def test_walkthrough_picklists_and_resolution(client):
     assert not report, f"unexpected resolution misses: {report}"
 
     miss: list = []
-    client.picklists.resolve_record_fields(
-        "alerts", {"severity": "Definitely Not A Severity"}, report=miss
-    )
+    client.picklists.resolve_record_fields("alerts", {"severity": "Definitely Not A Severity"}, report=miss)
     assert miss and miss[0]["field"] == "severity" and miss[0]["valid_values"]
 
 

@@ -88,10 +88,7 @@ def main() -> None:
         return
 
     if not DO_WRITES:
-        print(
-            f"\nWould ensure {CONNECTOR_NAME} == v{TARGET_VERSION} "
-            "(set DO_WRITES=1 to actually install)."
-        )
+        print(f"\nWould ensure {CONNECTOR_NAME} == v{TARGET_VERSION} (set DO_WRITES=1 to actually install).")
         return
 
     # ---- one-call orchestration ----------------------------------------------

@@ -19,9 +19,7 @@ def test_create_alert_success(mock_client, mock_response, monkeypatch):
     """Test successful alert creation"""
     mock_data = load_mock_response("alert_create_response.json")
 
-    monkeypatch.setattr(
-        "requests.Session.request", lambda *args, **kwargs: mock_response(json_data=mock_data)
-    )
+    monkeypatch.setattr("requests.Session.request", lambda *args, **kwargs: mock_response(json_data=mock_data))
 
     alert_data = {
         "name": "Response Capture Test Alert",
@@ -38,9 +36,7 @@ def test_get_alert(mock_client, mock_response, monkeypatch):
     """Test retrieving a single alert"""
     mock_data = load_mock_response("alert_get_response.json")
 
-    monkeypatch.setattr(
-        "requests.Session.request", lambda *args, **kwargs: mock_response(json_data=mock_data)
-    )
+    monkeypatch.setattr("requests.Session.request", lambda *args, **kwargs: mock_response(json_data=mock_data))
 
     alert_id = mock_data["@id"].split("/")[-1]
     result = mock_client.alerts.get(alert_id)
@@ -54,9 +50,7 @@ def test_list_alerts(mock_client, mock_response, monkeypatch):
     """Test listing alerts with pagination"""
     mock_data = load_mock_response("alert_list_response.json")
 
-    monkeypatch.setattr(
-        "requests.Session.request", lambda *args, **kwargs: mock_response(json_data=mock_data)
-    )
+    monkeypatch.setattr("requests.Session.request", lambda *args, **kwargs: mock_response(json_data=mock_data))
 
     result = mock_client.alerts.list()
 

@@ -101,14 +101,10 @@ def validate_leaf_value(operator: str, value: Any) -> None:
             raise ValueError(f"operator {operator!r} is value-less; drop the value")
     elif spec.arity is Arity.LIST:
         if not isinstance(value, (list, tuple)):
-            raise ValueError(
-                f"operator {operator!r} needs a list value, got {type(value).__name__}"
-            )
+            raise ValueError(f"operator {operator!r} needs a list value, got {type(value).__name__}")
     elif spec.arity is Arity.BOOL:
         if not isinstance(value, bool):
-            raise ValueError(
-                f"operator {operator!r} needs a bool value, got {type(value).__name__}"
-            )
+            raise ValueError(f"operator {operator!r} needs a bool value, got {type(value).__name__}")
     else:  # SCALAR
         if value is None:
             raise ValueError(f"operator {operator!r} requires a value")

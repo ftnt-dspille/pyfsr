@@ -42,14 +42,10 @@ SAFE_PLAYBOOK_RESULT = "safe-playbook-ok"
 def _pick_step_type(rows: list[dict[str, Any]], *needles: str) -> dict[str, Any]:
     wanted = [n.lower() for n in needles]
     for row in rows:
-        haystack = " ".join(
-            str(row.get(key) or "") for key in ("name", "displayName", "description")
-        ).lower()
+        haystack = " ".join(str(row.get(key) or "") for key in ("name", "displayName", "description")).lower()
         if any(needle in haystack for needle in wanted):
             return row
-    available = ", ".join(
-        sorted({str(row.get("displayName") or row.get("name") or "?") for row in rows})[:20]
-    )
+    available = ", ".join(sorted({str(row.get("displayName") or row.get("name") or "?") for row in rows})[:20])
     raise RuntimeError(f"could not find step type for {needles!r}; available: {available}")
 
 
@@ -187,9 +183,7 @@ def main() -> None:
     print("current playbook.logs       :", playbook_logs)
 
     if args.enable_debug_playbook_logging:
-        updated = client.system_settings.set_playbook_debug_logging(
-            True, allow_playbook_override=False
-        )
+        updated = client.system_settings.set_playbook_debug_logging(True, allow_playbook_override=False)
         print(
             "updated workflow_log_config:",
             updated.get("publicValues", {}).get("workflow_log_config"),
@@ -201,9 +195,7 @@ def main() -> None:
         print("step type discovery failed :", exc.__class__.__name__)
         step_types = []
     start_type = _resolve_step_type_iri(step_types, FALLBACK_START_STEP_TYPE, "start")
-    safe_type = _resolve_step_type_iri(
-        step_types, FALLBACK_SAFE_STEP_TYPE, "prepare inputs", "set variable", "manual"
-    )
+    safe_type = _resolve_step_type_iri(step_types, FALLBACK_SAFE_STEP_TYPE, "prepare inputs", "set variable", "manual")
     print("resolved step types        :", start_type, safe_type)
 
     collection_uuid = str(uuid.uuid4())
@@ -252,9 +244,7 @@ def main() -> None:
     print("final step status          :", final_step.get("status"))
     print("final step result keys     :", sorted((final_step.get("result") or {}).keys()))
     if result_value != SAFE_PLAYBOOK_RESULT:
-        raise RuntimeError(
-            f"playbook result mismatch: expected {SAFE_PLAYBOOK_RESULT!r}, got {result_value!r}"
-        )
+        raise RuntimeError(f"playbook result mismatch: expected {SAFE_PLAYBOOK_RESULT!r}, got {result_value!r}")
     if final_step.get("status") != "finished":
         raise RuntimeError(f"final step did not finish: {final_step!r}")
 

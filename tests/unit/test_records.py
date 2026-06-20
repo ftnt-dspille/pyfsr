@@ -95,9 +95,7 @@ def test_search_adds_search_param():
 
 
 def test_query_posts_to_query_endpoint():
-    client = FakeClient(
-        {"/api/query/incidents": {"hydra:member": [{"uuid": "x"}], "hydra:totalItems": 1}}
-    )
+    client = FakeClient({"/api/query/incidents": {"hydra:member": [{"uuid": "x"}], "hydra:totalItems": 1}})
     q = Query().eq("status.itemValue", "Open").limit(50)
     page = RecordSet(client, "incidents").query(q)
     method, endpoint, params, data = client.calls[0]

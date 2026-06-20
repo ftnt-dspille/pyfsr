@@ -49,9 +49,7 @@ class TaxiiAPI(BaseAPI):
         """Fetch one collection's metadata (``GET .../collections/{uuid}``)."""
         return self.client.get(f"{_BASE}/collections/{uuid}")
 
-    def manifest(
-        self, uuid: str, *, limit: int | None = None, added_after: str | None = None
-    ) -> dict[str, Any]:
+    def manifest(self, uuid: str, *, limit: int | None = None, added_after: str | None = None) -> dict[str, Any]:
         """Fetch a collection manifest — one entry per object, no bodies.
 
         ``GET .../collections/{uuid}/manifest``. Cheap "what's new since X" poll:
@@ -61,9 +59,7 @@ class TaxiiAPI(BaseAPI):
         params = _page_params(limit, added_after)
         return self.client.get(f"{_BASE}/collections/{uuid}/manifest", params=params or None)
 
-    def objects(
-        self, uuid: str, *, limit: int | None = None, added_after: str | None = None
-    ) -> dict[str, Any]:
+    def objects(self, uuid: str, *, limit: int | None = None, added_after: str | None = None) -> dict[str, Any]:
         """Fetch STIX 2.1 objects from a collection.
 
         ``GET .../collections/{uuid}/objects``. Returns the FortiSOAR

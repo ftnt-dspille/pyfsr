@@ -118,9 +118,7 @@ class BaseRecord(BaseModel):
             return model.model_validate(value)
         return None
 
-    def _as_actor(
-        self, field: str, user_model: type[BaseModel], appliance_model: type[BaseModel]
-    ) -> Any:
+    def _as_actor(self, field: str, user_model: type[BaseModel], appliance_model: type[BaseModel]) -> Any:
         """Coerce an actor field (createUser/modifyUser) to User or Appliance by ``@type``."""
         value = self.get(field)
         if value is None:

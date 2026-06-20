@@ -193,9 +193,7 @@ def test_export_connector_builds_entry_and_cleans_up(monkeypatch):
         return {}
 
     api, c = _api(handler)
-    monkeypatch.setattr(
-        api, "_export_with_template", lambda **kw: kw.get("output_path") or "out.zip"
-    )
+    monkeypatch.setattr(api, "_export_with_template", lambda **kw: kw.get("output_path") or "out.zip")
     api.export_connector("code-snippet", output_path="cs.zip")
 
     entry = captured["template"]["options"]["connectors"][0]

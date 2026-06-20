@@ -128,11 +128,7 @@ def test_uninstall_success(mock_client, mock_response, monkeypatch):
         if method == "POST":
             # content_hub search response
             return mock_response(
-                json_data={
-                    "hydra:member": [
-                        {"uuid": "pack-uuid", "name": "SOAR Framework", "installed": True}
-                    ]
-                }
+                json_data={"hydra:member": [{"uuid": "pack-uuid", "name": "SOAR Framework", "installed": True}]}
             )
         # DELETE — return 204-style empty
         return mock_response(json_data={}, status_code=204)

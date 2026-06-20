@@ -81,6 +81,4 @@ def mock_responses():
 
 def pytest_configure(config):
     """Register custom markers."""
-    config.addinivalue_line(
-        "markers", "integration: mark test as requiring integration with real FortiSOAR instance"
-    )
+    config.addinivalue_line("markers", "integration: mark test as requiring integration with real FortiSOAR instance")

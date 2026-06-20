@@ -83,9 +83,7 @@ class ImportConfigAPI(BaseAPI):
         ``file_iri`` is the ``@id`` of a ``/api/3/files`` record (what
         ``client.files.upload`` returns under ``@id``).
         """
-        resp = self.client.post(
-            "/api/3/import_jobs", data={"status": "InProgress", "file": file_iri}
-        )
+        resp = self.client.post("/api/3/import_jobs", data={"status": "InProgress", "file": file_iri})
         uuid = _job_uuid(resp)
         if not uuid:
             raise ValueError(f"could not determine import-job uuid from response: {resp!r}")
@@ -110,9 +108,7 @@ class ImportConfigAPI(BaseAPI):
         """Overwrite an import job's ``options`` (``PUT /api/3/import_jobs/<job>``)."""
         return self.client.put(f"/api/3/import_jobs/{job_uuid}", data={"options": options})
 
-    def wait_for_options(
-        self, job_uuid: str, *, interval: float = 2.0, timeout: float = 120.0
-    ) -> dict[str, Any]:
+    def wait_for_options(self, job_uuid: str, *, interval: float = 2.0, timeout: float = 120.0) -> dict[str, Any]:
         """Poll the job until option generation has populated ``options``.
 
         Returns the populated ``options`` dict. Raises ``TimeoutError`` if the
@@ -139,9 +135,7 @@ class ImportConfigAPI(BaseAPI):
         """Start the import run (``PUT /api/import/<job>``; async)."""
         return self.client.put(f"/api/import/{job_uuid}")
 
-    def wait_for_import(
-        self, job_uuid: str, *, interval: float = 3.0, timeout: float = 600.0
-    ) -> ImportJobResult:
+    def wait_for_import(self, job_uuid: str, *, interval: float = 3.0, timeout: float = 600.0) -> ImportJobResult:
         """Poll the import run until it reaches a terminal status.
 
         Returns the latest job record; ``status == "Import Complete"`` means
@@ -177,9 +171,7 @@ class ImportConfigAPI(BaseAPI):
         if job is None:
             # Never got a single clean poll within the window (whole import ran
             # under a migrate outage) — surface that rather than a bare None.
-            raise TimeoutError(
-                f"import job {job_uuid} never returned a readable status within {timeout}s"
-            )
+            raise TimeoutError(f"import job {job_uuid} never returned a readable status within {timeout}s")
         return job
 
     def wait_until_ready(self, *, interval: float = 3.0, timeout: float = 300.0) -> bool:
@@ -290,8 +282,7 @@ class ImportConfigAPI(BaseAPI):
         """
         if resolve is not None and resolve not in _RESOLVERS:
             raise ValueError(
-                f"unknown resolve strategy {resolve!r}; "
-                f"choose one of {sorted(_RESOLVERS)} or pass modify_options=..."
+                f"unknown resolve strategy {resolve!r}; choose one of {sorted(_RESOLVERS)} or pass modify_options=..."
             )
 
         uploaded = self.client.files.upload(zip_path)
@@ -504,8 +495,7 @@ def inspect_changes(options: dict[str, Any]) -> list[dict[str, Any]]:
                         "scope": "attribute",
                         "field": aname,
                         "kind": "unique-constraint field change",
-                        "message": f"field {aname!r} is in a unique constraint and changes "
-                        "(constraint/index rebuild)",
+                        "message": f"field {aname!r} is in a unique constraint and changes (constraint/index rebuild)",
                     }
                 )
     return risks

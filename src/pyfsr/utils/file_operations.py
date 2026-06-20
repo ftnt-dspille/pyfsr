@@ -54,9 +54,7 @@ class FileOperations:
                         "Content-Type": None
                     },
                 )
-                record = (
-                    FileRecord.model_validate(response) if isinstance(response, dict) else response
-                )
+                record = FileRecord.model_validate(response) if isinstance(response, dict) else response
                 logger.debug("File upload successful: %s", record.get("@id"))
                 return record
 

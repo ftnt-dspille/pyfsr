@@ -19,9 +19,7 @@ class SolutionPackAPI(BaseAPI):
         self.export_config = export_config
         self.content_hub = ContentHubSearch(client)
 
-    def export_pack(
-        self, pack_identifier: str, output_path: str | None = None, poll_interval: int = 5
-    ) -> str:
+    def export_pack(self, pack_identifier: str, output_path: str | None = None, poll_interval: int = 5) -> str:
         """
         Export a solution pack by name, label, or search term.
 
@@ -42,9 +40,7 @@ class SolutionPackAPI(BaseAPI):
         pack = self.content_hub.find_installed_pack(pack_identifier)
 
         if not pack:
-            raise ValueError(
-                f"An Installed Solution pack was not found with the search term: {pack_identifier}"
-            )
+            raise ValueError(f"An Installed Solution pack was not found with the search term: {pack_identifier}")
 
         if not pack.get("template"):
             raise ValueError(f"Solution Pack {pack_identifier} has no export template")
@@ -99,9 +95,7 @@ class SolutionPackAPI(BaseAPI):
                 # or in one call:
                 status = client.solution_packs.install("SOAR Framework", "2.2.1", wait=True)
         """
-        resp = self.client.post(
-            "/api/3/solutionpacks/install", data={"name": name, "version": version}
-        )
+        resp = self.client.post("/api/3/solutionpacks/install", data={"name": name, "version": version})
         if not isinstance(resp, dict):
             return SolutionPackInstallResponse()
         install_resp = SolutionPackInstallResponse.model_validate(resp)
@@ -115,14 +109,10 @@ class SolutionPackAPI(BaseAPI):
         ``GET /api/3/import_jobs/{job_id}`` (selecting just the progress fields).
         ``status == "Import Complete"`` means the install finished.
         """
-        resp = self.client.get(
-            f"/api/3/import_jobs/{job_id}", params={"__selectFields": _INSTALL_FIELDS}
-        )
+        resp = self.client.get(f"/api/3/import_jobs/{job_id}", params={"__selectFields": _INSTALL_FIELDS})
         return InstallJobStatus.model_validate(resp if isinstance(resp, dict) else {"status": resp})
 
-    def wait_for_install(
-        self, job_id: str, *, interval: float = 3.0, timeout: float = 300.0
-    ) -> InstallJobStatus:
+    def wait_for_install(self, job_id: str, *, interval: float = 3.0, timeout: float = 300.0) -> InstallJobStatus:
         """Poll an install import job until it reaches a terminal status.
 
         Returns the latest :class:`~pyfsr.models.InstallJobStatus`. On timeout,
@@ -130,10 +120,7 @@ class SolutionPackAPI(BaseAPI):
         """
         deadline = time.monotonic() + timeout
         status = self.install_status(job_id)
-        while (
-            str(status.status or "").strip().lower() not in _INSTALL_TERMINAL
-            and time.monotonic() < deadline
-        ):
+        while str(status.status or "").strip().lower() not in _INSTALL_TERMINAL and time.monotonic() < deadline:
             time.sleep(interval)
             status = self.install_status(job_id)
         return status
@@ -164,7 +151,5 @@ class SolutionPackAPI(BaseAPI):
             pack.get("@id", "").rstrip("/").split("/")[-1] if "/" in pack.get("@id", "") else None
         )
         if not uuid:
-            raise ValueError(
-                f"Cannot resolve UUID for solution pack {name!r} — try fetching it with typed=True"
-            )
+            raise ValueError(f"Cannot resolve UUID for solution pack {name!r} — try fetching it with typed=True")
         self.client.delete(f"/api/3/solutionpacks/{uuid}")

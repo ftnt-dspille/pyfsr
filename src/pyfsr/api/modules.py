@@ -90,9 +90,7 @@ class ModulesAPI(BaseAPI):
         self._modules = mods
         return mods
 
-    def describe(
-        self, module: str, *, refresh: bool = False, with_values: bool = False
-    ) -> dict[str, Any]:
+    def describe(self, module: str, *, refresh: bool = False, with_values: bool = False) -> dict[str, Any]:
         """Describe one module's fields.
 
         Returns ``{module, label, plural, field_count, fields}`` where each field
@@ -112,12 +110,7 @@ class ModulesAPI(BaseAPI):
         data = self.client.get(_META_FULL)
         members = (data or {}).get("hydra:member") or []
         hit = next(
-            (
-                m
-                for m in members
-                if str(m.get("type", "")).lower() == want
-                or str(m.get("module", "")).lower() == want
-            ),
+            (m for m in members if str(m.get("type", "")).lower() == want or str(m.get("module", "")).lower() == want),
             None,
         )
         if hit is None:
@@ -139,9 +132,7 @@ class ModulesAPI(BaseAPI):
                     ),
                     "type": a.get("type") or a.get("formType"),
                     "form_type": a.get("formType"),
-                    "required": bool(
-                        isinstance(validation, dict) and validation.get("required") is True
-                    ),
+                    "required": bool(isinstance(validation, dict) and validation.get("required") is True),
                     "picklist_name": _picklist_name_from_attr(a),
                 }
             )
@@ -190,9 +181,7 @@ class ModulesAPI(BaseAPI):
         return [
             m
             for m in self.list(refresh=refresh)
-            if q in str(m["type"]).lower()
-            or q in str(m["label"]).lower()
-            or q in str(m["plural"]).lower()
+            if q in str(m["type"]).lower() or q in str(m["label"]).lower() or q in str(m["plural"]).lower()
         ]
 
     def fields(self, module: str, *, refresh: bool = False) -> list[dict[str, Any]]:
@@ -248,10 +237,7 @@ class ModulesAPI(BaseAPI):
         for f in d["fields"]:
             req = "yes" if f.get("required") else ""
             pick = f"  [picklist: {f['picklist_name']}]" if f.get("picklist_name") else ""
-            lines.append(
-                f"  {str(f['name']):<28} {str(f.get('type')):<18} {req:<4} "
-                f"{f.get('title', '')}{pick}"
-            )
+            lines.append(f"  {str(f['name']):<28} {str(f.get('type')):<18} {req:<4} {f.get('title', '')}{pick}")
             vals = f.get("picklist_values")
             if vals:
                 shown = ", ".join(vals[:25]) + ("  …" if len(vals) > 25 else "")

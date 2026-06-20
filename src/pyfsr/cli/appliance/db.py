@@ -26,9 +26,7 @@ _IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,62}")
 def _require_identifier(name: str) -> str:
     """Reject anything that isn't a bare SQL identifier (anti-injection guard)."""
     if not _IDENT_RE.fullmatch(name or ""):
-        raise ValueError(
-            f"invalid table identifier {name!r}: must match [A-Za-z_][A-Za-z0-9_]{{0,62}}"
-        )
+        raise ValueError(f"invalid table identifier {name!r}: must match [A-Za-z_][A-Za-z0-9_]{{0,62}}")
     return name
 
 
@@ -43,9 +41,7 @@ def query(facts: Facts, sql: str, *, role: str | None = None, db: str | None = N
     Returns ``(dbname, headers, rows)``.
     """
     if is_write_sql(sql):
-        raise ValueError(
-            "refusing to run a mutating statement via `db query` — use `db exec --write --yes`"
-        )
+        raise ValueError("refusing to run a mutating statement via `db query` — use `db exec --write --yes`")
     target = facts.resolve_db(role=role, db=db)
     headers, rows = _query_with_headers(facts, sql, target)
     return target, headers, rows
@@ -66,17 +62,13 @@ def exec_write(
     """
     target = facts.resolve_db(role=role, db=db)
     if not yes:
-        raise PermissionError(
-            f"refusing to execute write against {target!r} without confirmation (pass --yes)"
-        )
+        raise PermissionError(f"refusing to execute write against {target!r} without confirmation (pass --yes)")
     rows = facts.psql(sql, db=target, tuples_only=False)
     status = rows[-1][0] if rows and rows[-1] else "OK"
     return target, status
 
 
-def tables(
-    facts: Facts, pattern: str | None = None, *, role: str | None = None, db: str | None = None
-):
+def tables(facts: Facts, pattern: str | None = None, *, role: str | None = None, db: str | None = None):
     """List tables (optionally name-filtered) in the target DB."""
     where = "WHERE schemaname='public'"
     if pattern:
@@ -87,9 +79,7 @@ def tables(
     return target, ["table"], rows
 
 
-def indexes(
-    facts: Facts, pattern: str | None = None, *, role: str | None = None, db: str | None = None
-):
+def indexes(facts: Facts, pattern: str | None = None, *, role: str | None = None, db: str | None = None):
     """List indexes (optionally name-filtered) in the target DB — the lookup used
     to diagnose ``42P07`` index-name collisions."""
     where = "WHERE schemaname='public'"

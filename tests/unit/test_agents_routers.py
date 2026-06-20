@@ -132,9 +132,7 @@ def test_connector_install_status_filters_by_agent():
     assert out[0].agent == "a1"
     assert out[0].status == "Completed"
     endpoint = c.calls[-1][1]
-    assert endpoint == (
-        "/api/integration/connectors/agents/cyops_utilities/3.7.1/?format=json&active=true"
-    )
+    assert endpoint == ("/api/integration/connectors/agents/cyops_utilities/3.7.1/?format=json&active=true")
 
 
 def test_connector_install_status_unwraps_dict_payload():

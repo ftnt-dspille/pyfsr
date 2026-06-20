@@ -107,12 +107,7 @@ class PicklistsAPI(BaseAPI):
         data = self.client.get(_META_PATH)
         members = (data or {}).get("hydra:member") or []
         hit = next(
-            (
-                m
-                for m in members
-                if str(m.get("type", "")).lower() == want
-                or str(m.get("module", "")).lower() == want
-            ),
+            (m for m in members if str(m.get("type", "")).lower() == want or str(m.get("module", "")).lower() == want),
             None,
         )
         fmap: dict[str, str | None] = {}
@@ -201,9 +196,7 @@ class PicklistsAPI(BaseAPI):
                     continue
                 valid = self.options(picklist)
                 if report is not None:
-                    report.append(
-                        {"field": k, "value": v, "picklist": picklist, "valid_values": valid}
-                    )
+                    report.append({"field": k, "value": v, "picklist": picklist, "valid_values": valid})
                 if strict:
                     raise PicklistResolutionError(k, v, picklist, valid)
             out[k] = v

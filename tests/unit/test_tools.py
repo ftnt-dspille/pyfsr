@@ -16,9 +16,7 @@ class FakeRecordSet:
         return {"@id": f"/api/3/{self.module}/{ref}", "uuid": ref, "name": "rec", "junk": 1}
 
     def search(self, term="", limit=30):
-        return HydraPage(
-            members=[{"uuid": "a", "name": "x", "junk": 1}], total=1, page=1, limit=limit, raw={}
-        )
+        return HydraPage(members=[{"uuid": "a", "name": "x", "junk": 1}], total=1, page=1, limit=limit, raw={})
 
     def query(self, body):
         self.store["query_body"] = body

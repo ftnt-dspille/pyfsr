@@ -119,9 +119,7 @@ class AlertsAPI(BaseAPI):
 
         return self.client.get(f"/api/3/{self.module}/{alert_id}")
 
-    def update(
-        self, alert_id: str, data: dict[str, Any], *, resolve_picklists: bool = True
-    ) -> dict[str, Any]:
+    def update(self, alert_id: str, data: dict[str, Any], *, resolve_picklists: bool = True) -> dict[str, Any]:
         """
         Update an existing alert.
 

@@ -137,9 +137,7 @@ def test_create_collections_posts_to_bulk_upsert_path():
 
 def test_import_export_strips_export_metadata():
     a, c = api()
-    a.import_export(
-        {"type": "workflow_collections", "data": [{"@context": "x", "uuid": "c-1", "name": "Pack"}]}
-    )
+    a.import_export({"type": "workflow_collections", "data": [{"@context": "x", "uuid": "c-1", "name": "Pack"}]})
     assert c.calls[-1] == ("POST", "/api/3/workflow_collections", {"uuid": "c-1", "name": "Pack"})
 
 
@@ -147,9 +145,7 @@ def test_import_export_replace_hard_deletes_existing():
     uuid = "46a177c6-200c-425a-b16d-c52ebb915d6b"
     responses = {f"/api/3/workflow_collections/{uuid}": {"uuid": uuid, "name": "Pack"}}
     a = WorkflowCollectionsAPI(RecordingClient(responses=responses))
-    a.import_export(
-        {"type": "workflow_collections", "data": [{"uuid": uuid, "name": "Pack"}]}, replace=True
-    )
+    a.import_export({"type": "workflow_collections", "data": [{"uuid": uuid, "name": "Pack"}]}, replace=True)
     assert a.client.calls[0] == ("GET", f"/api/3/workflow_collections/{uuid}", None)
     assert a.client.calls[1] == (
         "DELETE",

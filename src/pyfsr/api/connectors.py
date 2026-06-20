@@ -139,8 +139,7 @@ def _value_fits_type(ftype: str, value: Any) -> bool:
         return isinstance(value, str) and value.strip().lstrip("+-").isdigit()
     if ftype == "checkbox":
         return isinstance(value, bool) or (
-            isinstance(value, str)
-            and value.strip().lower() in {"true", "false", "1", "0", "yes", "no"}
+            isinstance(value, str) and value.strip().lower() in {"true", "false", "1", "0", "yes", "no"}
         )
     if ftype == "json":
         if isinstance(value, (dict, list)):
@@ -223,9 +222,7 @@ class ConnectorsAPI(BaseAPI):
             check its ``status`` (``"Import Complete"`` means success). The
             configured-connector cache is dropped on a successful wait.
         """
-        resp = self.client.post(
-            "/api/3/solutionpacks/install", data={"name": name, "version": version}
-        )
+        resp = self.client.post("/api/3/solutionpacks/install", data={"name": name, "version": version})
         resp = resp if isinstance(resp, dict) else {"result": resp}
         if not wait:
             return resp
@@ -318,9 +315,7 @@ class ConnectorsAPI(BaseAPI):
         """
         with tempfile.TemporaryDirectory() as tmp:
             tgz = pack_connector(source_dir, output=str(Path(tmp) / "bundle.tgz"))
-            return self.install_from_file(
-                tgz, replace=replace, wait=wait, interval=interval, timeout=timeout
-            )
+            return self.install_from_file(tgz, replace=replace, wait=wait, interval=interval, timeout=timeout)
 
     def install_status(self, job_id: str) -> InstallJobStatus:
         """Fetch a connector install's import-job progress.
@@ -328,14 +323,10 @@ class ConnectorsAPI(BaseAPI):
         ``GET /api/3/import_jobs/{job_id}`` (selecting just the progress fields).
         ``status == "Import Complete"`` means the install finished.
         """
-        resp = self.client.get(
-            f"/api/3/import_jobs/{job_id}", params={"__selectFields": _INSTALL_FIELDS}
-        )
+        resp = self.client.get(f"/api/3/import_jobs/{job_id}", params={"__selectFields": _INSTALL_FIELDS})
         return InstallJobStatus.model_validate(resp if isinstance(resp, dict) else {"result": resp})
 
-    def wait_for_install(
-        self, job_id: str, *, interval: float = 3.0, timeout: float = 300.0
-    ) -> InstallJobStatus:
+    def wait_for_install(self, job_id: str, *, interval: float = 3.0, timeout: float = 300.0) -> InstallJobStatus:
         """Poll an install import job until it reaches a terminal status.
 
         Returns the latest :meth:`install_status` payload. On timeout, returns
@@ -343,10 +334,7 @@ class ConnectorsAPI(BaseAPI):
         """
         deadline = time.monotonic() + timeout
         status = self.install_status(job_id)
-        while (
-            str(status.status or "").strip().lower() not in _INSTALL_TERMINAL
-            and time.monotonic() < deadline
-        ):
+        while str(status.status or "").strip().lower() not in _INSTALL_TERMINAL and time.monotonic() < deadline:
             time.sleep(interval)
             status = self.install_status(job_id)
         return status
@@ -450,9 +438,7 @@ class ConnectorsAPI(BaseAPI):
 
         def _do_install() -> None:
             if bundle_path:
-                self.install_from_file(
-                    bundle_path, replace=True, wait=wait, interval=interval, timeout=timeout
-                )
+                self.install_from_file(bundle_path, replace=True, wait=wait, interval=interval, timeout=timeout)
             else:
                 self.install(name, version, wait=wait, interval=interval, timeout=timeout)
 
@@ -468,12 +454,8 @@ class ConnectorsAPI(BaseAPI):
                 self.client.import_config.import_file(backup_path, wait=True)
                 self.clear_cache()
                 configs_after = self.configurations(name)
-                return self._ensure_summary(
-                    "restored", cur, version, backup_path, configs_before, configs_after
-                )
-            return self._ensure_summary(
-                "in_place", cur, version, backup_path, configs_before, configs_after
-            )
+                return self._ensure_summary("restored", cur, version, backup_path, configs_before, configs_after)
+            return self._ensure_summary("in_place", cur, version, backup_path, configs_before, configs_after)
 
         # In-place didn't take — destructive fallback, only if allowed.
         if allow_uninstall_fallback:
@@ -487,9 +469,7 @@ class ConnectorsAPI(BaseAPI):
                 self.clear_cache()
             configs_after = self.configurations(name)
             action = "reinstalled" if new == version else "failed"
-            return self._ensure_summary(
-                action, cur, new, backup_path, configs_before, configs_after
-            )
+            return self._ensure_summary(action, cur, new, backup_path, configs_before, configs_after)
 
         return self._ensure_summary("failed", cur, new, backup_path, configs_before, configs_after)
 
@@ -720,12 +700,8 @@ class ConnectorsAPI(BaseAPI):
         """
         version = version or self.resolve_version(connector)
         if not version:
-            raise ValueError(
-                f"{connector!r} is not configured; pass version= to fetch its definition"
-            )
-        return self.client.post(
-            f"/api/integration/connectors/{connector}/{version}/?format=json", data={}
-        )
+            raise ValueError(f"{connector!r} is not configured; pass version= to fetch its definition")
+        return self.client.post(f"/api/integration/connectors/{connector}/{version}/?format=json", data={})
 
     def operations(self, connector: str, *, version: str | None = None) -> list[dict[str, Any]]:
         """List a connector's operations (the ``operations`` of :meth:`definition`).
@@ -811,8 +787,7 @@ class ConnectorsAPI(BaseAPI):
                     "field": key,
                     "code": "unknown_field",
                     "message": (
-                        f"{key!r} is not a recognized configuration field "
-                        "(typo, or gated behind a different selection)"
+                        f"{key!r} is not a recognized configuration field (typo, or gated behind a different selection)"
                     ),
                 }
             )
@@ -870,9 +845,7 @@ class ConnectorsAPI(BaseAPI):
                             {
                                 "field": fname,
                                 "code": "invalid_option",
-                                "message": (
-                                    f"{_field_label(field)}: {value!r} is not a valid option"
-                                ),
+                                "message": (f"{_field_label(field)}: {value!r} is not a valid option"),
                                 "valid_options": allowed,
                             }
                         )
@@ -1076,9 +1049,7 @@ class ConnectorsAPI(BaseAPI):
         the entity's full operations + configuration schema + file tree. Follow
         with :meth:`dev_read_file`/:meth:`dev_write_file`, then :meth:`dev_publish`.
         """
-        resp = self.client.post(
-            f"{self._DEV_BASE}/{entity_id}/", data={"edit_repo_connector": True}
-        )
+        resp = self.client.post(f"{self._DEV_BASE}/{entity_id}/", data={"edit_repo_connector": True})
         return resp if isinstance(resp, dict) else {"result": resp}
 
     def dev_read_file(self, entity_id: str, xpath: str) -> dict[str, Any]:
