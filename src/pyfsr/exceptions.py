@@ -77,6 +77,78 @@ class UnsupportedAuthOperationError(FortiSOARException):
         super().__init__(msg)
 
 
+# Substrings the appliance returns (as 5xx bodies / error messages) while it is
+# mid-migrate — a publish *or* a module-bearing import runs a full backup + DB
+# migrate + cache-rebuild cycle, during which the API is briefly unavailable and
+# surfaces transient state strings ("System Backup", "Clearing Cache", "Schema
+# Update", "Decrypt Database", …) instead of real errors.
+_MIGRATE_TRANSIENT_MARKERS = (
+    "decrypt database",
+    "encrypt database",
+    "cleaning up old backups",
+    "creating backup",
+    "taking backup",
+    "system backup",
+    "restoring",
+    "migrat",  # "migrating" / "migration in progress"
+    "schema update",
+    "clearing cache",
+    "backup",
+    "service temporarily unavailable",
+    "service unavailable",
+    "bad gateway",
+    "gateway time-out",
+    "gateway timeout",
+)
+
+
+def is_migrate_transient(exc: Exception) -> bool:
+    """True if ``exc`` is a transient state surfaced while a migrate is in flight.
+
+    Both a publish and an import that carries schema changes drive the appliance
+    through a backup + DB migrate + cache-rebuild cycle. During that window the
+    API is briefly down, returning 5xx and/or state strings like "System Backup"
+    / "Clearing Cache" / "Schema Update" rather than a real error. We treat any
+    5xx, plus any error message matching a known migrate-cycle marker, as "still
+    working" so pollers keep waiting instead of failing.
+    """
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int) and status >= 500:
+        return True
+    text = (
+        " ".join(str(getattr(exc, attr, "") or "") for attr in ("message", "error_type")).lower()
+        or str(exc).lower()
+    )
+    return any(marker in text for marker in _MIGRATE_TRANSIENT_MARKERS)
+
+
+def describe_migrate_failure(status, message) -> str:
+    """Build an actionable message for a failed publish/import migrate.
+
+    ``status`` / ``message`` come from the failure's source of truth — an import
+    job record (``status``/``errorMessage``) or a ``/api/publish/error`` body
+    (``status``/``message``). For the half-applied-migration wedge (Postgres
+    ``42P07`` / "already exists" / "Duplicate table") it appends remediation
+    guidance, since pyfsr cannot repair appliance DB state over the API.
+    """
+    raw = str(message or "")
+    msg = f"publish/migrate failed: {status}"
+    if raw:
+        msg += f" ({raw})"
+    low = raw.lower()
+    if "already exists" in low or "42p07" in low or "duplicate" in low:
+        msg += (
+            "\nThis is a half-applied migration: a prior migrate created a DB object "
+            "(often an index, e.g. from a tableName rename) without recording it, so the "
+            "appliance's CREATE (no IF NOT EXISTS) now fails on every publish/import. "
+            "pyfsr cannot fix appliance DB state over the API — drop the orphaned relation "
+            "named in the error on the FortiSOAR Postgres node (or restore a pre-migrate "
+            "backup), then retry. To avoid re-triggering it, import the offending module "
+            "with resolve='skip_schema' (don't re-apply the schema change)."
+        )
+    return msg
+
+
 def _extract_message(error_data):
     """Pull a human-readable message out of a FortiSOAR/Symfony error body.
 

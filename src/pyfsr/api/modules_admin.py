@@ -55,7 +55,7 @@ import time
 import uuid as _uuid
 from typing import TYPE_CHECKING, Any
 
-from ..exceptions import FortiSOARException
+from ..exceptions import FortiSOARException, describe_migrate_failure, is_migrate_transient
 from .base import BaseAPI
 
 if TYPE_CHECKING:
@@ -124,25 +124,6 @@ _BOGUS_DB_TYPES = {
     "date": "dates store an epoch 'integer' — use datetime_field()",
     "bool": "booleans store 'boolean' — use checkbox_field()",
 }
-
-# Substrings the appliance returns (as 5xx bodies / error messages) while a publish
-# is mid-flight — it runs a full backup + DB migrate cycle and the API is briefly
-# unavailable, surfacing transient state strings instead of real errors.
-_PUBLISH_TRANSIENT_MARKERS = (
-    "decrypt database",
-    "encrypt database",
-    "cleaning up old backups",
-    "creating backup",
-    "taking backup",
-    "restoring",
-    "migrat",  # "migrating" / "migration in progress"
-    "backup",
-    "service temporarily unavailable",
-    "service unavailable",
-    "bad gateway",
-    "gateway time-out",
-    "gateway timeout",
-)
 
 
 class ModulesAdminAPI(BaseAPI):
@@ -1017,25 +998,7 @@ class ModulesAdminAPI(BaseAPI):
                     self.client.delete(f"{_VIEW_TEMPLATES}/{vt['uuid']}")
         return True
 
-    @staticmethod
-    def _is_publish_transient(exc: Exception) -> bool:
-        """True if ``exc`` is a transient state surfaced while a publish is in flight.
-
-        During a publish the appliance runs a backup + DB migrate cycle and the API is
-        briefly down, returning 5xx and/or state strings like "Decrypt Database" /
-        "Cleaning Up Old Backups" rather than a real error. We treat any 5xx, plus any
-        error message matching a known migrate-cycle marker, as "still working".
-        """
-        status = getattr(exc, "status_code", None)
-        if isinstance(status, int) and status >= 500:
-            return True
-        text = (
-            " ".join(
-                str(getattr(exc, attr, "") or "") for attr in ("message", "error_type")
-            ).lower()
-            or str(exc).lower()
-        )
-        return any(marker in text for marker in _PUBLISH_TRANSIENT_MARKERS)
+    _is_publish_transient = staticmethod(is_migrate_transient)
 
     def _last_publish_time(self) -> int | None:
         """Best-effort read of the last publish's ``last_publish_time`` (epoch), or None."""
@@ -1157,8 +1120,9 @@ class ModulesAdminAPI(BaseAPI):
                     return body
                 if fresh and status not in ("", "started", "in progress", "inprogress"):
                     raise FortiSOARException(
-                        f"publish failed: {body.get('status')} "
-                        f"({body.get('message') or body.get('error') or body})"
+                        describe_migrate_failure(
+                            body.get("status"), body.get("message") or body.get("error") or body
+                        )
                     )
             if time.monotonic() >= deadline:
                 raise TimeoutError(
