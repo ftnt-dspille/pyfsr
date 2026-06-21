@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Typed CRUD shortcuts for the common SOC record modules, mirroring the
+  `client.alerts` pattern so callers stop hand-rolling raw `client.post(...)`:
+  - `client.incidents` (`IncidentsAPI`) and `client.tasks` (`TasksAPI`):
+    full `create`/`list`/`get`/`update`/`delete` with friendly picklist-value
+    resolution (e.g. `status="Open"`, `severity="High"`) and a `record=` link
+    that attaches the new record to a parent (e.g. a task linked to its alert);
+    the relationship field is derived from the parent record's IRI.
+  - `client.comments` (`CommentsAPI`): `create(content, record=...)` posts an
+    analyst comment linked to one or more parent records of any module.
+  Shared base `pyfsr.api._record_module.RecordModuleAPI`. 6 unit tests.
+
 ## [0.6.4] - 2026-06-20
 
 ### Added
