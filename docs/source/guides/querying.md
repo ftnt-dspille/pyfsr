@@ -5,6 +5,13 @@ endpoint (`POST /api/query/{module}`). Every method returns `self` so calls chai
 naturally. Results come back as typed {class}`~pyfsr.pagination.HydraPage` objects
 that you can iterate, slice, or introspect.
 
+```{note}
+This guide covers the pyfsr `Query` **builder** (the Python ergonomics). For the underlying
+**wire protocol** — every filter/aggregation operator, OR/AND nesting, `$search`, Elasticsearch
+global search, pagination, and source-verified quirks — see the canonical FortiSOAR Query API
+reference: `~/PycharmProjects/Miscellaneous/fortisoar/FortiSOAR_Query_Aggregation_and_Filter_Options.md`.
+```
+
 ## Quick start
 
 ```python

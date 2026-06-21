@@ -1,3 +1,22 @@
+---
+title: Appliance CLI Validation & Examples
+category: tools
+status: reference
+source: live-verified
+topics:
+- appliance-cli
+- ssh
+- database
+- service-health
+- rabbitmq
+- diagnostics
+last_verified: '2026-06-20'
+canonical: true
+summary: 'Live-validated (10.99.249.205, FSR 7.6.5) guide to pyfsr appliance CLI (P1+P2):
+  transport abstraction, sudo hygiene, database layer, service diagnostics, RabbitMQ
+  checks, log scanning with 45 unit tests and dual demo modes.'
+---
+
 # Appliance CLI Validation & Examples
 
 **Status**: P2 shipped; unit-tested in full and **live-validated against a real
