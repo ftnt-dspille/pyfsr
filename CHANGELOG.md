@@ -14,7 +14,8 @@ All notable changes to this project will be documented in this file.
     the relationship field is derived from the parent record's IRI.
   - `client.comments` (`CommentsAPI`): `create(content, record=...)` posts an
     analyst comment linked to one or more parent records of any module.
-  Shared base `pyfsr.api._record_module.RecordModuleAPI`. 6 unit tests.
+  Shared base `pyfsr.api._record_module.RecordModuleAPI`. 6 unit tests; live
+  round-trip (create + link + delete for all three modules) validated on the dev box.
 
 ## [0.6.4] - 2026-06-20
 
