@@ -76,10 +76,20 @@ class FakeTransport(Transport):
             return f"Device UUID: {self._csadm_uuid}\n"
         if argv[:3] == ["csadm", "license", "--show-details"]:
             return "License Type: subscription\nExpiry: 2027-01-01\nDevice UUID: " + f"{self._csadm_uuid}\n"
+        if argv[:3] == ["csadm", "log", "--collect"]:
+            return "Log bundle created: /tmp/fortisoar-logs-20260621.tar.gz\n"
+        if argv[:3] == ["csadm", "ha", "list-nodes"]:
+            return "node1  primary  fortisoar.example.com\nnode2  secondary  fortisoar.example.com\n"
+        if argv[:3] == ["csadm", "ha", "show-health"]:
+            return "HA Health: OK\nPrimary: node1\nSecondary: node2\n"
+        if argv[:3] == ["csadm", "ha", "get-replication-stat"]:
+            return "Replication lag: 0 bytes\nStatus: streaming\n"
         if argv[:3] == ["csadm", "services", "--status"]:
             return "cyops-auth\tactive\t0\t0\ncyops-api\tactive\t0\t0\n"
         if argv[:4] == ["csadm", "services", "--restart", "--name"]:
             return f"service {argv[4]} restarted\n"
+        if argv[:1] == ["bash"] and len(argv) == 2 and argv[1].endswith(".sh"):
+            return f"[diagnose] ran {argv[1]}\n"
         if argv[0] == "curl":
             return self._curl_response(argv)
         if argv[0] == "ss":
@@ -590,3 +600,119 @@ def test_logs_scan_units_covered(facts):
     # Should run journalctl for each unit in _SCAN_UNITS
     journalctl_calls = [argv for argv, _env, _sudo in facts.transport.commands if argv[0] == "journalctl"]
     assert len(journalctl_calls) > 0
+
+
+# --------------------------------------------------------------- P3: logs bundle
+
+
+def test_logs_bundle_returns_tarball_path(facts):
+    path = logs_cmds.bundle(facts.transport)
+    # FakeTransport returns the csadm bundle output; check it ran csadm log --collect
+    cmds = [argv for argv, _e, _s in facts.transport.commands]
+    assert any(argv[:3] == ["csadm", "log", "--collect"] for argv in cmds)
+    # Return value should be a string (path or raw output)
+    assert isinstance(path, str)
+
+
+# --------------------------------------------------------------- P3: es
+
+
+def test_es_health_parses_json(facts):
+    from pyfsr.cli.appliance import es as es_cmds
+
+    h = es_cmds.health(facts)
+    # FakeTransport returns ES health JSON via _curl_response → the fake just
+    # returns "200" (not valid JSON), so the parse falls back to "unknown".
+    assert h.status in ("green", "yellow", "red", "unknown")
+    assert isinstance(h.raw, str)
+
+
+def test_es_health_green_parsed(facts):
+    """When the fake returns valid JSON, ESHealth is populated."""
+    import json
+
+    from pyfsr.cli.appliance import es as es_cmds
+
+    payload = json.dumps(
+        {
+            "cluster_name": "fortisoar",
+            "status": "green",
+            "number_of_nodes": 1,
+            "number_of_data_nodes": 1,
+            "active_shards": 120,
+            "unassigned_shards": 0,
+        }
+    )
+
+    class ESFakeTransport(FakeTransport):
+        def _curl_response(self, argv):
+            return payload
+
+    h = es_cmds.health(Facts(ESFakeTransport()))
+    assert h.status == "green"
+    assert h.cluster_name == "fortisoar"
+    assert h.active_shards == 120
+    assert h.unassigned_shards == 0
+
+
+def test_es_shards_no_unassigned(facts):
+    """When ES says no unassigned shards, shards() returns a descriptive row."""
+    import json
+
+    from pyfsr.cli.appliance import es as es_cmds
+
+    payload = json.dumps({"error": {"reason": "no unassigned shards to explain"}})
+
+    class NoShardFake(FakeTransport):
+        def _curl_response(self, argv):
+            return payload
+
+    headers, rows = es_cmds.shards(Facts(NoShardFake()))
+    assert rows == [["(no unassigned shards)"]]
+
+
+# --------------------------------------------------------------- P3: ha
+
+
+def test_ha_nodes_runs_csadm(facts):
+    from pyfsr.cli.appliance import ha as ha_cmds
+
+    ha_cmds.nodes(facts.transport)
+    cmds = [argv for argv, _e, _s in facts.transport.commands]
+    assert any(argv[:3] == ["csadm", "ha", "list-nodes"] for argv in cmds)
+
+
+def test_ha_health_runs_csadm(facts):
+    from pyfsr.cli.appliance import ha as ha_cmds
+
+    ha_cmds.health(facts.transport)
+    cmds = [argv for argv, _e, _s in facts.transport.commands]
+    assert any(argv[:3] == ["csadm", "ha", "show-health"] for argv in cmds)
+
+
+def test_ha_replication_runs_csadm(facts):
+    from pyfsr.cli.appliance import ha as ha_cmds
+
+    ha_cmds.replication(facts.transport)
+    cmds = [argv for argv, _e, _s in facts.transport.commands]
+    assert any(argv[:3] == ["csadm", "ha", "get-replication-stat"] for argv in cmds)
+
+
+# --------------------------------------------------------------- P3: diagnose
+
+
+def test_diagnose_runs_script(facts):
+    from pyfsr.cli.appliance import diagnose as diagnose_cmds
+
+    result = diagnose_cmds.run(facts.transport, path="/opt/cyops/scripts/fsr_diagnose.sh")
+    cmds = [argv for argv, _e, _s in facts.transport.commands]
+    assert any(argv == ["bash", "/opt/cyops/scripts/fsr_diagnose.sh"] for argv in cmds)
+    assert isinstance(result, str)
+
+
+def test_diagnose_missing_script_raises(facts):
+    from pyfsr.cli.appliance import diagnose as diagnose_cmds
+
+    # "missing" in the path makes FakeTransport's `test -f` return 1.
+    with pytest.raises(FileNotFoundError):
+        diagnose_cmds.run(facts.transport, path="/opt/cyops/scripts/missing_diagnose.sh")

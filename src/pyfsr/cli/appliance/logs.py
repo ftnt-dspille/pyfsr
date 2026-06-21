@@ -44,6 +44,24 @@ def tail(transport: Transport, service: str, *, lines: int = 100) -> str:
     return transport.run(["tail", "-n", str(lines), path], sudo=True).stdout
 
 
+def bundle(transport: Transport, *, timeout: float = 300.0) -> str:
+    """Run ``csadm log --collect`` and return the path of the resulting tarball.
+
+    ``csadm log --collect`` bundles all cyops logs into a single
+    ``fortisoar-logs.tar.gz`` under ``/tmp/``. The function returns the path
+    printed by csadm (or the whole output if the path cannot be parsed).
+    """
+    res = transport.run(["csadm", "log", "--collect"], sudo=True, timeout=timeout).check()
+    # csadm prints something like: "Log bundle created: /tmp/fortisoar-logs-<ts>.tar.gz"
+    for line in res.stdout.splitlines():
+        if ".tar.gz" in line:
+            parts = line.split()
+            for part in reversed(parts):
+                if part.endswith(".tar.gz"):
+                    return part
+    return res.stdout.strip()
+
+
 def scan(transport: Transport, *, minutes: int = 30) -> str:
     """Roll up recent errors from the cyops units' journals (last ``minutes``)."""
     out: list[str] = []
