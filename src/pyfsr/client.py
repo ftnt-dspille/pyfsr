@@ -40,6 +40,7 @@ from .api.tasks import TasksAPI
 from .api.taxii import TaxiiAPI
 from .api.user_settings import UserSettingsAPI
 from .api.users import UsersAPI
+from .api.views import ViewsAPI
 from .api.wf_tools import WfToolsAPI
 from .api.workflow_collections import WorkflowCollectionsAPI
 from .auth.api_key import APIKeyAuth
@@ -238,6 +239,9 @@ class FortiSOAR:
 
         # Module / field schema administration (create, alter fields, publish)
         self.modules_admin: ModulesAdminAPI = ModulesAdminAPI(self)
+
+        # Active system view template (SVT) resolution per module/layout
+        self.views: ViewsAPI = ViewsAPI(self)
 
         # Picklist discovery + friendly-value -> IRI resolution
         self.picklists: PicklistsAPI = PicklistsAPI(self)
