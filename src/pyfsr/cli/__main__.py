@@ -13,6 +13,9 @@ from collections.abc import Callable
 from . import _output
 from . import playbook as playbook_cmds
 from .appliance import db as db_cmds
+from .appliance import diagnose as diagnose_cmds
+from .appliance import es as es_cmds
+from .appliance import ha as ha_cmds
 from .appliance import info as info_cmds
 from .appliance import license as license_cmds
 from .appliance import logs as logs_cmds
@@ -198,6 +201,50 @@ def build_parser() -> argparse.ArgumentParser:
     p_logs_scan.add_argument("--minutes", type=int, default=30, help="window (default 30)")
     p_logs_scan.set_defaults(func=cmd_logs_scan)
 
+    p_logs_bundle = logssub.add_parser("bundle", help="csadm log --collect → tarball path")
+    _add_connection_args(p_logs_bundle)
+    p_logs_bundle.set_defaults(func=cmd_logs_bundle)
+
+    # --- es group ---
+    p_es = asub.add_parser("es", help="Elasticsearch health / shard verbs")
+    essub = p_es.add_subparsers(dest="es_command", required=True)
+
+    p_es_health = essub.add_parser("health", help="cluster health (green/yellow/red + shard counts)")
+    _add_connection_args(p_es_health)
+    _add_fmt(p_es_health)
+    p_es_health.set_defaults(func=cmd_es_health)
+
+    p_es_shards = essub.add_parser("shards", help="unassigned-shard allocation explain")
+    _add_connection_args(p_es_shards)
+    _add_fmt(p_es_shards)
+    p_es_shards.set_defaults(func=cmd_es_shards)
+
+    # --- ha group ---
+    p_ha = asub.add_parser("ha", help="HA cluster verbs (csadm ha)")
+    hasub = p_ha.add_subparsers(dest="ha_command", required=True)
+
+    p_ha_nodes = hasub.add_parser("nodes", help="csadm ha list-nodes")
+    _add_connection_args(p_ha_nodes)
+    p_ha_nodes.set_defaults(func=cmd_ha_nodes)
+
+    p_ha_health = hasub.add_parser("health", help="csadm ha show-health")
+    _add_connection_args(p_ha_health)
+    p_ha_health.set_defaults(func=cmd_ha_health)
+
+    p_ha_replication = hasub.add_parser("replication", help="csadm ha get-replication-stat")
+    _add_connection_args(p_ha_replication)
+    p_ha_replication.set_defaults(func=cmd_ha_replication)
+
+    # --- diagnose ---
+    p_diag = asub.add_parser("diagnose", help="run fsr_diagnose.sh on the appliance")
+    _add_connection_args(p_diag)
+    p_diag.add_argument(
+        "--script",
+        default="/opt/cyops/scripts/fsr_diagnose.sh",
+        help="path to fsr_diagnose.sh on the appliance",
+    )
+    p_diag.set_defaults(func=cmd_diagnose)
+
     # --- playbook group (top-level; API-based, distinct from the SSH appliance group) ---
     p_pb = sub.add_parser("playbook", help="author playbooks in YAML and deploy via the API")
     pbsub = p_pb.add_subparsers(dest="pb_command", required=True)
@@ -374,6 +421,57 @@ def cmd_logs_tail(args: argparse.Namespace) -> int:
 
 def cmd_logs_scan(args: argparse.Namespace) -> int:
     print(logs_cmds.scan(_make_transport(args), minutes=args.minutes))
+    return 0
+
+
+def cmd_logs_bundle(args: argparse.Namespace) -> int:
+    path = logs_cmds.bundle(_make_transport(args))
+    print(path)
+    return 0
+
+
+# --- es handlers ---------------------------------------------------------
+def cmd_es_health(args: argparse.Namespace) -> int:
+    h = es_cmds.health(_make_facts(args))
+    _output.kv(
+        {
+            "status": h.status,
+            "cluster": h.cluster_name,
+            "nodes": h.num_nodes,
+            "data_nodes": h.num_data_nodes,
+            "active_shards": h.active_shards,
+            "unassigned_shards": h.unassigned_shards,
+        },
+        fmt=args.fmt,
+    )
+    return 1 if h.status == "red" else 0
+
+
+def cmd_es_shards(args: argparse.Namespace) -> int:
+    headers, rows = es_cmds.shards(_make_facts(args))
+    _output.render(rows, headers, fmt=args.fmt)
+    return 0
+
+
+# --- ha handlers ---------------------------------------------------------
+def cmd_ha_nodes(args: argparse.Namespace) -> int:
+    print(ha_cmds.nodes(_make_transport(args)))
+    return 0
+
+
+def cmd_ha_health(args: argparse.Namespace) -> int:
+    print(ha_cmds.health(_make_transport(args)))
+    return 0
+
+
+def cmd_ha_replication(args: argparse.Namespace) -> int:
+    print(ha_cmds.replication(_make_transport(args)))
+    return 0
+
+
+# --- diagnose handler ----------------------------------------------------
+def cmd_diagnose(args: argparse.Namespace) -> int:
+    print(diagnose_cmds.run(_make_transport(args), path=args.script), end="")
     return 0
 
 
