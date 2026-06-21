@@ -4,6 +4,7 @@ from ..models._integration import InstallJobStatus
 from ..models._system import SolutionPackInstallResponse
 from .base import BaseAPI
 from .content_hub import ContentHubSearch
+from .export_config import ExportConfigAPI
 
 _INSTALL_TERMINAL = {"import complete", "import failed", "error"}
 _INSTALL_FIELDS = ["status", "progressPercent", "errorMessage", "currentlyImporting"]
@@ -14,9 +15,9 @@ class SolutionPackAPI(BaseAPI):
     API implementation for FortiSOAR Solution Pack operations
     """
 
-    def __init__(self, client, export_config):
+    def __init__(self, client):
         super().__init__(client)
-        self.export_config = export_config
+        self.export_config = ExportConfigAPI(client)
         self.content_hub = ContentHubSearch(client)
 
     def export_pack(self, pack_identifier: str, output_path: str | None = None, poll_interval: int = 5) -> str:
