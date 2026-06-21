@@ -26,6 +26,14 @@ jobs:
       - uses: astral-sh/ruff-action@v1
         with:
           args: format --check
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: mypy (typed CLI surface)
+        run: |
+          pip install -e '.[typecheck]'
+          mypy
 
   test:
     runs-on: ubuntu-latest

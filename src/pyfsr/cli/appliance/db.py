@@ -35,7 +35,9 @@ def is_write_sql(sql: str) -> bool:
     return bool(_WRITE_RE.match(sql))
 
 
-def query(facts: Facts, sql: str, *, role: str | None = None, db: str | None = None):
+def query(
+    facts: Facts, sql: str, *, role: str | None = None, db: str | None = None
+) -> tuple[str, list[str], list[list[str]]]:
     """Run a **read-only** query. Rejects mutating SQL (use ``db exec --write``).
 
     Returns ``(dbname, headers, rows)``.
@@ -54,7 +56,7 @@ def exec_write(
     role: str | None = None,
     db: str | None = None,
     yes: bool = False,
-):
+) -> tuple[str, str]:
     """Run a mutating statement. Refuses unless ``yes=True``.
 
     Returns ``(dbname, status_line)`` where ``status_line`` is psql's command tag
@@ -68,7 +70,9 @@ def exec_write(
     return target, status
 
 
-def tables(facts: Facts, pattern: str | None = None, *, role: str | None = None, db: str | None = None):
+def tables(
+    facts: Facts, pattern: str | None = None, *, role: str | None = None, db: str | None = None
+) -> tuple[str, list[str], list[list[str]]]:
     """List tables (optionally name-filtered) in the target DB."""
     where = "WHERE schemaname='public'"
     if pattern:
@@ -79,7 +83,9 @@ def tables(facts: Facts, pattern: str | None = None, *, role: str | None = None,
     return target, ["table"], rows
 
 
-def indexes(facts: Facts, pattern: str | None = None, *, role: str | None = None, db: str | None = None):
+def indexes(
+    facts: Facts, pattern: str | None = None, *, role: str | None = None, db: str | None = None
+) -> tuple[str, list[str], list[list[str]]]:
     """List indexes (optionally name-filtered) in the target DB — the lookup used
     to diagnose ``42P07`` index-name collisions."""
     where = "WHERE schemaname='public'"
@@ -91,7 +97,7 @@ def indexes(facts: Facts, pattern: str | None = None, *, role: str | None = None
     return target, ["table", "index"], rows
 
 
-def list_databases(facts: Facts):
+def list_databases(facts: Facts) -> tuple[list[str], list[list[str]]]:
     """Enumerate appliance DBs with sizes and detected content-DB role."""
     rows = facts.psql(
         "SELECT datname, pg_size_pretty(pg_database_size(datname)) "
@@ -147,7 +153,7 @@ def drop_module_tables(facts: Facts, base_table: str, *, yes: bool = False) -> d
 
 
 # --- internals -----------------------------------------------------------
-def _query_with_headers(facts: Facts, sql: str, db: str):
+def _query_with_headers(facts: Facts, sql: str, db: str) -> tuple[list[str], list[list[str]]]:
     args_rows = facts.psql(sql, db=db, tuples_only=False)
     # psql with -A (no -t) puts headers on line 0; psql() already split on \x1f.
     if not args_rows:

@@ -43,7 +43,7 @@ def status(transport: Transport, name: str | None = None) -> str:
     return transport.run(argv, sudo=True).stdout.strip()
 
 
-def liveness(transport: Transport, *, base: str = "https://127.0.0.1", timeout: float = 6.0):
+def liveness(transport: Transport, *, base: str = "https://127.0.0.1", timeout: float = 6.0) -> list[ProbeResult]:
     """Probe canonical endpoints; flag *active-but-wedged* services.
 
     Returns a list of :class:`ProbeResult`. ``code == 0`` (curl's ``000``) means
@@ -86,7 +86,7 @@ def restart(transport: Transport, name: str, *, yes: bool = False) -> str:
     return transport.run(["csadm", "services", "--restart", "--name", name], sudo=True, timeout=120).stdout.strip()
 
 
-def listeners(transport: Transport):
+def listeners(transport: Transport) -> tuple[list[str], list[list[str]]]:
     """Listening TCP ports with the owning process (``ss -tlnp``).
 
     Returns ``(headers, rows)``. Falls back to raw lines if parsing fails.
