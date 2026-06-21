@@ -43,10 +43,21 @@ source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 myst_enable_extensions = ["colon_fence", "deflist"]
 myst_heading_anchors = 3
 
+# SPHINX_OFFLINE=1 drops third-party inventories (requests, pydantic) that
+# fail when a VPN/proxy does SSL inspection, turning network errors into -W
+# build failures. The Python stdlib inventory (docs.python.org) survives VPN.
+# CI runs without this var and fetches all three.
+_offline = os.environ.get("SPHINX_OFFLINE")
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
-    "requests": ("https://docs.python-requests.org/en/latest/", None),
-    "pydantic": ("https://docs.pydantic.dev/latest/", None),
+    **(
+        {}
+        if _offline
+        else {
+            "requests": ("https://docs.python-requests.org/en/latest/", None),
+            "pydantic": ("https://docs.pydantic.dev/latest/", None),
+        }
+    ),
 }
 
 # Cross-references autoapi emits that have no resolvable target (base classes /
@@ -59,6 +70,14 @@ nitpick_ignore = [
     ("py:obj", "pyfsr.models._generated"),
     ("py:mod", "pyfsr.models._generated"),
     ("py:class", "pydantic.main.BaseModel"),
+    ("py:class", "pydantic.BaseModel"),
+    ("py:obj", "pydantic.BaseModel"),
+    # requests.Response: resolved via intersphinx when online; ignored offline
+    # (SPHINX_OFFLINE=1 skips the requests inventory to avoid VPN SSL failures).
+    ("py:class", "requests.Response"),
+    # argparse._SubParsersAction is a private stdlib type not exported by the
+    # Python intersphinx inventory.
+    ("py:class", "argparse._SubParsersAction"),
     # Typing artifacts autoapi can't resolve under `-n`: the `...` in
     # ``Callable[..., Any]`` / ``tuple[str, ...]`` renders as an Ellipsis xref,
     # and HydraPage's xref doesn't resolve from projection's autosummary context.
