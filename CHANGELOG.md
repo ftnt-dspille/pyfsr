@@ -16,6 +16,12 @@ All notable changes to this project will be documented in this file.
     analyst comment linked to one or more parent records of any module.
   Shared base `pyfsr.api._record_module.RecordModuleAPI`. 6 unit tests; live
   round-trip (create + link + delete for all three modules) validated on the dev box.
+- `client.views` (`ViewsAPI`): resolve a module's **active** system view template
+  (SVT) layout via `GET /api/views/1/modules-<module>-<kind>` — `views.detail(module)`,
+  `views.listing(module)`, `views.form(module)`, plus generic `views.resolve(module,
+  kind=)`. A module can carry duplicate `isDefault: true` SVT rows, so the live layout
+  must be resolved through this endpoint, never picked by name/flag. 4 unit tests; live
+  validated on the dev box (resolved detail UUID confirmed among the raw SVT rows).
 
 ## [0.6.4] - 2026-06-20
 
