@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 
 from . import _output
 from . import playbook as playbook_cmds
 from .appliance import db as db_cmds
 from .appliance import info as info_cmds
+from .appliance import license as license_cmds
 from .appliance import logs as logs_cmds
 from .appliance import mq as mq_cmds
 from .appliance import service as service_cmds
@@ -40,7 +42,7 @@ def _add_target_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--db", help="explicit DB name (overrides --role)")
 
 
-def _make_transport(args) -> Transport:
+def _make_transport(args: argparse.Namespace) -> Transport:
     return make_transport(
         host=args.host,
         user=args.user,
@@ -51,7 +53,7 @@ def _make_transport(args) -> Transport:
     )
 
 
-def _make_facts(args) -> Facts:
+def _make_facts(args: argparse.Namespace) -> Facts:
     return Facts(_make_transport(args))
 
 
@@ -164,6 +166,23 @@ def build_parser() -> argparse.ArgumentParser:
             _add_fmt(sp)
         sp.set_defaults(func=_MQ_HANDLERS[verb])
 
+    # --- license group ---
+    p_lic = asub.add_parser("license", help="licensing / identity (device UUID, drift)")
+    licsub = p_lic.add_subparsers(dest="license_command", required=True)
+
+    p_lic_show = licsub.add_parser("show", help="csadm license --show-details")
+    _add_connection_args(p_lic_show)
+    p_lic_show.set_defaults(func=cmd_license_show)
+
+    p_lic_uuid = licsub.add_parser("device-uuid", help="resolved device UUID (file first, csadm fallback)")
+    _add_connection_args(p_lic_uuid)
+    p_lic_uuid.set_defaults(func=cmd_license_device_uuid)
+
+    p_lic_drift = licsub.add_parser("drift", help="file vs csadm entitlement UUID drift (exit 1 if drifted)")
+    _add_connection_args(p_lic_drift)
+    _add_fmt(p_lic_drift)
+    p_lic_drift.set_defaults(func=cmd_license_drift)
+
     # --- logs group ---
     p_logs = asub.add_parser("logs", help="log tail / error scan")
     logssub = p_logs.add_subparsers(dest="logs_command", required=True)
@@ -194,20 +213,20 @@ def _add_fmt(p: argparse.ArgumentParser) -> None:
 
 
 # --- command handlers ----------------------------------------------------
-def cmd_info(args) -> int:
+def cmd_info(args: argparse.Namespace) -> int:
     facts = _make_facts(args)
     _output.kv(info_cmds.identity(facts), fmt=args.fmt)
     return 0
 
 
-def cmd_db_list(args) -> int:
+def cmd_db_list(args: argparse.Namespace) -> int:
     facts = _make_facts(args)
     headers, rows = db_cmds.list_databases(facts)
     _output.render(rows, headers, fmt=args.fmt)
     return 0
 
 
-def cmd_db_query(args) -> int:
+def cmd_db_query(args: argparse.Namespace) -> int:
     facts = _make_facts(args)
     dbname, headers, rows = db_cmds.query(facts, args.sql, role=args.role, db=args.db)
     _emit_target(dbname, args.fmt)
@@ -215,7 +234,7 @@ def cmd_db_query(args) -> int:
     return 0
 
 
-def cmd_db_tables(args) -> int:
+def cmd_db_tables(args: argparse.Namespace) -> int:
     facts = _make_facts(args)
     dbname, headers, rows = db_cmds.tables(facts, args.pattern, role=args.role, db=args.db)
     _emit_target(dbname, args.fmt)
@@ -223,7 +242,7 @@ def cmd_db_tables(args) -> int:
     return 0
 
 
-def cmd_db_indexes(args) -> int:
+def cmd_db_indexes(args: argparse.Namespace) -> int:
     facts = _make_facts(args)
     dbname, headers, rows = db_cmds.indexes(facts, args.pattern, role=args.role, db=args.db)
     _emit_target(dbname, args.fmt)
@@ -231,7 +250,7 @@ def cmd_db_indexes(args) -> int:
     return 0
 
 
-def cmd_db_exec(args) -> int:
+def cmd_db_exec(args: argparse.Namespace) -> int:
     if not args.write:
         print("error: `db exec` mutates — pass --write to acknowledge", file=sys.stderr)
         return 2
@@ -243,7 +262,7 @@ def cmd_db_exec(args) -> int:
     return 0
 
 
-def cmd_db_drop_module_tables(args) -> int:
+def cmd_db_drop_module_tables(args: argparse.Namespace) -> int:
     facts = _make_facts(args)
     planned = db_cmds.find_module_tables(facts, args.table)
     print(
@@ -259,12 +278,12 @@ def cmd_db_drop_module_tables(args) -> int:
 
 
 # --- service handlers ----------------------------------------------------
-def cmd_service_status(args) -> int:
+def cmd_service_status(args: argparse.Namespace) -> int:
     print(service_cmds.status(_make_transport(args), args.name))
     return 0
 
 
-def cmd_service_liveness(args) -> int:
+def cmd_service_liveness(args: argparse.Namespace) -> int:
     probes = service_cmds.liveness(_make_transport(args))
     rows = [[p.label, f"{p.method} {p.path}", p.code, p.verdict] for p in probes]
     _output.render(rows, ["service", "endpoint", "code", "verdict"], fmt=args.fmt)
@@ -272,43 +291,43 @@ def cmd_service_liveness(args) -> int:
     return 1 if any(p.code == 0 for p in probes) else 0
 
 
-def cmd_service_restart(args) -> int:
+def cmd_service_restart(args: argparse.Namespace) -> int:
     out = service_cmds.restart(_make_transport(args), args.name, yes=args.yes)
     print(out or f"restarted {args.name}")
     return 0
 
 
-def cmd_service_listeners(args) -> int:
+def cmd_service_listeners(args: argparse.Namespace) -> int:
     headers, rows = service_cmds.listeners(_make_transport(args))
     _output.render(rows, headers, fmt=args.fmt)
     return 0
 
 
 # --- mq handlers ---------------------------------------------------------
-def cmd_mq_status(args) -> int:
+def cmd_mq_status(args: argparse.Namespace) -> int:
     print(mq_cmds.status(_make_transport(args)))
     return 0
 
 
-def _mq_table(args, fn) -> int:
+def _mq_table(args: argparse.Namespace, fn: Callable[[Transport], tuple[list[str], list[list[str]]]]) -> int:
     headers, rows = fn(_make_transport(args))
     _output.render(rows, headers, fmt=args.fmt)
     return 0
 
 
-def cmd_mq_queues(args) -> int:
+def cmd_mq_queues(args: argparse.Namespace) -> int:
     return _mq_table(args, mq_cmds.queues)
 
 
-def cmd_mq_consumers(args) -> int:
+def cmd_mq_consumers(args: argparse.Namespace) -> int:
     return _mq_table(args, mq_cmds.consumers)
 
 
-def cmd_mq_vhosts(args) -> int:
+def cmd_mq_vhosts(args: argparse.Namespace) -> int:
     return _mq_table(args, mq_cmds.vhosts)
 
 
-def cmd_mq_permissions(args) -> int:
+def cmd_mq_permissions(args: argparse.Namespace) -> int:
     return _mq_table(args, mq_cmds.permissions)
 
 
@@ -321,13 +340,39 @@ _MQ_HANDLERS = {
 }
 
 
+# --- license handlers ----------------------------------------------------
+def cmd_license_show(args: argparse.Namespace) -> int:
+    print(license_cmds.show(_make_transport(args)))
+    return 0
+
+
+def cmd_license_device_uuid(args: argparse.Namespace) -> int:
+    print(license_cmds.device_uuid(_make_transport(args)))
+    return 0
+
+
+def cmd_license_drift(args: argparse.Namespace) -> int:
+    report = license_cmds.drift(_make_transport(args))
+    _output.kv(
+        {
+            "file_uuid": report.file_uuid or "(none)",
+            "csadm_uuid": report.csadm_uuid or "(none)",
+            "drifted": report.drifted,
+            "verdict": report.verdict,
+        },
+        fmt=args.fmt,
+    )
+    # Non-zero exit when drifted, so it's usable as a health gate.
+    return 1 if report.drifted else 0
+
+
 # --- logs handlers -------------------------------------------------------
-def cmd_logs_tail(args) -> int:
+def cmd_logs_tail(args: argparse.Namespace) -> int:
     print(logs_cmds.tail(_make_transport(args), args.service, lines=args.lines), end="")
     return 0
 
 
-def cmd_logs_scan(args) -> int:
+def cmd_logs_scan(args: argparse.Namespace) -> int:
     print(logs_cmds.scan(_make_transport(args), minutes=args.minutes))
     return 0
 

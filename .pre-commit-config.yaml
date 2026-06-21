@@ -43,6 +43,16 @@ repos:
         types_or: [python, pyi]
         require_serial: true
 
+      - id: mypy-cli
+        name: mypy (typed CLI surface)
+        # Scoped to src/pyfsr/cli via [tool.mypy] files=. pass_filenames=false so
+        # the whole configured set is checked (not just changed files), matching
+        # CI. --extra typecheck pulls mypy from the frozen lock.
+        entry: uv run --frozen --extra typecheck mypy
+        language: system
+        pass_filenames: false
+        files: '^src/pyfsr/cli/'
+
       # --- pre-push only: mirror the CI jobs that are slow but high-signal ---
       - id: pytest-unit
         name: pytest unit suite (mirrors CI test jobs)
@@ -52,7 +62,10 @@ repos:
         stages: [pre-push]
       - id: docs-build
         name: sphinx docs build -W -n (mirrors CI docs job; catches broken cross-refs)
-        entry: bash -c 'cd docs && PYTHONPATH=../src uv run --frozen make html SPHINXOPTS="-W --keep-going -n"'
+        # SPHINX_OFFLINE=1 skips external intersphinx inventory fetches so VPN/proxy
+        # SSL inspection doesn't turn network errors into -W build failures.
+        # CI runs without this var and validates cross-refs against real inventories.
+        entry: bash -c 'cd docs && SPHINX_OFFLINE=1 PYTHONPATH=../src uv run --frozen make html SPHINXOPTS="-W --keep-going -n"'
         language: system
         pass_filenames: false
         stages: [pre-push]

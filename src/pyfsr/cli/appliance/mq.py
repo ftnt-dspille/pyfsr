@@ -7,13 +7,13 @@ consumers**. ``rabbitmqctl`` needs root on the appliance, so every call runs sud
 
 from __future__ import annotations
 
-from .transport import Transport
+from .transport import CommandResult, Transport
 
 # A queue depth at/above this is called out as a backlog.
 _DEEP_QUEUE = 1000
 
 
-def _ctl(transport: Transport, *args: str, timeout: float = 30.0):
+def _ctl(transport: Transport, *args: str, timeout: float = 30.0) -> CommandResult:
     """Run ``rabbitmqctl -q <args>`` (quiet = no decorative table headers)."""
     return transport.run(["rabbitmqctl", "-q", *args], sudo=True, timeout=timeout)
 
@@ -33,7 +33,7 @@ def status(transport: Transport) -> str:
     return _ctl(transport, "status").stdout.strip()
 
 
-def queues(transport: Transport):
+def queues(transport: Transport) -> tuple[list[str], list[list[str]]]:
     """List queues with depth + consumer count; flag backlogs and zero-consumer
     queues. Returns ``(headers, rows)`` where each row gains a ``flag`` column."""
     res = _ctl(transport, "list_queues", "name", "messages", "consumers")
@@ -51,19 +51,19 @@ def queues(transport: Transport):
     return ["queue", "messages", "consumers", "flag"], rows
 
 
-def consumers(transport: Transport):
+def consumers(transport: Transport) -> tuple[list[str], list[list[str]]]:
     """List consumers (``queue_name`` ↔ ``channel_pid``)."""
     res = _ctl(transport, "list_consumers")
     return ["consumer"], _tabular(res.stdout)
 
 
-def vhosts(transport: Transport):
+def vhosts(transport: Transport) -> tuple[list[str], list[list[str]]]:
     """List virtual hosts."""
     res = _ctl(transport, "list_vhosts")
     return ["vhost"], _tabular(res.stdout)
 
 
-def permissions(transport: Transport):
+def permissions(transport: Transport) -> tuple[list[str], list[list[str]]]:
     """List per-vhost permissions (``user  conf  write  read``)."""
     res = _ctl(transport, "list_permissions")
     return ["user", "configure", "write", "read"], _tabular(res.stdout)

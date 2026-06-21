@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from pyfsr.cli.appliance import db as db_cmds
+from pyfsr.cli.appliance import license as license_cmds
 from pyfsr.cli.appliance import logs as logs_cmds
 from pyfsr.cli.appliance import mq as mq_cmds
 from pyfsr.cli.appliance import service as service_cmds
@@ -34,12 +35,23 @@ class FakeTransport(Transport):
 
     target = "fake"
 
-    def __init__(self, *, tables=None, databases=None, service_wedged=False, queues_backlog=False):
+    def __init__(
+        self,
+        *,
+        tables=None,
+        databases=None,
+        service_wedged=False,
+        queues_backlog=False,
+        file_uuid=UUID,
+        csadm_uuid=UUID,
+    ):
         self.commands = []
         self._tables = tables or ["widgets", "widgets_alerts", "widgets_team", "gadgets"]
         self._databases = databases or {"venom": "7 GB", "das": "200 MB", "postgres": "8 MB"}
         self._service_wedged = service_wedged  # if True, curl returns 000
         self._queues_backlog = queues_backlog  # if True, queues have backlog
+        self._file_uuid = file_uuid  # /home/csadmin/device_uuid (None = unreadable)
+        self._csadm_uuid = csadm_uuid  # csadm entitlement UUID (None = csadm fails)
 
     def run(self, argv, *, input_text=None, env=None, timeout=60.0, sudo=False):
         self.commands.append((argv, env, sudo))
@@ -47,15 +59,23 @@ class FakeTransport(Transport):
         # "missing" reports absent (returncode 1), everything else present.
         if argv[:2] == ["test", "-f"]:
             return CommandResult(argv, 1 if "missing" in argv[-1] else 0, "", "")
+        # The install-time UUID file may be absent/unreadable (drift simulation).
+        if argv[:2] == ["cat", "/home/csadmin/device_uuid"] and self._file_uuid is None:
+            return CommandResult(argv, 1, "", "cat: no such file")
+        # csadm may fail to return a UUID.
+        if argv[:3] == ["csadm", "license", "--get-device-uuid"] and self._csadm_uuid is None:
+            return CommandResult(argv, 1, "", "csadm: error")
         out = self._dispatch(argv, env)
         return CommandResult(argv, 0, out, "")
 
     def _dispatch(self, argv, env) -> str:
         if argv[:2] == ["cat", "/home/csadmin/device_uuid"]:
             # Primary device-UUID source (install-time file = the DB/ES password).
-            return f"{UUID}\n"
+            return f"{self._file_uuid}\n"
         if argv[:3] == ["csadm", "license", "--get-device-uuid"]:
-            return f"Device UUID: {UUID}\n"
+            return f"Device UUID: {self._csadm_uuid}\n"
+        if argv[:3] == ["csadm", "license", "--show-details"]:
+            return "License Type: subscription\nExpiry: 2027-01-01\nDevice UUID: " + f"{self._csadm_uuid}\n"
         if argv[:3] == ["csadm", "services", "--status"]:
             return "cyops-auth\tactive\t0\t0\ncyops-api\tactive\t0\t0\n"
         if argv[:4] == ["csadm", "services", "--restart", "--name"]:
@@ -236,6 +256,49 @@ def test_exec_write_runs_with_yes(facts):
     dbname, status = db_cmds.exec_write(facts, "DROP TABLE widgets CASCADE", yes=True)
     assert dbname == "venom"
     assert status == "DROP TABLE"
+
+
+# --------------------------------------------------------------- license verbs
+def test_license_device_uuid_prefers_file():
+    t = FakeTransport(file_uuid=UUID, csadm_uuid="ffffffffffffffffffffffffffffffff")
+    assert license_cmds.device_uuid(t) == UUID  # file wins over csadm
+
+
+def test_license_device_uuid_falls_back_to_csadm():
+    t = FakeTransport(file_uuid=None, csadm_uuid=UUID)
+    assert license_cmds.device_uuid(t) == UUID
+
+
+def test_license_device_uuid_raises_when_both_fail():
+    t = FakeTransport(file_uuid=None, csadm_uuid=None)
+    with pytest.raises(TransportError):
+        license_cmds.device_uuid(t)
+
+
+def test_license_drift_ok_when_equal():
+    report = license_cmds.drift(FakeTransport(file_uuid=UUID, csadm_uuid=UUID))
+    assert report.drifted is False
+    assert report.file_uuid == report.csadm_uuid == UUID
+
+
+def test_license_drift_detected_when_csadm_differs():
+    other = "ffffffffffffffffffffffffffffffff"
+    report = license_cmds.drift(FakeTransport(file_uuid=UUID, csadm_uuid=other))
+    assert report.drifted is True
+    assert report.file_uuid == UUID
+    assert report.csadm_uuid == other
+    assert "DRIFT" in report.verdict
+
+
+def test_license_drift_unknown_when_file_missing():
+    report = license_cmds.drift(FakeTransport(file_uuid=None, csadm_uuid=UUID))
+    assert report.drifted is False  # can't claim drift without the authoritative file
+    assert "UNKNOWN" in report.verdict
+
+
+def test_license_show_returns_details():
+    out = license_cmds.show(FakeTransport())
+    assert "License Type" in out
 
 
 # --------------------------------------------------------------- transport selection

@@ -1,6 +1,10 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
 [project]
 name = "pyfsr"
-version = "0.6.4"
+dynamic = ["version"]
 description = "Python implementation of the FortiSOAR REST API"
 readme = "README.md"
 authors = [
@@ -34,6 +38,10 @@ test = [
     "mcp>=1.0", # exercise the optional pyfsr[mcp] server in CI
 ]
 
+typecheck = [
+    "mypy>=1.13",
+]
+
 docs = [
     "sphinx>=8.1.3",
     "sphinx-autodoc-typehints>=3.0.0",
@@ -58,7 +66,7 @@ playbooks = [
 
 # One-shot dev setup: linters + the test/docs/mcp/playbooks extras.
 dev = [
-    "pyfsr[test,docs,mcp,playbooks]",
+    "pyfsr[test,docs,mcp,playbooks,typecheck]",
     "ruff>=0.6",
     "pre-commit>=3.5",
 ]
@@ -67,12 +75,38 @@ dev = [
 pyfsr = "pyfsr.cli.__main__:main"
 
 
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+version_scheme = "no-guess-dev"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/pyfsr/_version.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/pyfsr"]
 
 # Ship the bundled OpenAPI spec (gzipped JSON) inside the wheel + sdist.
 [tool.hatch.build]
 artifacts = ["src/pyfsr/resources/*.json.gz"]
+
+[tool.mypy]
+# Scoped to the CLI for now: it's the most user-facing surface and is already
+# ~83% annotated, so a strict gate here is enforceable without first cleaning
+# the whole codebase. `follow_imports = silent` resolves types from the rest of
+# pyfsr (and third-party) for accuracy but does NOT report errors outside the
+# CLI, keeping the gate focused. Widen `files` as other packages get typed.
+python_version = "3.10"
+files = ["src/pyfsr/cli"]
+follow_imports = "silent"
+ignore_missing_imports = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
 
 [tool.ruff]
 line-length = 120

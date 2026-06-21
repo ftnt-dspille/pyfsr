@@ -6,7 +6,7 @@ import csv
 import json
 import sys
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, TextIO
 
 
 def render(
@@ -14,15 +14,12 @@ def render(
     headers: Sequence[str] | None = None,
     *,
     fmt: str = "table",
-    file=sys.stdout,
+    file: TextIO = sys.stdout,
 ) -> None:
     """Render tabular ``rows`` in the requested format (``table``/``json``/``csv``)."""
     rows = [[("" if c is None else str(c)) for c in row] for row in rows]
     if fmt == "json":
-        if headers:
-            payload = [dict(zip(headers, row, strict=False)) for row in rows]
-        else:
-            payload = rows
+        payload: list[Any] = [dict(zip(headers, row, strict=False)) for row in rows] if headers else list(rows)
         json.dump(payload, file, indent=2, default=str)
         file.write("\n")
         return
@@ -35,7 +32,7 @@ def render(
     _render_table(rows, headers, file)
 
 
-def _render_table(rows, headers, file) -> None:
+def _render_table(rows: Sequence[Sequence[Any]], headers: Sequence[str] | None, file: TextIO) -> None:
     cols = list(headers) if headers else []
     width = [len(h) for h in cols]
     for row in rows:
@@ -53,7 +50,7 @@ def _render_table(rows, headers, file) -> None:
         file.write("  ".join(str(cell).ljust(width[i]) for i, cell in enumerate(row)) + "\n")
 
 
-def kv(pairs: dict[str, Any], *, fmt: str = "table", file=sys.stdout) -> None:
+def kv(pairs: dict[str, Any], *, fmt: str = "table", file: TextIO = sys.stdout) -> None:
     """Render a key/value identity card."""
     if fmt == "json":
         json.dump(pairs, file, indent=2, default=str)

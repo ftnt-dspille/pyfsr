@@ -23,8 +23,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from typing import TYPE_CHECKING, Any
 
 from . import _output
+
+if TYPE_CHECKING:
+    import sqlite3
+
+    from ..authoring import CompiledPlaybook
+    from ..client import FortiSOAR
 
 
 def add_connection_args(p: argparse.ArgumentParser) -> None:
@@ -42,7 +49,7 @@ def add_connection_args(p: argparse.ArgumentParser) -> None:
     )
 
 
-def _make_client(args):
+def _make_client(args: argparse.Namespace) -> FortiSOAR:
     """Build a FortiSOAR client from FSR_* env plus CLI overrides."""
     from ..config import EnvConfig
 
@@ -67,7 +74,7 @@ def _make_client(args):
     return EnvConfig.from_env().client(**overrides)
 
 
-def _compile(args):
+def _compile(args: argparse.Namespace) -> CompiledPlaybook:
     """Compile the YAML file, printing diagnostics to stderr. Returns the result."""
     from ..authoring import compile_playbook_yaml, format_diagnostic
 
@@ -84,7 +91,7 @@ def _read(path: str) -> str:
 
 
 # --- handlers ------------------------------------------------------------
-def cmd_compile(args) -> int:
+def cmd_compile(args: argparse.Namespace) -> int:
     result = _compile(args)
     if not result.ok:
         print("error: compilation failed (see diagnostics above)", file=sys.stderr)
@@ -99,7 +106,7 @@ def cmd_compile(args) -> int:
     return 0
 
 
-def cmd_validate(args) -> int:
+def cmd_validate(args: argparse.Namespace) -> int:
     result = _compile(args)
     counts = {"collections": len(result.collection_names), "playbooks": len(result.playbook_names)}
     summary = "OK" if result.ok else "FAILED"
@@ -117,7 +124,7 @@ def cmd_validate(args) -> int:
     return 0 if result.ok else 1
 
 
-def cmd_deploy(args) -> int:
+def cmd_deploy(args: argparse.Namespace) -> int:
     result = _compile(args)
     if not result.ok:
         print("error: compilation failed (see diagnostics above)", file=sys.stderr)
@@ -131,13 +138,15 @@ def cmd_deploy(args) -> int:
         )
         return 0
     client = _make_client(args)
-    created = client.workflow_collections.import_export(result.fsr_json, replace=args.replace)
+    # result.ok was checked above, so fsr_json is populated.
+    assert result.fsr_json is not None
+    created: list[dict[str, Any]] = client.workflow_collections.import_export(result.fsr_json, replace=args.replace)
     rows = [[c.get("name", ""), c.get("uuid", "")] for c in created]
     _output.render(rows, ["created collection", "uuid"], fmt="table")
     return 0
 
 
-def _catalog_conn(args):
+def _catalog_conn(args: argparse.Namespace) -> tuple[sqlite3.Connection, str]:
     """Open the fsr_playbooks reference catalog (read/write) for freshness ops.
 
     Honors ``--db`` then the package's own resolution (``$FSRPB_DB`` → dev DB →
@@ -154,7 +163,7 @@ def _catalog_conn(args):
     return conn, db
 
 
-def cmd_check_fresh(args) -> int:
+def cmd_check_fresh(args: argparse.Namespace) -> int:
     """Level-1 freshness probe: compare the cached catalog's provenance against
     a live SOAR. Exit 0 = fresh, 2 = drift detected, 1 = error / unstamped."""
     from fsr_playbooks import _catalog_meta
@@ -200,14 +209,14 @@ def cmd_check_fresh(args) -> int:
     return 0
 
 
-def _workflows_of(result, collection_name: str) -> list[str]:
+def _workflows_of(result: CompiledPlaybook, collection_name: str) -> list[str]:
     for col in (result.fsr_json or {}).get("data", []):
         if col.get("name") == collection_name:
             return [w.get("name", "") for w in col.get("workflows", []) or []]
     return []
 
 
-def build_subparser(asub) -> None:
+def build_subparser(asub: argparse._SubParsersAction) -> None:
     """Wire the ``playbook`` subcommands onto an existing subparsers object."""
     p_compile = asub.add_parser("compile", help="compile YAML to the FSR import envelope (offline)")
     add_connection_args(p_compile)  # harmless here; keeps args uniform
