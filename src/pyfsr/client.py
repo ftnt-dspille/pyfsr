@@ -246,7 +246,7 @@ class FortiSOAR:
         # Workflow-engine authoring helpers (Jinja render, global variables)
         self.wf_tools: WfToolsAPI = WfToolsAPI(self)
 
-        self.solution_packs: SolutionPackAPI = SolutionPackAPI(self, self.export_config)
+        self.solution_packs: SolutionPackAPI = SolutionPackAPI(self)
 
         # Appliance tuning: system settings, DAS auth config, periodic schedules
         self.system_settings: SystemSettingsAPI = SystemSettingsAPI(self)
