@@ -64,15 +64,23 @@ playbooks = [
     "fsr_playbooks>=0.3.68",
 ]
 
-# One-shot dev setup: linters + the test/docs/mcp/playbooks extras.
+[project.scripts]
+pyfsr = "pyfsr.cli.__main__:main"
+
+# Local dev toolchain (PEP 735 dependency group). uv installs the `dev` group
+# automatically on a bare `uv sync` (default-groups defaults to ["dev"]), so
+# PyCharm's background auto-sync keeps ruff/pre-commit/pytest/mypy/sphinx in
+# .venv. Previously `dev` was an *extra*, which a default `uv sync` does NOT
+# install — so the sync dropped `pre_commit` and broke the git pre-push hook
+# (`.venv/bin/python -mpre_commit`). CI is unaffected: it installs the
+# individual extras (test/docs/typecheck/playbooks) via pip, not this group.
+# Manual install without uv: `pip install -e . --group dev` (pip >= 25.1).
+[dependency-groups]
 dev = [
     "pyfsr[test,docs,mcp,playbooks,typecheck]",
     "ruff>=0.6",
     "pre-commit>=3.5",
 ]
-
-[project.scripts]
-pyfsr = "pyfsr.cli.__main__:main"
 
 
 [tool.hatch.version]
