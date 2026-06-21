@@ -1338,30 +1338,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-dev = [
-    { name = "coverage" },
-    { name = "fsr-playbooks" },
-    { name = "furo" },
-    { name = "mcp" },
-    { name = "mypy" },
-    { name = "myst-parser", version = "4.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "myst-parser", version = "5.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-mock" },
-    { name = "ruff" },
-    { name = "sphinx", version = "8.1.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "sphinx", version = "9.0.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
-    { name = "sphinx", version = "9.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "sphinx-autoapi" },
-    { name = "sphinx-autodoc-typehints", version = "3.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "sphinx-autodoc-typehints", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
-    { name = "sphinx-autodoc-typehints", version = "3.11.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "sphinx-copybutton" },
-    { name = "sphinx-design", version = "0.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "sphinx-design", version = "0.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-]
 docs = [
     { name = "furo" },
     { name = "myst-parser", version = "4.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -1394,43 +1370,41 @@ typecheck = [
     { name = "mypy" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pre-commit" },
+    { name = "pyfsr", extra = ["docs", "mcp", "playbooks", "test", "typecheck"] },
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
-    { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.6.9" },
     { name = "coverage", marker = "extra == 'test'", specifier = ">=7.6.9" },
-    { name = "fsr-playbooks", marker = "extra == 'dev'", specifier = ">=0.3.68" },
     { name = "fsr-playbooks", marker = "extra == 'playbooks'", specifier = ">=0.3.68" },
-    { name = "furo", marker = "extra == 'dev'", specifier = ">=2024.8.6" },
     { name = "furo", marker = "extra == 'docs'", specifier = ">=2024.8.6" },
-    { name = "mcp", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0" },
     { name = "mcp", marker = "extra == 'test'", specifier = ">=1.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13" },
     { name = "mypy", marker = "extra == 'typecheck'", specifier = ">=1.13" },
-    { name = "myst-parser", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "myst-parser", marker = "extra == 'docs'", specifier = ">=4.0.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "pytest-mock", marker = "extra == 'dev'" },
     { name = "pytest-mock", marker = "extra == 'test'" },
     { name = "requests", specifier = ">=2.31.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
-    { name = "sphinx", marker = "extra == 'dev'", specifier = ">=8.1.3" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=8.1.3" },
-    { name = "sphinx-autoapi", marker = "extra == 'dev'", specifier = ">=3.4.0" },
     { name = "sphinx-autoapi", marker = "extra == 'docs'", specifier = ">=3.4.0" },
-    { name = "sphinx-autodoc-typehints", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "sphinx-autodoc-typehints", marker = "extra == 'docs'", specifier = ">=3.0.0" },
-    { name = "sphinx-copybutton", marker = "extra == 'dev'", specifier = ">=0.5.2" },
     { name = "sphinx-copybutton", marker = "extra == 'docs'", specifier = ">=0.5.2" },
-    { name = "sphinx-design", marker = "extra == 'dev'", specifier = ">=0.6.1" },
     { name = "sphinx-design", marker = "extra == 'docs'", specifier = ">=0.6.1" },
 ]
-provides-extras = ["dev", "docs", "mcp", "playbooks", "test", "typecheck"]
+provides-extras = ["docs", "mcp", "playbooks", "test", "typecheck"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pre-commit", specifier = ">=3.5" },
+    { name = "pyfsr", extras = ["test", "docs", "mcp", "playbooks", "typecheck"] },
+    { name = "ruff", specifier = ">=0.6" },
+]
 
 [[package]]
 name = "pygments"
