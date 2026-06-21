@@ -103,6 +103,9 @@ nitpick_ignore = [
     ("py:meth", "runs"),
     ("py:meth", "get"),
     ("py:meth", "pyfsr.api.modules_admin.ModulesAdminAPI._wait_for_publish"),
+    # Private shared base for the tasks/incidents CRUD shortcuts; autoapi skips
+    # the underscore-prefixed module so the "Bases:" xref has no target.
+    ("py:obj", "pyfsr.api._record_module.RecordModuleAPI"),
 ]
 
 # Type annotations autoapi renders as xrefs that resolve at runtime but not

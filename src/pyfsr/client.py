@@ -17,11 +17,13 @@ from .api.alerts import AlertsAPI
 from .api.api_users import ApiKeyUsersAPI
 from .api.audit import AuditAPI
 from .api.auth_config import AuthConfigAPI
+from .api.comments import CommentsAPI
 from .api.connectors import ConnectorsAPI
 from .api.content_hub import ContentHubSearch
 from .api.export_config import ExportConfigAPI
 from .api.feeds import IngestFeedsAPI
 from .api.import_config import ImportConfigAPI
+from .api.incidents import IncidentsAPI
 from .api.modules import ModulesAPI
 from .api.modules_admin import ModulesAdminAPI
 from .api.picklists import PicklistsAPI
@@ -34,6 +36,7 @@ from .api.solution_packs import SolutionPackAPI
 from .api.system import SystemAPI
 from .api.system_settings import SystemSettingsAPI
 from .api.tags import TagsAPI
+from .api.tasks import TasksAPI
 from .api.taxii import TaxiiAPI
 from .api.user_settings import UserSettingsAPI
 from .api.users import UsersAPI
@@ -212,6 +215,11 @@ class FortiSOAR:
 
         # Initialize API interfaces
         self.alerts: AlertsAPI = AlertsAPI(self)
+
+        # Typed CRUD shortcuts for the common SOC record modules
+        self.incidents: IncidentsAPI = IncidentsAPI(self)
+        self.tasks: TasksAPI = TasksAPI(self)
+        self.comments: CommentsAPI = CommentsAPI(self)
 
         # Initialize file operations utility
         self.files: FileOperations = FileOperations(self)
