@@ -262,11 +262,9 @@ def test_db_query_rejects_writes(facts):
 
 
 def test_db_list_marks_content_role(facts):
-    headers, rows = db_cmds.list_databases(facts)
-    venom = next(r for r in rows if r[0] == "venom")
-    assert venom[2] == "content"
-    das = next(r for r in rows if r[0] == "das")
-    assert das[2] == "das"
+    dbs = db_cmds.list_databases(facts)
+    assert next(d for d in dbs if d.name == "venom").role == "content"
+    assert next(d for d in dbs if d.name == "das").role == "das"
 
 
 def test_find_module_tables_matches_base_and_joins(facts):
@@ -495,17 +493,15 @@ def test_service_restart_gated_by_yes(facts):
 
 def test_service_restart_succeeds_with_yes(facts):
     result = service_cmds.restart(facts.transport, "cyops-auth", yes=True)
-    assert "restarted" in result
+    assert result.service == "cyops-auth" and result.action == "restart" and result.ok
 
 
 def test_service_listeners(facts):
-    headers, rows = service_cmds.listeners(facts.transport)
-    assert "local_address" in headers
-    assert "process" in headers
-    assert len(rows) >= 1
-    # At least one row should have nginx or rabbitmq
-    all_rows = " ".join(str(r) for r in rows)
-    assert "nginx" in all_rows or "rabbitmq" in all_rows
+    lis = service_cmds.listeners(facts.transport)
+    assert len(lis) >= 1
+    assert all(isinstance(x, service_cmds.Listener) for x in lis)
+    blob = " ".join(f"{x.local_address} {x.process}" for x in lis)
+    assert "nginx" in blob or "rabbitmq" in blob
 
 
 # --------------------------------------------------------------- P2: mq
@@ -515,51 +511,39 @@ def test_mq_status(facts):
 
 
 def test_mq_queues_lists_depth_and_consumers(facts):
-    headers, rows = mq_cmds.queues(facts.transport)
-    assert "queue" in headers
-    assert "messages" in headers
-    assert "consumers" in headers
-    assert "flag" in headers
-    assert len(rows) >= 1
-    # Check that columns are populated
-    for row in rows:
-        assert row[0]  # queue name
-        assert row[1].isdigit()  # messages count
+    qs = mq_cmds.queues(facts.transport)
+    assert len(qs) >= 1
+    for q in qs:
+        assert q.name and isinstance(q.messages, int) and isinstance(q.consumers, int)
 
 
 def test_mq_queues_flags_zero_consumers(facts):
-    headers, rows = mq_cmds.queues(facts.transport)
-    row_with_zero = [r for r in rows if int(r[2]) == 0]
-    if row_with_zero:
-        assert "NO CONSUMERS" in row_with_zero[0][3]
+    for q in mq_cmds.queues(facts.transport):
+        if q.consumers == 0:
+            assert q.flag == "NO CONSUMERS"
 
 
 def test_mq_queues_flags_backlog(facts):
-    # Create a transport with backlog but ensure we have a queue with backlog AND consumers
+    # A queue with backlog AND consumers should flag backlog, not zero-consumers.
     class BacklogTransport(FakeTransport):
         def _rabbitmqctl_response(self, argv):
             if argv[1:3] == ["-q", "list_queues"] and "consumers" in argv:
-                # Queue with backlog but with consumers (should flag backlog, not zero-consumers)
                 return "task_queue\t2500\t1\ndefault_queue\t50\t2\n"
             return super()._rabbitmqctl_response(argv)
 
-    backlog_transport = BacklogTransport()
-    headers, rows = mq_cmds.queues(backlog_transport)
-    row_with_backlog = [r for r in rows if int(r[1]) >= 1000]
-    if row_with_backlog:
-        assert "BACKLOG" in row_with_backlog[0][3]
+    qs = mq_cmds.queues(BacklogTransport())
+    backlog = [q for q in qs if q.messages >= 1000]
+    if backlog:
+        assert "BACKLOG" in backlog[0].flag
 
 
 def test_mq_consumers(facts):
-    headers, rows = mq_cmds.consumers(facts.transport)
-    assert "consumer" in headers
-    assert len(rows) >= 1
+    cs = mq_cmds.consumers(facts.transport)
+    assert len(cs) >= 1 and cs[0].queue
 
 
 def test_mq_vhosts_drops_header_row(facts):
-    headers, rows = mq_cmds.vhosts(facts.transport)
-    assert "vhost" in headers
-    vhost_names = [r[0] for r in rows]
+    vhost_names = mq_cmds.vhosts(facts.transport)
     assert "/" in vhost_names
     # the "name" column header must NOT leak in as a bogus vhost (the live bug)
     assert "name" not in vhost_names
@@ -570,19 +554,15 @@ def test_mq_vhosts_drops_header_row(facts):
 
 def test_mq_permissions_default_vhost_empty(facts):
     # On a real box "/" carries no permissions; the header row must not leak.
-    headers, rows = mq_cmds.permissions(facts.transport)
-    assert headers == ["user", "configure", "write", "read"]
-    assert rows == []  # no "user configure write read" header masquerading as data
+    assert mq_cmds.permissions(facts.transport) == []
 
 
 def test_mq_permissions_all_vhosts_matrix(facts):
-    headers, rows = mq_cmds.permissions(facts.transport, all_vhosts=True)
-    assert headers == ["vhost", "user", "configure", "write", "read"]
+    perms = mq_cmds.permissions(facts.transport, all_vhosts=True)
     # "/" is empty; cyops-admin -> admin, intra-cyops -> cyops = 2 populated rows
-    assert len(rows) == 2
-    by_vhost = {r[0]: r[1] for r in rows}
+    assert len(perms) == 2
+    by_vhost = {p.vhost: p.user for p in perms}
     assert by_vhost == {"cyops-admin": "admin", "intra-cyops": "cyops"}
-    assert all(len(r) == 5 for r in rows)  # vhost + 4 permission columns
     # the per-vhost query was actually scoped with -p <vhost>
     perm_calls = [c[0] for c in facts.transport.commands if "list_permissions" in c[0]]
     assert any("-p" in call and "intra-cyops" in call for call in perm_calls)
@@ -755,9 +735,8 @@ def test_ha_replication_runs_csadm(facts):
 
 
 def test_db_getsize_parses_real_format(facts):
-    headers, rows = db_cmds.getsize(facts)
-    assert headers == ["data_class", "size"]
-    parsed = dict(rows)
+    sizes = db_cmds.getsize(facts)
+    parsed = {s.data_class: s.size for s in sizes}
     # preamble lines dropped; each "<class> : <size>" kept, unit preserved
     assert parsed == {
         "Primary Data": "7354 MB",
@@ -765,6 +744,10 @@ def test_db_getsize_parses_real_format(facts):
         "Workflow Logs": "1138 MB",
         "Archived Data": "8396 kB",
     }
+    # size_mb normalises the mixed kB/MB units
+    by_class = {s.data_class: s.size_mb for s in sizes}
+    assert by_class["Primary Data"] == 7354.0
+    assert by_class["Archived Data"] == round(8396 / 1024, 3)
     call = next(c for c in facts.transport.commands if c[0][:3] == ["csadm", "db", "--getsize"])
     assert call[2] is True  # sudo
 
@@ -819,3 +802,231 @@ def test_diagnose_missing_script_raises(facts):
     # "missing" in the path makes FakeTransport's `test -f` return 1.
     with pytest.raises(FileNotFoundError):
         diagnose_cmds.run(facts.transport, path="/opt/cyops/scripts/missing_diagnose.sh")
+
+
+# --- P3+: service stop/start/systemctl, mq purge + purge_workflows, host metrics ---
+
+
+def _cmds(t):
+    """The argv of every command the fake recorded."""
+    return [argv for argv, _env, _sudo in t.commands]
+
+
+def test_service_stop_gated(facts):
+    with pytest.raises(PermissionError):
+        service_cmds.stop(facts.transport, "celeryd")
+
+
+def test_service_stop_with_yes_uses_csadm(facts):
+    service_cmds.stop(facts.transport, "celeryd", yes=True)
+    assert ["csadm", "services", "--stop-service", "celeryd"] in _cmds(facts.transport)
+
+
+def test_service_start_not_gated(facts):
+    service_cmds.start(facts.transport, "celeryd")
+    assert ["csadm", "services", "--start-service", "celeryd"] in _cmds(facts.transport)
+
+
+def test_systemctl_mutating_gated(facts):
+    with pytest.raises(PermissionError):
+        service_cmds.systemctl(facts.transport, "kill", "celeryd.service")
+
+
+def test_systemctl_readonly_not_gated(facts):
+    service_cmds.systemctl(facts.transport, "is-active", "celeryd.service")
+    assert ["systemctl", "is-active", "celeryd.service"] in _cmds(facts.transport)
+
+
+def test_systemctl_kill_signal_shape(facts):
+    service_cmds.systemctl(facts.transport, "kill", "celeryd", signal="SIGKILL", yes=True)
+    assert ["systemctl", "kill", "--signal=SIGKILL", "celeryd"] in _cmds(facts.transport)
+
+
+def test_mq_purge_queue_gated(facts):
+    with pytest.raises(PermissionError):
+        mq_cmds.purge_queue(facts.transport, "celery", vhost="fsr-cluster")
+
+
+def test_mq_purge_queue_runs_purge(facts):
+    result = mq_cmds.purge_queue(facts.transport, "celery", vhost="fsr-cluster", yes=True)
+    assert result.queue == "celery" and result.vhost == "fsr-cluster"
+    assert ["rabbitmqctl", "-q", "purge_queue", "celery", "-p", "fsr-cluster"] in _cmds(facts.transport)
+
+
+def test_mq_purge_workflows_gated(facts):
+    with pytest.raises(PermissionError):
+        mq_cmds.purge_workflows(facts.transport)
+
+
+def test_mq_purge_workflows_hard_default_sigkills(facts):
+    report = mq_cmds.purge_workflows(facts.transport, yes=True)
+    cmds = _cmds(facts.transport)
+    # Hard path: purge the workflow queue, then SIGKILL celeryd (NOT csadm stop).
+    assert ["rabbitmqctl", "-q", "purge_queue", "celery", "-p", "fsr-cluster"] in cmds
+    assert ["systemctl", "kill", "--signal=SIGKILL", "celeryd"] in cmds
+    assert not any(c[:3] == ["csadm", "services", "--stop-service"] for c in cmds)
+    # purge happens BEFORE the kill (so the respawned pool sees an empty queue).
+    purge_i = cmds.index(["rabbitmqctl", "-q", "purge_queue", "celery", "-p", "fsr-cluster"])
+    kill_i = cmds.index(["systemctl", "kill", "--signal=SIGKILL", "celeryd"])
+    assert purge_i < kill_i
+    assert any(c[:3] == ["csadm", "services", "--restart"] for c in cmds)
+    assert report.purges
+
+
+def test_mq_purge_workflows_graceful_uses_csadm(facts):
+    mq_cmds.purge_workflows(facts.transport, yes=True, graceful=True)
+    cmds = _cmds(facts.transport)
+    assert ["csadm", "services", "--stop-service", "celeryd"] in cmds
+    assert ["csadm", "services", "--start-service", "celeryd"] in cmds
+    assert not any(c[:2] == ["systemctl", "kill"] for c in cmds)
+
+
+def test_host_parse_meminfo():
+    from pyfsr.cli.appliance import host
+
+    free = "\n".join(
+        [
+            "              total        used        free",
+            "Mem:          24096       12000        500",
+            "Swap:          8191        1024",
+        ]
+    )
+    m = host._parse_meminfo(free)
+    assert (m.total_mb, m.used_mb, m.swap_total_mb, m.swap_used_mb) == (24096, 12000, 8191, 1024)
+
+
+def test_host_parse_loadavg():
+    from pyfsr.cli.appliance import host
+
+    assert host._parse_loadavg("1.50 2.30 0.90 1/234 5678") == host.LoadAvg(1.5, 2.3, 0.9)
+
+
+def test_host_parse_process_rss_regex():
+    from pyfsr.cli.appliance import host
+
+    ps = "1024 /usr/bin/celery -A x worker\n2048 /usr/bin/celery -A x worker\n999 sshd: foo"
+    p = host._parse_process_rss(ps, r"celery\b.*worker")
+    assert (p.count, p.sum_mb, p.peak_mb) == (2, 3.0, 2.0)
+
+
+def test_host_parse_disk():
+    from pyfsr.cli.appliance import host
+
+    df = "Filesystem 1M-blocks Used Available Use% Mounted on\n/dev/sda1 102400 51200 51200 50% /opt/cyops"
+    d = host._parse_disk(df, "/opt/cyops")
+    assert (d.size_mb, d.used_mb, d.use_pct) == (102400, 51200, 50)
+
+
+def test_host_split_sections():
+    from pyfsr.cli.appliance import host
+
+    sec = host._split_sections("@@FREE\nMem: 1 2 3\n@@LOAD\n0.1 0.2 0.3\n@@PS\n10 celery worker")
+    assert sorted(sec) == ["FREE", "LOAD", "PS"]
+    assert sec["LOAD"] == "0.1 0.2 0.3"
+
+
+# --- csadm typed parsers: service.services / ha.nodes+health / license.details ---
+
+
+def test_service_services_parses_ansi_and_since():
+    from pyfsr.cli.appliance import service
+
+    out = (
+        "rabbitmq-server..........[\x1b[48;5;34mRunning\x1b[0m]      since Thu 2026-05-07 14:10:35 UTC\n"
+        "postgresql-16............[\x1b[48;5;34mRunning\x1b[0m]      since Thu 2026-05-07 14:10:24 UTC\n"
+        "celeryd..................[Stopped]"
+    )
+    states = []
+    from pyfsr.cli.appliance._text import strip_ansi
+
+    for line in strip_ansi(out).splitlines():
+        m = service._STATUS_LINE.match(line.strip())
+        assert m, line
+        st = m.group("status").strip()
+        states.append(service.ServiceState(m.group("name"), st.lower() == "running", st, m.group("since")))
+    assert states[0] == service.ServiceState("rabbitmq-server", True, "Running", "Thu 2026-05-07 14:10:35 UTC")
+    assert states[1].name == "postgresql-16" and states[1].running
+    assert states[2] == service.ServiceState("celeryd", False, "Stopped", None)
+
+
+def test_ha_parse_nodes_columns():
+    from pyfsr.cli.appliance import ha
+
+    txt = (
+        "nodeId                              nodeName    status    role     comment         mode         fsrVersion\n"
+        "----------------------------------  ----------  --------  -------  --------------  -----------  ------------\n"
+        "* 572b3ecd3ddbc133a650f3faecc7c286  fsr-1       active    primary  primary server  operational  7.6.2-5507"
+    )
+    nodes = ha._parse_nodes(txt)
+    assert len(nodes) == 1
+    n = nodes[0]
+    assert n.node_id == "572b3ecd3ddbc133a650f3faecc7c286" and n.is_current
+    assert n.name == "fsr-1" and n.role == "primary"
+    assert n.comment == "primary server"  # space-containing cell sliced by column
+    assert n.fsr_version == "7.6.2-5507"
+
+
+def test_ha_parse_health_sections():
+    from pyfsr.cli.appliance import ha
+
+    txt = (
+        "Node Name                     : fsr-1\n"
+        "Node ID                       : abc123\n"
+        "Uptime                        : 46 days, 0:58:21\n"
+        "Mode                          : operational\n"
+        "Services Status               : green\n"
+        "Queued Workflow Count         : 0\n"
+        "Memory Usage:\n"
+        "------------------------------------------------\n"
+        "total    used    avail      percent\n"
+        "-------  ------  -------  ---------\n"
+        "31.1G    14.2G   15.2G         51.2\n"
+        "Swap Usage:\n"
+        "total    used    free      percent\n"
+        "-------  ------  ------  ---------\n"
+        "0bytes   0bytes  0bytes          0\n"
+        "Disk Usage:\n"
+        "mountpoint    device     total    used    avail      percent\n"
+        "------------  ---------  -------  ------  -------  ---------\n"
+        "/             /dev/vda5  498.9G   41.6G   457.3G         8.3\n"
+        "/boot         /dev/vda2  936.0M   451.0M  485.0M        48.2\n"
+        "System load and CPU utilization:\n"
+    )
+    h = ha._parse_health(txt)
+    assert h.node_name == "fsr-1" and h.mode == "operational"
+    assert h.services_status == "green" and h.queued_workflows == 0
+    assert h.memory and h.memory.used == "14.2G" and h.memory.percent == 51.2
+    assert h.swap and h.swap.percent == 0.0
+    assert [d.mountpoint for d in h.disks] == ["/", "/boot"]
+    assert h.disks[1].percent == 48.2
+
+
+def test_license_parse_details_typed_ints():
+    from pyfsr.cli.appliance import license as lic
+
+    txt = (
+        "Type           : Evaluation\n"
+        "Edition        : Multi-tenant\n"
+        "Role           : Manager\n"
+        "Total Users    : 2\n"
+        "Expiry Date    : 2027-04-08\n"
+        "Remaining Days : 290\n"
+        "Serial no      : FSRVMPTM26000304\n"
+        "Device UUID    : 572b3ecd3ddbc133a650f3faecc7c286"
+    )
+    d = lic._parse_details(txt)
+    assert d.edition == "Multi-tenant" and d.total_users == 2 and d.remaining_days == 290
+    assert d.serial_no == "FSRVMPTM26000304"
+    assert d.device_uuid == "572b3ecd3ddbc133a650f3faecc7c286"
+    assert d.fields["Type"] == "Evaluation"
+
+
+def test_text_helpers():
+    from pyfsr.cli.appliance import _text
+
+    assert _text.strip_ansi("a\x1b[48;5;34mb\x1b[0mc") == "abc"
+    assert _text.kv_pairs("K   : v\nno-sep line\nK2 : w") == {"K": "v", "K2": "w"}
+    spans = _text.dash_columns("---  -----  --")
+    assert _text.slice_columns("ab   cdefg  hi", spans) == ["ab", "cdefg", "hi"]
+    assert _text.to_int("Remaining 290 days") == 290 and _text.to_int(None, -1) == -1
+    assert _text.to_float("51.2%") == 51.2

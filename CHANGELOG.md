@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-06-22
+
 ### Added
 - `FortiSOAR(..., dry_run=False)` is now a real constructor parameter (stored as
   `client.dry_run`). When True, mutating requests (POST/PUT/PATCH/DELETE) are not
@@ -29,6 +31,34 @@ All notable changes to this project will be documented in this file.
     via `csadm certs --generate <hostname>` (the documented fix for the expired-cert
     "Unable to load API credentials from cache or DAS" failure). Gated by `--yes`;
     restart services afterwards. New `pyfsr.cli.appliance.certs` module.
+- `pyfsr.cli.appliance.host` — typed OS resource metrics over SSH (no sudo):
+  `meminfo`/`loadavg`/`process_rss(regex)`/`disk`, plus `snapshot()` which gathers
+  mem/swap/load/per-process RSS/disk in one round-trip and returns a typed
+  `HostSnapshot` (with `.summary()`). CLI: `appliance host snapshot|mem|rss`.
+- `appliance mq purge <queue>` and `appliance mq purge-workflows` — the latter
+  releases a stuck-worker backlog by purging the `fsr-cluster/celery` queue and
+  recycling `celeryd` (SIGKILL by default so systemd respawns a clean pool against
+  the empty queue; `--graceful` for the csadm warm-stop path), then restarting
+  `cyops-integrations-agent`. Returns a typed `WorkflowPurgeReport`. Also
+  `mq.queue_depth`/`nonempty_queues`/`purge_queue`. All gated by `--yes`.
+- `appliance service stop|start|systemctl` — `csadm` stop/start plus a direct
+  `systemctl <action> <unit>` escape hatch (`--signal` for `kill`); mutating
+  actions gated by `--yes`, read-only ones (`is-active`/`status`) ungated.
+
+### Changed
+- Appliance command return types are now typed dataclasses instead of loose
+  `str` / `(headers, rows)` tuples, so inputs and outputs are clear from the docs:
+  - `service.services()` → `list[ServiceState]` (parsed `csadm services --status`,
+    ANSI-stripped, `running: bool`); `service.restart/stop/start/systemctl` →
+    `ServiceActionResult` (`.ok`); `service.listeners()` → `list[Listener]`.
+  - `mq.queues/consumers/permissions` → `list[QueueInfo|Consumer|Permission]`;
+    `mq.vhosts` → `list[str]`.
+  - `ha.nodes()` → `list[HaNode]`, `ha.health()` → `HaHealth` (typed mem/swap/disk);
+    `ha.nodes_raw`/`health_raw` keep the unparsed text.
+  - `license.details()` → `LicenseDetails` (typed `total_users`/`remaining_days`);
+    `license.show()` stays raw.
+  - `db.list_databases()` → `list[DatabaseInfo]`; `db.getsize()` →
+    `list[DataClassSize]` (adds `size_mb` normalising mixed kB/MB units).
 
 ### Fixed
 - `appliance mq` listings (`vhosts`/`permissions`/`queues`/`consumers`) leaked

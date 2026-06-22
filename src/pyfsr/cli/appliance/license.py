@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ._text import kv_pairs, to_int
 from .facts import _extract_uuid
 from .transport import Transport, TransportError
 
@@ -20,9 +21,48 @@ from .transport import Transport, TransportError
 _DEVICE_UUID_FILE = "/home/csadmin/device_uuid"
 
 
+@dataclass
+class LicenseDetails:
+    """Parsed ``csadm license --show-details`` identity card.
+
+    ``total_users`` / ``remaining_days`` are typed ints; ``fields`` keeps every raw
+    ``key: value`` pair so uncommon keys are still reachable.
+    """
+
+    type: str | None
+    edition: str | None
+    role: str | None
+    total_users: int | None
+    expiry_date: str | None
+    remaining_days: int | None
+    serial_no: str | None
+    device_uuid: str | None
+    fields: dict[str, str]
+
+
 def show(transport: Transport) -> str:
-    """Raw ``csadm license --show-details`` output (licensing identity card)."""
+    """Raw ``csadm license --show-details`` output. For a typed result use :func:`details`."""
     return transport.run(["csadm", "license", "--show-details"], sudo=True).check().stdout.strip()
+
+
+def details(transport: Transport) -> LicenseDetails:
+    """Typed ``csadm license --show-details`` — edition, expiry, user count, UUID."""
+    return _parse_details(show(transport))
+
+
+def _parse_details(text: str) -> LicenseDetails:
+    kv = kv_pairs(text)
+    return LicenseDetails(
+        type=kv.get("Type"),
+        edition=kv.get("Edition"),
+        role=kv.get("Role"),
+        total_users=to_int(kv.get("Total Users")),
+        expiry_date=kv.get("Expiry Date"),
+        remaining_days=to_int(kv.get("Remaining Days")),
+        serial_no=kv.get("Serial no"),
+        device_uuid=kv.get("Device UUID"),
+        fields=kv,
+    )
 
 
 def device_uuid_from_file(transport: Transport) -> str | None:

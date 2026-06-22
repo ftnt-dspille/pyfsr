@@ -7,10 +7,21 @@ consumers**. ``rabbitmqctl`` needs root on the appliance, so every call runs sud
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
+from . import service
 from .transport import CommandResult, Transport
 
 # A queue depth at/above this is called out as a backlog.
 _DEEP_QUEUE = 1000
+
+# FortiSOAR's primary workflow task broker: the `celery` queue in vhost
+# `fsr-cluster`. Queued tasks survive a celeryd restart and re-dispatch the moment
+# workers return — so draining the backlog means purge, not just restart.
+_WORKFLOW_VHOST = "fsr-cluster"
+_WORKFLOW_QUEUE = "celery"
+# Secondary data/status queues live in this vhost; sweep any that are non-empty.
+_DATA_VHOST = "intra-cyops"
 
 
 def _ctl(transport: Transport, *args: str, timeout: float = 30.0) -> CommandResult:
@@ -46,59 +57,211 @@ def status(transport: Transport) -> str:
     return _ctl(transport, "status").stdout.strip()
 
 
-def queues(transport: Transport) -> tuple[list[str], list[list[str]]]:
-    """List queues with depth + consumer count; flag backlogs and zero-consumer
-    queues. Returns ``(headers, rows)`` where each row gains a ``flag`` column."""
+@dataclass
+class QueueInfo:
+    """One queue's depth and consumer count, with a stuck-worker ``flag``."""
+
+    name: str
+    messages: int
+    consumers: int
+    flag: str  # "" | "NO CONSUMERS" | "BACKLOG (>N)"
+
+
+@dataclass
+class Consumer:
+    """A consumer binding (``queue_name`` ↔ ``channel_pid``)."""
+
+    queue: str
+    channel: str
+
+
+@dataclass
+class Permission:
+    """A user's ``configure``/``write``/``read`` regexes on a vhost."""
+
+    vhost: str
+    user: str
+    configure: str
+    write: str
+    read: str
+
+
+def queues(transport: Transport) -> list[QueueInfo]:
+    """List queues with depth + consumer count; flag backlogs and zero-consumer queues."""
     res = _list(transport, "list_queues", "name", "messages", "consumers")
-    rows = []
+    out: list[QueueInfo] = []
     for parts in _tabular(res.stdout):
         if len(parts) < 3:
             continue
-        name, messages, consumers = parts[0], parts[1], parts[2]
+        messages, consumers = _to_int(parts[1]), _to_int(parts[2])
         flag = ""
-        if _to_int(consumers) == 0:
+        if consumers == 0:
             flag = "NO CONSUMERS"
-        elif _to_int(messages) >= _DEEP_QUEUE:
+        elif messages >= _DEEP_QUEUE:
             flag = f"BACKLOG (>{_DEEP_QUEUE})"
-        rows.append([name, messages, consumers, flag])
-    return ["queue", "messages", "consumers", "flag"], rows
+        out.append(QueueInfo(name=parts[0], messages=messages, consumers=consumers, flag=flag))
+    return out
 
 
-def consumers(transport: Transport) -> tuple[list[str], list[list[str]]]:
+def consumers(transport: Transport) -> list[Consumer]:
     """List consumers (``queue_name`` ↔ ``channel_pid``)."""
-    res = _list(transport, "list_consumers")
-    return ["consumer"], _tabular(res.stdout)
+    out: list[Consumer] = []
+    for parts in _tabular(_list(transport, "list_consumers").stdout):
+        out.append(Consumer(queue=parts[0], channel=parts[1] if len(parts) > 1 else ""))
+    return out
 
 
-def vhosts(transport: Transport) -> tuple[list[str], list[list[str]]]:
-    """List virtual hosts."""
-    res = _list(transport, "list_vhosts")
-    return ["vhost"], _tabular(res.stdout)
+def vhosts(transport: Transport) -> list[str]:
+    """List virtual host names."""
+    return [parts[0] for parts in _tabular(_list(transport, "list_vhosts").stdout) if parts]
 
 
-def permissions(transport: Transport, *, all_vhosts: bool = False) -> tuple[list[str], list[list[str]]]:
-    """List permissions for the default vhost, or every vhost with ``all_vhosts``.
+def permissions(transport: Transport, *, all_vhosts: bool = False) -> list[Permission]:
+    """Permissions for the default vhost, or every vhost with ``all_vhosts``.
 
     ``rabbitmqctl list_permissions`` is scoped to a single vhost (the default
     ``/``). With ``all_vhosts=True`` this enumerates the vhosts and runs the
-    per-vhost query for each, prepending a ``vhost`` column so rows from different
-    vhosts stay distinguishable — the multi-vhost permission matrix the
-    single-vhost call can't give you.
+    per-vhost query for each — the multi-vhost permission matrix the single-vhost
+    call can't give you.
     """
-    if not all_vhosts:
-        res = _list(transport, "list_permissions")
-        return ["user", "configure", "write", "read"], _tabular(res.stdout)
+    out: list[Permission] = []
+    targets = vhosts(transport) if all_vhosts else ["/"]
+    for vhost in targets:
+        args = ["list_permissions", "-p", vhost] if all_vhosts else ["list_permissions"]
+        for parts in _tabular(_list(transport, *args).stdout):
+            if len(parts) >= 4:
+                out.append(Permission(vhost=vhost, user=parts[0], configure=parts[1], write=parts[2], read=parts[3]))
+    return out
 
-    _, vhost_rows = vhosts(transport)
-    matrix: list[list[str]] = []
-    for vrow in vhost_rows:
-        if not vrow:
+
+def queue_depth(transport: Transport, queue: str, *, vhost: str | None = None) -> int:
+    """Depth (pending message count) of a single ``queue``, or ``-1`` if absent.
+
+    Scoped to ``vhost`` when given. Cleanly typed: parses ``rabbitmqctl
+    list_queues`` and matches the named queue rather than awk-ing a tab field.
+    """
+    args = ["list_queues", "name", "messages"]
+    if vhost:
+        args += ["-p", vhost]
+    res = _list(transport, *args)
+    for parts in _tabular(res.stdout):
+        if len(parts) >= 2 and parts[0] == queue:
+            return _to_int(parts[1])
+    return -1
+
+
+def nonempty_queues(transport: Transport, *, vhost: str) -> list[tuple[str, int]]:
+    """``(name, depth)`` for every queue in ``vhost`` with a non-zero depth."""
+    res = _list(transport, "list_queues", "name", "messages", "-p", vhost)
+    out: list[tuple[str, int]] = []
+    for parts in _tabular(res.stdout):
+        if len(parts) < 2:
             continue
-        vhost = vrow[0]
-        res = _list(transport, "list_permissions", "-p", vhost)
-        for parts in _tabular(res.stdout):
-            matrix.append([vhost, *parts])
-    return ["vhost", "user", "configure", "write", "read"], matrix
+        depth = _to_int(parts[1])
+        if depth > 0:
+            out.append((parts[0], depth))
+    return out
+
+
+@dataclass
+class PurgeResult:
+    """Outcome of purging one queue: ``purged`` is the depth measured just before."""
+
+    queue: str
+    vhost: str
+    purged: int
+    output: str
+
+    def __str__(self) -> str:
+        return f"{self.vhost}/{self.queue}: {self.purged} purged ({self.output})"
+
+
+def purge_queue(transport: Transport, queue: str, *, vhost: str | None = None, yes: bool = False) -> PurgeResult:
+    """Purge all pending messages from ``queue`` (irreversible). Gated by ``yes``.
+
+    Measures depth first so the result reports how many messages were dropped, then
+    runs ``rabbitmqctl purge_queue``.
+    """
+    if not yes:
+        raise PermissionError(f"refusing to purge {vhost or '/'}/{queue} without confirmation (pass yes=True)")
+    before = queue_depth(transport, queue, vhost=vhost)
+    args = ["purge_queue", queue]
+    if vhost:
+        args += ["-p", vhost]
+    res = _ctl(transport, *args)
+    return PurgeResult(queue, vhost or "/", max(before, 0), (res.stdout or res.stderr).strip())
+
+
+@dataclass
+class WorkflowPurgeReport:
+    """Result of :func:`purge_workflows`: the service actions taken plus the purges done."""
+
+    steps: list[service.ServiceActionResult] = field(default_factory=list)
+    purges: list[PurgeResult] = field(default_factory=list)
+
+    @property
+    def total_purged(self) -> int:
+        return sum(p.purged for p in self.purges)
+
+    @property
+    def ok(self) -> bool:
+        """True if every service action succeeded."""
+        return all(s.ok for s in self.steps)
+
+
+def purge_workflows(
+    transport: Transport,
+    *,
+    yes: bool = False,
+    graceful: bool = False,
+    sweep_data_queues: bool = True,
+) -> WorkflowPurgeReport:
+    """Release a stuck-worker backlog: purge queued workflows and recycle ``celeryd``.
+
+    A ``celeryd`` restart alone does NOT clear the backlog — queued tasks sit in the
+    ``celery`` queue (vhost ``fsr-cluster``) and re-dispatch the moment workers
+    return. So the workflow queue must be **purged**, not just the pool bounced.
+
+    Two strategies for recycling the pool:
+
+    * **hard (default)** — purge first, then ``systemctl kill -s SIGKILL celeryd``.
+      ``celeryd`` has ``Restart=always``, so systemd respawns a clean pool in ~1s
+      against the now-empty queue. This is the fast, live-proven path; a graceful
+      ``csadm`` stop blocks for *minutes* on in-flight workers.
+    * **graceful** (``graceful=True``) — ``csadm services --stop-service celeryd``
+      → purge → ``--start-service``. Slower but lets in-flight tasks finish.
+
+    Either way ``cyops-integrations-agent`` is restarted last (clears ballooned uwsgi
+    RSS). With ``sweep_data_queues`` (default) any non-empty queues in
+    ``intra-cyops`` are purged too.
+
+    Irreversible (drops queued tasks) — gated by ``yes``.
+    """
+    if not yes:
+        raise PermissionError("purge_workflows discards queued tasks; pass yes=True to confirm")
+    report = WorkflowPurgeReport()
+
+    if graceful:
+        # Quiesce celeryd gracefully so it can't re-drain mid-purge, then purge, then start.
+        report.steps.append(service.stop(transport, "celeryd", yes=True))
+        _purge_workflow_queues(transport, report, sweep_data_queues)
+        report.steps.append(service.start(transport, "celeryd"))
+    else:
+        # Purge FIRST so the auto-respawned pool comes back to an empty queue, THEN
+        # SIGKILL — systemd's Restart=always brings a clean pool back in ~1s.
+        _purge_workflow_queues(transport, report, sweep_data_queues)
+        report.steps.append(service.systemctl(transport, "kill", "celeryd", signal="SIGKILL", yes=True))
+
+    report.steps.append(service.restart(transport, "cyops-integrations-agent", yes=True))
+    return report
+
+
+def _purge_workflow_queues(transport: Transport, report: WorkflowPurgeReport, sweep_data_queues: bool) -> None:
+    """Purge the primary workflow queue, then optionally sweep non-empty data queues."""
+    report.purges.append(purge_queue(transport, _WORKFLOW_QUEUE, vhost=_WORKFLOW_VHOST, yes=True))
+    if sweep_data_queues:
+        for name, _depth in nonempty_queues(transport, vhost=_DATA_VHOST):
+            report.purges.append(purge_queue(transport, name, vhost=_DATA_VHOST, yes=True))
 
 
 def _to_int(s: str) -> int:

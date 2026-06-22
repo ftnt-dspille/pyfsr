@@ -8,6 +8,7 @@ through :func:`exec_write`, which refuses without an explicit confirmation.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from .facts import Facts
 
@@ -97,8 +98,42 @@ def indexes(
     return target, ["table", "index"], rows
 
 
-def getsize(facts: Facts, *, timeout: float = 60.0) -> tuple[list[str], list[list[str]]]:
-    """Run ``csadm db --getsize`` and parse the footprint into ``(headers, rows)``.
+@dataclass
+class DataClassSize:
+    """One ``csadm db --getsize`` data-class footprint, normalised to MB."""
+
+    data_class: str
+    size: str  # raw, e.g. "7354 MB" / "8396 kB"
+    size_mb: float
+
+
+@dataclass
+class DatabaseInfo:
+    """One Postgres database: name, ``pg_size_pretty`` size, and detected role."""
+
+    name: str
+    size: str
+    role: str
+
+
+# Unit multipliers to normalise csadm's mixed kB/MB/GB sizes to MB.
+_UNIT_MB = {"kb": 1 / 1024, "mb": 1.0, "gb": 1024.0, "tb": 1024.0 * 1024, "b": 1 / (1024 * 1024)}
+
+
+def _size_to_mb(size: str) -> float:
+    parts = size.split()
+    if not parts:
+        return 0.0
+    try:
+        value = float(parts[0])
+    except ValueError:
+        return 0.0
+    unit = parts[1].lower() if len(parts) > 1 else "mb"
+    return round(value * _UNIT_MB.get(unit, 1.0), 3)
+
+
+def getsize(facts: Facts, *, timeout: float = 60.0) -> list[DataClassSize]:
+    """Parse ``csadm db --getsize`` into a typed per-data-class footprint.
 
     csadm breaks the database footprint out by data class (primary / audit /
     workflow, plus archived data on newer releases) — the size view to check
@@ -115,12 +150,11 @@ def getsize(facts: Facts, *, timeout: float = 60.0) -> tuple[list[str], list[lis
         Workflow Logs : 1138 MB
         Archived Data : 8396 kB
 
-    Only the ``<class> : <size>`` lines are kept; the preamble is dropped. Returns
-    ``(["data_class", "size"], rows)``. Empty rows means the format changed — the
-    caller can fall back to :func:`getsize_raw`.
+    ``size_mb`` normalises the mixed kB/MB units. Empty result means the format
+    changed — fall back to :func:`getsize_raw`.
     """
     raw = getsize_raw(facts, timeout=timeout)
-    rows: list[list[str]] = []
+    out: list[DataClassSize] = []
     for line in raw.splitlines():
         # Data lines are "<label> : <value> <unit>"; the preamble has no " : ".
         if " : " not in line:
@@ -128,8 +162,8 @@ def getsize(facts: Facts, *, timeout: float = 60.0) -> tuple[list[str], list[lis
         label, _, size = line.partition(" : ")
         label, size = label.strip(), size.strip()
         if label and size:
-            rows.append([label, size])
-    return ["data_class", "size"], rows
+            out.append(DataClassSize(data_class=label, size=size, size_mb=_size_to_mb(size)))
+    return out
 
 
 def getsize_raw(facts: Facts, *, timeout: float = 60.0) -> str:
@@ -137,7 +171,7 @@ def getsize_raw(facts: Facts, *, timeout: float = 60.0) -> str:
     return facts.transport.run(["csadm", "db", "--getsize"], sudo=True, timeout=timeout).check().stdout.strip()
 
 
-def list_databases(facts: Facts) -> tuple[list[str], list[list[str]]]:
+def list_databases(facts: Facts) -> list[DatabaseInfo]:
     """Enumerate appliance DBs with sizes and detected content-DB role."""
     rows = facts.psql(
         "SELECT datname, pg_size_pretty(pg_database_size(datname)) "
@@ -145,11 +179,11 @@ def list_databases(facts: Facts) -> tuple[list[str], list[list[str]]]:
         db="postgres",
     )
     content = facts.content_db()
-    out = []
+    out: list[DatabaseInfo] = []
     for name, size in rows:
         role = "content" if name == content else _fixed_role(name)
-        out.append([name, size, role])
-    return ["database", "size", "role"], out
+        out.append(DatabaseInfo(name=name, size=size, role=role))
+    return out
 
 
 def find_module_tables(facts: Facts, base_table: str) -> list[str]:

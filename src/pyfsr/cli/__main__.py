@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Callable
 
 from . import _output
 from . import playbook as playbook_cmds
@@ -17,6 +16,7 @@ from .appliance import db as db_cmds
 from .appliance import diagnose as diagnose_cmds
 from .appliance import es as es_cmds
 from .appliance import ha as ha_cmds
+from .appliance import host as host_cmds
 from .appliance import info as info_cmds
 from .appliance import license as license_cmds
 from .appliance import logs as logs_cmds
@@ -138,9 +138,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_svc = asub.add_parser("service", help="systemd / cyops service verbs")
     svcsub = p_svc.add_subparsers(dest="svc_command", required=True)
 
-    p_svc_status = svcsub.add_parser("status", help="csadm services --status")
+    p_svc_status = svcsub.add_parser("status", help="csadm services --status (parsed)")
     _add_connection_args(p_svc_status)
+    _add_fmt(p_svc_status)
     p_svc_status.add_argument("name", nargs="?", help="limit to one service")
+    p_svc_status.add_argument("--raw", action="store_true", help="print raw csadm text instead of the parsed table")
     p_svc_status.set_defaults(func=cmd_service_status)
 
     p_svc_live = svcsub.add_parser("liveness", help="probe endpoints for active-but-wedged")
@@ -158,6 +160,25 @@ def build_parser() -> argparse.ArgumentParser:
     _add_connection_args(p_svc_listen)
     _add_fmt(p_svc_listen)
     p_svc_listen.set_defaults(func=cmd_service_listeners)
+
+    p_svc_stop = svcsub.add_parser("stop", help="stop a cyops service (gated)")
+    _add_connection_args(p_svc_stop)
+    p_svc_stop.add_argument("name", help="service to stop")
+    p_svc_stop.add_argument("--yes", action="store_true", help="skip confirmation")
+    p_svc_stop.set_defaults(func=cmd_service_stop)
+
+    p_svc_start = svcsub.add_parser("start", help="start a cyops service")
+    _add_connection_args(p_svc_start)
+    p_svc_start.add_argument("name", help="service to start")
+    p_svc_start.set_defaults(func=cmd_service_start)
+
+    p_svc_ctl = svcsub.add_parser("systemctl", help="drive systemd directly (stop/kill/restart/status; gated)")
+    _add_connection_args(p_svc_ctl)
+    p_svc_ctl.add_argument("action", help="systemctl action: stop, kill, restart, start, status, is-active, …")
+    p_svc_ctl.add_argument("unit", help="systemd unit name (e.g. celeryd.service)")
+    p_svc_ctl.add_argument("--signal", help="signal for `kill` (e.g. SIGKILL, 9); default SIGTERM")
+    p_svc_ctl.add_argument("--yes", action="store_true", help="confirm a mutating action")
+    p_svc_ctl.set_defaults(func=cmd_service_systemctl)
 
     # --- mq group ---
     p_mq = asub.add_parser("mq", help="RabbitMQ verbs (rabbitmqctl)")
@@ -181,12 +202,56 @@ def build_parser() -> argparse.ArgumentParser:
             )
         sp.set_defaults(func=_MQ_HANDLERS[verb])
 
+    p_mq_purge = mqsub.add_parser("purge", help="purge all messages from a queue (irreversible, gated)")
+    _add_connection_args(p_mq_purge)
+    p_mq_purge.add_argument("queue", help="queue name to purge")
+    p_mq_purge.add_argument("-p", "--vhost", help="virtual host (default '/')")
+    p_mq_purge.add_argument("--yes", action="store_true", help="confirm the purge")
+    p_mq_purge.set_defaults(func=cmd_mq_purge)
+
+    p_mq_pw = mqsub.add_parser(
+        "purge-workflows",
+        help="release a stuck-worker backlog: purge queued workflows + recycle celeryd (SIGKILL by default; gated)",
+    )
+    _add_connection_args(p_mq_pw)
+    p_mq_pw.add_argument("--yes", action="store_true", help="confirm (discards queued tasks)")
+    p_mq_pw.add_argument(
+        "--graceful", action="store_true", help="csadm warm-stop celeryd instead of SIGKILL (slower; lets tasks finish)"
+    )
+    p_mq_pw.add_argument(
+        "--no-sweep", action="store_true", help="purge only fsr-cluster/celery, not the intra-cyops data queues"
+    )
+    p_mq_pw.set_defaults(func=cmd_mq_purge_workflows)
+
+    # --- host group ---
+    p_host = asub.add_parser("host", help="OS resource metrics (mem / swap / load / RSS / disk)")
+    hostsub = p_host.add_subparsers(dest="host_command", required=True)
+
+    p_host_snap = hostsub.add_parser("snapshot", help="one coherent sample: mem, swap, load, worker RSS, disk")
+    _add_connection_args(p_host_snap)
+    _add_fmt(p_host_snap)
+    p_host_snap.add_argument("--disk-path", help="also report this filesystem's usage (e.g. /opt/cyops)")
+    p_host_snap.set_defaults(func=cmd_host_snapshot)
+
+    p_host_mem = hostsub.add_parser("mem", help="memory + swap usage (MB)")
+    _add_connection_args(p_host_mem)
+    _add_fmt(p_host_mem)
+    p_host_mem.set_defaults(func=cmd_host_mem)
+
+    p_host_proc = hostsub.add_parser("rss", help="summed/peak RSS for processes matching a regex")
+    _add_connection_args(p_host_proc)
+    _add_fmt(p_host_proc)
+    p_host_proc.add_argument("pattern", help="regex matched against the process command line")
+    p_host_proc.set_defaults(func=cmd_host_rss)
+
     # --- license group ---
     p_lic = asub.add_parser("license", help="licensing / identity (device UUID, drift)")
     licsub = p_lic.add_subparsers(dest="license_command", required=True)
 
-    p_lic_show = licsub.add_parser("show", help="csadm license --show-details")
+    p_lic_show = licsub.add_parser("show", help="csadm license --show-details (parsed)")
     _add_connection_args(p_lic_show)
+    _add_fmt(p_lic_show)
+    p_lic_show.add_argument("--raw", action="store_true", help="print raw csadm text instead of the parsed card")
     p_lic_show.set_defaults(func=cmd_license_show)
 
     p_lic_uuid = licsub.add_parser("device-uuid", help="resolved device UUID (file first, csadm fallback)")
@@ -235,12 +300,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_ha = asub.add_parser("ha", help="HA cluster verbs (csadm ha)")
     hasub = p_ha.add_subparsers(dest="ha_command", required=True)
 
-    p_ha_nodes = hasub.add_parser("nodes", help="csadm ha list-nodes")
+    p_ha_nodes = hasub.add_parser("nodes", help="csadm ha list-nodes (parsed)")
     _add_connection_args(p_ha_nodes)
+    _add_fmt(p_ha_nodes)
     p_ha_nodes.set_defaults(func=cmd_ha_nodes)
 
-    p_ha_health = hasub.add_parser("health", help="csadm ha show-health")
+    p_ha_health = hasub.add_parser("health", help="csadm ha show-health (parsed)")
     _add_connection_args(p_ha_health)
+    _add_fmt(p_ha_health)
     p_ha_health.set_defaults(func=cmd_ha_health)
 
     p_ha_replication = hasub.add_parser("replication", help="csadm ha get-replication-stat")
@@ -292,15 +359,16 @@ def cmd_info(args: argparse.Namespace) -> int:
 
 
 def cmd_db_list(args: argparse.Namespace) -> int:
-    facts = _make_facts(args)
-    headers, rows = db_cmds.list_databases(facts)
-    _output.render(rows, headers, fmt=args.fmt)
+    dbs = db_cmds.list_databases(_make_facts(args))
+    rows = [[d.name, d.size, d.role] for d in dbs]
+    _output.render(rows, ["database", "size", "role"], fmt=args.fmt)
     return 0
 
 
 def cmd_db_getsize(args: argparse.Namespace) -> int:
-    headers, rows = db_cmds.getsize(_make_facts(args))
-    _output.render(rows, headers, fmt=args.fmt)
+    sizes = db_cmds.getsize(_make_facts(args))
+    rows = [[s.data_class, s.size, s.size_mb] for s in sizes]
+    _output.render(rows, ["data_class", "size", "size_mb"], fmt=args.fmt)
     return 0
 
 
@@ -357,8 +425,15 @@ def cmd_db_drop_module_tables(args: argparse.Namespace) -> int:
 
 # --- service handlers ----------------------------------------------------
 def cmd_service_status(args: argparse.Namespace) -> int:
-    print(service_cmds.status(_make_transport(args), args.name))
-    return 0
+    t = _make_transport(args)
+    if args.raw:
+        print(service_cmds.status(t, args.name))
+        return 0
+    states = service_cmds.services(t, args.name)
+    rows = [[s.name, "up" if s.running else "DOWN", s.status, s.since or ""] for s in states]
+    _output.render(rows, ["service", "up", "status", "since"], fmt=args.fmt)
+    # Non-zero exit if any service is not running, so it's usable as a health gate.
+    return 0 if all(s.running for s in states) else 1
 
 
 def cmd_service_liveness(args: argparse.Namespace) -> int:
@@ -370,15 +445,34 @@ def cmd_service_liveness(args: argparse.Namespace) -> int:
 
 
 def cmd_service_restart(args: argparse.Namespace) -> int:
-    out = service_cmds.restart(_make_transport(args), args.name, yes=args.yes)
-    print(out or f"restarted {args.name}")
-    return 0
+    r = service_cmds.restart(_make_transport(args), args.name, yes=args.yes)
+    print(str(r))
+    return 0 if r.ok else 1
 
 
 def cmd_service_listeners(args: argparse.Namespace) -> int:
-    headers, rows = service_cmds.listeners(_make_transport(args))
-    _output.render(rows, headers, fmt=args.fmt)
+    rows = [[lis.local_address, lis.process] for lis in service_cmds.listeners(_make_transport(args))]
+    _output.render(rows, ["local_address", "process"], fmt=args.fmt)
     return 0
+
+
+def cmd_service_stop(args: argparse.Namespace) -> int:
+    r = service_cmds.stop(_make_transport(args), args.name, yes=args.yes)
+    print(str(r))
+    return 0 if r.ok else 1
+
+
+def cmd_service_start(args: argparse.Namespace) -> int:
+    r = service_cmds.start(_make_transport(args), args.name)
+    print(str(r))
+    return 0 if r.ok else 1
+
+
+def cmd_service_systemctl(args: argparse.Namespace) -> int:
+    r = service_cmds.systemctl(_make_transport(args), args.action, args.unit, signal=args.signal, yes=args.yes)
+    # For read-only actions (is-active/show) print the queried value, else the outcome.
+    print(r.output if r.output else str(r))
+    return 0 if r.ok else 1
 
 
 # --- mq handlers ---------------------------------------------------------
@@ -387,27 +481,79 @@ def cmd_mq_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def _mq_table(args: argparse.Namespace, fn: Callable[[Transport], tuple[list[str], list[list[str]]]]) -> int:
-    headers, rows = fn(_make_transport(args))
-    _output.render(rows, headers, fmt=args.fmt)
+def cmd_mq_queues(args: argparse.Namespace) -> int:
+    qs = mq_cmds.queues(_make_transport(args))
+    rows = [[q.name, q.messages, q.consumers, q.flag] for q in qs]
+    _output.render(rows, ["queue", "messages", "consumers", "flag"], fmt=args.fmt)
     return 0
 
 
-def cmd_mq_queues(args: argparse.Namespace) -> int:
-    return _mq_table(args, mq_cmds.queues)
-
-
 def cmd_mq_consumers(args: argparse.Namespace) -> int:
-    return _mq_table(args, mq_cmds.consumers)
+    rows = [[c.queue, c.channel] for c in mq_cmds.consumers(_make_transport(args))]
+    _output.render(rows, ["queue", "channel"], fmt=args.fmt)
+    return 0
 
 
 def cmd_mq_vhosts(args: argparse.Namespace) -> int:
-    return _mq_table(args, mq_cmds.vhosts)
+    rows = [[v] for v in mq_cmds.vhosts(_make_transport(args))]
+    _output.render(rows, ["vhost"], fmt=args.fmt)
+    return 0
 
 
 def cmd_mq_permissions(args: argparse.Namespace) -> int:
-    headers, rows = mq_cmds.permissions(_make_transport(args), all_vhosts=args.all_vhosts)
-    _output.render(rows, headers, fmt=args.fmt)
+    perms = mq_cmds.permissions(_make_transport(args), all_vhosts=args.all_vhosts)
+    rows = [[p.vhost, p.user, p.configure, p.write, p.read] for p in perms]
+    _output.render(rows, ["vhost", "user", "configure", "write", "read"], fmt=args.fmt)
+    return 0
+
+
+def cmd_mq_purge(args: argparse.Namespace) -> int:
+    result = mq_cmds.purge_queue(_make_transport(args), args.queue, vhost=args.vhost, yes=args.yes)
+    print(str(result))
+    return 0
+
+
+def cmd_mq_purge_workflows(args: argparse.Namespace) -> int:
+    report = mq_cmds.purge_workflows(
+        _make_transport(args), yes=args.yes, graceful=args.graceful, sweep_data_queues=not args.no_sweep
+    )
+    for step in report.steps:
+        print(str(step))
+    for purge in report.purges:
+        print(str(purge))
+    print(f"total purged: {report.total_purged}")
+    return 0 if report.ok else 1
+
+
+# --- host handlers -------------------------------------------------------
+def cmd_host_snapshot(args: argparse.Namespace) -> int:
+    snap = host_cmds.snapshot(_make_transport(args), disk_path=args.disk_path)
+    rows = {
+        "mem_used_mb": snap.mem.used_mb,
+        "mem_total_mb": snap.mem.total_mb,
+        "swap_used_mb": snap.mem.swap_used_mb,
+        "swap_total_mb": snap.mem.swap_total_mb,
+        "load1": snap.load.load1,
+    }
+    for name, p in snap.procs.items():
+        rows[f"{name}_rss_mb"] = p.sum_mb
+        rows[f"{name}_workers"] = p.count
+        rows[f"{name}_peak_mb"] = p.peak_mb
+    if snap.disk:
+        rows[f"disk_{snap.disk.path}_use_pct"] = snap.disk.use_pct
+    _output.kv(rows, fmt=args.fmt)
+    return 0
+
+
+def cmd_host_mem(args: argparse.Namespace) -> int:
+    m = host_cmds.meminfo(_make_transport(args))
+    _output.kv(vars(m), fmt=args.fmt)
+    return 0
+
+
+def cmd_host_rss(args: argparse.Namespace) -> int:
+    p = host_cmds.process_rss(_make_transport(args), args.pattern)
+    _output.kv(vars(p), fmt=args.fmt)
     return 0
 
 
@@ -422,7 +568,24 @@ _MQ_HANDLERS = {
 
 # --- license handlers ----------------------------------------------------
 def cmd_license_show(args: argparse.Namespace) -> int:
-    print(license_cmds.show(_make_transport(args)))
+    t = _make_transport(args)
+    if args.raw:
+        print(license_cmds.show(t))
+        return 0
+    d = license_cmds.details(t)
+    _output.kv(
+        {
+            "type": d.type,
+            "edition": d.edition,
+            "role": d.role,
+            "total_users": d.total_users,
+            "expiry_date": d.expiry_date,
+            "remaining_days": d.remaining_days,
+            "serial_no": d.serial_no,
+            "device_uuid": d.device_uuid,
+        },
+        fmt=args.fmt,
+    )
     return 0
 
 
@@ -488,12 +651,29 @@ def cmd_es_shards(args: argparse.Namespace) -> int:
 
 # --- ha handlers ---------------------------------------------------------
 def cmd_ha_nodes(args: argparse.Namespace) -> int:
-    print(ha_cmds.nodes(_make_transport(args)))
+    nodes = ha_cmds.nodes(_make_transport(args))
+    rows = [["*" if n.is_current else "", n.name, n.node_id, n.status, n.role, n.mode, n.fsr_version] for n in nodes]
+    _output.render(rows, ["cur", "name", "node_id", "status", "role", "mode", "fsr_version"], fmt=args.fmt)
     return 0
 
 
 def cmd_ha_health(args: argparse.Namespace) -> int:
-    print(ha_cmds.health(_make_transport(args)))
+    h = ha_cmds.health(_make_transport(args))
+    card = {
+        "node_name": h.node_name,
+        "node_id": h.node_id,
+        "mode": h.mode,
+        "services_status": h.services_status,
+        "queued_workflows": h.queued_workflows,
+        "uptime": h.uptime,
+    }
+    if h.memory:
+        card["memory"] = f"{h.memory.used}/{h.memory.total} ({h.memory.percent}%)"
+    if h.swap:
+        card["swap"] = f"{h.swap.used}/{h.swap.total} ({h.swap.percent}%)"
+    for d in h.disks:
+        card[f"disk {d.mountpoint}"] = f"{d.used}/{d.total} ({d.percent}%)"
+    _output.kv(card, fmt=args.fmt)
     return 0
 
 
