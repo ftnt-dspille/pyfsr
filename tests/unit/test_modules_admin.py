@@ -315,6 +315,13 @@ def test_publish_hits_global_endpoint():
     assert result["status"] == "Success"
 
 
+def test_revert_puts_to_revert_endpoint():
+    c = RecordingClient()
+    result = ModulesAdminAPI(c).revert()
+    assert ("PUT", "/api/publish/revert", {}) in c.calls
+    assert result["ok"] is True
+
+
 def test_set_module_settings_maps_keys_and_syncs_owner():
     class SettingsClient(RecordingClient):
         def __init__(self):

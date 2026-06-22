@@ -42,10 +42,26 @@ class FakeClient:
         self.calls.append(("DELETE", endpoint, params, None))
         return None
 
+    def request(self, method, endpoint, params=None, data=None, **kwargs):
+        self.calls.append((method, endpoint, params, data))
+        return _FakeResponse(self.responses.get(endpoint) if isinstance(self.responses, dict) else None)
+
     def _resp(self, endpoint):
         if callable(self.responses):
             return self.responses(endpoint)
         return self.responses.get(endpoint, {"hydra:member": []})
+
+
+class _FakeResponse:
+    """Minimal stand-in for requests.Response (only what delete_by_query reads)."""
+
+    def __init__(self, json_data):
+        self._json = json_data
+        self.content = b"{}" if json_data is not None else b""
+        self.headers = {"Content-Type": "application/json"} if json_data is not None else {}
+
+    def json(self):
+        return self._json
 
 
 # -- path resolution --------------------------------------------------------
@@ -183,6 +199,34 @@ def test_delete_rejects_blank_ref(bad):
     client = FakeClient()
     with pytest.raises(ValueError):
         RecordSet(client, "alerts").delete(bad)
+    assert client.calls == []  # never reaches the wire
+
+
+def test_delete_by_query_sends_delete_with_filter_body():
+    client = FakeClient()
+    q = Query().eq("severity.itemValue", "Low")
+    RecordSet(client, "alerts").delete_by_query(q)
+    method, endpoint, params, data = client.calls[0]
+    assert method == "DELETE"
+    assert endpoint == "/api/3/delete-with-query/alerts"
+    assert params is None
+    assert data["filters"]  # the filter is carried in the body
+
+
+def test_delete_by_query_hard_sets_param_and_returns_json():
+    client = FakeClient({"/api/3/delete-with-query/alerts": {"deleted": 3}})
+    out = RecordSet(client, "alerts").delete_by_query(
+        {"logic": "AND", "filters": [{"field": "name", "operator": "eq", "value": "x"}]},
+        hard=True,
+    )
+    assert out == {"deleted": 3}
+    assert client.calls[0][2] == {"$hardDelete": "true"}
+
+
+def test_delete_by_query_rejects_empty_filters():
+    client = FakeClient()
+    with pytest.raises(ValueError, match="non-empty 'filters'"):
+        RecordSet(client, "alerts").delete_by_query({"logic": "AND", "filters": []})
     assert client.calls == []  # never reaches the wire
 
 

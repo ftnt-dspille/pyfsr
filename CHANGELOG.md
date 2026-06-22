@@ -16,6 +16,15 @@ All notable changes to this project will be documented in this file.
     analyst comment linked to one or more parent records of any module.
   Shared base `pyfsr.api._record_module.RecordModuleAPI`. 6 unit tests; live
   round-trip (create + link + delete for all three modules) validated on the dev box.
+- `RecordSet.delete_by_query(query, hard=)`: bulk-delete every record matching a
+  structured filter in one call via `DELETE /api/3/delete-with-query/<module>`
+  (the route is DELETE-only and carries the filter as its body). Accepts a `Query`
+  or raw `{logic, filters}` dict; rejects an empty filter so it can't wipe a whole
+  module; `hard=True` purges via `$hardDelete`. 3 unit tests.
+- `client.modules_admin.revert()`: discard **all** pending staged schema changes via
+  `PUT /api/publish/revert` (the inverse of `publish()`) — use it to abandon a
+  half-built change or clear a wedged staged draft. Appliance-wide, like publish;
+  synchronous (no DB-migrate 503 window). 1 unit test.
 - `client.views` (`ViewsAPI`): resolve a module's **active** system view template
   (SVT) layout via `GET /api/views/1/modules-<module>-<kind>` — `views.detail(module)`,
   `views.listing(module)`, `views.form(module)`, plus generic `views.resolve(module,
