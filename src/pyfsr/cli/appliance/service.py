@@ -172,7 +172,7 @@ def _service_action(transport: Transport, action: str, name: str) -> ServiceActi
     """Run one csadm `--*-service` verb and decode its (unreliable) exit code.
 
     csadm exits 0 even when it rejects the name as unmodifiable, so success is
-    ``res.ok`` AND the output not matching :data:`_CSADM_REJECT`.
+    ``res.ok`` AND the output not matching ``_CSADM_REJECT``.
     """
     res = transport.run(["csadm", "services", _SERVICE_FLAG[action], name], sudo=True, timeout=120)
     text = (res.stdout or res.stderr).strip()
@@ -198,7 +198,7 @@ def restart(transport: Transport, name: str, *, yes: bool = False) -> ServiceAct
     csadm exits 0 even when it refuses an unknown/unmodifiable name (it prints an
     ``ERROR: ... can not be modified`` hint and no-ops), so the returned ``ok``
     folds that rejection text in — a typo'd name yields ``ok=False``, not a false
-    success. (live-verified, see :data:`_CSADM_REJECT`.)
+    success. (live-verified, see ``_CSADM_REJECT``.)
     """
     if not yes:
         raise PermissionError(f"refusing to restart {name!r} without confirmation (pass --yes)")
