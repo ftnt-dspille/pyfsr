@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-06-21
+
 ### Added
 - Typed CRUD shortcuts for the common SOC record modules, mirroring the
   `client.alerts` pattern so callers stop hand-rolling raw `client.post(...)`:
