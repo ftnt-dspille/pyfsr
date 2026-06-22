@@ -5,13 +5,17 @@
 [![Documentation Status](https://github.com/ftnt-dspille/pyfsr/actions/workflows/docs.yml/badge.svg)](https://github.com/ftnt-dspille/pyfsr/actions/workflows/docs.yml)
 [![codecov](https://codecov.io/gh/ftnt-dspille/pyfsr/branch/main/graph/badge.svg)](https://codecov.io/gh/ftnt-dspille/pyfsr)
 
-[Documentation](https://ftnt-dspille.github.io/pyfsr/) · [Installation](#installation) · [Quick start](#quick-start) · [AI / agents](#ai--agent-friendly)
+[Documentation](https://ftnt-dspille.github.io/pyfsr/) · [Installation](#installation) · [Quick start](#quick-start) · [CLI](#command-line-tools) · [AI / agents](#ai--agent-friendly)
 
 **pyfsr** is a batteries-included Python client for the FortiSOAR REST API. It
 gives you a typed query/CRUD layer over any module, picklist resolution,
 connector execution, playbook-run history, safe deletes — and a ready-made
 **AI/agent surface** (tool-schema registry + an optional MCP server) so an agent
 can drive FortiSOAR with no glue code.
+
+There's also a `pyfsr` CLI for the things you reach for outside a script:
+poking at an appliance's health and services, and authoring playbooks in YAML
+and pushing them to a live instance.
 
 Python 3.10+ · Pydantic v2 · MIT.
 
@@ -119,6 +123,34 @@ FSR_BASE_URL=soar.example.com FSR_API_KEY=... python -m pyfsr.mcp
 It exposes the same registry (record CRUD, schema discovery, picklists,
 connectors, playbook runs) as MCP tools — generic and dependency-light,
 distinct from any domain-specific FortiSOAR MCP.
+
+## Command-line tools
+
+Installing pyfsr puts a `pyfsr` command on your path with two groups.
+
+**`pyfsr appliance`** — operational verbs against a FortiSOAR box (most run over
+SSH/sudo and stay dependency-light on the far end):
+
+```bash
+pyfsr appliance info                 # host, version, content DB, device UUID
+pyfsr appliance host                 # mem / swap / load / per-service RSS / disk
+pyfsr appliance service restart cyops-postman --yes
+pyfsr appliance db                   # Postgres verbs, multi-DB aware
+pyfsr appliance es                   # Elasticsearch health + shard state
+pyfsr appliance license              # licensing / identity, drift check
+```
+
+Other groups: `mq` (RabbitMQ), `ha`, `certs`, `logs`, and `diagnose` (runs
+`fsr_diagnose.sh`). `--help` on any of them lists the verbs.
+
+**`pyfsr playbook`** — author playbooks as YAML and deploy them:
+
+```bash
+pyfsr playbook validate flow.yaml    # compile + report diagnostics (offline)
+pyfsr playbook compile flow.yaml     # emit the FSR import envelope (offline)
+pyfsr playbook deploy flow.yaml      # compile and create it on the appliance
+pyfsr playbook check-fresh           # compare the cached catalog vs a live SOAR
+```
 
 ## Development
 
