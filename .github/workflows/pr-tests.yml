@@ -16,7 +16,7 @@ on:
         description: 'The Git ref to checkout'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   lint:
