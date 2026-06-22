@@ -76,6 +76,54 @@ def test_retry_disabled(mock_client):
     assert getattr(retry, "total", 0) in (0, None) or retry == 0
 
 
+# -- dry_run ----------------------------------------------------------------
+def _dry_run_client(mock_response, monkeypatch, sent):
+    """Build a dry_run client, capturing every method that reaches the session."""
+
+    def cap(self, method, url, **kwargs):
+        sent.append(method)
+        if "/auth/authenticate" in url:
+            return mock_response(json_data={"token": "tok"})
+        return mock_response(json_data={"hydra:member": []})
+
+    monkeypatch.setattr(requests.Session, "request", cap)
+    client = FortiSOAR(
+        base_url="https://t.example.com",
+        username="u",
+        password="p",
+        verify_ssl=False,
+        dry_run=True,
+    )
+    sent.clear()  # drop the auth call made during construction
+    return client
+
+
+def test_dry_run_suppresses_writes(mock_response, monkeypatch):
+    sent = []
+    client = _dry_run_client(mock_response, monkeypatch, sent)
+    assert client.dry_run is True
+
+    # Writes are suppressed and return a synthetic dry-run envelope.
+    body = client.post("/api/3/alerts", data={"name": "x"})
+    assert body["dryRun"] is True
+    assert body["method"] == "POST"
+    assert body["data"] == {"name": "x"}
+    # delete returns None but still must not hit the network
+    assert client.delete("/api/3/alerts/abc") is None
+    assert sent == []  # nothing actually went out
+
+
+def test_dry_run_passes_reads_through(mock_response, monkeypatch):
+    sent = []
+    client = _dry_run_client(mock_response, monkeypatch, sent)
+    client.get("/api/3/alerts")
+    assert sent == ["GET"]  # reads are not suppressed
+
+
+def test_dry_run_defaults_off(mock_client):
+    assert mock_client.dry_run is False
+
+
 # -- auth-header masking ----------------------------------------------------
 def test_mask_headers_keeps_scheme_hides_secret():
     masked = _mask_headers({"Authorization": "API-KEY supersecretvalue", "Content-Type": "application/json"})

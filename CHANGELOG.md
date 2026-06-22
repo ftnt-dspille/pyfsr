@@ -4,6 +4,46 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `FortiSOAR(..., dry_run=False)` is now a real constructor parameter (stored as
+  `client.dry_run`). When True, mutating requests (POST/PUT/PATCH/DELETE) are not
+  sent — they are logged and a synthetic 200 whose body echoes the would-be request
+  (`{dryRun, method, url, params, data}`) is returned, so a caller's write path runs
+  without touching the appliance. Reads pass through unchanged. Previously callers
+  (e.g. alertforge) set `dry_run` as an ad-hoc attribute the client silently ignored.
+- `client.picklists.validate_record_fields(module, fields)`: dry-run picklist
+  resolution that returns the misses (`[{field, value, picklist, valid_values}, ...]`)
+  without mapping or writing — empty list means every picklist field resolves cleanly.
+  Lets a caller validate friendly-value mappings before committing a write.
+- `pyfsr appliance` gained three csadm/RabbitMQ verbs (all live-validated against a
+  FortiSOAR appliance — FSR 7.6.x / RabbitMQ 3.13.2):
+  - `appliance db getsize` — `csadm db --getsize`, the database footprint broken
+    out by data class (primary / audit / workflow / archived). Parsed from csadm's
+    `<class> : <size>` report into a structured table (`db getsize --json/--csv`
+    supported); `db_cmds.getsize_raw()` exposes the unparsed text. Distinct from
+    `db list`, which sizes each Postgres DB via `pg_database_size`.
+  - `appliance mq permissions --all-vhosts` — the per-vhost permission matrix
+    (enumerates vhosts and runs `list_permissions -p <vhost>` for each, with a
+    `vhost` column). The bare `mq permissions` still covers only the default `/`.
+  - `appliance certs regenerate <hostname>` — regenerate the self-signed TLS cert
+    via `csadm certs --generate <hostname>` (the documented fix for the expired-cert
+    "Unable to load API credentials from cache or DAS" failure). Gated by `--yes`;
+    restart services afterwards. New `pyfsr.cli.appliance.certs` module.
+
+### Fixed
+- `appliance mq` listings (`vhosts`/`permissions`/`queues`/`consumers`) leaked
+  RabbitMQ's column-header row as a bogus data record on modern RabbitMQ (≥3.8):
+  `-q` alone no longer suppresses headers (confirmed live on 3.13.2 — `list_vhosts`
+  emitted a vhost literally named `name`). Listings now pass `--no-table-headers`.
+- `client.playbooks.clone(uuid, new_name, *, collection=None, is_active=False)`:
+  clone a playbook definition under a new name. Fetches the source with its
+  steps/routes/groups inlined, regenerates **every** owned UUID (workflow + steps
+  + routes + groups) and rewires all internal references (route
+  `sourceStep`/`targetStep`, `triggerStep`, step `group`) via a single global
+  UUID substitution, drops server-managed fields, and POSTs the copy. Defaults the
+  clone to inactive so it can't fire on triggers before review; optionally re-homes
+  it into a different collection.
+
 ## [0.6.6] - 2026-06-21
 
 ### Added

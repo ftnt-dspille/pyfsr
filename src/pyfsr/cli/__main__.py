@@ -12,6 +12,7 @@ from collections.abc import Callable
 
 from . import _output
 from . import playbook as playbook_cmds
+from .appliance import certs as certs_cmds
 from .appliance import db as db_cmds
 from .appliance import diagnose as diagnose_cmds
 from .appliance import es as es_cmds
@@ -87,6 +88,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_connection_args(p_list)
     _add_fmt(p_list)
     p_list.set_defaults(func=cmd_db_list)
+
+    p_getsize = dbsub.add_parser("getsize", help="csadm db --getsize (footprint by data class)")
+    _add_connection_args(p_getsize)
+    _add_fmt(p_getsize)
+    p_getsize.set_defaults(func=cmd_db_getsize)
 
     p_query = dbsub.add_parser("query", help="run a read-only SELECT")
     _add_connection_args(p_query)
@@ -167,6 +173,12 @@ def build_parser() -> argparse.ArgumentParser:
         _add_connection_args(sp)
         if verb != "status":
             _add_fmt(sp)
+        if verb == "permissions":
+            sp.add_argument(
+                "--all-vhosts",
+                action="store_true",
+                help="show the permission matrix across every vhost, not just '/'",
+            )
         sp.set_defaults(func=_MQ_HANDLERS[verb])
 
     # --- license group ---
@@ -235,6 +247,19 @@ def build_parser() -> argparse.ArgumentParser:
     _add_connection_args(p_ha_replication)
     p_ha_replication.set_defaults(func=cmd_ha_replication)
 
+    # --- certs group ---
+    p_certs = asub.add_parser("certs", help="appliance TLS certificate verbs (csadm certs)")
+    certssub = p_certs.add_subparsers(dest="certs_command", required=True)
+
+    p_certs_regen = certssub.add_parser(
+        "regenerate",
+        help="regenerate the self-signed cert (csadm certs --generate <hostname>); gated by --yes",
+    )
+    _add_connection_args(p_certs_regen)
+    p_certs_regen.add_argument("hostname", help="FQDN to issue the cert for (the cert CN)")
+    p_certs_regen.add_argument("--yes", action="store_true", help="skip confirmation")
+    p_certs_regen.set_defaults(func=cmd_certs_regenerate)
+
     # --- diagnose ---
     p_diag = asub.add_parser("diagnose", help="run fsr_diagnose.sh on the appliance")
     _add_connection_args(p_diag)
@@ -269,6 +294,12 @@ def cmd_info(args: argparse.Namespace) -> int:
 def cmd_db_list(args: argparse.Namespace) -> int:
     facts = _make_facts(args)
     headers, rows = db_cmds.list_databases(facts)
+    _output.render(rows, headers, fmt=args.fmt)
+    return 0
+
+
+def cmd_db_getsize(args: argparse.Namespace) -> int:
+    headers, rows = db_cmds.getsize(_make_facts(args))
     _output.render(rows, headers, fmt=args.fmt)
     return 0
 
@@ -375,7 +406,9 @@ def cmd_mq_vhosts(args: argparse.Namespace) -> int:
 
 
 def cmd_mq_permissions(args: argparse.Namespace) -> int:
-    return _mq_table(args, mq_cmds.permissions)
+    headers, rows = mq_cmds.permissions(_make_transport(args), all_vhosts=args.all_vhosts)
+    _output.render(rows, headers, fmt=args.fmt)
+    return 0
 
 
 _MQ_HANDLERS = {
@@ -466,6 +499,16 @@ def cmd_ha_health(args: argparse.Namespace) -> int:
 
 def cmd_ha_replication(args: argparse.Namespace) -> int:
     print(ha_cmds.replication(_make_transport(args)))
+    return 0
+
+
+# --- certs handler -------------------------------------------------------
+def cmd_certs_regenerate(args: argparse.Namespace) -> int:
+    print(
+        f"# plan: csadm certs --generate {args.hostname} (replaces the cert; restart services afterwards)",
+        file=sys.stderr,
+    )
+    print(certs_cmds.regenerate(_make_transport(args), args.hostname, yes=args.yes))
     return 0
 
 
