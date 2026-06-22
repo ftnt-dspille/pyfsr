@@ -20,11 +20,13 @@ All notable changes to this project will be documented in this file.
   structured filter in one call via `DELETE /api/3/delete-with-query/<module>`
   (the route is DELETE-only and carries the filter as its body). Accepts a `Query`
   or raw `{logic, filters}` dict; rejects an empty filter so it can't wipe a whole
-  module; `hard=True` purges via `$hardDelete`. 3 unit tests.
+  module; `hard=True` purges via `$hardDelete`. 3 unit tests; live validated on the
+  dev box (deleted 3 throwaway alerts by filter → `{"total_records_deleted": 3}`).
 - `client.modules_admin.revert()`: discard **all** pending staged schema changes via
   `PUT /api/publish/revert` (the inverse of `publish()`) — use it to abandon a
   half-built change or clear a wedged staged draft. Appliance-wide, like publish;
-  synchronous (no DB-migrate 503 window). 1 unit test.
+  synchronous (no DB-migrate 503 window). 1 unit test; live validated (reverted a
+  pending staged change → `{"status": "reverted"}`, staging back to 0 pending).
 - `client.views` (`ViewsAPI`): resolve a module's **active** system view template
   (SVT) layout via `GET /api/views/1/modules-<module>-<kind>` — `views.detail(module)`,
   `views.listing(module)`, `views.form(module)`, plus generic `views.resolve(module,
