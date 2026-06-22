@@ -71,6 +71,7 @@ _PUBLISH = "/api/publish"
 # with ``status == "Success"`` means this publish committed, any other status is a failure.
 _ENTRYPOINT = "/api/3"
 _PUBLISH_ERROR = "/api/publish/error"
+_REVERT = "/api/publish/revert"
 _VIEW_TEMPLATES = "/api/3/system_view_templates"
 _VIEW_TEMPLATES_BULK = "/api/3/bulkupsert/system_view_templates"
 _REL = {"$relationships": "true"}
@@ -1211,6 +1212,29 @@ class ModulesAdminAPI(BaseAPI):
             if not self._is_publish_transient(exc):
                 raise
         return self._wait_for_publish(prev_time, timeout, poll_interval)
+
+    def revert(self) -> dict[str, Any]:
+        """Discard **all** pending staged schema changes (``PUT /api/publish/revert``).
+
+        The inverse of :meth:`publish`: rather than committing staging to live, this
+        drops every uncommitted draft so staging matches the currently-published
+        schema again. Use it to abandon a half-built change, or to clear a wedged
+        staged draft (e.g. an illegally-named module that :meth:`find_invalid_drafts`
+        flags) so a subsequent :meth:`publish` can succeed.
+
+        ⚠️ Appliance-wide: like publish, this is **not** scoped to modules you
+        touched — it discards every pending staged change across the whole instance.
+        On a shared appliance, confirm nothing else is mid-edit before calling.
+
+        Unlike publish there is no DB migrate, so this returns synchronously without
+        the 503 outage window.
+
+        Returns:
+            The decoded API response (commonly ``{"status": ...}``), or an empty
+            dict if the endpoint returns no body.
+        """
+        result = self.client.put(_REVERT, data={})
+        return result if isinstance(result, dict) else {}
 
     def _wait_for_publish(self, prev_time: int | None, timeout: float, poll_interval: float) -> dict[str, Any]:
         """Block until the async publish finishes, using ``/api/publish/error`` as the truth.

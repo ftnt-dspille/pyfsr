@@ -523,12 +523,44 @@ class RecordSet(Generic[T]):
 
         Pass ``hard=True`` to permanently delete via ``?$hardDelete=true``. This
         is a single-row, URL-scoped delete; on relationship-parent modules
-        (e.g. ``workflow_collections``) the server cascades to children. There is
-        deliberately no bulk path — an empty/blank ``ref`` raises.
+        (e.g. ``workflow_collections``) the server cascades to children. An
+        empty/blank ``ref`` raises — to delete many rows by filter use
+        :meth:`delete_by_query`.
         """
         path = self._single_record_path(ref, action="delete")
         params = {"$hardDelete": "true"} if hard else None
         self.client.delete(path, params=params)
+
+    def delete_by_query(self, query: Query | dict[str, Any], *, hard: bool = False) -> dict[str, Any] | None:
+        """Bulk-delete every record matching ``query`` in one call.
+
+        Sends the filter as the body of ``DELETE /api/3/delete-with-query/<module>``
+        (the route is DELETE-only and module-scoped). ``query`` is the same
+        structured filter :meth:`query` accepts — a :class:`~pyfsr.query.Query`
+        or a raw ``{"logic": ..., "filters": [...]}`` dict; only the filter part
+        is used (pagination/sort keys are irrelevant to a delete).
+
+        Soft-deletes by default (rows go to the recycle bin); pass ``hard=True``
+        to purge permanently via ``?$hardDelete=true``.
+
+        ⚠️ This deletes **all** matching rows server-side in one shot — there is
+        no per-row confirmation. An empty/missing filter would match the whole
+        module, so a query with no ``filters`` is rejected.
+
+        Returns:
+            The decoded JSON response when the API returns a body (typically a
+            count/summary), otherwise ``None``.
+        """
+        body = query.to_body() if isinstance(query, Query) else dict(query)
+        if not body.get("filters"):
+            raise ValueError("delete_by_query requires a non-empty 'filters' — refusing to delete the whole module.")
+        params = {"$hardDelete": "true"} if hard else None
+        resp = self.client.request("DELETE", f"/api/3/delete-with-query/{self.module}", data=body, params=params)
+        if resp.content and "application/json" in resp.headers.get("Content-Type", ""):
+            result = resp.json()
+            assert isinstance(result, dict)
+            return result
+        return None
 
     @overload
     def restore(self, ref: str, *, raw: Literal[True]) -> dict[str, Any]: ...
