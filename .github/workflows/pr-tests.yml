@@ -15,8 +15,6 @@ on:
         type: string
         description: 'The Git ref to checkout'
 
-# Lint/test only read the repo; the docs child skips its deploy step on PRs,
-# so a read-only token covers every job here.
 permissions:
   contents: read
 
@@ -78,6 +76,8 @@ jobs:
 
   docs:
     needs: test
+    permissions:
+      contents: write
     uses: ./.github/workflows/docs.yml
     with:
       ref: ${{ github.event.pull_request.head.sha }}
