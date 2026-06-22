@@ -18,6 +18,13 @@ from .transport import Transport
 # is dot-padded out to the status bracket; the trailing "since ..." is optional.
 _STATUS_LINE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+?)\.*\[(?P<status>[^\]]+)\]\s*(?:since\s+(?P<since>.*\S))?\s*$")
 
+# csadm's `--{start,stop,restart}-service` verbs validate the name against the
+# box's service set (`modify_service_state` in /opt/cyops/adm/subcmd/services) and,
+# when it doesn't match, print this rejection and **exit 0** — a silent no-op. The
+# exit code is therefore meaningless for these verbs; the only reliable failure
+# signal is this text. (Live-verified on a 7.6.x appliance, June 2026.)
+_CSADM_REJECT = re.compile(r"can not be modified|can be used for following services", re.IGNORECASE)
+
 # Canonical endpoints whose health reflects the core services (plan §service
 # liveness). Each is curled on-box against the local nginx with a short timeout.
 # (method, path, expected-up codes, label)
@@ -55,11 +62,22 @@ def status(transport: Transport, name: str | None = None) -> str:
     """Raw ``csadm services --status`` output (optionally for one service).
 
     Free-form, ANSI-coloured text — for a typed result use :func:`services`.
+
+    NB: ``csadm services --status`` has **no** ``--name`` flag; passing one is
+    silently ignored and the full list comes back (live-verified). So ``name``
+    filters the lines client-side here rather than being handed to csadm.
     """
-    argv = ["csadm", "services", "--status"]
-    if name:
-        argv += ["--name", name]
-    return transport.run(argv, sudo=True).stdout.strip()
+    out = transport.run(["csadm", "services", "--status"], sudo=True).stdout.strip()
+    if not name:
+        return out
+    # Filter on the parsed (ANSI-stripped) service name so the dot-padding and
+    # colour codes in the raw line don't defeat a plain substring match.
+    kept = []
+    for line in out.splitlines():
+        m = _STATUS_LINE.match(strip_ansi(line).strip())
+        if m and m.group("name") == name:
+            kept.append(line)
+    return "\n".join(kept)
 
 
 def services(transport: Transport, name: str | None = None) -> list[ServiceState]:
@@ -143,30 +161,90 @@ class Listener:
     process: str
 
 
+# Map a single-service action onto its csadm `--*-service` flag. Whole-stack
+# actions (restart/stop/start ALL) use the bare `--restart`/`--stop`/`--start`
+# flags instead — see :func:`restart_all` and friends.
+_SERVICE_FLAG = {"restart": "--restart-service", "stop": "--stop-service", "start": "--start-service"}
+_ALL_FLAG = {"restart": "--restart", "stop": "--stop", "start": "--start"}
+
+
+def _service_action(transport: Transport, action: str, name: str) -> ServiceActionResult:
+    """Run one csadm `--*-service` verb and decode its (unreliable) exit code.
+
+    csadm exits 0 even when it rejects the name as unmodifiable, so success is
+    ``res.ok`` AND the output not matching :data:`_CSADM_REJECT`.
+    """
+    res = transport.run(["csadm", "services", _SERVICE_FLAG[action], name], sudo=True, timeout=120)
+    text = (res.stdout or res.stderr).strip()
+    ok = res.ok and not _CSADM_REJECT.search(text)
+    return ServiceActionResult(name, action, ok, text)
+
+
+def _all_action(transport: Transport, action: str) -> ServiceActionResult:
+    """Run a whole-stack csadm verb (``--restart``/``--stop``/``--start``)."""
+    # A full-stack bounce is serial (stop → sleep 5 → start, per service) so it can
+    # run minutes; give it a generous ceiling.
+    res = transport.run(["csadm", "services", _ALL_FLAG[action]], sudo=True, timeout=600)
+    return ServiceActionResult("ALL", action, res.ok, (res.stdout or res.stderr).strip())
+
+
 def restart(transport: Transport, name: str, *, yes: bool = False) -> ServiceActionResult:
-    """Restart a cyops service via ``csadm services --restart``. Gated by ``yes``."""
+    """Restart a single cyops service via ``csadm services --restart-service``. Gated by ``yes``.
+
+    Use this — NOT :func:`restart_all` — for one service. The bare ``--restart``
+    flag (``restart_all``) bounces the WHOLE stack in order; ``--restart-service``
+    touches just ``name`` (stop → sleep 5 → start, per csadm).
+
+    csadm exits 0 even when it refuses an unknown/unmodifiable name (it prints an
+    ``ERROR: ... can not be modified`` hint and no-ops), so the returned ``ok``
+    folds that rejection text in — a typo'd name yields ``ok=False``, not a false
+    success. (live-verified, see :data:`_CSADM_REJECT`.)
+    """
     if not yes:
         raise PermissionError(f"refusing to restart {name!r} without confirmation (pass --yes)")
-    res = transport.run(["csadm", "services", "--restart", "--name", name], sudo=True, timeout=120)
-    return ServiceActionResult(name, "restart", res.ok, (res.stdout or res.stderr).strip())
+    return _service_action(transport, "restart", name)
 
 
 def stop(transport: Transport, name: str, *, yes: bool = False) -> ServiceActionResult:
-    """Stop a cyops service via ``csadm services --stop-service``. Gated by ``yes``.
+    """Stop a single cyops service via ``csadm services --stop-service``. Gated by ``yes``.
 
     Used to quiesce a worker (e.g. ``celeryd``) so a queue can be purged without it
     re-draining mid-operation — see :func:`pyfsr.cli.appliance.mq.purge_workflows`.
+    Like :func:`restart`, a rejected name surfaces as ``ok=False`` despite csadm's
+    exit 0.
     """
     if not yes:
         raise PermissionError(f"refusing to stop {name!r} without confirmation (pass --yes)")
-    res = transport.run(["csadm", "services", "--stop-service", name], sudo=True, timeout=120)
-    return ServiceActionResult(name, "stop", res.ok, (res.stdout or res.stderr).strip())
+    return _service_action(transport, "stop", name)
 
 
 def start(transport: Transport, name: str) -> ServiceActionResult:
-    """Start a cyops service via ``csadm services --start-service`` (recovery — not gated)."""
-    res = transport.run(["csadm", "services", "--start-service", name], sudo=True, timeout=120)
-    return ServiceActionResult(name, "start", res.ok, (res.stdout or res.stderr).strip())
+    """Start a single cyops service via ``csadm services --start-service`` (recovery — not gated)."""
+    return _service_action(transport, "start", name)
+
+
+def restart_all(transport: Transport, *, yes: bool = False) -> ServiceActionResult:
+    """Restart the WHOLE service stack in order via ``csadm services --restart``. Gated by ``yes``.
+
+    This is the full-stack bounce (stop-all → start-all), distinct from
+    :func:`restart` which restarts a single named service. Disruptive — every
+    service drops — so it is gated behind ``yes``.
+    """
+    if not yes:
+        raise PermissionError("refusing to restart ALL services without confirmation (pass --yes)")
+    return _all_action(transport, "restart")
+
+
+def stop_all(transport: Transport, *, yes: bool = False) -> ServiceActionResult:
+    """Stop the WHOLE service stack in order via ``csadm services --stop``. Gated by ``yes``."""
+    if not yes:
+        raise PermissionError("refusing to stop ALL services without confirmation (pass --yes)")
+    return _all_action(transport, "stop")
+
+
+def start_all(transport: Transport) -> ServiceActionResult:
+    """Start the WHOLE service stack in order via ``csadm services --start`` (recovery — not gated)."""
+    return _all_action(transport, "start")
 
 
 # systemctl actions that mutate a unit's run state — gated behind ``yes``. Read-only

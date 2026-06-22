@@ -172,6 +172,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_svc_start.add_argument("name", help="service to start")
     p_svc_start.set_defaults(func=cmd_service_start)
 
+    p_svc_restart_all = svcsub.add_parser("restart-all", help="restart the WHOLE service stack in order (gated)")
+    _add_connection_args(p_svc_restart_all)
+    p_svc_restart_all.add_argument("--yes", action="store_true", help="skip confirmation")
+    p_svc_restart_all.set_defaults(func=cmd_service_restart_all)
+
+    p_svc_stop_all = svcsub.add_parser("stop-all", help="stop the WHOLE service stack in order (gated)")
+    _add_connection_args(p_svc_stop_all)
+    p_svc_stop_all.add_argument("--yes", action="store_true", help="skip confirmation")
+    p_svc_stop_all.set_defaults(func=cmd_service_stop_all)
+
+    p_svc_start_all = svcsub.add_parser("start-all", help="start the WHOLE service stack in order")
+    _add_connection_args(p_svc_start_all)
+    p_svc_start_all.set_defaults(func=cmd_service_start_all)
+
     p_svc_ctl = svcsub.add_parser("systemctl", help="drive systemd directly (stop/kill/restart/status; gated)")
     _add_connection_args(p_svc_ctl)
     p_svc_ctl.add_argument("action", help="systemctl action: stop, kill, restart, start, status, is-active, …")
@@ -464,6 +478,24 @@ def cmd_service_stop(args: argparse.Namespace) -> int:
 
 def cmd_service_start(args: argparse.Namespace) -> int:
     r = service_cmds.start(_make_transport(args), args.name)
+    print(str(r))
+    return 0 if r.ok else 1
+
+
+def cmd_service_restart_all(args: argparse.Namespace) -> int:
+    r = service_cmds.restart_all(_make_transport(args), yes=args.yes)
+    print(str(r))
+    return 0 if r.ok else 1
+
+
+def cmd_service_stop_all(args: argparse.Namespace) -> int:
+    r = service_cmds.stop_all(_make_transport(args), yes=args.yes)
+    print(str(r))
+    return 0 if r.ok else 1
+
+
+def cmd_service_start_all(args: argparse.Namespace) -> int:
+    r = service_cmds.start_all(_make_transport(args))
     print(str(r))
     return 0 if r.ok else 1
 

@@ -97,9 +97,28 @@ class FakeTransport(Transport):
         if argv[:3] == ["csadm", "ha", "get-replication-stat"]:
             return "Replication lag: 0 bytes\nStatus: streaming\n"
         if argv[:3] == ["csadm", "services", "--status"]:
-            return "cyops-auth\tactive\t0\t0\ncyops-api\tactive\t0\t0\n"
-        if argv[:4] == ["csadm", "services", "--restart", "--name"]:
-            return f"service {argv[4]} restarted\n"
+            # Faithful to live csadm: dot-padded name + "[Status]  since <when>".
+            return (
+                "cyops-auth...............[Running]      since Fri 2026-05-22 01:18:16 UTC\n"
+                "cyops-api................[Running]      since Thu 2026-05-07 14:10:22 UTC\n"
+            )
+        # Whole-stack verbs (--restart / --stop / --start) act on every service.
+        if argv[:3] in (
+            ["csadm", "services", "--restart"],
+            ["csadm", "services", "--stop"],
+            ["csadm", "services", "--start"],
+        ):
+            return f"{argv[2].lstrip('-')} all services\n"
+        # Single-service verbs validate the name and, per the live box, print an
+        # "ERROR: ... can not be modified" hint and **exit 0** for an unknown one.
+        if argv[1] == "services" and argv[2] in ("--restart-service", "--stop-service", "--start-service"):
+            name = argv[3]
+            if name not in ("cyops-auth", "cyops-api", "nginx"):
+                return (
+                    f"ERROR: {name} service can not be modified using this command.\n"
+                    "       This command can be used for following services: cyops-auth cyops-api nginx\n"
+                )
+            return f"service {name} {argv[2].rsplit('-', 1)[0].lstrip('-')}ed\n"
         if argv[:1] == ["bash"] and len(argv) == 2 and argv[1].endswith(".sh"):
             return f"[diagnose] ran {argv[1]}\n"
         if argv[0] == "curl":
@@ -459,7 +478,7 @@ def test_service_status(facts):
     result = service_cmds.status(facts.transport)
     assert "cyops-auth" in result
     assert "cyops-api" in result
-    assert "active" in result
+    assert "Running" in result
 
 
 def test_service_status_with_name(facts):
@@ -494,6 +513,40 @@ def test_service_restart_gated_by_yes(facts):
 def test_service_restart_succeeds_with_yes(facts):
     result = service_cmds.restart(facts.transport, "cyops-auth", yes=True)
     assert result.service == "cyops-auth" and result.action == "restart" and result.ok
+
+
+def test_service_restart_rejects_unknown_name_despite_exit_zero(facts):
+    # csadm exits 0 but no-ops on an unknown name; ok must reflect the reject text.
+    result = service_cmds.restart(facts.transport, "bogus-svc", yes=True)
+    assert not result.ok
+    assert "can not be modified" in result.output
+
+
+def test_service_status_name_filters_client_side(facts):
+    # --name is ignored by csadm, so the filter is applied to the parsed lines here.
+    out = service_cmds.status(facts.transport, name="cyops-auth")
+    assert "cyops-auth" in out and "cyops-api" not in out
+
+
+def test_services_parsed_running(facts):
+    states = service_cmds.services(facts.transport)
+    assert {s.name for s in states} == {"cyops-auth", "cyops-api"}
+    assert all(s.running for s in states)
+
+
+def test_service_restart_all_gated_by_yes(facts):
+    with pytest.raises(PermissionError):
+        service_cmds.restart_all(facts.transport, yes=False)
+
+
+def test_service_restart_all_succeeds_with_yes(facts):
+    result = service_cmds.restart_all(facts.transport, yes=True)
+    assert result.service == "ALL" and result.action == "restart" and result.ok
+
+
+def test_service_start_all_not_gated(facts):
+    result = service_cmds.start_all(facts.transport)
+    assert result.service == "ALL" and result.action == "start" and result.ok
 
 
 def test_service_listeners(facts):
@@ -869,7 +922,7 @@ def test_mq_purge_workflows_hard_default_sigkills(facts):
     purge_i = cmds.index(["rabbitmqctl", "-q", "purge_queue", "celery", "-p", "fsr-cluster"])
     kill_i = cmds.index(["systemctl", "kill", "--signal=SIGKILL", "celeryd"])
     assert purge_i < kill_i
-    assert any(c[:3] == ["csadm", "services", "--restart"] for c in cmds)
+    assert any(c[:4] == ["csadm", "services", "--restart-service", "cyops-integrations-agent"] for c in cmds)
     assert report.purges
 
 
