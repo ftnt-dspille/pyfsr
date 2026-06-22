@@ -97,6 +97,46 @@ def indexes(
     return target, ["table", "index"], rows
 
 
+def getsize(facts: Facts, *, timeout: float = 60.0) -> tuple[list[str], list[list[str]]]:
+    """Run ``csadm db --getsize`` and parse the footprint into ``(headers, rows)``.
+
+    csadm breaks the database footprint out by data class (primary / audit /
+    workflow, plus archived data on newer releases) — the size view to check
+    before an upgrade or when storage-pressure symptoms appear. Distinct from
+    :func:`list_databases`, which sizes each Postgres DB via ``pg_database_size``;
+    this is csadm's own class-level rollup. Needs root, so it runs under sudo.
+
+    The real output (verified live on FSR 7.6.x / csadm) is a short report::
+
+        Reading postgres details from db_config.yml file
+        Following is the current database usage:
+        Primary Data  : 7354 MB
+        Audit Logs    : 1089 MB
+        Workflow Logs : 1138 MB
+        Archived Data : 8396 kB
+
+    Only the ``<class> : <size>`` lines are kept; the preamble is dropped. Returns
+    ``(["data_class", "size"], rows)``. Empty rows means the format changed — the
+    caller can fall back to :func:`getsize_raw`.
+    """
+    raw = getsize_raw(facts, timeout=timeout)
+    rows: list[list[str]] = []
+    for line in raw.splitlines():
+        # Data lines are "<label> : <value> <unit>"; the preamble has no " : ".
+        if " : " not in line:
+            continue
+        label, _, size = line.partition(" : ")
+        label, size = label.strip(), size.strip()
+        if label and size:
+            rows.append([label, size])
+    return ["data_class", "size"], rows
+
+
+def getsize_raw(facts: Facts, *, timeout: float = 60.0) -> str:
+    """The unparsed ``csadm db --getsize`` output (escape hatch for :func:`getsize`)."""
+    return facts.transport.run(["csadm", "db", "--getsize"], sudo=True, timeout=timeout).check().stdout.strip()
+
+
 def list_databases(facts: Facts) -> tuple[list[str], list[list[str]]]:
     """Enumerate appliance DBs with sizes and detected content-DB role."""
     rows = facts.psql(

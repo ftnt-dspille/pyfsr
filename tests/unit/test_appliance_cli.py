@@ -78,6 +78,18 @@ class FakeTransport(Transport):
             return "License Type: subscription\nExpiry: 2027-01-01\nDevice UUID: " + f"{self._csadm_uuid}\n"
         if argv[:3] == ["csadm", "log", "--collect"]:
             return "Log bundle created: /tmp/fortisoar-logs-20260621.tar.gz\n"
+        if argv[:3] == ["csadm", "db", "--getsize"]:
+            # Real csadm format (verified live): preamble + "<class> : <size>" lines.
+            return (
+                "Reading postgres details from db_config.yml file\n"
+                "Following is the current database usage:\n"
+                "Primary Data  : 7354 MB\n"
+                "Audit Logs    : 1089 MB\n"
+                "Workflow Logs : 1138 MB\n"
+                "Archived Data : 8396 kB\n"
+            )
+        if argv[:3] == ["csadm", "certs", "--generate"]:
+            return f"Certificate generated for {argv[3]}\n"
         if argv[:3] == ["csadm", "ha", "list-nodes"]:
             return "node1  primary  10.99.249.205\nnode2  secondary  10.99.249.206\n"
         if argv[:3] == ["csadm", "ha", "show-health"]:
@@ -139,20 +151,46 @@ class FakeTransport(Transport):
         )
 
     def _rabbitmqctl_response(self, argv) -> str:
-        """Fake rabbitmqctl -q output (tab-separated quiet format)."""
-        if argv[1:3] == ["-q", "status"]:
-            return "Status of node rabbit@appliance ...\nRabbitMQ 3.8.14\n"
-        if argv[1:3] == ["-q", "list_queues"] and "consumers" in argv:
-            if self._queues_backlog:
-                return "task_queue\t2500\t0\ndefault_queue\t50\t2\n"
-            else:
-                return "task_queue\t100\t1\ndefault_queue\t50\t2\n"
-        if argv[1:3] == ["-q", "list_consumers"]:
-            return "task_queue\t<rabbit@appliance.1.250>\ndefault_queue\t<rabbit@appliance.2.251>\n"
-        if argv[1:3] == ["-q", "list_vhosts"]:
-            return "/\n/mq_internal\n"
-        if argv[1:3] == ["-q", "list_permissions"]:
-            return "guest\t.*\t.*\t.*\nadmin\t.*\t.*\t.*\n"
+        """Fake rabbitmqctl output, modelled on a live RabbitMQ 3.13.2 box.
+
+        Faithful to two behaviours verified live: (1) ``-q`` alone does NOT drop
+        the column-header row — only ``--no-table-headers`` does — so this emits a
+        header line *unless* that flag is present; (2) ``list_permissions`` is
+        per-vhost (``-p <vhost>``) and ``/`` is empty while named vhosts populate.
+        """
+        verb = next((a for a in argv if a.startswith("list_") or a == "status"), "")
+        no_headers = "--no-table-headers" in argv
+
+        if verb == "status":
+            return "Status of node rabbit@appliance ...\nRabbitMQ 3.13.2\n"
+
+        def _emit(header: str, body: list[str]) -> str:
+            lines = ([] if no_headers else [header]) + body
+            return "\n".join(lines) + "\n" if lines else "\n"
+
+        if verb == "list_queues" and "consumers" in argv:
+            body = (
+                ["task_queue\t2500\t0", "default_queue\t50\t2"]
+                if self._queues_backlog
+                else ["task_queue\t100\t1", "default_queue\t50\t2"]
+            )
+            return _emit("name\tmessages\tconsumers", body)
+        if verb == "list_consumers":
+            return _emit(
+                "queue_name\tchannel_pid",
+                ["task_queue\t<rabbit@appliance.1.250>", "default_queue\t<rabbit@appliance.2.251>"],
+            )
+        if verb == "list_vhosts":
+            return _emit("name", ["/", "cyops-admin", "intra-cyops"])
+        if verb == "list_permissions":
+            # Per-vhost; "/" is empty on a real box, named vhosts have one entry.
+            i = argv.index("-p") if "-p" in argv else -1
+            vhost = argv[i + 1] if i >= 0 else "/"
+            body = {
+                "cyops-admin": ["admin\t.*\t.*\t.*"],
+                "intra-cyops": ["cyops\t.*\t.*\t.*"],
+            }.get(vhost, [])
+            return _emit("user\tconfigure\twrite\tread", body)
         return ""
 
     def _journalctl_response(self, argv) -> str:
@@ -518,21 +556,36 @@ def test_mq_consumers(facts):
     assert len(rows) >= 1
 
 
-def test_mq_vhosts(facts):
+def test_mq_vhosts_drops_header_row(facts):
     headers, rows = mq_cmds.vhosts(facts.transport)
     assert "vhost" in headers
-    assert len(rows) >= 1
     vhost_names = [r[0] for r in rows]
     assert "/" in vhost_names
+    # the "name" column header must NOT leak in as a bogus vhost (the live bug)
+    assert "name" not in vhost_names
+    # and --no-table-headers must actually be on the wire
+    vh_call = next(c[0] for c in facts.transport.commands if "list_vhosts" in c[0])
+    assert "--no-table-headers" in vh_call
 
 
-def test_mq_permissions(facts):
+def test_mq_permissions_default_vhost_empty(facts):
+    # On a real box "/" carries no permissions; the header row must not leak.
     headers, rows = mq_cmds.permissions(facts.transport)
-    assert "user" in headers
-    assert "configure" in headers
-    assert "write" in headers
-    assert "read" in headers
-    assert len(rows) >= 1
+    assert headers == ["user", "configure", "write", "read"]
+    assert rows == []  # no "user configure write read" header masquerading as data
+
+
+def test_mq_permissions_all_vhosts_matrix(facts):
+    headers, rows = mq_cmds.permissions(facts.transport, all_vhosts=True)
+    assert headers == ["vhost", "user", "configure", "write", "read"]
+    # "/" is empty; cyops-admin -> admin, intra-cyops -> cyops = 2 populated rows
+    assert len(rows) == 2
+    by_vhost = {r[0]: r[1] for r in rows}
+    assert by_vhost == {"cyops-admin": "admin", "intra-cyops": "cyops"}
+    assert all(len(r) == 5 for r in rows)  # vhost + 4 permission columns
+    # the per-vhost query was actually scoped with -p <vhost>
+    perm_calls = [c[0] for c in facts.transport.commands if "list_permissions" in c[0]]
+    assert any("-p" in call and "intra-cyops" in call for call in perm_calls)
 
 
 def test_mq_to_int_safe_parse(facts):
@@ -696,6 +749,56 @@ def test_ha_replication_runs_csadm(facts):
     ha_cmds.replication(facts.transport)
     cmds = [argv for argv, _e, _s in facts.transport.commands]
     assert any(argv[:3] == ["csadm", "ha", "get-replication-stat"] for argv in cmds)
+
+
+# ---------------------------------------------------------- db getsize / certs
+
+
+def test_db_getsize_parses_real_format(facts):
+    headers, rows = db_cmds.getsize(facts)
+    assert headers == ["data_class", "size"]
+    parsed = dict(rows)
+    # preamble lines dropped; each "<class> : <size>" kept, unit preserved
+    assert parsed == {
+        "Primary Data": "7354 MB",
+        "Audit Logs": "1089 MB",
+        "Workflow Logs": "1138 MB",
+        "Archived Data": "8396 kB",
+    }
+    call = next(c for c in facts.transport.commands if c[0][:3] == ["csadm", "db", "--getsize"])
+    assert call[2] is True  # sudo
+
+
+def test_db_getsize_raw_escape_hatch(facts):
+    raw = db_cmds.getsize_raw(facts)
+    assert "Following is the current database usage" in raw  # unparsed preamble retained
+
+
+def test_certs_regenerate_refuses_without_yes(facts):
+    from pyfsr.cli.appliance import certs as certs_cmds
+
+    with pytest.raises(PermissionError, match="confirmation"):
+        certs_cmds.regenerate(facts.transport, "soar.example.com")
+    # nothing ran
+    assert not any(c[0][:3] == ["csadm", "certs", "--generate"] for c in facts.transport.commands)
+
+
+def test_certs_regenerate_runs_with_yes(facts):
+    from pyfsr.cli.appliance import certs as certs_cmds
+
+    out = certs_cmds.regenerate(facts.transport, "soar.example.com", yes=True)
+    # exact match (not substring-in) — clearer, and dodges CodeQL's URL-substring query
+    assert out == "Certificate generated for soar.example.com"
+    call = next(c for c in facts.transport.commands if c[0][:3] == ["csadm", "certs", "--generate"])
+    assert call[0][3] == "soar.example.com"
+    assert call[2] is True  # sudo
+
+
+def test_certs_regenerate_requires_hostname(facts):
+    from pyfsr.cli.appliance import certs as certs_cmds
+
+    with pytest.raises(ValueError, match="hostname"):
+        certs_cmds.regenerate(facts.transport, "  ", yes=True)
 
 
 # --------------------------------------------------------------- P3: diagnose

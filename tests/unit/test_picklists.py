@@ -192,6 +192,21 @@ def test_resolve_record_fields_iri_passthrough():
     assert out == {"severity": "/api/3/picklists/sev-low"}
 
 
+def test_validate_record_fields_all_resolve():
+    api, _ = _api()
+    misses = api.validate_record_fields("alerts", {"name": "x", "severity": "High", "status": "Open"})
+    assert misses == []  # every picklist field resolves cleanly
+
+
+def test_validate_record_fields_reports_misses():
+    api, _ = _api()
+    misses = api.validate_record_fields("alerts", {"severity": "Nope", "name": "x"})
+    assert len(misses) == 1
+    assert misses[0]["field"] == "severity"
+    assert misses[0]["value"] == "Nope"
+    assert "valid_values" in misses[0]
+
+
 def test_clear_cache():
     api, client = _api()
     api.list()

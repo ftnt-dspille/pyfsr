@@ -674,3 +674,92 @@ def test_render_jinja_handles_string_response():
     c = _Rec(resp="raw string")
     out = PlaybooksAPI(c).render_jinja("{{ x }}")
     assert out == "raw string"
+
+
+# -- clone ------------------------------------------------------------------
+_SRC_DEFINITION = {
+    "@id": "/api/3/workflows/11111111-1111-1111-1111-111111111111",
+    "id": 42,
+    "uuid": "11111111-1111-1111-1111-111111111111",
+    "name": "Original PB",
+    "aliasName": "#Original",
+    "isActive": True,
+    "collection": "/api/3/workflow_collections/cccccccc-cccc-cccc-cccc-cccccccccccc",
+    "triggerStep": "/api/3/workflow_steps/22222222-2222-2222-2222-222222222222",
+    "createDate": 1700000000,
+    "createUser": "/api/3/people/someone",
+    "recordTags": ["keepme"],
+    "groups": [{"uuid": "33333333-3333-3333-3333-333333333333", "name": "G1"}],
+    "steps": [
+        {
+            "uuid": "22222222-2222-2222-2222-222222222222",
+            "name": "Start",
+            "group": "/api/3/workflow_groups/33333333-3333-3333-3333-333333333333",
+        },
+        {"uuid": "44444444-4444-4444-4444-444444444444", "name": "Action"},
+    ],
+    "routes": [
+        {
+            "uuid": "55555555-5555-5555-5555-555555555555",
+            "sourceStep": "22222222-2222-2222-2222-222222222222",
+            "targetStep": "44444444-4444-4444-4444-444444444444",
+        }
+    ],
+}
+
+
+def test_clone_remaps_all_uuids_and_rewires():
+    c = _Rec(resp=_SRC_DEFINITION)
+    PlaybooksAPI(c).clone("11111111-1111-1111-1111-111111111111", "Copy of PB")
+    method, endpoint, body, _ = c.calls[-1]
+    assert (method, endpoint) == ("POST", "/api/3/workflows")
+
+    old_uuids = {
+        "11111111-1111-1111-1111-111111111111",
+        "22222222-2222-2222-2222-222222222222",
+        "33333333-3333-3333-3333-333333333333",
+        "44444444-4444-4444-4444-444444444444",
+        "55555555-5555-5555-5555-555555555555",
+    }
+    import json
+
+    blob = json.dumps(body)
+    for old in old_uuids:
+        assert old not in blob  # every original uuid regenerated
+
+    # references stay internally consistent after remap
+    trigger = body["triggerStep"].rsplit("/", 1)[-1]
+    assert trigger == body["steps"][0]["uuid"]  # triggerStep still points at "Start"
+    assert body["routes"][0]["sourceStep"] == body["steps"][0]["uuid"]
+    assert body["routes"][0]["targetStep"] == body["steps"][1]["uuid"]
+    assert body["steps"][0]["group"].rsplit("/", 1)[-1] == body["groups"][0]["uuid"]
+
+
+def test_clone_sets_name_and_strips_server_fields():
+    c = _Rec(resp=_SRC_DEFINITION)
+    PlaybooksAPI(c).clone("11111111-1111-1111-1111-111111111111", "Copy of PB")
+    body = c.calls[-1][2]
+    assert body["name"] == "Copy of PB"
+    assert body["aliasName"] is None
+    assert body["isActive"] is False  # inactive by default
+    for stripped in ("@id", "id", "createDate", "createUser", "recordTags"):
+        assert stripped not in body
+
+
+def test_clone_active_and_collection_override():
+    c = _Rec(resp=_SRC_DEFINITION)
+    PlaybooksAPI(c).clone(
+        "11111111-1111-1111-1111-111111111111",
+        "Copy",
+        collection="dddddddd-dddd-dddd-dddd-dddddddddddd",
+        is_active=True,
+    )
+    body = c.calls[-1][2]
+    assert body["isActive"] is True
+    assert body["collection"] == "/api/3/workflow_collections/dddddddd-dddd-dddd-dddd-dddddddddddd"
+
+
+def test_clone_requires_new_name():
+    c = _Rec(resp=_SRC_DEFINITION)
+    with pytest.raises(ValueError, match="new_name"):
+        PlaybooksAPI(c).clone("11111111-1111-1111-1111-111111111111", "  ")

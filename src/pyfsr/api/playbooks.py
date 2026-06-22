@@ -65,6 +65,67 @@ def _alert_iri(ref: str) -> str:
     return f"/api/3/alerts/{ref.rstrip('/').split('/')[-1].split(':')[-1]}"
 
 
+# Server-managed fields that must NOT be carried into a clone — the appliance
+# assigns them. Left in place they'd either be ignored or cause the POST to look
+# like an update of the source row.
+_CLONE_STRIP_FIELDS = (
+    "@id",
+    "id",
+    "createDate",
+    "modifyDate",
+    "lastModifyDate",
+    "createUser",
+    "modifyUser",
+    "deletedAt",
+    "versions",
+    "owners",
+    "importedBy",
+    "recordTags",
+)
+
+
+def _collect_uuids(definition: dict[str, Any]) -> set[str]:
+    """Every UUID owned by a playbook definition: the workflow + its steps,
+    routes, and groups. These are the ids that must be regenerated for a clone."""
+    uuids: set[str] = set()
+    top = definition.get("uuid")
+    if isinstance(top, str) and _looks_like_uuid(top):
+        uuids.add(top)
+    for key in ("steps", "routes", "groups"):
+        for item in definition.get(key) or []:
+            u = item.get("uuid") if isinstance(item, dict) else None
+            if isinstance(u, str) and _looks_like_uuid(u):
+                uuids.add(u)
+    return uuids
+
+
+def _prepare_clone_body(src: dict[str, Any], *, new_name: str, is_active: bool) -> dict[str, Any]:
+    """Build the POST body for a playbook clone from a source definition.
+
+    Regenerates every owned UUID and rewrites all references in one pass by
+    substituting old→new UUID strings over the serialized definition. Because
+    UUIDs are globally-unique 36-char tokens, a plain string replacement safely
+    catches both bare references (route ``sourceStep``/``targetStep``) and ones
+    embedded in IRIs (``triggerStep``, step ``group``, nested ``@id``s) without
+    needing to know every field that can hold one.
+    """
+    import json
+    import uuid as _uuid
+
+    remap = {old: str(_uuid.uuid4()) for old in _collect_uuids(src)}
+    blob = json.dumps(src)
+    for old, new in remap.items():
+        blob = blob.replace(old, new)
+    body: dict[str, Any] = json.loads(blob)
+
+    for field in _CLONE_STRIP_FIELDS:
+        body.pop(field, None)
+    body["name"] = new_name
+    body["aliasName"] = None  # the alias (#Name anchor) must be unique; let it re-derive
+    body["isActive"] = is_active
+    return body
+
+
 def _shape_run(m: dict[str, Any]) -> dict[str, Any]:
     """Flatten a raw workflow-run record to the fields callers usually want."""
     res = m.get("result") if isinstance(m.get("result"), dict) else {}
@@ -194,6 +255,51 @@ class PlaybooksAPI(BaseAPI):
             body["priority"] = priority
         if origin is not None:
             body["playbookOrigin"] = origin
+        return self.client.post(_WORKFLOWS, data=body)
+
+    def clone(
+        self,
+        uuid: str,
+        new_name: str,
+        *,
+        collection: str | None = None,
+        is_active: bool = False,
+    ) -> dict[str, Any]:
+        """Clone an existing playbook definition under a new name.
+
+        Fetches the source playbook with its steps/routes/groups inlined, then
+        **remaps every UUID** (the workflow itself plus each step, route, and
+        group) to a fresh one, rewiring all the internal references — route
+        ``sourceStep``/``targetStep``, the workflow's ``triggerStep``, and each
+        step's ``group`` — so the copy is fully self-contained and never collides
+        with the original. Server-managed fields (``@id``/``id``/create+modify
+        stamps, ``deletedAt``, ``versions``) are dropped. POSTs the result to
+        ``/api/3/workflows``.
+
+        Args:
+            uuid: source playbook uuid.
+            new_name: display name for the clone (required — a clone must be
+                distinguishable from its source).
+            collection: optionally re-home the clone into a different collection
+                (uuid or IRI). Defaults to the source's collection.
+            is_active: whether the clone is active. Defaults to ``False`` so a
+                copy never starts firing on triggers before it's been reviewed.
+
+        Returns:
+            The created clone's playbook definition record.
+        """
+        if not isinstance(new_name, str) or not new_name.strip():
+            raise ValueError("clone() requires a non-empty new_name")
+        uuid = _require_uuid(uuid, "clone")
+        src = self.get_definition(uuid, relationships=True)
+
+        body = _prepare_clone_body(src, new_name=new_name.strip(), is_active=is_active)
+        if collection is not None:
+            if not isinstance(collection, str) or not collection.strip():
+                raise ValueError("clone() collection must be a uuid or IRI")
+            body["collection"] = (
+                collection if collection.startswith("/api/") else f"/api/3/workflow_collections/{collection}"
+            )
         return self.client.post(_WORKFLOWS, data=body)
 
     def update(self, uuid: str, **fields: Any) -> dict[str, Any]:

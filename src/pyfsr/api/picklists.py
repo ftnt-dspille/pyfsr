@@ -201,3 +201,22 @@ class PicklistsAPI(BaseAPI):
                     raise PicklistResolutionError(k, v, picklist, valid)
             out[k] = v
         return out
+
+    def validate_record_fields(self, module: str, fields: dict[str, Any]) -> list[dict[str, Any]]:
+        """Dry-run picklist resolution: return the misses without mapping/writing.
+
+        Runs the same resolution :meth:`resolve_record_fields` would, but discards
+        the resolved dict and returns only the unresolved picklist values as
+        ``[{field, value, picklist, valid_values}, ...]`` — empty list means every
+        picklist field resolves cleanly. Lets a caller validate its mappings before
+        committing any write.
+
+        Example:
+            >>> misses = client.picklists.validate_record_fields(
+            ...     "alerts", {"severity": "Critical", "status": "Bogus"})
+            >>> [m["field"] for m in misses]
+            ['status']
+        """
+        report: list[dict[str, Any]] = []
+        self.resolve_record_fields(module, fields, report=report)
+        return report

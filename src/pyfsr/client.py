@@ -104,6 +104,7 @@ class FortiSOAR:
         port: int | None = None,
         timeout: int | float | None = 30,
         max_retries: int = 2,
+        dry_run: bool = False,
     ):
         """
         Initialize the FortiSOAR client.
@@ -130,6 +131,11 @@ class FortiSOAR:
            max_retries (int, optional): Automatic retries for transient failures
                (connection errors and 429/5xx) on idempotent methods, with
                exponential backoff. Defaults to 2; pass 0 to disable.
+           dry_run (bool, optional): When True, mutating requests (POST/PUT/PATCH/
+               DELETE) are **not** sent — they are logged and a synthetic success
+               response is returned instead. Reads (GET/HEAD/OPTIONS) pass through
+               normally. Lets callers exercise their write path without touching the
+               appliance. Defaults to False.
 
         Raises:
             ValueError: If the provided authentication method is invalid.
@@ -180,6 +186,7 @@ class FortiSOAR:
             logger.info(f"Logging to file: {self._log_file}")
 
         self.timeout = timeout
+        self.dry_run = dry_run
         self.session = requests.Session()
         self.session.verify = verify_ssl
         self.verify_ssl = verify_ssl
@@ -447,6 +454,11 @@ class FortiSOAR:
 
         self._log_request(method, url, params, data, request_headers)
 
+        # Dry-run: never send mutating requests. Log the intent and hand back a
+        # synthetic 200 so the caller's write path runs without touching the box.
+        if self.dry_run and method.upper() in ("POST", "PUT", "PATCH", "DELETE"):
+            return self._dry_run_response(method, url, params, data)
+
         # Apply the default timeout unless the caller passed one explicitly.
         kwargs.setdefault("timeout", self.timeout)
 
@@ -476,6 +488,35 @@ class FortiSOAR:
             if self.verbose:
                 logger.error(f"Request failed: {str(e)}")  # pragma: no cover
             raise
+
+    def _dry_run_response(self, method: str, url: str, params: dict | None, data: dict | None) -> requests.Response:
+        """Build a synthetic 200 response for a suppressed dry-run write.
+
+        The body echoes the would-be request so callers that read ``.json()``
+        (e.g. to pull a new record's ``@id``/``uuid``) still get a usable shape.
+        """
+        import io
+        import json as _json
+
+        if self.verbose:
+            logger.info(f"[dry-run] suppressed {method.upper()} {url} (params={params}, data={data})")
+
+        body = {
+            "dryRun": True,
+            "method": method.upper(),
+            "url": url,
+            "params": params,
+            "data": data,
+        }
+        # DELETE returns no body in normal flow; echo the envelope anyway so the
+        # method is uniform and callers can detect the dry-run.
+        response = requests.Response()
+        response.status_code = 200
+        response.url = url
+        response.headers["Content-Type"] = "application/json"
+        response.raw = io.BytesIO(_json.dumps(body).encode())
+        response.encoding = "utf-8"
+        return response
 
     def get(self, endpoint: str, params: dict | None = None, **kwargs) -> dict[str, Any] | bytes:
         """
