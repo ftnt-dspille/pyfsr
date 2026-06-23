@@ -126,20 +126,32 @@ class RecordModuleAPI(BaseAPI):
         return out
 
     def _validate_record(self, data: dict[str, Any]) -> None:
-        """Minimal client-side validation: field presence and type checks.
+        """Client-side validation against the module's typed model.
 
-        Currently validates:
-          - No validation performed (reserved for future pydantic model integration).
+        Looks up the curated Pydantic model for :attr:`module` in
+        ``MODEL_REGISTRY`` and validates ``data`` against it. Because every
+        record model uses ``extra="allow"`` and types its fields as optional,
+        this type-checks the *known* fields (e.g. rejecting an ``int`` for a
+        ``str``-typed field) while leaving unknown keys and partial updates
+        untouched — so it is safe for both ``create`` and ``update``.
 
-        If a typed model becomes available via the models registry, this will
-        validate against it. For now, this is a placeholder that allows the
-        ``validate=`` parameter to be used without error, maintaining the API
-        contract for future extensions.
+        Modules without a curated model (parsed as the bare ``BaseRecord``) have
+        no typed fields to check, so validation is a no-op for them.
 
         Raises:
-            ValidationError: When validation fails.
+            ValidationError: When ``data`` fails the typed-model validation.
         """
-        # Placeholder: validation framework reserved for model-based typing
-        # (currently all modules use dict[str, Any] internally).
-        # When pydantic models are wired up, this will invoke model validation.
-        pass
+        from pydantic import ValidationError as PydanticValidationError
+
+        from ..exceptions import ValidationError
+        from ..models import BaseRecord, model_for
+
+        model = model_for(self.module)
+        if model is BaseRecord:
+            # No curated model for this module — nothing typed to validate.
+            return
+        try:
+            model.model_validate(data)
+        except PydanticValidationError as exc:
+            problems = "; ".join(f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors())
+            raise ValidationError(f"validation failed for {self.module}: {problems}") from exc

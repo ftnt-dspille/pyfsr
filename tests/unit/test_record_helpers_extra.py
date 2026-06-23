@@ -276,27 +276,60 @@ def test_update_validate_order():
     assert call_order == ["validate", "resolve"]
 
 
-# -- _validate_record tests (placeholder) -----------------------------------------------
+# -- _validate_record tests -------------------------------------------------------------
 
 
-def test_validate_record_is_placeholder():
-    """_validate_record is a placeholder that doesn't raise by default."""
+def test_validate_record_unregistered_module_is_noop():
+    """A module without a curated model has no typed fields to check → no-op."""
     client = FakeClient()
-    api = MockRecordAPI(client)
+    api = MockRecordAPI(client)  # module = "test_records" (unregistered)
 
-    # Should not raise
+    # No curated model → never raises, regardless of contents.
     api._validate_record({})
     api._validate_record({"name": "test", "status": "Open"})
-
-
-def test_validate_record_accepts_any_dict():
-    """_validate_record accepts any dict without validation logic."""
-    client = FakeClient()
-    api = MockRecordAPI(client)
-
-    # Even with invalid/weird values, the placeholder should not raise
     api._validate_record({"field_1": None, "field_2": 123, "field_3": []})
-    api._validate_record({})  # Empty dict
+
+
+class _AlertsAPI(RecordModuleAPI):
+    """Concrete API bound to the registered ``alerts`` module."""
+
+    module = "alerts"
+
+
+def test_validate_record_passes_for_valid_typed_fields():
+    """Known fields with the right types (and unknown extras) validate cleanly."""
+    api = _AlertsAPI(FakeClient())
+
+    # `name`/`source` are str-typed on Alert; `extra_custom` is unknown but
+    # allowed (extra="allow"); empty/partial is fine (all fields optional).
+    api._validate_record({"name": "test", "source": "siem", "extra_custom": "ok"})
+    api._validate_record({})
+
+
+def test_validate_record_rejects_wrong_typed_field():
+    """A wrong-typed known field raises pyfsr ValidationError."""
+    from pyfsr.exceptions import ValidationError
+
+    api = _AlertsAPI(FakeClient())
+
+    # `id` is typed int on Alert; a non-coercible string must fail.
+    with pytest.raises(ValidationError) as excinfo:
+        api._validate_record({"id": "not-an-int"})
+    assert "alerts" in str(excinfo.value)
+    assert "id" in str(excinfo.value)
+
+
+def test_create_validate_true_raises_on_bad_type():
+    """create(validate=True) surfaces a typed-model failure before POST."""
+    from pyfsr.exceptions import ValidationError
+
+    client = FakeClient(responses={"/api/3/alerts": {"uuid": "new"}})
+    api = _AlertsAPI(client)
+
+    with pytest.raises(ValidationError):
+        api.create(id="not-an-int", validate=True, resolve_picklists=False)
+    # Validation aborted the call — no POST was made.
+    assert client.calls == []
 
 
 # -- integration: create + resolve_picklists + validate --------------------------------
