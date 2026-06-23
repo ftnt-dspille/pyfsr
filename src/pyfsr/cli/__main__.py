@@ -7,6 +7,7 @@ console script is wired as ``pyfsr = "pyfsr.cli.__main__:main"``.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
 from . import _output
@@ -355,6 +356,46 @@ def build_parser() -> argparse.ArgumentParser:
     p_pb = sub.add_parser("playbook", help="author playbooks in YAML and deploy via the API")
     pbsub = p_pb.add_subparsers(dest="pb_command", required=True)
     playbook_cmds.build_subparser(pbsub)
+
+    # --- records group (top-level; API-based record CRUD) ---
+    p_rec = sub.add_parser("records", help="query and manage FortiSOAR records (alerts, incidents, etc.)")
+    recsub = p_rec.add_subparsers(dest="records_command", required=True)
+
+    # alerts list
+    p_alerts_list = recsub.add_parser("alerts", help="list alerts with optional filters")
+    playbook_cmds.add_connection_args(p_alerts_list)
+    _add_fmt(p_alerts_list)
+    p_alerts_list.add_argument("--limit", type=int, default=50, help="max results (default 50)")
+    p_alerts_list.add_argument("--status", help="filter by status (e.g. Open, Closed)")
+    p_alerts_list.add_argument("--severity", help="filter by severity (e.g. Critical, High)")
+    p_alerts_list.set_defaults(func=cmd_records_alerts_list)
+
+    # incidents query
+    p_incidents_query = recsub.add_parser("incidents", help="query incidents via DSL")
+    playbook_cmds.add_connection_args(p_incidents_query)
+    _add_fmt(p_incidents_query)
+    p_incidents_query.add_argument("query", help="Query DSL JSON or simplified filter (field=value)")
+    p_incidents_query.set_defaults(func=cmd_records_incidents_query)
+
+    # records delete
+    p_records_delete = recsub.add_parser("delete", help="delete records by module and id")
+    playbook_cmds.add_connection_args(p_records_delete)
+    p_records_delete.add_argument("module", help="module name (e.g. alerts, incidents)")
+    p_records_delete.add_argument("id", nargs="+", help="one or more record UUIDs to delete")
+    p_records_delete.add_argument("--yes", action="store_true", help="skip confirmation")
+    p_records_delete.set_defaults(func=cmd_records_delete)
+
+    # Global HTTP trace flag (applies to all top-level commands)
+    parser.add_argument(
+        "--log-requests",
+        action="store_true",
+        help="log outgoing HTTP request bodies",
+    )
+    parser.add_argument(
+        "--log-responses",
+        action="store_true",
+        help="log incoming HTTP response bodies",
+    )
 
     return parser
 
@@ -727,6 +768,154 @@ def cmd_certs_regenerate(args: argparse.Namespace) -> int:
 # --- diagnose handler ----------------------------------------------------
 def cmd_diagnose(args: argparse.Namespace) -> int:
     print(diagnose_cmds.run(_make_transport(args), path=args.script), end="")
+    return 0
+
+
+# --- records handlers (API-based) ----------------------------------------
+def cmd_records_alerts_list(args: argparse.Namespace) -> int:
+    """List alerts with optional filtering."""
+    client = playbook_cmds._make_client(args)
+    client.http_trace = getattr(args, "log_requests", False) or getattr(args, "log_responses", False)
+
+    # Build query filters
+    from ..query import Query
+
+    q = Query(module="alerts")
+    if hasattr(args, "status") and args.status:
+        q.eq("status.itemValue", args.status)
+    if hasattr(args, "severity") and args.severity:
+        q.eq("severity.itemValue", args.severity)
+    q.limit(args.limit)
+
+    # Execute query
+    page = client.records("alerts").query(q)
+    records = page.members
+
+    # Render as table or JSON
+    if args.fmt == "json":
+        json.dump([dict(r) if hasattr(r, "__iter__") else r for r in records], sys.stdout, indent=2, default=str)
+        sys.stdout.write("\n")
+    else:
+        if not records:
+            print("(no alerts)", file=sys.stderr)
+            return 0
+        # Extract common fields for display
+        headers = ["uuid", "name", "status", "severity", "created"]
+        rows = []
+        for rec in records:
+            row = [
+                rec.get("uuid", ""),
+                rec.get("name", "")[:50],
+                rec.get("status", {}).get("itemValue", "") if isinstance(rec.get("status"), dict) else "",
+                rec.get("severity", {}).get("itemValue", "") if isinstance(rec.get("severity"), dict) else "",
+                str(rec.get("createDate", ""))[:19],
+            ]
+            rows.append(row)
+        _output.render(rows, headers, fmt=args.fmt)
+    return 0
+
+
+def cmd_records_incidents_query(args: argparse.Namespace) -> int:
+    """Query incidents via DSL or simple filter."""
+    client = playbook_cmds._make_client(args)
+    client.http_trace = getattr(args, "log_requests", False) or getattr(args, "log_responses", False)
+
+    from ..query import Query
+
+    # Try to parse as JSON first; fall back to simple filter syntax
+    try:
+        query_dict = json.loads(args.query)
+        # If it's a dict with query DSL keys, use it directly
+        if any(k in query_dict for k in ["filters", "logic", "sort"]):
+            from ..query import Query as QueryCls
+
+            q = QueryCls(module="incidents")
+            # Apply the raw DSL body
+            for key in ["filters", "logic", "sort", "limit"]:
+                if key in query_dict:
+                    setattr(q, f"_{key}", query_dict[key])
+            page = client.records("incidents").query(q)
+        else:
+            # Treat as a dict of field=value filters
+            q = Query(module="incidents")
+            for field, value in query_dict.items():
+                q.eq(field, value)
+            page = client.records("incidents").query(q)
+    except (json.JSONDecodeError, ValueError):
+        # Fall back to simple "field=value" syntax
+        if "=" in args.query:
+            parts = args.query.split("=", 1)
+            q = Query(module="incidents")
+            q.eq(parts[0].strip(), parts[1].strip())
+            page = client.records("incidents").query(q)
+        else:
+            # Treat as a search term in name
+            q = Query(module="incidents")
+            q.contains("name", args.query)
+            page = client.records("incidents").query(q)
+
+    records = page.members
+
+    # Render
+    if args.fmt == "json":
+        json.dump([dict(r) if hasattr(r, "__iter__") else r for r in records], sys.stdout, indent=2, default=str)
+        sys.stdout.write("\n")
+    else:
+        if not records:
+            print("(no incidents)", file=sys.stderr)
+            return 0
+        headers = ["uuid", "name", "status", "severity"]
+        rows = []
+        for rec in records:
+            row = [
+                rec.get("uuid", ""),
+                rec.get("name", "")[:50],
+                rec.get("status", {}).get("itemValue", "") if isinstance(rec.get("status"), dict) else "",
+                rec.get("severity", {}).get("itemValue", "") if isinstance(rec.get("severity"), dict) else "",
+            ]
+            rows.append(row)
+        _output.render(rows, headers, fmt=args.fmt)
+    return 0
+
+
+def cmd_records_delete(args: argparse.Namespace) -> int:
+    """Delete records by module and id."""
+    client = playbook_cmds._make_client(args)
+    client.http_trace = getattr(args, "log_requests", False) or getattr(args, "log_responses", False)
+
+    module = args.module
+    ids = args.id
+
+    # Confirmation gate
+    if not args.yes:
+        print(f"# plan: delete {len(ids)} record(s) from {module!r}", file=sys.stderr)
+        response = input("Confirm [y/N]: ")
+        if response.lower() != "y":
+            print("cancelled")
+            return 1
+
+    # Execute deletes
+    rec_set = client.records(module)
+    deleted = []
+    failed = []
+
+    for rec_id in ids:
+        try:
+            rec_set.delete(rec_id)
+            deleted.append(rec_id)
+        except Exception as e:
+            failed.append((rec_id, str(e)))
+
+    # Report
+    print(f"deleted: {len(deleted)}/{len(ids)}")
+    if deleted:
+        for rec_id in deleted:
+            print(f"  {rec_id}")
+    if failed:
+        print(f"failed: {len(failed)}", file=sys.stderr)
+        for rec_id, err in failed:
+            print(f"  {rec_id}: {err}", file=sys.stderr)
+        return 1
     return 0
 
 

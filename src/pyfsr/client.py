@@ -2,6 +2,7 @@
 
 import logging
 import os
+import sys
 import time
 import warnings
 from typing import Any, Literal, overload
@@ -105,6 +106,7 @@ class FortiSOAR:
         timeout: int | float | None = 30,
         max_retries: int = 2,
         dry_run: bool = False,
+        http_trace: bool = False,
     ):
         """
         Initialize the FortiSOAR client.
@@ -136,6 +138,9 @@ class FortiSOAR:
                response is returned instead. Reads (GET/HEAD/OPTIONS) pass through
                normally. Lets callers exercise their write path without touching the
                appliance. Defaults to False.
+           http_trace (bool, optional): When True, log full outgoing and incoming
+               HTTP bodies to stderr for debugging. Defaults to False; no overhead
+               when disabled.
 
         Raises:
             ValueError: If the provided authentication method is invalid.
@@ -145,6 +150,7 @@ class FortiSOAR:
         self._log_file = "logs/fortisoar.log"
         self._max_log_size = 10 * 1024 * 1024  # 10MB
         self._backup_count = 5
+        self.http_trace = http_trace
 
         # Setup logging if enabled
         self.verbose = verbose
@@ -475,6 +481,26 @@ class FortiSOAR:
                 **kwargs,
             )
             elapsed = time.time() - start_time
+
+            # HTTP trace: log request/response bodies if enabled
+            if self.http_trace:
+                import json as _json
+
+                print(f"[HTTP] {method.upper()} {url}", file=sys.stderr)
+                if params:
+                    print(f"  params: {params}", file=sys.stderr)
+                if data:
+                    try:
+                        print(f"  request body: {_json.dumps(data)}", file=sys.stderr)
+                    except (TypeError, ValueError):
+                        print(f"  request body: {data}", file=sys.stderr)
+                print(f"  response: {response.status_code}", file=sys.stderr)
+                if response.content:
+                    try:
+                        print(f"  response body: {response.json()}", file=sys.stderr)
+                    except (TypeError, ValueError):
+                        print(f"  response body: {response.text[:500]}", file=sys.stderr)
+
             self._log_response(response, elapsed)
 
             response.raise_for_status()

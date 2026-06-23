@@ -217,10 +217,171 @@ class Query:
         """
         return self.where(field, "in_all", list(values))
 
+    def between(self, field: str, low: Any, high: Any) -> Query:
+        """Match records where ``field`` is between ``low`` and ``high`` (inclusive).
+
+        Convenience operator that compiles to a gte + lte pair under the hood.
+        For example, ``between("createDate", start_ts, end_ts)`` is equivalent to
+        composing ``gte`` and ``lte`` leaves in an AND group::
+
+            Query().between("createDate", 1700000000, 1700086400)
+
+        Args:
+            field: The field to filter on.
+            low: The lower bound (inclusive).
+            high: The upper bound (inclusive).
+        """
+        return self.where(field, "between", [low, high])
+
+    def related(self, path: str, operator: str, value: Any = None) -> Query:
+        """Filter by a field in a related module using dot-walk syntax.
+
+        This is a convenience helper for relationship-traversal filtering. Under
+        the hood, it's equivalent to using :meth:`where` with a dot-separated or
+        double-underscore-separated path, but it makes intent explicit::
+
+            # These are equivalent:
+            Query().related("alert.status.itemValue", "eq", "Open")
+            Query().where("alert.status.itemValue", "eq", "Open")
+            Query().where("alert__status__itemValue", "eq", "Open")
+
+        The FortiSOAR platform treats ``.`` and ``__`` identically in field paths,
+        and adding a relationship hop (e.g. ``alert``) narrows scope via an inner
+        join on the related module.
+
+        Args:
+            path: A dot-separated or double-underscore-separated path traversing
+                related modules. The final segment is the field to match.
+            operator: The comparison operator (``"eq"``, ``"gt"``, etc.).
+            value: The value to compare (arity determined by operator).
+
+        Returns:
+            self for chaining.
+
+        Examples::
+
+            Query(module="incidents").related("alerts.severity.itemValue", "eq", "Critical")
+            Query().related("assignedTo.name", "like", "alice")
+        """
+        # Normalize __ to . for consistency, but preserve the path as-is for wire
+        normalized = path.replace("__", ".")
+        self._check_field(normalized)
+        return self.where(normalized, operator, value)
+
     def group(self, query: Query) -> Query:
         """Nest another ``Query`` as a sub-group (its own logic + filters)."""
         self._filters.append({"logic": query._logic, "filters": query._build_filters()})
         return self
+
+    def or_(self, query: Query | None = None) -> Query:
+        """Create or nest an OR-logic group for ergonomic composition.
+
+        This is a convenience wrapper around ``Query(logic="OR").group(...)`` that
+        lets you build OR groups inline without explicit ``Query("OR")`` construction::
+
+            Query().eq("status", "Open").or_(Query().eq("type", "A").eq("severity", "High"))
+
+        Equivalently, nest an empty OR group to be populated inline::
+
+            (Query()
+             .eq("status", "Open")
+             .or_()
+             .eq("type", "A")
+             .eq("severity", "High"))
+
+        Args:
+            query: Optional pre-built ``Query`` with logic="OR" to nest. If None,
+                creates a fresh OR context for inline building.
+
+        Returns:
+            If ``query`` is provided, returns self (for chaining). Otherwise,
+            returns a fresh OR-context Query that appends to this Query when
+            used (via its own group-like semantics).
+        """
+        if query is not None:
+            if not isinstance(query, Query):
+                raise TypeError(f"or_() expects a Query or None, got {type(query).__name__}")
+            return self.group(query)
+        else:
+            # Return a fresh OR query that auto-groups into self
+            or_query = Query("OR", module=self._module)
+
+            # Wrap the or_query so that when you call .to_body() or .model(),
+            # it appends itself to self first. Shape methods (sort, select, limit, etc.)
+            # apply to the parent query.
+            class OrProxy:
+                # Filter-building methods that apply to the OR query
+                _OR_METHODS = frozenset(
+                    (
+                        "eq",
+                        "neq",
+                        "lt",
+                        "lte",
+                        "gt",
+                        "gte",
+                        "in_",
+                        "nin",
+                        "like",
+                        "notlike",
+                        "contains",
+                        "exists",
+                        "isnull",
+                        "changed",
+                        "in_all",
+                        "between",
+                        "related",
+                        "where",
+                    )
+                )
+                # Terminal methods that commit and delegate to parent
+                _TERMINAL_METHODS = frozenset(("to_body", "model"))
+                # Shape methods that apply to the parent query
+                _PARENT_METHODS = frozenset(("sort", "select", "ignore", "limit", "page", "search"))
+
+                def __init__(self, or_q: Query, parent: Query) -> None:
+                    self._or = or_q
+                    self._parent = parent
+
+                def __getattr__(self, name: str) -> Any:
+                    if name in self._OR_METHODS:
+                        # Filter-building method: apply to OR query, return proxy for chaining
+                        attr = getattr(self._or, name)
+
+                        def wrapper(*a: Any, **kw: Any) -> OrProxy:
+                            attr(*a, **kw)
+                            return self
+
+                        return wrapper
+                    elif name in self._TERMINAL_METHODS:
+                        # Terminal method: commit OR group and delegate to parent
+                        if name == "to_body":
+
+                            def terminal_to_body() -> dict[str, Any]:
+                                self._parent.group(self._or)
+                                return self._parent.to_body()
+
+                            return terminal_to_body
+                        elif name == "model":
+
+                            def terminal_model() -> QueryBody:
+                                self._parent.group(self._or)
+                                return self._parent.model()
+
+                            return terminal_model
+                    elif name in self._PARENT_METHODS:
+                        # Shape method: apply to parent, return parent for chaining
+                        attr = getattr(self._parent, name)
+
+                        def shape_wrapper(*a: Any, **kw: Any) -> OrProxy:
+                            attr(*a, **kw)
+                            return self
+
+                        return shape_wrapper
+                    else:
+                        # Fall through to OR query for other attributes
+                        return getattr(self._or, name)
+
+            return OrProxy(or_query, self)  # type: ignore[return-value]
 
     # -- shaping ------------------------------------------------------------
     def sort(self, field: str, direction: str = "DESC") -> Query:

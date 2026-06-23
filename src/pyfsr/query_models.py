@@ -64,6 +64,7 @@ OPERATOR_SPECS: dict[str, OperatorSpec] = {
         _spec("isnull", Arity.BOOL, "leaf", "field is null (bool; use value=False for not-null)"),
         _spec("changed", Arity.NONE, "trigger", "field changed (playbook trigger only)"),
         _spec("in_all", Arity.LIST, "trigger", "collection contains all of the list"),
+        _spec("between", Arity.LIST, "leaf", "field value is between two bounds (inclusive)"),
     )
 }
 

@@ -217,10 +217,76 @@ class BaseRecord(BaseModel):
         found, value = self._lookup_attr(key)
         return value if found else default
 
-    def to_dict(self, *, by_alias: bool = True, exclude_none: bool = False) -> dict[str, Any]:
+    def to_dict(
+        self,
+        *,
+        by_alias: bool = True,
+        exclude_none: bool = False,
+        serialize_special: bool = False,
+    ) -> dict[str, Any]:
         """Serialize back to a plain FortiSOAR-shaped dict.
 
         Defaults to ``by_alias=True`` so ``@id``/``@type`` round-trip with their
         wire names.
+
+        When ``serialize_special=True``, object/array fields (typed as ``list[Any]``
+        or ``dict[str, Any]``) are JSON-encoded to strings for wire submission,
+        as FortiSOAR expects. When ``False`` (the default), they remain as native
+        Python objects for backward compatibility.
         """
-        return self.model_dump(by_alias=by_alias, exclude_none=exclude_none)
+        import json
+
+        result = self.model_dump(by_alias=by_alias, exclude_none=exclude_none)
+
+        if not serialize_special:
+            return result
+
+        # Inspect model fields to identify which ones need JSON encoding
+        for name, info in type(self).model_fields.items():
+            # Determine the key in the result dict (use alias if by_alias, else field name)
+            key = info.alias if by_alias and info.alias else name
+            if key not in result:
+                continue
+
+            value = result[key]
+            if value is None:
+                continue
+
+            # Check if this field is a "special" type that needs JSON encoding
+            # Special types: list[Any], dict[str, Any], and similar structures
+            ann = info.annotation
+            if self._is_special_field_type(ann):
+                # Encode the value as a JSON string
+                result[key] = json.dumps(value)
+
+        return result
+
+    @staticmethod
+    def _is_special_field_type(annotation: Any) -> bool:
+        """Check if a field annotation represents a special (object/array) type.
+
+        Returns True for list[Any], dict[str, Any], and similar untyped containers
+        that FortiSOAR expects as JSON-encoded strings on the wire.
+        """
+        from typing import Any, Union, get_args, get_origin
+
+        origin = get_origin(annotation)
+        args = get_args(annotation)
+
+        # Handle UnionType (Python 3.10+ X | Y syntax) or typing.Union
+        # Both have args where we need to filter out NoneType and recurse
+        if origin is Union or (hasattr(annotation, "__class__") and annotation.__class__.__name__ == "UnionType"):
+            non_none_args = [a for a in args if a is not type(None)]
+            if len(non_none_args) == 1:
+                return BaseRecord._is_special_field_type(non_none_args[0])
+            return False
+
+        # Check for list[Any]
+        if origin is list:
+            return len(args) == 1 and args[0] is Any
+
+        # Check for dict[str, Any]
+        if origin is dict:
+            return len(args) == 2 and args[0] is str and args[1] is Any
+
+        return False
