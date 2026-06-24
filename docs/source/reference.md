@@ -15,8 +15,48 @@ The complete, auto-generated reference for every pyfsr module and class.
 
 ## Full reference
 
+The per-module pages below are auto-generated. They're listed flat (instead of
+nested under the `pyfsr` package) so every module is one click from here.
+
 ```{toctree}
-:maxdepth: 3
+:maxdepth: 2
+:caption: Core
+
+autoapi/pyfsr/client/index
+autoapi/pyfsr/records/index
+autoapi/pyfsr/query/index
+autoapi/pyfsr/query_models/index
+autoapi/pyfsr/pagination/index
+autoapi/pyfsr/projection/index
+autoapi/pyfsr/fields/index
+autoapi/pyfsr/config/index
+autoapi/pyfsr/exceptions/index
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Endpoint APIs & models
+
+autoapi/pyfsr/api/index
+autoapi/pyfsr/models/index
+autoapi/pyfsr/auth/index
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Playbooks, tooling & CLI
+
+Playbooks (authoring) <autoapi/pyfsr/authoring/index>
+autoapi/pyfsr/playbook_freshness/index
+autoapi/pyfsr/tools/index
+autoapi/pyfsr/mcp/index
+autoapi/pyfsr/cli/index
+autoapi/pyfsr/spec/index
+autoapi/pyfsr/utils/index
+```
+
+```{toctree}
+:hidden:
 
 autoapi/pyfsr/index
 ```
