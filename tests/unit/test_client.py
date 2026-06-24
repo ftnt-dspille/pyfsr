@@ -251,6 +251,20 @@ def test_request_reauth_fires_only_once(mock_client, mock_response, monkeypatch)
 
 
 # -- version() fallback chain ------------------------------------------------
+def test_version_from_cyops_version_json(mock_client, mock_response, monkeypatch):
+    """version() prefers /cyops_version.json on the configured base port."""
+
+    def mock_request(*args, **kwargs):
+        url = " ".join(str(a) for a in args) + " " + " ".join(str(v) for v in kwargs.values())
+        if "/cyops_version.json" in url:
+            return mock_response(json_data={"version": "7.6.5-5662"})
+        return mock_response(status_code=404)
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    assert mock_client.version() == "7.6.5-5662"
+
+
 def test_version_from_appliances_endpoint(mock_client, mock_response, monkeypatch):
     """version() returns version string from /api/3/appliances."""
 

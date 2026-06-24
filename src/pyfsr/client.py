@@ -728,9 +728,11 @@ class FortiSOAR:
         of endpoints, returning the first successful response as a version
         string or a dict with build details:
 
-        1. ``GET /api/3/appliances`` (reads ``@version`` / ``build`` if present)
-        2. License details endpoint (``GET /api/auth/license``, via system API)
-        3. Public version endpoint (``GET /api/version``, via system API)
+        1. ``GET /cyops_version.json`` — the canonical version file, e.g.
+           ``{"version": "8.0.0-6034"}``. Live-verified across releases.
+        2. ``GET /api/3/appliances`` (reads ``@version`` / ``build`` if present)
+        3. License details endpoint (``GET /api/auth/license``, via system API)
+        4. Public version endpoint (``GET /api/version``, via system API)
 
         Returns:
             str | dict[str, Any]: A clean version string (e.g., ``"7.4.2"``),
@@ -739,7 +741,7 @@ class FortiSOAR:
 
         Raises:
             FortiSOARException: If all fallback endpoints return 404 or other
-            errors, with a message explaining which endpoints were tried.
+                failures; the message names every endpoint that was tried.
 
         Example:
             >>> v = client.version()                       # doctest: +SKIP
@@ -750,6 +752,18 @@ class FortiSOAR:
             7.4.2
         """
         errors = []
+
+        # Primary: /cyops_version.json — canonical version file, served at the
+        # root of the configured base URL (outside /api/3).
+        cyops_url = urljoin(self.base_url, "/cyops_version.json")
+        try:
+            resp = self.session.get(cyops_url, timeout=self.timeout, verify=self.verify_ssl)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, dict) and data.get("version"):
+                    return data["version"]
+        except Exception as e:  # noqa: BLE001 - tolerate and fall through
+            errors.append(f"/cyops_version.json: {type(e).__name__}")
 
         # Fallback 1: /api/3/appliances
         try:
@@ -794,7 +808,7 @@ class FortiSOAR:
             errors.append(f"/api/version: {type(e).__name__}")
 
         # All fallbacks exhausted
-        endpoint_list = ", ".join(["/api/3/appliances", "/api/auth/license", "/api/version"])
+        endpoint_list = ", ".join(["/cyops_version.json", "/api/3/appliances", "/api/auth/license", "/api/version"])
         error_detail = "; ".join(errors) if errors else "all endpoints returned empty"
         raise FortiSOARException(
             f"Could not retrieve FortiSOAR version from any fallback endpoint ({endpoint_list}): {error_detail}"
