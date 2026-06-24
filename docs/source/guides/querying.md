@@ -12,6 +12,11 @@ global search, pagination, and source-verified quirks — see the canonical Fort
 reference: `~/PycharmProjects/Miscellaneous/fortisoar/FortiSOAR_Query_Aggregation_and_Filter_Options.md`.
 ```
 
+```{seealso}
+A runnable, guided tour of every builder feature lives in
+[`examples/queries.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/queries.py).
+```
+
 ## Quick start
 
 ```python
@@ -51,6 +56,22 @@ Query().eq("severity.itemValue", "Critical")
 Query().eq("status.itemValue", "Open")
 Query().eq("type.itemValue", "Brute Force Attack")
 ```
+
+:::{tip}
+**Bind the query to a module and pyfsr fills in `.itemValue` for you.** When you
+pass `module=`, a bare picklist field is auto-resolved to its `.itemValue` path,
+so you can drop the suffix entirely:
+
+```{doctest}
+>>> Query(module="alerts").eq("severity", "Critical").to_body()["filters"][0]["field"]
+'severity.itemValue'
+```
+
+If you pass an IRI or UUID value instead (e.g. `eq("severity", "/api/3/picklists/…")`),
+pyfsr leaves the field bare so the comparison is by IRI. This only applies to
+picklist fields; module relationships like `assignedTo` stay explicit (you choose
+`.name` vs `.uuid`).
+:::
 
 ## Leaf operators
 
@@ -103,6 +124,66 @@ client.records("alerts").filter(
     .eq("status.itemValue", "Open")
     .group(severity_filter)
 )
+```
+
+### Inline grouping with `.or_()` and `.and_()`
+
+`.group()` is explicit but verbose. `.or_()` and `.and_()` build the same nested
+groups inline — pass a pre-built `Query`, or call with no argument to open an
+inline context that collects the following leaf filters:
+
+```python
+# (status == Open) OR (type == phishing AND severity == High)
+(Query("OR")
+ .eq("status.itemValue", "Open")
+ .and_()                              # opens an AND sub-group
+ .eq("type.itemValue", "phishing")
+ .eq("severity.itemValue", "High"))
+
+# Equivalent with a pre-built group:
+inner = Query("AND").eq("type.itemValue", "phishing").eq("severity.itemValue", "High")
+Query("OR").eq("status.itemValue", "Open").and_(inner)
+```
+
+Inside an inline context, leaf methods (`.eq()`, `.in_()`, …) apply to the
+sub-group, while shaping methods (`.sort()`, `.select()`, `.limit()`) and the
+terminal `.to_body()` / `.model()` apply to and close out the parent query:
+
+```python
+(Query("OR")
+ .eq("status.itemValue", "Open")
+ .and_().eq("type.itemValue", "phishing").eq("severity.itemValue", "High")
+ .sort("createDate", "DESC")          # applies to the parent query
+ .limit(50))
+```
+
+The wire body these build is exactly what you'd hand-assemble — an `AND`
+sub-group nested under the parent's filters:
+
+```{doctest}
+>>> body = (Query("OR")
+...     .eq("status.itemValue", "Open")
+...     .and_().eq("type.itemValue", "phishing").eq("severity.itemValue", "High")
+...     .to_body())
+>>> body["logic"]
+'OR'
+>>> body["filters"][1]["logic"]
+'AND'
+>>> [f["field"] for f in body["filters"][1]["filters"]]
+['type.itemValue', 'severity.itemValue']
+```
+
+Arbitrary depth is reachable by nesting `.group()` inside a pre-built sub-group —
+e.g. `(A AND (B OR C)) OR (D AND E)`:
+
+```python
+(Query("OR")
+ .and_(Query("AND")
+       .eq("status.itemValue", "Open")
+       .group(Query("OR").eq("type.itemValue", "A").eq("type.itemValue", "B")))
+ .and_(Query("AND")
+       .eq("severity.itemValue", "High")
+       .eq("owner.itemValue", "alice")))
 ```
 
 ## Sorting and shaping results

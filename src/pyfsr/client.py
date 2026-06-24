@@ -468,6 +468,10 @@ class FortiSOAR:
         # Apply the default timeout unless the caller passed one explicitly.
         kwargs.setdefault("timeout", self.timeout)
 
+        # Internal marker: set on the single auth-refresh replay so it can't leak
+        # into session.request (which would TypeError) and bounds the retry to one.
+        reauthed = kwargs.pop("_reauthed", False)
+
         start_time = time.time()
         try:
             response = self.session.request(
@@ -502,6 +506,38 @@ class FortiSOAR:
                         print(f"  response body: {response.text[:500]}", file=sys.stderr)
 
             self._log_response(response, elapsed)
+
+            # Recover from an expired session token: a long-lived client that
+            # authenticated once at construction can outlive its token and start
+            # getting 401/403 ("HMAC signature has expired"). Re-authenticate
+            # once and replay the request. Guarded so it fires at most once and
+            # only for refreshable (token) auth; file uploads aren't replayed
+            # because the stream is already consumed.
+            if (
+                response.status_code in (401, 403)
+                and not reauthed
+                and files is None
+                and getattr(self.auth, "can_refresh", False)
+            ):
+                fresh = None
+                try:
+                    fresh = self.auth.refresh()
+                except Exception:  # noqa: BLE001 — fall through to normal error handling
+                    fresh = None
+                if fresh:
+                    self.session.headers.update(fresh)
+                    if logger.isEnabledFor(logging.INFO):
+                        logger.info("auth token refreshed after %d; retrying request", response.status_code)
+                    return self.request(
+                        method,
+                        endpoint,
+                        params=params,
+                        data=data,
+                        files=files,
+                        headers=headers,
+                        _reauthed=True,
+                        **kwargs,
+                    )
 
             response.raise_for_status()
             return response

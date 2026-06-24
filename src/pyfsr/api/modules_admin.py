@@ -12,25 +12,26 @@ in-product editor and the "Clone Module" playbook use:
   :meth:`ModulesAdminAPI.publish`.
 
 A module is a staging record with an ``attributes`` list; each attribute (field) carries a
-**storage type** (``type``) and a **UI widget** (``formType``). These are two different
+**storage type** (``type``) and a **display type** (``formType``). These are two different
 axes and a correct field needs both:
 
 - ``type`` is the Postgres column type the platform actually stores:
   ``string`` / ``integer`` / ``float`` / ``boolean`` / ``picklists`` / ``object`` /
   ``array`` or a *module type name* for a relationship (e.g. ``alerts``). **There is no
-  ``text`` storage type** — text widgets store ``string``. Publishing a field whose ``type``
-  is ``text`` fails validation ("Attribute type 'text' does not exist").
-- ``formType`` is the editor widget: ``text`` / ``textarea`` / ``richtext`` / ``html`` /
-  ``email`` / ``url`` / ``phone`` / ``domain`` / ``filehash`` / ``ipv4`` / ``ipv6`` /
-  ``password`` / ``integer`` / ``decimal`` / ``datetime`` / ``checkbox`` / ``file`` /
-  ``json`` / ``object`` / ``picklist`` / ``multiselectpicklist`` / ``lookup`` /
-  ``manyToMany`` / ``oneToMany``.
+  ``text`` storage type** — text-like fields store ``string``. Publishing a field whose
+  ``type`` is ``text`` fails validation ("Attribute type 'text' does not exist").
+- ``formType`` is the display type (the field kind shown in the editor): ``text`` /
+  ``textarea`` / ``richtext`` / ``html`` / ``email`` / ``url`` / ``phone`` / ``domain`` /
+  ``filehash`` / ``ipv4`` / ``ipv6`` / ``password`` / ``integer`` / ``decimal`` /
+  ``datetime`` / ``checkbox`` / ``file`` / ``json`` / ``object`` / ``picklist`` /
+  ``multiselectpicklist`` / ``lookup`` / ``manyToMany`` / ``oneToMany``.
 
 Use the **typed builders** (:meth:`ModulesAdminAPI.text_field`,
 :meth:`~ModulesAdminAPI.integer_field`, :meth:`~ModulesAdminAPI.datetime_field`,
 :meth:`~ModulesAdminAPI.lookup_field`, ...) which set the right storage type for each
-widget for you. :meth:`~ModulesAdminAPI.field` is the low-level escape hatch where you
-pass both axes yourself. See :data:`WIDGET_STORAGE_TYPE` for the full widget→storage map.
+display type for you. :meth:`~ModulesAdminAPI.field` is the low-level escape hatch where you
+pass both axes yourself. See :data:`DISPLAY_STORAGE_TYPE` for the full display-type→storage
+map.
 
 For the field-type catalogue and relationship/reverse-field semantics from an authoring
 perspective, see ``docs/source/guides/module-field-schema.md``.
@@ -60,6 +61,7 @@ from .base import BaseAPI
 
 if TYPE_CHECKING:
     from ..models import AttributeMetadata, PublishedModelMetadata, StagingModelMetadata
+    from ..query import Query
 
 _STAGING = "/api/3/staging_model_metadatas"
 _PUBLISHED = "/api/3/model_metadatas"
@@ -77,12 +79,12 @@ _VIEW_TEMPLATES_BULK = "/api/3/bulkupsert/system_view_templates"
 _REL = {"$relationships": "true"}
 _ALL = {"$limit": 2147483647}
 
-# UI widget (``formType``) -> storage column type (``type``). This is the mapping the
-# in-product editor applies under the hood: many distinct widgets all store ``string``,
+# Display type (``formType``) -> storage column type (``type``). This is the mapping the
+# in-product editor applies under the hood: many distinct display types all store ``string``,
 # datetime stores an epoch ``integer``, a checkbox stores ``boolean``, etc. Relationship
-# widgets (lookup/manyToMany/oneToMany) store the *target module type* and are handled by
-# the relationship builders, so they are intentionally absent here.
-WIDGET_STORAGE_TYPE: dict[str, str] = {
+# display types (lookup/manyToMany/oneToMany) store the *target module type* and are handled
+# by the relationship builders, so they are intentionally absent here.
+DISPLAY_STORAGE_TYPE: dict[str, str] = {
     "text": "string",
     "textarea": "string",
     "richtext": "string",
@@ -97,15 +99,19 @@ WIDGET_STORAGE_TYPE: dict[str, str] = {
     "domain": "string",
     "file": "string",
     "integer": "integer",
-    "decimal": "float",  # the Decimal Field widget stores a 'float' column
+    "decimal": "float",  # the Decimal Field display type stores a 'float' column
     "datetime": "integer",  # stored as an epoch-millis integer
     "checkbox": "boolean",
     "picklist": "picklists",
     "multiselectpicklist": "picklists",
-    "json": "object",  # the JSON widget; a distinct widget from the raw 'object' one
+    "json": "object",  # the JSON display type; distinct from the raw 'object' one
     "object": "object",
     "array": "array",
 }
+
+# Backward-compatible alias for the pre-0.x name (the constant was previously framed in
+# terms of "widget"; "display type" reads clearer and matches the rest of the API).
+WIDGET_STORAGE_TYPE = DISPLAY_STORAGE_TYPE
 
 # A field's ``name`` is its immutable **API key** — it must start with a letter and contain
 # only letters, digits, or underscores (it becomes a DB column / JSON key). The appliance
@@ -119,7 +125,7 @@ _MAX_NAME_LEN = 63  # Postgres identifier limit
 # Non-existent storage types people reach for by habit; both fail the publish validator
 # ("Attribute type 'text' does not exist"). Map each to the right builder/storage type.
 _BOGUS_DB_TYPES = {
-    "text": "a text widget stores 'string' — use text_field()/typed_field(), or db_type='string'",
+    "text": "a text field stores 'string' — use text_field()/typed_field(), or db_type='string'",
     "json": "JSON stores 'object' — use object_field(), or db_type='object'",
     "datetime": "datetime stores an epoch 'integer' — use datetime_field()",
     "date": "dates store an epoch 'integer' — use datetime_field()",
@@ -235,20 +241,73 @@ class ModulesAdminAPI(BaseAPI):
             None,
         )
 
+    def _reverse_attr_for(self, source_module: str, field: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+        """Compute the reverse-side attribute pyfsr should create on the target module.
+
+        Returns ``(target_module, reverse_attribute)`` for relationship fields whose
+        reverse side the platform does **not** auto-create — so pyfsr can create it and
+        keep both sides of the relationship valid — or ``None`` when no explicit reverse
+        is needed:
+
+        - ``lookup`` (many-to-one): one-directional pointer, no reverse field exists.
+        - ``manyToMany`` with the **default** inverse: FortiSOAR auto-creates the reverse,
+          so pyfsr must not duplicate it.
+        - ``manyToMany`` with a **custom** ``inversedField``: pyfsr builds the mirror
+          ``manyToMany`` on the target pointing back.
+        - ``oneToMany``: pyfsr builds the required ``lookup`` (many-to-one) on the target.
+        """
+        form_type = field.get("formType")
+        target = field.get("type")
+        name = field.get("name")
+        if not target or not name:
+            return None
+        if form_type == "oneToMany":
+            reverse_name = field.get("inversedField") or source_module
+            reverse = self.lookup_field(reverse_name, source_module, inversedField=name)
+            return target, reverse
+        if form_type == "manyToMany" and field.get("inversedField"):
+            reverse = self.relationship_field(
+                field["inversedField"],
+                source_module,
+                many=True,
+                inversed_field=name,
+                owns_relationship=False,
+            )
+            return target, reverse
+        # lookup / default-inverse manyToMany: nothing for pyfsr to create.
+        return None
+
     # ------------------------------------------------------------- helpers
     @staticmethod
+    def _as_condition(value: bool | dict[str, Any] | Any) -> bool | dict[str, Any]:
+        """Normalize a ``required``/``visibility`` value to the wire shape.
+
+        Accepts a plain bool, an already-built FortiSOAR condition dict, or a
+        :class:`~pyfsr.query.Query` — the latter is rendered to the
+        ``{"logic": ..., "filters": [...]}`` envelope the editor uses for
+        "Required/Visible by condition", so callers can build conditions with the
+        same fluent DSL they query with instead of hand-assembling filter dicts.
+        """
+        from ..query import Query
+
+        if isinstance(value, Query):
+            return {"logic": value._logic, "filters": value._build_filters()}
+        return value
+
+    @classmethod
     def field(
+        cls,
         name: str,
         *,
         db_type: str = "string",
         form_type: str | None = None,
         label: str | None = None,
-        required: bool | dict[str, Any] = False,
+        required: bool | dict[str, Any] | Query = False,
         searchable: bool = False,
         editable: bool = True,
         grid_column: bool = False,
         encrypted: bool = False,
-        visibility: bool | dict[str, Any] = True,
+        visibility: bool | dict[str, Any] | Query = True,
         default_value: Any = None,
         tooltip: str | None = None,
         minlength: int = 0,
@@ -263,17 +322,17 @@ class ModulesAdminAPI(BaseAPI):
 
         - ``db_type`` — **storage** type (``string``/``integer``/``float``/``boolean``/
           ``picklists``/``object``/``array`` or a target module type); ``form_type`` is the
-          UI widget (defaults to ``db_type``). Prefer the typed builders (:meth:`text_field` etc.) —
-          they pick the right pair; ``"text"``/``"json"`` are widgets, not storage types,
-          and are rejected here.
+          display type (defaults to ``db_type``). Prefer the typed builders (:meth:`text_field`
+          etc.) — they pick the right pair; ``"text"``/``"json"`` are display types, not storage
+          types, and are rejected here.
         - ``label`` — the **Field Title** (``name`` is the immutable **Field API Key**).
         - ``editable`` — UI "Editable" (maps to ``writeable``).
         - ``searchable`` / ``grid_column`` / ``encrypted`` — the **Field Options** row.
           Note: encrypted fields can't be searchable and vice-versa.
-        - ``required`` — ``False`` / ``True``, or a **condition** dict for
-          "Required by condition" (the FortiSOAR filter shape).
-        - ``visibility`` — ``True`` (Visible) / ``False`` (Hidden), or a **condition**
-          dict for "Visible by Condition".
+        - ``required`` — ``False`` / ``True``, a **condition** for "Required by condition",
+          or a :class:`~pyfsr.query.Query` that pyfsr renders to the condition shape.
+        - ``visibility`` — ``True`` (Visible) / ``False`` (Hidden), a **condition** for
+          "Visible by Condition", or a :class:`~pyfsr.query.Query`.
         - ``default_value`` / ``tooltip`` — the Default Value and Tooltip inputs.
         - ``minlength`` / ``maxlength`` / ``enable_range`` — **Length Constraints**
           ("Add minimum/maximum range" sets ``enable_range``).
@@ -298,7 +357,7 @@ class ModulesAdminAPI(BaseAPI):
         if encrypted and searchable:
             raise ValueError(f"field {name!r} cannot be both encrypted and searchable — pick one")
         validation: dict[str, Any] = {
-            "required": required,
+            "required": cls._as_condition(required),
             "minlength": minlength,
             "maxlength": maxlength,
         }
@@ -314,7 +373,7 @@ class ModulesAdminAPI(BaseAPI):
             "gridColumn": grid_column,
             "encrypted": encrypted,
             "collection": False,
-            "visibility": visibility,
+            "visibility": cls._as_condition(visibility),
             "readable": True,
             "writeable": editable,
             "defaultValue": default_value,
@@ -366,22 +425,32 @@ class ModulesAdminAPI(BaseAPI):
 
     # ------------------------------------------------ typed scalar builders
     @classmethod
-    def typed_field(cls, name: str, form_type: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build a scalar field by **widget**, deriving the storage ``type`` for you.
+    def typed_field(
+        cls, name: str, display_type: str | None = None, *, label: str | None = None, **opts: Any
+    ) -> dict[str, Any]:
+        """Build a scalar field by **display type**, deriving the storage ``type`` for you.
 
-        ``form_type`` is any key of :data:`WIDGET_STORAGE_TYPE` (``text``, ``datetime``,
-        ``checkbox``, ``email``, ...). This is the recommended way to build non-relationship
-        fields — it guarantees ``type``/``formType`` agree, avoiding the
-        "Attribute type 'text' does not exist" publish error you get from hand-setting
-        ``db_type``. For relationships/picklists use the dedicated builders instead.
+        ``display_type`` is the kind of field as shown in the editor — any key of
+        :data:`DISPLAY_STORAGE_TYPE` (``text``, ``datetime``, ``checkbox``, ``email``, ...).
+        This is the recommended way to build non-relationship fields: it guarantees the
+        storage ``type`` and ``formType`` agree, avoiding the "Attribute type 'text' does not
+        exist" publish error you get from hand-setting ``db_type``. For relationships and
+        picklists use the dedicated builders instead.
+
+        (The argument was formerly named ``form_type``; ``display_type`` is the clearer name,
+        and the legacy ``form_type=`` keyword is still accepted.)
         """
-        db_type = WIDGET_STORAGE_TYPE.get(form_type)
+        if display_type is None:
+            display_type = opts.pop("form_type", None)
+        if display_type is None:
+            raise ValueError("typed_field() requires a display type (e.g. 'text', 'datetime', 'email')")
+        db_type = DISPLAY_STORAGE_TYPE.get(display_type)
         if db_type is None:
             raise ValueError(
-                f"unknown scalar widget {form_type!r}; use a key of WIDGET_STORAGE_TYPE, "
+                f"unknown display type {display_type!r}; use a key of DISPLAY_STORAGE_TYPE, "
                 "or picklist_field / lookup_field / relationship_field for non-scalars"
             )
-        return cls.field(name, db_type=db_type, form_type=form_type, label=label, **opts)
+        return cls.field(name, db_type=db_type, form_type=display_type, label=label, **opts)
 
     @classmethod
     def text_field(
@@ -395,73 +464,73 @@ class ModulesAdminAPI(BaseAPI):
         **opts: Any,
     ) -> dict[str, Any]:
         """Build a string field: single-line (default), ``textarea``, ``richtext`` or
-        ``html``. ``area``/``rich``/``html`` pick the widget (all store ``string``)."""
-        widget = "html" if html else "richtext" if rich else "textarea" if area else "text"
-        return cls.typed_field(name, widget, label=label, **opts)
+        ``html``. ``area``/``rich``/``html`` pick the display type (all store ``string``)."""
+        display_type = "html" if html else "richtext" if rich else "textarea" if area else "text"
+        return cls.typed_field(name, display_type, label=label, **opts)
 
     @classmethod
     def integer_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build an integer field (``integer`` storage, ``integer`` widget)."""
+        """Build an integer field (stores ``integer``)."""
         return cls.typed_field(name, "integer", label=label, **opts)
 
     @classmethod
     def decimal_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build a Decimal Field (``float`` storage, ``decimal`` widget) for fractional
-        numbers — the floating-point counterpart of :meth:`integer_field`."""
+        """Build a Decimal field (stores ``float``) for fractional numbers — the
+        floating-point counterpart of :meth:`integer_field`."""
         return cls.typed_field(name, "decimal", label=label, **opts)
 
     @classmethod
     def datetime_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build a date/time field. Stored as an epoch-millis ``integer`` behind a
-        ``datetime`` widget — that storage type is intentional, not a bug."""
+        """Build a date/time field. Stored as an epoch-millis ``integer`` — that storage
+        type is intentional, not a bug."""
         return cls.typed_field(name, "datetime", label=label, **opts)
 
     @classmethod
     def checkbox_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build a boolean checkbox field (``boolean`` storage, ``checkbox`` widget)."""
+        """Build a boolean checkbox field (stores ``boolean``)."""
         return cls.typed_field(name, "checkbox", label=label, **opts)
 
-    # alias: the editor labels this widget "checkbox"; "boolean" reads naturally too
+    # alias: the editor labels this field "checkbox"; "boolean" reads naturally too
     boolean_field = checkbox_field
 
     @classmethod
     def email_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build an email field (``string`` storage, ``email`` widget with email validation)."""
+        """Build an email field (stores ``string``, with email-format validation)."""
         return cls.typed_field(name, "email", label=label, **opts)
 
     @classmethod
     def url_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build a URL field (``string`` storage, ``url`` widget)."""
+        """Build a URL field (stores ``string``)."""
         return cls.typed_field(name, "url", label=label, **opts)
 
     @classmethod
     def phone_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build a phone field (``string`` storage, ``phone`` widget)."""
+        """Build a phone field (stores ``string``)."""
         return cls.typed_field(name, "phone", label=label, **opts)
 
     @classmethod
     def domain_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build a Domain field (``string`` storage, ``domain`` widget)."""
+        """Build a Domain field (stores ``string``)."""
         return cls.typed_field(name, "domain", label=label, **opts)
 
     @classmethod
     def ipv4_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build an IPv4 field (``string`` storage, ``ipv4`` widget)."""
+        """Build an IPv4 field (stores ``string``)."""
         return cls.typed_field(name, "ipv4", label=label, **opts)
 
     @classmethod
     def ipv6_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build an IPv6 field (``string`` storage, ``ipv6`` widget)."""
+        """Build an IPv6 field (stores ``string``)."""
         return cls.typed_field(name, "ipv6", label=label, **opts)
 
     @classmethod
     def filehash_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build a FileHash field (``string`` storage, ``filehash`` widget)."""
+        """Build a FileHash field (stores ``string``)."""
         return cls.typed_field(name, "filehash", label=label, **opts)
 
     @classmethod
     def file_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build a file-attachment field (``string`` storage, ``file`` widget)."""
+        """Build a file-attachment field (stores ``string``)."""
         return cls.typed_field(name, "file", label=label, **opts)
 
     @classmethod
@@ -472,15 +541,15 @@ class ModulesAdminAPI(BaseAPI):
 
     @classmethod
     def json_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build a JSON field (``object`` storage, ``json`` widget) — the editor's "JSON"
-        type with a JSON editor control. See also :meth:`object_field` (the raw ``object``
-        widget): both store ``object`` and differ only in the UI control."""
+        """Build a JSON field (stores ``object``) — the editor's "JSON" type with a JSON
+        editor control. See also :meth:`object_field` (the raw ``object`` type): both store
+        ``object`` and differ only in the editor control."""
         return cls.typed_field(name, "json", label=label, **opts)
 
     @classmethod
     def object_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
-        """Build a raw object field (``object`` storage, ``object`` widget). For the editor's
-        "JSON" field type (a JSON editor control) use :meth:`json_field` instead."""
+        """Build a raw object field (stores ``object``). For the editor's "JSON" field type
+        (a JSON editor control) use :meth:`json_field` instead."""
         return cls.typed_field(name, "object", label=label, **opts)
 
     # ---------------------------------------------------- relationship/refs
@@ -539,20 +608,20 @@ class ModulesAdminAPI(BaseAPI):
 
         ``many`` selects ``manyToMany`` (default) vs ``oneToMany``; both are collections.
 
-        **Reverse-field behavior** (the part that "sometimes" creates a field on the other
-        module — verify it with :meth:`reverse_field` after :meth:`publish`):
+        This is a pure builder — it returns the owning-side attribute only. Add it with
+        :meth:`add_field`, which **creates the reverse side on the target for you** so the
+        relationship is valid on publish:
 
-        - ``manyToMany`` with the **default** inverse (``inversed_field=None``): the editor
-          auto-creates a reverse many-to-many field on ``target_module`` named after *this*
-          module, wired at staging time. This is the common "it auto-created the field" case.
-        - ``manyToMany`` with a **custom** ``inversed_field``: the reverse field is **not**
-          auto-created — you must add it to the target yourself (another
-          ``relationship_field`` pointing back). This is the common "it did *not* create the
-          field" case.
-        - ``oneToMany``: requires a matching **lookup** (many-to-one) field to already exist
-          on ``target_module`` (its name = ``inversed_field``). Publish fails with
-          "there is no lookup field present in '<target>'" if it is missing — create it with
-          :meth:`lookup_field` on the target *before* publishing.
+        - ``manyToMany`` with the **default** inverse (``inversed_field=None``): FortiSOAR
+          itself mirrors a reverse field onto ``target_module``; :meth:`add_field` leaves
+          the target untouched to avoid duplicating it.
+        - ``manyToMany`` with a **custom** ``inversed_field``: :meth:`add_field` adds the
+          matching reverse ``manyToMany`` (named ``inversed_field``) to the target.
+        - ``oneToMany``: :meth:`add_field` adds the required **lookup** (many-to-one) to the
+          target (a ``oneToMany`` will not publish without it).
+
+        Pass ``create_reverse=False`` to :meth:`add_field` to stage only this side, then
+        confirm whatever landed with :meth:`reverse_field`.
 
         ``owns_relationship`` (default True) marks this as the owning side of the join.
         Pass ``owns_relationship=False`` for the non-owning mirror of an existing relation.
@@ -917,13 +986,65 @@ class ModulesAdminAPI(BaseAPI):
             raise FortiSOARException(f"module settings did not apply for {module!r}: {sorted(not_applied)}")
         return updated
 
-    def add_field(self, module: str, field: dict[str, Any]) -> dict[str, Any]:
-        """Append a field (build it with :meth:`field`) to ``module`` in staging."""
+    def add_field(self, module: str, field: dict[str, Any], *, create_reverse: bool = True) -> dict[str, Any]:
+        """Append a field (build it with :meth:`field`) to ``module`` in staging.
+
+        When ``field`` is a relationship whose reverse side FortiSOAR does **not**
+        auto-create, pyfsr creates it for you so the relationship is valid on publish
+        (``create_reverse=True``, the default):
+
+        - ``oneToMany`` → a matching ``lookup`` (many-to-one) is added to the target
+          module (a ``oneToMany`` will not publish without it).
+        - ``manyToMany`` with a **custom** ``inversedField`` → the mirror ``manyToMany``
+          is added to the target.
+
+        A plain ``lookup`` (one-directional) and a default-inverse ``manyToMany`` (which
+        the platform mirrors itself) add no extra field. Pass ``create_reverse=False`` to
+        stage only this side. The reverse is created in **staging** too, so publishing the
+        modules commits both sides.
+
+        Raises ``ValueError`` if the reverse is needed but the target module does not
+        exist, or already has a *different* field under the reverse name.
+        """
         mod = self.get_staging(module)
         if not mod:
             raise ValueError(f"module {module!r} not found in staging")
         attrs = mod.get("attributes", []) + [field]
-        return self._put_attributes(mod, attrs)
+        result = self._put_attributes(mod, attrs)
+        if create_reverse:
+            reverse = self._reverse_attr_for(module, field)
+            if reverse is not None:
+                self._ensure_reverse_field(*reverse, source_module=module, source_field=field)
+        return result
+
+    def _ensure_reverse_field(
+        self,
+        target_module: str,
+        reverse_attr: dict[str, Any],
+        *,
+        source_module: str,
+        source_field: dict[str, Any],
+    ) -> None:
+        """Add ``reverse_attr`` to ``target_module`` in staging, idempotently."""
+        target = self.get_staging(target_module) or self.get_published(target_module)
+        if not target:
+            raise ValueError(
+                f"cannot create the reverse field {reverse_attr['name']!r}: target module "
+                f"{target_module!r} (referenced by {source_module}.{source_field.get('name')}) "
+                "does not exist — create it first, or pass create_reverse=False"
+            )
+        existing = next((a for a in target.get("attributes", []) if a.get("name") == reverse_attr["name"]), None)
+        if existing is not None:
+            # Idempotent: a matching reverse (same target type) is fine; a clashing
+            # field of a different type is a conflict the caller must resolve.
+            if existing.get("type") != reverse_attr.get("type"):
+                raise ValueError(
+                    f"target module {target_module!r} already has a field "
+                    f"{reverse_attr['name']!r} of a different type "
+                    f"({existing.get('type')!r}); rename the inverse or pass create_reverse=False"
+                )
+            return
+        self.add_field(target_module, reverse_attr, create_reverse=False)
 
     def set_field_type(self, module: str, field: str, *, db_type: str, form_type: str | None = None) -> dict[str, Any]:
         """Change a staged field's storage ``type`` (and ``formType``).

@@ -44,7 +44,8 @@ class AttributeMetadata(BaseRecord):
 
     ``type`` is the Postgres storage type (``"string"``, ``"integer"``,
     ``"boolean"``, ``"object"``, ``"picklists"``, or a module name like
-    ``"alerts"`` for relationships).  ``form_type`` is the UI widget.
+    ``"alerts"`` for relationships).  ``form_type`` is the display type (the
+    field kind shown in the editor).
 
     The ``sattrib`` field is the IRI of the parent
     :class:`StagingModelMetadata` (or its dict form when the attribute is

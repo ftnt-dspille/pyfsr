@@ -1,4 +1,4 @@
-# Connectors & Agents
+# Connectors
 
 `client.connectors` ({class}`~pyfsr.api.connectors.ConnectorsAPI`) wraps
 FortiSOAR's `/api/integration` surface — discovery, healthcheck, configuration,

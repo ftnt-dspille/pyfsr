@@ -207,3 +207,44 @@ def test_request_exception_logging(mock_client, mock_response, monkeypatch):
 
     # Enable verbose mode for logging
     mock_client.verbose = True
+
+
+def test_request_reauths_and_retries_on_expired_token(mock_client, mock_response, monkeypatch):
+    """A 401/403 on a token-auth client triggers one re-auth + replay (recovers
+    from an expired session token mid-run instead of failing the request)."""
+    import requests as _rq
+
+    state = {"auth_calls": 0, "data_calls": 0}
+
+    def mock_request(self, method, url, **kwargs):
+        if "/auth/authenticate" in url:
+            state["auth_calls"] += 1
+            return mock_response(json_data={"token": f"tok-{state['auth_calls']}"})
+        state["data_calls"] += 1
+        if state["data_calls"] == 1:
+            return mock_response(status_code=403, json_data={"message": "HMAC signature has expired"})
+        return mock_response(json_data={"ok": True})
+
+    monkeypatch.setattr(_rq.sessions.Session, "request", mock_request)
+    resp = mock_client.request("GET", "/api/3/alerts")
+    assert resp.json() == {"ok": True}
+    assert state["data_calls"] == 2  # original + one replay
+    assert state["auth_calls"] >= 1  # refreshed at least once
+
+
+def test_request_reauth_fires_only_once(mock_client, mock_response, monkeypatch):
+    """If the replay still 401/403s, the client gives up (no infinite loop)."""
+    import requests as _rq
+
+    state = {"data_calls": 0}
+
+    def mock_request(self, method, url, **kwargs):
+        if "/auth/authenticate" in url:
+            return mock_response(json_data={"token": "tok"})
+        state["data_calls"] += 1
+        return mock_response(status_code=403, json_data={"message": "still expired"})
+
+    monkeypatch.setattr(_rq.sessions.Session, "request", mock_request)
+    with pytest.raises(PermissionError):
+        mock_client.request("GET", "/api/3/alerts")
+    assert state["data_calls"] == 2  # original + exactly one replay, then raise

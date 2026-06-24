@@ -10,6 +10,14 @@ It's deliberately transport-neutral (no MCP, no provider SDK), so the same
 registry can feed Anthropic tool-use, OpenAI function calling, the bundled MCP
 server, or a home-grown agent loop.
 
+```{seealso}
+End-to-end FortiAI / FortiSIEM-MCP examples:
+[`connect_fortisiem_mcp.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/connect_fortisiem_mcp.py),
+[`trigger_ai_investigation.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/trigger_ai_investigation.py),
+and [`investigate_fortisiem_incident.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/investigate_fortisiem_incident.py).
+See the [examples index](https://github.com/dylanspille/pyfsr/blob/main/examples/README.md) for the full set.
+```
+
 ## Why use it
 
 Wiring an LLM to FortiSOAR by hand means hand-writing JSON-Schema for every

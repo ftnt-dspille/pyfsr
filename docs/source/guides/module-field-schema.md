@@ -9,9 +9,9 @@ generate valid field definitions from it.
 Everything here was extracted from a live FortiSOAR appliance (its 64 modules and ~1,500
 real fields) and verified by creating and publishing test modules.
 
-```{contents}
-:local:
-:depth: 2
+```{seealso}
+[`examples/all_field_types_module.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/all_field_types_module.py)
+builds a module exercising every field type described here.
 ```
 
 ## The two axes of a field: `type` vs `formType`
@@ -22,23 +22,23 @@ same thing:
 | Axis | Metadata key | What it is | Allowed values |
 | --- | --- | --- | --- |
 | **Storage type** | `type` | the Postgres column type the platform stores | `string`, `integer`, `boolean`, `picklists`, `object`, `array`, or a **module type name** (for relationships) |
-| **UI widget** | `formType` | the editor control rendered for the field | `text`, `textarea`, `richtext`, `html`, `integer`, `datetime`, `checkbox`, `email`, `url`, `phone`, `password`, `filehash`, `ipv4`, `file`, `picklist`, `multiselectpicklist`, `lookup`, `manyToMany`, `oneToMany`, `object` |
+| **Display type** | `formType` | the kind of field shown/edited in the editor | `text`, `textarea`, `richtext`, `html`, `integer`, `datetime`, `checkbox`, `email`, `url`, `phone`, `password`, `filehash`, `ipv4`, `file`, `picklist`, `multiselectpicklist`, `lookup`, `manyToMany`, `oneToMany`, `object` |
 
 ```{important}
-**There is no `text` storage type.** Text-like widgets (`text`, `textarea`, `richtext`,
+**There is no `text` storage type.** Text-like fields (`text`, `textarea`, `richtext`,
 `email`, ...) all store `string`. Setting `type: "text"` *looks* fine in staging but
 **fails at publish** with:
 
 > `Attribute type 'text' does not exist as core or custom model metadata.`
 
-This is the single most common authoring mistake. Always pair the widget with its correct
-storage type — or let the typed builders do it for you (see below).
+This is the single most common authoring mistake. Always pair the display type with its
+correct storage type — or let the typed builders do it for you (see below).
 ```
 
-The widget → storage mapping is exposed in code as
-{data}`pyfsr.api.modules_admin.WIDGET_STORAGE_TYPE`:
+The display type → storage mapping is exposed in code as
+{data}`pyfsr.api.modules_admin.DISPLAY_STORAGE_TYPE`:
 
-| `formType` (widget) | `type` (storage) | Notes |
+| `formType` (display type) | `type` (storage) | Notes |
 | --- | --- | --- |
 | `text` | `string` | single-line |
 | `textarea` | `string` | multi-line plain text |
@@ -86,9 +86,9 @@ fields = [
 admin.create_module("widgets", label="Widget", fields=fields)
 ```
 
-`admin.typed_field(name, form_type, ...)` is the generic form for any scalar widget in the
-table above (e.g. `admin.typed_field("md5", "filehash")`). For the low-level escape hatch
-where you set both axes yourself, use
+`admin.typed_field(name, display_type, ...)` is the generic form for any scalar display
+type in the table above (e.g. `admin.typed_field("md5", "filehash")`). For the low-level
+escape hatch where you set both axes yourself, use
 {meth}`~pyfsr.api.modules_admin.ModulesAdminAPI.field` directly.
 
 ### Field properties (the editor's Properties panel)
@@ -110,18 +110,21 @@ Every builder accepts these keyword options (they map 1:1 to the in-product edit
 | `enable_range` | `validation._enableRange` | Enables the min/max numeric range UI. |
 | `bulk_edit` | `bulkAction.allow` | Allow editing this field in bulk actions. |
 
-Conditional `required`/`visibility` take the FortiSOAR filter shape, e.g. "require
-`emailFrom` only when `type` is Phishing":
+Conditional `required`/`visibility` take a condition. Pass a {class}`~pyfsr.query.Query`
+and pyfsr renders the FortiSOAR filter shape for you — e.g. "require `emailFrom` only
+when `type` is Phishing":
 
 ```python
-admin.email_field("emailFrom", required={
-    "logic": "AND",
-    "filters": [
-        {"field": "type", "operator": "eq",
-         "value": "/api/3/picklists/<phishing-uuid>"}
-    ],
-})
+from pyfsr import Query
+
+admin.email_field("emailFrom",
+    required=Query(module="alerts").eq("type", "Phishing"))
 ```
+
+Because the `Query` is module-bound, the picklist field auto-resolves to
+`type.itemValue` and you compare by the friendly name instead of hunting down
+`/api/3/picklists/<uuid>`. A pre-built condition `dict` (or a plain `True`/`False`)
+still works if you'd rather assemble it yourself.
 
 ## Picklist fields
 
@@ -134,7 +137,7 @@ admin.picklist_field("threatTypes", "ThreatType", multi=True)  # multi-select (c
 
 - `picklist_name` is the picklist's **list name** (e.g. `"AlertSeverity"`), discoverable
   via `client.picklists`.
-- `multi=True` switches the widget to `multiselectpicklist` and sets `collection=True`.
+- `multi=True` switches the display type to `multiselectpicklist` and sets `collection=True`.
 - The builder writes the `dataSource` query that filters `picklists` by
   `listName__name == <picklist_name>`, sorted by `orderIndex`.
 
@@ -143,93 +146,75 @@ To create the picklist *values* themselves, manage `/api/3/picklist_names` and
 
 ## Relationships
 
-This is where "SOAR sometimes auto-creates the reverse field and sometimes doesn't" lives.
-There are three relationship widgets, and they behave **very differently** with respect to
-the field created on the *other* (target) module.
+Three relationship display types, distinguished by cardinality and which side owns the join:
 
-| Widget | Cardinality | `collection` | Owns join? | Reverse field on target? |
+| Display type | Cardinality | `collection` | Owns join? | Reverse field on target |
 | --- | --- | --- | --- | --- |
-| `lookup` | many-to-one | `False` | no | **Never** — one-directional pointer |
-| `manyToMany` | many-to-many | `True` | yes | **Yes if default inverse; no if custom `inversedField`** |
-| `oneToMany` | one-to-many | `True` | yes | **Must pre-exist** as a `lookup` on the target |
+| `lookup` | many-to-one | `False` | no | none — one-directional pointer |
+| `manyToMany` | many-to-many | `True` | yes | always exists (see below) |
+| `oneToMany` | one-to-many | `True` | yes | a `lookup` on the target |
 
-The wiring keys on each relationship attribute:
+Wiring keys on a relationship attribute:
 
-- **`type`** — the **target module type** (e.g. `"alerts"`), not `string`.
-- **`inversedField`** — the *name of the field on the target module* that points back.
+- **`type`** — the target module type (e.g. `"alerts"`), not `string`.
+- **`inversedField`** — name of the field on the target that points back.
 - **`ownsRelationship`** — `True` on the side that owns the join table.
 
-### Lookup (many-to-one): a single reference, no reverse
+**pyfsr keeps both sides valid for you.**
+{meth}`~pyfsr.api.modules_admin.ModulesAdminAPI.add_field` creates the reverse side on the
+target whenever the platform won't, so you only declare the relationship once. Pass
+`create_reverse=False` to opt out and manage the target side yourself.
+
+### Lookup (many-to-one)
 
 ```python
-admin.lookup_field("owner", "people")     # one person per record
+admin.add_field("incidents", admin.lookup_field("owner", "people"))
 ```
 
-A lookup is a single pointer to one record of the target. It is **not** a collection and
-owns nothing, so FortiSOAR creates **no reverse field** on the target. Two modules can each
-have a lookup to `people` independently. This is the safe, predictable relationship — use
-it whenever you just need "this record references one X".
+A single pointer to one target record — not a collection, owns nothing, and intentionally
+has **no** reverse field. Two modules can each look up `people` independently. Use it
+whenever a record just references one X.
 
-### Many-to-many: reverse field depends on `inversedField`
+### Many-to-many
 
 ```python
-# Default inverse — reverse field IS auto-created on the target:
-admin.relationship_field("campaigns", "campaigns")
+# Default inverse — FortiSOAR mirrors the reverse field itself:
+admin.add_field("incidents", admin.relationship_field("relatedAlerts", "alerts"))
 
-# Custom inverse name — reverse field is NOT auto-created:
-admin.relationship_field("campaigns", "campaigns", inversed_field="myAlerts")
+# Custom inverse name — pyfsr adds the matching reverse field to the target:
+admin.add_field("incidents",
+    admin.relationship_field("relatedAlerts", "alerts", inversed_field="parentIncidents"))
 ```
 
-Verified behavior (observed at **staging** time, before publish):
+A many-to-many always ends up two-directional. With the **default** inverse the platform
+creates the reverse field (named after the source module) at staging time. With a **custom**
+`inversed_field` the platform does not — so `add_field` adds the mirror `manyToMany`
+(`ownsRelationship=False`, `inversedField` pointing back) to the target for you.
 
-- With the **default** inverse (`inversed_field=None`), the editor immediately adds a
-  reverse `manyToMany` field to the target module, **named after the source module**, with
-  `ownsRelationship=False` and `inversedField` pointing back to your field. This is the
-  "it auto-created the field for me" case.
-- With a **custom** `inversed_field`, FortiSOAR stores your name on the owning side but
-  **does not** create the matching reverse field on the target. You must add it yourself
-  (a second `relationship_field` on the target pointing back). This is the "it didn't
-  create the field" case.
-
-### One-to-many: the reverse lookup must already exist
+### One-to-many
 
 ```python
-# On the target module FIRST, create the back-reference lookup:
-admin.add_field("agents", admin.lookup_field("router", "routers"))
-
-# Then the one-to-many on the source, whose inverse is that lookup's name:
-admin.add_field("routers", admin.relationship_field(
-    "agents", "agents", many=False, inversed_field="router"))
+admin.add_field("incidents",
+    admin.relationship_field("relatedAlerts", "alerts", many=False, inversed_field="incident"))
 ```
 
-A `oneToMany` is **not** self-sufficient: it requires a matching `lookup` (many-to-one)
-field on the target whose name equals `inversed_field`. If it is missing, **publish fails**
-with:
+A `oneToMany` requires a matching `lookup` (many-to-one) on the target whose name equals
+`inversed_field` — without it, publish fails with *"there is no lookup field present in
+'<target>'"*. `add_field` creates that lookup on the target automatically, so the single
+call above leaves both modules publishable. (The target module must already exist.)
 
-> `For many-to-one '<field>' field in '<module>' module there is no lookup field present in
-> '<target>' module.`
+## Verifying & publishing
 
-Create the lookup on the target *before* publishing.
-
-## Verifying reverse fields & publishing
-
-Because reverse-field creation is conditional, **always verify after publish** rather than
-assuming. The {meth}`~pyfsr.api.modules_admin.ModulesAdminAPI.reverse_field` helper resolves
-whatever reverse attribute (if any) the platform created:
+After publish, confirm the reverse attribute the platform actually stored with
+{meth}`~pyfsr.api.modules_admin.ModulesAdminAPI.reverse_field`:
 
 ```python
-admin.create_module("widgets", fields=[
-    admin.text_field("name", required=True),
-    admin.relationship_field("relatedAlerts", "alerts"),
-])
+admin.create_module("widgets", fields=[admin.text_field("name", required=True)])
+admin.add_field("widgets", admin.relationship_field("relatedAlerts", "alerts"))
 admin.publish()                       # appliance-wide; blocks until committed
 
-# Did the reverse field actually land on `alerts`?
 rev = admin.reverse_field("widgets", "relatedAlerts", published=True)
-if rev is None:
-    print("No reverse field — add it manually on the target if you need it.")
-else:
-    print("Reverse field:", rev["name"], rev["formType"])
+print("Reverse field:", rev["name"], rev["formType"])
 ```
 
 ```{warning}
@@ -276,8 +261,8 @@ before anything is sent:
 | **duplicate field name** in a module | **staging POST** (fast) | appliance already rejects — *"Duplicate field 'x'… names are case-insensitive"* |
 | **reserved key** `id` | **staging POST** (fast) | appliance already rejects — *"'id' is a reserved keyword"* |
 | **duplicate module** type | **staging POST** (fast) | appliance already rejects (uniqueness constraint) |
-| `oneToMany` with no lookup on target | publish | create the target lookup first (see Relationships) |
-| relationship to a non-existent target module | publish | verify the target exists first |
+| `oneToMany` with no lookup on target | publish | `add_field` creates the target lookup for you (see Relationships) |
+| relationship to a non-existent target module | publish | `add_field` raises a clear error naming the missing target |
 
 ```{note}
 The last group is *not* guarded client-side because the appliance already fails fast (at
@@ -316,13 +301,13 @@ per module). Pass `publish(precheck=False)` only if you deliberately want to ski
 ### Recommended authoring workflow
 
 1. Build all fields with the **typed builders** (correct `type`/`formType` guaranteed).
-2. For `oneToMany`, create the target-side `lookup` **first**.
-3. `create_module(...)` / `add_field(...)` → stages the draft.
-4. `pending_changes()` / `find_invalid_drafts()` → confirm only your modules are pending and
+2. `create_module(...)` / `add_field(...)` → stages the draft; `add_field` also stages the
+   reverse side of relationships on the target (the `oneToMany` target lookup, the
+   custom-inverse `manyToMany` mirror).
+3. `pending_changes()` / `find_invalid_drafts()` → confirm only your modules are pending and
    nothing staged (by you or anyone) would wedge the appliance-wide publish.
-5. `publish()` → prechecks for invalid drafts, commits, and **waits for the real commit**.
-6. `reverse_field(..., published=True)` → verify each relationship's reverse, and add any
-   missing reverse field manually, then publish again.
+4. `publish()` → prechecks for invalid drafts, commits, and **waits for the real commit**.
+5. `reverse_field(..., published=True)` → confirm each relationship's reverse landed.
 
 ## Module-level settings
 

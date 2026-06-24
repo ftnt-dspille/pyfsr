@@ -4,6 +4,14 @@ pyfsr offers two ways to work with FortiSOAR data: a generic
 {class}`~pyfsr.records.RecordSet` that works for **any** module, and typed,
 module-specific APIs like `client.alerts`.
 
+```{seealso}
+Runnable examples:
+[`examples/list_alerts.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/list_alerts.py)
+(a minimal read) and
+[`examples/upload_attachment_record.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/upload_attachment_record.py)
+(file upload + linking an attachment record).
+```
+
 ## Generic CRUD
 
 `client.records("<module>")` returns a {class}`~pyfsr.records.RecordSet` bound to that

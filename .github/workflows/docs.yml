@@ -66,6 +66,14 @@ jobs:
           make clean
           PYTHONPATH=$PYTHONPATH:${{ github.workspace }}/src make html SPHINXOPTS="-W --keep-going -n"
 
+      - name: Run doctests
+        # Executes the explicit doctest directives in the guides so documented
+        # examples can't silently rot (illustrative `>>>` snippets are excluded
+        # via doctest_test_doctest_blocks="" in conf.py).
+        run: |
+          cd docs
+          PYTHONPATH=$PYTHONPATH:${{ github.workspace }}/src make doctest
+
       - name: Check build output
         run: |
           if [ ! -f docs/build/html/index.html ]; then

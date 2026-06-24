@@ -28,3 +28,17 @@ class UserPasswordAuth(BaseAuth):
 
     def get_auth_headers(self) -> dict:
         return {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
+
+    def refresh(self) -> dict:
+        """Re-authenticate (mint a fresh session token) and return new headers.
+
+        FortiSOAR session tokens expire; a long-lived client that authenticated
+        once at construction will eventually get ``401``/``403`` ("HMAC signature
+        has expired"). The client calls this to recover and retry the request.
+        """
+        self.token = self._authenticate()
+        return self.get_auth_headers()
+
+    @property
+    def can_refresh(self) -> bool:
+        return True

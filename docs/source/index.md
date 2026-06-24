@@ -24,63 +24,70 @@ alerts = client.alerts.list()
 ::::{grid} 1 2 2 2
 :gutter: 3
 
-:::{grid-item-card} 🚀 Getting Started
+:::{grid-item-card} Getting Started
 :link: getting-started
 :link-type: doc
 
 Install pyfsr, connect to an appliance, and make your first calls.
 :::
 
-:::{grid-item-card} 🔑 Authentication
+:::{grid-item-card} Authentication
 :link: guides/authentication
 :link-type: doc
 
 API keys vs. username/password, SSL options, and environment config.
 :::
 
-:::{grid-item-card} 📇 Working with Records
+:::{grid-item-card} Working with Records
 :link: guides/records
 :link-type: doc
 
 Generic CRUD over any module, typed models, and picklist resolution.
 :::
 
-:::{grid-item-card} 🔎 Querying
+:::{grid-item-card} Querying
 :link: guides/querying
 :link-type: doc
 
 Build FortiSOAR queries fluently with the `Query` DSL and paginate results.
 :::
 
-:::{grid-item-card} 🧱 Module Administration
+:::{grid-item-card} Module Administration
 :link: guides/module-admin
 :link-type: doc
 
 Create modules, add and alter fields, track pending changes, and publish.
 :::
 
-:::{grid-item-card} 🧩 Field Schema Reference
+:::{grid-item-card} Field Schema Reference
 :link: guides/module-field-schema
 :link-type: doc
 
 Every field type, its properties, and how relationship fields wire to other modules.
 :::
 
-:::{grid-item-card} 🧩 Connectors & Agents
+:::{grid-item-card} Connectors
 :link: guides/connectors
 :link-type: doc
 
 Discover, configure, execute, and install connectors; manage remote agents.
 :::
 
-:::{grid-item-card} 🤖 AI & Agents
+:::{grid-item-card} Playbook Authoring
+:link: guides/playbook-authoring
+:link-type: doc
+
+Author playbooks in YAML, compile them, and deploy through the API or CLI.
+:::
+
+:::{grid-item-card} AI & Agents
 :link: guides/ai-agents
 :link-type: doc
 
 Expose FortiSOAR as tools to Claude, OpenAI, or the bundled MCP server.
 :::
 
-:::{grid-item-card} 📚 API Reference
+:::{grid-item-card} API Reference
 :link: reference
 :link-type: doc
 
@@ -100,6 +107,7 @@ guides/querying
 guides/module-admin
 guides/module-field-schema
 guides/connectors
+guides/playbook-authoring
 guides/ai-agents
 ```
 

@@ -29,6 +29,25 @@ class BaseAuth(ABC):
         """Get authentication headers for requests"""
         pass
 
+    def refresh(self) -> dict:
+        """Re-establish credentials and return fresh auth headers.
+
+        Default is a no-op (returns the current headers) — correct for static
+        credentials like an API key. Token-based auth (username/password)
+        overrides this to re-authenticate, so a long-lived client can recover
+        from an expired session token mid-run instead of failing the request.
+        """
+        return self.get_auth_headers()
+
+    @property
+    def can_refresh(self) -> bool:
+        """Whether :meth:`refresh` mints a *new* credential (vs. a no-op).
+
+        The client only retries an auth-failed request when this is True, so
+        static-credential auth (API key) doesn't pointlessly re-send.
+        """
+        return False
+
     @property
     def unsupported_operations(self) -> set[str]:
         """Get set of unsupported operations"""

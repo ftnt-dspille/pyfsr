@@ -27,6 +27,7 @@ version = ".".join(release.split("+")[0].split(".")[:3])
 # -- Extensions --------------------------------------------------------------
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx.ext.doctest",  # execute doctest blocks via `make doctest`
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
@@ -42,6 +43,29 @@ source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 # MyST niceties: colon-fences (for sphinx-design directives) and smart links.
 myst_enable_extensions = ["colon_fence", "deflist"]
 myst_heading_anchors = 3
+
+# `make doctest` — every doctest block runs with these names pre-imported, so
+# guide examples stay focused on the API rather than boilerplate imports.
+doctest_global_setup = "from pyfsr import Query"
+
+# Only execute *explicit* doctest directives (```{doctest} / .. doctest::). The
+# many illustrative `>>>` snippets in API docstrings reference live clients and
+# undefined names — they document shape, not runnable code — so don't collect
+# them. As guide/docstring examples are converted to real doctests, they opt in
+# via the directive and start getting verified by CI.
+doctest_test_doctest_blocks = ""
+
+# -- Napoleon (docstring style) ----------------------------------------------
+# pyfsr docstrings use Google style (``Args:`` / ``Returns:`` / ``Raises:``).
+# Pin the config explicitly rather than relying on defaults so the rendered
+# signatures stay stable: NumPy parsing off, params rendered as a typed field
+# list, and ``Returns`` kept untyped-rtype-free for cleaner output.
+napoleon_google_docstring = True
+napoleon_numpy_docstring = False
+napoleon_use_param = True
+napoleon_use_rtype = True
+napoleon_use_ivar = True
+napoleon_include_init_with_doc = False
 
 # SPHINX_OFFLINE=1 drops third-party inventories (requests, pydantic) that
 # fail when a VPN/proxy does SSL inspection, turning network errors into -W

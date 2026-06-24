@@ -188,6 +188,29 @@ def test_typed_field_rejects_relationship_widgets():
         ModulesAdminAPI.typed_field("x", "manyToMany")
 
 
+def test_required_accepts_query_as_condition():
+    from pyfsr import Query
+
+    f = ModulesAdminAPI.email_field("emailFrom", required=Query(module="alerts").eq("type", "Phishing"))
+    cond = f["validation"]["required"]
+    assert cond["logic"] == "AND"
+    # the module-bound Query auto-resolves the picklist to .itemValue
+    assert cond["filters"] == [{"field": "type.itemValue", "operator": "eq", "value": "Phishing"}]
+
+
+def test_visibility_accepts_query_as_condition():
+    from pyfsr import Query
+
+    g = ModulesAdminAPI.text_field("notes", visibility=Query().eq("status.itemValue", "Open"))
+    assert g["visibility"]["filters"][0]["field"] == "status.itemValue"
+
+
+def test_required_bool_and_dict_pass_through_unchanged():
+    assert ModulesAdminAPI.text_field("a", required=True)["validation"]["required"] is True
+    raw = {"logic": "OR", "filters": []}
+    assert ModulesAdminAPI.text_field("b", required=raw)["validation"]["required"] == raw
+
+
 def test_lookup_field_is_single_ref_with_no_reverse():
     f = ModulesAdminAPI.lookup_field("owner", "people")
     assert f["type"] == "people" and f["formType"] == "lookup"
@@ -524,3 +547,107 @@ def test_delete_module_not_found_raises():
         assert False, "expected ValueError"
     except ValueError as e:
         assert "not found" in str(e)
+
+
+class MultiModuleClient:
+    """In-memory staging store across several modules, for reverse-field tests."""
+
+    def __init__(self, modules):
+        # modules: {name: [attribute dicts]}
+        self.staging = {
+            name: {"uuid": f"u-{name}", "type": name, "module": name, "attributes": list(attrs)}
+            for name, attrs in modules.items()
+        }
+        self.put_calls = []
+
+    def get(self, endpoint, params=None, **kw):
+        if endpoint == "/api/3/staging_model_metadatas":
+            return {"hydra:member": list(self.staging.values())}
+        if endpoint == "/api/3/model_metadatas":
+            return {"hydra:member": []}  # nothing published
+        uuid = endpoint.rsplit("/", 1)[-1]
+        return next((m for m in self.staging.values() if m["uuid"] == uuid), None)
+
+    def put(self, endpoint, data=None, params=None, **kw):
+        self.put_calls.append((endpoint, data))
+        # uuid is in the URL (the body is just {"attributes": [...]}); persist back
+        # so a follow-up reverse add sees prior state.
+        uuid = endpoint.rsplit("/", 1)[-1]
+        for m in self.staging.values():
+            if m["uuid"] == uuid and "attributes" in (data or {}):
+                m["attributes"] = data["attributes"]
+        return {"ok": True, **(data or {})}
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        return {"uuid": "new", **(data or {})}
+
+
+def _attrs(client, module):
+    return {a["name"]: a for a in client.staging[module]["attributes"]}
+
+
+def test_add_field_one_to_many_creates_target_lookup():
+    c = MultiModuleClient({"incidents": [{"name": "name", "type": "string", "formType": "text"}], "alerts": []})
+    api = ModulesAdminAPI(c)
+    rel = api.relationship_field("relatedAlerts", "alerts", many=False, inversed_field="incident")
+    api.add_field("incidents", rel)
+    # the oneToMany is on incidents...
+    assert "relatedAlerts" in _attrs(c, "incidents")
+    # ...and pyfsr auto-created the required lookup on the alerts target
+    rev = _attrs(c, "alerts")["incident"]
+    assert rev["formType"] == "lookup" and rev["type"] == "incidents"
+    assert rev["inversedField"] == "relatedAlerts"
+
+
+def test_add_field_custom_inverse_many_to_many_creates_mirror():
+    c = MultiModuleClient({"incidents": [], "alerts": []})
+    api = ModulesAdminAPI(c)
+    rel = api.relationship_field("relatedAlerts", "alerts", inversed_field="parentIncidents")
+    api.add_field("incidents", rel)
+    rev = _attrs(c, "alerts")["parentIncidents"]
+    assert rev["formType"] == "manyToMany" and rev["type"] == "incidents"
+    assert rev["ownsRelationship"] is False and rev["inversedField"] == "relatedAlerts"
+
+
+def test_add_field_default_inverse_many_to_many_adds_no_reverse():
+    c = MultiModuleClient({"incidents": [], "alerts": []})
+    api = ModulesAdminAPI(c)
+    api.add_field("incidents", api.relationship_field("relatedAlerts", "alerts"))
+    # default inverse: platform mirrors it, so pyfsr leaves the target untouched
+    assert c.staging["alerts"]["attributes"] == []
+
+
+def test_add_field_lookup_adds_no_reverse():
+    c = MultiModuleClient({"incidents": [], "people": []})
+    api = ModulesAdminAPI(c)
+    api.add_field("incidents", api.lookup_field("owner", "people"))
+    assert c.staging["people"]["attributes"] == []
+
+
+def test_add_field_create_reverse_false_skips_reverse():
+    c = MultiModuleClient({"incidents": [], "alerts": []})
+    api = ModulesAdminAPI(c)
+    rel = api.relationship_field("relatedAlerts", "alerts", many=False, inversed_field="incident")
+    api.add_field("incidents", rel, create_reverse=False)
+    assert c.staging["alerts"]["attributes"] == []
+
+
+def test_add_field_reverse_missing_target_raises():
+    c = MultiModuleClient({"incidents": []})  # no 'alerts' module
+    api = ModulesAdminAPI(c)
+    rel = api.relationship_field("relatedAlerts", "alerts", many=False, inversed_field="incident")
+    try:
+        api.add_field("incidents", rel)
+        assert False, "expected ValueError"
+    except ValueError as e:
+        assert "does not exist" in str(e)
+
+
+def test_add_field_reverse_is_idempotent():
+    c = MultiModuleClient({"incidents": [], "alerts": []})
+    api = ModulesAdminAPI(c)
+    rel = api.relationship_field("relatedAlerts", "alerts", many=False, inversed_field="incident")
+    api.add_field("incidents", rel)
+    # re-adding (e.g. a retry) must not duplicate the reverse lookup
+    api._ensure_reverse_field(*api._reverse_attr_for("incidents", rel), source_module="incidents", source_field=rel)
+    assert sum(1 for a in c.staging["alerts"]["attributes"] if a["name"] == "incident") == 1

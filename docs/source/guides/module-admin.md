@@ -53,14 +53,14 @@ admin.get_field("alerts", "name")
 ## Building fields
 
 ```{tip}
-For the **full field-type catalogue** — every widget, its storage type, properties, and
-relationship/reverse-field semantics — see {doc}`module-field-schema`. This section is a
+For the **full field-type catalogue** — every display type, its storage type, properties,
+and relationship/reverse-field semantics — see {doc}`module-field-schema`. This section is a
 quick start; that page is the authoring reference.
 ```
 
-Prefer the **typed builders**, which set the storage `type` and UI `formType` to a
-matching pair for you (e.g. a `datetime` widget must store `integer`; a `text` widget must
-store `string`):
+Prefer the **typed builders**, which set the storage `type` and `formType` (display type)
+to a matching pair for you (e.g. a `datetime` field must store `integer`; a `text` field
+must store `string`):
 
 ```python
 admin.text_field("summary", area=True)     # string / textarea
@@ -71,14 +71,14 @@ admin.object_field("payload", label="Payload")   # object / object
 ```
 
 ```{warning}
-There is **no `text` storage type** (and no `json` type). Text widgets store `string`;
+There is **no `text` storage type** (and no `json` type). Text fields store `string`;
 JSON stores `object`. Hand-setting `db_type="text"` stages fine but **fails at publish**
 ("Attribute type 'text' does not exist"). The typed builders avoid this entirely.
 ```
 
 {meth}`~pyfsr.api.modules_admin.ModulesAdminAPI.field` is the low-level escape hatch where
-you set both axes yourself; `admin.typed_field(name, form_type)` derives the storage type
-for any scalar widget. The object field above produces:
+you set both axes yourself; `admin.typed_field(name, display_type)` derives the storage
+type for any scalar display type. The object field above produces:
 
 ```json
 {
@@ -132,12 +132,11 @@ admin.lookup_field("owner", "people", label="Owner")
 admin.relationship_field("relatedalerts", "alerts", label="Related Alerts")
 ```
 
-```{important}
-Relationships are the part where FortiSOAR "sometimes" creates a field on the *other*
-module and sometimes doesn't — a `lookup` never does, a default `manyToMany` does, a
-custom-inverse `manyToMany` doesn't, and a `oneToMany` needs the reverse `lookup` to exist
-first. The rules and verification (`reverse_field()`) are documented in detail in
-{doc}`module-field-schema`.
+```{note}
+`add_field` keeps both sides of a relationship valid: it creates the reverse field on the
+target when the platform won't (the `oneToMany` target lookup, the custom-inverse
+`manyToMany` mirror). Pass `create_reverse=False` to manage the target side yourself. See
+{doc}`module-field-schema` for the per-relationship rules and `reverse_field()` verification.
 ```
 
 ## Creating a module

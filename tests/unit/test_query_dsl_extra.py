@@ -140,8 +140,8 @@ class TestOrConvenience:
         """or_() inherits the module context for field validation."""
         # When using or_() inline, the OR query should have the same module
         q = Query(module="alerts").eq("status", "Open").or_()
-        # The proxy's underlying or_query should have module="alerts"
-        assert q._or._module == "alerts"  # type: ignore[attr-defined]
+        # The proxy's underlying group query should have module="alerts"
+        assert q._group._module == "alerts"  # type: ignore[attr-defined]
 
     def test_or_complex_nesting(self):
         """or_() can be combined with group() for complex boolean logic."""
@@ -166,6 +166,121 @@ class TestOrConvenience:
         assert isinstance(model, QueryBody)
         assert len(model.filters) == 2
         assert model.filters[1].logic == "OR"  # type: ignore[attr-defined]
+
+
+class TestAndConvenience:
+    """Tests for the and_() convenience method (AND counterpart to or_())."""
+
+    def test_and_with_explicit_query_argument(self):
+        """and_(Query(...)) nests an AND group."""
+        and_group = Query("AND").eq("type", "A").eq("severity", "High")
+        body = Query("OR").eq("status", "Open").and_(and_group).to_body()
+        assert body["logic"] == "OR"
+        assert body["filters"][0]["field"] == "status"
+        assert body["filters"][1]["logic"] == "AND"
+        assert len(body["filters"][1]["filters"]) == 2
+
+    def test_and_returns_self_for_chaining(self):
+        """and_(Query(...)) returns self so it's chainable."""
+        and_group = Query("AND").eq("a", 1)
+        body = Query("OR").and_(and_group).limit(10).to_body()
+        assert body["limit"] == 10
+        assert body["filters"][0]["logic"] == "AND"
+
+    def test_and_with_none_builds_group_inline(self):
+        """and_() with no args returns an AND-context that builds inline."""
+        body = Query("OR").eq("status", "Open").and_().eq("type", "A").eq("severity", "High").to_body()
+        assert body["filters"][0]["field"] == "status"
+        assert body["filters"][1]["logic"] == "AND"
+        and_filters = body["filters"][1]["filters"]
+        assert len(and_filters) == 2
+        assert and_filters[0]["field"] == "type"
+        assert and_filters[1]["field"] == "severity"
+
+    def test_and_proxy_works_with_shape_methods(self):
+        """and_() proxy supports shape methods on the parent query."""
+        body = Query("OR").and_().eq("type", "A").eq("severity", "High").sort("createDate").limit(50).to_body()
+        assert body["filters"][0]["logic"] == "AND"
+        assert body["sort"] == [{"field": "createDate", "direction": "DESC"}]
+        assert body["limit"] == 50
+
+    def test_and_proxy_rejects_non_query_type(self):
+        """and_(not_a_query) raises TypeError."""
+        with pytest.raises(TypeError, match="and_.. expects a Query"):
+            Query().and_("not a query")  # type: ignore[arg-type]
+
+    def test_and_with_module_preserves_context(self):
+        """and_() inherits the module context for field validation."""
+        q = Query("OR", module="alerts").eq("status.itemValue", "Open").and_()
+        assert q._group._module == "alerts"  # type: ignore[attr-defined]
+
+    def test_and_proxy_model_method(self):
+        """and_() proxy.model() commits the AND group and returns the parent's model."""
+        from pyfsr.query_models import QueryBody
+
+        model = Query("OR").eq("status", "Open").and_().eq("type", "A").model()
+        assert isinstance(model, QueryBody)
+        assert len(model.filters) == 2
+        assert model.filters[1].logic == "AND"  # type: ignore[attr-defined]
+
+    def test_nested_or_and_round_trip(self):
+        """(A AND (B OR C)) OR (D AND E) is expressible with or_/and_ + group."""
+        body = (
+            Query("OR")
+            .and_(Query("AND").eq("status", "Open").group(Query("OR").eq("type", "A").eq("type", "B")))
+            .and_(Query("AND").eq("severity", "High").eq("owner", "alice"))
+            .to_body()
+        )
+        assert body["logic"] == "OR"
+        assert len(body["filters"]) == 2
+        assert body["filters"][0]["logic"] == "AND"
+        # inner OR group nested inside the first AND group
+        assert body["filters"][0]["filters"][1]["logic"] == "OR"
+        assert body["filters"][1]["logic"] == "AND"
+
+
+class TestPicklistItemValueAutoResolve:
+    """Module-bound queries auto-append .itemValue for bare picklist fields."""
+
+    def _field(self, q):
+        return q.to_body()["filters"][0]["field"]
+
+    def test_bare_picklist_field_gets_itemvalue(self):
+        assert self._field(Query(module="alerts").eq("severity", "High")) == "severity.itemValue"
+
+    def test_explicit_itemvalue_path_unchanged(self):
+        assert self._field(Query(module="alerts").eq("severity.itemValue", "High")) == "severity.itemValue"
+
+    def test_iri_value_compares_by_iri_not_itemvalue(self):
+        assert self._field(Query(module="alerts").eq("severity", "/api/3/picklists/abc")) == "severity"
+
+    def test_uuid_value_compares_by_iri_not_itemvalue(self):
+        u = "3f2a1b4c-5d6e-7081-92a3-b4c5d6e7f809"
+        assert self._field(Query(module="alerts").eq("severity", u)) == "severity"
+
+    def test_not_module_bound_is_untouched(self):
+        assert self._field(Query().eq("severity", "High")) == "severity"
+
+    def test_non_picklist_relationship_untouched(self):
+        # assignedTo -> people (a module ref, not a picklist): leave it explicit
+        assert self._field(Query(module="alerts").eq("assignedTo", "x")) == "assignedTo"
+
+    def test_scalar_field_untouched(self):
+        assert self._field(Query(module="alerts").eq("name", "x")) == "name"
+
+    def test_in_with_plain_values_resolves(self):
+        assert self._field(Query(module="alerts").in_("severity", ["High", "Low"])) == "severity.itemValue"
+
+    def test_in_with_any_iri_value_stays_bare(self):
+        q = Query(module="alerts").in_("severity", ["High", "/api/3/picklists/x"])
+        assert self._field(q) == "severity"
+
+    def test_existence_operator_not_resolved(self):
+        # exists() targets the field itself, not its itemValue
+        assert self._field(Query(module="alerts").exists("severity")) == "severity"
+
+    def test_double_underscore_path_untouched(self):
+        assert self._field(Query(module="alerts").eq("severity__itemValue", "High")) == "severity__itemValue"
 
 
 class TestRelatedMethod:
