@@ -124,3 +124,123 @@ def test_str_picklist_field_collapses_to_iri():
 def test_str_field_plain_iri_unchanged():
     alert = Alert.model_validate({"uuid": "a1", "modifyUser": "/api/3/people/u-1"})
     assert alert.modifyUser == "/api/3/people/u-1"
+
+
+# -- integration models: status field 7.x<->8.0 tolerance --------------------
+
+
+def test_connector_config_status_as_int_7x_active():
+    """ConnectorConfig.status tolerates 7.x int active-flag (1 = active)."""
+    from pyfsr.models import ConnectorConfig
+
+    cfg = ConnectorConfig.model_validate(
+        {
+            "id": 37,
+            "config_id": "cfg-7",
+            "name": "prod",
+            "default": True,
+            "status": 1,
+            "config": {"k": "v"},
+            "connector": 16,
+        }
+    )
+    assert cfg.status == 1
+    assert cfg.config_id == "cfg-7"
+
+
+def test_connector_config_status_as_int_7x_inactive():
+    """ConnectorConfig.status tolerates 7.x int status 0 (inactive)."""
+    from pyfsr.models import ConnectorConfig
+
+    cfg = ConnectorConfig.model_validate(
+        {
+            "config_id": "cfg-7",
+            "status": 0,
+        }
+    )
+    assert cfg.status == 0
+
+
+def test_connector_config_status_as_8x_nested_op_envelope():
+    """FortiSOAR 8.0 PUT echoes row with async op-envelope in status; coerces to None."""
+    from pyfsr.models import ConnectorConfig
+
+    cfg = ConnectorConfig.model_validate(
+        {
+            "id": 37,
+            "config_id": "cfg-7",
+            "name": "prod",
+            "default": True,
+            "status": {"status": "finished", "message": "Configuration prod has been updated successfully"},
+            "config": {"k": "v"},
+            "connector": 16,
+        }
+    )
+    # Op-envelope coerced to None (no active-flag conveyed)
+    assert cfg.status is None
+    assert cfg.config_id == "cfg-7"
+    assert cfg.name == "prod"
+    assert cfg.default is True
+
+
+def test_connector_config_status_string_coerces_to_none():
+    """Non-int, non-dict status (e.g. unexpected string) coerces to None."""
+    from pyfsr.models import ConnectorConfig
+
+    cfg = ConnectorConfig.model_validate(
+        {
+            "config_id": "cfg-7",
+            "status": "finished",
+        }
+    )
+    assert cfg.status is None
+
+
+def test_connector_config_status_bool_coerces_to_none():
+    """Bool status coerces to None to avoid True->1 surprises."""
+    from pyfsr.models import ConnectorConfig
+
+    cfg = ConnectorConfig.model_validate(
+        {
+            "config_id": "cfg-7",
+            "status": True,
+        }
+    )
+    assert cfg.status is None
+
+
+def test_connector_config_status_missing_defaults_to_none():
+    """Missing status defaults to None."""
+    from pyfsr.models import ConnectorConfig
+
+    cfg = ConnectorConfig.model_validate(
+        {
+            "config_id": "cfg-7",
+        }
+    )
+    assert cfg.status is None
+
+
+def test_connector_config_7x_vs_8x_normalization():
+    """7.x int(1) and 8.0 op-envelope normalize consistently (int vs None respectively)."""
+    from pyfsr.models import ConnectorConfig
+
+    cfg_7x = ConnectorConfig.model_validate(
+        {
+            "config_id": "cfg-7",
+            "name": "prod",
+            "status": 1,
+        }
+    )
+    cfg_8x = ConnectorConfig.model_validate(
+        {
+            "config_id": "cfg-7",
+            "name": "prod",
+            "status": {"status": "finished", "message": "..."},
+        }
+    )
+    # Both parse successfully; 7.x preserves active flag, 8.x coerces to None
+    assert cfg_7x.config_id == cfg_8x.config_id
+    assert cfg_7x.name == cfg_8x.name
+    assert cfg_7x.status == 1
+    assert cfg_8x.status is None

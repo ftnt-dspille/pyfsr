@@ -248,3 +248,189 @@ def test_request_reauth_fires_only_once(mock_client, mock_response, monkeypatch)
     with pytest.raises(PermissionError):
         mock_client.request("GET", "/api/3/alerts")
     assert state["data_calls"] == 2  # original + exactly one replay, then raise
+
+
+# -- version() fallback chain ------------------------------------------------
+def test_version_from_appliances_endpoint(mock_client, mock_response, monkeypatch):
+    """version() returns version string from /api/3/appliances."""
+
+    def mock_request(*args, **kwargs):
+        url = args[1] if len(args) > 1 else kwargs.get("url", "")
+        if "/api/3/appliances" in url:
+            return mock_response(json_data={"@version": "7.4.2", "build": "123"})
+        return mock_response(status_code=404)
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    version = mock_client.version()
+    assert version == "7.4.2"
+
+
+def test_version_fallback_to_license_endpoint(mock_client, mock_response, monkeypatch):
+    """version() falls back to /api/auth/license when /api/3/appliances fails."""
+
+    def mock_request(*args, **kwargs):
+        url = args[1] if len(args) > 1 else kwargs.get("url", "")
+        if "/api/3/appliances" in url:
+            return mock_response(status_code=404, json_data={"message": "Not found"})
+        if "/api/auth/license" in url:
+            return mock_response(json_data={"version": "7.3.1"})
+        return mock_response(status_code=404)
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    version = mock_client.version()
+    assert version == "7.3.1"
+
+
+def test_version_fallback_to_system_version_endpoint(mock_client, mock_response, monkeypatch):
+    """version() falls back to /api/version when appliances and license fail."""
+
+    def mock_request(*args, **kwargs):
+        url = args[1] if len(args) > 1 else kwargs.get("url", "")
+        if "/api/3/appliances" in url:
+            return mock_response(status_code=404, json_data={"message": "Not found"})
+        if "/api/auth/license" in url:
+            return mock_response(status_code=404, json_data={"message": "Not found"})
+        if "/api/version" in url:
+            return mock_response(json_data={"version": "7.2.0"})
+        return mock_response(status_code=404)
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    version = mock_client.version()
+    assert version == "7.2.0"
+
+
+def test_version_returns_dict_when_multiple_fields(mock_client, mock_response, monkeypatch):
+    """version() returns dict with version + build when both are present."""
+
+    def mock_request(*args, **kwargs):
+        url = args[1] if len(args) > 1 else kwargs.get("url", "")
+        if "/api/3/appliances" in url:
+            return mock_response(
+                json_data={
+                    "@version": "7.4.2",
+                    "build": "456",
+                    "@id": "/appliances/1",
+                }
+            )
+        return mock_response(status_code=404)
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    version = mock_client.version()
+    # Should return the first non-@type, non-special key or the version string
+    assert version == "7.4.2"
+
+
+def test_version_raises_when_all_endpoints_fail(mock_client, mock_response, monkeypatch):
+    """version() raises FortiSOARException when all fallback endpoints fail."""
+    from pyfsr.exceptions import FortiSOARException
+
+    def mock_request(*args, **kwargs):
+        return mock_response(status_code=404, json_data={"message": "Not found"})
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    with pytest.raises(FortiSOARException) as exc:
+        mock_client.version()
+
+    error_msg = str(exc.value)
+    assert "Could not retrieve FortiSOAR version" in error_msg
+    assert "/api/3/appliances" in error_msg
+    assert "/api/auth/license" in error_msg
+    assert "/api/version" in error_msg
+
+
+def test_version_returns_appliances_dict_with_extra_fields(mock_client, mock_response, monkeypatch):
+    """version() returns full dict from /api/3/appliances when fields present."""
+
+    def mock_request(*args, **kwargs):
+        url = args[1] if len(args) > 1 else kwargs.get("url", "")
+        if "/api/3/appliances" in url:
+            return mock_response(
+                json_data={
+                    "@version": "7.5.0",
+                    "build": "789",
+                    "name": "FortiSOAR",
+                    "@id": "/appliances/1",
+                }
+            )
+        return mock_response(status_code=404)
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    version = mock_client.version()
+    # Should return the @version string since it exists
+    assert version == "7.5.0"
+
+
+def test_version_returns_license_dict(mock_client, mock_response, monkeypatch):
+    """version() returns dict from license endpoint if appliances fails."""
+
+    def mock_request(*args, **kwargs):
+        url = args[1] if len(args) > 1 else kwargs.get("url", "")
+        if "/api/3/appliances" in url:
+            return mock_response(status_code=404, json_data={"message": "Not found"})
+        if "/api/auth/license" in url:
+            return mock_response(
+                json_data={
+                    "version": "7.3.1",
+                    "licensee": "Test Corp",
+                    "expiryDate": "2025-12-31",
+                }
+            )
+        return mock_response(status_code=404)
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    version = mock_client.version()
+    assert version == "7.3.1"
+
+
+def test_version_with_network_error_falls_back(mock_client, mock_response, monkeypatch):
+    """version() tolerates exceptions and tries next endpoint."""
+
+    def mock_request(*args, **kwargs):
+        url = args[1] if len(args) > 1 else kwargs.get("url", "")
+        if "/api/3/appliances" in url:
+            raise requests.exceptions.ConnectionError("Network error")
+        if "/api/auth/license" in url:
+            return mock_response(json_data={"version": "7.3.0"})
+        return mock_response(status_code=404)
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    version = mock_client.version()
+    assert version == "7.3.0"
+
+
+def test_version_exhausts_all_fallbacks_then_raises(mock_client, mock_response, monkeypatch):
+    """version() tries all 3 endpoints before raising exception."""
+    from pyfsr.exceptions import FortiSOARException
+
+    call_count = {"appliances": 0, "license": 0, "version": 0}
+
+    def mock_request(*args, **kwargs):
+        url = args[1] if len(args) > 1 else kwargs.get("url", "")
+        if "/api/3/appliances" in url:
+            call_count["appliances"] += 1
+            return mock_response(status_code=404)
+        if "/api/auth/license" in url:
+            call_count["license"] += 1
+            return mock_response(status_code=404)
+        if "/api/version" in url:
+            call_count["version"] += 1
+            return mock_response(status_code=404)
+        return mock_response(status_code=404)
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    with pytest.raises(FortiSOARException):
+        mock_client.version()
+
+    # All three endpoints should have been attempted
+    assert call_count["appliances"] >= 1
+    assert call_count["license"] >= 1
+    assert call_count["version"] >= 1

@@ -21,10 +21,11 @@ class _NoopPicklists:
 class FakeClient:
     """Records get/post/put/delete calls and returns scripted responses."""
 
-    def __init__(self, responses=None):
+    def __init__(self, responses=None, playbooks=None):
         self.calls = []
         self.responses = responses or {}
         self.picklists = _NoopPicklists()
+        self.playbooks = playbooks
 
     def get(self, endpoint, params=None, **kwargs):
         self.calls.append(("GET", endpoint, params, None))
@@ -285,6 +286,140 @@ def test_upsert_posts_to_upsert_path():
     rec = RecordSet(client, "alerts").upsert({"name": "x"})
     assert client.calls[0] == ("POST", "/api/3/upsert/alerts", None, {"name": "x"})
     assert rec["uuid"] == "u9"
+
+
+# -- get_or_create ----------------------------------------------------------
+def test_get_or_create_returns_existing_with_false():
+    existing = {"uuid": "u1", "name": "Alert A", "alias": "alert_a"}
+    client = FakeClient({"/api/query/alerts": {"hydra:member": [existing], "hydra:totalItems": 1}})
+    rec, created = RecordSet(client, "alerts").get_or_create({"name": "Alert A", "alias": "alert_a"}, key="alias")
+    assert created is False
+    assert rec["uuid"] == "u1"
+    assert rec["alias"] == "alert_a"
+
+
+def test_get_or_create_creates_when_missing():
+    client = FakeClient(
+        {
+            "/api/query/alerts": {"hydra:member": [], "hydra:totalItems": 0},
+            "/api/3/alerts": {"uuid": "new-uuid", "name": "Alert B", "alias": "alert_b"},
+        }
+    )
+    rec, created = RecordSet(client, "alerts").get_or_create({"name": "Alert B", "alias": "alert_b"}, key="alias")
+    assert created is True
+    assert rec["uuid"] == "new-uuid"
+    # Verify it queried first, then created
+    assert client.calls[0][0] == "POST"  # query call
+    assert client.calls[1][0] == "POST"  # create call
+
+
+def test_get_or_create_with_multiple_keys():
+    client = FakeClient(
+        {
+            "/api/query/alerts": {"hydra:member": [], "hydra:totalItems": 0},
+            "/api/3/alerts": {"uuid": "new", "severity": "High", "source": "api"},
+        }
+    )
+    rec, created = RecordSet(client, "alerts").get_or_create(
+        {"severity": "High", "source": "api", "name": "Test"}, key=["severity", "source"]
+    )
+    assert created is True
+    # Should have queried with both keys
+    _, _, _, query_data = client.calls[0]
+    assert len(query_data["filters"]) == 2
+
+
+def test_get_or_create_rejects_missing_key_field():
+    client = FakeClient()
+    with pytest.raises(ValueError, match="key field 'alias' to be present"):
+        RecordSet(client, "alerts").get_or_create(
+            {"name": "Alert"},  # missing 'alias'
+            key="alias",
+        )
+
+
+def test_get_or_create_with_raw_returns_plain_dict():
+    existing = {"uuid": "u1", "name": "x"}
+    client = FakeClient({"/api/query/alerts": {"hydra:member": [existing], "hydra:totalItems": 1}})
+    rec, created = RecordSet(client, "alerts").get_or_create({"name": "x"}, key="name", raw=True)
+    assert isinstance(rec, dict)
+    assert created is False
+
+
+# -- upsert with key --------------------------------------------------------
+def test_upsert_with_key_uses_get_or_create():
+    client = FakeClient(
+        {
+            "/api/query/alerts": {"hydra:member": [], "hydra:totalItems": 0},
+            "/api/3/alerts": {"uuid": "new", "alias": "alert_x", "name": "Alert X"},
+        }
+    )
+    rec = RecordSet(client, "alerts").upsert({"alias": "alert_x", "name": "Alert X"}, key="alias")
+    assert rec["uuid"] == "new"
+
+
+def test_upsert_with_key_updates_existing():
+    existing = {"uuid": "u1", "alias": "alert_a", "name": "Old Name"}
+    client = FakeClient(
+        {
+            "/api/query/alerts": {"hydra:member": [existing], "hydra:totalItems": 1},
+            "/api/3/alerts/u1": {"uuid": "u1", "alias": "alert_a", "name": "New Name"},
+        }
+    )
+    rec = RecordSet(client, "alerts").upsert({"alias": "alert_a", "name": "New Name"}, key="alias")
+    # Should have queried, found it, then updated
+    calls_by_method = {c[0]: c for c in client.calls}
+    assert "POST" in calls_by_method  # query
+    assert "PUT" in calls_by_method  # update
+    assert rec["name"] == "New Name"
+
+
+def test_upsert_without_key_uses_natural_key_endpoint():
+    client = FakeClient({"/api/3/upsert/alerts": {"uuid": "u1", "name": "x"}})
+    RecordSet(client, "alerts").upsert({"name": "x"})
+    # Should hit the /api/3/upsert/ endpoint, not query-then-update
+    assert client.calls[0] == ("POST", "/api/3/upsert/alerts", None, {"name": "x"})
+
+
+# -- create_and_wait (bonus feature) ----------------------------------------
+def test_create_and_wait_creates_and_polls_playbook(monkeypatch):
+    """create_and_wait creates a record and waits for on-create playbook to finish."""
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    monkeypatch.setattr("time.monotonic", lambda: 0.0)
+
+    # Mock playbooks API
+    class FakePlaybooksAPI:
+        def wait_for_run(self, playbook=None, playbook_uuid=None, since=None, timeout=None, poll_interval=None):
+            return {
+                "task_id": "t1",
+                "name": "Auto Investigate",
+                "status": "finished",
+                "error_message": None,
+                "pk": "r1",
+            }
+
+    client = FakeClient({"/api/3/alerts": {"uuid": "new-alert", "name": "Test Alert"}})
+    client.playbooks = FakePlaybooksAPI()
+
+    rec, run = RecordSet(client, "alerts").create_and_wait(
+        {"name": "Test Alert"},
+        playbook="Auto Investigate",
+        timeout=30,
+    )
+    assert rec["uuid"] == "new-alert"
+    assert run["status"] == "finished"
+
+
+def test_create_and_wait_raises_without_playbooks_api():
+    """create_and_wait raises RuntimeError if client.playbooks is missing."""
+    client = FakeClient({"/api/3/alerts": {"uuid": "new", "name": "x"}})
+    client.playbooks = None  # Simulate missing playbooks API
+
+    with pytest.raises(RuntimeError, match="playbooks API"):
+        RecordSet(client, "alerts").create_and_wait(
+            {"name": "x"},
+            playbook="Some PB",
+        )
 
 
 def test_upsert_raw_returns_plain_dict():

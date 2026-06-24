@@ -47,7 +47,7 @@ from .api.workflow_collections import WorkflowCollectionsAPI
 from .auth.api_key import APIKeyAuth
 from .auth.base import BaseAuth
 from .auth.user_pass import UserPasswordAuth
-from .exceptions import handle_api_error
+from .exceptions import FortiSOARException, handle_api_error
 
 if TYPE_CHECKING:
     from .appliance import Appliance
@@ -720,3 +720,82 @@ class FortiSOAR:
         :meth:`ModulesAPI.describe <pyfsr.api.modules.ModulesAPI.describe>`.
         """
         return self.modules.describe(module, refresh=refresh)
+
+    def version(self) -> str | dict[str, Any]:
+        """Get the FortiSOAR product version (tries multiple endpoints).
+
+        Attempts to retrieve the FortiSOAR build version via a fallback chain
+        of endpoints, returning the first successful response as a version
+        string or a dict with build details:
+
+        1. ``GET /api/3/appliances`` (reads ``@version`` / ``build`` if present)
+        2. License details endpoint (``GET /api/auth/license``, via system API)
+        3. Public version endpoint (``GET /api/version``, via system API)
+
+        Returns:
+            str | dict[str, Any]: A clean version string (e.g., ``"7.4.2"``),
+            or a dict like ``{"version": "7.4.2", "build": "..."}`` if
+            multiple fields are present.
+
+        Raises:
+            FortiSOARException: If all fallback endpoints return 404 or other
+            errors, with a message explaining which endpoints were tried.
+
+        Example:
+            >>> v = client.version()                       # doctest: +SKIP
+            >>> print(v)                                   # doctest: +SKIP
+            7.4.2
+            >>> v = client.version()                       # doctest: +SKIP
+            >>> print(v["version"] if isinstance(v, dict) else v)  # doctest: +SKIP
+            7.4.2
+        """
+        errors = []
+
+        # Fallback 1: /api/3/appliances
+        try:
+            resp = self.get("/api/3/appliances")
+            if isinstance(resp, dict) and resp:
+                # Try to extract version/build from appliance record
+                for key in ("@version", "version", "build"):
+                    if key in resp:
+                        return resp[key]
+                # If appliances dict has data, return it
+                if any(k for k in resp if k != "@type"):
+                    return resp
+        except Exception as e:
+            errors.append(f"/api/3/appliances: {type(e).__name__}")
+
+        # Fallback 2: license endpoint (via system API)
+        try:
+            license_info = self.system.license()
+            if isinstance(license_info, dict):
+                # Extract version/build if present
+                for key in ("version", "build", "@version"):
+                    if key in license_info:
+                        return license_info[key]
+                # Return whole dict if it has useful content
+                if any(k for k in license_info if k != "@type"):
+                    return license_info
+        except Exception as e:
+            errors.append(f"/api/auth/license: {type(e).__name__}")
+
+        # Fallback 3: public version endpoint (via system API)
+        try:
+            version_info = self.system.version()
+            if isinstance(version_info, dict):
+                # Extract version string if present
+                for key in ("version", "build", "@version"):
+                    if key in version_info:
+                        return version_info[key]
+                # Return whole dict if it has useful content
+                if version_info and any(k for k in version_info if k != "@type"):
+                    return version_info
+        except Exception as e:
+            errors.append(f"/api/version: {type(e).__name__}")
+
+        # All fallbacks exhausted
+        endpoint_list = ", ".join(["/api/3/appliances", "/api/auth/license", "/api/version"])
+        error_detail = "; ".join(errors) if errors else "all endpoints returned empty"
+        raise FortiSOARException(
+            f"Could not retrieve FortiSOAR version from any fallback endpoint ({endpoint_list}): {error_detail}"
+        )

@@ -1,5 +1,7 @@
 """Custom exceptions for the FortiSOAR API client."""
 
+from typing import Any
+
 import requests
 
 
@@ -24,6 +26,44 @@ class ValidationError(FortiSOARException):
     """Raised when API request validation fails."""
 
     pass
+
+
+class ConfigValidationError(ValidationError):
+    """Raised when a connector configuration fails structural validation.
+
+    Carries field-level problems from :meth:`~pyfsr.api.connectors.ConnectorsAPI.validate_config`
+    so callers see exactly which field failed and why, without needing a server roundtrip.
+    """
+
+    def __init__(
+        self,
+        message: str = None,
+        response=None,
+        *,
+        error_type: str | None = None,
+        errors: list[dict[str, Any]] | None = None,
+    ):
+        self.errors = errors or []
+        super().__init__(message, response, error_type=error_type)
+
+
+class ConfigurationExistsError(FortiSOARException):
+    """Raised when creating a configuration with a name that already exists.
+
+    Raised by :meth:`~pyfsr.api.connectors.ConnectorsAPI.create_configuration`
+    when ``exist_ok=False`` (the default) and the server rejects the write with
+    a unique constraint violation on ``(name, connector, agent)``. Includes a
+    helpful hint about using ``exist_ok=True`` or ``upsert_configuration()``.
+    """
+
+    def __init__(self, connector: str, name: str, message: str = None, response=None, *, error_type: str | None = None):
+        self.connector = connector
+        self.name = name
+        msg = message or (
+            f"a configuration named {name!r} already exists for this connector — "
+            f"use upsert_configuration(...) or create_configuration(..., exist_ok=True)"
+        )
+        super().__init__(msg, response, error_type=error_type)
 
 
 class PicklistResolutionError(ValidationError):

@@ -796,6 +796,110 @@ class PlaybooksAPI(BaseAPI):
                 raise TimeoutError(f"playbook run {task_id!r} did not finish within {timeout}s")
             time.sleep(interval)
 
+    def wait_for_run(
+        self,
+        playbook: str | None = None,
+        *,
+        playbook_uuid: str | None = None,
+        since: str | float | None = None,
+        timeout: float = 120,
+        poll_interval: float = 3,
+    ) -> dict[str, Any]:
+        """Poll until the most recent run of a playbook reaches a terminal status.
+
+        Queries :meth:`execution_history` (merged from live + historical tables,
+        newest first) and polls until the most recent run *newer than* ``since``
+        reaches a terminal state (status in finished/failed/error/cancelled/aborted).
+
+        This is useful for verifying that a triggered playbook has completed —
+        more ergonomic than manually tracking ``task_id`` when the playbook's
+        definition (by name) is the natural reference.
+
+        Args:
+            playbook: the playbook name — resolved to uuid internally.
+            playbook_uuid: the playbook uuid (use instead of ``playbook`` when
+                you already have it).
+            since: an optional timestamp (ISO string or UNIX float) — only polls
+                runs *newer* than this. Useful when the playbook may have old
+                runs already in a terminal state. Default ``None`` (polls the
+                absolute newest run, which is often still running).
+            timeout: seconds to wait before raising :exc:`TimeoutError`
+                (default 120).
+            poll_interval: seconds between polls (default 3).
+
+        Returns:
+            A shaped run dict (``{task_id, name, status, error_message, modified,
+            uuid, pk, source}``) for the completed run.
+
+        Raises:
+            TimeoutError: if no terminal run newer than ``since`` is found within
+                ``timeout`` seconds.
+            ValueError: if the playbook does not exist or is not found.
+
+        Example:
+            >>> # Trigger a playbook, then wait for it to finish
+            >>> result = client.playbooks.trigger("AI Investigation", records=[alert_uuid])
+            >>> task_id = result["task_id"]
+            >>> # ... or just wait by playbook name (polls the newest run)
+            >>> run = client.playbooks.wait_for_run(playbook="AI Investigation", timeout=120)
+            >>> print(f"Run {run['pk']}: {run['status']}")
+            >>> if run["error_message"]:
+            ...     print(f"Error: {run['error_message']}")
+        """
+        # Resolve playbook name to uuid if needed
+        uuid = playbook_uuid or (self._resolve_uuid(playbook) if playbook else None)
+        if not uuid:
+            raise ValueError(f"playbook {playbook!r} not found")
+
+        deadline = time.monotonic() + timeout
+        while True:
+            # Fetch the most recent run(s)
+            runs = self.execution_history(playbook_uuid=uuid, limit=1, raw=False)
+            if not runs:
+                # No runs found yet; keep polling
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"playbook {playbook or uuid!r} has no runs after {since!r} within {timeout}s")
+                time.sleep(poll_interval)
+                continue
+
+            run = runs[0]
+
+            # Check if this run is newer than 'since', if given
+            if since is not None:
+                # Parse since as ISO string or UNIX float
+                if isinstance(since, str):
+                    # ISO string comparison (modified is ISO)
+                    since_str = since
+                else:
+                    # Convert UNIX float to ISO string for comparison
+                    import datetime
+
+                    since_dt = datetime.datetime.fromtimestamp(since, tz=datetime.timezone.utc)
+                    since_str = since_dt.isoformat()
+
+                run_modified = run.get("modified", "")
+                if run_modified < since_str:
+                    # This run is older than 'since'; keep polling for a newer one
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(
+                            f"playbook {playbook or uuid!r} has no runs newer than {since!r} within {timeout}s"
+                        )
+                    time.sleep(poll_interval)
+                    continue
+
+            # Check if this run is in a terminal state
+            status = (run.get("status") or "").lower()
+            if status in _TERMINAL_STATUSES:
+                return run
+
+            # Not terminal yet; keep polling
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"playbook {playbook or uuid!r} run {run.get('pk') or run.get('uuid')!r} "
+                    f"did not finish within {timeout}s (currently {status!r})"
+                )
+            time.sleep(poll_interval)
+
     # ---------------------------------------------------------------- resume
     def resume(
         self,

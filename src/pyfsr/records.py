@@ -435,10 +435,97 @@ class RecordSet(Generic[T]):
         return self._parse(self.client.put(path, data=data), raw=raw)
 
     @overload
+    def get_or_create(
+        self,
+        data: dict[str, Any],
+        *,
+        key: str | list[str] = ...,
+        raw: Literal[True],
+        resolve_picklists: bool = ...,
+    ) -> tuple[dict[str, Any], bool]: ...
+
+    @overload
+    def get_or_create(
+        self,
+        data: dict[str, Any],
+        *,
+        key: str | list[str] = ...,
+        raw: Literal[False] = ...,
+        resolve_picklists: bool = ...,
+    ) -> tuple[T, bool]: ...
+
+    def get_or_create(
+        self,
+        data: dict[str, Any],
+        *,
+        key: str | list[str] = "uuid",
+        raw: bool = False,
+        resolve_picklists: bool = True,
+    ) -> tuple[Any, bool]:
+        """Look up an existing record by key field(s), or create if absent.
+
+        Queries for an existing record matching the given key field(s). If found,
+        returns it with ``created=False``. Otherwise creates the record and
+        returns ``created=True``.
+
+        Args:
+            data: dict or model instance with the record to create/match.
+            key: field name (str) or list of field names to match against
+                (default ``"uuid"`` — the natural key). Multiple keys are AND'ed.
+            raw: if ``True``, returns a plain dict; otherwise a typed model.
+            resolve_picklists: if ``True``, friendly picklist values are mapped to
+                IRIs before posting (see :meth:`create`).
+
+        Returns:
+            A tuple of ``(record, created)`` where ``created`` is ``True`` if the
+            record was newly created, ``False`` if it already existed.
+
+        Raises:
+            ValueError: if ``key`` field(s) are missing from ``data``.
+
+        Example:
+            >>> alert, created = client.records("alerts").get_or_create(
+            ...     {"name": "Malware Alert", "severity": "High"},
+            ...     key="name"
+            ... )
+            >>> if created:
+            ...     print(f"Created new alert {alert.uuid}")
+            ... else:
+            ...     print(f"Alert already exists: {alert.uuid}")
+        """
+        if isinstance(data, BaseRecord):
+            data = data.to_dict(exclude_none=True)
+
+        # Normalize key to a list
+        keys = [key] if isinstance(key, str) else list(key)
+        if not keys:
+            raise ValueError("key must be a non-empty field name or list of field names")
+
+        # Verify all key fields are present in data
+        for k in keys:
+            if k not in data:
+                raise ValueError(f"get_or_create() requires the key field {k!r} to be present in data")
+
+        # Build a query to find existing record by key field(s)
+        q = Query()
+        for k in keys:
+            q = q.eq(k, data[k])
+        q = q.limit(1)
+
+        existing = self.first(q, raw=raw)
+        if existing is not None:
+            return (existing, False)
+
+        # Create if not found
+        created_rec = self.create(data, raw=raw, resolve_picklists=resolve_picklists)
+        return (created_rec, True)
+
+    @overload
     def upsert(
         self,
         data: dict[str, Any],
         *,
+        key: str | list[str] | None = ...,
         raw: Literal[True],
         resolve_picklists: bool = ...,
     ) -> dict[str, Any]: ...
@@ -448,6 +535,7 @@ class RecordSet(Generic[T]):
         self,
         data: dict[str, Any],
         *,
+        key: str | list[str] | None = ...,
         raw: Literal[False] = ...,
         resolve_picklists: bool = ...,
     ) -> T: ...
@@ -456,22 +544,64 @@ class RecordSet(Generic[T]):
         self,
         data: dict[str, Any],
         *,
+        key: str | list[str] | None = None,
         raw: bool = False,
         resolve_picklists: bool = True,
     ) -> Any:
         """Insert-or-update one record via ``POST /api/3/upsert/<module>``.
 
-        FortiSOAR matches an existing row by the record's natural key (its
-        ``uuid`` / ``@id`` when present, else the module's unique field) and
-        updates it, otherwise creates a new one. ``data`` may be a dict or a
-        model instance; friendly picklist values are mapped to IRIs first —
-        pass ``resolve_picklists=False`` to skip that (see :meth:`create`).
+        When ``key`` is ``None`` (default), FortiSOAR matches an existing row by
+        the record's natural key (its ``uuid`` / ``@id`` when present, else the
+        module's unique field) and updates it, otherwise creates a new one.
+
+        When ``key`` is specified (a field name or list of field names),
+        uses :meth:`get_or_create` to find an existing record by those fields;
+        if found, updates it with the provided ``data``; otherwise creates it.
+
+        ``data`` may be a dict or a model instance; friendly picklist values
+        are mapped to IRIs first — pass ``resolve_picklists=False`` to skip that
+        (see :meth:`create`).
+
+        Args:
+            data: dict or model instance with the record to create/update.
+            key: optional field name(s) to match on for the lookup. If ``None``
+                (default), uses FortiSOAR's natural key (``uuid`` or the module's
+                unique field). If a str or list of strs, finds-by-key then updates
+                if present, else creates.
+            raw: if ``True``, returns a plain dict; otherwise a typed model.
+            resolve_picklists: if ``True``, friendly picklist values are mapped to
+                IRIs before posting.
+
+        Returns:
+            The upserted record (newly created or updated), parsed as the bound
+            model (or raw dict if ``raw=True``).
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
-        if resolve_picklists:
-            data = self.client.picklists.resolve_record_fields(self.module, data)
-        return self._parse(self.client.post(f"/api/3/upsert/{self.module}", data=data), raw=raw)
+
+        # When no custom key is specified, use the FortiSOAR natural-key upsert endpoint
+        if key is None:
+            if resolve_picklists:
+                data = self.client.picklists.resolve_record_fields(self.module, data)
+            return self._parse(self.client.post(f"/api/3/upsert/{self.module}", data=data), raw=raw)
+
+        # When a custom key is specified, use get_or_create + update pattern
+        existing, created = self.get_or_create(
+            data,
+            key=key,
+            raw=False,  # Always get the typed record internally
+            resolve_picklists=resolve_picklists,
+        )
+        if created:
+            # Record was just created, return it
+            return self._parse(existing, raw=raw)
+
+        # Record exists; update it
+        ref = existing.get("@id") or existing.get("uuid") or existing.get("id")
+        if not ref:
+            raise ValueError("could not determine record reference for update (no @id, uuid, or id)")
+        updated = self.update(ref, data, raw=False, resolve_picklists=False)
+        return self._parse(updated, raw=raw)
 
     def bulk_upsert(
         self,
@@ -686,6 +816,88 @@ class RecordSet(Generic[T]):
                 query["limit"] = 1
             page = self.query(query, show_deleted=show_deleted, raw=True)
         return bool(page.members)
+
+    def create_and_wait(
+        self,
+        data: dict[str, Any],
+        *,
+        playbook: str | None = None,
+        playbook_uuid: str | None = None,
+        timeout: float = 120,
+        poll_interval: float = 3,
+        resolve_picklists: bool = True,
+    ) -> Any:
+        """Create a record and wait for its on-create playbook to complete.
+
+        Posts the record to ``/api/3/<module>``, then uses the playbooks API
+        to poll until the triggered on-create playbook reaches a terminal state
+        (finished/failed/error/cancelled/aborted).
+
+        Useful when a record's creation triggers a downstream playbook workflow
+        and you need to confirm the full pipeline completes before proceeding.
+
+        Args:
+            data: dict or model instance with the record to create.
+            playbook: the playbook name to wait for. This is the on-create
+                playbook that should be auto-triggered when the record is posted.
+            playbook_uuid: the playbook uuid (use instead of ``playbook`` when
+                you already have it).
+            timeout: seconds to wait before raising :exc:`TimeoutError`
+                (default 120).
+            poll_interval: seconds between polls (default 3).
+            resolve_picklists: if ``True`` (default), friendly picklist values
+                are mapped to IRIs before posting (see :meth:`create`).
+
+        Returns:
+            A tuple of ``(record, run)`` where:
+            - ``record`` is the created record (typed model or dict,
+              matching the bound model type).
+            - ``run`` is the shaped run dict from
+              :meth:`~pyfsr.api.playbooks.PlaybooksAPI.wait_for_run`
+              (``{task_id, name, status, error_message, modified, uuid, pk, source}``).
+
+        Raises:
+            TimeoutError: if the playbook run does not complete within ``timeout``.
+            ValueError: if the playbook does not exist.
+
+        Note:
+            The playbook lookup is done via :meth:`~pyfsr.api.playbooks.PlaybooksAPI`
+            on the same client. If the client does not have a playbooks API (unlikely
+            for FortiSOAR), this method may not work; check `client.playbooks` before
+            calling this method.
+
+        Example:
+            >>> # Create a record and wait for its on-create playbook to finish
+            >>> record, run = client.records("alerts").create_and_wait(
+            ...     {"name": "Suspicious Activity", "severity": "High"},
+            ...     playbook="Auto Investigate",
+            ...     timeout=120
+            ... )
+            >>> print(f"Alert created: {record.uuid}")
+            >>> print(f"Playbook run {run['pk']}: {run['status']}")
+            >>> if run["error_message"]:
+            ...     print(f"Error: {run['error_message']}")
+        """
+        # Create the record first
+        record = self.create(data, raw=False, resolve_picklists=resolve_picklists)
+
+        # Wait for the on-create playbook
+        # Use 'since' to only poll runs created after this record was posted
+        import time as _time_module
+
+        post_time = _time_module.time()
+        try:
+            run = self.client.playbooks.wait_for_run(
+                playbook=playbook,
+                playbook_uuid=playbook_uuid,
+                since=post_time,
+                timeout=timeout,
+                poll_interval=poll_interval,
+            )
+        except AttributeError as e:
+            raise RuntimeError(f"create_and_wait() requires the client to have a playbooks API: {e}") from e
+
+        return (record, run)
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         return f"RecordSet(module={self.module!r})"

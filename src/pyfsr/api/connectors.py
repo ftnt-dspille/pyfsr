@@ -48,6 +48,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..exceptions import APIError, ConfigurationExistsError, ConfigValidationError
 from ..models._integration import (
     ConfigValidationResult,
     ConnectorConfig,
@@ -963,6 +964,7 @@ class ConnectorsAPI(BaseAPI):
         agent: str | None = None,
         validate: bool = True,
         autofill: bool = True,
+        exist_ok: bool = False,
         refresh: bool = True,
     ) -> ConnectorConfig:
         """Create (or update) a connector configuration — write its credentials.
@@ -1000,6 +1002,10 @@ class ConnectorsAPI(BaseAPI):
                 only at *playbook runtime* (see :meth:`default_config`). Your
                 explicit values always win. Pass ``False`` to send ``config``
                 verbatim (default ``True``).
+            exist_ok: when ``True``, if a configuration with the same ``name``
+                already exists for this connector/agent pair, delegate to
+                :meth:`upsert_configuration` instead of raising
+                :exc:`~pyfsr.exceptions.ConfigurationExistsError` (default ``False``).
             refresh: drop the cached configured-connector listing afterwards so
                 the new config is visible to :meth:`resolve_config` etc.
                 (default ``True``).
@@ -1011,8 +1017,15 @@ class ConnectorsAPI(BaseAPI):
             The persisted configuration record (including its ``config_id``).
 
         Raises:
-            ValueError: if the connector isn't installed, ``version`` can't be
-                resolved, or (when ``validate``) a required field is missing.
+            ValueError: if the connector isn't installed or ``version`` can't be
+                resolved.
+            ConfigValidationError: when ``validate=True`` and the configuration
+                fails structural validation (missing required fields, invalid
+                option values, or wrong field types). Includes field-level error
+                details so callers can programmatically handle them.
+            ConfigurationExistsError: when ``exist_ok=False`` (the default) and
+                the server rejects the write with a unique constraint violation
+                on ``(name, connector, agent)``.
         """
         version = version or self.resolve_version(connector)
         if not version:
@@ -1028,7 +1041,9 @@ class ConnectorsAPI(BaseAPI):
         if validate:
             check = self.validate_config(connector, config, version=version)
             if not check.valid:
-                raise ValueError(_format_validation_error(connector, check))
+                # Convert to the new ConfigValidationError with structured errors
+                msg = _format_validation_error(connector, check)
+                raise ConfigValidationError(msg, errors=check.errors)
         body: dict[str, Any] = {
             "connector": connector_id,
             "connector_name": connector,
@@ -1041,7 +1056,26 @@ class ConnectorsAPI(BaseAPI):
             body["config_id"] = config_id
         if agent is not None:
             body["agent"] = agent
-        resp = self.client.post("/api/integration/configuration/", data=body)
+        try:
+            resp = self.client.post("/api/integration/configuration/", data=body)
+        except APIError as e:
+            # Catch unique constraint violations and offer exist_ok hint
+            error_msg = (e.message or "").lower()
+            if "unique" in error_msg and ("name" in error_msg or "must" in error_msg):
+                if not exist_ok:
+                    raise ConfigurationExistsError(connector, name, response=e.response, error_type=e.error_type) from e
+                # exist_ok=True: delegate to upsert
+                return self.upsert_configuration(
+                    connector,
+                    config,
+                    name=name,
+                    version=version,
+                    default=default,
+                    agent=agent,
+                    validate=False,  # already validated
+                    autofill=False,  # already autofilled
+                )
+            raise
         if refresh:
             self.clear_cache()
         raw = resp if isinstance(resp, dict) else {"result": resp}
@@ -1089,6 +1123,11 @@ class ConnectorsAPI(BaseAPI):
 
         Returns:
             The updated :class:`~pyfsr.models.ConnectorConfig`.
+
+        Raises:
+            ValueError: if the connector isn't installed or version can't be resolved.
+            ConfigValidationError: when ``validate=True`` and the configuration
+                fails structural validation.
         """
         version = version or self.resolve_version(connector)
         if not version:
@@ -1101,7 +1140,8 @@ class ConnectorsAPI(BaseAPI):
         if validate:
             check = self.validate_config(connector, config, version=version)
             if not check.valid:
-                raise ValueError(_format_validation_error(connector, check))
+                msg = _format_validation_error(connector, check)
+                raise ConfigValidationError(msg, errors=check.errors)
         body: dict[str, Any] = {
             "connector": connector_id,
             "connector_name": connector,
@@ -1325,6 +1365,11 @@ class ConnectorsAPI(BaseAPI):
 
         Returns:
             The persisted :class:`~pyfsr.models.ConnectorConfig`.
+
+        Raises:
+            ValueError: if the connector isn't installed or version can't be resolved.
+            ConfigValidationError: when ``validate=True`` and the configuration
+                fails structural validation.
         """
         version = version or self.resolve_version(connector)
         existing = self._find_configuration_by_name(connector, name)

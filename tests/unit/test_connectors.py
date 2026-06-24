@@ -355,10 +355,12 @@ def test_create_configuration_clears_cache():
 def test_create_configuration_validate_missing_raises():
     import pytest
 
+    from pyfsr.exceptions import ConfigValidationError
+
     # config_schema comes from definition() (a POST returning config_schema.fields)
     schema = {"config_schema": {"fields": [{"name": "fsm_type", "title": "FortiSIEM Type", "required": True}]}}
     api, _ = _api(post_resp=schema)
-    with pytest.raises(ValueError, match="is required"):
+    with pytest.raises(ConfigValidationError, match="is required"):
         api.create_configuration("virustotal", {}, name="c", version="3.1.0")
 
 
@@ -563,8 +565,10 @@ def test_validate_config_accepts_string_integer_and_bool_checkbox():
 def test_create_configuration_raises_with_guidance_on_invalid_option():
     # 'virustotal' is in the mock's configured list (resolves version + id); the
     # schema is served from post_resp regardless of name.
+    from pyfsr.exceptions import ConfigValidationError
+
     api, _ = _api(post_resp=_HTTP_SCHEMA)
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(ConfigValidationError) as exc:
         api.create_configuration("virustotal", {"auth_type": "Bsaic"}, name="t", version="3.1.0")
     assert "not a valid option" in str(exc.value)
     assert "Basic" in str(exc.value)  # lists valid options
@@ -1062,6 +1066,8 @@ def test_create_configuration_autofill_false_sends_verbatim():
 
 def test_create_configuration_autofill_with_validation_composes():
     """autofill fills defaults, then validation checks the merged config."""
+    from pyfsr.exceptions import ConfigValidationError
+
     schema = {
         "config_schema": {
             "fields": [
@@ -1081,7 +1087,7 @@ def test_create_configuration_autofill_with_validation_composes():
     # With autofill=True, the password field (revealed by "Basic" default) gets
     # filled with "", which satisfies the schema but may fail validation elsewhere.
     # This test just ensures autofill + validate don't conflict.
-    with pytest.raises(ValueError, match="is required"):
+    with pytest.raises(ConfigValidationError, match="is required"):
         # password is empty after autofill, so validation fails
         api.create_configuration("virustotal", {}, name="test", version="3.1.0", validate=True)
 
@@ -1139,3 +1145,184 @@ def test_upsert_configuration_autofill_false():
     _, create_body = client.post_calls[-1]
     # Only the caller's key
     assert create_body["config"] == {"key": "value"}
+
+
+# -- A2: ConfigValidationError with field-level details ---------------------
+def test_create_configuration_validation_raises_config_validation_error():
+    """Invalid config raises ConfigValidationError (not plain ValueError) with error details."""
+    from pyfsr.exceptions import ConfigValidationError
+
+    schema = {"config_schema": {"fields": [{"name": "required_field", "required": True}]}}
+    api, _ = _api(post_resp=schema)
+    with pytest.raises(ConfigValidationError) as exc_info:
+        api.create_configuration("virustotal", {}, name="test", version="3.1.0")
+    exc = exc_info.value
+    assert "required" in str(exc).lower()
+    # Check that errors are attached
+    assert exc.errors is not None
+    assert len(exc.errors) > 0
+    assert any(e.get("field") == "required_field" for e in exc.errors)
+
+
+def test_config_validation_error_carries_structured_errors():
+    """ConfigValidationError.errors includes field-level problem details."""
+    from pyfsr.exceptions import ConfigValidationError
+
+    schema = {"config_schema": {"fields": [{"name": "port", "type": "integer", "required": False}]}}
+    api, _ = _api(post_resp=schema)
+    with pytest.raises(ConfigValidationError) as exc_info:
+        api.create_configuration("virustotal", {"port": "not-a-number"}, name="test", version="3.1.0")
+    exc = exc_info.value
+    assert exc.errors is not None
+    port_error = next((e for e in exc.errors if e.get("field") == "port"), None)
+    assert port_error is not None
+    assert "wrong_type" in port_error.get("code", "")
+
+
+def test_config_validation_error_invalid_select_option():
+    """ConfigValidationError includes valid_options when option is invalid."""
+    from pyfsr.exceptions import ConfigValidationError
+
+    schema = {
+        "config_schema": {
+            "fields": [{"name": "level", "type": "select", "options": ["Low", "Medium", "High"], "required": True}]
+        }
+    }
+    api, _ = _api(post_resp=schema)
+    with pytest.raises(ConfigValidationError) as exc_info:
+        api.create_configuration("virustotal", {"level": "Invalid"}, name="test", version="3.1.0")
+    exc = exc_info.value
+    level_error = next((e for e in exc.errors if e.get("field") == "level"), None)
+    assert level_error is not None
+    assert level_error.get("code") == "invalid_option"
+    assert level_error.get("valid_options") == ["Low", "Medium", "High"]
+
+
+def test_update_configuration_validation_raises_config_validation_error():
+    """update_configuration with invalid config raises ConfigValidationError."""
+    from pyfsr.exceptions import ConfigValidationError
+
+    schema = {"config_schema": {"fields": [{"name": "required", "required": True}]}}
+    api, client = _scripted()
+    api.config_schema = lambda connector, version=None: schema["config_schema"]["fields"]
+    with pytest.raises(ConfigValidationError) as exc_info:
+        api.update_configuration("virustotal", "cfg-1", {}, name="test", version="3.1.0")
+    assert exc_info.value.errors is not None
+
+
+def test_upsert_configuration_validation_raises_config_validation_error():
+    """upsert_configuration with invalid config raises ConfigValidationError."""
+    from pyfsr.exceptions import ConfigValidationError
+
+    schema = {"config_schema": {"fields": [{"name": "required", "required": True}]}}
+    api, client = _scripted()
+    client.detail = {"configuration": []}
+    api.config_schema = lambda connector, version=None: schema["config_schema"]["fields"]
+    with pytest.raises(ConfigValidationError):
+        api.upsert_configuration("virustotal", {}, name="test", version="3.1.0")
+
+
+# -- A3: create_configuration with exist_ok and ConfigurationExistsError ----
+def test_create_configuration_exist_ok_false_raises_on_unique_violation():
+    """When exist_ok=False (default) and server returns unique constraint error, raise ConfigurationExistsError."""
+    from pyfsr.exceptions import APIError, ConfigurationExistsError
+
+    class FailingClient(ScriptedClient):
+        def post(self, endpoint, data=None, params=None, **kwargs):
+            if endpoint == "/api/integration/configuration/":
+                from unittest.mock import Mock
+
+                resp = Mock()
+                resp.status_code = 400
+                resp.json = lambda: {"message": "fields name, connector, agent must make a unique set"}
+                resp.text = "fields name, connector, agent must make a unique set"
+                raise APIError("fields name, connector, agent must make a unique set", resp)
+            return super().post(endpoint, data, params, **kwargs)
+
+    api = ConnectorsAPI(FailingClient())
+    with pytest.raises(ConfigurationExistsError) as exc_info:
+        api.create_configuration("virustotal", {"k": "v"}, name="prod", version="3.1.0", validate=False, exist_ok=False)
+    exc = exc_info.value
+    assert exc.connector == "virustotal"
+    assert exc.name == "prod"
+    assert "exist_ok=True" in str(exc)
+    assert "upsert_configuration" in str(exc)
+
+
+def test_create_configuration_exist_ok_true_delegates_to_upsert():
+    """When exist_ok=True and unique constraint error occurs, delegate to upsert instead of raising."""
+    from pyfsr.exceptions import APIError
+
+    class FailingThenPassingClient(ScriptedClient):
+        def __init__(self):
+            super().__init__()
+            self.post_count = 0
+
+        def post(self, endpoint, data=None, params=None, **kwargs):
+            if endpoint == "/api/integration/configuration/":
+                self.post_count += 1
+                if self.post_count == 1:
+                    # First POST fails with unique constraint
+                    from unittest.mock import Mock
+
+                    resp = Mock()
+                    resp.status_code = 400
+                    resp.json = lambda: {"message": "fields name, connector, agent must make a unique set"}
+                    resp.text = "fields name, connector, agent must make a unique set"
+                    raise APIError("fields name, connector, agent must make a unique set", resp)
+            return super().post(endpoint, data, params, **kwargs)
+
+    client = FailingThenPassingClient()
+    api = ConnectorsAPI(client)
+    # Set up detail to show an existing config, so upsert will use PUT
+    client.detail = {"configuration": [{"name": "prod", "config_id": "cfg-existing", "agent": None}]}
+    res = api.create_configuration(
+        "virustotal", {"k": "v"}, name="prod", version="3.1.0", validate=False, exist_ok=True
+    )
+    # Should have succeeded via upsert path (PUT, not POST)
+    assert res is not None
+    # The upsert should have detected the existing config and issued a PUT
+    assert len(client.put_calls) > 0
+
+
+def test_create_configuration_exist_ok_false_non_unique_error_propagates():
+    """Non-unique-constraint errors should propagate even with exist_ok context."""
+    from pyfsr.exceptions import APIError
+
+    class FailingClient(ScriptedClient):
+        def post(self, endpoint, data=None, params=None, **kwargs):
+            if endpoint == "/api/integration/configuration/":
+                from unittest.mock import Mock
+
+                resp = Mock()
+                resp.status_code = 500
+                resp.json = lambda: {"message": "Internal Server Error"}
+                resp.text = "Internal Server Error"
+                raise APIError("Internal Server Error", resp)
+            return super().post(endpoint, data, params, **kwargs)
+
+    api = ConnectorsAPI(FailingClient())
+    with pytest.raises(APIError, match="Internal Server Error"):
+        api.create_configuration("virustotal", {"k": "v"}, name="prod", version="3.1.0", validate=False)
+
+
+def test_create_configuration_exist_ok_default_false():
+    """exist_ok defaults to False; unique constraint errors raise by default."""
+    from pyfsr.exceptions import APIError, ConfigurationExistsError
+
+    class FailingClient(ScriptedClient):
+        def post(self, endpoint, data=None, params=None, **kwargs):
+            if endpoint == "/api/integration/configuration/":
+                from unittest.mock import Mock
+
+                resp = Mock()
+                resp.status_code = 400
+                resp.json = lambda: {"message": "name, connector, agent must be unique"}
+                resp.text = "name, connector, agent must be unique"
+                raise APIError("name, connector, agent must be unique", resp)
+            return super().post(endpoint, data, params, **kwargs)
+
+    api = ConnectorsAPI(FailingClient())
+    # No exist_ok parameter → defaults to False
+    with pytest.raises(ConfigurationExistsError):
+        api.create_configuration("virustotal", {"k": "v"}, name="prod", version="3.1.0", validate=False)

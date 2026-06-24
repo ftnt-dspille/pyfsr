@@ -500,6 +500,32 @@ def test_wait_rejects_blank_task_id():
         PlaybooksAPI(_Rec()).wait("")
 
 
+def test_wait_for_run_returns_terminal_run():
+    """wait_for_run returns immediately when run is in terminal state."""
+    finished_run = _run(
+        "/api/wf/api/workflows/r1/",
+        "Test PB",
+        "finished",
+        "2026-06-19T00:00:00",
+        uuid="u1",
+    )
+    client = FakeClient(
+        workflows=[finished_run],
+        name_lookup={"hydra:member": [{"uuid": "pb-uuid"}]},
+    )
+    run = PlaybooksAPI(client).wait_for_run(playbook="Test PB")
+    assert run["status"] == "finished"
+    assert run["pk"] == "r1"
+    assert run["name"] == "Test PB"
+
+
+def test_wait_for_run_rejects_missing_playbook():
+    """wait_for_run raises ValueError if playbook not found."""
+    client = FakeClient()  # Empty lookup by default
+    with pytest.raises(ValueError, match="not found"):
+        PlaybooksAPI(client).wait_for_run(playbook="Nonexistent")
+
+
 def test_trigger_follow_returns_shaped_run(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _: None)
     monkeypatch.setattr("time.monotonic", lambda: 0.0)
