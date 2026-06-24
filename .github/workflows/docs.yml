@@ -13,6 +13,10 @@ on:
         required: false
         type: string
         description: 'The Git ref to checkout'
+  # Manual deploy: refresh the public site for a docs-only change without
+  # cutting a release (which would also ship a new PyPI version). The title
+  # will carry the current ``X.Y.Z+devN`` dev suffix until the next release.
+  workflow_dispatch:
 
 jobs:
   docs:
@@ -85,8 +89,9 @@ jobs:
         # Deploy on release so the public site always reflects the published
         # version (hatch-vcs derives a clean ``X.Y.Z`` only at the tagged commit).
         # A plain main push builds for verification but does not deploy — that
-        # would re-publish a ``X.Y.Z+1.devN`` title between releases.
-        if: github.event_name == 'release'
+        # would re-publish a ``X.Y.Z+1.devN`` title between releases. A manual
+        # workflow_dispatch deploys on demand for docs-only fixes.
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
