@@ -87,6 +87,13 @@ Author playbooks in YAML, compile them, and deploy through the API or CLI.
 Expose FortiSOAR as tools to Claude, OpenAI, or the bundled MCP server.
 :::
 
+:::{grid-item-card} Appliance CLI
+:link: guides/appliance-cli
+:link-type: doc
+
+Administer the appliance over SSH: services, DB, queues, logs, HA, certs.
+:::
+
 :::{grid-item-card} API Reference
 :link: reference
 :link-type: doc
@@ -109,6 +116,7 @@ guides/module-field-schema
 guides/connectors
 guides/playbook-authoring
 guides/ai-agents
+guides/appliance-cli
 ```
 
 ```{toctree}
