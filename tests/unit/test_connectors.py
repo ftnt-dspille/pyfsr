@@ -370,6 +370,29 @@ def test_update_configuration_puts_to_config_id_path():
     assert body["config"] == {"k": "v2"}
 
 
+def test_update_configuration_tolerates_8_0_nested_status_envelope():
+    # FortiSOAR 8.0 echoes the saved row on PUT but nests an async op-envelope in
+    # ``status`` ({"status":"finished","message":...}) instead of 7.x's int flag.
+    # The row must still validate; status coerces to None (no active-flag conveyed).
+    api, client = _scripted()
+    client.put_envelope = {
+        "id": 37,
+        "config_id": "cfg-7",
+        "name": "prod",
+        "default": True,
+        "status": {"status": "finished", "message": "Configuration prod has been updated successfully"},
+        "config": {"k": "v"},
+        "connector": 16,
+    }
+    cfg = api.update_configuration(
+        "virustotal", "cfg-7", {"k": "v"}, name="prod", version="3.1.0", default=True, validate=False
+    )
+    assert client.put_calls[-1][0] == "/api/integration/configuration/cfg-7/"
+    assert cfg.config_id == "cfg-7"
+    assert cfg.default is True
+    assert cfg.status is None  # nested op-envelope -> coerced, not a ValidationError
+
+
 def test_delete_configuration_trailing_slash():
     api, client = _api()
     api.delete_configuration("cfg-1")
@@ -648,3 +671,133 @@ def test_dev_publish_sends_flags():
         "/api/integration/connector/development/entity/dev-7/publish/",
         {"replace": True, "discard": False},
     )
+
+
+# -- republish + upsert_configuration --------------------------------------
+class ScriptedClient:
+    """Endpoint-scripted fake: route POST/PUT/DELETE by endpoint substring."""
+
+    def __init__(self):
+        self.post_calls = []
+        self.put_calls = []
+        self.delete_calls = []
+        # connector listing so resolve_connector_id('virustotal') -> 16
+        self._listing = _CONFIGURED
+        self.detail = {"configuration": []}
+        self.dev_edit_resp = {"id": "dev-1", "development": True}
+        self.dev_list_resp = []
+        self.publish_raises = False
+        self.create_raises = False
+        # When set, PUT returns this instead of a config row (FortiSOAR 8.0
+        # returns an async op-envelope on configuration PUT).
+        self.put_envelope = None
+
+    def get(self, endpoint, params=None, **kwargs):
+        if endpoint.startswith("/api/integration/connectors/"):
+            return self._listing
+        if endpoint == "/api/integration/connector/development/entity/":
+            return {"data": self.dev_list_resp}
+        return {}
+
+    def post(self, endpoint, data=None, params=None, **kwargs):
+        self.post_calls.append((endpoint, data))
+        if endpoint.endswith("/publish/"):
+            if self.publish_raises:
+                raise RuntimeError("publish 500")
+            return {"ok": True}
+        if "/development/entity/" in endpoint:
+            return self.dev_edit_resp
+        if endpoint == "/api/integration/configuration/":
+            if self.create_raises:
+                raise RuntimeError("config 500 (post-save hook)")
+            return {"config_id": "new-cfg", "name": (data or {}).get("name")}
+        # connector_detail POST /api/integration/connectors/{id}/
+        if endpoint.startswith("/api/integration/connectors/"):
+            return self.detail
+        return {}
+
+    def put(self, endpoint, data=None, params=None, **kwargs):
+        self.put_calls.append((endpoint, data))
+        if self.put_envelope is not None:
+            return self.put_envelope
+        return {"config_id": (data or {}).get("config_id"), "name": (data or {}).get("name")}
+
+    def delete(self, endpoint, params=None, **kwargs):
+        self.delete_calls.append((endpoint, params))
+        return None
+
+
+def _scripted():
+    c = ScriptedClient()
+    return ConnectorsAPI(c), c
+
+
+def test_republish_happy_path():
+    api, client = _scripted()
+    out = api.republish("virustotal", replace=True, discard=True)
+    assert out == {"ok": True, "dev_id": "dev-1"}
+    # edit posted to the installed id (16), publish to the twin with replace+discard
+    assert ("/api/integration/connector/development/entity/16/", {"edit_repo_connector": True}) in client.post_calls
+    assert (
+        "/api/integration/connector/development/entity/dev-1/publish/",
+        {"replace": True, "discard": True},
+    ) in client.post_calls
+    assert client.delete_calls == []  # success path leaves no orphan to delete
+
+
+def test_republish_resolves_twin_when_edit_echoes_installed_id():
+    api, client = _scripted()
+    # edit-mode echoes the installed id and no development flag -> find twin in dev_list
+    client.dev_edit_resp = {"id": 16, "development": False}
+    client.dev_list_resp = [{"id": "twin-9", "name": "virustotal", "development": True}]
+    out = api.republish("virustotal")
+    assert out["dev_id"] == "twin-9"
+
+
+def test_republish_cleans_up_dev_twin_on_publish_failure():
+    api, client = _scripted()
+    client.publish_raises = True
+    with pytest.raises(RuntimeError, match="publish 500"):
+        api.republish("virustotal")
+    # the orphaned dev twin is deleted so no _dev dir lingers
+    assert client.delete_calls == [("/api/integration/connector/development/entity/dev-1/", None)]
+
+
+def test_republish_unknown_connector_raises():
+    api, _ = _scripted()
+    with pytest.raises(ValueError, match="not installed"):
+        api.republish("does-not-exist")
+
+
+def test_upsert_creates_when_absent():
+    api, client = _scripted()
+    client.detail = {"configuration": []}
+    api.upsert_configuration("virustotal", {"k": "v"}, name="prod", default=True, validate=False)
+    assert client.post_calls[-1][0] == "/api/integration/configuration/"
+    assert client.put_calls == []
+
+
+def test_upsert_updates_in_place_and_preserves_agent():
+    api, client = _scripted()
+    client.detail = {"configuration": [{"name": "prod", "config_id": "cfg-7", "agent": "agent-x"}]}
+    api.upsert_configuration("virustotal", {"k": "v"}, name="prod", default=True, validate=False)
+    assert client.put_calls[-1][0] == "/api/integration/configuration/cfg-7/"
+    assert client.put_calls[-1][1]["agent"] == "agent-x"  # preserved
+    assert all(e != "/api/integration/configuration/" for e, _ in client.post_calls)
+
+
+def test_upsert_tolerates_persisted_despite_500():
+    api, client = _scripted()
+    # create raises (post-save hook 500), but a re-fetch finds the row -> success
+    client.create_raises = True
+    seq = [{"configuration": []}, {"configuration": [{"name": "prod", "config_id": "landed"}]}]
+    calls = {"n": 0}
+
+    def fake_detail(conn):
+        i = min(calls["n"], len(seq) - 1)
+        calls["n"] += 1
+        return seq[i]
+
+    api.connector_detail = fake_detail  # type: ignore[assignment]
+    cfg = api.upsert_configuration("virustotal", {"k": "v"}, name="prod", validate=False)
+    assert cfg["config_id"] == "landed"

@@ -1011,6 +1011,10 @@ class ConnectorsAPI(BaseAPI):
         if refresh:
             self.clear_cache()
         raw = resp if isinstance(resp, dict) else {"result": resp}
+        # NB: FortiSOAR 8.0's PUT echoes the saved row but puts an async
+        # op-envelope in ``status`` (``{"status":"finished","message":...}``)
+        # instead of 7.x's int active-flag. ``ConnectorConfig.status`` tolerates
+        # this (coerced to None) — see its validator in models/_integration.py.
         return ConnectorConfig.model_validate(raw)
 
     def delete_configuration(self, config_id: str, *, refresh: bool = True) -> None:
@@ -1099,6 +1103,145 @@ class ConnectorsAPI(BaseAPI):
         if refresh:
             self.clear_cache()
         return resp if isinstance(resp, dict) else {"result": resp}
+
+    def dev_delete(self, entity_id: str, *, refresh: bool = True) -> None:
+        """Delete a dev-workspace connector twin (Studio *discard*).
+
+        ``DELETE .../entity/{id}/``. Use to tear down an orphaned ``_dev``
+        workspace left by a failed :meth:`dev_publish` — an unreadable file in
+        an orphaned ``_dev`` dir can wedge DAS's HA file-sync, so cleanup matters.
+        """
+        self.client.delete(f"{self._DEV_BASE}/{entity_id}/")
+        if refresh:
+            self.clear_cache()
+
+    def republish(self, connector: str, *, replace: bool = True, discard: bool = True) -> dict[str, Any]:
+        """Recycle the integrations workers onto a connector's installed code.
+
+        A same-version ``$replace`` tgz install (see :meth:`install_from_file`)
+        writes the new files but does **not** refresh the long-lived integrations
+        uwsgi workers, so they keep serving the previously-imported module object
+        from ``sys.modules`` (the "ghost bytecode" bug: a request randomly hits a
+        stale worker and same-named-module edits silently don't take). This is the
+        supported, SSH-free recycle: open the installed connector in the Connector
+        Studio dev workspace (cloning the current installed state), then publish
+        that twin back — which copies it into the live dir **and** touches the dev
+        config ini, recycling every worker within ~5s.
+
+        ``discard`` makes a *successful* publish destroy the dev twin server-side
+        so no orphan ``_dev`` dir is left; on a publish failure the twin is
+        deleted explicitly here (an unreadable file in an orphaned ``_dev`` can
+        wedge HA file-sync). ``replace`` overwrites the same name+version.
+
+        Run this after a same-version ``install_from_file(..., replace=True)`` so
+        every worker imports the new code. Returns ``{"ok": True, "dev_id": ...}``.
+
+        Raises ``ValueError`` if ``connector`` isn't installed, or re-raises the
+        publish error (after cleaning up the twin) if the publish itself fails.
+        """
+        connector_id = self.resolve_connector_id(connector)
+        if connector_id is None:
+            raise ValueError(f"{connector!r} is not installed")
+        # Entering edit mode clones the installed tree into the dev workspace.
+        dev = self.dev_edit(connector_id)
+        dev_id = dev.get("id")
+        # Defensive: edit-mode sometimes echoes the installed id rather than the
+        # twin's — find the real dev twin (development=true) by name.
+        if dev_id == connector_id or not dev.get("development"):
+            twin = next(
+                (m for m in self.dev_list() if m.get("name") == connector and m.get("development")),
+                None,
+            )
+            dev_id = (twin or {}).get("id", dev_id)
+        if not dev_id:
+            raise RuntimeError(f"could not resolve the dev-workspace twin for {connector!r}")
+        try:
+            self.dev_publish(dev_id, replace=replace, discard=discard)
+        except Exception:
+            # Publish didn't run its discard (failed/timed out) — delete the twin
+            # explicitly so no `_dev` dir is left to wedge HA file-sync.
+            try:
+                self.dev_delete(dev_id)
+            except Exception:  # noqa: BLE001 — best-effort teardown
+                pass
+            raise
+        return {"ok": True, "dev_id": dev_id}
+
+    def _find_configuration_by_name(self, connector: str, name: str) -> dict[str, Any] | None:
+        """The connector's configuration row matching ``name`` (carrying
+        ``config_id`` + ``agent``), or ``None``. Reads :meth:`connector_detail`,
+        the only view that lists full config rows."""
+        try:
+            detail = self.connector_detail(connector)
+        except ValueError:
+            return None
+        return next((c for c in (detail.get("configuration") or []) if c.get("name") == name), None)
+
+    def upsert_configuration(
+        self,
+        connector: str,
+        config: dict[str, Any],
+        *,
+        name: str,
+        version: str | None = None,
+        default: bool = False,
+        agent: str | None = None,
+        validate: bool = True,
+    ) -> ConnectorConfig:
+        """Create a named configuration, or update it in place if one already
+        exists with the same ``name`` — the idempotent write the UI's *Save*
+        button performs, safe to re-run from a deploy script.
+
+        Finds an existing config by ``name`` (via :meth:`connector_detail`) and
+        ``PUT``s to its ``config_id`` (preserving the existing ``agent`` unless
+        ``agent`` is given), else ``POST``s a new one. Unlike calling
+        :meth:`create_configuration` twice — which 400s on
+        ``"name, connector, agent must be unique"`` — this updates the second time.
+
+        Tolerates the platform's *persisted-despite-500* case: a connector's own
+        ``on_add_config`` / ``on_update_config`` hook can raise **after** the row
+        is written (e.g. a post-save warmup), surfacing a 500 even though the
+        config saved. On a write error this re-fetches by ``name`` and returns the
+        row if it landed, rather than failing a re-runnable deploy.
+
+        Args mirror :meth:`create_configuration`. Returns the persisted
+        :class:`~pyfsr.models.ConnectorConfig`.
+        """
+        version = version or self.resolve_version(connector)
+        existing = self._find_configuration_by_name(connector, name)
+
+        def _write() -> ConnectorConfig:
+            if existing:
+                return self.update_configuration(
+                    connector,
+                    existing.get("config_id") or existing.get("id"),
+                    config,
+                    name=name,
+                    version=version,
+                    default=default,
+                    agent=agent if agent is not None else existing.get("agent"),
+                    validate=validate,
+                )
+            return self.create_configuration(
+                connector,
+                config,
+                name=name,
+                version=version,
+                default=default,
+                agent=agent,
+                validate=validate,
+            )
+
+        try:
+            return _write()
+        except Exception:
+            # The write may have persisted before a post-save hook raised — verify
+            # by re-fetch rather than trusting the status code.
+            confirmed = self._find_configuration_by_name(connector, name)
+            if confirmed is not None:
+                self.clear_cache()
+                return ConnectorConfig.model_validate(confirmed)
+            raise
 
     # ------------------------------------------------------------- execute
     def execute(

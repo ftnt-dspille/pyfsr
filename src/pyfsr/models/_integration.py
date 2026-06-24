@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .types import RecordIRI
 
@@ -119,9 +119,27 @@ class ConnectorConfig(ApiResult):
     name: str | None = None
     default: bool = False
     # Active flag: 1 == active. Verified int on the live wire (list, create, and
-    # update all return the saved record). Kept strict so callers can rely on
+    # 7.x update all return the saved record). Kept as int so callers can rely on
     # ``cfg.status == 1``; unknown *fields* are still tolerated via extra="allow".
+    # FortiSOAR 8.0's *update* echo instead nests an async op-envelope here
+    # (``{"status":"finished","message":...}``) — that conveys no active-flag, so
+    # the validator coerces any non-int (dict/str) to None rather than failing.
     status: int | None = None
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _coerce_status(cls, v: Any) -> int | None:
+        if isinstance(v, bool):  # avoid True->1 surprises
+            return None
+        if isinstance(v, int):
+            return v
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                return None
+        return None  # dict op-envelope (8.0) or anything else -> no active flag
+
     config: dict[str, Any] = Field(default_factory=dict)
     connector: int | None = None
     agent: str | None = None
