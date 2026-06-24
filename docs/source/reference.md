@@ -48,15 +48,11 @@ autoapi/pyfsr/auth/index
 
 Playbooks (authoring) <autoapi/pyfsr/authoring/index>
 autoapi/pyfsr/playbook_freshness/index
+autoapi/pyfsr/playbook_lint/index
 autoapi/pyfsr/tools/index
 autoapi/pyfsr/mcp/index
 autoapi/pyfsr/cli/index
+autoapi/pyfsr/appliance/index
 autoapi/pyfsr/spec/index
 autoapi/pyfsr/utils/index
-```
-
-```{toctree}
-:hidden:
-
-autoapi/pyfsr/index
 ```

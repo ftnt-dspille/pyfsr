@@ -214,4 +214,8 @@ copybutton_prompt_text = r">>> |\.\.\. |\$ "
 copybutton_prompt_is_regexp = True
 
 # Exclude patterns
-exclude_patterns = ["build"]
+# `autoapi/pyfsr/index` is AutoAPI's package-landing page; its auto-generated
+# "Submodules" toctree duplicates every module into a second parallel nav tree
+# (sidebar showed each module twice). reference.md curates the canonical flat
+# list, so drop the landing page rather than surface its competing tree.
+exclude_patterns = ["build", "autoapi/pyfsr/index.rst"]
