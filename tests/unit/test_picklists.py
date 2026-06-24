@@ -219,7 +219,7 @@ def test_clear_cache():
 # --- RecordSet opt-in integration -----------------------------------------
 def test_recordset_create_resolves_picklists_opt_in():
     api, client = _api()
-    RecordSet(client, "alerts", typed=False).create({"name": "x", "severity": "High"}, resolve_picklists=True)
+    RecordSet(client, "alerts").create({"name": "x", "severity": "High"}, resolve_picklists=True)
     endpoint, data = client.post_calls[0]
     assert endpoint == "/api/3/alerts"
     assert data["severity"] == "/api/3/picklists/sev-high"
@@ -227,21 +227,21 @@ def test_recordset_create_resolves_picklists_opt_in():
 
 def test_recordset_create_resolves_picklists_by_default():
     api, client = _api()
-    RecordSet(client, "alerts", typed=False).create({"severity": "High"})
+    RecordSet(client, "alerts").create({"severity": "High"})
     _, data = client.post_calls[0]
     assert data["severity"] == "/api/3/picklists/sev-high"  # resolved by default
 
 
 def test_recordset_create_resolution_opt_out():
     api, client = _api()
-    RecordSet(client, "alerts", typed=False).create({"severity": "High"}, resolve_picklists=False)
+    RecordSet(client, "alerts").create({"severity": "High"}, resolve_picklists=False)
     _, data = client.post_calls[0]
     assert data["severity"] == "High"  # untouched when opted out
 
 
 def test_recordset_update_resolves_picklists_opt_in():
     api, client = _api()
-    RecordSet(client, "alerts", typed=False).update("u1", {"status": "Open"}, resolve_picklists=True)
+    RecordSet(client, "alerts").update("u1", {"status": "Open"}, resolve_picklists=True)
     endpoint, data = client.put_calls[0]
     assert endpoint == "/api/3/alerts/u1"
     assert data["status"] == "/api/3/picklists/st-open"

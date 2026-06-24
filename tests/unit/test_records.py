@@ -234,7 +234,7 @@ def test_delete_by_query_rejects_empty_filters():
 def test_restore_clears_deleted_at_and_puts():
     deleted = {"@id": "/api/3/alerts/u1", "uuid": "u1", "name": "x", "deletedAt": 1234.5}
     client = FakeClient({"/api/3/alerts/u1": deleted})
-    rec = RecordSet(client, "alerts", typed=False).restore("u1")
+    rec = RecordSet(client, "alerts").restore("u1", raw=True)
     get_call, put_call = client.calls
     assert get_call == ("GET", "/api/3/alerts/u1", {"$showDeleted": "true"}, None)
     method, endpoint, params, data = put_call

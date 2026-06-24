@@ -1,6 +1,6 @@
 """Unit tests for the user/team/role models and BaseRecord relationship accessors."""
 
-from pyfsr.models import FileRecord, Role, Team, User, model_for
+from pyfsr.models import FileRecord, ModulePermission, Role, Team, User, model_for
 from pyfsr.models._generated import Alert, Task
 
 # A People/Person record as returned by /api/3/people (single-relation expansion
@@ -46,11 +46,27 @@ def test_team_and_role_slim_schema_no_extra_leak():
             "@id": "/api/3/roles/r1",
             "@type": "Role",
             "name": "SOC Manager",
-            "modulePermissions": [1, 2],
+            "modulePermissions": [
+                {
+                    "@id": "/api/3/module_permissions/p1",
+                    "@type": "ModulePermission",
+                    "canCreate": True,
+                    "canRead": True,
+                    "canUpdate": False,
+                    "canDelete": False,
+                    "canExecute": True,
+                    "module": "/api/3/modules/m1",
+                },
+                {"@type": "ModulePermission", "canRead": True, "module": "/api/3/modules/m2"},
+            ],
         }
     )
     assert role.name == "SOC Manager"
     assert len(role.modulePermissions) == 2
+    perm = role.modulePermissions[0]
+    assert isinstance(perm, ModulePermission)
+    assert perm.canCreate is True and perm.canDelete is False
+    assert perm["canExecute"] is True  # dict-compatible
 
 
 def test_create_modify_user_accessors_expanded():

@@ -91,10 +91,11 @@ def test_recordset_unknown_module_returns_baserecord():
     assert rec["anything"] == 1
 
 
-def test_recordset_typed_false_returns_dict():
+def test_recordset_raw_read_returns_dict():
     client = FakeClient({"/api/3/incidents/i1": {"uuid": "i1"}})
-    rec = RecordSet(client, "incidents", typed=False).get("i1")
+    rec = RecordSet(client, "incidents").get("i1", raw=True)
     assert rec == {"uuid": "i1"}
+    assert type(rec) is dict
 
 
 def test_recordset_create_accepts_model_instance():

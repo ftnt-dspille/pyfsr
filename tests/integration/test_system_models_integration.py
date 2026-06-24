@@ -6,7 +6,7 @@ run with: pytest -m integration
 
 import pytest
 
-from pyfsr import SolutionPack, Workflow, WorkflowCollection, WorkflowRun
+from pyfsr import RunSummary, SolutionPack, Workflow, WorkflowCollection
 
 pytestmark = pytest.mark.integration
 
@@ -30,17 +30,17 @@ def test_records_workflow_collections_returns_typed_model(client):
 
 
 def test_playbook_runs_typed(client):
-    runs = client.playbooks.execution_history(limit=3, typed=True)
+    runs = client.playbooks.execution_history(limit=3)
     if not runs:
         pytest.skip("no playbook runs on box")
-    assert all(isinstance(r, WorkflowRun) for r in runs)
+    assert all(isinstance(r, RunSummary) for r in runs)
     assert runs[0].status is not None
-    # dict-compatible access still works
+    # dict-compatible access still works; full record preserved in extra
     assert runs[0]["status"] == runs[0].status
 
 
 def test_content_hub_packs_typed(client):
-    packs = client.content_hub.search_installed_packs(limit=3, typed=True)
+    packs = client.content_hub.search_installed_packs(limit=3)
     if not packs:
         pytest.skip("no installed solution packs on box")
     assert all(isinstance(p, SolutionPack) for p in packs)

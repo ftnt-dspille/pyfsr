@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import BaseRecord
+from .models import ApiResult, BaseRecord
 from .pagination import HydraPage
 
 #: Fields kept by ``summary=True`` when present on a record — identity plus the
@@ -57,6 +57,8 @@ def to_jsonable(obj: Any) -> Any:
     """
     if isinstance(obj, BaseRecord):
         return obj.to_dict(by_alias=True)
+    if isinstance(obj, ApiResult):
+        return to_jsonable(obj.to_dict(by_alias=True))
     if isinstance(obj, HydraPage):
         return {
             "members": [to_jsonable(m) for m in obj.members],

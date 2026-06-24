@@ -15,6 +15,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import Field
+
+from ._integration import ApiResult
 from .base import BaseRecord
 from .types import PicklistIRI
 
@@ -39,7 +42,7 @@ class Workflow(BaseRecord):
     remoteExecutableFlag: bool | None = None
     synchronous: bool | None = None
     triggerLimit: Any | None = None
-    parameters: list[Any] | None = None
+    parameters: list[str] | None = None  # declared input names, e.g. ["ip4AddressList"] (live-verified)
     lastModifyDate: int | None = None
     collection: str | None = None
     triggerStep: str | None = None
@@ -96,11 +99,28 @@ class WorkflowRun(BaseRecord):
     result: Any | None = None
 
 
+class FeaturedTag(ApiResult):
+    """A marketplace "featured" badge on a Content Hub item.
+
+    The ``featuredTags`` array on a :class:`ContentHubItem` carries these —
+    live-verified shape is ``{"tag": "preview", "color": "#2d87e3"}`` (the label
+    and the hex colour the catalog UI renders the chip with). Dict-compatible,
+    so ``tag["tag"]`` works alongside ``tag.tag``.
+    """
+
+    tag: str | None = None
+    color: str | None = None
+
+
 class ContentHubItem(BaseRecord):
     """Shared base for Content Hub items (solution packs, connectors, widgets).
 
-    Returned by ``client.content_hub`` searches when ``typed=True``. Stable,
-    platform-owned schema (the marketplace catalog shape).
+    Returned by ``client.content_hub`` searches. Stable, platform-owned schema
+    (the marketplace catalog shape). Subclassed by :class:`SolutionPack`,
+    :class:`ContentHubConnector`, and :class:`Widget`, which add nothing of their
+    own today — the catalog returns one flat shape discriminated by ``type`` —
+    but exist so callers can ``isinstance``-narrow and so future per-type fields
+    have a home.
     """
 
     name: str | None = None
@@ -115,13 +135,14 @@ class ContentHubItem(BaseRecord):
     publisher: str | None = None
     certified: bool | None = None
     featured: bool | None = None
-    featuredTags: list[Any] | None = None
+    featuredTags: list[FeaturedTag] | None = None
     draft: bool | None = None
     local: bool | None = None
     development: bool | None = None
     dependencies: list[Any] | None = None
     category: list[Any] | None = None
     iconLarge: str | None = None
+    infoPath: str | None = None  # repo path to the item's info.json (drives connector_versions)
     publishedDate: float | None = None
     buildNumber: int | None = None
     configCount: int | None = None
@@ -208,6 +229,25 @@ class Team(BaseRecord):
     importedBy: list[Any] | None = None
 
 
+class ModulePermission(BaseRecord):
+    """One module's CRUD/execute grant inside a :class:`Role`.
+
+    Live-verified shape (``@type == "ModulePermission"``): the five ``can*``
+    booleans, an optional ``fieldPermissions`` list, and a ``module``
+    relationship (an IRI string, or the expanded module object when relationships
+    are pulled). Dict-compatible, so ``perm["canRead"]`` works alongside
+    ``perm.canRead``.
+    """
+
+    canCreate: bool | None = None
+    canRead: bool | None = None
+    canUpdate: bool | None = None
+    canDelete: bool | None = None
+    canExecute: bool | None = None
+    fieldPermissions: list[Any] | None = None
+    module: Any | None = None  # IRI str or expanded module dict per $relationships
+
+
 class Role(BaseRecord):
     """A FortiSOAR **role** record from ``/api/3/roles/``.
 
@@ -219,7 +259,7 @@ class Role(BaseRecord):
 
     name: str | None = None
     description: str | None = None
-    modulePermissions: list[Any] | None = None
+    modulePermissions: list[ModulePermission] | None = None
     importedBy: list[Any] | None = None
 
 
@@ -248,29 +288,42 @@ class SolutionPack(ContentHubItem):
     """A Content Hub **solution pack** (``type == "solutionpack"``)."""
 
 
+class ImportJob(ApiResult):
+    """The async import job embedded in a solution-pack install response.
+
+    ``POST /api/3/solutionpacks/install`` returns the pack entity with this
+    object tracking the install; its ``uuid`` is what
+    :meth:`~pyfsr.api.solution_packs.SolutionPackAPI.install_status` and
+    :meth:`~pyfsr.api.solution_packs.SolutionPackAPI.wait_for_install` poll.
+    Dict-compatible, so ``job["uuid"]`` works alongside ``job.uuid``.
+    """
+
+    id_iri: str | None = Field(default=None, alias="@id")
+    uuid: str | None = None
+    status: str | None = None
+
+
 class SolutionPackInstallResponse(SolutionPack):
     """The SolutionPack record returned by ``POST /api/3/solutionpacks/install``.
 
     The install response is the full SolutionPack entity with an embedded
-    ``importJob`` object tracking the async install. Use :attr:`job_id` to
+    :class:`ImportJob` tracking the async install. Use :attr:`job_id` to
     get the UUID for :meth:`~pyfsr.api.solution_packs.SolutionPackAPI.install_status`
     and :meth:`~pyfsr.api.solution_packs.SolutionPackAPI.wait_for_install` calls.
     """
 
-    importJob: Any | None = None
+    importJob: ImportJob | None = None
 
     @property
     def job_id(self) -> str | None:
-        """UUID of the async import job, parsed from the embedded ``importJob``."""
+        """UUID of the async import job, parsed from the embedded :class:`ImportJob`."""
         job = self.importJob
-        if not isinstance(job, dict):
+        if job is None:
             return None
-        uuid = job.get("uuid")
-        if isinstance(uuid, str) and uuid:
-            return uuid
-        iri = job.get("@id")
-        if isinstance(iri, str) and iri:
-            return iri.rstrip("/").split("/")[-1]
+        if job.uuid:
+            return job.uuid
+        if job.id_iri:
+            return job.id_iri.rstrip("/").split("/")[-1]
         return None
 
 
@@ -284,3 +337,47 @@ class ContentHubConnector(ContentHubItem):
 
 class Widget(ContentHubItem):
     """A Content Hub **widget** (``type == "widget"``)."""
+
+
+class ConnectorOperation(ApiResult):
+    """One action a connector exposes, from its ``info.json`` ``operations[]``.
+
+    Live-verified stable fields: the ``operation`` slug, human ``title`` /
+    ``description``, and the ``visible`` flag. Operation-specific extras
+    (parameters, output schema, category, …) stay in ``extra``. Dict-compatible.
+    """
+
+    operation: str | None = None
+    title: str | None = None
+    description: str | None = None
+    visible: bool | None = None
+
+
+class ConnectorVersionInfo(ApiResult):
+    """A connector's published ``info.json`` from Fortinet's public Content Hub repo.
+
+    Returned by :meth:`~pyfsr.api.content_hub.ContentHubSearch.connector_versions`.
+    This is the *repo* manifest (``{repo}/.../latest/info.json``), a different
+    shape from the on-box :class:`ContentHubConnector` catalog entry — most
+    notably it carries :attr:`availableVersions`, every version ever published.
+    Curated fields are typed; the rest (``scm``, ``help``, icon paths, …) stay in
+    ``extra``. Dict-compatible, so ``info["availableVersions"]`` still works.
+    """
+
+    name: str | None = None
+    label: str | None = None
+    description: str | None = None
+    version: str | None = None
+    type: str | None = None
+    buildNumber: int | None = None
+    publishedDate: int | None = None
+    lastUpdated: int | None = None
+    publisher: str | None = None
+    certified: bool | None = None
+    category: str | None = None
+    infoPath: str | None = None
+    help: str | None = None
+    releaseNotes: str | None = None
+    availableVersions: list[str] | None = None
+    operations: list[ConnectorOperation] | None = None
+    dependentSolutionPacks: list[Any] | None = None

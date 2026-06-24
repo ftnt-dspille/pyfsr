@@ -62,7 +62,7 @@ def test_safe_delete_lifecycle(client):
     """
     from pyfsr.exceptions import ResourceNotFoundError
 
-    alerts = client.records("alerts", typed=False)
+    alerts = client.records("alerts")
     uuid = alerts.create({"name": "pyfsr-p4-safe-delete-test"})["uuid"]
     recycled_ok = False
     try:

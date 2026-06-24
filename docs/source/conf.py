@@ -91,6 +91,11 @@ nitpick_ignore = [
     ("py:class", "FortiSOAR"),
     ("py:class", "pyfsr.FortiSOAR"),
     ("py:class", "pyfsr.models.BaseRecord"),
+    # ApiResult is re-exported from pyfsr.models but documented at its canonical
+    # private module; the "Bases:" xref from public subclasses (FreshnessReport,
+    # FreshnessProbe) resolves at runtime but not under `-n`.
+    ("py:class", "pyfsr.models.ApiResult"),
+    ("py:obj", "pyfsr.models.ApiResult"),
     ("py:obj", "pyfsr.models._generated"),
     ("py:mod", "pyfsr.models._generated"),
     ("py:class", "pydantic.main.BaseModel"),

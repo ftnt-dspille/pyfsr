@@ -58,9 +58,9 @@ print(alert.name, alert.severity)
 
 Available typed models include `Alert`, `Incident`,
 `Task`, `Comment`, `Workflow`, and
-more. Look up the model class for any module with {func}`~pyfsr.models.model_for`, or
-disable typing for a `RecordSet` with `client.records("alerts", typed=False)` to
-get raw dicts.
+more. Look up the model class for any module with {func}`~pyfsr.models.model_for`.
+Reads always come back typed; pass `raw=True` on an individual read (e.g.
+`client.records("alerts").get(uuid, raw=True)`) when you want a plain dict.
 
 ## Picklist resolution
 

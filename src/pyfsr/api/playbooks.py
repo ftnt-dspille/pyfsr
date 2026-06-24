@@ -26,10 +26,37 @@ import time
 import urllib.parse
 from typing import Any
 
+from pydantic import ValidationError
+
+from ..models import (
+    ApprovalRequest,
+    CreatePlaybookRequest,
+    ResumeRequest,
+    RunEnv,
+    RunFailure,
+    RunStep,
+    RunSummary,
+    TriggerActionRequest,
+    TriggerRequest,
+    TriggerResponse,
+    Workflow,
+)
 from ..pagination import HydraPage, extract_members
 from ..projection import project
 from ..query import Query
 from .base import BaseAPI
+
+
+def _build(model_cls, op: str, **kwargs):
+    """Construct a typed request model, re-raising pydantic errors as a friendly
+    ``ValueError`` so the SDK keeps its single, predictable exception type."""
+    try:
+        return model_cls(**kwargs)
+    except ValidationError as e:
+        first = e.errors()[0]
+        loc = ".".join(str(p) for p in first.get("loc", ())) or "?"
+        raise ValueError(f"{op}(): invalid {loc} — {first.get('msg')}") from e
+
 
 _TERMINAL_STATUSES = frozenset({"finished", "failed", "error", "cancelled", "aborted"})
 
@@ -58,13 +85,6 @@ def _pk(pk: str) -> str:
     if not isinstance(pk, str) or not pk.strip():
         raise ValueError("a non-empty pk is required")
     return pk.strip()
-
-
-def _alert_iri(ref: str) -> str:
-    """Expand a bare alert uuid/ref to a full ``/api/3/alerts/<uuid>`` IRI."""
-    if ref.startswith("/api/"):
-        return ref
-    return f"/api/3/alerts/{ref.rstrip('/').split('/')[-1].split(':')[-1]}"
 
 
 # Server-managed fields that must NOT be carried into a clone — the appliance
@@ -128,24 +148,23 @@ def _prepare_clone_body(src: dict[str, Any], *, new_name: str, is_active: bool) 
     return body
 
 
-def _shape_run(m: dict[str, Any]) -> dict[str, Any]:
-    """Flatten a raw workflow-run record to the fields callers usually want."""
+def _shape_run(m: dict[str, Any]) -> RunSummary:
+    """Wrap a raw workflow-run record in a typed :class:`RunSummary`.
+
+    The curated fields (``pk``, ``error_message``, ``source``, …) are promoted to
+    typed attributes; **every other field of the raw record is preserved** in the
+    model's ``extra`` (``RunSummary`` is ``ApiResult`` with ``extra="allow"``), so
+    the typed view never loses data — there's no "raw vs typed" trade-off to make.
+    """
     res = m.get("result") if isinstance(m.get("result"), dict) else {}
     err = None
     if isinstance(res, dict):
         err = res.get("Error message") or res.get("error") or res.get("message")
     pk_url = m.get("@id") or ""
     pk = pk_url.rstrip("/").rsplit("/", 1)[-1] if pk_url else None
-    return {
-        "task_id": m.get("task_id"),
-        "name": m.get("name"),
-        "status": m.get("status"),
-        "error_message": err,
-        "modified": m.get("modified"),
-        "uuid": m.get("uuid"),
-        "pk": pk,
-        "source": m.get("_source"),  # "live" or "historical"
-    }
+    data = dict(m)
+    data.update(error_message=err, pk=pk, source=m.get("_source"))  # "live"/"historical"
+    return RunSummary(**data)
 
 
 class PlaybooksAPI(BaseAPI):
@@ -196,22 +215,20 @@ class PlaybooksAPI(BaseAPI):
         uuid: str,
         *,
         relationships: bool = True,
-        raw: bool = False,
-        typed: bool = False,
-    ) -> dict[str, Any]:
+    ) -> Workflow:
         """Fetch one playbook definition by uuid (``GET /api/3/workflows/{uuid}``).
 
-        ``relationships=True`` (default) inlines the workflow's steps/routes/groups, which is
-        the usual shape callers want when inspecting or cloning a playbook.
+        Returns a typed :class:`~pyfsr.models.Workflow`. It stays dict-compatible
+        (``wf["name"]`` / ``wf.get(...)``) and round-trips to a plain dict via
+        ``wf.to_dict()`` when a JSON-serializable copy is needed (e.g. by
+        :meth:`clone`). ``relationships=True`` (default) inlines the workflow's
+        steps/routes/groups, which is the usual shape callers want when inspecting
+        or cloning a playbook.
         """
         uuid = _require_uuid(uuid, "get_definition")
         params = {"$relationships": "true"} if relationships else None
         resp = self.client.get(f"{_WORKFLOWS}/{uuid}", params=params)
-        if typed:
-            from ..models import Workflow
-
-            return Workflow(**resp)
-        return resp if raw else resp
+        return Workflow(**resp)
 
     def create_playbook(
         self,
@@ -241,23 +258,18 @@ class PlaybooksAPI(BaseAPI):
         Returns:
             The created playbook definition record.
         """
-        if not isinstance(name, str) or not name.strip():
-            raise ValueError("create_playbook() requires a non-empty name")
-        if not isinstance(collection, str) or not collection.strip():
-            raise ValueError("create_playbook() requires a collection uuid or IRI")
-        coll_iri = collection if collection.startswith("/api/") else f"/api/3/workflow_collections/{collection}"
-        body: dict[str, Any] = {
-            "name": name.strip(),
-            "collection": coll_iri,
-            "isActive": is_active,
-            "remoteExecutableFlag": remote_executable,
+        req = _build(
+            CreatePlaybookRequest,
+            "create_playbook",
+            name=name,
+            collection=collection,
+            is_active=is_active,
+            remote_executable=remote_executable,
+            priority=priority,
+            origin=origin,
             **fields,
-        }
-        if priority is not None:
-            body["priority"] = priority
-        if origin is not None:
-            body["playbookOrigin"] = origin
-        return self.client.post(_WORKFLOWS, data=body)
+        )
+        return self.client.post(_WORKFLOWS, data=req.to_body())
 
     def clone(
         self,
@@ -293,7 +305,7 @@ class PlaybooksAPI(BaseAPI):
         if not isinstance(new_name, str) or not new_name.strip():
             raise ValueError("clone() requires a non-empty new_name")
         uuid = _require_uuid(uuid, "clone")
-        src = self.get_definition(uuid, relationships=True)
+        src = self.get_definition(uuid, relationships=True).to_dict(by_alias=True)
 
         body = _prepare_clone_body(src, new_name=new_name.strip(), is_active=is_active)
         if collection is not None:
@@ -339,15 +351,17 @@ class PlaybooksAPI(BaseAPI):
         *,
         page: int = 1,
         raw: bool = False,
-        typed: bool = False,
         fields: list[str] | tuple[str, ...] | None = None,
         summary: bool = False,
         show_deleted: bool = False,
     ) -> Any:
         """Run a structured query against ``/api/query/workflows``.
 
-        This mirrors :meth:`pyfsr.records.RecordSet.query` for the workflow-definition
-        surface, so callers can use the same body-filter shapes the framework probes with.
+        Mirrors :meth:`pyfsr.records.RecordSet.query` for the workflow-definition
+        surface. Members come back as typed :class:`~pyfsr.models.Workflow` objects;
+        ``raw=True`` returns the whole :class:`~pyfsr.pagination.HydraPage` instead of
+        just its members, and ``fields``/``summary`` apply a token-efficient
+        projection (returning trimmed dicts) for agent reads.
         """
         body = query.to_body() if isinstance(query, Query) else dict(query)
         params: dict[str, Any] = {"$page": page}
@@ -362,15 +376,9 @@ class PlaybooksAPI(BaseAPI):
             body["showDeleted"] = True
         resp = self.client.post("/api/query/workflows", data=body, params=params)
         page_obj = HydraPage.from_response(resp, page=page, limit=params.get("$limit"))
-        if typed:
-            from ..models import Workflow
-
-            page_obj.members = [Workflow(**m) if isinstance(m, dict) else m for m in page_obj.members]
-            if raw:
-                return page_obj
-            return page_obj.members
         if fields or summary:
             return project(page_obj, fields=fields, summary=summary)
+        page_obj.members = [Workflow(**m) if isinstance(m, dict) else m for m in page_obj.members]
         return page_obj if raw else page_obj.members
 
     def _fetch_runs_both(self, *, limit: int, extra_qs: str = "") -> list[dict[str, Any]]:
@@ -400,17 +408,14 @@ class PlaybooksAPI(BaseAPI):
         playbook: str | None = None,
         playbook_uuid: str | None = None,
         limit: int = 20,
-        raw: bool = False,
-        typed: bool = False,
-    ) -> list[dict[str, Any]]:
+    ) -> list[RunSummary]:
         """List recent playbook executions, newest first (live + historical merged).
 
         Scope to one playbook by ``playbook`` (name, resolved to uuid) or
-        ``playbook_uuid``. Returns shaped dicts
-        (``{task_id, name, status, error_message, modified, uuid, pk, source}``)
-        by default; pass ``raw=True`` for the full unshaped run records, or
-        ``typed=True`` for ``WorkflowRun`` objects (dict-compatible). ``typed``
-        wins over ``raw``.
+        ``playbook_uuid``. Returns typed :class:`~pyfsr.models.RunSummary` objects
+        — the curated fields (``task_id``/``status``/``error_message``/``pk``/…) as
+        typed attributes, with the full raw run record preserved in ``extra`` and
+        reachable by item access (``run["created"]``).
         """
         extra = ""
         if playbook_uuid or playbook:
@@ -420,30 +425,24 @@ class PlaybooksAPI(BaseAPI):
                     return []
             extra = f"&template_iri=/api/3/workflows/{playbook_uuid}"
         members = self._fetch_runs_both(limit=limit, extra_qs=extra)[:limit]
-        if typed:
-            from ..models import WorkflowRun
-
-            return [WorkflowRun(**m) for m in members]
-        return members if raw else [_shape_run(m) for m in members]
+        return [_shape_run(m) for m in members]
 
     def get_execution(
         self,
         run_pk: str,
         *,
-        raw: bool = False,
-        typed: bool = False,
         step_detail: bool = False,
-    ) -> dict[str, Any]:
+    ) -> RunSummary:
         """Fetch one playbook execution by its pk.
 
         The pk is the trailing segment of a run's ``@id`` URL. Tries the live
-        table first, then historical. Returns a shaped dict by default;
-        ``raw=True`` for the full record, or ``typed=True`` for a
-        ``WorkflowRun``. ``typed`` wins over ``raw``.
+        table first, then historical. Returns a typed
+        :class:`~pyfsr.models.RunSummary` — curated fields as attributes, the full
+        raw record preserved in ``extra`` (so ``run["result"]`` etc. still work).
 
         Pass ``step_detail=True`` to include the per-step execution trace; the
-        step results land under ``workflow``/``result``. ``step_detail`` implies
-        ``raw`` unless ``typed`` is set.
+        per-step results then ride in the model's ``extra`` under ``steps``/``env``
+        (see :meth:`run_env` for a reshaped view of them).
         """
         if not isinstance(run_pk, str) or not run_pk.strip():
             raise ValueError("get_execution() requires a non-empty run pk")
@@ -457,15 +456,8 @@ class PlaybooksAPI(BaseAPI):
                 last_err = e
                 continue
             if isinstance(resp, dict) and resp.get("@id"):
-                source = "historical" if "historical" in path else "live"
-                resp["_source"] = source
-                if typed:
-                    from ..models import WorkflowRun
-
-                    return WorkflowRun(**resp)
-                if step_detail:
-                    return resp
-                return resp if raw else _shape_run(resp)
+                resp["_source"] = "historical" if "historical" in path else "live"
+                return _shape_run(resp)
         if last_err is not None:
             raise last_err
         raise ValueError(f"execution {run_pk!r} not found")
@@ -482,7 +474,7 @@ class PlaybooksAPI(BaseAPI):
         limit: int = 20,
         offset: int = 0,
         ordering: str = "-modified",
-    ) -> list[dict[str, Any]]:
+    ) -> list[RunSummary]:
         """Search playbook execution history with human-friendly filters.
 
         Queries ``POST /api/wf/api/workflows/log_list/`` and returns shaped run
@@ -536,36 +528,32 @@ class PlaybooksAPI(BaseAPI):
         playbook: str | None = None,
         *,
         playbook_uuid: str | None = None,
-        raw: bool = False,
-    ) -> dict[str, Any] | None:
-        """Return the most recent run summary for a playbook.
+    ) -> RunSummary | None:
+        """Return the most recent run for a playbook as a typed :class:`~pyfsr.models.RunSummary`.
 
         Fetches the most recent execution (merged from live + historical tables,
         newest first) for the specified playbook. The playbook may be identified
-        by ``playbook`` (name, resolved to uuid) or ``playbook_uuid``.
+        by ``playbook`` (name, resolved to uuid) or ``playbook_uuid``. The full raw
+        run record is preserved in the model's ``extra`` (e.g. ``run["@id"]``).
 
         Args:
             playbook: the playbook name — resolved to uuid internally.
             playbook_uuid: the playbook uuid (use instead of ``playbook`` when
                 you already have it).
-            raw: if ``True``, returns the full unshaped run record; otherwise
-                returns the shaped dict
-                (``{task_id, name, status, error_message, modified, uuid, pk, source}``).
 
         Returns:
-            The shaped (or raw) run dict for the most recent execution, or
-            ``None`` if the playbook has no runs or does not exist.
+            The :class:`~pyfsr.models.RunSummary` for the most recent execution,
+            or ``None`` if the playbook has no runs or does not exist.
 
         Example:
             >>> run = client.playbooks.last_run(playbook="Block IP")
             >>> if run:
-            ...     print(f"{run['name']}: {run['status']} ({run['pk']})")
+            ...     print(f"{run.name}: {run.status} ({run.pk})")
         """
         runs = self.execution_history(
             playbook=playbook,
             playbook_uuid=playbook_uuid,
             limit=1,
-            raw=raw,
         )
         return runs[0] if runs else None
 
@@ -574,54 +562,34 @@ class PlaybooksAPI(BaseAPI):
         playbook: str | None = None,
         *,
         playbook_uuid: str | None = None,
-        raw: bool = False,
-    ) -> dict[str, Any] | None:
-        """Find the most recent run and fetch its error details.
+    ) -> RunFailure | None:
+        """Find the most recent run and return its error details as a typed :class:`~pyfsr.models.RunFailure`.
 
         Locates the most recent execution for the specified playbook, then
         calls :meth:`get_execution` with ``step_detail=True`` to retrieve the
         full record (error_message and step results are only fully populated
         there). The playbook may be identified by ``playbook`` (name, resolved
-        to uuid) or ``playbook_uuid``.
+        to uuid) or ``playbook_uuid``. For the full run record (all steps/env),
+        call :meth:`get_execution` with the returned ``pk``.
 
         Args:
             playbook: the playbook name — resolved to uuid internally.
             playbook_uuid: the playbook uuid (use instead of ``playbook`` when
                 you already have it).
-            raw: if ``True``, returns the full get_execution record with all
-                step details; otherwise returns a slim projection
-                (``{status, failing_step, error_message, pk}``).
 
         Returns:
-            When ``raw=False`` (default): a dict with keys:
-
-            - ``status``: the run's terminal status.
-            - ``error_message``: the error message (populated from the run's
-              result or the first failing step). ``None`` if the run succeeded.
-            - ``failing_step``: the first step with a failure status
-              (e.g. 'failed', 'errored'). ``None`` if the run succeeded.
-            - ``pk``: the run's pk (the trailing segment of its @id URL).
-
-            When ``raw=True``: the full run record from
-            :meth:`get_execution` (includes ``steps[]`` with per-step
-            execution traces, ``env``, etc.).
-
-            Returns ``None`` if the playbook has no runs or does not exist.
+            A :class:`~pyfsr.models.RunFailure` with ``status`` (the run's terminal
+            status), ``error_message`` (from the run result or first failing step;
+            ``None`` if it succeeded), ``failing_step`` (name of the first non-success
+            step, ``None`` if it succeeded), and ``pk``. Returns ``None`` if the
+            playbook has no runs or does not exist.
 
         Example:
             >>> failure = client.playbooks.why_failed(playbook="Block IP")
-            >>> if failure:
-            ...     print(f"Run {failure['pk']}: {failure['status']}")
-            ...     if failure['failing_step']:
-            ...         print(f"  Failed at step: {failure['failing_step']}")
-            ...     if failure['error_message']:
-            ...         print(f"  Error: {failure['error_message']}")
+            >>> if failure and failure.failing_step:
+            ...     print(f"Run {failure.pk} failed at {failure.failing_step}: {failure.error_message}")
         """
-        run = self.last_run(
-            playbook=playbook,
-            playbook_uuid=playbook_uuid,
-            raw=True,
-        )
+        run = self.last_run(playbook=playbook, playbook_uuid=playbook_uuid)
         if not run:
             return None
 
@@ -630,8 +598,6 @@ class PlaybooksAPI(BaseAPI):
             return None
 
         full = self.get_execution(pk, step_detail=True)
-        if raw:
-            return full
 
         # Extract the first failing step, if any.
         failing_step = None
@@ -657,14 +623,14 @@ class PlaybooksAPI(BaseAPI):
         # Use the step-level message if available, else fall back to top-level.
         error_message = failing_step_msg or top_error
 
-        return {
-            "status": full.get("status"),
-            "failing_step": failing_step,
-            "error_message": error_message,
-            "pk": pk,
-        }
+        return RunFailure(
+            status=full.get("status"),
+            failing_step=failing_step,
+            error_message=error_message,
+            pk=pk,
+        )
 
-    def run_env(self, run_pk: str) -> dict[str, Any]:
+    def run_env(self, run_pk: str) -> RunEnv:
         """Return a run's execution environment + per-step results.
 
         Fetches the run with ``step_detail=true`` and reshapes it into the
@@ -684,7 +650,7 @@ class PlaybooksAPI(BaseAPI):
         ``vars.steps.<name with spaces replaced by underscores>``.
         """
         full = self.get_execution(run_pk, step_detail=True)
-        steps: dict[str, Any] = {}
+        steps: dict[str, RunStep] = {}
         for s in full.get("steps") or []:
             if not isinstance(s, dict):
                 continue
@@ -694,12 +660,12 @@ class PlaybooksAPI(BaseAPI):
                 name = (md.get("metadata") or {}).get("name") or md.get("name")
             if not name:
                 continue
-            steps[name] = {"status": s.get("status"), "result": s.get("result")}
-        return {
-            "env": full.get("env") or {},
-            "status": full.get("status"),
-            "steps": steps,
-        }
+            steps[name] = RunStep(status=s.get("status"), result=s.get("result"))
+        return RunEnv(
+            env=full.get("env") or {},
+            status=full.get("status"),
+            steps=steps,
+        )
 
     # --------------------------------------------------------------- trigger
     def trigger(
@@ -712,7 +678,7 @@ class PlaybooksAPI(BaseAPI):
         follow: bool = False,
         timeout: float = 300,
         interval: float = 3,
-    ) -> dict[str, Any]:
+    ) -> TriggerResponse | RunSummary:
         """Manually trigger a playbook and return its run handle.
 
         POSTs to ``/api/triggers/1/notrigger/<playbook_uuid>`` — the route the
@@ -744,19 +710,14 @@ class PlaybooksAPI(BaseAPI):
         uuid = playbook if _looks_like_uuid(playbook) else self._resolve_uuid(playbook)
         if not uuid:
             raise ValueError(f"playbook {playbook!r} not found")
-        body: dict[str, Any] = dict(env or {})
-        if records is not None:
-            refs = [records] if isinstance(records, str) else list(records)
-            body["records"] = [_alert_iri(r) for r in refs]
-        if inputs is not None:
-            body["inputs"] = inputs
-        resp = self.client.post(f"/api/triggers/1/notrigger/{uuid}", data=body)
+        req = _build(TriggerRequest, "trigger", records=records, inputs=inputs, env=env or {})
+        resp = self.client.post(f"/api/triggers/1/notrigger/{uuid}", data=req.to_body())
         if follow:
             task_id = resp.get("task_id") if isinstance(resp, dict) else None
             if not task_id:
                 raise ValueError(f"trigger response missing task_id: {resp!r}")
             return self.wait(task_id, timeout=timeout, interval=interval)
-        return resp
+        return TriggerResponse(**resp) if isinstance(resp, dict) else resp
 
     # ------------------------------------------------------------------ wait
     def wait(
@@ -765,7 +726,7 @@ class PlaybooksAPI(BaseAPI):
         *,
         timeout: float = 300,
         interval: float = 3,
-    ) -> dict[str, Any]:
+    ) -> RunSummary:
         """Poll until a run reaches a terminal status and return the shaped run dict.
 
         Uses :meth:`log_list` (keyed by ``task_id``) rather than the heavier
@@ -804,7 +765,7 @@ class PlaybooksAPI(BaseAPI):
         since: str | float | None = None,
         timeout: float = 120,
         poll_interval: float = 3,
-    ) -> dict[str, Any]:
+    ) -> RunSummary:
         """Poll until the most recent run of a playbook reaches a terminal status.
 
         Queries :meth:`execution_history` (merged from live + historical tables,
@@ -854,7 +815,7 @@ class PlaybooksAPI(BaseAPI):
         deadline = time.monotonic() + timeout
         while True:
             # Fetch the most recent run(s)
-            runs = self.execution_history(playbook_uuid=uuid, limit=1, raw=False)
+            runs = self.execution_history(playbook_uuid=uuid, limit=1)
             if not runs:
                 # No runs found yet; keep polling
                 if time.monotonic() >= deadline:
@@ -919,17 +880,18 @@ class PlaybooksAPI(BaseAPI):
         """
         if not isinstance(run_pk, str) or not run_pk.strip():
             raise ValueError("resume() requires a non-empty run pk")
-        body: dict[str, Any] = {
-            "input": input,
-            "step_iri": step_iri,
-            "step_id": step_id,
-            "manual_input_id": int(manual_input_id),
-        }
-        if approved is not None:
-            body["approved"] = bool(approved)
+        req = _build(
+            ResumeRequest,
+            "resume",
+            input=input,
+            step_iri=step_iri,
+            step_id=step_id,
+            manual_input_id=manual_input_id,
+            approved=approved,
+        )
         return self.client.post(
             f"/api/wf/api/workflows/{run_pk.strip()}/wfinput_resume/?format=json",
-            data=body,
+            data=req.to_body(),
         )
 
     # ------------------------------------------------------- run control verbs
@@ -947,10 +909,8 @@ class PlaybooksAPI(BaseAPI):
         ``decision`` is the approval choice (e.g. ``"approved"``/``"rejected"``);
         ``comment`` is an optional note. For input-style resumes use :meth:`resume`.
         """
-        body: dict[str, Any] = {"decision": decision}
-        if comment is not None:
-            body["comment"] = comment
-        return self.client.post(f"/api/wf/api/workflows/{_pk(run_pk)}/approval/", data=body)
+        req = _build(ApprovalRequest, "approval", decision=decision, comment=comment)
+        return self.client.post(f"/api/wf/api/workflows/{_pk(run_pk)}/approval/", data=req.to_body())
 
     def count(self, *, logs: str = "all") -> dict[str, Any]:
         """Total run count (``GET .../workflows/count/``).
@@ -1041,7 +1001,7 @@ class PlaybooksAPI(BaseAPI):
     # --------------------------------------------------------- named triggers
     def trigger_by_name(
         self, name: str, *, body: dict[str, Any] | None = None, deferred: bool = False
-    ) -> dict[str, Any]:
+    ) -> TriggerResponse | Any:
         """Fire a playbook by its trigger's endpoint name.
 
         ``POST /api/triggers/1/{name}`` (or ``/api/triggers/1/deferred/{name}``
@@ -1053,7 +1013,8 @@ class PlaybooksAPI(BaseAPI):
         if not isinstance(name, str) or not name.strip():
             raise ValueError("trigger_by_name() requires a non-empty name")
         prefix = "/api/triggers/1/deferred/" if deferred else "/api/triggers/1/"
-        return self.client.post(f"{prefix}{name.strip('/ ')}", data=body or {})
+        resp = self.client.post(f"{prefix}{name.strip('/ ')}", data=body or {})
+        return TriggerResponse(**resp) if isinstance(resp, dict) else resp
 
     def trigger_action(
         self,
@@ -1063,7 +1024,7 @@ class PlaybooksAPI(BaseAPI):
         record_uuid: str,
         playbook_uuid: str | None = None,
         env: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> TriggerResponse | Any:
         """Fire a record-context action trigger (``POST /api/triggers/1/action/{route_uuid}``).
 
         This is the route FortiSOAR uses for playbooks with a *record-action*
@@ -1086,13 +1047,16 @@ class PlaybooksAPI(BaseAPI):
         """
         if not isinstance(route_uuid, str) or not route_uuid.strip():
             raise ValueError("trigger_action() requires a non-empty route_uuid")
-        body: dict[str, Any] = dict(env or {})
-        body["singleRecordExecution"] = True
-        body["__resource"] = module
-        body["records"] = [f"/api/3/{module}/{record_uuid}"]
-        if playbook_uuid is not None:
-            body["__uuid"] = playbook_uuid
-        return self.client.post(f"/api/triggers/1/action/{route_uuid.strip()}", data=body)
+        req = _build(
+            TriggerActionRequest,
+            "trigger_action",
+            module=module,
+            record_uuid=record_uuid,
+            playbook_uuid=playbook_uuid,
+            env=env or {},
+        )
+        resp = self.client.post(f"/api/triggers/1/action/{route_uuid.strip()}", data=req.to_body())
+        return TriggerResponse(**resp) if isinstance(resp, dict) else resp
 
     # --------------------------------------------------------- step diagnostics
     def historical_steps(

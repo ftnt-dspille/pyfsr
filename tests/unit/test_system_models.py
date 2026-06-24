@@ -4,12 +4,14 @@ from pyfsr import (
     BaseRecord,
     ContentHubConnector,
     ContentHubItem,
+    FeaturedTag,
+    ImportJob,
     RecordSet,
     SolutionPack,
+    SolutionPackInstallResponse,
     Widget,
     Workflow,
     WorkflowCollection,
-    WorkflowRun,
     model_for,
 )
 from pyfsr.api.content_hub import ContentHubSearch
@@ -102,31 +104,56 @@ def test_solution_pack_fields():
     assert sp.version == "9"
 
 
-def test_content_hub_search_typed_returns_models():
-    members = {"hydra:member": [{"name": "openai", "label": "OpenAI", "type": "connector"}]}
-    client = FakeClient({"/api/query/solutionpacks?$limit=30&$page=1&$search=": members})
-    ch = ContentHubSearch(client)
-    out = ch.search_installed_connectors(typed=True)
-    assert len(out) == 1
-    assert isinstance(out[0], ContentHubConnector)
-    assert out[0].label == "OpenAI"
-
-
-def test_content_hub_search_default_returns_dicts():
+def test_content_hub_search_returns_models():
     members = {"hydra:member": [{"name": "openai", "label": "OpenAI", "type": "connector"}]}
     client = FakeClient({"/api/query/solutionpacks?$limit=30&$page=1&$search=": members})
     ch = ContentHubSearch(client)
     out = ch.search_installed_connectors()
-    assert out == members["hydra:member"]  # plain dicts, unchanged default
+    assert len(out) == 1
+    assert isinstance(out[0], ContentHubConnector)
+    assert out[0].label == "OpenAI"
+    assert out[0]["label"] == "OpenAI"  # dict-compatible
 
 
-def test_content_hub_find_typed_single():
+def test_content_hub_find_single_returns_model():
     members = {"hydra:member": [{"name": "stats", "label": "Stats", "type": "widget"}]}
     client = FakeClient({"/api/query/solutionpacks?$limit=1&$page=1&$search=Stats": members})
     ch = ContentHubSearch(client)
-    hit = ch.find_installed_widget("Stats", typed=True)
+    hit = ch.find_installed_widget("Stats")
     assert isinstance(hit, Widget)
     assert hit.label == "Stats"
+
+
+def test_content_hub_featured_tags_are_typed():
+    # live-verified shape: [{"tag": "preview", "color": "#2d87e3"}]
+    members = {
+        "hydra:member": [
+            {
+                "name": "x",
+                "type": "connector",
+                "featuredTags": [{"tag": "preview", "color": "#2d87e3"}],
+                "infoPath": "/content-hub/x-1.0.0/9000",
+            }
+        ]
+    }
+    client = FakeClient({"/api/query/solutionpacks?$limit=30&$page=1&$search=": members})
+    out = ContentHubSearch(client).search_installed_connectors()
+    tag = out[0].featuredTags[0]
+    assert isinstance(tag, FeaturedTag)
+    assert tag.tag == "preview" and tag.color == "#2d87e3"
+    assert tag["color"] == "#2d87e3"  # dict-compatible
+    assert out[0].infoPath == "/content-hub/x-1.0.0/9000"  # promoted off extra
+
+
+def test_solution_pack_install_response_job_id_from_typed_import_job():
+    resp = SolutionPackInstallResponse(
+        name="p", importJob={"@id": "/api/3/import_jobs/abc", "uuid": "abc", "status": "running"}
+    )
+    assert isinstance(resp.importJob, ImportJob)
+    assert resp.importJob.status == "running"
+    assert resp.job_id == "abc"
+    # falls back to the @id tail when uuid is absent
+    assert SolutionPackInstallResponse(name="p", importJob={"@id": "/api/3/import_jobs/zzz"}).job_id == "zzz"
 
 
 # -- WorkflowRun via PlaybooksAPI -------------------------------------------
@@ -139,22 +166,11 @@ _RUN = {
 }
 
 
-def test_playbooks_runs_typed_returns_workflowrun():
-    client = FakeClient(
-        {
-            "/api/wf/api/workflows/?format=json&limit=20&ordering=-modified&parent_wf__isnull=True": {
-                "hydra:member": [_RUN]
-            },
-        }
-    )
-    runs = PlaybooksAPI(client).execution_history(typed=True)
-    assert len(runs) == 1
-    assert isinstance(runs[0], WorkflowRun)
-    assert runs[0].status == "finished"
-    assert runs[0].node_name == "node-a"
+def test_playbooks_runs_expose_full_record_in_extra():
+    # Typing is native + forced: execution_history always returns RunSummary, and
+    # the full WorkflowRun-style fields (node_name, …) survive in extra.
+    from pyfsr.models import RunSummary
 
-
-def test_playbooks_runs_default_returns_shaped_dict():
     client = FakeClient(
         {
             "/api/wf/api/workflows/?format=json&limit=20&ordering=-modified&parent_wf__isnull=True": {
@@ -163,21 +179,35 @@ def test_playbooks_runs_default_returns_shaped_dict():
         }
     )
     runs = PlaybooksAPI(client).execution_history()
-    assert isinstance(runs[0], dict)
-    assert set(runs[0]) == {
-        "task_id",
-        "name",
-        "status",
-        "error_message",
-        "modified",
-        "uuid",
-        "pk",
-        "source",
-    }
+    assert len(runs) == 1
+    assert isinstance(runs[0], RunSummary)
+    assert runs[0].status == "finished"
+    assert runs[0]["node_name"] == "node-a"
 
 
-def test_playbooks_get_typed():
+def test_playbooks_runs_default_returns_typed_run_summary():
+    from pyfsr.models import RunSummary
+
+    client = FakeClient(
+        {
+            "/api/wf/api/workflows/?format=json&limit=20&ordering=-modified&parent_wf__isnull=True": {
+                "hydra:member": [_RUN]
+            },
+        }
+    )
+    runs = PlaybooksAPI(client).execution_history()
+    # Typed by default, but still dict-compatible (ApiResult __getitem__/get/in).
+    assert isinstance(runs[0], RunSummary)
+    for key in ("task_id", "name", "status", "error_message", "modified", "uuid", "pk", "source"):
+        assert key in runs[0]
+    assert runs[0]["status"] == runs[0].status
+
+
+def test_playbooks_get_execution_returns_run_summary():
+    from pyfsr.models import RunSummary
+
     client = FakeClient({"/api/wf/api/workflows/run-1/?format=json": _RUN})
-    run = PlaybooksAPI(client).get_execution("run-1", typed=True)
-    assert isinstance(run, WorkflowRun)
+    run = PlaybooksAPI(client).get_execution("run-1")
+    assert isinstance(run, RunSummary)
     assert run.name == "Block IP"
+    assert run.pk == "run-1"

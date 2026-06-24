@@ -271,7 +271,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         This mirrors :meth:`pyfsr.records.RecordSet.restore` but keeps the collection-specific
         API self-contained.
         """
-        return RecordSet(self.client, "workflow_collections", typed=False).restore(uuid)
+        return RecordSet(self.client, "workflow_collections").restore(uuid, raw=True)
 
     def exists(self, uuid: str) -> bool:
         """Return True if a collection with ``uuid`` exists on the appliance.

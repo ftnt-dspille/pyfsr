@@ -23,7 +23,11 @@ without a live SOAR.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from typing import Any
+
+from pydantic import Field
+
+from .models import ApiResult
 
 #: Collections we cheap-count, mapped to the catalog table whose drift they
 #: signal. ``model_metadatas`` == published modules (equals staging when there's
@@ -37,15 +41,28 @@ COUNT_COLLECTIONS: dict[str, str] = {
 }
 
 
-@dataclass
-class FreshnessReport:
-    """Outcome of comparing stamped provenance against a live probe."""
+class FreshnessProbe(ApiResult):
+    """Result of the Level-1 cheap probe against a live SOAR (:func:`probe_live`).
+
+    Dict-compatible (``probe["version"]`` / ``probe.version``). A failed signal is
+    recorded as ``None`` rather than aborting the probe.
+    """
+
+    version: str | None = None
+    last_publish_time: Any | None = None
+    counts: dict[str, int | None] = Field(default_factory=dict)
+
+
+class FreshnessReport(ApiResult):
+    """Outcome of comparing stamped provenance against a live probe.
+
+    Dict-compatible (``report["drift"]`` / ``report.drift``)."""
 
     instance_label: str = ""
-    stored: dict = field(default_factory=dict)
-    live: dict = field(default_factory=dict)
+    stored: dict[str, Any] = Field(default_factory=dict)
+    live: dict[str, Any] = Field(default_factory=dict)
     #: Human-readable drift lines (empty ⇒ fresh).
-    drift: list[str] = field(default_factory=list)
+    drift: list[str] = Field(default_factory=list)
     #: True when the catalog carries no provenance stamp (never warmed).
     unstamped: bool = False
 
@@ -62,32 +79,32 @@ def _total_items(resp: object) -> int | None:
     return None
 
 
-def probe_live(client) -> dict:
+def probe_live(client) -> FreshnessProbe:
     """Run the Level-1 cheap probe against a live client. Best-effort: a failed
     signal is recorded as ``None`` rather than aborting the whole probe."""
-    out: dict = {"version": None, "last_publish_time": None, "counts": {}}
+    out = FreshnessProbe()
     try:
         v = client.get("/api/version")
         if isinstance(v, dict):
-            out["version"] = v.get("version")
+            out.version = v.get("version")
     except Exception:  # noqa: BLE001
         pass
     try:
         p = client.get("/api/publish/error")
         if isinstance(p, dict):
-            out["last_publish_time"] = p.get("last_publish_time")
+            out.last_publish_time = p.get("last_publish_time")
     except Exception:  # noqa: BLE001
         pass
     for coll in COUNT_COLLECTIONS:
         try:
             r = client.get(f"/api/3/{coll}?$limit=0")
-            out["counts"][coll] = _total_items(r)
+            out.counts[coll] = _total_items(r)
         except Exception:  # noqa: BLE001
-            out["counts"][coll] = None
+            out.counts[coll] = None
     return out
 
 
-def compare(stored: dict, live: dict) -> FreshnessReport:
+def compare(stored: dict, live: dict | FreshnessProbe) -> FreshnessReport:
     """Diff stamped provenance (``_catalog_meta`` key/value dict) against a live
     probe result. Returns a :class:`FreshnessReport`."""
     rep = FreshnessReport(

@@ -51,8 +51,8 @@ class RecordSet(Generic[T]):
     otherwise.  ``BaseRecord`` is dict-compatible (``rec["field"]`` /
     ``rec.get(...)`` / ``"field" in rec``), so typing is additive.
 
-    Pass ``model=...`` to force a specific model, ``typed=False`` to get raw
-    dicts back, or ``raw=True`` on an individual call for one-off dicts.
+    Reads always come back as the bound model; pass ``model=...`` to force a
+    specific one, or ``raw=True`` on an individual call for a one-off plain dict.
 
     The ``raw=True`` overloads narrow the return type to ``dict[str, Any]``
     so type checkers know exactly which shape they're getting.
@@ -64,14 +64,10 @@ class RecordSet(Generic[T]):
         module: str,
         *,
         model: type[T] | None = None,
-        typed: bool = True,
     ) -> None:
         self.client = client
         self.module = module
-        if not typed:
-            self.model: type[T] | None = None
-        else:
-            self.model = model or model_for(module)  # type: ignore[assignment]
+        self.model = model or model_for(module)  # type: ignore[assignment]
 
     # -- parsing ------------------------------------------------------------
     def _parse(self, obj: Any, *, raw: bool) -> Any:

@@ -152,5 +152,5 @@ class SolutionPackAPI(BaseAPI):
             pack.get("@id", "").rstrip("/").split("/")[-1] if "/" in pack.get("@id", "") else None
         )
         if not uuid:
-            raise ValueError(f"Cannot resolve UUID for solution pack {name!r} — try fetching it with typed=True")
+            raise ValueError(f"Cannot resolve UUID for solution pack {name!r}")
         self.client.delete(f"/api/3/solutionpacks/{uuid}")

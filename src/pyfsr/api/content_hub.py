@@ -1,9 +1,20 @@
+from __future__ import annotations
+
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
 
 from .base import BaseAPI
+
+if TYPE_CHECKING:
+    from ..models import (
+        ConnectorVersionInfo,
+        ContentHubConnector,
+        ContentHubItem,
+        SolutionPack,
+        Widget,
+    )
 
 _REPO_HOST = "https://repo.fortisoar.fortinet.com"
 _REPO_BASE = f"{_REPO_HOST}/content-hub"
@@ -17,7 +28,7 @@ class ContentType(Enum):
     WIDGET = "widget"
 
 
-def _model_for_type(content_type: "ContentType"):
+def _model_for_type(content_type: ContentType):
     """Return the typed model class for a Content Hub ``content_type``."""
     from ..models import ContentHubConnector, SolutionPack, Widget
 
@@ -33,11 +44,10 @@ class ContentHubSearch(BaseAPI):
     API implementation for searching FortiSOAR Content Hub items including
     solution packs, connectors, and widgets.
 
-    Every search/find method takes an opt-in ``typed=True`` to return the
-    matching typed model (``SolutionPack`` /
-    ``ContentHubConnector`` / ``Widget``).
-    Those models subclass ``BaseRecord`` and stay dict-compatible, so the
-    default (``typed=False``, plain dicts) is unchanged.
+    Every search/find method returns the matching typed model (``SolutionPack``
+    / ``ContentHubConnector`` / ``Widget``). Those models subclass
+    ``BaseRecord`` and stay dict-compatible (``item["label"]`` / ``item.get(...)``
+    work alongside ``item.label``), so the typed view loses nothing.
     """
 
     def _search_content(
@@ -48,8 +58,7 @@ class ContentHubSearch(BaseAPI):
         limit: int = 30,
         extra_filters: list[dict[str, Any]] | None = None,
         extra_fields: list[str] | None = None,
-        typed: bool = False,
-    ) -> list[dict[str, Any]]:
+    ) -> list[ContentHubItem]:
         """
         Generic search method for Content Hub items.
 
@@ -60,13 +69,10 @@ class ContentHubSearch(BaseAPI):
             limit: Maximum number of results to return
             extra_filters: Additional filters to apply to the query
             extra_fields: Additional fields to include in the response
-            typed: Parse results into the matching typed model
-                (``SolutionPack`` /
-                ``ContentHubConnector`` /
-                ``Widget``). Models stay dict-compatible.
 
         Returns:
-            List[Dict[str, Any]]: List of matching content items
+            The matching content items as typed, dict-compatible models
+            (``SolutionPack`` / ``ContentHubConnector`` / ``Widget``).
         """
         query = {
             "sort": [
@@ -117,54 +123,48 @@ class ContentHubSearch(BaseAPI):
             f"/api/query/solutionpacks?$limit={limit}&$page=1&$search={search_term}", data=query
         )
         members = response.get("hydra:member", [])
-        if typed:
-            model = _model_for_type(content_type)
-            return [model(**m) for m in members]
-        return members
+        model = _model_for_type(content_type)
+        return [model(**m) for m in members]
 
     def _find_single_content(
         self,
         content_type: ContentType,
         search_term: str,
         installed: bool = True,
-        typed: bool = False,
-    ) -> dict[str, Any] | None:
+    ) -> ContentHubItem | None:
         """Find a single content item matching the search criteria."""
         results = self._search_content(
             content_type=content_type,
             installed=installed,
             search_term=search_term,
             limit=1,
-            typed=typed,
         )
         return results[0] if results else None
 
     # Solution Pack Methods
-    def find_installed_pack(self, search_term: str, *, typed: bool = False) -> dict[str, Any] | None:
+    def find_installed_pack(self, search_term: str) -> SolutionPack | None:
         """Find a single installed solution pack by name, label, or description.
 
-        Pass ``typed=True`` for a ``SolutionPack``.
+        Returns a dict-compatible ``SolutionPack`` (or ``None``).
 
         Example:
             .. code-block:: python
 
                 pack = content_hub.find_installed_pack("SOAR Framework")
         """
-        return self._find_single_content(ContentType.SOLUTION_PACK, search_term, installed=True, typed=typed)
+        return self._find_single_content(ContentType.SOLUTION_PACK, search_term, installed=True)
 
-    def find_available_pack(self, search_term: str = "", *, typed: bool = False) -> dict[str, Any] | None:
+    def find_available_pack(self, search_term: str = "") -> SolutionPack | None:
         """Find a single available solution pack by name, label, or description.
 
-        Pass ``typed=True`` for a ``SolutionPack``.
+        Returns a dict-compatible ``SolutionPack`` (or ``None``).
         """
-        return self._find_single_content(ContentType.SOLUTION_PACK, search_term, installed=False, typed=typed)
+        return self._find_single_content(ContentType.SOLUTION_PACK, search_term, installed=False)
 
-    def search_installed_packs(
-        self, search_term: str = "", limit: int = 30, *, typed: bool = False
-    ) -> list[dict[str, Any]]:
+    def search_installed_packs(self, search_term: str = "", limit: int = 30) -> list[SolutionPack]:
         """Search for all installed solution packs matching the search criteria.
 
-        Pass ``typed=True`` for ``SolutionPack`` objects.
+        Returns dict-compatible ``SolutionPack`` objects.
 
         Example:
             .. code-block:: python
@@ -176,137 +176,118 @@ class ContentHubSearch(BaseAPI):
             installed=True,
             search_term=search_term,
             limit=limit,
-            typed=typed,
         )
 
-    def search_available_packs(
-        self, search_term: str = "", limit: int = 30, *, typed: bool = False
-    ) -> list[dict[str, Any]]:
+    def search_available_packs(self, search_term: str = "", limit: int = 30) -> list[SolutionPack]:
         """Search for all available solution packs matching the search criteria.
 
-        Pass ``typed=True`` for ``SolutionPack`` objects.
+        Returns dict-compatible ``SolutionPack`` objects.
         """
         return self._search_content(
             ContentType.SOLUTION_PACK,
             installed=False,
             search_term=search_term,
             limit=limit,
-            typed=typed,
         )
 
     # Connector Methods
-    def find_installed_connector(self, search_term: str, *, typed: bool = False) -> dict[str, Any] | None:
+    def find_installed_connector(self, search_term: str) -> ContentHubConnector | None:
         """Find a single installed connector by name, label, or description.
 
-        Pass ``typed=True`` for a ``ContentHubConnector``.
+        Returns a dict-compatible ``ContentHubConnector`` (or ``None``).
         """
-        return self._find_single_content(ContentType.CONNECTOR, search_term, installed=True, typed=typed)
+        return self._find_single_content(ContentType.CONNECTOR, search_term, installed=True)
 
-    def find_available_connector(self, search_term: str = "", *, typed: bool = False) -> dict[str, Any] | None:
+    def find_available_connector(self, search_term: str = "") -> ContentHubConnector | None:
         """Find a single available connector by name, label, or description.
 
-        Pass ``typed=True`` for a ``ContentHubConnector``.
+        Returns a dict-compatible ``ContentHubConnector`` (or ``None``).
         """
-        return self._find_single_content(ContentType.CONNECTOR, search_term, installed=None, typed=typed)
+        return self._find_single_content(ContentType.CONNECTOR, search_term, installed=None)
 
-    def find_uninstalled_connector(self, search_term: str, *, typed: bool = False) -> dict[str, Any] | None:
+    def find_uninstalled_connector(self, search_term: str) -> ContentHubConnector | None:
         """Find a single uninstalled connector by name, label, or description.
 
-        Pass ``typed=True`` for a ``ContentHubConnector``.
+        Returns a dict-compatible ``ContentHubConnector`` (or ``None``).
         """
-        return self._find_single_content(ContentType.CONNECTOR, search_term, installed=False, typed=typed)
+        return self._find_single_content(ContentType.CONNECTOR, search_term, installed=False)
 
-    def search_installed_connectors(
-        self, search_term: str = "", limit: int = 30, *, typed: bool = False
-    ) -> list[dict[str, Any]]:
+    def search_installed_connectors(self, search_term: str = "", limit: int = 30) -> list[ContentHubConnector]:
         """Search for all installed connectors matching the search criteria.
 
-        Pass ``typed=True`` for ``ContentHubConnector`` objects.
+        Returns dict-compatible ``ContentHubConnector`` objects.
         """
         return self._search_content(
             ContentType.CONNECTOR,
             installed=True,
             search_term=search_term,
             limit=limit,
-            typed=typed,
         )
 
-    def search_available_connectors(
-        self, search_term: str = "", limit: int = 30, *, typed: bool = False
-    ) -> list[dict[str, Any]]:
+    def search_available_connectors(self, search_term: str = "", limit: int = 30) -> list[ContentHubConnector]:
         """Search for all available connectors matching the search criteria.
 
-        Pass ``typed=True`` for ``ContentHubConnector`` objects.
+        Returns dict-compatible ``ContentHubConnector`` objects.
         """
         return self._search_content(
             ContentType.CONNECTOR,
             installed=None,
             search_term=search_term,
             limit=limit,
-            typed=typed,
         )
 
-    def search_uninstalled_connectors(
-        self, search_term: str = "", limit: int = 30, *, typed: bool = False
-    ) -> list[dict[str, Any]]:
+    def search_uninstalled_connectors(self, search_term: str = "", limit: int = 30) -> list[ContentHubConnector]:
         """Search for all uninstalled connectors matching the search criteria.
 
-        Pass ``typed=True`` for ``ContentHubConnector`` objects.
+        Returns dict-compatible ``ContentHubConnector`` objects.
         """
         return self._search_content(
             ContentType.CONNECTOR,
             installed=False,
             search_term=search_term,
             limit=limit,
-            typed=typed,
         )
 
     # Widget Methods
-    def find_installed_widget(self, search_term: str, *, typed: bool = False) -> dict[str, Any] | None:
+    def find_installed_widget(self, search_term: str) -> Widget | None:
         """Find a single installed widget by name, label, or description.
 
-        Pass ``typed=True`` for a ``Widget``.
+        Returns a dict-compatible ``Widget`` (or ``None``).
         """
-        return self._find_single_content(ContentType.WIDGET, search_term, installed=True, typed=typed)
+        return self._find_single_content(ContentType.WIDGET, search_term, installed=True)
 
-    def find_available_widget(self, search_term: str = "", *, typed: bool = False) -> dict[str, Any] | None:
+    def find_available_widget(self, search_term: str = "") -> Widget | None:
         """Find a single available widget by name, label, or description.
 
-        Pass ``typed=True`` for a ``Widget``.
+        Returns a dict-compatible ``Widget`` (or ``None``).
         """
-        return self._find_single_content(ContentType.WIDGET, search_term, installed=False, typed=typed)
+        return self._find_single_content(ContentType.WIDGET, search_term, installed=False)
 
-    def search_installed_widgets(
-        self, search_term: str = "", limit: int = 30, *, typed: bool = False
-    ) -> list[dict[str, Any]]:
+    def search_installed_widgets(self, search_term: str = "", limit: int = 30) -> list[Widget]:
         """Search for all installed widgets matching the search criteria.
 
-        Pass ``typed=True`` for ``Widget`` objects.
+        Returns dict-compatible ``Widget`` objects.
         """
         return self._search_content(
             ContentType.WIDGET,
             installed=True,
             search_term=search_term,
             limit=limit,
-            typed=typed,
         )
 
-    def search_available_widgets(
-        self, search_term: str = "", limit: int = 30, *, typed: bool = False
-    ) -> list[dict[str, Any]]:
+    def search_available_widgets(self, search_term: str = "", limit: int = 30) -> list[Widget]:
         """Search for all available widgets matching the search criteria.
 
-        Pass ``typed=True`` for ``Widget`` objects.
+        Returns dict-compatible ``Widget`` objects.
         """
         return self._search_content(
             ContentType.WIDGET,
             installed=False,
             search_term=search_term,
             limit=limit,
-            typed=typed,
         )
 
-    def connector_versions(self, name: str) -> dict[str, Any]:
+    def connector_versions(self, name: str) -> ConnectorVersionInfo:
         """Return all published versions of a connector from Fortinet's public repo.
 
         Searches the local solutionpacks API for ``name`` (fuzzy — partial
@@ -319,15 +300,18 @@ class ContentHubSearch(BaseAPI):
         or ``"code"``). Raises ``ValueError`` if nothing cloud-backed is found
         (box may not have FDN access, or name doesn't match any connector).
 
-        Returns the full info.json payload including ``availableVersions``,
-        ``operations``, ``releaseNotes``, etc.
+        Returns the full info.json payload as a dict-compatible
+        :class:`~pyfsr.models.ConnectorVersionInfo` (``availableVersions``,
+        ``operations``, ``releaseNotes``, etc.).
 
         Example::
 
             info = client.content_hub.connector_versions("code-snippet")
-            print(info["availableVersions"])
+            print(info.availableVersions)        # or info["availableVersions"]
             # ['1.2.0', '1.2.1', ..., '2.2.1']
         """
+        from ..models import ConnectorVersionInfo
+
         results = self._search_content(
             ContentType.CONNECTOR,
             installed=None,
@@ -358,4 +342,4 @@ class ContentHubSearch(BaseAPI):
             url = f"{repo_base}/latest/info.json"
         resp = requests.get(url, timeout=15)
         resp.raise_for_status()
-        return resp.json()
+        return ConnectorVersionInfo(**resp.json())

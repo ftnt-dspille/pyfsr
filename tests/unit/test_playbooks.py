@@ -114,10 +114,14 @@ def test_runs_unknown_playbook_returns_empty():
     assert PlaybooksAPI(client).execution_history(playbook="nope") == []
 
 
-def test_runs_raw_returns_unshaped():
+def test_runs_preserve_full_record_in_extra():
+    # No raw/typed toggle: the typed RunSummary carries the full wire record in
+    # extra, so unshaped fields like @id stay reachable by item access.
     client = FakeClient(workflows=[_run("/api/wf/api/workflows/a/", "A", "failed", "t")])
-    runs = PlaybooksAPI(client).execution_history(raw=True)
+    runs = PlaybooksAPI(client).execution_history()
     assert "@id" in runs[0]
+    assert runs[0]["@id"] == "/api/wf/api/workflows/a/"
+    assert runs[0].pk == "a"
 
 
 # -- get --------------------------------------------------------------------
@@ -223,7 +227,9 @@ def test_run_env_reshapes_env_and_steps():
     env = api.run_env("901")
     assert env["status"] == "finished"
     assert env["env"]["wf_id"] == "901"
-    assert env["steps"]["Fetch Email"] == {"status": "finished", "result": {"data": 2}}
+    step = env["steps"]["Fetch Email"]
+    assert step["status"] == "finished"
+    assert step["result"] == {"data": 2}
 
 
 class CrudClient:
@@ -554,7 +560,7 @@ def test_trigger_follow_returns_shaped_run(monkeypatch):
 def test_trigger_follow_false_returns_task_id():
     c = _Rec(resp={"task_id": "t99"})
     resp = PlaybooksAPI(c).trigger("aabbccdd-0000-0000-0000-000000000000", follow=False)
-    assert resp == {"task_id": "t99"}
+    assert resp["task_id"] == "t99"
 
 
 # -- trigger_action -----------------------------------------------------------
@@ -572,7 +578,7 @@ def test_trigger_action_posts_correct_body():
     assert body["__resource"] == "alerts"
     assert body["records"] == ["/api/3/alerts/rec-uuid"]
     assert body["__uuid"] == "pb-uuid"
-    assert resp == {"task_id": "ta1"}
+    assert resp["task_id"] == "ta1"
 
 
 def test_trigger_action_omits_playbook_uuid_when_not_given():
@@ -824,13 +830,15 @@ def test_last_run_resolves_playbook_name():
     assert any("/api/3/workflows?" in c[0] for c in client.get_calls)
 
 
-def test_last_run_raw_returns_unshaped():
+def test_last_run_preserves_full_record_in_extra():
     raw_run = _run("/api/wf/api/workflows/a/", "A", "failed", "t", result={"error": "boom"})
     client = FakeClient(workflows=[raw_run])
-    run = PlaybooksAPI(client).last_run(playbook_uuid="pb-uuid", raw=True)
+    run = PlaybooksAPI(client).last_run(playbook_uuid="pb-uuid")
     assert run is not None
+    assert run.pk == "a"
     assert "@id" in run
     assert run["@id"] == "/api/wf/api/workflows/a/"
+    assert run.error_message == "boom"
 
 
 def test_last_run_prefers_playbook_uuid_over_name():
@@ -926,16 +934,9 @@ def test_why_failed_succeeding_run_has_no_error():
     assert result["error_message"] is None
 
 
-def test_why_failed_respects_raw_flag():
-    """raw=True returns the full step_detail record, not the slim projection."""
-    run_record = {
-        "@id": "/api/wf/api/workflows/run1/",
-        "name": "Block IP",
-        "status": "failed",
-        "modified": "2026-06-08T03:00",
-        "task_id": "t1",
-        "uuid": "u1",
-    }
+def test_get_execution_step_detail_exposes_full_record():
+    """The full step_detail record (steps/env) rides in the typed RunSummary's
+    extra — no raw flag needed; callers reach it by item access."""
     full_record = {
         "@id": "/api/wf/api/workflows/run1/",
         "status": "failed",
@@ -947,20 +948,19 @@ def test_why_failed_respects_raw_flag():
         "env": {"custom": "value"},
     }
 
-    class _WhyFailedClient(FakeClient):
+    class _StepDetailClient(FakeClient):
         def get(self, endpoint, params=None, **kw):
             if "step_detail=true" in endpoint:
                 return full_record
             return super().get(endpoint, params, **kw)
 
-    client = _WhyFailedClient(workflows=[run_record])
-    result = PlaybooksAPI(client).why_failed(playbook_uuid="pb-uuid", raw=True)
+    client = _StepDetailClient(workflows=[full_record])
+    result = PlaybooksAPI(client).get_execution("run1", step_detail=True)
 
-    assert result is not None
     assert "steps" in result
     assert "env" in result
     assert len(result["steps"]) == 2
-    assert result["status"] == "failed"
+    assert result.status == "failed"
 
 
 def test_why_failed_resolves_playbook_name():
@@ -1077,8 +1077,9 @@ def test_why_failed_handles_missing_pk():
     assert result is None
 
 
-def test_why_failed_uses_pk_from_run_record():
-    """why_failed prefers explicit pk field from the raw run record if available."""
+def test_why_failed_derives_pk_from_run_iri():
+    """pk is always derived from the run's @id (the wire never sends a pk field),
+    so it's consistent regardless of what the record carries."""
     run_record = {
         "@id": "/api/wf/api/workflows/extracted-pk/",
         "name": "PB",
@@ -1086,7 +1087,6 @@ def test_why_failed_uses_pk_from_run_record():
         "modified": "t",
         "task_id": "t1",
         "uuid": "u1",
-        "pk": "explicit-pk",  # If the raw run already has pk
     }
     full_record = {
         "@id": "/api/wf/api/workflows/extracted-pk/",
@@ -1104,6 +1104,87 @@ def test_why_failed_uses_pk_from_run_record():
     client = _WhyFailedClient(workflows=[run_record])
     result = PlaybooksAPI(client).why_failed(playbook_uuid="pb-uuid")
 
-    # why_failed uses run.get("pk") if available, else extracts from @id
     assert result is not None
-    assert result["pk"] == "explicit-pk"
+    assert result.pk == "extracted-pk"
+
+
+# -- typed pydantic shapes --------------------------------------------------
+def test_shape_run_returns_typed_run_summary():
+    from pyfsr.models import RunSummary
+
+    s = _shape_run(_run("/api/wf/api/workflows/abc/", "n", "finished", "t", task_id="t1"))
+    assert isinstance(s, RunSummary)
+    # dict-compatible access still works
+    assert s["pk"] == "abc" and s.pk == "abc"
+    assert s.task_id == "t1"
+    assert "status" in s
+
+
+def test_run_env_returns_typed_run_env():
+    from pyfsr.models import RunEnv, RunStep
+
+    client = FakeClient(workflows=[_run_with_steps("901")])
+    env = PlaybooksAPI(client).run_env("901")
+    assert isinstance(env, RunEnv)
+    assert isinstance(env.steps["Fetch Email"], RunStep)
+    assert env.status == "finished"
+
+
+def test_trigger_returns_typed_trigger_response():
+    from pyfsr.models import TriggerResponse
+
+    c = _Rec(resp={"task_id": "t99"})
+    resp = PlaybooksAPI(c).trigger("aabbccdd-0000-0000-0000-000000000000")
+    assert isinstance(resp, TriggerResponse)
+    assert resp.task_id == "t99"
+
+
+def test_why_failed_returns_typed_run_failure():
+    from pyfsr.models import RunFailure
+
+    runs_resp = {"hydra:member": [{"@id": "/api/wf/api/workflows/rk/", "status": "failed", "modified": "t"}]}
+    detail = {
+        "@id": "/api/wf/api/workflows/rk/",
+        "status": "failed",
+        "result": {"error": "top boom"},
+        "steps": [{"name": "Do Thing", "status": "failed", "result": {"message": "step boom"}}],
+    }
+
+    class _C:
+        def get(self, endpoint, params=None, **kw):
+            if "/rk/" in endpoint:  # get_execution(step_detail=True) fetch
+                return detail
+            return runs_resp  # run-history list fetches
+
+        def post(self, endpoint, data=None, params=None, **kw):
+            return runs_resp
+
+    result = PlaybooksAPI(_C()).why_failed(playbook_uuid="pb-uuid")
+    assert isinstance(result, RunFailure)
+    assert result.failing_step == "Do Thing"
+    assert result["error_message"] == "step boom"
+
+
+def test_trigger_request_normalizes_records():
+    from pyfsr.models import TriggerRequest
+
+    req = TriggerRequest(records="abc-123")
+    assert req.to_body()["records"] == ["/api/3/alerts/abc-123"]
+    req2 = TriggerRequest(records=["/api/3/incidents/x", "y"])
+    assert req2.to_body()["records"] == ["/api/3/incidents/x", "/api/3/alerts/y"]
+
+
+def test_create_playbook_request_builds_body_and_validates():
+    from pyfsr.models import CreatePlaybookRequest
+
+    body = CreatePlaybookRequest(name="PB", collection="coll-uuid", priority="/api/3/picklists/p").to_body()
+    assert body["collection"] == "/api/3/workflow_collections/coll-uuid"
+    assert body["isActive"] is True
+    assert body["priority"] == "/api/3/picklists/p"
+    with pytest.raises(Exception):
+        CreatePlaybookRequest(name="  ", collection="c")
+
+
+def test_create_playbook_blank_name_raises_value_error():
+    with pytest.raises(ValueError, match="non-empty name"):
+        PlaybooksAPI(_Rec()).create_playbook("   ", "coll-uuid")
