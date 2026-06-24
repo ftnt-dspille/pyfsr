@@ -121,6 +121,10 @@ def cmd_validate(args: argparse.Namespace) -> int:
         fmt="table",
         file=sys.stderr,
     )
+    # Opt-in live preflight: connector steps with no config on the target.
+    # Warnings never flip the validate exit code (they don't break compilation).
+    if result.ok and getattr(args, "check_connectors", False):
+        _print_findings(_connector_findings(_make_client(args), result))
     return 0 if result.ok else 1
 
 
@@ -140,6 +144,9 @@ def cmd_deploy(args: argparse.Namespace) -> int:
     client = _make_client(args)
     # result.ok was checked above, so fsr_json is populated.
     assert result.fsr_json is not None
+    # Opt-in live preflight before posting; warn-only, never aborts the deploy.
+    if getattr(args, "check_connectors", False):
+        _print_findings(_connector_findings(client, result))
     created: list[dict[str, Any]] = client.workflow_collections.import_export(result.fsr_json, replace=args.replace)
     rows = [[c.get("name", ""), c.get("uuid", "")] for c in created]
     _output.render(rows, ["created collection", "uuid"], fmt="table")
@@ -209,6 +216,49 @@ def cmd_check_fresh(args: argparse.Namespace) -> int:
     return 0
 
 
+def _connector_findings(client: FortiSOAR, result: CompiledPlaybook) -> list:
+    """Run the live-target connector-config preflight on a compiled playbook.
+
+    Returns the list of :class:`~pyfsr.playbook_lint.LintFinding` (empty when
+    clean). Shared by ``lint`` and the opt-in ``--check-connectors`` on
+    deploy/validate."""
+    from ..playbook_lint import check_connector_configs, connector_refs
+
+    assert result.fsr_json is not None
+    refs = connector_refs(result.fsr_json)
+    return check_connector_configs(client, refs)
+
+
+def _print_findings(findings: list) -> None:
+    """Render lint findings as a table on stderr (no-op message when clean)."""
+    if not findings:
+        print("connector preflight: OK — every connector step is configured.", file=sys.stderr)
+        return
+    print(f"connector preflight: {len(findings)} warning(s)", file=sys.stderr)
+    _output.render(
+        [[f.connector, f.code, f.message, f.fix_hint] for f in findings],
+        ["connector", "issue", "detail", "fix"],
+        fmt="table",
+        file=sys.stderr,
+    )
+
+
+def cmd_lint(args: argparse.Namespace) -> int:
+    """Compile, then warn about connector steps with no config on the target.
+
+    Exit 0 = clean, 2 = warnings, 1 = compile/connection error — mirrors
+    ``check-fresh``. Never blocks: a playbook may be deployed before its
+    connector configs are created."""
+    result = _compile(args)
+    if not result.ok:
+        print("error: compilation failed (see diagnostics above)", file=sys.stderr)
+        return 1
+    client = _make_client(args)
+    findings = _connector_findings(client, result)
+    _print_findings(findings)
+    return 2 if findings else 0
+
+
 def _workflows_of(result: CompiledPlaybook, collection_name: str) -> list[str]:
     for col in (result.fsr_json or {}).get("data", []):
         if col.get("name") == collection_name:
@@ -225,7 +275,13 @@ def build_subparser(asub: argparse._SubParsersAction) -> None:
     p_compile.set_defaults(func=cmd_compile)
 
     p_validate = asub.add_parser("validate", help="compile and report diagnostics (offline)")
+    add_connection_args(p_validate)  # only used with --check-connectors
     p_validate.add_argument("file", help="playbook YAML file")
+    p_validate.add_argument(
+        "--check-connectors",
+        action="store_true",
+        help="also warn about connector steps with no config on the target (needs a connection)",
+    )
     p_validate.set_defaults(func=cmd_validate)
 
     p_deploy = asub.add_parser("deploy", help="compile YAML and create the playbook on the appliance")
@@ -233,7 +289,20 @@ def build_subparser(asub: argparse._SubParsersAction) -> None:
     p_deploy.add_argument("file", help="playbook YAML file")
     p_deploy.add_argument("--replace", action="store_true", help="hard-delete + recreate if it exists")
     p_deploy.add_argument("--dry-run", action="store_true", help="compile and list what would be created")
+    p_deploy.add_argument(
+        "--check-connectors",
+        action="store_true",
+        help="warn about connector steps with no config on the target before posting",
+    )
     p_deploy.set_defaults(func=cmd_deploy)
+
+    p_lint = asub.add_parser(
+        "lint",
+        help="compile, then warn about connector steps with no config on the target (live preflight)",
+    )
+    add_connection_args(p_lint)
+    p_lint.add_argument("file", help="playbook YAML file")
+    p_lint.set_defaults(func=cmd_lint)
 
     p_fresh = asub.add_parser(
         "check-fresh",
