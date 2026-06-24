@@ -236,10 +236,11 @@ These accept their canonical `arguments:` (see `pyfsr playbook validate` /
 `inputs`) go at the **step level**, not under `arguments:`, and its `options`,
 like `decision` conditions, carry a per-entry `next:` for branching.
 
-```{warning}
-Always set a non-empty **`description:`** on `manual_input`. The compiler accepts
-it missing (it defaults to `""`), but the FortiSOAR runtime rejects an empty
-body — so a playbook that *validates* can still fail when the prompt is reached.
+```{note}
+`description:` on `manual_input` is optional: when omitted the compiler now falls
+back to the step's `title:` (the FortiSOAR runtime rejects a genuinely empty
+description body, so the fallback keeps a description-less prompt runnable). Set
+an explicit `description:` when you want prompt text distinct from the title.
 ```
 
 ### `stop` / `end`
