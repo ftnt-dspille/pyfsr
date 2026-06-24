@@ -56,6 +56,8 @@ import time
 import uuid as _uuid
 from typing import TYPE_CHECKING, Any
 
+import requests
+
 from ..exceptions import FortiSOARException, describe_migrate_failure, is_migrate_transient
 from .base import BaseAPI
 
@@ -821,6 +823,7 @@ class ModulesAdminAPI(BaseAPI):
         record_uniqueness: list[str] | None = None,
         default_sort: list[dict[str, Any]] | None = None,
         create_view_templates: bool = True,
+        grant_to: list[str] | str | None = None,
         **opts: Any,
     ) -> dict[str, Any]:
         """Create a new module in **staging** (not yet live — call :meth:`publish`).
@@ -850,6 +853,21 @@ class ModulesAdminAPI(BaseAPI):
         module is **published** (it is a DB migration), not at staging time.
         ``default_sort`` is the default sort spec (e.g. ``[{"field": "createDate",
         "direction": "DESC"}]``).
+
+        ``grant_to`` (optional) grants full CRUD+execute permissions on the new module to
+        one or more roles immediately after creation. Pass a single role name (string) or a
+        list of role names. **This is explicit opt-in** — no roles are auto-granted unless
+        you specify them, ensuring RBAC changes are intentional. If you do not grant
+        permissions up front, the module will exist but records cannot be accessed until you
+        call :meth:`~pyfsr.api.roles.RolesAPI.grant_module_permissions` manually.
+
+        Example::
+
+            admin.create_module(
+                "custom_alerts",
+                fields=[admin.text_field("name")],
+                grant_to=["Full App Permissions", "SOC Analyst"],
+            )
         """
         if not isinstance(module, str) or not _MODULE_NAME_RE.match(module):
             raise ValueError(
@@ -892,6 +910,19 @@ class ModulesAdminAPI(BaseAPI):
         created = self.client.post(_STAGING, data=payload, params=_REL)
         if create_view_templates:
             self.create_view_templates(module)
+        if grant_to is not None:
+            # grant_to can be a single role name (string) or a list of role names
+            roles = grant_to if isinstance(grant_to, list) else [grant_to]
+            for role_name in roles:
+                self.client.roles.grant_module_permissions(
+                    role_name,
+                    module=module,
+                    can_read=True,
+                    can_create=True,
+                    can_update=True,
+                    can_delete=True,
+                    can_execute=True,
+                )
         return created
 
     def get_staging_typed(self, module: str) -> StagingModelMetadata | None:
@@ -1326,10 +1357,12 @@ class ModulesAdminAPI(BaseAPI):
         prev_time = self._last_publish_time()
         try:
             self.client.put(_PUBLISH, data={})
-        except FortiSOARException as exc:
-            # A 5xx body here is the migrate cycle already starting (the publish was
-            # accepted); anything else — notably a 400 with a validation message — is a
-            # real rejection the caller needs to see.
+        except (FortiSOARException, requests.exceptions.RequestException) as exc:
+            # A 5xx body — or a read timeout / dropped connection — here is the migrate
+            # cycle already starting (the publish was accepted; the PUT itself can block
+            # past the client timeout). Anything else — notably a 400 with a validation
+            # message — is a real rejection the caller needs to see. The poller confirms
+            # the true outcome via /api/publish/error regardless.
             if not self._is_publish_transient(exc):
                 raise
         return self._wait_for_publish(prev_time, timeout, poll_interval)

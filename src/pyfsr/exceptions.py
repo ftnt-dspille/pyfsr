@@ -1,5 +1,7 @@
 """Custom exceptions for the FortiSOAR API client."""
 
+import requests
+
 
 class FortiSOARException(Exception):
     """Base exception for FortiSOAR API errors.
@@ -112,6 +114,12 @@ def is_migrate_transient(exc: Exception) -> bool:
     status = getattr(exc, "status_code", None)
     if isinstance(status, int) and status >= 500:
         return True
+    # A read timeout or dropped connection during the migrate is the outage itself:
+    # the appliance accepted the publish/import and is now mid-cycle (the PUT can
+    # block past the client timeout). The poller confirms the real outcome via the
+    # source-of-truth status endpoint, so treat these as "still working".
+    if isinstance(exc, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+        return True
     text = " ".join(str(getattr(exc, attr, "") or "") for attr in ("message", "error_type")).lower() or str(exc).lower()
     return any(marker in text for marker in _MIGRATE_TRANSIENT_MARKERS)
 
@@ -177,6 +185,24 @@ def _extract_message(error_data):
     return error_data.get("title")
 
 
+def _extract_module_from_url(response) -> str | None:
+    """Try to extract a module name from the request URL (best-effort).
+
+    If the request was to an endpoint like /api/3/records/modulename/...,
+    returns 'modulename'. Otherwise returns None.
+    """
+    url = getattr(response, "url", "")
+    if not isinstance(url, str):
+        return None
+    # Attempt to extract module name from /api/3/records/<module>/ pattern
+    import re
+
+    match = re.search(r"/api/3/records/([a-z_][a-z0-9_]*)", url, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
+
+
 def handle_api_error(response):
     """Convert API error responses to appropriate exceptions."""
     try:
@@ -194,7 +220,21 @@ def handle_api_error(response):
     elif response.status_code == 401:
         raise AuthenticationError(message, response, error_type=error_type)
     elif response.status_code == 403:
-        raise PermissionError(message, response, error_type=error_type)
+        # Enrich 403 PermissionError with RBAC guidance for newly-created modules
+        module_hint = _extract_module_from_url(response)
+        hint = (
+            "If this is a newly created module, it may have no role permissions yet — "
+            "grant with client.roles.grant_module_permissions(role, module='<module>') "
+            "or pass grant_to=[...] to create_module()."
+        )
+        if module_hint:
+            hint = (
+                f"If this is a newly created module, it may have no role permissions yet — "
+                f"grant with client.roles.grant_module_permissions(role, module='{module_hint}') "
+                f"or pass grant_to=[...] to create_module()."
+            )
+        enriched_message = f"{message}\n\n{hint}"
+        raise PermissionError(enriched_message, response, error_type=error_type)
     elif response.status_code == 404:
         raise ResourceNotFoundError(message, response, error_type=error_type)
     else:

@@ -292,6 +292,7 @@ def test_create_configuration_builds_body():
         version="6.1.0",
         default=True,
         validate=False,
+        autofill=False,
     )
     assert res["config_id"] == "new-uuid"
     endpoint, body = client.post_calls[0]
@@ -308,7 +309,7 @@ def test_create_configuration_builds_body():
 
 def test_create_configuration_resolves_version():
     api, client = _api(post_resp={"config_id": "x"})
-    api.create_configuration("virustotal", {"key": "v"}, name="c", validate=False)
+    api.create_configuration("virustotal", {"key": "v"}, name="c", validate=False, autofill=False)
     _, body = client.post_calls[0]
     assert body["connector_version"] == "3.1.0"
     assert body["connector"] == 16
@@ -336,6 +337,7 @@ def test_create_configuration_with_config_id_and_agent():
         config_id="cfg-1",
         agent="agent-9",
         validate=False,
+        autofill=False,
     )
     _, body = client.post_calls[0]
     assert body["config_id"] == "cfg-1"
@@ -362,7 +364,9 @@ def test_create_configuration_validate_missing_raises():
 
 def test_update_configuration_puts_to_config_id_path():
     api, client = _api()
-    api.update_configuration("virustotal", "cfg-1", {"k": "v2"}, name="c", version="3.1.0", validate=False)
+    api.update_configuration(
+        "virustotal", "cfg-1", {"k": "v2"}, name="c", version="3.1.0", validate=False, autofill=False
+    )
     endpoint, body = client.put_calls[0]
     assert endpoint == "/api/integration/configuration/cfg-1/"
     assert body["config_id"] == "cfg-1"
@@ -801,3 +805,337 @@ def test_upsert_tolerates_persisted_despite_500():
     api.connector_detail = fake_detail  # type: ignore[assignment]
     cfg = api.upsert_configuration("virustotal", {"k": "v"}, name="prod", validate=False)
     assert cfg["config_id"] == "landed"
+
+
+# -- autofill and default_config -----------------------------------------------
+_CODE_SNIPPET_SCHEMA = {
+    "config_schema": {
+        "fields": [
+            {
+                "name": "allow_imports",
+                "type": "checkbox",
+                "title": "Allow Imports",
+                "required": False,
+                "value": False,
+                "onchange": {
+                    "false": [
+                        {
+                            "name": "restrict_imports",
+                            "type": "text",
+                            "title": "Restrict Imports",
+                            "required": True,
+                        }
+                    ],
+                    "true": [],
+                },
+            },
+        ]
+    }
+}
+
+
+def test_default_config_includes_declared_defaults():
+    """default_config fills every field with its declared value or type-default."""
+    api, _ = _api(post_resp=_CODE_SNIPPET_SCHEMA)
+    cfg = api.default_config("code-snippet", version="1.0.0")
+    assert cfg["allow_imports"] is False  # explicit default
+
+
+def test_default_config_expands_onchange_for_default_selection():
+    """default_config walks the onchange branch for the default selected option."""
+    api, _ = _api(post_resp=_CODE_SNIPPET_SCHEMA)
+    cfg = api.default_config("code-snippet", version="1.0.0")
+    # allow_imports defaults to False; that matches the "false" onchange key
+    # so restrict_imports (revealed by that branch) should be in the config
+    assert "restrict_imports" in cfg
+    assert cfg["restrict_imports"] == ""  # text field with no explicit default
+
+
+def test_default_config_handles_select_with_explicit_default():
+    """default_config includes onchange sub-fields for the default select option."""
+    schema = {
+        "config_schema": {
+            "fields": [
+                {
+                    "name": "auth_type",
+                    "type": "select",
+                    "title": "Auth Type",
+                    "required": True,
+                    "value": "Basic",  # explicit default
+                    "options": ["None", "Basic", "Bearer Token"],
+                    "onchange": {
+                        "None": [],
+                        "Basic": [
+                            {"name": "username", "type": "text", "required": True},
+                            {"name": "password", "type": "password", "required": True},
+                        ],
+                        "Bearer Token": [
+                            {"name": "token", "type": "password", "required": True},
+                        ],
+                    },
+                }
+            ]
+        }
+    }
+    api, _ = _api(post_resp=schema)
+    cfg = api.default_config("http", version="1.0.0")
+    assert cfg["auth_type"] == "Basic"
+    assert cfg["username"] == ""  # Basic branch is revealed
+    assert cfg["password"] == ""
+    assert "token" not in cfg  # Bearer Token branch not active
+
+
+def test_default_config_select_defaults_to_first_option_if_no_explicit_default():
+    """When a select has no explicit default, default_config uses the first option."""
+    schema = {
+        "config_schema": {
+            "fields": [
+                {
+                    "name": "level",
+                    "type": "select",
+                    "title": "Level",
+                    "required": False,
+                    # no "value" field
+                    "options": ["Low", "Medium", "High"],
+                    "onchange": {
+                        "Low": [{"name": "reason", "type": "text", "required": False}],
+                        "Medium": [],
+                        "High": [{"name": "approval", "type": "text", "required": True}],
+                    },
+                }
+            ]
+        }
+    }
+    api, _ = _api(post_resp=schema)
+    cfg = api.default_config("test", version="1.0.0")
+    # First option "Low" is selected as the default
+    assert cfg["level"] == "Low"
+    assert "reason" in cfg  # Low branch is revealed
+
+
+def test_default_config_checkbox_branches_on_string_key():
+    """Checkbox default branches on the string keys 'true'/'false'."""
+    schema = {
+        "config_schema": {
+            "fields": [
+                {
+                    "name": "enabled",
+                    "type": "checkbox",
+                    "title": "Enabled",
+                    "required": False,
+                    "value": True,
+                    "onchange": {
+                        "true": [{"name": "port", "type": "integer", "value": 8080}],
+                        "false": [],
+                    },
+                }
+            ]
+        }
+    }
+    api, _ = _api(post_resp=schema)
+    cfg = api.default_config("test", version="1.0.0")
+    assert cfg["enabled"] is True
+    assert cfg["port"] == 8080  # true branch reveals this
+
+
+def test_default_config_nested_onchange():
+    """default_config handles nested onchange branches (sub-field with its own onchange)."""
+    schema = {
+        "config_schema": {
+            "fields": [
+                {
+                    "name": "method",
+                    "type": "select",
+                    "title": "Method",
+                    "value": "api",
+                    "options": ["file", "api"],
+                    "onchange": {
+                        "api": [
+                            {
+                                "name": "api_type",
+                                "type": "select",
+                                "title": "API Type",
+                                "value": "rest",
+                                "options": ["rest", "graphql"],
+                                "onchange": {
+                                    "rest": [{"name": "endpoint", "type": "text", "required": True}],
+                                    "graphql": [{"name": "query", "type": "text", "required": True}],
+                                },
+                            }
+                        ],
+                        "file": [{"name": "path", "type": "text", "required": True}],
+                    },
+                }
+            ]
+        }
+    }
+    api, _ = _api(post_resp=schema)
+    cfg = api.default_config("test", version="1.0.0")
+    assert cfg["method"] == "api"
+    assert cfg["api_type"] == "rest"
+    assert "endpoint" in cfg  # rest branch is revealed
+    assert "query" not in cfg  # graphql branch not active
+    assert "path" not in cfg  # file branch not active
+
+
+def test_required_config_fields_with_default_selection():
+    """required_config_fields walks the active onchange branch."""
+    api, _ = _api(post_resp=_CODE_SNIPPET_SCHEMA)
+    # allow_imports defaults to False (unchecked); that reveals restrict_imports
+    config = {"allow_imports": False}
+    req = api.required_config_fields("code-snippet", config, version="1.0.0")
+    assert "restrict_imports" in req
+
+
+def test_required_config_fields_different_selection():
+    """required_config_fields changes with the current selection value."""
+    schema = {
+        "config_schema": {
+            "fields": [
+                {
+                    "name": "auth_type",
+                    "type": "select",
+                    "title": "Auth Type",
+                    "required": True,
+                    "options": ["None", "Basic"],
+                    "onchange": {
+                        "None": [],
+                        "Basic": [{"name": "password", "type": "password", "required": True}],
+                    },
+                }
+            ]
+        }
+    }
+    api, _ = _api(post_resp=schema)
+    # None branch has no sub-fields
+    req_none = api.required_config_fields("http", {"auth_type": "None"}, version="1.0.0")
+    assert req_none == ["auth_type"]
+    # Basic branch requires password
+    req_basic = api.required_config_fields("http", {"auth_type": "Basic"}, version="1.0.0")
+    assert set(req_basic) == {"auth_type", "password"}
+
+
+def test_create_configuration_autofill_merges_defaults_without_clobbering():
+    """autofill=True fills missing fields but never overwrites caller-provided values."""
+    schema = {
+        "config_schema": {
+            "fields": [
+                {"name": "server", "type": "text", "required": False, "value": "localhost"},
+                {"name": "port", "type": "integer", "required": False, "value": 8080},
+            ]
+        }
+    }
+    api, client = _api(post_resp={"config_id": "new-cfg"})
+    # virustotal is in the mock's configured list (see _CONFIGURED)
+    api.config_schema = lambda connector, version=None: schema["config_schema"]["fields"]
+    # Pass only port, let server be autofilled
+    api.create_configuration(
+        "virustotal",
+        {"port": 9000},  # explicit override
+        name="test",
+        version="3.1.0",
+        validate=False,
+        autofill=True,
+    )
+    _, body = client.post_calls[0]
+    # server should be filled with its default
+    assert body["config"]["server"] == "localhost"
+    # port should keep the caller's value (not the schema default)
+    assert body["config"]["port"] == 9000
+
+
+def test_create_configuration_autofill_false_sends_verbatim():
+    """autofill=False sends config as-is, no schema defaults merged."""
+    api, client = _api(post_resp={"config_id": "new-cfg"})
+    api.create_configuration(
+        "virustotal",
+        {"key": "explicit-value"},
+        name="test",
+        version="3.1.0",
+        validate=False,
+        autofill=False,
+    )
+    _, body = client.post_calls[0]
+    # Only the caller's key should be present
+    assert body["config"] == {"key": "explicit-value"}
+
+
+def test_create_configuration_autofill_with_validation_composes():
+    """autofill fills defaults, then validation checks the merged config."""
+    schema = {
+        "config_schema": {
+            "fields": [
+                {
+                    "name": "auth_type",
+                    "type": "select",
+                    "title": "Auth Type",
+                    "required": True,
+                    "value": "Basic",
+                    "options": ["None", "Basic"],
+                    "onchange": {"Basic": [{"name": "password", "type": "password", "required": True}]},
+                }
+            ]
+        }
+    }
+    api, _ = _api(post_resp=schema)
+    # With autofill=True, the password field (revealed by "Basic" default) gets
+    # filled with "", which satisfies the schema but may fail validation elsewhere.
+    # This test just ensures autofill + validate don't conflict.
+    with pytest.raises(ValueError, match="is required"):
+        # password is empty after autofill, so validation fails
+        api.create_configuration("virustotal", {}, name="test", version="3.1.0", validate=True)
+
+
+def test_update_configuration_autofill_similar_to_create():
+    """update_configuration with autofill=True merges defaults without clobbering."""
+    schema = {
+        "config_schema": {
+            "fields": [
+                {"name": "server", "type": "text", "required": False, "value": "localhost"},
+                {"name": "timeout", "type": "integer", "required": False, "value": 30},
+            ]
+        }
+    }
+    api, client = _scripted()
+    api.config_schema = lambda connector, version=None: schema["config_schema"]["fields"]
+    # Update with only timeout changed
+    api.update_configuration(
+        "virustotal",
+        "cfg-7",
+        {"timeout": 60},  # explicit change
+        name="prod",
+        version="3.1.0",
+        validate=False,
+        autofill=True,
+    )
+    _, body = client.put_calls[0]
+    # server should be filled from schema default
+    assert body["config"]["server"] == "localhost"
+    # timeout should keep the caller's override
+    assert body["config"]["timeout"] == 60
+
+
+def test_upsert_configuration_passes_autofill_to_create_and_update():
+    """upsert_configuration forwards autofill to both create and update paths."""
+    schema = {
+        "config_schema": {"fields": [{"name": "key", "type": "text", "required": False, "value": "default-value"}]}
+    }
+    # Test create path (no existing config)
+    api, client = _scripted()
+    api.config_schema = lambda connector, version=None: schema["config_schema"]["fields"]
+    client.detail = {"configuration": []}
+    api.upsert_configuration("virustotal", {}, name="test", version="3.1.0", validate=False, autofill=True)
+    _, create_body = client.post_calls[-1]
+    assert create_body["config"]["key"] == "default-value"
+
+
+def test_upsert_configuration_autofill_false():
+    """upsert with autofill=False sends config verbatim."""
+    api, client = _scripted()
+    client.detail = {"configuration": []}
+    api.upsert_configuration(
+        "virustotal", {"key": "value"}, name="test", version="3.1.0", validate=False, autofill=False
+    )
+    _, create_body = client.post_calls[-1]
+    # Only the caller's key
+    assert create_body["config"] == {"key": "value"}

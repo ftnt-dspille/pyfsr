@@ -155,6 +155,27 @@ def _value_fits_type(ftype: str, value: Any) -> bool:
     return True
 
 
+def _onchange_key(value: Any) -> str | None:
+    """Coerce a config value to its ``onchange`` map key. Checkbox values are
+    keyed as the strings ``"true"`` / ``"false"``; everything else by ``str``."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _type_default(ftype: str | None) -> Any:
+    """A type-appropriate empty default for a field with no declared ``value``."""
+    if ftype == "checkbox":
+        return False
+    if ftype == "integer":
+        return 0
+    if ftype == "json":
+        return {}
+    return ""
+
+
 def _missing_message(field: dict[str, Any], condition: dict[str, Any] | None) -> str:
     """Guidance for a missing required field, naming the selection that requires
     it when the field lives in a conditional ``onchange`` branch."""
@@ -727,15 +748,70 @@ class ConnectorsAPI(BaseAPI):
         schema = defn.get("config_schema") or {}
         return schema.get("fields") or []
 
+    def default_config(self, connector: str, *, version: str | None = None) -> dict[str, Any]:
+        """Build a schema-complete **default** configuration dict for ``connector``.
+
+        Walks the config schema and fills every field with its declared default
+        ``value`` (or a type-appropriate empty default — ``False`` for checkbox,
+        ``0`` for integer, ``""`` otherwise), **including the conditional
+        sub-fields that** ``onchange`` **reveals for those defaults**. That last
+        part is the point: a connector like ``code-snippet`` requires
+        ``restrict_imports`` only when ``allow_imports`` is unchecked, and that
+        requirement is invisible until the *playbook run* fails with a
+        ``KeyError``. Start from this dict, override what you need, and pass it to
+        :meth:`create_configuration` / :meth:`upsert_configuration`.
+
+        Example:
+            >>> cfg = client.connectors.default_config("code-snippet")
+            >>> cfg                                   # doctest: +SKIP
+            {'allow_imports': False, 'restrict_imports': ''}
+
+        Args:
+            connector: connector name (e.g. ``"code-snippet"``).
+            version: connector version (resolved from configured instance if omitted).
+
+        Returns:
+            A dict with every config field populated with its default value,
+            including onchange-revealed sub-fields for the default selections.
+        """
+        return self._materialize_config(self.config_schema(connector, version=version), {})
+
+    def _materialize_config(self, fields: list[dict[str, Any]], overrides: dict[str, Any]) -> dict[str, Any]:
+        """Resolve ``fields`` to a value map, honoring ``overrides`` and walking
+        each chosen value's ``onchange`` branch so revealed fields are filled too."""
+        out: dict[str, Any] = {}
+        for field in fields:
+            name = field.get("name")
+            if not name:
+                continue
+            if name in overrides:
+                value = overrides[name]
+            else:
+                value = field.get("value")
+                if value is None:
+                    # For select fields with options, default to the first option
+                    # when no explicit value is declared.
+                    if field.get("type") == "select" and field.get("options"):
+                        opts = _option_values(field)
+                        value = opts[0] if opts else ""
+                    else:
+                        value = _type_default(field.get("type"))
+            out[name] = value
+            branch = (field.get("onchange") or {}).get(_onchange_key(value))
+            if isinstance(branch, list):
+                out.update(self._materialize_config(branch, overrides))
+        return out
+
     def required_config_fields(
         self, connector: str, config: dict[str, Any], *, version: str | None = None
     ) -> list[str]:
         """The config field names *required* given the selections in ``config``.
 
-        Resolves ``select`` ``onchange`` branches against the values already in
-        ``config`` (so for FortiSIEM with ``fsm_type="FortiSIEM"`` you get
-        ``server``/``username``/``password``, and with ``"FortiSOC"`` you get
-        ``server``/``is_fsoc``). Use it to know which fields a user must supply.
+        Resolves ``select`` / ``checkbox`` ``onchange`` branches against the
+        values already in ``config`` (so for FortiSIEM with ``fsm_type="FortiSIEM"``
+        you get ``server``/``username``/``password``, and for ``code-snippet`` with
+        ``allow_imports=False`` you get ``restrict_imports``). Use it to know which
+        fields a user must supply.
         """
         required: list[str] = []
 
@@ -744,7 +820,9 @@ class ConnectorsAPI(BaseAPI):
                 fname = field.get("name")
                 if fname and field.get("required"):
                     required.append(fname)
-                branch = (field.get("onchange") or {}).get(config.get(fname))
+                # onchange keys are strings ("true"/"false" for checkboxes); coerce
+                # the config value the same way so checkbox branches aren't missed.
+                branch = (field.get("onchange") or {}).get(_onchange_key(config.get(fname)))
                 if isinstance(branch, list):
                     walk(branch)
 
@@ -884,8 +962,9 @@ class ConnectorsAPI(BaseAPI):
         config_id: str | None = None,
         agent: str | None = None,
         validate: bool = True,
+        autofill: bool = True,
         refresh: bool = True,
-    ) -> dict[str, Any]:
+    ) -> ConnectorConfig:
         """Create (or update) a connector configuration — write its credentials.
 
         Persists a named configuration for ``connector`` via
@@ -916,6 +995,11 @@ class ConnectorsAPI(BaseAPI):
                 schema first (via :meth:`validate_config`) and raise on a missing
                 required field — turns the server's opaque 500 into a clear
                 error. Pass ``False`` to skip (default ``True``).
+            autofill: fill any schema-defaulted fields ``config`` omits — including
+                the ``onchange``-revealed sub-fields that are otherwise required
+                only at *playbook runtime* (see :meth:`default_config`). Your
+                explicit values always win. Pass ``False`` to send ``config``
+                verbatim (default ``True``).
             refresh: drop the cached configured-connector listing afterwards so
                 the new config is visible to :meth:`resolve_config` etc.
                 (default ``True``).
@@ -939,6 +1023,8 @@ class ConnectorsAPI(BaseAPI):
                 f"{connector!r} is not installed; install it before configuring "
                 "(client.connectors.install(name, version))"
             )
+        if autofill:
+            config = self._materialize_config(self.config_schema(connector, version=version), config)
         if validate:
             check = self.validate_config(connector, config, version=version)
             if not check.valid:
@@ -972,8 +1058,9 @@ class ConnectorsAPI(BaseAPI):
         default: bool = False,
         agent: str | None = None,
         validate: bool = True,
+        autofill: bool = True,
         refresh: bool = True,
-    ) -> dict[str, Any]:
+    ) -> ConnectorConfig:
         """Update an existing connector configuration by ``config_id``.
 
         ``PUT /api/integration/configuration/{config_id}/`` (the POST create path
@@ -985,6 +1072,23 @@ class ConnectorsAPI(BaseAPI):
         Like :meth:`create_configuration`, the integer ``connector`` id is
         resolved automatically, and ``config`` is structurally validated first
         unless ``validate=False``.
+
+        Args:
+            connector: connector name.
+            config_id: the UUID of the configuration to update.
+            config: the new connector configuration field values.
+            name: the configuration's label.
+            version: connector version (resolved if omitted).
+            default: mark this the connector's default configuration.
+            agent: run the connector on a remote agent (omit to keep existing).
+            validate: structurally check ``config`` against the schema first
+                (default ``True``).
+            autofill: fill any schema-defaulted fields ``config`` omits (default ``True``).
+            refresh: drop the cached configured-connector listing afterwards
+                (default ``True``).
+
+        Returns:
+            The updated :class:`~pyfsr.models.ConnectorConfig`.
         """
         version = version or self.resolve_version(connector)
         if not version:
@@ -992,6 +1096,8 @@ class ConnectorsAPI(BaseAPI):
         connector_id = self.resolve_connector_id(connector)
         if connector_id is None:
             raise ValueError(f"{connector!r} is not installed")
+        if autofill:
+            config = self._materialize_config(self.config_schema(connector, version=version), config)
         if validate:
             check = self.validate_config(connector, config, version=version)
             if not check.valid:
@@ -1187,6 +1293,7 @@ class ConnectorsAPI(BaseAPI):
         default: bool = False,
         agent: str | None = None,
         validate: bool = True,
+        autofill: bool = True,
     ) -> ConnectorConfig:
         """Create a named configuration, or update it in place if one already
         exists with the same ``name`` — the idempotent write the UI's *Save*
@@ -1204,8 +1311,20 @@ class ConnectorsAPI(BaseAPI):
         config saved. On a write error this re-fetches by ``name`` and returns the
         row if it landed, rather than failing a re-runnable deploy.
 
-        Args mirror :meth:`create_configuration`. Returns the persisted
-        :class:`~pyfsr.models.ConnectorConfig`.
+        Args:
+            connector: connector name.
+            config: the connector's configuration field values.
+            name: a label for this configuration (required).
+            version: connector version (resolved if omitted).
+            default: mark this the connector's default configuration.
+            agent: run the connector on a remote agent (omit for self-agent).
+            validate: structurally check ``config`` against the schema first
+                (default ``True``).
+            autofill: fill any schema-defaulted fields ``config`` omits,
+                including onchange-revealed sub-fields (default ``True``).
+
+        Returns:
+            The persisted :class:`~pyfsr.models.ConnectorConfig`.
         """
         version = version or self.resolve_version(connector)
         existing = self._find_configuration_by_name(connector, name)
@@ -1221,6 +1340,7 @@ class ConnectorsAPI(BaseAPI):
                     default=default,
                     agent=agent if agent is not None else existing.get("agent"),
                     validate=validate,
+                    autofill=autofill,
                 )
             return self.create_configuration(
                 connector,
@@ -1230,6 +1350,7 @@ class ConnectorsAPI(BaseAPI):
                 default=default,
                 agent=agent,
                 validate=validate,
+                autofill=autofill,
             )
 
         try:

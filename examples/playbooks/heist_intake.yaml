@@ -1,0 +1,96 @@
+# Heist intake — a richer on-create trigger playbook.
+#
+# Fires automatically when a `heists` record is created and runs a full plan:
+#   Start (on create)
+#     -> Size Up The Job   (set_variable)
+#     -> Split The Take    (code_snippet — Python)
+#     -> Case The Joint    (delay)
+#     -> Worth The Risk?   (decision)
+#          big  -> Mark Authorized (update_record)
+#          else -> Mark Briefed    (update_record)
+#     -> Final Go Call    (manual_input — waits for a human)
+#
+# Deploy with:
+#     pyfsr playbook deploy examples/playbooks/heist_intake.yaml --replace
+# or via the full walkthrough in examples/heist_tracker.py.
+
+collection: Heist Tracker
+description: Plan the perfect job the moment a heist is logged.
+visible: true
+
+playbooks:
+  - name: Heist Intake
+    is_active: true                # live — the on-create trigger fires
+    steps:
+      - name: Start
+        type: start_on_create      # cybersponse.post_create
+        module: heists             # watch the heists module
+        next: Size Up The Job
+
+      # 1. Pull a few values off the new record into playbook vars.
+      - name: Size Up The Job
+        type: set_variable
+        vars:
+          codename: "{{ vars.input.records[0].codename }}"
+          take: "{{ vars.input.records[0].takeUsd | int }}"
+          crew_count: "{{ vars.input.records[0].crew | length }}"
+        next: Split The Take
+
+      # 2. Real Python: work out everyone's cut and a risk label.
+      - name: Split The Take
+        type: code_snippet
+        arguments:
+          code: |
+            take = int("{{ vars.take }}" or 0)
+            crew = int("{{ vars.crew_count }}" or 1)
+            if crew < 1:
+                crew = 1
+            output = {
+                "cut_per_member": take // crew,
+                "risk": "high" if take > 1000000 else "low",
+            }
+        next: Case The Joint
+
+      # 3. Dramatic pause — case the joint.
+      - name: Case The Joint
+        type: delay
+        arguments:
+          seconds: 5
+        next: Worth The Risk?
+
+      # 4. Branch on the size of the score.
+      - name: Worth The Risk?
+        type: decision
+        next: Mark Briefed              # else / fall-through path
+        conditions:
+          - option: Big Score
+            condition: "{{ (vars.take | int) > 1000000 }}"
+            next: Mark Authorized
+
+      # 5a / 5b. Stamp the record status (the automated proof the run reached here).
+      - name: Mark Authorized
+        type: update_record
+        arguments:
+          module: heists
+          collection: "{{ vars.input.records[0]['@id'] }}"
+          resource:
+            status: Authorized
+        next: Final Go Call
+
+      - name: Mark Briefed
+        type: update_record
+        arguments:
+          module: heists
+          collection: "{{ vars.input.records[0]['@id'] }}"
+          resource:
+            status: Briefed
+        next: Final Go Call
+
+      # 6. Wait for a human to make the final call.
+      - name: Final Go Call
+        type: manual_input
+        title: Pull the job?
+        description: "Crew briefed on **{{ vars.codename }}**. Final go/no-go?"
+        options:
+          - {option: "Go", primary: true}
+          - {option: "Abort"}

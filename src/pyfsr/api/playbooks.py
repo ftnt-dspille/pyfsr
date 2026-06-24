@@ -13,6 +13,8 @@ Example:
     >>> client.playbooks.get_definition("<uuid>")                          # one playbook template
     >>> client.playbooks.create_playbooks([payload])                      # re-push definitions
     >>> client.playbooks.execution_history(playbook="Block IP", limit=5)  # one playbook's runs
+    >>> client.playbooks.last_run(playbook="Block IP")                    # newest run summary
+    >>> client.playbooks.why_failed(playbook="Block IP")                  # newest run's error details
     >>> client.playbooks.get_execution("<run-pk>")                         # one run, full
     >>> client.playbooks.search_executions("High Risk", status="failed")  # filtered search
 """
@@ -528,6 +530,139 @@ class PlaybooksAPI(BaseAPI):
         resp = self.client.post("/api/wf/api/workflows/log_list/", data={}, params=params)
         members = extract_members(resp)
         return [_shape_run(m) for m in members]
+
+    def last_run(
+        self,
+        playbook: str | None = None,
+        *,
+        playbook_uuid: str | None = None,
+        raw: bool = False,
+    ) -> dict[str, Any] | None:
+        """Return the most recent run summary for a playbook.
+
+        Fetches the most recent execution (merged from live + historical tables,
+        newest first) for the specified playbook. The playbook may be identified
+        by ``playbook`` (name, resolved to uuid) or ``playbook_uuid``.
+
+        Args:
+            playbook: the playbook name — resolved to uuid internally.
+            playbook_uuid: the playbook uuid (use instead of ``playbook`` when
+                you already have it).
+            raw: if ``True``, returns the full unshaped run record; otherwise
+                returns the shaped dict
+                (``{task_id, name, status, error_message, modified, uuid, pk, source}``).
+
+        Returns:
+            The shaped (or raw) run dict for the most recent execution, or
+            ``None`` if the playbook has no runs or does not exist.
+
+        Example:
+            >>> run = client.playbooks.last_run(playbook="Block IP")
+            >>> if run:
+            ...     print(f"{run['name']}: {run['status']} ({run['pk']})")
+        """
+        runs = self.execution_history(
+            playbook=playbook,
+            playbook_uuid=playbook_uuid,
+            limit=1,
+            raw=raw,
+        )
+        return runs[0] if runs else None
+
+    def why_failed(
+        self,
+        playbook: str | None = None,
+        *,
+        playbook_uuid: str | None = None,
+        raw: bool = False,
+    ) -> dict[str, Any] | None:
+        """Find the most recent run and fetch its error details.
+
+        Locates the most recent execution for the specified playbook, then
+        calls :meth:`get_execution` with ``step_detail=True`` to retrieve the
+        full record (error_message and step results are only fully populated
+        there). The playbook may be identified by ``playbook`` (name, resolved
+        to uuid) or ``playbook_uuid``.
+
+        Args:
+            playbook: the playbook name — resolved to uuid internally.
+            playbook_uuid: the playbook uuid (use instead of ``playbook`` when
+                you already have it).
+            raw: if ``True``, returns the full get_execution record with all
+                step details; otherwise returns a slim projection
+                (``{status, failing_step, error_message, pk}``).
+
+        Returns:
+            When ``raw=False`` (default): a dict with keys:
+
+            - ``status``: the run's terminal status.
+            - ``error_message``: the error message (populated from the run's
+              result or the first failing step). ``None`` if the run succeeded.
+            - ``failing_step``: the first step with a failure status
+              (e.g. 'failed', 'errored'). ``None`` if the run succeeded.
+            - ``pk``: the run's pk (the trailing segment of its @id URL).
+
+            When ``raw=True``: the full run record from
+            :meth:`get_execution` (includes ``steps[]`` with per-step
+            execution traces, ``env``, etc.).
+
+            Returns ``None`` if the playbook has no runs or does not exist.
+
+        Example:
+            >>> failure = client.playbooks.why_failed(playbook="Block IP")
+            >>> if failure:
+            ...     print(f"Run {failure['pk']}: {failure['status']}")
+            ...     if failure['failing_step']:
+            ...         print(f"  Failed at step: {failure['failing_step']}")
+            ...     if failure['error_message']:
+            ...         print(f"  Error: {failure['error_message']}")
+        """
+        run = self.last_run(
+            playbook=playbook,
+            playbook_uuid=playbook_uuid,
+            raw=True,
+        )
+        if not run:
+            return None
+
+        pk = run.get("pk") or (run.get("@id") or "").rstrip("/").rsplit("/", 1)[-1]
+        if not pk:
+            return None
+
+        full = self.get_execution(pk, step_detail=True)
+        if raw:
+            return full
+
+        # Extract the first failing step, if any.
+        failing_step = None
+        failing_step_msg = None
+        for step in full.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            status = (step.get("status") or "").lower()
+            # Look for non-success statuses: failure, failed, error, errored, etc.
+            if status and status not in ("finished", "success", "running"):
+                failing_step = step.get("name")
+                result = step.get("result") or {}
+                if isinstance(result, dict):
+                    failing_step_msg = result.get("Error message") or result.get("error") or result.get("message")
+                break
+
+        # Extract error message from the run's top-level result.
+        res = full.get("result") if isinstance(full.get("result"), dict) else {}
+        top_error = None
+        if isinstance(res, dict):
+            top_error = res.get("Error message") or res.get("error") or res.get("message")
+
+        # Use the step-level message if available, else fall back to top-level.
+        error_message = failing_step_msg or top_error
+
+        return {
+            "status": full.get("status"),
+            "failing_step": failing_step,
+            "error_message": error_message,
+            "pk": pk,
+        }
 
     def run_env(self, run_pk: str) -> dict[str, Any]:
         """Return a run's execution environment + per-step results.

@@ -763,3 +763,321 @@ def test_clone_requires_new_name():
     c = _Rec(resp=_SRC_DEFINITION)
     with pytest.raises(ValueError, match="new_name"):
         PlaybooksAPI(c).clone("11111111-1111-1111-1111-111111111111", "  ")
+
+
+# -- last_run ---------------------------------------------------------------
+def test_last_run_returns_newest_shaped():
+    client = FakeClient(
+        workflows=[
+            _run("/api/wf/api/workflows/old/", "PB", "finished", "2026-06-08T01:00", task_id="t1", uuid="u1"),
+            _run("/api/wf/api/workflows/new/", "PB", "failed", "2026-06-08T03:00", task_id="t2", uuid="u2"),
+        ]
+    )
+    run = PlaybooksAPI(client).last_run(playbook_uuid="pb-uuid")
+    assert run is not None
+    assert run["pk"] == "new"
+    assert run["status"] == "failed"
+    assert run["task_id"] == "t2"
+
+
+def test_last_run_returns_none_if_no_runs():
+    client = FakeClient(workflows=[], historical=[])
+    run = PlaybooksAPI(client).last_run(playbook_uuid="pb-uuid")
+    assert run is None
+
+
+def test_last_run_resolves_playbook_name():
+    client = FakeClient(
+        workflows=[_run("/api/wf/api/workflows/a/", "A", "finished", "t")],
+        name_lookup={"hydra:member": [{"uuid": "pb-uuid"}]},
+    )
+    run = PlaybooksAPI(client).last_run(playbook="Block IP")
+    assert run is not None
+    assert run["pk"] == "a"
+    # Verify the name lookup happened
+    assert any("/api/3/workflows?" in c[0] for c in client.get_calls)
+
+
+def test_last_run_raw_returns_unshaped():
+    raw_run = _run("/api/wf/api/workflows/a/", "A", "failed", "t", result={"error": "boom"})
+    client = FakeClient(workflows=[raw_run])
+    run = PlaybooksAPI(client).last_run(playbook_uuid="pb-uuid", raw=True)
+    assert run is not None
+    assert "@id" in run
+    assert run["@id"] == "/api/wf/api/workflows/a/"
+
+
+def test_last_run_prefers_playbook_uuid_over_name():
+    """When both playbook and playbook_uuid are given, uuid takes precedence."""
+    client = FakeClient(
+        workflows=[_run("/api/wf/api/workflows/x/", "X", "finished", "t")],
+        name_lookup={"hydra:member": [{"uuid": "wrong-uuid"}]},
+    )
+    # Pass both; playbook_uuid should be used, avoiding the name lookup
+    run = PlaybooksAPI(client).last_run(playbook="Block IP", playbook_uuid="pb-uuid")
+    assert run is not None
+    # playbook_uuid is used directly; just verify the result is correct.
+    assert run["pk"] == "x"
+
+
+# -- why_failed -----------------------------------------------------------
+def test_why_failed_finds_newest_run_and_fetches_step_detail():
+    """why_failed fetches the newest run and pulls step_detail."""
+    run_record = {
+        "@id": "/api/wf/api/workflows/run1/",
+        "name": "Block IP",
+        "status": "failed",
+        "modified": "2026-06-08T03:00",
+        "task_id": "t1",
+        "uuid": "u1",
+    }
+    full_record = {
+        "@id": "/api/wf/api/workflows/run1/",
+        "status": "failed",
+        "result": {"Error message": "top error"},
+        "steps": [
+            {"name": "Start", "status": "finished", "result": {}},
+            {"name": "Fetch Data", "status": "failed", "result": {"error": "step error"}},
+        ],
+    }
+
+    class _WhyFailedClient(FakeClient):
+        def get(self, endpoint, params=None, **kw):
+            # Handle step_detail fetch
+            if "step_detail=true" in endpoint:
+                return full_record
+            return super().get(endpoint, params, **kw)
+
+    client = _WhyFailedClient(workflows=[run_record])
+    result = PlaybooksAPI(client).why_failed(playbook_uuid="pb-uuid")
+
+    assert result is not None
+    assert result["status"] == "failed"
+    assert result["pk"] == "run1"
+    assert result["failing_step"] == "Fetch Data"
+    assert result["error_message"] == "step error"
+
+
+def test_why_failed_returns_none_if_no_runs():
+    client = FakeClient(workflows=[], historical=[])
+    result = PlaybooksAPI(client).why_failed(playbook_uuid="pb-uuid")
+    assert result is None
+
+
+def test_why_failed_succeeding_run_has_no_error():
+    """A succeeding run returns status with error_message and failing_step = None."""
+    run_record = {
+        "@id": "/api/wf/api/workflows/run1/",
+        "name": "Block IP",
+        "status": "finished",
+        "modified": "2026-06-08T03:00",
+        "task_id": "t1",
+        "uuid": "u1",
+    }
+    full_record = {
+        "@id": "/api/wf/api/workflows/run1/",
+        "status": "finished",
+        "result": {},
+        "steps": [
+            {"name": "Start", "status": "finished", "result": {"data": 1}},
+            {"name": "Enrich", "status": "finished", "result": {"data": 2}},
+        ],
+    }
+
+    class _WhyFailedClient(FakeClient):
+        def get(self, endpoint, params=None, **kw):
+            if "step_detail=true" in endpoint:
+                return full_record
+            return super().get(endpoint, params, **kw)
+
+    client = _WhyFailedClient(workflows=[run_record])
+    result = PlaybooksAPI(client).why_failed(playbook_uuid="pb-uuid")
+
+    assert result is not None
+    assert result["status"] == "finished"
+    assert result["pk"] == "run1"
+    assert result["failing_step"] is None
+    assert result["error_message"] is None
+
+
+def test_why_failed_respects_raw_flag():
+    """raw=True returns the full step_detail record, not the slim projection."""
+    run_record = {
+        "@id": "/api/wf/api/workflows/run1/",
+        "name": "Block IP",
+        "status": "failed",
+        "modified": "2026-06-08T03:00",
+        "task_id": "t1",
+        "uuid": "u1",
+    }
+    full_record = {
+        "@id": "/api/wf/api/workflows/run1/",
+        "status": "failed",
+        "result": {"Error message": "boom"},
+        "steps": [
+            {"name": "Start", "status": "finished", "result": {}},
+            {"name": "Act", "status": "failed", "result": {"error": "act failed"}},
+        ],
+        "env": {"custom": "value"},
+    }
+
+    class _WhyFailedClient(FakeClient):
+        def get(self, endpoint, params=None, **kw):
+            if "step_detail=true" in endpoint:
+                return full_record
+            return super().get(endpoint, params, **kw)
+
+    client = _WhyFailedClient(workflows=[run_record])
+    result = PlaybooksAPI(client).why_failed(playbook_uuid="pb-uuid", raw=True)
+
+    assert result is not None
+    assert "steps" in result
+    assert "env" in result
+    assert len(result["steps"]) == 2
+    assert result["status"] == "failed"
+
+
+def test_why_failed_resolves_playbook_name():
+    """why_failed can accept a playbook name (not just uuid)."""
+    run_record = {
+        "@id": "/api/wf/api/workflows/run1/",
+        "name": "Block IP",
+        "status": "failed",
+        "modified": "2026-06-08T03:00",
+        "task_id": "t1",
+        "uuid": "u1",
+    }
+    full_record = {
+        "@id": "/api/wf/api/workflows/run1/",
+        "status": "failed",
+        "result": {},
+        "steps": [{"name": "X", "status": "failed", "result": {"error": "e"}}],
+    }
+
+    class _WhyFailedClient(FakeClient):
+        def get(self, endpoint, params=None, **kw):
+            if "step_detail=true" in endpoint:
+                return full_record
+            return super().get(endpoint, params, **kw)
+
+    client = _WhyFailedClient(
+        workflows=[run_record],
+        name_lookup={"hydra:member": [{"uuid": "pb-uuid"}]},
+    )
+    result = PlaybooksAPI(client).why_failed(playbook="Block IP")
+    assert result is not None
+    assert result["pk"] == "run1"
+
+
+def test_why_failed_prefers_step_error_over_top_error():
+    """If both step and top-level errors exist, step-level message is used."""
+    run_record = {
+        "@id": "/api/wf/api/workflows/run1/",
+        "name": "PB",
+        "status": "failed",
+        "modified": "t",
+        "task_id": "t1",
+        "uuid": "u1",
+    }
+    full_record = {
+        "@id": "/api/wf/api/workflows/run1/",
+        "status": "failed",
+        "result": {"Error message": "top level error"},
+        "steps": [
+            {"name": "S1", "status": "failed", "result": {"error": "step-specific error"}},
+        ],
+    }
+
+    class _WhyFailedClient(FakeClient):
+        def get(self, endpoint, params=None, **kw):
+            if "step_detail=true" in endpoint:
+                return full_record
+            return super().get(endpoint, params, **kw)
+
+    client = _WhyFailedClient(workflows=[run_record])
+    result = PlaybooksAPI(client).why_failed(playbook_uuid="pb-uuid")
+
+    # step-level error should take precedence
+    assert result["error_message"] == "step-specific error"
+    assert result["failing_step"] == "S1"
+
+
+def test_why_failed_detects_various_failure_statuses():
+    """why_failed recognizes 'failed', 'errored', 'error', etc. as failure statuses."""
+    for fail_status in ["failed", "errored", "error", "FAILED"]:
+        run_record = {
+            "@id": "/api/wf/api/workflows/run1/",
+            "name": "PB",
+            "status": "failed",
+            "modified": "t",
+            "task_id": "t1",
+            "uuid": "u1",
+        }
+        full_record = {
+            "@id": "/api/wf/api/workflows/run1/",
+            "status": "failed",
+            "result": {},
+            "steps": [
+                {"name": "Start", "status": "finished", "result": {}},
+                {"name": "Fail Step", "status": fail_status, "result": {"error": f"failed with {fail_status}"}},
+            ],
+        }
+
+        class _WhyFailedClient(FakeClient):
+            def get(self, endpoint, params=None, **kw):
+                if "step_detail=true" in endpoint:
+                    return full_record
+                return super().get(endpoint, params, **kw)
+
+        client = _WhyFailedClient(workflows=[run_record])
+        result = PlaybooksAPI(client).why_failed(playbook_uuid="pb-uuid")
+
+        assert result["failing_step"] == "Fail Step", f"Failed to detect status={fail_status}"
+
+
+def test_why_failed_handles_missing_pk():
+    """If a run record has no pk and no @id, why_failed returns None."""
+    run_record = {
+        "name": "PB",
+        "status": "failed",
+        "modified": "t",
+        "task_id": "t1",
+        "uuid": "u1",
+        # Missing @id
+    }
+
+    client = FakeClient(workflows=[run_record])
+    result = PlaybooksAPI(client).why_failed(playbook_uuid="pb-uuid")
+    assert result is None
+
+
+def test_why_failed_uses_pk_from_run_record():
+    """why_failed prefers explicit pk field from the raw run record if available."""
+    run_record = {
+        "@id": "/api/wf/api/workflows/extracted-pk/",
+        "name": "PB",
+        "status": "failed",
+        "modified": "t",
+        "task_id": "t1",
+        "uuid": "u1",
+        "pk": "explicit-pk",  # If the raw run already has pk
+    }
+    full_record = {
+        "@id": "/api/wf/api/workflows/extracted-pk/",
+        "status": "failed",
+        "result": {},
+        "steps": [{"name": "S", "status": "failed", "result": {"error": "e"}}],
+    }
+
+    class _WhyFailedClient(FakeClient):
+        def get(self, endpoint, params=None, **kw):
+            if "step_detail=true" in endpoint:
+                return full_record
+            return super().get(endpoint, params, **kw)
+
+    client = _WhyFailedClient(workflows=[run_record])
+    result = PlaybooksAPI(client).why_failed(playbook_uuid="pb-uuid")
+
+    # why_failed uses run.get("pk") if available, else extracts from @id
+    assert result is not None
+    assert result["pk"] == "explicit-pk"

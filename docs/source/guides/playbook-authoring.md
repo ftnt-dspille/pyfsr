@@ -59,6 +59,12 @@ The YAML schema (step types, their arguments, routing) is owned by the
 catalog of FortiSOAR step types and emits diagnostics (with `code`, `path`,
 `message`, and often a `suggestion`) when something won't import.
 
+```{tip}
+For the **full DSL** — every top-level key, every step `type`, the friendly
+fields each accepts, and the `start_on_create` / `start_on_update` record
+triggers — see the {doc}`playbook-yaml-reference`.
+```
+
 ## Deploying from Python
 
 The high-level path lives on `client.workflow_collections`. Compile and import

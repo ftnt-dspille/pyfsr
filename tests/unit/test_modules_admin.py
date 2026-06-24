@@ -16,6 +16,7 @@ class RecordingClient:
                 {"name": "payload", "type": "string", "formType": "textarea"},
             ],
         }
+        self.roles = FakeRolesAPI()
 
     def get(self, endpoint, params=None, **kw):
         self.calls.append(("GET", endpoint, params))
@@ -33,6 +34,38 @@ class RecordingClient:
 
     def delete(self, endpoint, params=None, **kw):
         self.calls.append(("DELETE", endpoint, params))
+
+
+class FakeRolesAPI:
+    """Fake roles API for testing grant_module_permissions calls."""
+
+    def __init__(self):
+        self.grant_calls = []
+
+    def grant_module_permissions(
+        self,
+        role,
+        *,
+        module,
+        can_read=True,
+        can_create=True,
+        can_update=True,
+        can_delete=True,
+        can_execute=True,
+    ):
+        """Record grant calls for inspection in tests."""
+        self.grant_calls.append(
+            {
+                "role": role,
+                "module": module,
+                "can_read": can_read,
+                "can_create": can_create,
+                "can_update": can_update,
+                "can_delete": can_delete,
+                "can_execute": can_execute,
+            }
+        )
+        return {"uuid": "r-1", "name": role}
 
 
 def test_field_builder_defaults_and_overrides():
@@ -334,6 +367,35 @@ def test_publish_hits_global_endpoint():
     c = PublishClient()
     result = ModulesAdminAPI(c).publish(poll_interval=0)
     # PUT to the global endpoint, then confirmation read of /api/publish/error.
+    assert ("PUT", "/api/publish", {}) in c.calls
+    assert result["status"] == "Success"
+
+
+def test_publish_treats_put_timeout_as_transient():
+    # On some boxes the publish PUT blocks through the migrate and raises a raw
+    # requests timeout instead of returning {"status":"started"}. publish() must
+    # treat that as "migrate started" and confirm via /api/publish/error, not
+    # propagate the timeout.
+    import requests
+
+    class TimeoutPutClient(RecordingClient):
+        def __init__(self):
+            super().__init__()
+            self._ts = 100
+
+        def put(self, endpoint, data=None, params=None, **kw):
+            self.calls.append(("PUT", endpoint, data))
+            raise requests.exceptions.ReadTimeout("Read timed out.")
+
+        def get(self, endpoint, params=None, **kw):
+            self.calls.append(("GET", endpoint, params))
+            if endpoint == "/api/publish/error":
+                self._ts += 1
+                return {"status": "Success", "last_publish_time": self._ts}
+            return super().get(endpoint, params=params, **kw)
+
+    c = TimeoutPutClient()
+    result = ModulesAdminAPI(c).publish(poll_interval=0)
     assert ("PUT", "/api/publish", {}) in c.calls
     assert result["status"] == "Success"
 
@@ -651,3 +713,114 @@ def test_add_field_reverse_is_idempotent():
     # re-adding (e.g. a retry) must not duplicate the reverse lookup
     api._ensure_reverse_field(*api._reverse_attr_for("incidents", rel), source_module="incidents", source_field=rel)
     assert sum(1 for a in c.staging["alerts"]["attributes"] if a["name"] == "incident") == 1
+
+
+# --------------------------------------------------------------- grant_to / RBAC
+
+
+def test_create_module_with_grant_to_single_role():
+    c = RecordingClient()
+    ModulesAdminAPI(c).create_module(
+        "widgets",
+        label="Widget",
+        grant_to="Full App Permissions",
+        create_view_templates=False,
+    )
+    # Verify grant was called with the role name
+    assert len(c.roles.grant_calls) == 1
+    grant = c.roles.grant_calls[0]
+    assert grant["role"] == "Full App Permissions"
+    assert grant["module"] == "widgets"
+    # Full CRUD+execute granted
+    assert grant["can_read"] is True
+    assert grant["can_create"] is True
+    assert grant["can_update"] is True
+    assert grant["can_delete"] is True
+    assert grant["can_execute"] is True
+
+
+def test_create_module_with_grant_to_multiple_roles():
+    c = RecordingClient()
+    ModulesAdminAPI(c).create_module(
+        "widgets",
+        label="Widget",
+        grant_to=["Full App Permissions", "SOC Analyst"],
+        create_view_templates=False,
+    )
+    # Verify grant was called once per role
+    assert len(c.roles.grant_calls) == 2
+    roles_granted = [g["role"] for g in c.roles.grant_calls]
+    assert "Full App Permissions" in roles_granted
+    assert "SOC Analyst" in roles_granted
+    # Both grants are for the same module
+    modules = {g["module"] for g in c.roles.grant_calls}
+    assert modules == {"widgets"}
+
+
+def test_create_module_without_grant_to_no_grants():
+    c = RecordingClient()
+    ModulesAdminAPI(c).create_module("widgets", create_view_templates=False)
+    # No roles granted when grant_to is not specified
+    assert len(c.roles.grant_calls) == 0
+
+
+def test_create_module_with_empty_grant_to_list_no_grants():
+    c = RecordingClient()
+    ModulesAdminAPI(c).create_module(
+        "widgets",
+        grant_to=[],
+        create_view_templates=False,
+    )
+    # Empty list means no grants
+    assert len(c.roles.grant_calls) == 0
+
+
+def test_permission_error_includes_rbac_hint():
+    """Test that 403 PermissionError messages are enriched with RBAC guidance."""
+    from pyfsr.exceptions import PermissionError, handle_api_error
+
+    # Mock a 403 response from /api/3/records/widgets/
+    class MockResponse:
+        status_code = 403
+        url = "/api/3/records/widgets/create"
+
+        def json(self):
+            return {"message": "Access Denied"}
+
+    response = MockResponse()
+    try:
+        handle_api_error(response)
+        assert False, "expected PermissionError"
+    except PermissionError as e:
+        # Message should contain both the original error and the RBAC hint
+        msg = str(e)
+        assert "Access Denied" in msg
+        assert "newly created module" in msg
+        assert "grant_module_permissions" in msg
+        assert "grant_to=" in msg
+        # The hint should extract the module name from the URL
+        assert "widgets" in msg
+
+
+def test_permission_error_hint_without_module_in_url():
+    """Test RBAC hint is included even when module can't be extracted from URL."""
+    from pyfsr.exceptions import PermissionError, handle_api_error
+
+    # Mock a 403 response from a URL without a clear module name
+    class MockResponse:
+        status_code = 403
+        url = "/api/3/roles"
+
+        def json(self):
+            return {"message": "Access Denied"}
+
+    response = MockResponse()
+    try:
+        handle_api_error(response)
+        assert False, "expected PermissionError"
+    except PermissionError as e:
+        # Hint should still be present, but without module name extraction
+        msg = str(e)
+        assert "Access Denied" in msg
+        assert "newly created module" in msg
+        assert "grant_module_permissions(role, module='<module>')" in msg

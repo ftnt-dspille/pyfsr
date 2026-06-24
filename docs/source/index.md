@@ -115,6 +115,7 @@ guides/module-admin
 guides/module-field-schema
 guides/connectors
 guides/playbook-authoring
+guides/playbook-yaml-reference
 guides/ai-agents
 guides/appliance-cli
 ```
