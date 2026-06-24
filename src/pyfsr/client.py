@@ -5,7 +5,7 @@ import os
 import sys
 import time
 import warnings
-from typing import Any, Literal, overload
+from typing import TYPE_CHECKING, Any, Literal, overload
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
@@ -48,6 +48,9 @@ from .auth.api_key import APIKeyAuth
 from .auth.base import BaseAuth
 from .auth.user_pass import UserPasswordAuth
 from .exceptions import handle_api_error
+
+if TYPE_CHECKING:
+    from .appliance import Appliance
 from .models import (
     Alert,
     Comment,
@@ -630,6 +633,39 @@ class FortiSOAR:
             Query results
         """
         return self.post(f"/api/query/{module}", data=query_data)
+
+    def appliance(
+        self,
+        *,
+        user: str = "csadmin",
+        password: str | None = None,
+        port: int = 22,
+        key_path: str | None = None,
+        sudo_password: str | None = None,
+        insecure_skip_host_key_check: bool = False,
+    ) -> "Appliance":
+        """Open an :class:`~pyfsr.appliance.Appliance` against this client's host.
+
+        The REST client and the appliance use **different** transports: this client
+        talks to ``/api/3`` with an API key/credentials, while the appliance reaches
+        the same box over **SSH** (or locally when on-box). The host is reused from
+        this client's ``base_url``; SSH credentials must still be supplied here.
+
+        >>> box = client.appliance(key_path="~/.ssh/id_rsa")   # doctest: +SKIP
+        >>> box.service.status()                               # doctest: +SKIP
+        """
+        from .appliance import Appliance
+
+        host = urlparse(self.base_url).hostname
+        return Appliance(
+            host=host,
+            user=user,
+            password=password,
+            port=port,
+            key_path=key_path,
+            sudo_password=sudo_password,
+            insecure_skip_host_key_check=insecure_skip_host_key_check,
+        )
 
     @overload
     def records(self, module: Literal["alerts"], *, typed: bool = ...) -> RecordSet[Alert]: ...

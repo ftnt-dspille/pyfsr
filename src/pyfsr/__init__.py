@@ -5,6 +5,7 @@ For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
 """
 
 from .api.connectors import pack_connector
+from .appliance import Appliance
 from .client import FortiSOAR
 from .config import EnvConfig
 from .models import (
@@ -60,6 +61,7 @@ except ImportError:  # pragma: no cover - source checkout without a build
 
 __all__ = [
     "FortiSOAR",
+    "Appliance",
     "EnvConfig",
     "pack_connector",
     "Query",

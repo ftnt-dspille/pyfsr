@@ -29,6 +29,96 @@ change across the whole instance, not just modules you touched. On a shared box,
 check {meth}`~pyfsr.api.modules_admin.ModulesAdminAPI.pending_changes` first.
 ```
 
+## Walkthrough: two linked modules (a heist tracker)
+
+Before the reference sections, here's the whole arc end to end. We'll build a
+tiny **heist tracker**: a `crew` module (the people pulling the job) and a
+`heists` module (the jobs), linked so a heist has a whole crew and a crew member
+has a rap sheet of heists. The fun part — you only declare the link **once**;
+the SDK stages the reverse side for you.
+
+```python
+admin = client.modules_admin
+
+# 1. The crew. Each member has a name and a specialty.
+admin.create_module(
+    "crew",
+    label="Crew Member",
+    plural="Crew",
+    fields=[
+        admin.text_field("alias", required=True, grid_column=True),  # "The Brains", "Wheels"
+        admin.picklist_field("specialty", "AlertType"),              # reuse any existing picklist
+        admin.checkbox_field("trustworthy"),
+    ],
+    record_uniqueness=["alias"],
+)
+
+# 2. The heists. The `crew` field is the link — a many-to-many relationship to
+#    the module we just made. We declare it ONLY here.
+admin.create_module(
+    "heists",
+    label="Heist",
+    plural="Heists",
+    fields=[
+        admin.text_field("codename", required=True, grid_column=True),  # "Operation Cannoli"
+        admin.text_field("target", grid_column=True),
+        admin.integer_field("takeUsd"),
+        admin.datetime_field("goTime"),
+        admin.relationship_field("crew", "crew", label="Crew"),         # <-- the linkage
+    ],
+)
+```
+
+That single `relationship_field` is the whole trick. Because the SDK keeps both
+sides of a relationship valid, it auto-stages the **reverse field on `crew`** —
+so each crew member gets a `heists` field listing every job they're on, without
+you touching the `crew` module again:
+
+```python
+[a["name"] for a in admin.get_staging("crew")["attributes"]]
+# ['alias', 'specialty', 'trustworthy', 'heists']   <-- 'heists' appeared on its own
+```
+
+Nothing is live yet — both modules are staging-only drafts. Check what a publish
+would commit, then commit it (remember: **publish is appliance-wide**):
+
+```python
+admin.pending_changes()
+# [{'module': 'crew', 'change': 'created'}, {'module': 'heists', 'change': 'created'}]
+
+admin.publish()   # backup + migrate; blocks ~30–60s while /api/3 is down
+```
+
+Now the tables exist and you can populate the caper. Create the crew, then a
+heist that references them — the link is just a list of record IRIs:
+
+```python
+danny  = client.records("crew").create({"alias": "The Brains",  "trustworthy": True})
+linus  = client.records("crew").create({"alias": "Light Fingers", "trustworthy": True})
+
+job = client.records("heists").create({
+    "codename": "Operation Cannoli",
+    "target": "Bellagio Vault",
+    "takeUsd": 150_000_000,
+    "crew": [danny["@id"], linus["@id"]],   # link by IRI
+})
+```
+
+Because the reverse field exists, the relationship reads **both ways** for free —
+ask a heist for its crew, or a crew member for their heists:
+
+```python
+client.records("heists").get(job["uuid"], relationships=True)["crew"]
+# -> [{'alias': 'The Brains', ...}, {'alias': 'Light Fingers', ...}]
+
+client.records("crew").get(danny["uuid"], relationships=True)["heists"]
+# -> [{'codename': 'Operation Cannoli', ...}]
+```
+
+That's the full loop: **two `create_module` calls, one relationship, one
+publish** — and a bidirectional link you only had to describe once. The rest of
+this guide is the reference behind each step.
+
 ## Inspecting existing schema (read-only)
 
 ```python

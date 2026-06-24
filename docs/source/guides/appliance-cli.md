@@ -148,6 +148,58 @@ but does **not** drop the underlying table. Always `db query` for the matching
 table names first, confirm they're truly orphaned, then drop.
 ```
 
+## From Python
+
+Everything above is also available programmatically through
+{class}`~pyfsr.appliance.Appliance` — the same verbs, grouped the same way, so the Python
+API mirrors the CLI. Construct it with SSH details (or run on-box with no `host`
+for a local transport):
+
+```python
+from pyfsr import Appliance
+
+box = Appliance(host="10.0.0.1", user="csadmin", key_path="~/.ssh/id_rsa")
+
+box.info()                                  # {'host':..., 'version':..., 'content_db':..., 'device_uuid':...}
+dbname, headers, rows = box.db.query("SELECT count(*) FROM alerts")
+for q in box.mq.queues():
+    print(q)
+print(box.service.status())
+print(box.es.health())
+```
+
+Connection arguments fall back to the same `PYFSR_APPLIANCE_*` environment
+variables, so `Appliance()` with no arguments works on-box or with the env set.
+
+The verbs are grouped under attributes that match the CLI command groups —
+`box.db`, `box.service`, `box.mq`, `box.host`, `box.license`, `box.logs`,
+`box.es`, `box.ha`, `box.certs` — plus `box.info()` and `box.diagnose()`. The
+same gating applies: mutating calls take `yes=True`, and SQL writes go through
+`box.db.execute(..., yes=True)` (reads use `box.db.query(...)`).
+
+```python
+# Mutating calls are gated exactly like the CLI's --yes / --write
+box.db.execute("UPDATE workflow_steps SET status='complete' WHERE id='...'", yes=True)
+box.db.drop_module_tables("widgets", yes=True)
+box.service.restart("celeryd", yes=True)
+box.mq.purge_workflows(graceful=True, yes=True)
+```
+
+If you already have a REST client, `client.appliance(...)` reuses its host and
+just needs the SSH credentials (the REST and SSH transports are separate):
+
+```python
+from pyfsr import FortiSOAR
+
+client = FortiSOAR("https://10.0.0.1", token="<api-key>")
+box = client.appliance(key_path="~/.ssh/id_rsa")
+box.service.liveness()
+```
+
+For any verb not surfaced as a method, drop down to `box.facts` /
+`box.transport` and call the underlying `pyfsr.cli.appliance.*` functions
+directly.
+
 ## When to use the API instead
 
 `pyfsr appliance` is for the *box*. For anything that has a REST endpoint —
