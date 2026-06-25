@@ -84,6 +84,27 @@ _SUMMARY = {
     "description": "Return a compact identity + triage summary instead of the full record(s).",
 }
 _LIMIT = {"type": "integer", "description": "Maximum number of records to return.", "minimum": 1}
+_CONNECTOR = {
+    "type": "string",
+    "description": "Connector name, e.g. 'virustotal' or 'code-snippet'. Use list_connectors to discover.",
+}
+_CONFIG = {
+    "type": "object",
+    "description": "Connector configuration field values (the connector's own field map). "
+    "Use default_connector_config to get a complete, schema-valid starting point.",
+}
+_CONFIG_NAME = {
+    "type": "string",
+    "description": "A label for this configuration (required; what the UI shows).",
+}
+_CONFIG_ID = {
+    "type": "string",
+    "description": "A configuration UUID (the config_id). Reusing an existing one updates it.",
+}
+_PLAYBOOK = {
+    "type": "string",
+    "description": "Playbook name. Scope to one playbook by its display name.",
+}
 
 
 def _obj(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -189,6 +210,190 @@ def _h_list_ai_config(client) -> Any:
         "llm_configs": client.ai.list_llm_configs(),
         "mcp_servers": client.ai.list_mcp_servers(),
     }
+
+
+# -- module admin -----------------------------------------------------------
+def _h_create_module(
+    client,
+    *,
+    module,
+    fields=None,
+    label=None,
+    plural=None,
+    grant_to=None,
+    options=None,
+) -> Any:
+    """Create a module in staging (publish to make it live). RBAC optional via grant_to."""
+    kwargs: dict[str, Any] = {"label": label, "plural": plural, "fields": fields, "grant_to": grant_to}
+    # Drop None-valued kwargs so create_module's own defaults apply; merge passthrough options.
+    kwargs = {k: v for k, v in kwargs.items() if v is not None}
+    if options:
+        kwargs.update(options)
+    return to_jsonable(client.modules_admin.create_module(module, **kwargs))
+
+
+def _h_delete_module(
+    client,
+    *,
+    module,
+    detach_relationships=False,
+    drop_orphan_tables=None,
+    publish=True,
+    timeout=600.0,
+    poll_interval=10.0,
+) -> Any:
+    return client.modules_admin.delete_module(
+        module,
+        detach_relationships=detach_relationships,
+        drop_orphan_tables=drop_orphan_tables,
+        publish=publish,
+        timeout=timeout,
+        poll_interval=poll_interval,
+    )
+
+
+def _h_publish(client, *, timeout=600.0, poll_interval=10.0, precheck=True) -> Any:
+    return client.modules_admin.publish(timeout=timeout, poll_interval=poll_interval, precheck=precheck)
+
+
+# -- connector configuration ------------------------------------------------
+def _h_default_connector_config(client, *, connector, version=None) -> Any:
+    return client.connectors.default_config(connector, version=version)
+
+
+def _h_validate_connector_config(client, *, connector, config, version=None) -> Any:
+    result = client.connectors.validate_config(connector, config, version=version)
+    # ConfigValidationResult -> JSON-safe projection of its problem fields.
+    return {
+        "valid": bool(getattr(result, "valid", False)),
+        "missing": list(getattr(result, "missing", []) or []),
+        "invalid": list(getattr(result, "invalid", []) or []),
+        "unknown": list(getattr(result, "unknown", []) or []),
+        "errors": list(getattr(result, "errors", []) or []),
+    }
+
+
+def _h_create_connector_configuration(
+    client,
+    *,
+    connector,
+    config,
+    name,
+    default=False,
+    agent=None,
+    validate=True,
+    autofill=True,
+    exist_ok=False,
+    version=None,
+) -> Any:
+    return to_jsonable(
+        client.connectors.create_configuration(
+            connector,
+            config,
+            name=name,
+            default=default,
+            agent=agent,
+            validate=validate,
+            autofill=autofill,
+            exist_ok=exist_ok,
+            version=version,
+        )
+    )
+
+
+def _h_update_connector_configuration(
+    client,
+    *,
+    connector,
+    config_id,
+    config,
+    name,
+    default=False,
+    agent=None,
+    validate=True,
+    autofill=True,
+    version=None,
+) -> Any:
+    return to_jsonable(
+        client.connectors.update_configuration(
+            connector,
+            config_id,
+            config,
+            name=name,
+            default=default,
+            agent=agent,
+            validate=validate,
+            autofill=autofill,
+            version=version,
+        )
+    )
+
+
+def _h_upsert_connector_configuration(
+    client,
+    *,
+    connector,
+    config,
+    name,
+    default=False,
+    agent=None,
+    validate=True,
+    autofill=True,
+    version=None,
+) -> Any:
+    return to_jsonable(
+        client.connectors.upsert_configuration(
+            connector,
+            config,
+            name=name,
+            default=default,
+            agent=agent,
+            validate=validate,
+            autofill=autofill,
+            version=version,
+        )
+    )
+
+
+# -- playbook run debugging -------------------------------------------------
+def _h_last_playbook_run(client, *, playbook=None, playbook_uuid=None) -> Any:
+    run = client.playbooks.last_run(playbook=playbook, playbook_uuid=playbook_uuid)
+    return to_jsonable(run) if run is not None else {"run": None}
+
+
+def _h_why_playbook_failed(client, *, playbook=None, playbook_uuid=None) -> Any:
+    failure = client.playbooks.why_failed(playbook=playbook, playbook_uuid=playbook_uuid)
+    return to_jsonable(failure) if failure is not None else {"failure": None}
+
+
+def _h_wait_for_playbook_run(
+    client,
+    *,
+    playbook=None,
+    playbook_uuid=None,
+    since=None,
+    timeout=120,
+    poll_interval=3,
+) -> Any:
+    run = client.playbooks.wait_for_run(
+        playbook=playbook,
+        playbook_uuid=playbook_uuid,
+        since=since,
+        timeout=timeout,
+        poll_interval=poll_interval,
+    )
+    return to_jsonable(run)
+
+
+# -- record upsert ----------------------------------------------------------
+def _h_upsert_record(client, *, module, data, key=None, resolve_picklists=True) -> Any:
+    rec = client.records(module).upsert(data, key=key, resolve_picklists=resolve_picklists)
+    return to_jsonable(rec)
+
+
+def _h_get_or_create_record(client, *, module, data, key="uuid", resolve_picklists=True) -> Any:
+    record, created = client.records(module).get_or_create(data, key=key, resolve_picklists=resolve_picklists)
+    return {"record": to_jsonable(record), "created": bool(created)}
 
 
 # --------------------------------------------------------------------------- registry
@@ -463,6 +668,262 @@ _TOOLS: tuple[ToolSpec, ...] = (
         "reasoning profiles, and the registered MCP servers the agents can call.",
         _obj({}),
         _h_list_ai_config,
+    ),
+    ToolSpec(
+        "create_module",
+        "Create a new module in STAGING (call publish to make it live). Define its fields and "
+        "optionally grant a role permissions in one call via grant_to (e.g. "
+        "['Full App Permissions']) — otherwise the new module gets no role permissions and "
+        "record writes will 403 until you grant them. Returns the created staging module.",
+        _obj(
+            {
+                "module": _MODULE,
+                "fields": {
+                    "type": "array",
+                    "description": "Field definitions (each a {name, type, ...} dict). "
+                    "Use describe_module on an existing module to see the field-spec shape.",
+                    "items": {"type": "object"},
+                },
+                "label": {"type": "string", "description": "Display label (defaults to module name)."},
+                "plural": {"type": "string", "description": "Plural label."},
+                "grant_to": {
+                    "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                    "description": "Role name(s) to grant full CRUD+execute on the new module "
+                    "(e.g. 'Full App Permissions'). Explicit opt-in; never auto-grants.",
+                },
+                "options": {
+                    "type": "object",
+                    "description": "Extra create_module options passed through (ownable, trackable, "
+                    "indexable, taggable, queueable, recycle_bin, multi_tenancy, record_uniqueness, "
+                    "default_sort, create_view_templates). All have sensible defaults.",
+                },
+            },
+            ["module"],
+        ),
+        _h_create_module,
+    ),
+    ToolSpec(
+        "delete_module",
+        "Delete a module — the only operation that actually removes one. By default detaches "
+        "reverse relationships, publishes the change, and (when drop_orphan_tables is set) drops "
+        "the physical tables. Set publish=false to leave the delete in staging.",
+        _obj(
+            {
+                "module": _MODULE,
+                "detach_relationships": {
+                    "type": "boolean",
+                    "description": "Detach reverse-relationship references first (default true). "
+                    "If false and refs exist, the delete fails.",
+                },
+                "drop_orphan_tables": {
+                    "type": "string",
+                    "description": "Drop the module's physical tables after publish "
+                    "(pass 'Facts' or the table name). Omit to leave them orphaned.",
+                },
+                "publish": {
+                    "type": "boolean",
+                    "description": "Publish the delete appliance-wide immediately (default true).",
+                },
+            },
+            ["module"],
+        ),
+        _h_delete_module,
+    ),
+    ToolSpec(
+        "publish",
+        "Commit ALL staged schema changes appliance-wide (module creates/deletes/edits). This is "
+        "appliance-wide, not module-scoped — every staged change ships at once. Polls until the "
+        "publish job finishes. Call after create_module/delete_module to make them live.",
+        _obj(
+            {
+                "timeout": {"type": "number", "description": "Max seconds to wait (default 600)."},
+                "poll_interval": {"type": "number", "description": "Poll cadence in seconds (default 10)."},
+                "precheck": {
+                    "type": "boolean",
+                    "description": "Validate the draft before publishing (default true).",
+                },
+            }
+        ),
+        _h_publish,
+    ),
+    ToolSpec(
+        "default_connector_config",
+        "Build a complete, runtime-valid default configuration for a connector — every field's "
+        "default plus the onchange-revealed sub-fields. Call this first, edit the values you need "
+        "(credentials etc.), then pass the result as `config` to create_/upsert_connector_configuration.",
+        _obj(
+            {
+                "connector": _CONNECTOR,
+                "version": {"type": "string", "description": "Connector version (resolved if omitted)."},
+            },
+            ["connector"],
+        ),
+        _h_default_connector_config,
+    ),
+    ToolSpec(
+        "validate_connector_config",
+        "Validate a connector config dict against the connector's schema BEFORE submitting. Returns "
+        "{valid, missing, invalid, unknown, errors} so you can fix problems client-side rather than "
+        "discovering them as a runtime failure.",
+        _obj(
+            {
+                "connector": _CONNECTOR,
+                "config": _CONFIG,
+                "version": {"type": "string", "description": "Connector version (resolved if omitted)."},
+            },
+            ["connector", "config"],
+        ),
+        _h_validate_connector_config,
+    ),
+    ToolSpec(
+        "create_connector_configuration",
+        "Create a named connector configuration (persists credentials). For a config that may "
+        "already exist, set exist_ok=true (delegates to upsert; safe to re-run) instead of failing "
+        "on a duplicate name. autofill=true (default) fills any schema-defaulted fields you omit.",
+        _obj(
+            {
+                "connector": _CONNECTOR,
+                "config": _CONFIG,
+                "name": _CONFIG_NAME,
+                "default": {"type": "boolean", "description": "Mark this the connector's default config."},
+                "agent": {"type": "string", "description": "Run on a remote agent (its uuid); omit for self-agent."},
+                "validate": {"type": "boolean", "description": "Validate config against schema first (default true)."},
+                "autofill": {"type": "boolean", "description": "Fill schema-defaulted fields (default true)."},
+                "exist_ok": {
+                    "type": "boolean",
+                    "description": "Delegate to upsert if a config with this name exists (default false).",
+                },
+                "version": {"type": "string", "description": "Connector version (resolved if omitted)."},
+            },
+            ["connector", "config", "name"],
+        ),
+        _h_create_connector_configuration,
+    ),
+    ToolSpec(
+        "update_connector_configuration",
+        "Update an existing connector configuration identified by its config_id (PUT). Same options "
+        "as create for validation and autofill.",
+        _obj(
+            {
+                "connector": _CONNECTOR,
+                "config_id": _CONFIG_ID,
+                "config": _CONFIG,
+                "name": _CONFIG_NAME,
+                "default": {"type": "boolean", "description": "Mark this the connector's default config."},
+                "agent": {"type": "string", "description": "Run on a remote agent (its uuid); omit for self-agent."},
+                "validate": {"type": "boolean", "description": "Validate config against schema first (default true)."},
+                "autofill": {"type": "boolean", "description": "Fill schema-defaulted fields (default true)."},
+                "version": {"type": "string", "description": "connector version (resolved if omitted)."},
+            },
+            ["connector", "config_id", "config", "name"],
+        ),
+        _h_update_connector_configuration,
+    ),
+    ToolSpec(
+        "upsert_connector_configuration",
+        "Create a named configuration, or update it in place if one already exists with the same name — "
+        "the idempotent write safe to re-run from a deploy script. Preferred over create_connector_configuration "
+        "when the config may already exist.",
+        _obj(
+            {
+                "connector": _CONNECTOR,
+                "config": _CONFIG,
+                "name": _CONFIG_NAME,
+                "default": {"type": "boolean", "description": "Mark this the connector's default config."},
+                "agent": {"type": "string", "description": "Run on a remote agent (its uuid); omit for self-agent."},
+                "validate": {"type": "boolean", "description": "Validate config against schema first (default true)."},
+                "autofill": {"type": "boolean", "description": "Fill schema-defaulted fields (default true)."},
+                "version": {"type": "string", "description": "Connector version (resolved if omitted)."},
+            },
+            ["connector", "config", "name"],
+        ),
+        _h_upsert_connector_configuration,
+    ),
+    ToolSpec(
+        "last_playbook_run",
+        "Return the most recent run of a playbook (live or historical). Returns {run: null} if none. "
+        "Use why_playbook_failed to get just the failure detail, or get_playbook_run for a full run by pk.",
+        _obj(
+            {
+                "playbook": _PLAYBOOK,
+                "playbook_uuid": {"type": "string", "description": "Identify the playbook by UUID instead of name."},
+            }
+        ),
+        _h_last_playbook_run,
+    ),
+    ToolSpec(
+        "why_playbook_failed",
+        "Return the slim failure detail of the most recent run of a playbook: "
+        "{status, failing_step, error_message, pk}. Returns {failure: null} if the run succeeded or "
+        "no run exists. Pulls the populated error_message (absent from the run list).",
+        _obj(
+            {
+                "playbook": _PLAYBOOK,
+                "playbook_uuid": {"type": "string", "description": "Identify the playbook by UUID instead of name."},
+            }
+        ),
+        _h_why_playbook_failed,
+    ),
+    ToolSpec(
+        "wait_for_playbook_run",
+        "Block until the newest run of a playbook reaches a terminal state, then return its summary. "
+        "Pass since (an ISO timestamp or prior run's modified time) to wait for a run newer than that. "
+        "Raises TimeoutError (returned as an error) if no terminal state within timeout.",
+        _obj(
+            {
+                "playbook": _PLAYBOOK,
+                "playbook_uuid": {"type": "string", "description": "Identify the playbook by UUID instead of name."},
+                "since": {
+                    "type": "string",
+                    "description": "Only consider runs newer than this (ISO timestamp). Use after triggering.",
+                },
+                "timeout": {"type": "number", "description": "Max seconds to wait (default 120)."},
+                "poll_interval": {"type": "number", "description": "Poll cadence in seconds (default 3)."},
+            }
+        ),
+        _h_wait_for_playbook_run,
+    ),
+    ToolSpec(
+        "upsert_record",
+        "Insert a record or update an existing one. With key omitted, FortiSOAR matches by natural key; "
+        "pass key (a field name) to match on that field. Friendly picklist values map to IRIs by default.",
+        _obj(
+            {
+                "module": _MODULE,
+                "data": {"type": "object", "description": "Field -> value mapping for the record."},
+                "key": {
+                    "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                    "description": "Field name(s) to match an existing record on (default: natural key).",
+                },
+                "resolve_picklists": {
+                    "type": "boolean",
+                    "description": "Map friendly picklist values to IRIs before sending (default true).",
+                },
+            },
+            ["module", "data"],
+        ),
+        _h_upsert_record,
+    ),
+    ToolSpec(
+        "get_or_create_record",
+        "Look up a record by key field(s); create it if absent. Returns {record, created} where created "
+        "is true if the record was newly made. key defaults to 'uuid'; multiple keys are AND'ed.",
+        _obj(
+            {
+                "module": _MODULE,
+                "data": {"type": "object", "description": "Field -> value mapping to match/create on."},
+                "key": {
+                    "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                    "description": "Field name(s) to match on (default 'uuid'). Must be present in data.",
+                },
+                "resolve_picklists": {
+                    "type": "boolean",
+                    "description": "Map friendly picklist values to IRIs before sending (default true).",
+                },
+            },
+            ["module", "data"],
+        ),
+        _h_get_or_create_record,
     ),
 )
 

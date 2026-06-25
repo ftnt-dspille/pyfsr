@@ -57,6 +57,28 @@ def test_call_wraps_result_as_text_json():
     assert payload["modules"][0]["type"] == "alerts"
 
 
+def test_call_dispatches_new_admin_tool_as_text_json():
+    # The new registry tools (module admin / connector config / run-debug / upsert)
+    # flow through the same _call -> dispatch path as the originals.
+    class FakeConnectors:
+        def default_config(self, connector, version=None):
+            return {"server": "", "verify_ssl": True}
+
+    class FakeModulesAdmin:
+        pass
+
+    class Client:
+        def __init__(self):
+            self.connectors = FakeConnectors()
+            self.modules_admin = FakeModulesAdmin()
+
+    content = mcp_mod._call(Client(), "default_connector_config", {"connector": "code-snippet"})
+    assert len(content) == 1
+    assert content[0].type == "text"
+    payload = json.loads(content[0].text)
+    assert payload == {"server": "", "verify_ssl": True}
+
+
 def test_call_unknown_tool_returns_structured_error():
     content = mcp_mod._call(FakeClient(), "does_not_exist", {})
     payload = json.loads(content[0].text)

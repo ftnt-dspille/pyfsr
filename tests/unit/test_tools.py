@@ -33,6 +33,14 @@ class FakeRecordSet:
     def delete(self, ref, hard=False):
         self.store["deleted"] = (ref, hard)
 
+    def upsert(self, data, key=None, resolve_picklists=False):
+        self.store["upserted"] = (data, key)
+        return {"uuid": "ups", **data}
+
+    def get_or_create(self, data, key="uuid", resolve_picklists=False):
+        self.store["goc"] = (data, key)
+        return ({"uuid": "goc", **data}, True)
+
 
 class FakePicklists:
     def list(self):
@@ -55,6 +63,28 @@ class FakeConnectors:
     def execute(self, connector, operation, params=None, config_name=None):
         return {"operation": operation, "status": "Success", "data": {"params": params}}
 
+    def default_config(self, connector, version=None):
+        return {"server": "", "verify_ssl": True}
+
+    def validate_config(self, connector, config, version=None):
+        class Result:
+            valid = True
+            missing = []
+            invalid = []
+            unknown = ["rogue_key"]
+            errors = []
+
+        return Result()
+
+    def create_configuration(self, connector, config, *, name, **kwargs):
+        return {"config_id": "c1", "name": name, "connector": connector}
+
+    def update_configuration(self, connector, config_id, config, *, name, **kwargs):
+        return {"config_id": config_id, "name": name, "connector": connector}
+
+    def upsert_configuration(self, connector, config, *, name, **kwargs):
+        return {"config_id": "c1", "name": name, "connector": connector}
+
 
 class FakePlaybooks:
     def execution_history(self, playbook=None, limit=20):
@@ -63,6 +93,32 @@ class FakePlaybooks:
     def get_execution(self, run_pk):
         return {"pk": run_pk, "status": "finished"}
 
+    def last_run(self, playbook=None, playbook_uuid=None):
+        return {"pk": "100", "name": playbook or "pb", "status": "finished"}
+
+    def why_failed(self, playbook=None, playbook_uuid=None):
+        return {"status": "failed", "failing_step": "enrich", "error_message": "boom", "pk": "100"}
+
+    def wait_for_run(self, playbook=None, playbook_uuid=None, since=None, timeout=120, poll_interval=3):
+        return {"pk": "100", "name": playbook or "pb", "status": "finished"}
+
+
+class FakeModulesAdmin:
+    def __init__(self, store):
+        self.store = store
+
+    def create_module(self, module, **kwargs):
+        self.store["create_module"] = (module, kwargs)
+        return {"module": module, "staging": True}
+
+    def delete_module(self, module, **kwargs):
+        self.store["delete_module"] = (module, kwargs)
+        return {"module": module, "published": kwargs.get("publish", True)}
+
+    def publish(self, **kwargs):
+        self.store["publish"] = kwargs
+        return {"status": "Success", "last_publish_time": "now"}
+
 
 class FakeClient:
     def __init__(self):
@@ -70,6 +126,7 @@ class FakeClient:
         self.picklists = FakePicklists()
         self.connectors = FakeConnectors()
         self.playbooks = FakePlaybooks()
+        self.modules_admin = FakeModulesAdmin(self.store)
 
     def records(self, module, **kwargs):
         return FakeRecordSet(module, self.store)
@@ -106,6 +163,19 @@ def test_registry_covers_core_ops():
         "run_connector_operation",
         "list_playbook_runs",
         "get_playbook_run",
+        "create_module",
+        "delete_module",
+        "publish",
+        "default_connector_config",
+        "validate_connector_config",
+        "create_connector_configuration",
+        "update_connector_configuration",
+        "upsert_connector_configuration",
+        "last_playbook_run",
+        "why_playbook_failed",
+        "wait_for_playbook_run",
+        "upsert_record",
+        "get_or_create_record",
     }:
         assert expected in names
 
@@ -202,6 +272,114 @@ def test_dispatch_run_connector_operation(client):
 def test_dispatch_list_playbook_runs(client):
     out = tools.dispatch(client, "list_playbook_runs", {"playbook": "Block IP"})
     assert out["runs"][0]["name"] == "Block IP"
+
+
+# -- dispatch: module admin -------------------------------------------------
+def test_dispatch_create_module_grant_to(client):
+    out = tools.dispatch(
+        client,
+        "create_module",
+        {"module": "crew", "fields": [{"name": "alias", "type": "text"}], "grant_to": ["Full App Permissions"]},
+    )
+    assert out["module"] == "crew"
+    module, kwargs = client.store["create_module"]
+    assert module == "crew"
+    assert kwargs["grant_to"] == ["Full App Permissions"]
+    assert kwargs["fields"] == [{"name": "alias", "type": "text"}]
+
+
+def test_dispatch_create_module_drops_none_defaults(client):
+    # Omitted optional kwargs must not be passed as None (let create_module defaults apply).
+    tools.dispatch(client, "create_module", {"module": "crew"})
+    _, kwargs = client.store["create_module"]
+    assert "label" not in kwargs and "plural" not in kwargs and "grant_to" not in kwargs
+
+
+def test_dispatch_delete_module(client):
+    out = tools.dispatch(client, "delete_module", {"module": "crew", "drop_orphan_tables": "Facts"})
+    assert out["module"] == "crew"
+    module, kwargs = client.store["delete_module"]
+    assert module == "crew"
+    assert kwargs["drop_orphan_tables"] == "Facts"
+
+
+def test_dispatch_publish(client):
+    out = tools.dispatch(client, "publish", {"timeout": 30})
+    assert out["status"] == "Success"
+    assert client.store["publish"]["timeout"] == 30
+
+
+# -- dispatch: connector configuration --------------------------------------
+def test_dispatch_default_connector_config(client):
+    out = tools.dispatch(client, "default_connector_config", {"connector": "code-snippet"})
+    assert out == {"server": "", "verify_ssl": True}
+
+
+def test_dispatch_validate_connector_config(client):
+    out = tools.dispatch(
+        client,
+        "validate_connector_config",
+        {"connector": "virustotal", "config": {"api_key": "x"}},
+    )
+    assert out["valid"] is True
+    assert out["unknown"] == ["rogue_key"]
+
+
+def test_dispatch_upsert_connector_configuration(client):
+    out = tools.dispatch(
+        client,
+        "upsert_connector_configuration",
+        {"connector": "virustotal", "config": {"api_key": "x"}, "name": "default"},
+    )
+    assert out["name"] == "default" and out["config_id"] == "c1"
+
+
+def test_dispatch_create_connector_configuration_exist_ok(client):
+    out = tools.dispatch(
+        client,
+        "create_connector_configuration",
+        {"connector": "virustotal", "config": {"api_key": "x"}, "name": "default", "exist_ok": True},
+    )
+    assert out["name"] == "default"
+
+
+def test_dispatch_update_connector_configuration(client):
+    out = tools.dispatch(
+        client,
+        "update_connector_configuration",
+        {"connector": "virustotal", "config_id": "c1", "config": {"api_key": "y"}, "name": "default"},
+    )
+    assert out["config_id"] == "c1" and out["name"] == "default"
+
+
+# -- dispatch: playbook run debugging ---------------------------------------
+def test_dispatch_last_playbook_run(client):
+    out = tools.dispatch(client, "last_playbook_run", {"playbook": "Block IP"})
+    assert out["pk"] == "100" and out["status"] == "finished"
+
+
+def test_dispatch_why_playbook_failed(client):
+    out = tools.dispatch(client, "why_playbook_failed", {"playbook": "Block IP"})
+    assert out["failing_step"] == "enrich" and out["error_message"] == "boom"
+
+
+def test_dispatch_wait_for_playbook_run(client):
+    out = tools.dispatch(client, "wait_for_playbook_run", {"playbook": "Block IP", "timeout": 5})
+    assert out["status"] == "finished"
+
+
+# -- dispatch: record upsert ------------------------------------------------
+def test_dispatch_upsert_record(client):
+    out = tools.dispatch(client, "upsert_record", {"module": "alerts", "data": {"name": "n"}, "key": "name"})
+    assert out["uuid"] == "ups"
+    assert client.store["upserted"] == ({"name": "n"}, "name")
+
+
+def test_dispatch_get_or_create_record(client):
+    out = tools.dispatch(client, "get_or_create_record", {"module": "alerts", "data": {"name": "n"}, "key": "name"})
+    assert out["created"] is True
+    assert out["record"]["uuid"] == "goc"
+    assert client.store["goc"] == ({"name": "n"}, "name")
 
 
 # -- dispatch: error handling ----------------------------------------------
