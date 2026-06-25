@@ -30,6 +30,64 @@ incidents.delete("0d2c...")
 A record reference can be a bare uuid, the `module:uuid` shorthand, or a full
 `/api/3/<module>/<uuid>` IRI — all resolve to the same record.
 
+### Return shapes
+
+`get` returns the bound model (here `Alert`); picklist fields come back as their
+IRI string. Pass `raw=True` for the plain decoded dict, where a picklist keeps
+its full `itemValue` block:
+
+```{doctest}
+>>> client = demo_client()
+>>> alerts = client.records("alerts")
+>>> alert = alerts.get("9f0eb603-ac1e-41c3-b47b-444589beed39")
+>>> type(alert).__name__, alert.name
+('Alert', 'Response Capture Test Alert')
+>>> alert.severity                       # typed: the picklist IRI string
+'/api/3/picklists/58d0753f-f7e4-403b-953c-b0f521eab759'
+>>> raw = alerts.get("9f0eb603-ac1e-41c3-b47b-444589beed39", raw=True)
+>>> raw["severity"]["itemValue"], raw["status"]["itemValue"]   # raw: friendly values
+('Low', 'Open')
+```
+
+`create` and `update` return the created/updated record the same way;
+`delete` returns `None`:
+
+```{doctest}
+>>> created = alerts.create({"name": "New Alert"}, resolve_picklists=False)
+>>> type(created).__name__, created.name, created.uuid[:8]
+('Alert', 'Response Capture Test Alert', '9f0eb603')
+>>> updated = alerts.update(
+...     "9f0eb603-ac1e-41c3-b47b-444589beed39", {"name": "Renamed"},
+...     resolve_picklists=False)
+>>> updated.name
+'Response Capture Test Alert'
+>>> alerts.delete("9f0eb603-ac1e-41c3-b47b-444589beed39")  # returns None
+```
+
+`list` and `query` return a {class}`~pyfsr.pagination.HydraPage` — iterate it,
+index `members`, or read `total` / `has_next`:
+
+```{doctest}
+>>> page = alerts.list()
+>>> type(page).__name__, len(page), page.total, page.has_next
+('HydraPage', 1, 1, False)
+>>> [a.name for a in page]
+['Response Capture Test Alert']
+>>> qpage = alerts.query(Query().eq("status.itemValue", "Open"))
+>>> qpage.members[0].name
+'Response Capture Test Alert'
+```
+
+`iterate()` streams across pages (here one page, one record) and `first` /
+`count` / `exists` are the one-liner conveniences:
+
+```{doctest}
+>>> [a.name for a in alerts.iterate(Query())]
+['Response Capture Test Alert']
+>>> alerts.first(Query()).name, alerts.count(Query()), alerts.exists(Query())
+('Response Capture Test Alert', 1, True)
+```
+
 ## Querying & iterating
 
 Pass a {class}`~pyfsr.query.Query` to fetch a page, or `iterate()` to stream across
@@ -48,12 +106,24 @@ See {doc}`querying` for the full DSL.
 
 ## Typed models
 
-The package-level module APIs return Pydantic models with attribute access and
-validation:
+`client.records("<module>")` parses each record into the module's Pydantic
+model (here `Alert`) — attribute access, validation, and picklist-IRI
+flattening for free:
 
-```{code-block} python
-alert = client.alerts.get("alert-uuid")
-print(alert.name, alert.severity)
+```{doctest}
+>>> alert = client.records("alerts").get("9f0eb603-ac1e-41c3-b47b-444589beed39")
+>>> type(alert).__name__, alert.name
+('Alert', 'Response Capture Test Alert')
+```
+
+The legacy `client.alerts` accessor (and the other package-level module APIs)
+return the **raw decoded dict** instead — handy when you want the wire shape
+untouched, but without the typed niceties:
+
+```{doctest}
+>>> raw = client.alerts.get("9f0eb603-ac1e-41c3-b47b-444589beed39")
+>>> type(raw).__name__, raw["name"]
+('dict', 'Response Capture Test Alert')
 ```
 
 Available typed models include `Alert`, `Incident`,

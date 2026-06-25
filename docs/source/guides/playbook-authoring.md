@@ -98,6 +98,45 @@ else:
     client.workflow_collections.import_export(result.fsr_json, replace=True)
 ```
 
+The `CompiledPlaybook` shape is doctested (compilation is offline, no network).
+`ok` is `True` only when there are no blocking errors; `collection_names` and
+`playbook_names` read off the produced envelope:
+
+```{doctest}
+>>> from pyfsr.authoring import compile_playbook_yaml
+>>> yaml = '''
+... name: demo-triage
+... description: Doctested example playbook
+... playbooks:
+...   - name: Triage Alert
+...     description: one step
+...     steps:
+...       - name: Start
+...         type: start
+...         next: Set Note
+...       - name: Set Note
+...         type: set_variable
+...         manual_input:
+...           - name: note
+...             type: text
+...             value: hello
+... '''
+>>> result = compile_playbook_yaml(yaml)
+>>> result.ok, result.collection_names, result.playbook_names
+(True, ['00 - FSR Studio'], ['Triage Alert'])
+```
+
+A blocking error keeps `ok` `False` and leaves `fsr_json` `None` — `errors`
+holds every diagnostic so you can surface *why* before anything is deployed:
+
+```{doctest}
+>>> bad = compile_playbook_yaml("name: x\nplaybooks:\n  - name: P\n    steps: []")
+>>> bad.ok, bad.fsr_json
+(False, None)
+>>> [e["code"] for e in bad.errors]
+['no_trigger']
+```
+
 {meth}`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_yaml`
 options:
 

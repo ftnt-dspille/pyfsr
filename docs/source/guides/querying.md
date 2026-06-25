@@ -217,6 +217,22 @@ if page.has_next:
     next_page = client.records("alerts").filter(Query().eq("status.itemValue", "Open").limit(30).page(2))
 ```
 
+The executed shape against a recorded response (no network — `demo_client()`
+replays a captured `/api/query/alerts` page):
+
+```{doctest}
+>>> client = demo_client()
+>>> page = client.records("alerts").filter(Query().eq("status.itemValue", "Open"))
+>>> type(page).__name__
+'HydraPage'
+>>> page.total, len(page), page.has_next     # hydra:totalItems, on-page count, more?
+(1, 1, False)
+>>> page.members[0].name                     # index members directly
+'Response Capture Test Alert'
+>>> [a.name for a in page]                    # or iterate
+['Response Capture Test Alert']
+```
+
 ## Streaming all results with `iterate()`
 
 For processing more records than fit on one page, `iterate()` pages automatically:

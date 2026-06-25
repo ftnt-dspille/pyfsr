@@ -20,6 +20,47 @@ validate <file>` is the source of truth — it reports unknown keys, missing
 fields, and wrong shapes with a `path:` into your YAML.
 ```
 
+## What the compiler turns a step into
+
+The friendly `type:` / `vars:` / `next:` you write expand into the canonical
+workflow/step/route JSON the import API expects. Compiling is offline (no
+network), so you can inspect exactly what gets sent before deploying:
+
+```{doctest}
+>>> from pyfsr.authoring import compile_playbook_yaml
+>>> result = compile_playbook_yaml('''
+... name: wire-shape-demo
+... description: show one step's canonical JSON
+... playbooks:
+...   - name: Demo
+...     steps:
+...       - name: Start
+...         type: start
+...         next: Set Greeting
+...       - name: Set Greeting
+...         type: set_variable
+...         vars:
+...           greeting: hello from pyfsr
+...           count: 3
+... ''')
+>>> result.ok
+True
+>>> wf = result.fsr_json["data"][0]["workflows"][0]
+>>> step = wf["steps"][1]
+>>> step["@type"], step["name"], step["arguments"]
+('WorkflowStep', 'Set Greeting', {'greeting': 'hello from pyfsr', 'count': 3})
+>>> [r["name"] for r in wf["routes"]]
+['Start -> Set Greeting']
+```
+
+The `set_variable` step type maps to a fixed `stepType` IRI (a UUID the
+compiler resolves from its catalog); the friendly `vars:` mapping lands verbatim
+in `arguments`, and `next:` becomes a `WorkflowRoute` whose `name` is
+`"<source> -> <target>"`. The volatile fields ��� `uuid`, `top`/`left` (canvas
+position), and the `/api/3/workflow_steps/<uuid>` IRIs in each route — are
+compiler-generated and stable across runs, so you only need to author the
+friendly shape on the left.
+
 ## File structure
 
 A playbook file describes **one collection** and the **workflows** (playbooks)
@@ -260,6 +301,37 @@ pyfsr playbook validate heist_intake.yaml      # diagnostics only, no network
 pyfsr playbook compile  heist_intake.yaml -o envelope.json
 pyfsr playbook deploy   heist_intake.yaml --replace
 ```
+
+`validate` compiles offline and prints one line per diagnostic to stderr
+(nonzero exit on any error). Each diagnostic carries a stable `code`, a `path`
+into your YAML, a human `message`, and a `severity` (`error` or `warning`):
+
+```{doctest}
+>>> from pyfsr.authoring import compile_playbook_yaml, format_diagnostic
+>>> bad = compile_playbook_yaml('''
+... name: bad-demo
+... playbooks:
+...   - name: P
+...     steps:
+...       - name: S
+...         type: not_a_real_type
+... ''')
+>>> bad.ok, bad.fsr_json
+(False, None)
+>>> [d["code"] for d in bad.errors]
+['unknown_step_type']
+>>> diag = bad.errors[0]
+>>> (diag["severity"], diag["path"])
+('error', 'playbooks[0].steps[0].type')
+>>> format_diagnostic(diag)              # the line `validate` prints
+"[ERROR] unknown_step_type at playbooks[0].steps[0].type: unknown step type: 'not_a_real_type'"
+```
+
+The `code` is the stable machine identifier to branch on (e.g.
+`unknown_step_type`, `missing_field`, `no_trigger`); `path` is the
+YAML-location you fix. `format_diagnostic` renders the same `[SEVERITY] code at
+path: message` line the CLI emits, so in-process checks and the CLI stay in
+sync.
 
 …or from Python with
 {meth}`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_yaml`.
