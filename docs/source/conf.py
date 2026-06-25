@@ -46,7 +46,11 @@ myst_heading_anchors = 3
 
 # `make doctest` — every doctest block runs with these names pre-imported, so
 # guide examples stay focused on the API rather than boilerplate imports.
-doctest_global_setup = "from pyfsr import Query"
+# `demo_box()` builds a healthy Appliance over a replay transport seeded with
+# verified-live captures, so appliance return-example doctests run offline.
+# `demo_client()` builds a FortiSOAR client over a replay REST session seeded
+# with recorded /api/3 captures, so API-guide return-example doctests run offline.
+doctest_global_setup = "from pyfsr import Query\nfrom pyfsr._testing import demo_box, demo_client"
 
 # Only execute *explicit* doctest directives (```{doctest} / .. doctest::). The
 # many illustrative `>>>` snippets in API docstrings reference live clients and
@@ -151,7 +155,10 @@ autoapi_type = "python"
 autoapi_dirs = ["../../src/pyfsr"]
 # `pyfsr.resources` is a data-only package (ships the bundled OpenAPI spec); it
 # has no public Python API, so AutoAPI would emit an all-but-empty page. Skip it.
-autoapi_ignore = ["*/resources/*"]
+# `pyfsr._testing` is the doctest/test harness (replay transport + fixtures), not
+# a feature of the appliance API — it backs the doctested return examples but
+# shouldn't surface as a top-level API page.
+autoapi_ignore = ["*/resources/*", "*/_testing/*"]
 autoapi_keep_files = True
 # Drop AutoAPI's own top-level toctree entry; we surface it under our
 # "API Reference" section instead, so there's a single, unambiguous nav path.
