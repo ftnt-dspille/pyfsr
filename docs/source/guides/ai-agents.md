@@ -108,6 +108,45 @@ The registry ships these tools, grouped by what they do:
 * -
   - `list_ai_config`
   - Report FortiAI config: enabled features, LLM profiles, registered MCP servers.
+* - **Modules (admin)**
+  - `create_module`
+  - Create a module in staging; `grant_to` wires RBAC in one call. Call `publish` to make it live.
+* -
+  - `delete_module`
+  - Delete a module (the only op that actually removes one); optionally drops orphan tables.
+* -
+  - `publish`
+  - Commit ALL staged schema changes appliance-wide (appliance-wide, not module-scoped).
+* - **Connector config**
+  - `default_connector_config`
+  - Build a complete, runtime-valid default config (handles `onchange` sub-fields). Call first, then edit.
+* -
+  - `validate_connector_config`
+  - Validate a config against the schema before submitting — returns `{valid, missing, invalid, ...}`.
+* -
+  - `create_connector_configuration`
+  - Create a named config; `exist_ok=true` delegates to upsert, `autofill=true` fills schema defaults.
+* -
+  - `update_connector_configuration`
+  - Update an existing config by `config_id`.
+* -
+  - `upsert_connector_configuration`
+  - Idempotent create-or-replace by name — the safe default for deploy scripts.
+* - **Playbook runs**
+  - `last_playbook_run`
+  - Most recent run of a playbook (live or historical); `{run: null}` if none.
+* -
+  - `why_playbook_failed`
+  - Slim failure detail `{status, failing_step, error_message, pk}` of the most recent run.
+* -
+  - `wait_for_playbook_run`
+  - Block until the newest run reaches a terminal state; return its summary.
+* - **Records (upsert)**
+  - `upsert_record`
+  - Insert-or-update by natural key (or a `key` field); friendly picklists resolved by default.
+* -
+  - `get_or_create_record`
+  - Look up by key field(s), create if absent; returns `{record, created}`.
 ```
 
 Inspect any tool's full JSON-Schema (parameters, defaults, enums) at runtime
@@ -228,6 +267,30 @@ python -m pyfsr.mcp
 The server reads `FSR_*` environment variables (see
 {doc}`authentication`) to build its client, and exposes the same registry of
 tools to any MCP-compatible host.
+
+### Two MCP servers: pyfsr vs fsr_playbooks
+
+pyfsr ships the **runtime/admin** MCP server (this one); the separate
+`fsr_playbooks` package ships the **playbook-authoring** MCP server
+(`python -m fsr_playbooks.mcp_server` or `fsrpb mcp`). They share the same
+`FSR_*` environment (`fsr_playbooks` builds its `FortiSOAR` client from the same
+vars), so point both at one appliance. An agent that must *create modules,
+configure connectors, run connector actions, and build playbooks* uses **both**:
+
+| Task | Server | Tool(s) |
+|------|--------|---------|
+| Create custom modules | pyfsr | `create_module` → `publish` (grant RBAC via `grant_to`) |
+| Configure connectors | pyfsr | `default_connector_config` → `validate_connector_config` → `upsert_connector_configuration` |
+| Run connector actions | pyfsr | `run_connector_operation` (fsr_playbooks' `run_op` is the richer, safety-gated variant for authoring) |
+| Build playbooks | fsr_playbooks | `compile_yaml` → `validate_yaml` → `push_playbook` → `dry_run_playbook`; debug with `why_did_playbook_fail`, `step_test` |
+| Trigger & verify a run | pyfsr | create a triggering record → `wait_for_playbook_run` → `why_playbook_failed` |
+
+pyfsr owns discovery, record CRUD, module admin, connector config, connector
+*run*, and playbook *run* inspection/debugging. fsr_playbooks owns the playbook
+DSL — compile/validate/push/dry-run, step-type and connector-op *discovery*
+(`get_step_type`, `get_op_schema`, `find_operation`), single-step `step_test`,
+and recipes. The two don't overlap on the four tasks, so running both gives an
+agent the full create-configure-run-build loop with no gaps.
 
 ```{seealso}
 The {mod}`pyfsr.tools` and {mod}`pyfsr.mcp` modules in the {doc}`../reference`
