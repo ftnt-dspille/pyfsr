@@ -17,6 +17,7 @@ from .api.ai import AIApi
 from .api.alerts import AlertsAPI
 from .api.api_keys import ApiKeysAPI
 from .api.api_users import ApiKeyUsersAPI
+from .api.app_config import AppConfigAPI
 from .api.audit import AuditAPI
 from .api.auth_config import AuthConfigAPI
 from .api.comments import CommentsAPI
@@ -43,6 +44,7 @@ from .api.taxii import TaxiiAPI
 from .api.teams import TeamsAPI
 from .api.user_settings import UserSettingsAPI
 from .api.users import UsersAPI
+from .api.view_templates import ViewTemplatesAPI
 from .api.views import ViewsAPI
 from .api.wf_tools import WfToolsAPI
 from .api.workflow_collections import WorkflowCollectionsAPI
@@ -261,6 +263,12 @@ class FortiSOAR:
 
         # Active system view template (SVT) resolution per module/layout
         self.views: ViewsAPI = ViewsAPI(self)
+
+        # Read/write system view templates + role/condition-based default assignment
+        self.view_templates: ViewTemplatesAPI = ViewTemplatesAPI(self)
+
+        # Application navigation and module-visibility configuration
+        self.app_config: AppConfigAPI = AppConfigAPI(self)
 
         # Picklist discovery + friendly-value -> IRI resolution
         self.picklists: PicklistsAPI = PicklistsAPI(self)

@@ -7,7 +7,9 @@ For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
 from .api.connectors import pack_connector
 from .appliance import Appliance
 from .client import FortiSOAR
+from .concurrency import ConcurrencyResult, compute_overlap
 from .config import EnvConfig
+from .loadtest import OutageWindow, OutageWindowLoadHelper, TrialResult
 from .models import (
     MODEL_REGISTRY,
     Alert,
@@ -124,6 +126,13 @@ __all__ = [
     "project_record",
     "to_jsonable",
     "SUMMARY_FIELDS",
+    # concurrency analysis
+    "compute_overlap",
+    "ConcurrencyResult",
+    # load / outage-window testing
+    "OutageWindowLoadHelper",
+    "OutageWindow",
+    "TrialResult",
     # agent tool registry
     "ToolSpec",
     "REGISTRY",
