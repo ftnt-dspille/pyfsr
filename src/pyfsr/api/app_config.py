@@ -61,8 +61,8 @@ class AppConfigAPI(BaseAPI):
         """Fetch the current application configuration (navigation + visibility).
 
         Returns:
-            The full application configuration document:
-            ``{"id": "app", "type": "app", "config": {"header": {...}, "navigation": [...]}}``
+            dict[str, Any]: The full application configuration document
+            (``{"id": "app", "type": "app", "config": {"header": {...}, "navigation": [...]}}``).
 
         Example:
             .. code-block:: python
@@ -228,10 +228,9 @@ class AppConfigAPI(BaseAPI):
 
         Args:
             module: Module name (e.g. ``"sla_templates"``).
-            require: Visibility gate. Options:
-                - ``None`` or ``[]``: unrestricted visibility.
-                - ``{"module": "...", "action": "..."}```: gated by permission
-                  on a specific module.
+            require: Visibility gate — ``None`` or ``[]`` for unrestricted
+                visibility, or ``{"module": "...", "action": "..."}`` to gate by
+                permission on a specific module.
 
         Returns:
             The API response (the updated configuration document).

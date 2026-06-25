@@ -86,10 +86,10 @@ class OutageWindow:
     def add_result(self, result: TrialResult) -> None:
         """Add a trial result and update outage window tracking.
 
-        Updates success/failure counts and detects outage windows:
-        - On first failure: record first_failure_timestamp.
-        - On first success after a failure: record first_recovery_timestamp
-          and calculate outage_duration_seconds.
+        Updates success/failure counts and detects outage windows. On the first
+        failure it records ``first_failure_timestamp``; on the first success after
+        a failure it records ``first_recovery_timestamp`` and calculates
+        ``outage_duration_seconds``.
 
         Args:
             result: A TrialResult to add.
