@@ -180,6 +180,16 @@ class PlaybooksAPI(BaseAPI):
         members = (resp or {}).get("hydra:member") or []
         return members[0].get("uuid") if members else None
 
+    def resolve_iri(self, playbook: str) -> str | None:
+        """Resolve a playbook name to its workflow IRI (``/api/3/workflows/<uuid>``).
+
+        Returns ``None`` if no playbook with that name exists. Use when an
+        operation needs the IRI rather than the uuid -- e.g. scheduling a
+        periodic task whose ``kwargs.wf_iri`` points at the workflow.
+        """
+        uuid = self._resolve_uuid(playbook)
+        return f"{_WORKFLOWS}/{uuid}" if uuid else None
+
     # ------------------------------------------------------ definition CRUD
     def list(
         self,

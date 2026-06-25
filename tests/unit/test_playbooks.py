@@ -114,6 +114,16 @@ def test_runs_unknown_playbook_returns_empty():
     assert PlaybooksAPI(client).execution_history(playbook="nope") == []
 
 
+def test_resolve_iri_returns_workflow_iri_for_name():
+    client = FakeClient(name_lookup={"hydra:member": [{"uuid": "pb-uuid"}]})
+    assert PlaybooksAPI(client).resolve_iri("Nightly Recon") == "/api/3/workflows/pb-uuid"
+
+
+def test_resolve_iri_returns_none_when_playbook_absent():
+    client = FakeClient(name_lookup={"hydra:member": []})
+    assert PlaybooksAPI(client).resolve_iri("Nope") is None
+
+
 def test_runs_preserve_full_record_in_extra():
     # No raw/typed toggle: the typed RunSummary carries the full wire record in
     # extra, so unshaped fields like @id stay reachable by item access.

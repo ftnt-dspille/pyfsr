@@ -396,6 +396,47 @@ def _h_get_or_create_record(client, *, module, data, key="uuid", resolve_picklis
     return {"record": to_jsonable(record), "created": bool(created)}
 
 
+# -- scheduling -------------------------------------------------------------
+def _h_schedule_playbook(
+    client,
+    *,
+    name,
+    cron,
+    playbook=None,
+    playbook_uuid=None,
+    timezone="UTC",
+    enabled=True,
+    exit_if_running=True,
+) -> Any:
+    if playbook_uuid is not None:
+        workflow_iri = f"/api/3/workflows/{playbook_uuid}"
+    elif playbook is not None:
+        workflow_iri = client.playbooks.resolve_iri(playbook)
+        if workflow_iri is None:
+            raise ValueError(f"No playbook named {playbook!r}")
+    else:
+        raise ValueError("schedule_playbook requires 'playbook' (name) or 'playbook_uuid'")
+    return to_jsonable(
+        client.schedules.create(
+            name,
+            workflow_iri,
+            cron,
+            timezone=timezone,
+            enabled=enabled,
+            exit_if_running=exit_if_running,
+        )
+    )
+
+
+def _h_trigger_schedule_now(client, *, name=None, task_id=None) -> Any:
+    return to_jsonable(client.schedules.trigger_now(name=name, task_id=task_id))
+
+
+def _h_delete_schedule(client, *, name) -> Any:
+    client.schedules.delete(name)
+    return {"deleted": True, "name": name}
+
+
 # --------------------------------------------------------------------------- registry
 
 _TOOLS: tuple[ToolSpec, ...] = (
@@ -924,6 +965,69 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["module", "data"],
         ),
         _h_get_or_create_record,
+    ),
+    ToolSpec(
+        "schedule_playbook",
+        "Create a periodic task that runs a playbook on a cron schedule (daily/weekly/etc). "
+        "Returns the created schedule with its server-generated id. The playbook fires "
+        "asynchronously on the cron; use trigger_schedule_now to fire it immediately and "
+        "wait_for_playbook_run to track the resulting run. cron is 5-field: "
+        "'minute hour day_of_month month_of_year day_of_week' (e.g. '7 2 * * *' = 02:07 daily).",
+        _obj(
+            {
+                "name": {"type": "string", "description": "Schedule display name."},
+                "playbook": _PLAYBOOK,
+                "playbook_uuid": {
+                    "type": "string",
+                    "description": "Identify the playbook by UUID instead of name.",
+                },
+                "cron": {
+                    "type": "string",
+                    "description": "5-field cron: 'minute hour day_of_month month_of_year day_of_week'.",
+                },
+                "timezone": {
+                    "type": "string",
+                    "description": "IANA timezone for the cron (default UTC).",
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Create the task enabled (default true).",
+                },
+                "exit_if_running": {
+                    "type": "boolean",
+                    "description": "Skip a fire if the previous run is still active (default true).",
+                },
+            },
+            ["name", "cron"],
+        ),
+        _h_schedule_playbook,
+    ),
+    ToolSpec(
+        "trigger_schedule_now",
+        "Fire a scheduled task immediately, out-of-band of its cron. The trigger is "
+        "asynchronous; pair with wait_for_playbook_run to track the resulting run. Identify "
+        "the schedule by name (resolved to its id) or by task_id (the id from schedule_playbook).",
+        _obj(
+            {
+                "name": {"type": "string", "description": "Schedule display name (resolved to its id)."},
+                "task_id": {
+                    "type": "string",
+                    "description": "The schedule's id (Fernet token from schedule_playbook) instead of name.",
+                },
+            }
+        ),
+        _h_trigger_schedule_now,
+    ),
+    ToolSpec(
+        "delete_schedule",
+        "Delete a scheduled periodic task entirely by name. Resolves the task's current id and "
+        "DELETEs it. Use disable to merely pause a schedule; use this to remove one created for "
+        "testing or no longer wanted.",
+        _obj(
+            {"name": {"type": "string", "description": "Schedule display name to delete."}},
+            ["name"],
+        ),
+        _h_delete_schedule,
     ),
 )
 

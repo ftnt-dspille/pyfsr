@@ -147,6 +147,15 @@ The registry ships these tools, grouped by what they do:
 * -
   - `get_or_create_record`
   - Look up by key field(s), create if absent; returns `{record, created}`.
+* - **Scheduling**
+  - `schedule_playbook`
+  - Create a periodic task that runs a playbook on a cron schedule; returns the created schedule.
+* -
+  - `trigger_schedule_now`
+  - Fire a scheduled task immediately (out-of-band of its cron); pair with `wait_for_playbook_run`.
+* -
+  - `delete_schedule`
+  - Delete a scheduled periodic task entirely by name (use `disable` to merely pause).
 ```
 
 Inspect any tool's full JSON-Schema (parameters, defaults, enums) at runtime
