@@ -1,7 +1,7 @@
 """Verified-live raw appliance command output, frozen as fixtures.
 
-These are **real captures** from a lab FortiSOAR appliance (host
-``fortisoar.example.com``, FSR 7.6.x, 2026-06-20), not hand-authored shapes. They back
+These are **real captures** from a lab FortiSOAR appliance (a lab box,
+FSR 7.6.x, 2026-06-20), not hand-authored shapes. They back
 the doctested return examples in :doc:`/guides/appliance-cli` and the
 :mod:`pyfsr.appliance` docstrings so those examples can't silently drift from
 what the box actually returns.

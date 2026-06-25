@@ -12,7 +12,7 @@ topics:
 - diagnostics
 last_verified: '2026-06-20'
 canonical: true
-summary: 'Live-validated (fortisoar.example.com, FSR 7.6.5) guide to pyfsr appliance CLI (P1+P2):
+summary: 'Live-validated (lab appliance, FSR 7.6.5) guide to pyfsr appliance CLI (P1+P2):
   transport abstraction, sudo hygiene, database layer, service diagnostics, RabbitMQ
   checks, log scanning with 45 unit tests and dual demo modes.'
 ---
@@ -20,7 +20,7 @@ summary: 'Live-validated (fortisoar.example.com, FSR 7.6.5) guide to pyfsr appli
 # Appliance CLI Validation & Examples
 
 **Status**: P2 shipped; unit-tested in full and **live-validated against a real
-appliance (fortisoar.example.com, FSR 7.6.5) on 2026-06-20** for the SSH / service / MQ /
+appliance (lab box, FSR 7.6.5) on 2026-06-20** for the SSH / service / MQ /
 log layers. See the *Live validation* section below for what the live run actually
 proved, the bug it surfaced and fixed, and the **DB-layer blocker still open**.
 
@@ -162,7 +162,7 @@ db.exec_write(facts, "DELETE...", yes=True)    # Arbitrary writes (gated)
 - **Observed**: Job status transitions to Error with errorMessage if anything fails
 - **Workaround**: Check `POST /api/modules-admin/jobs/{id}` status before declaring success
 
-### Appliance auto-mirror (lab box fortisoar.example.com)
+### Appliance auto-mirror (lab box)
 - **Issue**: Lab box auto-mirrors staging→published, distorting `is_published` checks
 - **Context**: For ad-hoc testing only; does NOT apply to prod or test boxes
 
@@ -189,7 +189,7 @@ pyfsr appliance db list
 - **Tests**: `tests/unit/test_appliance_cli.py` (45 tests, all passing)
 - **Examples**: `examples/appliance_cli_{test_demo,live_example}.py`
 
-## Live validation (fortisoar.example.com, FSR 7.6.5 — 2026-06-20)
+## Live validation (lab appliance, FSR 7.6.5 — 2026-06-20)
 
 First real-appliance run, read-only verbs, over `SSHTransport` (`csadmin`, sudo via
 `-S`). Drove `examples/appliance_cli_live_example.py` + the `pyfsr appliance`
@@ -248,7 +248,7 @@ from a `pip install -e .` checkout until the appliance CLI is released.
 
 ---
 
-**Last validated**: 2026-06-20 (live, fortisoar.example.com, FSR 7.6.5 — read-only verbs across
+**Last validated**: 2026-06-20 (live, lab appliance, FSR 7.6.5 — read-only verbs across
 service/mq/logs/db, incl. content-DB discovery after the device-UUID fix)
 **Test status**: full unit suite green; `logs` path fix + device-UUID file-first fix
 (+ split device-uuid test into primary/fallback)

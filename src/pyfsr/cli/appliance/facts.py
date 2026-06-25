@@ -46,7 +46,7 @@ class Facts:
         were provisioned with. ``csadm license --get-device-uuid`` is only a
         fallback: on a box whose entitlement has been re-issued (FortiCloud
         drift) it returns the *current* device UUID, which differs from the file
-        and **fails** ``cyberpgsql`` auth (verified live on fortisoar.example.com,
+        and **fails** ``cyberpgsql`` auth (verified live on a lab appliance,
         2026-06-20). The file is csadmin-readable (no sudo needed)."""
         if self._device_uuid:
             return self._device_uuid

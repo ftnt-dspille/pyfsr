@@ -30,6 +30,16 @@ repos:
   # it, giving deterministic, CI-matching runs.
   - repo: local
     hooks:
+      # Leak gate (runs first, before any lint/format): refuse to commit if a
+      # lab-box 10.99.x.x IP is staged anywhere. always_run + pass_filenames:
+      # false so every commit scans the whole tracked tree -- a partial commit
+      # can't sneak a leak through by not staging the offending file.
+      - id: no-lab-ips
+        name: no lab 10.99.x.x IPs
+        entry: uv run --frozen python scripts/check_no_lab_ips.py
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: ruff-check
         name: ruff check (project pin, via uv)
         entry: uv run --frozen ruff check --fix
