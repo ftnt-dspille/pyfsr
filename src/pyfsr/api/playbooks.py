@@ -69,6 +69,51 @@ _HARD_DELETE = {"$hardDelete": "true", "$showDeleted": "true"}
 
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
+# Friendly step-type aliases -> the step-type *name the API filters on*
+# (``steps.stepType.name``). These are the names the server actually stores —
+# live-verified against /api/3/workflows, so a few differ from the names the
+# fsr_playbooks compiler emits (e.g. query name ``ApprovalManualInput`` vs the
+# compiler's ``Approval``; the product's ``CyopsUtilites`` is misspelled on the
+# wire). An unknown value is passed through verbatim, so the raw API name always
+# works too. Cross-ref: fsr_playbooks ``compiler/resolver/_constants.SHORT_TYPE_TO_FSR``.
+STEP_TYPE_NAMES: dict[str, str] = {
+    "connector": "Connectors",
+    "set_variable": "SetVariable",
+    "decision": "Decision",
+    "find_record": "FindRecords",
+    "find_records": "FindRecords",
+    "update_record": "UpdateRecord",
+    "create_record": "InsertData",
+    "insert_record": "InsertData",
+    "ingest_bulk_feed": "IngestBulkFeed",
+    "delay": "Delay",
+    "wait": "Delay",
+    "manual_input": "ManualInput",
+    "code_snippet": "CodeSnippet",
+    "approval": "ApprovalManualInput",
+    "workflow_reference": "WorkflowReference",
+    "reference": "WorkflowReference",
+    "reference_playbook": "WorkflowReference",
+    "send_mail": "SendMail",
+    "email": "SendMail",
+    "utility": "CyopsUtilites",
+    "no_op": "CyopsUtilites",
+    "set_api_keys": "SetAPIKeys",
+}
+
+# Friendly trigger aliases -> the start step's ``triggerStep.stepType.name``.
+# The trigger step uses the engine's internal ``cybersponse.*`` names (NOT the
+# friendly step names above) — live-verified. Unknown values pass through.
+TRIGGER_TYPE_NAMES: dict[str, str] = {
+    "manual": "cybersponse.action",  # right-click / Execute menu
+    "referenced": "cybersponse.abstract_trigger",  # called by another playbook
+    "child": "cybersponse.abstract_trigger",
+    "on_create": "cybersponse.post_create",  # record-created trigger
+    "on_update": "cybersponse.post_update",  # record-updated trigger
+    "api_endpoint": "cybersponse.api_call",  # POST /api/triggers/1/<route>
+    "api": "cybersponse.api_call",
+}
+
 
 def _looks_like_uuid(s: str) -> bool:
     return bool(_UUID_RE.match(s.strip()))
@@ -219,6 +264,147 @@ class PlaybooksAPI(BaseAPI):
         if relationships:
             query["$relationships"] = "true"
         return extract_members(self.client.get(_WORKFLOWS, params=query))
+
+    def find(
+        self,
+        *,
+        name: str | None = None,
+        name_contains: str | None = None,
+        collection: str | None = None,
+        tag: str | None = None,
+        active: bool | None = None,
+        private: bool | None = None,
+        trigger_type: str | None = None,
+        step_type: str | None = None,
+        uses_connector: str | None = None,
+        uses_operation: str | None = None,
+        route: str | None = None,
+        references: str | None = None,
+        remote_executable: bool | None = None,
+        single_record: bool | None = None,
+        limit: int = 50,
+        relationships: bool = False,
+        params: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Search playbook definitions across the most useful dimensions at once.
+
+        A thin, ergonomic layer over the FortiSOAR API-Platform deep-relationship
+        filter language (all filters are ANDed; each maps to a ``/api/3/workflows``
+        query param). Every argument is optional; pass only what you want to
+        constrain. All values are **live-verified** against the query API.
+
+        Args:
+            name: exact playbook name.
+            name_contains: case-insensitive substring of the name (``name$like``).
+            collection: collection uuid or ``/api/3/workflow_collections/<uuid>`` IRI.
+            tag: a tag substring (``tag$like``).
+            active: ``True`` for active playbooks only, ``False`` for disabled.
+            private: ``True`` for private (owner-scoped) playbooks, ``False`` for public.
+            trigger_type: filter on the **start step** — a friendly alias from
+                ``TRIGGER_TYPE_NAMES`` (``manual``, ``on_create``, ``on_update``,
+                ``referenced``, ``api_endpoint``) or a raw ``cybersponse.*`` name.
+            step_type: playbooks **containing** a step of this type — a friendly
+                alias from ``STEP_TYPE_NAMES`` (``connector``, ``decision``,
+                ``manual_input``, ``approval``, ``reference``, ``code_snippet``,
+                …) or a raw API step-type name.
+            uses_connector: playbooks with a step invoking this connector (matched
+                as a substring of step ``arguments``, e.g. ``"fortigate"``).
+            uses_operation: playbooks with a step calling this connector operation
+                (substring of ``arguments``, e.g. ``"block_ip"``).
+            route: playbooks exposing this API-endpoint route (implies an
+                ``api_endpoint`` trigger; substring of ``arguments``).
+            references: playbooks that reference another playbook by name (implies
+                a ``reference`` step; substring of ``arguments``).
+            remote_executable: agent/remote-executable playbooks only.
+            single_record: single-record-execution playbooks only.
+            limit: max results (default 50).
+            relationships: inline each playbook's ``steps``/``routes`` (heavier).
+            params: extra raw query params, merged last (escape hatch).
+
+        Returns:
+            The matching playbook-definition records (``hydra:member``).
+
+        Note:
+            ``arguments``-substring filters (``uses_connector``, ``uses_operation``,
+            ``route``, ``references``) all target the same JSON column, so at most
+            **one** may be combined with the others per call — passing two raises
+            ``ValueError``. For richer boolean logic use :meth:`query` with a
+            :class:`~pyfsr.query.Query`.
+        """
+        q: dict[str, Any] = {}
+        if name_contains is not None:
+            q["name$like"] = f"%{name_contains}%"
+        if tag is not None:
+            q["tag$like"] = f"%{tag}%"
+        if active is not None:
+            q["isActive"] = "true" if active else "false"
+        if private is not None:
+            q["isPrivate"] = "true" if private else "false"
+        if remote_executable is not None:
+            q["remoteExecutableFlag"] = "true" if remote_executable else "false"
+        if single_record is not None:
+            q["singleRecordExecution"] = "true" if single_record else "false"
+        if trigger_type is not None:
+            q["triggerStep.stepType.name"] = TRIGGER_TYPE_NAMES.get(trigger_type.lower(), trigger_type)
+        if step_type is not None:
+            q["steps.stepType.name"] = STEP_TYPE_NAMES.get(step_type.lower(), step_type)
+
+        # All of these match a substring of the shared JSON `arguments` column,
+        # so only one $like on `steps.arguments` can live in the param dict.
+        arg_likes = {
+            "uses_connector": uses_connector,
+            "uses_operation": uses_operation,
+            "route": route,
+            "references": references,
+        }
+        supplied = {k: v for k, v in arg_likes.items() if v is not None}
+        if len(supplied) > 1:
+            raise ValueError(
+                "find(): only one of uses_connector/uses_operation/route/references "
+                f"can be combined per call (got {sorted(supplied)}); use query() for "
+                "multiple step-argument conditions"
+            )
+        if supplied:
+            ((_, val),) = supplied.items()
+            q["steps.arguments$like"] = f"%{val}%"
+        # `route`/`references` further imply a specific step/trigger; only set the
+        # implied type when the caller didn't already constrain it themselves.
+        if route is not None and trigger_type is None:
+            q["triggerStep.stepType.name"] = TRIGGER_TYPE_NAMES["api_endpoint"]
+        if references is not None and step_type is None:
+            q["steps.stepType.name"] = STEP_TYPE_NAMES["reference"]
+
+        if params:
+            q.update(params)
+        return self.list(name=name, collection=collection, limit=limit, relationships=relationships, params=q)
+
+    def find_with_step_type(self, step_type: str, **kwargs: Any) -> list[dict[str, Any]]:
+        """Playbooks containing at least one step of ``step_type`` (see :meth:`find`)."""
+        return self.find(step_type=step_type, **kwargs)
+
+    def find_by_trigger_type(self, trigger_type: str, **kwargs: Any) -> list[dict[str, Any]]:
+        """Playbooks whose start step is ``trigger_type`` (see :meth:`find`)."""
+        return self.find(trigger_type=trigger_type, **kwargs)
+
+    def find_using_connector(
+        self, connector: str, *, operation: str | None = None, **kwargs: Any
+    ) -> list[dict[str, Any]]:
+        """Playbooks with a step that invokes ``connector`` (optionally a specific
+        ``operation``). Matched as a substring of the step ``arguments`` — pass the
+        connector slug as it appears on the wire (e.g. ``"fortigate"``,
+        ``"fortinet-fortimanager"``). ``operation`` and ``connector`` can't both be
+        used here (same JSON column); pass whichever is more selective."""
+        if operation is not None:
+            return self.find(uses_operation=operation, **kwargs)
+        return self.find(uses_connector=connector, **kwargs)
+
+    def find_referencing(self, playbook: str, **kwargs: Any) -> list[dict[str, Any]]:
+        """Playbooks that reference ``playbook`` (by name) via a reference step."""
+        return self.find(references=playbook, **kwargs)
+
+    def find_by_route(self, route: str, **kwargs: Any) -> list[dict[str, Any]]:
+        """Playbooks exposing the API-endpoint ``route`` (``POST /api/triggers/1/<route>``)."""
+        return self.find(route=route, **kwargs)
 
     def get_definition(
         self,

@@ -129,7 +129,7 @@ def test_api_users_revoke_uses_put_operation():
     ApiKeyUsersAPI(c).revoke("u-1")
     method, endpoint, data = c.calls[-1]
     assert method == "PUT" and endpoint == "/api/auth/users"
-    assert data == {"uuid": "u-1", "key_type": "api_key", "operation": "REVOKE"}
+    assert data == {"uuid": "u-1", "key_type": "API_KEY", "operation": "REVOKE"}
 
 
 def test_api_users_reset_validity_includes_days():
@@ -137,6 +137,21 @@ def test_api_users_reset_validity_includes_days():
     ApiKeyUsersAPI(c).reset_validity("u-1", 90)
     assert c.calls[-1][2]["operation"] == "RESET_VALIDITY"
     assert c.calls[-1][2]["api_key_validity"] == 90
+
+
+def test_api_users_regenerate_sends_uppercase_key_type_and_validity():
+    # Server requires key_type "API_KEY" (uppercase) AND api_key_validity for a
+    # REGENERATE — both verified live on 7.6.5; a missing validity errors.
+    c = FakeClient()
+    ApiKeyUsersAPI(c).regenerate("u-1", api_key_validity=1)
+    method, endpoint, data = c.calls[-1]
+    assert method == "PUT" and endpoint == "/api/auth/users"
+    assert data == {
+        "uuid": "u-1",
+        "key_type": "API_KEY",
+        "operation": "REGENERATE",
+        "api_key_validity": 1,
+    }
 
 
 def test_api_users_bad_operation_raises():
@@ -239,10 +254,12 @@ class _FakeApiUsers:
     *unwrapped* user dict (the real :meth:`ApiKeyUsersAPI.get` unwraps the
     ``usersresp`` envelope), with ``api_key.retrievable`` set per case."""
 
-    def __init__(self, create_resp=None, get_resps=None):
+    def __init__(self, create_resp=None, get_resps=None, regen_resp=None):
         self._create = create_resp or {"uuid": "u-1", "api_key": {"key": "plain"}}
         # Sequence of responses returned by successive get() calls.
         self._gets = list(get_resps or [{"api_key": {"key": "plain", "retrievable": True}}])
+        # regenerate echoes the fresh plaintext in its response body.
+        self._regen = regen_resp if regen_resp is not None else {"uuid": "u-1", "api_key": {"key": "fresh"}}
         self.calls = []  # (op, uuid-ish)
 
     def create(self, *, api_key_validity):
@@ -253,9 +270,9 @@ class _FakeApiUsers:
         self.calls.append(("get", uuid, show_api_key))
         return self._gets.pop(0) if self._gets else {}
 
-    def regenerate(self, uuid, *, key_type="api_key"):
-        self.calls.append(("regenerate", uuid))
-        return {}
+    def regenerate(self, uuid, *, api_key_validity=365, key_type="API_KEY"):
+        self.calls.append(("regenerate", uuid, api_key_validity))
+        return self._regen
 
 
 class _FakeAuthConfig:
@@ -283,11 +300,11 @@ def _ensure_client(*, list_members=None, post_resp=None, put_resp=None, api_user
     return c
 
 
-def test_ensure_usable_creates_user_and_binding_and_recovers_plaintext():
+def test_ensure_usable_creates_user_and_binding_and_reads_plaintext_from_response():
     au = _FakeApiUsers()
     c = _ensure_client(list_members=[], api_users=au)  # no existing binding
     binding, plaintext = ApiKeysAPI(c).ensure_usable(name="k", teams=["TeamB"])
-    assert plaintext == "plain"
+    assert plaintext == "plain"  # straight from the create response
     assert binding["uuid"] == "k-1"
     # Created the api-key user, then bound it with the resolved team IRI.
     assert ("create", 365) in au.calls
@@ -296,21 +313,16 @@ def test_ensure_usable_creates_user_and_binding_and_recovers_plaintext():
         "/api/3/api_keys",
         {"name": "k", "userId": "u-1", "teams": ["/api/3/teams/t-1"]},
     )
-    # Recovered the plaintext via show_api_key.
-    assert ("get", "u-1", True) in au.calls
-    assert "regenerate" not in (op for op, *_ in au.calls)  # no regenerate needed
+    # Plaintext came from the create response — no show_api_key GET, no regenerate.
+    ops = [op for op, *_ in au.calls]
+    assert "get" not in ops
+    assert "regenerate" not in ops
 
 
-def test_ensure_usable_regenerates_when_plaintext_unrecoverable():
-    # First get() returns a masked key (retrievable=False); regenerate; second
-    # get returns the fresh retrievable plaintext.
-    au = _FakeApiUsers(
-        create_resp={"uuid": "u-1", "api_key": {"key": ""}},
-        get_resps=[
-            {"api_key": {"key": "xxxxd517", "retrievable": False}},  # masked
-            {"api_key": {"key": "fresh", "retrievable": True}},  # post-regen
-        ],
-    )
+def test_ensure_usable_reuse_regenerates_and_reads_plaintext_from_response():
+    # A reused binding can't recover its original plaintext, so it regenerates
+    # and reads the fresh key straight from the regenerate response body.
+    au = _FakeApiUsers(regen_resp={"uuid": "u-1", "api_key": {"key": "fresh"}})
     c = _ensure_client(
         list_members=[{"name": "k", "uuid": "k-9", "userId": "u-1"}],
         api_users=au,
@@ -318,17 +330,17 @@ def test_ensure_usable_regenerates_when_plaintext_unrecoverable():
     binding, plaintext = ApiKeysAPI(c).ensure_usable(name="k")
     assert plaintext == "fresh"
     ops = [op for op, *_ in au.calls]
-    assert ops == ["get", "regenerate", "get"]  # recover → regenerate → recover
+    assert ops == ["regenerate"]  # no show_api_key GET round-trips
 
 
 def test_ensure_usable_reuses_existing_and_reconciles_teams():
-    au = _FakeApiUsers(get_resps=[{"api_key": {"key": "plain", "retrievable": True}}])
+    au = _FakeApiUsers(regen_resp={"uuid": "u-1", "api_key": {"key": "fresh"}})
     c = _ensure_client(
         list_members=[{"name": "k", "uuid": "k-9", "userId": "u-1"}],
         api_users=au,
     )
     binding, plaintext = ApiKeysAPI(c).ensure_usable(name="k", teams=["TeamB"])
-    assert plaintext == "plain" and binding["uuid"] == "k-9"
+    assert plaintext == "fresh" and binding["uuid"] == "k-9"
     # Reused binding -> reconcile teams via PUT (no POST create).
     assert not any(call[0] == "POST" for call in c.calls)
     method, endpoint, data = c.calls[-1]
@@ -336,14 +348,8 @@ def test_ensure_usable_reuses_existing_and_reconciles_teams():
     assert data == {"teams": ["/api/3/teams/t-1"]}
 
 
-def test_ensure_usable_raises_when_plaintext_unrecoverable_after_regenerate():
-    # Masked (retrievable=False) both before and after regenerate.
-    au = _FakeApiUsers(
-        get_resps=[
-            {"api_key": {"key": "xxxx", "retrievable": False}},
-            {"api_key": {"key": "xxxx", "retrievable": False}},
-        ]
-    )
+def test_ensure_usable_raises_when_regenerate_response_has_no_plaintext():
+    au = _FakeApiUsers(regen_resp={"uuid": "u-1", "api_key": {"key": ""}})
     c = _ensure_client(
         list_members=[{"name": "k", "uuid": "k-9", "userId": "u-1"}],
         api_users=au,
@@ -352,11 +358,12 @@ def test_ensure_usable_raises_when_plaintext_unrecoverable_after_regenerate():
         ApiKeysAPI(c).ensure_usable(name="k")
 
 
-def test_ensure_usable_toggles_retrievable_mode_on():
+def test_ensure_usable_never_toggles_retrievable_mode():
+    # The broken-branch trigger on 7.6.5/8.0.0 — ensure_usable must not touch it.
     ac = _FakeAuthConfig(retrievable=False)
     c = _ensure_client(list_members=[], auth_config=ac)
     ApiKeysAPI(c).ensure_usable(name="k")
-    assert ac.toggled is True
+    assert ac.toggled is False
 
 
 # -- wire shapes (real ApiKeyUsersAPI.get + _api_key_plaintext via FakeClient) --

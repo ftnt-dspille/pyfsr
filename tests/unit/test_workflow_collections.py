@@ -146,12 +146,16 @@ def test_import_export_replace_hard_deletes_existing():
     responses = {f"/api/3/workflow_collections/{uuid}": {"uuid": uuid, "name": "Pack"}}
     a = WorkflowCollectionsAPI(RecordingClient(responses=responses))
     a.import_export({"type": "workflow_collections", "data": [{"uuid": uuid, "name": "Pack"}]}, replace=True)
+    # exists() probes the collection, then the replace path makes any private
+    # playbooks public before the hard delete (so the delete isn't refused).
     assert a.client.calls[0] == ("GET", f"/api/3/workflow_collections/{uuid}", None)
-    assert a.client.calls[1] == (
+    assert (
         "DELETE",
         f"/api/3/workflow_collections/{uuid}",
         {"$hardDelete": "true", "$showDeleted": "true"},
-    )
+    ) in a.client.calls
+    # POST recreate happens after the delete.
+    assert a.client.calls[-1][0] == "POST"
 
 
 def test_restore_uses_recordset_restore():
