@@ -164,3 +164,115 @@ def test_read_yaml_source_missing_file():
     a, _ = api()
     with pytest.raises(FileNotFoundError):
         a.compile_yaml("/no/such/path/playbook.yaml")
+
+
+# --- pyfsr.authoring.warm_catalog ---------------------------------------
+class _FakeUsers:
+    def __init__(self, teams):
+        self._teams = teams
+
+    def list_teams(self, params=None):
+        return self._teams
+
+
+class _FakePicklists:
+    def __init__(self, data):
+        self._data = data  # {name: [{itemValue, iri}]}
+
+    def list(self):
+        return list(self._data)
+
+    def values(self, name):
+        return self._data.get(name, [])
+
+
+class _WarmFakeClient:
+    """Minimal client for warm_catalog: users + picklists + a raw GET."""
+
+    def __init__(self, teams, picklists, tags_resp):
+        self.users = _FakeUsers(teams)
+        self.picklists = _FakePicklists(picklists)
+        self._tags_resp = tags_resp
+
+    def get(self, endpoint, params=None, **kw):
+        if endpoint.startswith("/api/3/tags"):
+            return self._tags_resp
+        return {"hydra:member": []}
+
+
+@requires_compiler
+def test_warm_catalog_populates_teams_picklists_tags(tmp_path):
+    from pyfsr.authoring import warm_catalog
+
+    client = _WarmFakeClient(
+        teams=[{"name": "TeamA", "uuid": "t-1"}, {"name": "TeamB", "uuid": "t-2"}],
+        picklists={"Severity": [{"itemValue": "High", "iri": "/api/3/picklists/p-1"}]},
+        tags_resp={
+            "hydra:member": [
+                {"name": "phishing", "@id": "/api/3/tags/g-1"},
+            ]
+        },
+    )
+    db = tmp_path / "warmed.db"
+    summary = warm_catalog(client, db)
+    assert db.exists()
+    assert summary["teams"] == 2
+    assert summary["picklist_items"] == 1
+    assert summary["tags"] == 1
+
+    import sqlite3
+
+    conn = sqlite3.connect(db)
+    teams = dict(conn.execute("SELECT name, iri FROM teams").fetchall())
+    assert teams == {
+        "TeamA": "/api/3/teams/t-1",
+        "TeamB": "/api/3/teams/t-2",
+    }
+    assert conn.execute(
+        "SELECT item_iri FROM picklists WHERE list_name='Severity' AND item_value='High'"
+    ).fetchone() == ("/api/3/picklists/p-1",)
+    assert conn.execute("SELECT iri FROM tags WHERE name='phishing'").fetchone() == ("/api/3/tags/g-1",)
+    conn.close()
+
+
+@requires_compiler
+@pytest.mark.xfail(
+    strict=False,
+    reason=(
+        "TDD for an in-progress authoring feature: the YAML `owners:` field is not "
+        "yet emitted (the fsr_playbooks emitter hardcodes owners=[]/isPrivate=False, "
+        "and the IR doesn't model ownership), and `api_endpoint` is not a registered "
+        "step type (the SHORT_TYPE_TO_FSR friendly-type map ships in the installed "
+        "fsr_playbooks wheel). Both need fsr_playbooks compiler support; remove this "
+        "xfail once owner-resolution + the api_endpoint step type land there."
+    ),
+)
+def test_warm_catalog_enables_name_based_owner_resolution(tmp_path, monkeypatch):
+    """Seamless: compile_playbook_yaml(client=...) warms + resolves `owners: [TeamA]`."""
+    from pyfsr.authoring import compile_playbook_yaml
+
+    client = _WarmFakeClient(
+        teams=[{"name": "TeamA", "uuid": "d34aff9d-3b61-413e-8ced-854743e8ddcc"}],
+        picklists={},
+        tags_resp={"hydra:member": []},
+    )
+    # Keep the seamless warm off the real ~/.cache — point it at tmp_path.
+    monkeypatch.setattr("pyfsr.authoring._default_cache_db", lambda: tmp_path / "cache.db")
+
+    yaml = """
+collection: 00-test
+playbooks:
+  - name: Lookup IP
+    owners: ["TeamA"]
+    steps:
+      - name: Start
+        type: api_endpoint
+        arguments:
+          route: lookup_ip
+          authentication_methods: [""]
+"""
+    result = compile_playbook_yaml(yaml, client=client)
+    assert result.ok, result.blocking
+    wf = result.fsr_json["data"][0]["workflows"][0]
+    assert wf["isPrivate"] is True
+    assert wf["owners"] == ["/api/3/teams/d34aff9d-3b61-413e-8ced-854743e8ddcc"]

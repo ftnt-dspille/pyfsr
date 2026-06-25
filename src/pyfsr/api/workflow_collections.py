@@ -210,13 +210,18 @@ class WorkflowCollectionsAPI(BaseAPI):
         return self.import_export(data, replace=replace)
 
     def compile_yaml(self, source: str | Path, *, db_path: str | Path | None = None):
-        """Compile playbook YAML into the FortiSOAR import envelope (no network).
+        """Compile playbook YAML into the FortiSOAR import envelope.
 
         ``source`` is either YAML text or a path (``str``/``Path``) to a ``.yaml``/
         ``.yml`` file. Returns a :class:`~pyfsr.authoring.CompiledPlaybook` whose
         ``fsr_json`` is ready for :meth:`import_export`; inspect ``ok``/``errors``/
-        ``warnings`` before deploying. Pass ``db_path`` to override the reference
-        catalog (defaults to the packaged one).
+        ``warnings`` before deploying.
+
+        Warming is **seamless**: with no ``db_path``, the reference catalog is
+        warmed from this client's instance (so author-friendly tokens like
+        ``owners: ["TeamA"]`` resolve to IRIs) — the caller never touches
+        SQLite. Pass ``db_path`` to compile against a specific pre-warmed
+        catalog instead (offline, no network).
 
         Requires the optional compiler — install with ``pip install
         "pyfsr[playbooks]"`` (raises
@@ -225,7 +230,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         from ..authoring import compile_playbook_yaml
 
         text = _read_yaml_source(source)
-        return compile_playbook_yaml(text, db_path=db_path)
+        return compile_playbook_yaml(text, client=self.client, db_path=db_path)
 
     def import_from_yaml(
         self,
