@@ -47,6 +47,7 @@ autoapi/pyfsr/auth/index
 :caption: Playbooks, tooling & CLI
 
 Playbooks (authoring) <autoapi/pyfsr/authoring/index>
+autoapi/pyfsr/archetypes/index
 autoapi/pyfsr/playbook_freshness/index
 autoapi/pyfsr/playbook_lint/index
 autoapi/pyfsr/tools/index

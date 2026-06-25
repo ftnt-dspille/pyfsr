@@ -1,0 +1,3 @@
+# Seed archetypes live here as `*.json` (one Archetype.to_json() per file).
+# `ArchetypeStore.seed_if_empty()` loads every `*.json` into a freshly-created empty store.
+# Empty in step 2 -- the first seed (`reconcile-and-report.json`) lands in step 3.
