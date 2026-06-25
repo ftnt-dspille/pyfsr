@@ -98,6 +98,18 @@ packages = ["src/pyfsr"]
 # Ship the bundled OpenAPI spec (gzipped JSON) inside the wheel + sdist.
 [tool.hatch.build]
 artifacts = ["src/pyfsr/resources/*.json.gz"]
+# Keep dev/local-only cruft out of the sdist. ``.claude`` is the Claude Code
+# session/worktree dir (untracked, but hatch's default sdist scoops up
+# everything not VCS-ignored by its own rules); a stale worktree there once
+# re-shipped a scrubbed lab IP to PyPI. The rest are local dev tooling with no
+# place in a source distribution. (examples/ and docs/ ARE shipped -- scrubbed
+# and gate-protected, and useful to anyone unpacking the source.)
+exclude = [
+    ".claude",
+    ".coveragerc",
+    ".python-version",
+    "uv.lock",
+]
 
 [tool.mypy]
 # Scoped to the CLI for now: it's the most user-facing surface and is already
