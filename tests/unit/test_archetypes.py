@@ -18,6 +18,7 @@ from pyfsr.archetypes import (
     ArchetypeStore,
     harvest_from_dir,
     harvest_from_zip,
+    map_use_case,
 )
 from pyfsr.archetypes.harvest import _dedupe_manifest, _picklist_name, _uuid_tail
 from pyfsr.archetypes.record import ConnectorUse
@@ -462,3 +463,77 @@ def test_harvest_then_put_then_get_round_trips(tmp_path):
     assert got.connector_manifest == draft.connector_manifest
     assert got.playbook_skeletons == draft.playbook_skeletons
     assert got.source["pack_name"] == draft.source["pack_name"]
+
+
+# ------------------------------------------------------------------------- router
+def _seeded_store(tmp_path):
+    """A hermetic store seeded with the shipped default archetype (reconcile-and-report)."""
+    store = ArchetypeStore(tmp_path / "arch.db")
+    assert store.seed_if_empty() == 1
+    return store
+
+
+def test_map_use_case_matches_reconcile_pilot(tmp_path):
+    """The pilot use case classifies to reconcile-and-report with parameters filled.
+
+    Labels + join_key are inferred from the archetype's own manifest/schema; results_module +
+    cron take their shipped defaults; recipients stays pending (a deployment value the use
+    case text cannot supply).
+    """
+    store = _seeded_store(tmp_path)
+    r = map_use_case(
+        "compare FortiCloud assets vs ServiceNow CMDB, email a CSV on mismatches",
+        store=store,
+    )
+    assert r["archetype"] == "reconcile-and-report"
+    assert r["confidence"] >= 0.5
+    assert "forticloud" in r["rationale"] and "servicenow" in r["rationale"]
+
+    params = r["parameters"]
+    # <role>_label params inferred from the connector manifest's roles
+    assert params["source_a_label"]["value"] == "FortiCloud assets"
+    assert params["source_a_label"]["source"] == "inferred"
+    assert params["source_b_label"]["value"] == "ServiceNow CMDB"
+    assert params["source_b_label"]["source"] == "inferred"
+    # join_key inferred from the module schema (the field literally named join_key)
+    assert params["join_key"]["value"] == "join_key"
+    assert params["join_key"]["source"] == "inferred"
+    # prompt params with shipped defaults
+    assert params["results_module"]["value"] == "reconciliation_results"
+    assert params["results_module"]["source"] == "default"
+    assert params["cron"]["value"] == "7 2 * * *"
+    assert params["cron"]["source"] == "default"
+    # recipients cannot be inferred -- still pending
+    assert params["recipients"]["value"] is None
+    assert params["recipients"]["source"] == "pending"
+
+    # required-ness passes through; cron is the one optional slot
+    assert params["cron"]["required"] is False
+    assert all(
+        params[n]["required"] is True
+        for n in ("results_module", "source_a_label", "source_b_label", "join_key", "recipients")
+    )
+
+    assert r["pending"] == ["recipients"]
+    assert "5/6 parameters filled" in r["notes"]
+
+
+def test_map_use_case_no_fit_returns_candidates(tmp_path):
+    """An unrelated use case reports no confident match + the ranked candidates."""
+    store = _seeded_store(tmp_path)
+    r = map_use_case("organize my music library collection", store=store)
+    assert r["archetype"] is None
+    assert "no archetype confidently matches" in r["notes"]
+    # the sole archetype is still listed as a candidate, but with zero overlap
+    assert r["candidates"][0]["name"] == "reconcile-and-report"
+    assert r["candidates"][0]["score"] < 0.2
+    assert r["candidates"][0]["matched"] == []
+
+
+def test_map_use_case_empty_store_no_fit(tmp_path):
+    """An empty store yields no match + no candidates (does not raise)."""
+    store = ArchetypeStore(tmp_path / "arch.db")  # not seeded -> empty
+    r = map_use_case("compare two inventories", store=store)
+    assert r["archetype"] is None
+    assert r["candidates"] == []
+    assert "no archetype confidently matches" in r["notes"]

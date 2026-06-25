@@ -176,6 +176,7 @@ def test_registry_covers_core_ops():
         "wait_for_playbook_run",
         "upsert_record",
         "get_or_create_record",
+        "map_use_case",
     }:
         assert expected in names
 
@@ -411,3 +412,20 @@ def test_dispatch_bad_arguments_is_structured(client):
     out = tools.dispatch(client, "get_record", {"module": "alerts"})  # missing ref
     assert out["error"]["type"] == "TypeError"
     assert out["error"]["tool"] == "get_record"
+
+
+def test_dispatch_map_use_case(client, monkeypatch, tmp_path):
+    """map_use_case dispatches like any tool and ignores its client (no appliance I/O).
+
+    Points XDG_CACHE_HOME at tmp_path so the default store is seeded hermetically rather
+    than writing to the real per-user cache.
+    """
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    out = tools.dispatch(
+        client,
+        "map_use_case",
+        {"use_case": "compare FortiCloud assets vs ServiceNow CMDB, email a CSV on mismatches"},
+    )
+    assert out["archetype"] == "reconcile-and-report"
+    assert out["parameters"]["source_a_label"]["value"] == "FortiCloud assets"
+    assert out["pending"] == ["recipients"]

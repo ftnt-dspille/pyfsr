@@ -35,6 +35,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from .archetypes import map_use_case
 from .exceptions import FortiSOARException
 from .projection import project, to_jsonable
 
@@ -435,6 +436,14 @@ def _h_trigger_schedule_now(client, *, name=None, task_id=None) -> Any:
 def _h_delete_schedule(client, *, name) -> Any:
     client.schedules.delete(name)
     return {"deleted": True, "name": name}
+
+
+# -- archetypes -------------------------------------------------------------
+def _h_map_use_case(client, *, use_case) -> Any:
+    # Classifies against the local archetype store (no appliance I/O -- `client` is unused).
+    # The default store seeds itself from the shipped `reconcile-and-report` archetype on
+    # first use; see map_use_case for the return shape.
+    return map_use_case(use_case)
 
 
 # --------------------------------------------------------------------------- registry
@@ -1028,6 +1037,26 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["name"],
         ),
         _h_delete_schedule,
+    ),
+    ToolSpec(
+        "map_use_case",
+        "Classify a free-text operational use case to a FortiSOAR archetype and fill its "
+        "parameter slots. Returns the matched archetype name, a confidence + rationale, the "
+        "filled vs pending parameters, and notes. Use this as the entry point when standing up "
+        "a new use case: then create the module from the archetype's module_schema, configure the "
+        "manifest's connectors, and push a playbook from its skeleton. No appliance I/O -- reads "
+        "the local archetype store only.",
+        _obj(
+            {
+                "use_case": {
+                    "type": "string",
+                    "description": "Free-text use case, e.g. 'compare FortiCloud assets vs "
+                    "ServiceNow CMDB, email a CSV on mismatches'.",
+                }
+            },
+            ["use_case"],
+        ),
+        _h_map_use_case,
     ),
 )
 

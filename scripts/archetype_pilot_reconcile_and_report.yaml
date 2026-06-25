@@ -1,0 +1,93 @@
+collection: PyFSR Archetype Pilot
+description: >
+  End-to-end archetype pilot (reconcile-and-report). Mocks two inventories via a single
+  code_snippet step (the lab box has no usable FortiCloud/ServiceNow creds), diffs by a
+  join key (serial), writes a finding record to the reconciliation_results module, and
+  emails a CSV report via SMTP (localhost-postfix). Source data is canned; the module,
+  connectors, compiled playbook, schedule, and SMTP email are all real.
+visible: true
+
+playbooks:
+  - name: PyFSR Pilot Reconcile and Report
+    is_active: true
+    parameters: [recipients]
+    steps:
+      - name: Start
+        type: start
+        next: Reconcile
+
+      - name: Reconcile
+        type: code_snippet
+        next: Write finding
+        arguments:
+          code: |
+            import csv, io
+            # Canned inventories (lab box has no live FortiCloud/ServiceNow creds).
+            a = [
+                {"serial": "FGT-001", "name": "edge-fw-01", "license": "active"},
+                {"serial": "FGT-002", "name": "edge-fw-02", "license": "expired"},
+                {"serial": "FGT-003", "name": "core-fw-01", "license": "active"},
+            ]
+            b = [
+                {"serial": "FGT-001", "name": "edge-fw-01", "status": "installed"},
+                {"serial": "FGT-004", "name": "branch-fw-09", "status": "installed"},
+            ]
+            ka = {r["serial"]: r for r in a}
+            kb = {r["serial"]: r for r in b}
+            findings = []
+            for s, r in ka.items():
+                if s not in kb:
+                    findings.append({"join_key": s, "mismatch_type": "missing-in-B",
+                                     "source_system": "FortiCloud", "target_system": "ServiceNow",
+                                     "details": f"{r['name']} missing in ServiceNow"})
+                elif r.get("license") == "expired":
+                    findings.append({"join_key": s, "mismatch_type": "license-expiring",
+                                     "source_system": "FortiCloud", "target_system": "ServiceNow",
+                                     "details": f"{r['name']} license expired"})
+            for s, r in kb.items():
+                if s not in ka:
+                    findings.append({"join_key": s, "mismatch_type": "missing-in-A",
+                                     "source_system": "FortiCloud", "target_system": "ServiceNow",
+                                     "details": f"{r['name']} missing in FortiCloud"})
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerow(["join_key", "mismatch_type", "source_system", "target_system", "details"])
+            for f in findings:
+                w.writerow([f["join_key"], f["mismatch_type"], f["source_system"],
+                            f["target_system"], f["details"]])
+            csv_path = "/tmp/pyfsr_recon_report.csv"
+            with open(csv_path, "w") as fh:
+                fh.write(buf.getvalue())
+            return {"findings": findings,
+                    "first": findings[0] if findings else None,
+                    "csv_path": csv_path,
+                    "count": len(findings)}
+
+      - name: Write finding
+        type: create_record
+        next: Email report
+        arguments:
+          module: reconciliation_results
+          operation: Create
+          resource:
+            source_system: "{{ vars.steps.Reconcile.output.first.source_system }}"
+            target_system: "{{ vars.steps.Reconcile.output.first.target_system }}"
+            join_key: "{{ vars.steps.Reconcile.output.first.join_key }}"
+            mismatch_type: "{{ vars.steps.Reconcile.output.first.mismatch_type }}"
+            status: "Open"
+            details: "{{ vars.steps.Reconcile.output.first.details }}"
+          step_variables: []
+
+      - name: Email report
+        type: connector
+        arguments:
+          connector: smtp
+          operation: send_email
+          config: localhost-postfix
+          params:
+            to_recipients: "{{ vars.input.params.recipients }}"
+            subject: "Reconciliation Report - {{ vars.steps.Reconcile.output.count }} findings"
+            body: "Reconciliation report attached."
+            content_type: "text"
+            file_path: "{{ vars.steps.Reconcile.output.csv_path }}"
+            file_name: "reconciliation_report.csv"
