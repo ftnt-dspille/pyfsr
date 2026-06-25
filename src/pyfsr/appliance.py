@@ -13,8 +13,11 @@ methods (``appliance.db.query(...)``, ``appliance.service.status()``,
 >>> from pyfsr import Appliance
 >>> box = Appliance(host="10.0.0.1", user="csadmin", key_path="~/.ssh/id_rsa")
 >>> box.info()                                  # doctest: +SKIP
-{'host': '...', 'version': '7.6.0', 'content_db': '...', 'device_uuid': '...'}
->>> _, headers, rows = box.db.query("SELECT count(*) FROM alerts")   # doctest: +SKIP
+{'target': 'csadmin@10.0.0.1', 'fsr_version': '7.6.0', 'content_db': 'venom',
+ 'device_uuid': '0123…cdef', 'db_user': 'cyberpgsql'}
+>>> dbname, headers, rows = box.db.query("SELECT count(*) FROM alerts")   # doctest: +SKIP
+>>> (dbname, headers, rows)                      # doctest: +SKIP
+('venom', ['count'], [['42']])
 
 Or reuse a client's host (SSH still needs its own credentials):
 
@@ -101,6 +104,10 @@ class _ServiceNamespace:
     def status(self, name: str | None = None) -> str:
         """Parsed ``csadm services --status`` (optionally one service)."""
         return service.status(self._t, name)
+
+    def services(self, name: str | None = None) -> list[service.ServiceState]:
+        """Typed per-service states (name, running, status, since)."""
+        return service.services(self._t, name)
 
     def liveness(self, *, base: str = "https://127.0.0.1", timeout: float = 6.0) -> list[ProbeResult]:
         """Probe endpoints for active-but-wedged services."""
