@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import pytest
 
+from pyfsr._testing.appliance_captures import DEVICE_UUID as UUID
+from pyfsr._testing.replay import ReplayTransport
 from pyfsr.cli.appliance import db as db_cmds
 from pyfsr.cli.appliance import license as license_cmds
 from pyfsr.cli.appliance import logs as logs_cmds
@@ -20,228 +22,34 @@ from pyfsr.cli.appliance.transport import (
     CommandResult,
     LocalTransport,
     SSHTransport,
-    Transport,
     TransportError,
     _sudo_wrap,
     make_transport,
 )
 
-UUID = "0123456789abcdef0123456789abcdef"
 US = "\x1f"  # the unit-separator field delimiter Facts.psql uses
 
 
-class FakeTransport(Transport):
-    """Transport that fabricates psql/csadm/service/rabbitmq/curl output by matching on the command."""
+class FakeTransport(ReplayTransport):
+    """The test transport: :class:`ReplayTransport` (verified-live captures) plus
+    the failure-mode knobs these tests need (a wedged service, a backlog, a missing
+    UUID file, a failing csadm).
+
+    Inherits ``run``/``_dispatch`` and every ``_xxx_response`` from
+    :class:`ReplayTransport` so tests and the doctested docs share one fixture
+    source (see :mod:`pyfsr._testing.appliance_captures`). Two test-only overrides
+    remain inline below: ``csadm license --show-details`` returns the short card
+    (``test_license_show_returns_details`` asserts on the ``License Type`` label),
+    and the HA verbs return the simple format the ``*_runs_csadm`` tests expect.
+    """
 
     target = "fake"
 
-    def __init__(
-        self,
-        *,
-        tables=None,
-        databases=None,
-        service_wedged=False,
-        queues_backlog=False,
-        file_uuid=UUID,
-        csadm_uuid=UUID,
-    ):
-        self.commands = []
-        self._tables = tables or ["widgets", "widgets_alerts", "widgets_team", "gadgets"]
-        self._databases = databases or {"venom": "7 GB", "das": "200 MB", "postgres": "8 MB"}
-        self._service_wedged = service_wedged  # if True, curl returns 000
-        self._queues_backlog = queues_backlog  # if True, queues have backlog
-        self._file_uuid = file_uuid  # /home/csadmin/device_uuid (None = unreadable)
-        self._csadm_uuid = csadm_uuid  # csadm entitlement UUID (None = csadm fails)
-
-    def run(self, argv, *, input_text=None, env=None, timeout=60.0, sudo=False):
-        self.commands.append((argv, env, sudo))
-        # `test -f <path>` existence probe (used by logs.tail): a path containing
-        # "missing" reports absent (returncode 1), everything else present.
-        if argv[:2] == ["test", "-f"]:
-            return CommandResult(argv, 1 if "missing" in argv[-1] else 0, "", "")
-        # The install-time UUID file may be absent/unreadable (drift simulation).
-        if argv[:2] == ["cat", "/home/csadmin/device_uuid"] and self._file_uuid is None:
-            return CommandResult(argv, 1, "", "cat: no such file")
-        # csadm may fail to return a UUID.
-        if argv[:3] == ["csadm", "license", "--get-device-uuid"] and self._csadm_uuid is None:
-            return CommandResult(argv, 1, "", "csadm: error")
-        out = self._dispatch(argv, env)
-        return CommandResult(argv, 0, out, "")
-
-    def _dispatch(self, argv, env) -> str:
-        if argv[:2] == ["cat", "/home/csadmin/device_uuid"]:
-            # Primary device-UUID source (install-time file = the DB/ES password).
-            return f"{self._file_uuid}\n"
-        if argv[:3] == ["csadm", "license", "--get-device-uuid"]:
-            return f"Device UUID: {self._csadm_uuid}\n"
+    def _dispatch(self, argv, env=None) -> str:
+        # test-only short-form license card (has the "License Type" label).
         if argv[:3] == ["csadm", "license", "--show-details"]:
-            return "License Type: subscription\nExpiry: 2027-01-01\nDevice UUID: " + f"{self._csadm_uuid}\n"
-        if argv[:3] == ["csadm", "log", "--collect"]:
-            return "Log bundle created: /tmp/fortisoar-logs-20260621.tar.gz\n"
-        if argv[:3] == ["csadm", "db", "--getsize"]:
-            # Real csadm format (verified live): preamble + "<class> : <size>" lines.
-            return (
-                "Reading postgres details from db_config.yml file\n"
-                "Following is the current database usage:\n"
-                "Primary Data  : 7354 MB\n"
-                "Audit Logs    : 1089 MB\n"
-                "Workflow Logs : 1138 MB\n"
-                "Archived Data : 8396 kB\n"
-            )
-        if argv[:3] == ["csadm", "certs", "--generate"]:
-            return f"Certificate generated for {argv[3]}\n"
-        if argv[:3] == ["csadm", "ha", "list-nodes"]:
-            return "node1  primary  fortisoar.example.com\nnode2  secondary  fortisoar.example.com\n"
-        if argv[:3] == ["csadm", "ha", "show-health"]:
-            return "HA Health: OK\nPrimary: node1\nSecondary: node2\n"
-        if argv[:3] == ["csadm", "ha", "get-replication-stat"]:
-            return "Replication lag: 0 bytes\nStatus: streaming\n"
-        if argv[:3] == ["csadm", "services", "--status"]:
-            # Faithful to live csadm: dot-padded name + "[Status]  since <when>".
-            return (
-                "cyops-auth...............[Running]      since Fri 2026-05-22 01:18:16 UTC\n"
-                "cyops-api................[Running]      since Thu 2026-05-07 14:10:22 UTC\n"
-            )
-        # Whole-stack verbs (--restart / --stop / --start) act on every service.
-        if argv[:3] in (
-            ["csadm", "services", "--restart"],
-            ["csadm", "services", "--stop"],
-            ["csadm", "services", "--start"],
-        ):
-            return f"{argv[2].lstrip('-')} all services\n"
-        # Single-service verbs validate the name and, per the live box, print an
-        # "ERROR: ... can not be modified" hint and **exit 0** for an unknown one.
-        if argv[1] == "services" and argv[2] in ("--restart-service", "--stop-service", "--start-service"):
-            name = argv[3]
-            if name not in ("cyops-auth", "cyops-api", "nginx"):
-                return (
-                    f"ERROR: {name} service can not be modified using this command.\n"
-                    "       This command can be used for following services: cyops-auth cyops-api nginx\n"
-                )
-            return f"service {name} {argv[2].rsplit('-', 1)[0].lstrip('-')}ed\n"
-        if argv[:1] == ["bash"] and len(argv) == 2 and argv[1].endswith(".sh"):
-            return f"[diagnose] ran {argv[1]}\n"
-        if argv[0] == "curl":
-            return self._curl_response(argv)
-        if argv[0] == "ss":
-            return self._ss_response()
-        if argv[0] == "rabbitmqctl":
-            return self._rabbitmqctl_response(argv)
-        if argv[0] == "journalctl":
-            return self._journalctl_response(argv)
-        if argv[0] == "tail":
-            return self._tail_response(argv)
-        if argv[0] == "rpm":
-            return "7.6.5"
-        if argv[0] != "psql":
-            return ""
-        sql = argv[-1].lower()
-        if "from pg_database" in sql and "datistemplate" in sql and "pg_size_pretty" in sql:
-            rows = [f"{n}{US}{s}" for n, s in self._databases.items()]
-            return "\n".join(rows) + "\n"
-        if "from pg_database" in sql:
-            return "\n".join(self._databases) + "\n"
-        if "information_schema.tables" in sql and "model_metadatas" in sql:
-            # Only the content DB (venom) has model_metadatas.
-            return "1\n" if argv[argv.index("-d") + 1] == "venom" else "\n"
-        if "from pg_tables" in sql:
-            return "\n".join(self._filter_tables(sql)) + "\n"
-        if sql.startswith("select 1"):
-            return "1\n"
-        # Mutating statements echo a command tag like real psql -A (no -t).
-        if sql.lstrip().startswith("drop table"):
-            return "DROP TABLE\n"
-        return ""
-
-    def _curl_response(self, argv) -> str:
-        """Fake curl response (0 = wedged, otherwise a status code)."""
-        if self._service_wedged:
-            return "0"  # No response — the wedge signal
-        if "-X" in argv and argv[argv.index("-X") + 1] == "POST":
-            return "200"  # auth endpoint
-        return "200"  # API endpoint
-
-    def _ss_response(self) -> str:
-        """Fake ss -tlnp output (TCP listeners)."""
-        return (
-            'LISTEN  0  128  *:443  *:*  users:(("nginx",pid=1234,fd=5))\n'
-            'LISTEN  0  128  *:80  *:*  users:(("nginx",pid=1234,fd=6))\n'
-            'LISTEN  0  128  *:5672  *:*  users:(("rabbitmq",pid=2345,fd=7))\n'
-        )
-
-    def _rabbitmqctl_response(self, argv) -> str:
-        """Fake rabbitmqctl output, modelled on a live RabbitMQ 3.13.2 box.
-
-        Faithful to two behaviours verified live: (1) ``-q`` alone does NOT drop
-        the column-header row — only ``--no-table-headers`` does — so this emits a
-        header line *unless* that flag is present; (2) ``list_permissions`` is
-        per-vhost (``-p <vhost>``) and ``/`` is empty while named vhosts populate.
-        """
-        verb = next((a for a in argv if a.startswith("list_") or a == "status"), "")
-        no_headers = "--no-table-headers" in argv
-
-        if verb == "status":
-            return "Status of node rabbit@appliance ...\nRabbitMQ 3.13.2\n"
-
-        def _emit(header: str, body: list[str]) -> str:
-            lines = ([] if no_headers else [header]) + body
-            return "\n".join(lines) + "\n" if lines else "\n"
-
-        if verb == "list_queues" and "consumers" in argv:
-            body = (
-                ["task_queue\t2500\t0", "default_queue\t50\t2"]
-                if self._queues_backlog
-                else ["task_queue\t100\t1", "default_queue\t50\t2"]
-            )
-            return _emit("name\tmessages\tconsumers", body)
-        if verb == "list_consumers":
-            return _emit(
-                "queue_name\tchannel_pid",
-                ["task_queue\t<rabbit@appliance.1.250>", "default_queue\t<rabbit@appliance.2.251>"],
-            )
-        if verb == "list_vhosts":
-            return _emit("name", ["/", "cyops-admin", "intra-cyops"])
-        if verb == "list_permissions":
-            # Per-vhost; "/" is empty on a real box, named vhosts have one entry.
-            i = argv.index("-p") if "-p" in argv else -1
-            vhost = argv[i + 1] if i >= 0 else "/"
-            body = {
-                "cyops-admin": ["admin\t.*\t.*\t.*"],
-                "intra-cyops": ["cyops\t.*\t.*\t.*"],
-            }.get(vhost, [])
-            return _emit("user\tconfigure\twrite\tread", body)
-        return ""
-
-    def _journalctl_response(self, argv) -> str:
-        """Fake journalctl output (errors last N minutes)."""
-        if "--since" in argv:
-            return "No entries\n"
-        return ""
-
-    def _tail_response(self, argv) -> str:
-        """Fake tail output from log files."""
-        if "/var/log/cyops/cyops-auth/das.log" in argv:
-            return "[INFO] 2026-06-20 12:30:45 auth service started\n[INFO] successful login\n"
-        if "/var/log/nginx/error.log" in argv:
-            return "[warn] low memory condition\n[info] connection opened\n"
-        return "log tail data\n"
-
-    def _filter_tables(self, sql: str):
-        """Emulate the WHERE clause of find_module_tables/tables: exact match on
-        ``tablename='X'`` plus prefix on ``tablename like 'X\\_%'``."""
-        import re
-
-        exact = re.search(r"tablename='([^']+)'", sql)
-        like = re.search(r"tablename like '([^'\\]+)", sql)
-        if not exact and not like:
-            return self._tables
-        out = []
-        for t in self._tables:
-            if exact and t == exact.group(1):
-                out.append(t)
-            elif like and t.startswith(like.group(1) + "_"):
-                out.append(t)
-        return out
+            return f"License Type: subscription\nExpiry: 2027-01-01\nDevice UUID: {self._csadm_uuid}\n"
+        return super()._dispatch(argv)
 
 
 @pytest.fixture
