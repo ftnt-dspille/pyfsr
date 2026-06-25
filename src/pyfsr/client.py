@@ -15,6 +15,7 @@ from urllib3.util.retry import Retry
 from .api.agents import AgentsAPI
 from .api.ai import AIApi
 from .api.alerts import AlertsAPI
+from .api.api_keys import ApiKeysAPI
 from .api.api_users import ApiKeyUsersAPI
 from .api.audit import AuditAPI
 from .api.auth_config import AuthConfigAPI
@@ -39,6 +40,7 @@ from .api.system_settings import SystemSettingsAPI
 from .api.tags import TagsAPI
 from .api.tasks import TasksAPI
 from .api.taxii import TaxiiAPI
+from .api.teams import TeamsAPI
 from .api.user_settings import UserSettingsAPI
 from .api.users import UsersAPI
 from .api.views import ViewsAPI
@@ -53,6 +55,7 @@ if TYPE_CHECKING:
     from .appliance import Appliance
 from .models import (
     Alert,
+    ApiKey,
     Comment,
     FileRecord,
     Incident,
@@ -288,6 +291,7 @@ class FortiSOAR:
         self.tags: TagsAPI = TagsAPI(self)
         self.agents: AgentsAPI = AgentsAPI(self)
         self.roles: RolesAPI = RolesAPI(self)
+        self.teams: TeamsAPI = TeamsAPI(self)
         self.routers: RoutersAPI = RoutersAPI(self)
 
         # Threat-intel / bulk ingest, TAXII sharing, audit log
@@ -297,6 +301,7 @@ class FortiSOAR:
 
         # API-key user lifecycle, appliance introspection/licensing, global search
         self.api_users: ApiKeyUsersAPI = ApiKeyUsersAPI(self)
+        self.api_keys: ApiKeysAPI = ApiKeysAPI(self)
         self.system: SystemAPI = SystemAPI(self)
         self.search: SearchAPI = SearchAPI(self)
 
@@ -416,6 +421,8 @@ class FortiSOAR:
         data: dict | None = None,
         files: dict | None = None,
         headers: dict | None = None,
+        *,
+        raise_on_status: bool = True,
         **kwargs,
     ) -> requests.Response:
         """
@@ -428,6 +435,16 @@ class FortiSOAR:
             data: Request body data
             files: Files to upload
             headers: Additional headers
+            raise_on_status: When True (default) a non-2xx response is converted
+                to a typed exception (``AuthenticationError`` / ``PermissionError`` /
+                ``ResourceNotFoundError`` / ``APIError``). Pass ``False`` to get the
+                raw :class:`requests.Response` back instead — for access-control
+                probes and "is this identity allowed to do X?" checks that need the
+                status code (200 vs 401/403) rather than a raised exception. The
+                reauth-retry for refreshable auth still runs first, so a refreshed
+                token can still turn a 401 into a 200; non-refreshable (API-key) auth
+                returns the raw denial status. Transport errors (connection,
+                timeout) always raise regardless of this flag.
             **kwargs: Additional arguments passed to requests
 
         Returns:
@@ -538,11 +555,13 @@ class FortiSOAR:
                         data=data,
                         files=files,
                         headers=headers,
+                        raise_on_status=raise_on_status,
                         _reauthed=True,
                         **kwargs,
                     )
 
-            response.raise_for_status()
+            if raise_on_status:
+                response.raise_for_status()
             return response
 
         except requests.exceptions.RequestException as e:
@@ -583,13 +602,24 @@ class FortiSOAR:
         response.encoding = "utf-8"
         return response
 
-    def get(self, endpoint: str, params: dict | None = None, **kwargs) -> dict[str, Any] | bytes:
+    def get(
+        self,
+        endpoint: str,
+        params: dict | None = None,
+        *,
+        raise_on_status: bool = True,
+        **kwargs,
+    ) -> dict[str, Any] | bytes | requests.Response:
         """
         Perform GET request and return response based on content type.
 
         Returns JSON for application/json responses and bytes for binary responses.
+        With ``raise_on_status=False`` returns the raw :class:`requests.Response`
+        (so the caller can read ``.status_code`` on a denial).
         """
-        response = self.request("GET", endpoint, params=params, **kwargs)
+        response = self.request("GET", endpoint, params=params, raise_on_status=raise_on_status, **kwargs)
+        if not raise_on_status:
+            return response
         content_type = response.headers.get("Content-Type", "")
 
         if "application/json" in content_type:
@@ -606,20 +636,64 @@ class FortiSOAR:
         data: dict | None = None,
         files: dict | None = None,
         params: dict | None = None,
+        *,
+        raise_on_status: bool = True,
         **kwargs,
-    ) -> dict[str, Any]:
-        """Perform POST request and return JSON response"""
-        response = self.request("POST", endpoint, params=params, data=data, files=files, **kwargs)
-        return response.json()
+    ) -> dict[str, Any] | requests.Response:
+        """Perform POST request and return JSON response.
 
-    def put(self, endpoint: str, data: dict | None = None, params: dict | None = None, **kwargs) -> dict[str, Any]:
-        """Perform PUT request and return JSON response"""
-        response = self.request("PUT", endpoint, params=params, data=data, **kwargs)
-        return response.json()
+        With ``raise_on_status=False`` returns the raw :class:`requests.Response`
+        instead of parsing JSON — use it for fire-and-observe-status probes.
+        """
+        response = self.request(
+            "POST",
+            endpoint,
+            params=params,
+            data=data,
+            files=files,
+            raise_on_status=raise_on_status,
+            **kwargs,
+        )
+        return response if not raise_on_status else response.json()
 
-    def delete(self, endpoint: str, params: dict | None = None, **kwargs) -> None:
-        """Perform DELETE request"""
-        self.request("DELETE", endpoint, params=params, **kwargs)
+    def put(
+        self,
+        endpoint: str,
+        data: dict | None = None,
+        params: dict | None = None,
+        *,
+        raise_on_status: bool = True,
+        **kwargs,
+    ) -> dict[str, Any] | requests.Response:
+        """Perform PUT request and return JSON response.
+
+        With ``raise_on_status=False`` returns the raw :class:`requests.Response`.
+        """
+        response = self.request(
+            "PUT",
+            endpoint,
+            params=params,
+            data=data,
+            raise_on_status=raise_on_status,
+            **kwargs,
+        )
+        return response if not raise_on_status else response.json()
+
+    def delete(
+        self,
+        endpoint: str,
+        params: dict | None = None,
+        *,
+        raise_on_status: bool = True,
+        **kwargs,
+    ) -> None | requests.Response:
+        """Perform DELETE request.
+
+        With ``raise_on_status=False`` returns the raw :class:`requests.Response`
+        instead of ``None``.
+        """
+        response = self.request("DELETE", endpoint, params=params, raise_on_status=raise_on_status, **kwargs)
+        return response if not raise_on_status else None
 
     def query(self, module: str, query_data: dict) -> dict[str, Any]:
         """
@@ -687,6 +761,8 @@ class FortiSOAR:
     def records(self, module: Literal["teams"]) -> RecordSet[Team]: ...
     @overload
     def records(self, module: Literal["roles"]) -> RecordSet[Role]: ...
+    @overload
+    def records(self, module: Literal["api_keys"]) -> RecordSet[ApiKey]: ...
     @overload
     def records(self, module: str) -> RecordSet[Any]: ...
     def records(self, module: str) -> RecordSet[Any]:

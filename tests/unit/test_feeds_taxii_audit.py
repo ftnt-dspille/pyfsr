@@ -2,12 +2,14 @@
 
 import pytest
 
+from pyfsr.api.api_keys import ApiKeysAPI, _api_key_plaintext
 from pyfsr.api.api_users import ApiKeyUsersAPI
 from pyfsr.api.audit import AuditAPI
 from pyfsr.api.feeds import IngestFeedsAPI
 from pyfsr.api.search import SearchAPI
 from pyfsr.api.system import SystemAPI
 from pyfsr.api.taxii import TaxiiAPI
+from pyfsr.models import ApiKeyUser
 
 
 class FakeClient:
@@ -140,6 +142,245 @@ def test_api_users_reset_validity_includes_days():
 def test_api_users_bad_operation_raises():
     with pytest.raises(ValueError):
         ApiKeyUsersAPI(FakeClient()).lifecycle("u-1", "BOGUS")
+
+
+# ------------------------------------------------------------------ api_keys
+class _FakeUsers:
+    """Stand-in for ``client.roles`` / ``client.teams`` — resolves known names
+    to fake IRIs and passes IRIs through (mirrors the real
+    :class:`~pyfsr.api.roles.RolesAPI` / :class:`~pyfsr.api.teams.TeamsAPI`)."""
+
+    _TEAMS = {"TeamB": "/api/3/teams/t-1"}
+    _ROLES = {"Admin": "/api/3/roles/r-1"}
+
+    def _resolve_roles(self, roles):
+        return [self._ROLES.get(r, r) for r in roles]
+
+    def _resolve_teams(self, teams):
+        return [self._TEAMS.get(t, t) for t in teams]
+
+
+def _api_keys_client(*, get_resp=None, post_resp=None, put_resp=None):
+    c = FakeClient(get_resp=get_resp, post_resp=post_resp, put_resp=put_resp)
+    # api_keys delegates role/team resolution to client.roles / client.teams.
+    c.roles = _FakeUsers()
+    c.teams = _FakeUsers()
+    return c
+
+
+def test_api_keys_create_resolves_team_names_to_iris():
+    c = _api_keys_client(post_resp={"uuid": "k-1"})
+    out = ApiKeysAPI(c).create(name="repro-teamb", user_uuid="u-1", teams=["TeamB"])
+    assert out["uuid"] == "k-1"
+    assert c.calls[-1][:3] == (
+        "POST",
+        "/api/3/api_keys",
+        {"name": "repro-teamb", "userId": "u-1", "teams": ["/api/3/teams/t-1"]},
+    )
+
+
+def test_api_keys_create_passes_iris_through():
+    c = _api_keys_client(post_resp={"uuid": "k-1"})
+    ApiKeysAPI(c).create(
+        name="k",
+        user_uuid="u-1",
+        roles=["/api/3/roles/r-1"],
+        teams=["/api/3/teams/t-1"],
+    )
+    body = c.calls[-1][2]
+    assert body["roles"] == ["/api/3/roles/r-1"]
+    assert body["teams"] == ["/api/3/teams/t-1"]
+
+
+def test_api_keys_create_omits_empty_roles_teams():
+    c = _api_keys_client(post_resp={"uuid": "k-1"})
+    ApiKeysAPI(c).create(name="k", user_uuid="u-1")
+    assert c.calls[-1][2] == {"name": "k", "userId": "u-1"}
+
+
+def test_api_keys_list_unwraps_hydra_members():
+    c = _api_keys_client(get_resp={"hydra:member": [{"name": "k1"}, {"name": "k2"}]})
+    assert [k["name"] for k in ApiKeysAPI(c).list()] == ["k1", "k2"]
+
+
+def test_api_keys_get_or_create_reuses_existing_by_name():
+    c = _api_keys_client(get_resp={"hydra:member": [{"name": "repro-teamb", "uuid": "k-9"}]})
+    binding, created = ApiKeysAPI(c).get_or_create(name="repro-teamb", user_uuid="u-1")
+    assert created is False and binding["uuid"] == "k-9"
+    assert not any(call[0] == "POST" for call in c.calls)
+
+
+def test_api_keys_get_or_create_creates_when_absent():
+    c = _api_keys_client(
+        get_resp={"hydra:member": [{"name": "other"}]},
+        post_resp={"uuid": "k-new"},
+    )
+    binding, created = ApiKeysAPI(c).get_or_create(
+        name="repro-teamb",
+        user_uuid="u-1",
+        teams=["TeamB"],
+    )
+    assert created is True and binding["uuid"] == "k-new"
+    assert c.calls[-1][0] == "POST"
+
+
+def test_api_keys_update_resolves_and_puts():
+    c = _api_keys_client(put_resp={"uuid": "k-1"})
+    ApiKeysAPI(c).update("k-1", teams=["TeamB"])
+    method, endpoint, data = c.calls[-1]
+    assert method == "PUT" and endpoint == "/api/3/api_keys/k-1"
+    assert data == {"teams": ["/api/3/teams/t-1"]}
+
+
+# ------------------------------------------------------------- api_keys.ensure_usable
+class _FakeApiUsers:
+    """Stand-in for ``client.api_users`` — records lifecycle calls and serves
+    configurable plaintext on ``get(show_api_key=True)``. Returns the
+    *unwrapped* user dict (the real :meth:`ApiKeyUsersAPI.get` unwraps the
+    ``usersresp`` envelope), with ``api_key.retrievable`` set per case."""
+
+    def __init__(self, create_resp=None, get_resps=None):
+        self._create = create_resp or {"uuid": "u-1", "api_key": {"key": "plain"}}
+        # Sequence of responses returned by successive get() calls.
+        self._gets = list(get_resps or [{"api_key": {"key": "plain", "retrievable": True}}])
+        self.calls = []  # (op, uuid-ish)
+
+    def create(self, *, api_key_validity):
+        self.calls.append(("create", api_key_validity))
+        return self._create
+
+    def get(self, uuid, *, show_api_key=False):
+        self.calls.append(("get", uuid, show_api_key))
+        return self._gets.pop(0) if self._gets else {}
+
+    def regenerate(self, uuid, *, key_type="api_key"):
+        self.calls.append(("regenerate", uuid))
+        return {}
+
+
+class _FakeAuthConfig:
+    def __init__(self, retrievable=True):
+        self._retrievable = retrievable
+        self.toggled = False
+
+    def is_api_key_retrievable(self):
+        return self._retrievable
+
+    def set_api_key_retrievable(self, enabled):
+        self.toggled = True
+        self._retrievable = bool(enabled)
+        return {}
+
+
+def _ensure_client(*, list_members=None, post_resp=None, put_resp=None, api_users=None, auth_config=None):
+    c = _api_keys_client(
+        get_resp={"hydra:member": list_members or []},
+        post_resp=post_resp or {"uuid": "k-1", "name": "k"},
+        put_resp=put_resp or {"uuid": "k-1"},
+    )
+    c.api_users = api_users or _FakeApiUsers()
+    c.auth_config = auth_config or _FakeAuthConfig()
+    return c
+
+
+def test_ensure_usable_creates_user_and_binding_and_recovers_plaintext():
+    au = _FakeApiUsers()
+    c = _ensure_client(list_members=[], api_users=au)  # no existing binding
+    binding, plaintext = ApiKeysAPI(c).ensure_usable(name="k", teams=["TeamB"])
+    assert plaintext == "plain"
+    assert binding["uuid"] == "k-1"
+    # Created the api-key user, then bound it with the resolved team IRI.
+    assert ("create", 365) in au.calls
+    assert c.calls[-1][:3] == (
+        "POST",
+        "/api/3/api_keys",
+        {"name": "k", "userId": "u-1", "teams": ["/api/3/teams/t-1"]},
+    )
+    # Recovered the plaintext via show_api_key.
+    assert ("get", "u-1", True) in au.calls
+    assert "regenerate" not in (op for op, *_ in au.calls)  # no regenerate needed
+
+
+def test_ensure_usable_regenerates_when_plaintext_unrecoverable():
+    # First get() returns a masked key (retrievable=False); regenerate; second
+    # get returns the fresh retrievable plaintext.
+    au = _FakeApiUsers(
+        create_resp={"uuid": "u-1", "api_key": {"key": ""}},
+        get_resps=[
+            {"api_key": {"key": "xxxxd517", "retrievable": False}},  # masked
+            {"api_key": {"key": "fresh", "retrievable": True}},  # post-regen
+        ],
+    )
+    c = _ensure_client(
+        list_members=[{"name": "k", "uuid": "k-9", "userId": "u-1"}],
+        api_users=au,
+    )
+    binding, plaintext = ApiKeysAPI(c).ensure_usable(name="k")
+    assert plaintext == "fresh"
+    ops = [op for op, *_ in au.calls]
+    assert ops == ["get", "regenerate", "get"]  # recover → regenerate → recover
+
+
+def test_ensure_usable_reuses_existing_and_reconciles_teams():
+    au = _FakeApiUsers(get_resps=[{"api_key": {"key": "plain", "retrievable": True}}])
+    c = _ensure_client(
+        list_members=[{"name": "k", "uuid": "k-9", "userId": "u-1"}],
+        api_users=au,
+    )
+    binding, plaintext = ApiKeysAPI(c).ensure_usable(name="k", teams=["TeamB"])
+    assert plaintext == "plain" and binding["uuid"] == "k-9"
+    # Reused binding -> reconcile teams via PUT (no POST create).
+    assert not any(call[0] == "POST" for call in c.calls)
+    method, endpoint, data = c.calls[-1]
+    assert method == "PUT" and endpoint == "/api/3/api_keys/k-9"
+    assert data == {"teams": ["/api/3/teams/t-1"]}
+
+
+def test_ensure_usable_raises_when_plaintext_unrecoverable_after_regenerate():
+    # Masked (retrievable=False) both before and after regenerate.
+    au = _FakeApiUsers(
+        get_resps=[
+            {"api_key": {"key": "xxxx", "retrievable": False}},
+            {"api_key": {"key": "xxxx", "retrievable": False}},
+        ]
+    )
+    c = _ensure_client(
+        list_members=[{"name": "k", "uuid": "k-9", "userId": "u-1"}],
+        api_users=au,
+    )
+    with pytest.raises(RuntimeError, match="plaintext"):
+        ApiKeysAPI(c).ensure_usable(name="k")
+
+
+def test_ensure_usable_toggles_retrievable_mode_on():
+    ac = _FakeAuthConfig(retrievable=False)
+    c = _ensure_client(list_members=[], auth_config=ac)
+    ApiKeysAPI(c).ensure_usable(name="k")
+    assert ac.toggled is True
+
+
+# -- wire shapes (real ApiKeyUsersAPI.get + _api_key_plaintext via FakeClient) --
+def test_api_users_get_unwraps_usersresp_envelope():
+    c = FakeClient(get_resp={"usersresp": [{"uuid": "u-1", "user_type": 9}]})
+    c.api_users = ApiKeyUsersAPI(c)
+    u = c.api_users.get("u-1", show_api_key=True)
+    # Unwrapped + parsed into an ApiKeyUser (not the {"usersresp": [...]} envelope).
+    assert isinstance(u, ApiKeyUser)
+    assert u["uuid"] == "u-1" and u.user_type == 9
+    assert "usersresp" not in u
+
+
+def test_api_key_plaintext_returns_key_when_retrievable():
+    c = FakeClient(get_resp={"usersresp": [{"api_key": {"key": "plainkey", "retrievable": True}}]})
+    c.api_users = ApiKeyUsersAPI(c)
+    assert _api_key_plaintext(c, "u-1") == "plainkey"
+
+
+def test_api_key_plaintext_none_when_masked_even_though_key_nonempty():
+    # A masked key is non-empty ("xxxx…d517") but retrievable=False → unrecoverable.
+    c = FakeClient(get_resp={"usersresp": [{"api_key": {"key": "xxxxxxxxd517", "retrievable": False}}]})
+    c.api_users = ApiKeyUsersAPI(c)
+    assert _api_key_plaintext(c, "u-1") is None
 
 
 # -------------------------------------------------------------------- system

@@ -52,6 +52,9 @@ from ._playbooks import (
     TriggerResponse,
 )
 from ._system import (
+    ApiKey,
+    ApiKeyMaterial,
+    ApiKeyUser,
     Appliance,
     ConnectorOperation,
     ConnectorVersionInfo,
@@ -88,6 +91,7 @@ MODEL_REGISTRY: dict[str, type[BaseRecord]] = {
     "people": User,
     "teams": Team,
     "roles": Role,
+    "api_keys": ApiKey,
 }
 
 
@@ -145,6 +149,9 @@ __all__ = [
     "Team",
     "Role",
     "ModulePermission",
+    "ApiKey",
+    "ApiKeyMaterial",
+    "ApiKeyUser",
     "ContentHubItem",
     "FeaturedTag",
     "SolutionPack",

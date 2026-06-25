@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..models import Role, Team
 from .base import BaseAPI
 
 
@@ -37,52 +38,21 @@ class UsersAPI(BaseAPI):
         )
     """
 
-    _role_map: dict[str, str] | None = None
-    _team_map: dict[str, str] | None = None
-
     def role_map(self) -> dict[str, str]:
-        """Return ``{name: uuid}`` for all roles, cached for the lifetime of this instance."""
-        if self._role_map is None:
-            self._role_map = {r["name"]: r["uuid"] for r in self.list_roles() if r.get("name") and r.get("uuid")}
-        return self._role_map
+        """Return ``{name: uuid}`` for all roles (delegates to :class:`~pyfsr.api.roles.RolesAPI`)."""
+        return self.client.roles.role_map()
 
     def team_map(self) -> dict[str, str]:
-        """Return ``{name: uuid}`` for all teams, cached for the lifetime of this instance."""
-        if self._team_map is None:
-            self._team_map = {t["name"]: t["uuid"] for t in self.list_teams() if t.get("name") and t.get("uuid")}
-        return self._team_map
+        """Return ``{name: uuid}`` for all teams (delegates to :class:`~pyfsr.api.teams.TeamsAPI`)."""
+        return self.client.teams.team_map()
 
     def _resolve_roles(self, roles: list[str]) -> list[str]:
-        """Accept role UUIDs or names; return UUIDs. Raises ValueError for unknown names."""
-        rmap = None
-        resolved = []
-        for r in roles:
-            if "-" in r and len(r) == 36:
-                resolved.append(r)
-            else:
-                if rmap is None:
-                    rmap = self.role_map()
-                uuid = rmap.get(r)
-                if uuid is None:
-                    raise ValueError(f"Role not found: {r!r}. Available: {list(rmap)}")
-                resolved.append(uuid)
-        return resolved
+        """Accept role UUIDs or names; return UUIDs (delegates to RolesAPI)."""
+        return self.client.roles._resolve_roles(roles)
 
     def _resolve_teams(self, teams: list[str]) -> list[str]:
-        """Accept team UUIDs or names; return UUIDs. Raises ValueError for unknown names."""
-        tmap = None
-        resolved = []
-        for t in teams:
-            if "-" in t and len(t) == 36:
-                resolved.append(t)
-            else:
-                if tmap is None:
-                    tmap = self.team_map()
-                uuid = tmap.get(t)
-                if uuid is None:
-                    raise ValueError(f"Team not found: {t!r}. Available: {list(tmap)}")
-                resolved.append(uuid)
-        return resolved
+        """Accept team UUIDs or names; return UUIDs (delegates to TeamsAPI)."""
+        return self.client.teams._resolve_teams(teams)
 
     def create(
         self,
@@ -207,46 +177,26 @@ class UsersAPI(BaseAPI):
         """
         return self.update(person_uuid, csActive=False)
 
-    def list_roles(self, params: dict | None = None) -> list[dict[str, Any]]:
-        """
-        List all roles available for assignment.
+    def list_roles(self, params: dict | None = None) -> list[Role]:
+        """List all roles available for assignment (delegates to :class:`~pyfsr.api.roles.RolesAPI`).
 
-        Returns:
-            List of role dicts, each containing ``uuid`` and ``name``.
+        Returns typed :class:`~pyfsr.models.Role` records (dict-compatible:
+        ``r["name"]`` / ``r["uuid"]`` still work).
         """
-        r = self.client.get("/api/3/roles", params=params)
-        return r.get("hydra:member", [])
+        return self.client.roles.list(params=params)
 
-    def list_teams(self, params: dict | None = None) -> list[dict[str, Any]]:
-        """
-        List all teams available for assignment.
+    def list_teams(self, params: dict | None = None) -> list[Team]:
+        """List all teams available for assignment (delegates to :class:`~pyfsr.api.teams.TeamsAPI`).
 
-        Returns:
-            List of team dicts, each containing ``uuid`` and ``name``.
+        Returns typed :class:`~pyfsr.models.Team` records (dict-compatible:
+        ``t["name"]`` / ``t["uuid"]`` still work).
         """
-        r = self.client.get("/api/3/teams", params=params)
-        return r.get("hydra:member", [])
+        return self.client.teams.list(params)
 
     def role_uuid_by_name(self, name: str) -> str | None:
-        """
-        Look up a role UUID by its display name.
-
-        Args:
-            name: Exact role name (case-sensitive).
-
-        Returns:
-            UUID string, or ``None`` if not found.
-        """
-        return self.role_map().get(name)
+        """Look up a role UUID by display name (case-sensitive); ``None`` if not found."""
+        return self.client.roles.role_uuid_by_name(name)
 
     def team_uuid_by_name(self, name: str) -> str | None:
-        """
-        Look up a team UUID by its display name.
-
-        Args:
-            name: Exact team name (case-sensitive).
-
-        Returns:
-            UUID string, or ``None`` if not found.
-        """
-        return self.team_map().get(name)
+        """Look up a team UUID by display name (case-sensitive); ``None`` if not found."""
+        return self.client.teams.team_uuid_by_name(name)

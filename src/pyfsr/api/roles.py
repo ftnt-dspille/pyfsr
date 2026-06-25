@@ -4,7 +4,7 @@ A FortiSOAR **role** bundles a set of ``ModulePermission`` records (one per modu
 together define what a user assigned that role can read, write, create, delete, and execute.
 This API wraps the lifecycle operations that matter most for automation:
 
-- **list / get** — discover roles by name or uuid.
+- **list / get / create** — discover roles by name or uuid, and create new ones.
 - **grant_module_permissions** — the primary write operation. Module-level permissions
   live on ``/api/3/module_permissions`` but that collection is GET-only; the only write
   path is ``PUT /api/3/roles/{uuid}`` with a ``modulePermissions`` array. This method
@@ -35,6 +35,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..models import ModulePermission, Role
 from ..pagination import extract_members
 from .base import BaseAPI
 
@@ -75,10 +76,10 @@ class RolesAPI(BaseAPI):
     """Role discovery and module-permission management."""
 
     # ------------------------------------------------------------------ cache
-    _role_cache: dict[str, dict[str, Any]] | None = None  # name -> record
+    _role_cache: dict[str, Role] | None = None  # name -> record
     _module_cache: dict[str, dict[str, Any]] | None = None  # type -> record
 
-    def _role_by_name(self) -> dict[str, dict[str, Any]]:
+    def _role_by_name(self) -> dict[str, Role]:
         if self._role_cache is None:
             self._role_cache = {r["name"]: r for r in self.list() if r.get("name")}
         return self._role_cache
@@ -110,30 +111,79 @@ class RolesAPI(BaseAPI):
             )
         return rec["@id"]
 
+    # ------------------------------------------------------ name/uuid resolution
+    def role_map(self) -> dict[str, str]:
+        """Return ``{name: uuid}`` for all roles, cached for the instance lifetime."""
+        return {name: r["uuid"] for name, r in self._role_by_name().items()}
+
+    def role_uuid_by_name(self, name: str) -> str | None:
+        """Look up a role UUID by display name (case-sensitive); ``None`` if absent."""
+        return self.role_map().get(name)
+
+    def _resolve_roles(self, roles: list[str]) -> list[str]:
+        """Accept role UUIDs or names; return UUIDs. Raises ``ValueError`` for unknown names."""
+        return [self._resolve_role_uuid(r) for r in roles]
+
     # ------------------------------------------------------------------- read
-    def list(self, *, limit: int = 2147483647) -> list[dict[str, Any]]:
-        """List all roles (``GET /api/3/roles``)."""
-        return extract_members(self.client.get(_BASE, params={"$limit": limit}))
+    def list(self, *, limit: int = 2147483647, params: dict[str, Any] | None = None) -> list[Role]:
+        """List all roles (``GET /api/3/roles``) as typed :class:`~pyfsr.models.Role` records.
 
-    def get(self, role: str, *, relationships: bool = False) -> dict[str, Any]:
-        """Fetch one role by uuid or name.
+        ``params`` adds/overrides query params (e.g. ``{"$page": 1}``); ``$limit``
+        defaults to ``limit`` unless ``params`` supplies one.
+        """
+        query = dict(params or {})
+        query.setdefault("$limit", limit)
+        return [Role.model_validate(m) for m in extract_members(self.client.get(_BASE, params=query))]
 
-        ``relationships=True`` inlines ``modulePermissions`` — useful for inspecting what
+    def get(self, role: str, *, relationships: bool = False) -> Role:
+        """Fetch one role by uuid or name as a :class:`~pyfsr.models.Role`.
+
+        ``relationships=True`` inlines ``modulePermissions`` (parsed into
+        :class:`~pyfsr.models.ModulePermission`) — useful for inspecting what
         a role currently has before modifying it.
         """
         uuid = self._resolve_role_uuid(role)
         params = {"$relationships": "true"} if relationships else None
-        return self.client.get(f"{_BASE}/{uuid}", params=params)
+        return Role.model_validate(self.client.get(f"{_BASE}/{uuid}", params=params))
 
-    def module_permissions(self, role: str) -> list[dict[str, Any]]:
-        """Return the ``ModulePermission`` records currently assigned to ``role``.
+    def module_permissions(self, role: str) -> list[ModulePermission]:
+        """Return the :class:`~pyfsr.models.ModulePermission` records on ``role``.
 
-        ``role`` may be a uuid or friendly name.
+        ``role`` may be a uuid or friendly name. Equivalent to
+        ``roles.get(role, relationships=True).modulePermissions`` but returns
+        ``[]`` (not ``None``) when the role has none.
         """
-        record = self.get(role, relationships=True)
+        return self.get(role, relationships=True).modulePermissions or []
+
+    def _module_permissions_raw(self, role: str) -> list[dict[str, Any]]:
+        """Raw (untyped) ``modulePermissions`` dicts for ``role``.
+
+        Used internally by :meth:`grant_module_permissions` where the records are
+        re-PUT and must stay as plain dicts — :meth:`module_permissions` returns
+        typed ``ModulePermission`` models, which :func:`_clean_perm` can't walk
+        (it expects ``.items()`` / ``isinstance(.., dict)``).
+        """
+        uuid = self._resolve_role_uuid(role)
+        record = self.client.get(f"{_BASE}/{uuid}", params={"$relationships": "true"})
         return record.get("modulePermissions") or []
 
     # ------------------------------------------------------------------ write
+    def create(self, name: str, *, description: str | None = None) -> Role:
+        """Create a role (``POST /api/3/roles``).
+
+        Only ``name`` is required; ``description`` is optional. The returned
+        :class:`~pyfsr.models.Role` starts with an empty ``modulePermissions``
+        list — use :meth:`grant_module_permissions` to attach module grants.
+
+        Args:
+            name: Role name (must be unique).
+            description: Optional role description.
+        """
+        body: dict[str, Any] = {"name": name}
+        if description is not None:
+            body["description"] = description
+        return Role.model_validate(self.client.post(_BASE, data=body))
+
     def grant_module_permissions(
         self,
         role: str,
@@ -144,7 +194,7 @@ class RolesAPI(BaseAPI):
         can_update: bool = True,
         can_delete: bool = True,
         can_execute: bool = True,
-    ) -> dict[str, Any]:
+    ) -> Role:
         """Add or replace module-level permissions on a role.
 
         Resolves ``role`` (uuid or name) and ``module`` (module type like ``'alerts'`` or
@@ -167,7 +217,7 @@ class RolesAPI(BaseAPI):
         role_uuid = self._resolve_role_uuid(role)
         module_iri = self._resolve_module_iri(module)
 
-        existing = self.module_permissions(role_uuid)
+        existing = self._module_permissions_raw(role_uuid)
         new_perm: dict[str, Any] = {
             "@type": "ModulePermission",
             "module": module_iri,
@@ -195,4 +245,4 @@ class RolesAPI(BaseAPI):
         if not replaced:
             merged.append(new_perm)
 
-        return self.client.put(f"{_BASE}/{role_uuid}", data={"modulePermissions": merged})
+        return Role.model_validate(self.client.put(f"{_BASE}/{role_uuid}", data={"modulePermissions": merged}))

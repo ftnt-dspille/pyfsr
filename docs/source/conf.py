@@ -37,6 +37,16 @@ extensions = [
     "sphinx_copybutton",  # one-click copy on code blocks
 ]
 
+# Suppress the Python-domain "more than one target found for cross-reference"
+# ambiguity only (Sphinx emits it as ``type='ref', subtype='python'``). This
+# fires when two attributes share a name that also appears as a bare builtin
+# in a ``type[...]`` annotation — e.g. ``ModuleField.type`` and
+# ``LicenseDetails.type`` both shadowing the builtin ``type`` used in
+# ``model_for() -> type[BaseRecord]``. Missing-reference warnings are emitted
+# with a *role* subtype (``ref.meth`` / ``ref.class`` / ...), so they are NOT
+# masked here — the nitpicky ``-n`` gate still catches unresolved xrefs.
+suppress_warnings = ["ref.python"]
+
 # Author guides in Markdown; keep .rst working for the AutoAPI output.
 source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 

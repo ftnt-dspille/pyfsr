@@ -263,6 +263,70 @@ class Role(BaseRecord):
     importedBy: list[Any] | None = None
 
 
+class ApiKey(BaseRecord):
+    """An **API-key binding** record from ``/api/3/api_keys/``.
+
+    This is the *scope* object that binds roles/teams to an API-key user (the
+    user record carrying the key material, created via ``/api/auth/users``).
+    ``@type`` on the wire is ``ApiKey``; the module slug is ``api_keys``. The
+    key value itself is masked on every read here ��� the plaintext lives on the
+    API-key user, recoverable only at create time (or via ``show_api_key`` when
+    ``retrievable_mode`` was on).
+    """
+
+    name: str | None = None
+    userId: str | None = None
+    roles: list[str] | None = None  # role IRIs (/api/3/roles/<uuid>)
+    teams: list[str] | None = None  # team IRIs (/api/3/teams/<uuid>)
+    avatar: Any | None = None
+    recordTags: list[Any] | None = None
+    userType: Any | None = None
+    createUser: str | dict[str, Any] | None = None
+    createDate: float | None = None
+    modifyUser: str | dict[str, Any] | None = None
+    modifyDate: float | None = None
+    id: int | None = None
+
+
+class ApiKeyMaterial(BaseRecord):
+    """The nested ``api_key`` block on an :class:`ApiKeyUser`.
+
+    Carries the key value (masked unless read with ``show_api_key`` under
+    ``retrievable_mode``) and its validity/status metadata. Modeled as a
+    ``BaseRecord`` so ``ak.get("key")`` / ``ak.get("retrievable")`` work — the
+    plaintext-recovery helper in :mod:`pyfsr.api.api_keys` relies on that.
+    """
+
+    key: str | None = None
+    retrievable: bool | None = None
+    status: str | None = None  # e.g. "Active"
+    valid_until: int | None = None
+    time_remaining: int | None = None
+    modify_date: int | None = None
+
+
+class ApiKeyUser(BaseRecord):
+    """An **API-key user** from ``/api/auth/users`` (``usersresp[0]``).
+
+    The user record that carries key material — distinct from a People
+    :class:`User`. Not a JSON-LD ``/api/3`` collection (no ``@id``/``@type`` on
+    the wire), but ``BaseRecord`` works fine: ``id_iri``/``record_type`` stay
+    ``None`` and dict-access (``u["uuid"]``, ``u.get("api_key")``) keeps working.
+    The nested ``api_key`` is parsed into :class:`ApiKeyMaterial`.
+    """
+
+    uuid: str | None = None
+    user_type: int | None = None  # 9 = API-key user
+    status: int | None = None  # 1 = active
+    access_type: str | None = None  # "Concurrent" / "Named"
+    loginid: str | None = None
+    api_key: ApiKeyMaterial | None = None
+    bind_name: str | None = None
+    domain: str | None = None
+    is_logged_in: bool | None = None
+    tenant: Any | None = None
+
+
 class FileRecord(BaseRecord):
     """A ``/api/3/files`` record, returned by :meth:`FileOperations.upload`.
 

@@ -103,7 +103,7 @@ message — pass an explicit `env` dict to make the failure deterministic:
 ```{note}
 `EnvConfig.from_env()` itself never touches the network — it only resolves
 config. The live validation call happens later, inside
-{meth}`~pyfsr.client.FortiSOAR.__init__`, when you call `.client()` (or
+{class}`~pyfsr.client.FortiSOAR`, when you call `.client()` (or
 construct `FortiSOAR(...)` directly): constructing the client validates the
 credential against the appliance.
 ```

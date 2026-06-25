@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..models import ApiKeyUser
 from .base import BaseAPI
 
 _BASE = "/api/auth/users"
@@ -35,27 +36,42 @@ _OPS = frozenset({"REVOKE", "ACTIVATE", "DEACTIVATE", "REGENERATE", "RESET_VALID
 class ApiKeyUsersAPI(BaseAPI):
     """Create, inspect, and run lifecycle ops on API-key users."""
 
-    def get(self, uuid: str, *, show_api_key: bool = False) -> dict[str, Any]:
+    @staticmethod
+    def _members(resp: Any) -> list[dict[str, Any]]:
+        """Return the ``usersresp`` list from a GET/POST response, or ``[]``."""
+        members = resp.get("usersresp") if isinstance(resp, dict) else None
+        return members if isinstance(members, list) else []
+
+    def get(self, uuid: str, *, show_api_key: bool = False) -> ApiKeyUser:
         """Look up an API-key user by uuid (``GET /api/auth/users?uuid=``).
 
         The response masks the key by default; ``show_api_key=True`` returns the
-        plaintext — but only when the key was created with ``retrievable_mode``.
+        plaintext — but only when the key was created with ``retrievable_mode``
+        (the per-key ``api_key.retrievable`` flag is set at creation; toggling the
+        global flag on later does **not** retroactively unmask existing keys).
+        Unwraps the ``{"usersresp": [user]}`` envelope and parses the user into an
+        :class:`~pyfsr.models.ApiKeyUser` (dict-compatible: ``u["uuid"]``,
+        ``u["api_key"]["key"]`` still work).
         """
         params: dict[str, Any] = {"uuid": uuid}
         if show_api_key:
             params["show_api_key"] = "true"
-        return self.client.get(_BASE, params=params)
+        resp = self.client.get(_BASE, params=params)
+        members = self._members(resp)
+        return ApiKeyUser.model_validate(members[0] if members else (resp if isinstance(resp, dict) else {}))
 
-    def query(self, uuids: list[str], *, show_api_key: bool = False) -> Any:
+    def query(self, uuids: list[str], *, show_api_key: bool = False) -> list[ApiKeyUser]:
         """Bulk-fetch API-key users by uuid (``POST /api/auth/query/users``).
 
         ``uuids`` are ``userId`` values from ``GET /api/3/api_keys``. Keys are
         masked unless ``show_api_key=True`` (and the user was ``retrievable_mode``).
+        Returns typed :class:`~pyfsr.models.ApiKeyUser` records.
         """
         body: dict[str, Any] = {"users": list(uuids)}
         if show_api_key:
             body["show_api_key"] = True
-        return self.client.post("/api/auth/query/users", data=body)
+        resp = self.client.post("/api/auth/query/users", data=body)
+        return [ApiKeyUser.model_validate(m) for m in self._members(resp)]
 
     def create(
         self,
@@ -63,7 +79,7 @@ class ApiKeyUsersAPI(BaseAPI):
         api_key_validity: int,
         type: int = _TYPE_API_KEY,
         status: int = _STATUS_ACTIVE,
-    ) -> dict[str, Any]:
+    ) -> ApiKeyUser:
         """Create an API-key user (``POST /api/auth/users``).
 
         Creates the user record carrying the key material; its returned ``uuid``
@@ -72,7 +88,7 @@ class ApiKeyUsersAPI(BaseAPI):
         (active) are the defaults — all three fields are required by the endpoint.
         """
         body = {"type": type, "status": status, "api_key_validity": api_key_validity}
-        return self.client.post(_BASE, data=body)
+        return ApiKeyUser.model_validate(self.client.post(_BASE, data=body))
 
     def lifecycle(
         self,
@@ -81,7 +97,7 @@ class ApiKeyUsersAPI(BaseAPI):
         *,
         key_type: str = "api_key",
         api_key_validity: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> ApiKeyUser:
         """Run a lifecycle operation on an API-key user (``PUT /api/auth/users``).
 
         One endpoint, discriminated by ``operation``:
@@ -100,24 +116,24 @@ class ApiKeyUsersAPI(BaseAPI):
         body: dict[str, Any] = {"uuid": uuid, "key_type": key_type, "operation": op}
         if api_key_validity is not None:
             body["api_key_validity"] = api_key_validity
-        return self.client.put(_BASE, data=body)
+        return ApiKeyUser.model_validate(self.client.put(_BASE, data=body))
 
-    def revoke(self, uuid: str, *, key_type: str = "api_key") -> dict[str, Any]:
+    def revoke(self, uuid: str, *, key_type: str = "api_key") -> ApiKeyUser:
         """Permanently revoke an API-key user (lifecycle ``REVOKE``)."""
         return self.lifecycle(uuid, "REVOKE", key_type=key_type)
 
-    def activate(self, uuid: str, *, key_type: str = "api_key") -> dict[str, Any]:
+    def activate(self, uuid: str, *, key_type: str = "api_key") -> ApiKeyUser:
         """Activate an API-key user (lifecycle ``ACTIVATE``)."""
         return self.lifecycle(uuid, "ACTIVATE", key_type=key_type)
 
-    def deactivate(self, uuid: str, *, key_type: str = "api_key") -> dict[str, Any]:
+    def deactivate(self, uuid: str, *, key_type: str = "api_key") -> ApiKeyUser:
         """Deactivate an API-key user (lifecycle ``DEACTIVATE``)."""
         return self.lifecycle(uuid, "DEACTIVATE", key_type=key_type)
 
-    def regenerate(self, uuid: str, *, key_type: str = "api_key") -> dict[str, Any]:
+    def regenerate(self, uuid: str, *, key_type: str = "api_key") -> ApiKeyUser:
         """Regenerate an API-key user's key (lifecycle ``REGENERATE``)."""
         return self.lifecycle(uuid, "REGENERATE", key_type=key_type)
 
-    def reset_validity(self, uuid: str, api_key_validity: int, *, key_type: str = "api_key") -> dict[str, Any]:
+    def reset_validity(self, uuid: str, api_key_validity: int, *, key_type: str = "api_key") -> ApiKeyUser:
         """Reset an API-key user's validity window (lifecycle ``RESET_VALIDITY``)."""
         return self.lifecycle(uuid, "RESET_VALIDITY", key_type=key_type, api_key_validity=api_key_validity)
