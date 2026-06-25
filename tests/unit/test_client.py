@@ -250,6 +250,90 @@ def test_request_reauth_fires_only_once(mock_client, mock_response, monkeypatch)
     assert state["data_calls"] == 2  # original + exactly one replay, then raise
 
 
+# -- raise_on_status (fire-and-observe-status probes) -----------------------
+def test_request_raise_on_status_false_returns_raw_response(mock_client, mock_response, monkeypatch):
+    """raise_on_status=False returns the raw Response on a 4xx instead of raising."""
+    error = {"message": "Not found"}
+
+    def mock_request(*args, **kwargs):
+        return mock_response(status_code=404, json_data=error)
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+    resp = mock_client.request("GET", "/api/3/alerts/missing", raise_on_status=False)
+    assert resp.status_code == 404
+    assert resp.json() == error
+
+
+def test_get_raise_on_status_false_returns_response_not_json(mock_client, mock_response, monkeypatch):
+    """client.get(raise_on_status=False) returns the raw Response (not parsed JSON)."""
+    error = {"message": "Forbidden"}
+
+    def mock_request(*args, **kwargs):
+        return mock_response(status_code=403, json_data=error)
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+    resp = mock_client.get("/api/3/alerts", raise_on_status=False)
+    assert isinstance(resp, requests.Response)
+    assert resp.status_code == 403
+    assert resp.json() == error
+
+
+def test_post_and_delete_raise_on_status_false_return_response(mock_client, mock_response, monkeypatch):
+    def mock_request(*args, **kwargs):
+        return mock_response(status_code=404, json_data={"message": "nope"})
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+    post_resp = mock_client.post("/api/3/alerts", data={}, raise_on_status=False)
+    assert isinstance(post_resp, requests.Response) and post_resp.status_code == 404
+    del_resp = mock_client.delete("/api/3/alerts/x", raise_on_status=False)
+    assert isinstance(del_resp, requests.Response) and del_resp.status_code == 404
+
+
+def test_raise_on_status_default_still_raises(mock_client, mock_response, monkeypatch):
+    """The default (raise_on_status=True) is unchanged — 4xx still raises."""
+
+    def mock_request(*args, **kwargs):
+        return mock_response(status_code=404, json_data={"message": "Not found"})
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+    with pytest.raises(ResourceNotFoundError):
+        mock_client.get("/api/3/alerts/missing")
+
+
+def test_raise_on_status_false_still_raises_on_network_error(mock_client, monkeypatch):
+    """raise_on_status=False suppresses status errors but NOT transport errors."""
+
+    def mock_request(*args, **kwargs):
+        raise requests.exceptions.ConnectionError("Network error")
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+    with pytest.raises(requests.exceptions.ConnectionError):
+        mock_client.get("/api/3/alerts", raise_on_status=False)
+
+
+def test_raise_on_status_false_preserved_through_reauth(mock_client, mock_response, monkeypatch):
+    """The flag survives the 401→reauth→replay path: a refreshed 200 is returned
+    as a raw Response (not parsed), and the original 401 didn't raise."""
+    import requests as _rq
+
+    state = {"data_calls": 0}
+
+    def mock_request(self, method, url, **kwargs):
+        if "/auth/authenticate" in url:
+            return mock_response(json_data={"token": "tok-2"})
+        state["data_calls"] += 1
+        if state["data_calls"] == 1:
+            return mock_response(status_code=401, json_data={"message": "expired"})
+        return mock_response(json_data={"ok": True})
+
+    monkeypatch.setattr(_rq.sessions.Session, "request", mock_request)
+    resp = mock_client.get("/api/3/alerts", raise_on_status=False)
+    assert isinstance(resp, requests.Response)
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+    assert state["data_calls"] == 2  # original 401 + one replay after refresh
+
+
 # -- version() fallback chain ------------------------------------------------
 def test_version_from_cyops_version_json(mock_client, mock_response, monkeypatch):
     """version() prefers /cyops_version.json on the configured base port."""

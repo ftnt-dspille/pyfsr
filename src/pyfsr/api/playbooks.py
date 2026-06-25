@@ -1010,7 +1010,12 @@ class PlaybooksAPI(BaseAPI):
 
     # --------------------------------------------------------- named triggers
     def trigger_by_name(
-        self, name: str, *, body: dict[str, Any] | None = None, deferred: bool = False
+        self,
+        name: str,
+        *,
+        body: dict[str, Any] | None = None,
+        deferred: bool = False,
+        raise_on_status: bool = True,
     ) -> TriggerResponse | Any:
         """Fire a playbook by its trigger's endpoint name.
 
@@ -1019,11 +1024,22 @@ class PlaybooksAPI(BaseAPI):
         the named-webhook trigger route — distinct from :meth:`trigger`, which
         uses the manual-execute (``notrigger``) route by playbook uuid. Returns
         the trigger response (typically ``{"task_id": ...}``).
+
+        With ``raise_on_status=False`` returns the raw
+        :class:`requests.Response` (``.status_code`` / ``.json()``) instead of a
+        :class:`~pyfsr.models.TriggerResponse` — for access-control probes that need to
+        distinguish a permit (200) from a denial (401/403) without catching.
         """
         if not isinstance(name, str) or not name.strip():
             raise ValueError("trigger_by_name() requires a non-empty name")
         prefix = "/api/triggers/1/deferred/" if deferred else "/api/triggers/1/"
-        resp = self.client.post(f"{prefix}{name.strip('/ ')}", data=body or {})
+        resp = self.client.post(
+            f"{prefix}{name.strip('/ ')}",
+            data=body or {},
+            raise_on_status=raise_on_status,
+        )
+        if not raise_on_status:
+            return resp
         return TriggerResponse(**resp) if isinstance(resp, dict) else resp
 
     def trigger_action(
