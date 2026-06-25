@@ -226,10 +226,64 @@ def test_store_seed_if_empty_noop_on_empty_seed_dir(tmp_path):
     assert store.list() == []
 
 
-def test_store_seed_if_empty_uses_default_package_seed_dir_when_empty(tmp_path):
-    """The shipped package seed dir is empty in step 2, so seeding is a no-op."""
+def test_store_seed_if_empty_loads_default_package_seed(tmp_path):
+    """The shipped package seed dir carries the curated ``reconcile-and-report`` archetype."""
     store = ArchetypeStore(tmp_path / "arch.db")
+    assert store.seed_if_empty() == 1
+    assert store.list() == ["reconcile-and-report"]
+    # second call is a no-op (store is non-empty)
     assert store.seed_if_empty() == 0
+
+
+def test_connector_use_role_round_trips():
+    # a harvested connector use carries no role (defaults to None) -- absent key is tolerated
+    assert (
+        ConnectorUse.from_dict({"connector": "jira", "operation": "create_ticket", "step_name": "Create Ticket"}).role
+        is None
+    )
+    # a curated connector use carries its role through from_dict and an Archetype round-trip
+    curated = ConnectorUse.from_dict(
+        {"connector": "smtp", "operation": "send_email", "step_name": "Email", "role": "notify"}
+    )
+    assert curated.role == "notify"
+    arch = Archetype(
+        name="x",
+        connector_manifest=[ConnectorUse("smtp", "send_email", "Email", role="notify")],
+    )
+    rebuilt = Archetype.from_json(arch.to_json())
+    assert rebuilt.connector_manifest[0].role == "notify"
+
+
+def test_default_seed_reconcile_and_report_is_curated(tmp_path):
+    """The shipped seed is a curated archetype (not a harvested draft).
+
+    Curation (step 3) populates ``when_to_use`` + ``parameters``, assigns connector *roles*
+    (``source_a`` / ``source_b`` / ``notify``), and parameterizes the module schema with
+    ``{{param}}`` slots -- none of which a harvested draft has.
+    """
+    store = ArchetypeStore(tmp_path / "arch.db")
+    assert store.seed_if_empty() == 1
+    arch = store.get("reconcile-and-report")
+    assert arch is not None
+
+    # curated, not a harvested draft (which leaves these empty)
+    assert arch.when_to_use != ""
+    assert arch.source.get("curated") is True
+    assert arch.parameters, "curated archetype must declare its parameter slots"
+
+    # the router/agent-facing parameter slots
+    names = {p["name"] for p in arch.parameters}
+    assert {"results_module", "source_a_label", "source_b_label", "join_key", "recipients", "cron"} <= names
+
+    # connector roles assigned to the plan-verified pilot connectors
+    roles = {c.role: (c.connector, c.operation) for c in arch.connector_manifest}
+    assert roles["source_a"] == ("forticloud-asset-management", "list_assets")
+    assert roles["source_b"] == ("servicenow-cmdb", "get_configuration_items")
+    assert roles["notify"] == ("smtp", "send_email")
+
+    # module_schema parameterized with the {{results_module}} slot; picklist fields grounded
+    assert all(f.module == "{{results_module}}" for f in arch.module_schema)
+    assert any(f.picklist == "MismatchType" and f.type == "picklists" for f in arch.module_schema)
 
 
 def test_store_default_db_path_under_cache(monkeypatch):

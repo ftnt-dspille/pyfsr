@@ -7,9 +7,9 @@ pyfsr's runtime state is in one place. Pass an explicit ``db_path`` (e.g. a ``tm
 tests or to keep a separate archetype library.
 
 Seed archetypes ship as ``*.json`` under the package ``seed/`` dir and are loaded into a
-freshly-created (empty) store on first use via :meth:`~pyfsr.archetypes.store.ArchetypeStore.seed_if_empty`. The
-seed dir is empty in step 2 -- the seeding machinery ships now so that step 3's
-``reconcile-and-report`` archetype is just "drop the file in".
+freshly-created (empty) store on first use via :meth:`~pyfsr.archetypes.store.ArchetypeStore.seed_if_empty`.
+The seed dir ships the curated ``reconcile-and-report`` archetype (step 3); more archetypes can be
+added by dropping further ``*.json`` files alongside it.
 
 Example::
 
@@ -131,7 +131,8 @@ class ArchetypeStore:
         """Load every ``*.json`` archetype from ``seed_dir`` into an empty store.
 
         No-op (returns 0) if the store already holds archetypes. ``seed_dir`` defaults to the
-        shipped package seed dir (empty in step 2). Returns the number of archetypes loaded.
+        shipped package seed dir, which carries the curated ``reconcile-and-report`` archetype.
+        Returns the number of archetypes loaded.
 
         A malformed seed file is skipped with a warning rather than aborting the batch, so one
         bad seed never blocks the rest.

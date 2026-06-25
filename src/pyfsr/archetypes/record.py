@@ -58,13 +58,15 @@ class ConnectorUse:
     """A connector + operation the archetype's playbook skeleton invokes.
 
     ``step_name`` is the harvesting step's human label (the step's ``name``), kept for
-    traceability -- the *role* (``source_a`` / ``notify`` / ...) is assigned during curation,
-    not harvest.
+    traceability. ``role`` is the use-case role this connector plays in a *curated* archetype
+    (``source_a`` / ``source_b`` / ``notify`` / ...) -- empty on a harvested draft (the harvester
+    sees connector+operation pairs, not their semantic role) and assigned during curation (step 3).
     """
 
     connector: str
     operation: str
     step_name: str
+    role: str | None = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> ConnectorUse:
@@ -72,6 +74,7 @@ class ConnectorUse:
             connector=d["connector"],
             operation=d["operation"],
             step_name=d["step_name"],
+            role=d.get("role"),
         )
 
 

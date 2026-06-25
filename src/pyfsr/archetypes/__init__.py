@@ -5,9 +5,9 @@ the module schema, connector manifest, and playbook skeleton that implement a us
 the ``{{param}}`` slots a router fills to instantiate it. This package holds the record types,
 the writable companion store, and the harvester.
 
-Step 2 (this package) ships the harvester + store scaffolding only -- the router
-(``map_use_case``), the first curated archetype (``reconcile-and-report``), and the MCP tools
-are steps 3-4 of the ``mutable-yawning-fox`` plan.
+This package ships the harvester + store (steps 1-2) and the first curated archetype,
+``reconcile-and-report`` (step 3). The ``map_use_case`` router + MCP tools remain -- step 4 of
+the ``mutable-yawning-fox`` plan.
 
 Public surface::
 

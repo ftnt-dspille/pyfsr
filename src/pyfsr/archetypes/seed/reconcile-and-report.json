@@ -1,0 +1,214 @@
+{
+  "connector_manifest": [
+    {
+      "connector": "forticloud-asset-management",
+      "operation": "list_assets",
+      "role": "source_a",
+      "step_name": "Fetch source A assets"
+    },
+    {
+      "connector": "servicenow-cmdb",
+      "operation": "get_configuration_items",
+      "role": "source_b",
+      "step_name": "Fetch source B configuration items"
+    },
+    {
+      "connector": "smtp",
+      "operation": "send_email",
+      "role": "notify",
+      "step_name": "Email reconciliation CSV report"
+    }
+  ],
+  "description": "Reconcile two inventories -- e.g. FortiCloud/FortiCare assets vs a CMDB such as ServiceNow -- by a join key (typically a serial number), classify each discrepancy (missing-in-A, missing-in-B, field mismatch, expiring license), write the findings to a reconciliation_results module, and email a CSV report. The archetype fixes the module schema, the connector roles, and the playbook flow; the router/agent fills the deployment-specific slots (module name, join key, recipients, schedule). First pilot instance: FortiCloud assets vs ServiceNow CMDB.",
+  "module_schema": [
+    {
+      "display_name": "Source System",
+      "form_type": "text",
+      "module": "{{results_module}}",
+      "name": "source_system",
+      "picklist": null,
+      "relationship": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "display_name": "Source ID",
+      "form_type": "text",
+      "module": "{{results_module}}",
+      "name": "source_id",
+      "picklist": null,
+      "relationship": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "display_name": "Target System",
+      "form_type": "text",
+      "module": "{{results_module}}",
+      "name": "target_system",
+      "picklist": null,
+      "relationship": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "display_name": "Target ID",
+      "form_type": "text",
+      "module": "{{results_module}}",
+      "name": "target_id",
+      "picklist": null,
+      "relationship": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "display_name": "Join Key",
+      "form_type": "text",
+      "module": "{{results_module}}",
+      "name": "join_key",
+      "picklist": null,
+      "relationship": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "display_name": "Mismatch Type",
+      "form_type": "picklist",
+      "module": "{{results_module}}",
+      "name": "mismatch_type",
+      "picklist": "MismatchType",
+      "relationship": null,
+      "required": true,
+      "type": "picklists"
+    },
+    {
+      "display_name": "Status",
+      "form_type": "picklist",
+      "module": "{{results_module}}",
+      "name": "status",
+      "picklist": "ReconStatus",
+      "relationship": null,
+      "required": true,
+      "type": "picklists"
+    },
+    {
+      "display_name": "Reported At",
+      "form_type": "datetime",
+      "module": "{{results_module}}",
+      "name": "reported_at",
+      "picklist": null,
+      "relationship": null,
+      "required": false,
+      "type": "datetime"
+    },
+    {
+      "display_name": "Details",
+      "form_type": "textarea",
+      "module": "{{results_module}}",
+      "name": "details",
+      "picklist": null,
+      "relationship": null,
+      "required": false,
+      "type": "string"
+    }
+  ],
+  "name": "reconcile-and-report",
+  "parameters": [
+    {
+      "default": "reconciliation_results",
+      "description": "Name of the FortiSOAR module that holds reconciliation-result records.",
+      "from": "prompt",
+      "name": "results_module",
+      "required": true
+    },
+    {
+      "description": "Human label for source A (e.g. 'FortiCloud assets').",
+      "from": "use_case",
+      "name": "source_a_label",
+      "required": true
+    },
+    {
+      "description": "Human label for source B (e.g. 'ServiceNow CMDB').",
+      "from": "use_case",
+      "name": "source_b_label",
+      "required": true
+    },
+    {
+      "description": "Field used to match records across the two sources (typically a serial number). Inferred from the module schema when possible, else prompted.",
+      "from": "module_schema|prompt",
+      "name": "join_key",
+      "required": true
+    },
+    {
+      "description": "Email recipient(s) for the CSV report (comma-separated).",
+      "from": "prompt",
+      "name": "recipients",
+      "required": true
+    },
+    {
+      "default": "7 2 * * *",
+      "description": "Cron schedule for the out-of-band reconciliation run.",
+      "from": "prompt",
+      "name": "cron",
+      "required": false
+    }
+  ],
+  "playbook_skeletons": [
+    {
+      "description": "Fetch both sources, diff by the join key, write findings to reconciliation_results, and email a CSV report. Abstract trigger (fired by an out-of-band schedule).",
+      "name": "Reconcile and Report",
+      "steps": [
+        {
+          "connector": null,
+          "name": "Start",
+          "operation": null,
+          "step_type": null
+        },
+        {
+          "connector": "forticloud-asset-management",
+          "name": "Fetch Source A",
+          "operation": "list_assets",
+          "step_type": null
+        },
+        {
+          "connector": "servicenow-cmdb",
+          "name": "Fetch Source B",
+          "operation": "get_configuration_items",
+          "step_type": null
+        },
+        {
+          "connector": null,
+          "name": "Diff and Build CSV",
+          "operation": null,
+          "step_type": null
+        },
+        {
+          "connector": null,
+          "name": "Findings?",
+          "operation": null,
+          "step_type": null
+        },
+        {
+          "connector": null,
+          "name": "Write Findings",
+          "operation": null,
+          "step_type": null
+        },
+        {
+          "connector": "smtp",
+          "name": "Email Report",
+          "operation": "send_email",
+          "step_type": null
+        }
+      ]
+    }
+  ],
+  "source": {
+    "basis": "ServiceNow + FortiCare reconciliation pilot (mutable-yawning-fox plan, Form 1)",
+    "curated": true,
+    "curated_on": "2026-06-25",
+    "note": "Hand-curated (no single reconciliation solution pack exists to harvest). Module field types grounded in real mmd.json (string/text, picklists/picklist, datetime); connector ops research-verified per plan.",
+    "pilot_connectors": "forticloud-asset-management, servicenow-cmdb, smtp"
+  },
+  "when_to_use": "Compare two data sources, surface records present in one but not the other plus field mismatches on a join key, persist each finding to a reconciliation-results record, and notify stakeholders with a CSV report. Triggered on a schedule (an out-of-band Celery task pointing at an abstract-trigger playbook), not by an inbound event."
+}
