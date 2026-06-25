@@ -24,6 +24,7 @@ from __future__ import annotations
 import re
 import time
 import urllib.parse
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import ValidationError
@@ -166,15 +167,33 @@ def _collect_uuids(definition: dict[str, Any]) -> set[str]:
     return uuids
 
 
+# Per-entity metadata keys that must be dropped off every nested step/route/group
+# of a clone. A nested ``@id`` is the critical one: API-Platform treats an embedded
+# child carrying ``@id: /api/3/workflow_steps/<uuid>`` as a *reference to an existing
+# entity* and fails the whole POST with ``EntityNotFoundException`` when that uuid
+# was regenerated for the clone. The FortiSOAR playbook designer deletes the nested
+# ``@id`` on every step/route before saving a copy for exactly this reason (and
+# leaves ``stepType`` untouched — it points at a real, shared step-type row).
+_CLONE_CHILD_STRIP_FIELDS = ("@id", "@type", "id", "_oldUuid")
+
+
 def _prepare_clone_body(src: dict[str, Any], *, new_name: str, is_active: bool) -> dict[str, Any]:
     """Build the POST body for a playbook clone from a source definition.
 
-    Regenerates every owned UUID and rewrites all references in one pass by
-    substituting old→new UUID strings over the serialized definition. Because
-    UUIDs are globally-unique 36-char tokens, a plain string replacement safely
-    catches both bare references (route ``sourceStep``/``targetStep``) and ones
-    embedded in IRIs (``triggerStep``, step ``group``, nested ``@id``s) without
-    needing to know every field that can hold one.
+    Regenerates every **owned** UUID (the workflow plus its steps, routes, and
+    groups — never the shared ``stepType``) and rewrites all references in one
+    pass by substituting old→new UUID strings over the serialized definition.
+    Because UUIDs are globally-unique 36-char tokens, a plain string replacement
+    safely catches both bare references (route ``sourceStep``/``targetStep``) and
+    ones embedded in IRIs (``triggerStep``, step ``group``) without needing to
+    know every field that can hold one.
+
+    The nested ``@id``/``@type``/``id`` of each step/route/group is then stripped
+    so the appliance creates them fresh rather than treating them as references to
+    (now-nonexistent) existing rows — mirroring what the FortiSOAR playbook
+    designer does when it duplicates a playbook. Without this the POST fails with
+    ``EntityNotFoundException`` for any definition whose steps were inlined
+    (e.g. anything fetched with ``$relationships=true``, or imported via YAML).
     """
     import json
     import uuid as _uuid
@@ -187,6 +206,13 @@ def _prepare_clone_body(src: dict[str, Any], *, new_name: str, is_active: bool) 
 
     for field in _CLONE_STRIP_FIELDS:
         body.pop(field, None)
+    body.pop("@type", None)
+    body.pop("@context", None)
+    for key in ("steps", "routes", "groups"):
+        for child in body.get(key) or []:
+            if isinstance(child, dict):
+                for field in _CLONE_CHILD_STRIP_FIELDS:
+                    child.pop(field, None)
     body["name"] = new_name
     body["aliasName"] = None  # the alias (#Name anchor) must be unique; let it re-derive
     body["isActive"] = is_active
@@ -474,17 +500,22 @@ class PlaybooksAPI(BaseAPI):
         *,
         collection: str | None = None,
         is_active: bool = False,
+        transform: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
     ) -> dict[str, Any]:
         """Clone an existing playbook definition under a new name.
 
         Fetches the source playbook with its steps/routes/groups inlined, then
-        **remaps every UUID** (the workflow itself plus each step, route, and
-        group) to a fresh one, rewiring all the internal references — route
-        ``sourceStep``/``targetStep``, the workflow's ``triggerStep``, and each
-        step's ``group`` — so the copy is fully self-contained and never collides
-        with the original. Server-managed fields (``@id``/``id``/create+modify
-        stamps, ``deletedAt``, ``versions``) are dropped. POSTs the result to
-        ``/api/3/workflows``.
+        **remaps every owned UUID** (the workflow itself plus each step, route,
+        and group — never the shared ``stepType``) to a fresh one, rewiring all
+        the internal references — route ``sourceStep``/``targetStep``, the
+        workflow's ``triggerStep``, and each step's ``group`` — so the copy is
+        fully self-contained and never collides with the original. Server-managed
+        fields (``@id``/``id``/create+modify stamps, ``deletedAt``, ``versions``)
+        are dropped at the top level, and the nested ``@id``/``@type``/``id`` of
+        every step/route/group is stripped so the appliance creates them fresh
+        (otherwise an inlined child carrying an ``@id`` is read as a reference to
+        a now-nonexistent row and the POST fails with ``EntityNotFoundException``).
+        POSTs the result to ``/api/3/workflows``.
 
         Args:
             uuid: source playbook uuid.
@@ -494,6 +525,12 @@ class PlaybooksAPI(BaseAPI):
                 (uuid or IRI). Defaults to the source's collection.
             is_active: whether the clone is active. Defaults to ``False`` so a
                 copy never starts firing on triggers before it's been reviewed.
+            transform: optional callback to mutate the prepared POST body
+                **before** it is sent — receives the body dict (already remapped,
+                stripped, and renamed) and may edit it in place or return a
+                replacement. Use it to tweak a cloned definition at create time,
+                e.g. rename a Set-Variable arg, so the change is part of the same
+                save the appliance validates.
 
         Returns:
             The created clone's playbook definition record.
@@ -510,6 +547,8 @@ class PlaybooksAPI(BaseAPI):
             body["collection"] = (
                 collection if collection.startswith("/api/") else f"/api/3/workflow_collections/{collection}"
             )
+        if transform is not None:
+            body = transform(body) or body
         return self.client.post(_WORKFLOWS, data=body)
 
     def update(self, uuid: str, **fields: Any) -> dict[str, Any]:

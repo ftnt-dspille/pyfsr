@@ -793,14 +793,29 @@ _SRC_DEFINITION = {
     "groups": [{"uuid": "33333333-3333-3333-3333-333333333333", "name": "G1"}],
     "steps": [
         {
+            "@id": "/api/3/workflow_steps/22222222-2222-2222-2222-222222222222",
+            "@type": "WorkflowStep",
             "uuid": "22222222-2222-2222-2222-222222222222",
             "name": "Start",
             "group": "/api/3/workflow_groups/33333333-3333-3333-3333-333333333333",
+            "stepType": {
+                "@id": "/api/3/workflow_step_types/99999999-9999-9999-9999-999999999999",
+                "name": "cybersponse.abstract_trigger",
+                "uuid": "99999999-9999-9999-9999-999999999999",
+            },
         },
-        {"uuid": "44444444-4444-4444-4444-444444444444", "name": "Action"},
+        {
+            "@id": "/api/3/workflow_steps/44444444-4444-4444-4444-444444444444",
+            "@type": "WorkflowStep",
+            "id": 7,
+            "uuid": "44444444-4444-4444-4444-444444444444",
+            "name": "Action",
+        },
     ],
     "routes": [
         {
+            "@id": "/api/3/workflow_routes/55555555-5555-5555-5555-555555555555",
+            "@type": "WorkflowRoute",
             "uuid": "55555555-5555-5555-5555-555555555555",
             "sourceStep": "22222222-2222-2222-2222-222222222222",
             "targetStep": "44444444-4444-4444-4444-444444444444",
@@ -858,6 +873,52 @@ def test_clone_active_and_collection_override():
     body = c.calls[-1][2]
     assert body["isActive"] is True
     assert body["collection"] == "/api/3/workflow_collections/dddddddd-dddd-dddd-dddd-dddddddddddd"
+
+
+def test_clone_strips_nested_entity_ids_and_keeps_steptype():
+    # Regression: an inlined step/route carrying its own ``@id`` makes the
+    # appliance treat it as a reference to an existing (now-nonexistent) row and
+    # fail the POST with EntityNotFoundException. The clone must drop nested
+    # @id/@type/id on every step/route while leaving the shared stepType (and its
+    # @id, which points at a real step-type row) untouched.
+    c = _Rec(resp=_SRC_DEFINITION)
+    PlaybooksAPI(c).clone("11111111-1111-1111-1111-111111111111", "Copy")
+    body = c.calls[-1][2]
+    for step in body["steps"]:
+        assert "@id" not in step
+        assert "@type" not in step
+        assert "id" not in step
+    for route in body["routes"]:
+        assert "@id" not in route
+        assert "@type" not in route
+    # stepType (and its real @id) is preserved verbatim — it is NOT a clone-owned uuid.
+    st = body["steps"][0]["stepType"]
+    assert st["@id"] == "/api/3/workflow_step_types/99999999-9999-9999-9999-999999999999"
+    assert st["uuid"] == "99999999-9999-9999-9999-999999999999"
+
+
+def test_clone_transform_hook_mutates_body_before_post():
+    c = _Rec(resp=_SRC_DEFINITION)
+
+    def _rename(body):
+        body["steps"][1]["name"] = "Renamed Action"
+        return body
+
+    PlaybooksAPI(c).clone("11111111-1111-1111-1111-111111111111", "Copy", transform=_rename)
+    body = c.calls[-1][2]
+    assert body["steps"][1]["name"] == "Renamed Action"
+
+
+def test_clone_transform_may_edit_in_place_without_returning():
+    c = _Rec(resp=_SRC_DEFINITION)
+
+    def _edit(body):
+        body["description"] = "edited"
+        # returns None — clone() must fall back to the mutated body
+
+    PlaybooksAPI(c).clone("11111111-1111-1111-1111-111111111111", "Copy", transform=_edit)
+    body = c.calls[-1][2]
+    assert body["description"] == "edited"
 
 
 def test_clone_requires_new_name():
