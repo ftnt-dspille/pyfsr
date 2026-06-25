@@ -55,9 +55,15 @@ class APIKeyAuth(BaseAuth):
         try:
             response = requests.get(f"{self.base_url}/api/3/people", headers=headers, verify=self.verify_ssl)
 
+            # 401 is the only status that means the key itself is bad. A 403
+            # (Access Denied) means the key authenticated successfully but its
+            # role/team simply can't read the People module — a valid, merely
+            # restricted key (e.g. a low-privilege team-scoped key). Treat that
+            # as valid; surfacing it as a validation failure would make every
+            # least-privilege key unusable.
             if response.status_code == 401:
                 raise APIError("Invalid API key - authentication failed")
-            elif response.status_code != 200:
+            elif response.status_code not in (200, 403):
                 raise APIError(f"API key validation failed with status {response.status_code}: {response.text}")
 
         except requests.exceptions.RequestException as e:

@@ -54,6 +54,17 @@ def test_api_key_validation_failed_auth(mocker):
     assert "Invalid API key - authentication failed" in str(exc_info.value)
 
 
+def test_api_key_validation_accepts_403_restricted_key(mocker):
+    """A 403 on the probe means the key authenticated but lacks People-read
+    permission — a valid, least-privilege key. It must NOT raise."""
+    mock_get = mocker.patch("requests.get")
+    mock_get.return_value.status_code = 403
+    mock_get.return_value.text = '{"type":"AccessDeniedException","message":"Access Denied."}'
+
+    auth = APIKeyAuth(base_url="https://test.fortisoar.com", api_key="test-key-123")
+    assert auth.api_key == "test-key-123"
+
+
 def test_api_key_validation_server_error(mocker):
     """Test API key validation with server error"""
     mock_get = mocker.patch("requests.get")

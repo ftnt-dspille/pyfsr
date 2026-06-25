@@ -60,6 +60,10 @@ class _FakeClient:
         self.calls.append(("PUT", endpoint, data))
         return self._lookup("PUT", endpoint)
 
+    def delete(self, endpoint, params=None, **kw):
+        self.calls.append(("DELETE", endpoint, params))
+        return self._lookup("DELETE", endpoint)
+
 
 def _roles_client() -> _FakeClient:
     c = _FakeClient()
@@ -403,6 +407,13 @@ def test_api_keys_list_get_create_update_typed():
     up = api.update(_K_UID, teams=["Tier 1"])
     assert isinstance(up, ApiKey)
     assert c.calls[-1][2] == {"teams": [_T_UID]}
+
+
+def test_api_keys_delete_issues_delete():
+    c = _api_keys_client()
+    ApiKeysAPI(c).delete(_K_UID)
+    method, endpoint, *_ = c.calls[-1]
+    assert method == "DELETE" and endpoint == f"/api/3/api_keys/{_K_UID}"
 
 
 def test_api_keys_get_or_create_reuses_existing():

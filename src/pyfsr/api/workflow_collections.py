@@ -177,6 +177,7 @@ class WorkflowCollectionsAPI(BaseAPI):
             if replace:
                 col_uuid = col.get("uuid")
                 if col_uuid and self.exists(col_uuid):
+                    self._make_playbooks_public(col_uuid)
                     self.delete(col_uuid)
             results.append(self.client.post(_BASE, data=col))
         return results
@@ -299,6 +300,30 @@ class WorkflowCollectionsAPI(BaseAPI):
         if not fields:
             raise ValueError("update() requires at least one field to change")
         return self.client.put(f"{_BASE}/{uuid}", data=fields)
+
+    def _make_playbooks_public(self, col_uuid: str) -> None:
+        """Set every private playbook in a collection public, so it can be deleted.
+
+        The appliance refuses to delete a collection that still contains private
+        playbooks ("make all playbooks ... public"). A ``replace`` import has to
+        clear that first. Best-effort: a collection with no private playbooks is
+        a no-op, and individual update failures are swallowed so the subsequent
+        delete still gets its chance to surface the real error.
+        """
+        try:
+            detail = self.get(col_uuid.strip(), relationships=True)
+        except Exception:  # noqa: BLE001 — let delete() report the real problem
+            return
+        for wf in detail.get("workflows") or []:
+            if not wf.get("isPrivate"):
+                continue
+            wf_uuid = wf.get("uuid")
+            if not wf_uuid:
+                continue
+            try:
+                self.client.put(f"/api/3/workflows/{wf_uuid}", data={"isPrivate": False, "owners": []})
+            except Exception:  # noqa: BLE001 — best-effort; delete() will report if this mattered
+                pass
 
     def delete(self, uuid: str, *, hard: bool = True) -> None:
         """Delete a collection. ``hard=True`` (default) bypasses the recycle bin.

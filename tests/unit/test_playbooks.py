@@ -295,6 +295,65 @@ def test_list_passes_extra_query_params():
     assert params["$fields"] == "uuid,name"
 
 
+# ----------------------------------------------------------------- find() helpers
+def test_find_maps_friendly_step_and_trigger_types():
+    c = CrudClient()
+    PlaybooksAPI(c).find_with_step_type("connector", limit=10)
+    p = c.calls[-1][2]
+    assert p["steps.stepType.name"] == "Connectors" and p["$limit"] == 10
+    PlaybooksAPI(c).find_by_trigger_type("api_endpoint")
+    assert c.calls[-1][2]["triggerStep.stepType.name"] == "cybersponse.api_call"
+    # friendly aliases that differ from the compiler's emit names
+    PlaybooksAPI(c).find(step_type="approval")
+    assert c.calls[-1][2]["steps.stepType.name"] == "ApprovalManualInput"
+
+
+def test_find_passes_raw_step_type_through():
+    c = CrudClient()
+    PlaybooksAPI(c).find(step_type="CyopsUtilites", trigger_type="cybersponse.action")
+    p = c.calls[-1][2]
+    assert p["steps.stepType.name"] == "CyopsUtilites"
+    assert p["triggerStep.stepType.name"] == "cybersponse.action"
+
+
+def test_find_booleans_and_substrings():
+    c = CrudClient()
+    PlaybooksAPI(c).find(active=True, private=False, name_contains="phish", tag="ioc")
+    p = c.calls[-1][2]
+    assert p["isActive"] == "true" and p["isPrivate"] == "false"
+    assert p["name$like"] == "%phish%" and p["tag$like"] == "%ioc%"
+
+
+def test_find_using_connector_and_operation():
+    c = CrudClient()
+    PlaybooksAPI(c).find_using_connector("fortigate")
+    assert c.calls[-1][2]["steps.arguments$like"] == "%fortigate%"
+    PlaybooksAPI(c).find_using_connector("fortigate", operation="block_ip")
+    assert c.calls[-1][2]["steps.arguments$like"] == "%block_ip%"
+
+
+def test_find_route_implies_api_endpoint_trigger():
+    c = CrudClient()
+    PlaybooksAPI(c).find_by_route("lookup_ip")
+    p = c.calls[-1][2]
+    assert p["steps.arguments$like"] == "%lookup_ip%"
+    assert p["triggerStep.stepType.name"] == "cybersponse.api_call"
+
+
+def test_find_referencing_implies_reference_step():
+    c = CrudClient()
+    PlaybooksAPI(c).find_referencing("Enrich IP")
+    p = c.calls[-1][2]
+    assert p["steps.arguments$like"] == "%Enrich IP%"
+    assert p["steps.stepType.name"] == "WorkflowReference"
+
+
+def test_find_rejects_multiple_argument_substring_filters():
+    c = CrudClient()
+    with pytest.raises(ValueError, match="only one of uses_connector"):
+        PlaybooksAPI(c).find(uses_connector="fortigate", route="x")
+
+
 def test_get_definition_fetches_one_workflow():
     class _DefinitionClient(CrudClient):
         def get(self, endpoint, params=None, **kw):

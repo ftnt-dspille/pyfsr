@@ -95,12 +95,22 @@ class RunFailure(ApiResult):
 class TriggerResponse(ApiResult):
     """The response from a trigger verb (``trigger`` / ``trigger_by_name`` / ``trigger_action``).
 
-    Normally ``{"task_id": "<run-uuid>"}``; extra keys (e.g. a deferred 202
-    envelope) are preserved. Use :attr:`task_id` to track the started run with
+    Normally ``{"task_id": "<run-uuid>"}``, but a trigger that starts more than
+    one run (e.g. an API-endpoint route bound to several playbooks) returns
+    ``task_id`` as a **list** of run-uuids — so this accepts either. Extra keys
+    (e.g. a deferred 202 envelope) are preserved. Use :attr:`task_ids` for a
+    uniform list, or :attr:`task_id` to track the started run with
     :meth:`~pyfsr.api.playbooks.PlaybooksAPI.wait`.
     """
 
-    task_id: str | None = None
+    task_id: str | list[str] | None = None
+
+    @property
+    def task_ids(self) -> list[str]:
+        """``task_id`` normalized to a list (empty when absent)."""
+        if self.task_id is None:
+            return []
+        return list(self.task_id) if isinstance(self.task_id, list) else [self.task_id]
 
 
 # ------------------------------------------------------------- input requests

@@ -56,6 +56,20 @@ def _api_key_plaintext(client: Any, user_uuid: str) -> str | None:
     return ak.get("key")
 
 
+def _response_plaintext(user: Any) -> str | None:
+    """Pull the plaintext key out of a create/regenerate ``ApiKeyUser`` response.
+
+    ``POST``/``PUT /api/auth/users`` echo the freshly minted key under
+    ``api_key.key`` — the *only* moment the plaintext is exposed (a masked key
+    can never be unmasked afterwards, regardless of ``retrievable_mode``). This
+    avoids the ``retrievable_mode`` global flag entirely, which on FortiSOAR
+    7.6.5 / 8.0.0 activates a broken ``encrypt(preserve_compatibility=...)``
+    path that 400s all API-key creation.
+    """
+    ak = user.get("api_key") or {} if hasattr(user, "get") else {}
+    return ak.get("key") or None
+
+
 class ApiKeysAPI(BaseAPI):
     """Create and inspect API-key bindings (roles/teams on an API-key user)."""
 
@@ -109,6 +123,16 @@ class ApiKeysAPI(BaseAPI):
             fields["teams"] = self._resolve_teams(list(fields["teams"]))
         return ApiKey.model_validate(self.client.put(f"{_BASE}/{uuid}", data=fields))
 
+    def delete(self, uuid: str) -> None:
+        """Delete an API-key binding (``DELETE /api/3/api_keys/{uuid}``).
+
+        Removes the role/team binding. The underlying API-key *user* is separate
+        — revoke it via
+        :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.revoke` if it should no longer
+        authenticate.
+        """
+        self.client.delete(f"{_BASE}/{uuid}")
+
     def get_or_create(
         self,
         *,
@@ -151,47 +175,46 @@ class ApiKeysAPI(BaseAPI):
 
         1. Finds an existing binding by ``name``; if none, creates the API-key
            user (:meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.create`) and binds it
-           (:meth:`create`).
-        2. Toggles ``retrievable_mode`` on so the plaintext can be recovered on
-           re-runs (best-effort — ``create`` returns the plaintext regardless).
-        3. Recovers the plaintext via ``api_users.get(show_api_key=True)``; if it
-           can't be recovered (mode was off when the key was created),
+           (:meth:`create`). A freshly created user returns its plaintext key in
+           the create response.
+        2. On a *reused* binding the original plaintext is gone (a masked key can
+           never be unmasked after the fact), so
            :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.regenerate` mints a fresh
-           key and the new plaintext is recovered.
-        4. Reconciles ``teams``/``roles`` on a reused binding.
+           key — its plaintext comes back in the regenerate **response**. This
+           invalidates the previous key value for that binding.
+        3. Reconciles ``teams``/``roles`` on a reused binding.
 
-        Idempotent by ``name``. Returns ``(binding, plaintext)``.
+        This deliberately does **not** touch the global ``retrievable_mode``
+        flag. ``retrievable_mode`` only enables recovering a key *later* via
+        ``GET …?show_api_key=true``; capturing the plaintext from the
+        create/regenerate response makes it unnecessary. Toggling it on also
+        activates a broken ``apikeys_helper`` branch that calls
+        ``encrypt(preserve_compatibility=...)`` — unsupported by the shipped
+        ``PasswordModule`` on FortiSOAR 7.6.5 / 8.0.0 — which makes *all*
+        API-key creation fail with HTTP 400 on those builds.
+
+        Idempotent by ``name`` (reuse regenerates). Returns ``(binding, plaintext)``.
         ``teams``/``roles`` accept IRIs or names (resolved like :meth:`create`).
 
         Raises:
-            RuntimeError: if the plaintext can't be recovered even after a
-                regenerate (e.g. retrievable_mode couldn't be toggled and the
-                key predates it).
+            RuntimeError: if the create/regenerate response carries no plaintext.
         """
         client = self.client
-        # retrievable_mode must be on to recover plaintext on re-runs. Toggle
-        # best-effort — a freshly created key returns its plaintext regardless.
-        try:
-            if not client.auth_config.is_api_key_retrievable():
-                client.auth_config.set_api_key_retrievable(True)
-        except Exception:  # noqa: BLE001 — recover may still succeed below
-            pass
 
         existing = next((k for k in self.list() if k.get("name") == name), None)
         if existing:
             binding = existing
             user_uuid = existing["userId"]
             created = False
+            # The original plaintext is unrecoverable on reuse — mint a fresh one
+            # and read it straight from the regenerate response.
+            plaintext = _response_plaintext(client.api_users.regenerate(user_uuid, api_key_validity=api_key_validity))
         else:
             u = client.api_users.create(api_key_validity=api_key_validity)
             user_uuid = u["uuid"]
             binding = self.create(name=name, user_uuid=user_uuid, roles=roles, teams=teams)
             created = True
-
-        plaintext = _api_key_plaintext(client, user_uuid)
-        if not plaintext:
-            client.api_users.regenerate(user_uuid)
-            plaintext = _api_key_plaintext(client, user_uuid)
+            plaintext = _response_plaintext(u)
 
         # Reconcile teams/roles on a reused binding (get_or_create matches on
         # name only and returns a possibly-stale binding as-is). Only pass the
@@ -207,8 +230,7 @@ class ApiKeysAPI(BaseAPI):
 
         if not plaintext:
             raise RuntimeError(
-                f"could not recover plaintext for API key {name!r} (user "
-                f"{user_uuid}) even after regenerate — is retrievable_mode on?"
+                f"create/regenerate response for API key {name!r} (user {user_uuid}) carried no plaintext key value"
             )
         return binding, plaintext
 

@@ -95,7 +95,7 @@ class ApiKeyUsersAPI(BaseAPI):
         uuid: str,
         operation: str,
         *,
-        key_type: str = "api_key",
+        key_type: str = "API_KEY",
         api_key_validity: int | None = None,
     ) -> ApiKeyUser:
         """Run a lifecycle operation on an API-key user (``PUT /api/auth/users``).
@@ -118,22 +118,27 @@ class ApiKeyUsersAPI(BaseAPI):
             body["api_key_validity"] = api_key_validity
         return ApiKeyUser.model_validate(self.client.put(_BASE, data=body))
 
-    def revoke(self, uuid: str, *, key_type: str = "api_key") -> ApiKeyUser:
+    def revoke(self, uuid: str, *, key_type: str = "API_KEY") -> ApiKeyUser:
         """Permanently revoke an API-key user (lifecycle ``REVOKE``)."""
         return self.lifecycle(uuid, "REVOKE", key_type=key_type)
 
-    def activate(self, uuid: str, *, key_type: str = "api_key") -> ApiKeyUser:
+    def activate(self, uuid: str, *, key_type: str = "API_KEY") -> ApiKeyUser:
         """Activate an API-key user (lifecycle ``ACTIVATE``)."""
         return self.lifecycle(uuid, "ACTIVATE", key_type=key_type)
 
-    def deactivate(self, uuid: str, *, key_type: str = "api_key") -> ApiKeyUser:
+    def deactivate(self, uuid: str, *, key_type: str = "API_KEY") -> ApiKeyUser:
         """Deactivate an API-key user (lifecycle ``DEACTIVATE``)."""
         return self.lifecycle(uuid, "DEACTIVATE", key_type=key_type)
 
-    def regenerate(self, uuid: str, *, key_type: str = "api_key") -> ApiKeyUser:
-        """Regenerate an API-key user's key (lifecycle ``REGENERATE``)."""
-        return self.lifecycle(uuid, "REGENERATE", key_type=key_type)
+    def regenerate(self, uuid: str, *, api_key_validity: int = 365, key_type: str = "API_KEY") -> ApiKeyUser:
+        """Regenerate an API-key user's key (lifecycle ``REGENERATE``).
 
-    def reset_validity(self, uuid: str, api_key_validity: int, *, key_type: str = "api_key") -> ApiKeyUser:
+        ``api_key_validity`` (days) is **required by the server** for a
+        regenerate — omitting it errors — so it carries a default here. The
+        fresh plaintext is returned under ``api_key.key`` in the response.
+        """
+        return self.lifecycle(uuid, "REGENERATE", key_type=key_type, api_key_validity=api_key_validity)
+
+    def reset_validity(self, uuid: str, api_key_validity: int, *, key_type: str = "API_KEY") -> ApiKeyUser:
         """Reset an API-key user's validity window (lifecycle ``RESET_VALIDITY``)."""
         return self.lifecycle(uuid, "RESET_VALIDITY", key_type=key_type, api_key_validity=api_key_validity)
