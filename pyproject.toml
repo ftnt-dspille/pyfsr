@@ -61,7 +61,7 @@ mcp = [
 # Author playbooks in YAML and deploy them (`pyfsr playbook`, import_from_yaml).
 # Pulls in the fsr_playbooks compiler; the core library never imports it.
 playbooks = [
-    "fsr_playbooks>=0.3.68",
+    "fsr_playbooks>=0.4.8",
 ]
 
 [project.scripts]
