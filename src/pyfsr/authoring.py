@@ -250,6 +250,178 @@ def compile_playbook_yaml(
     return CompiledPlaybook(fsr_json=result.fsr_json, errors=errors, ok=result.ok)
 
 
+def _resolve_catalog(client: Any, db_path: str | Path | None) -> Path:
+    """Resolve which reference catalog to use, warming a per-user cache from a
+    live client when one is given (same rule as :func:`compile_playbook_yaml`):
+    explicit ``db_path`` > warm-from-``client`` > packaged slim catalog."""
+    _, default_db_path = _load_compiler()
+    if db_path is not None:
+        return Path(db_path)
+    if client is not None:
+        cache = _default_cache_db()
+        warm_catalog(client, cache)
+        return cache
+    return default_db_path()
+
+
+def _load_verify():
+    """Import the fsr_playbooks verify gate + its check-group catalog."""
+    try:
+        from fsr_playbooks import CHECK_GROUPS, verify
+    except ImportError as exc:  # pragma: no cover - exercised via the missing-extra test
+        raise PlaybooksExtraNotInstalled(exc) from exc
+    return verify, CHECK_GROUPS
+
+
+@dataclass
+class VerifiedPlaybook:
+    """Result of running a playbook YAML through the fsr_playbooks verify gate.
+
+    ``ready`` is the single go/no-go (the gate's ``ready_to_push``). ``suppressed``
+    holds any diagnostics silenced via ``skip=`` — never dropped silently.
+    Truthy iff ``ready``.
+    """
+
+    ready: bool = False
+    required_fixes: list[dict[str, Any]] = field(default_factory=list)
+    warnings: list[dict[str, Any]] = field(default_factory=list)
+    suppressed: list[dict[str, Any]] = field(default_factory=list)
+    next_actions: list[str] = field(default_factory=list)
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def ok(self) -> bool:
+        return self.ready
+
+    def __bool__(self) -> bool:
+        return self.ready
+
+    def summary(self) -> str:
+        head = "READY" if self.ready else "NOT READY"
+        bits = [f"{len(self.required_fixes)} blocking", f"{len(self.warnings)} warning(s)"]
+        if self.suppressed:
+            bits.append(f"{len(self.suppressed)} suppressed")
+        return f"{head} — {', '.join(bits)}"
+
+
+def verify_playbook_yaml(
+    text: str,
+    *,
+    client: Any = None,
+    db_path: str | Path | None = None,
+    live_probe: bool = False,
+    skip: list[str] | None = None,
+    playbook: str | None = None,
+) -> VerifiedPlaybook:
+    """Run playbook YAML through the fsr_playbooks **verify gate** — the single
+    forcing-function pre-submit check (compile → typed walk → per-step schema →
+    optional live probe). This is the method to call before showing or pushing a
+    playbook.
+
+    ``skip`` disables check groups or individual diagnostic codes (e.g.
+    ``skip=["jinja", "type_mismatch"]``); the available groups are
+    ``fsr_playbooks.CHECK_GROUPS``. Skipped diagnostics are surfaced under
+    ``VerifiedPlaybook.suppressed``, never dropped silently. Pass ``client`` to
+    warm a per-user catalog from the live instance (so record/op/config checks
+    have real facts); pass ``live_probe=True`` to additionally probe safe ops on
+    the target.
+
+    Returns a :class:`VerifiedPlaybook` (truthy iff ready to push).
+    """
+    verify, _ = _load_verify()
+    catalog = _resolve_catalog(client, db_path)
+    res = verify(
+        text,
+        playbook=playbook,
+        live_probe=live_probe,
+        disable_checks=list(skip) if skip else None,
+        db_path=str(catalog),
+    )
+    ev = res.get("evidence", {}) if isinstance(res, dict) else {}
+    return VerifiedPlaybook(
+        ready=bool(res.get("ready_to_push", False)),
+        required_fixes=res.get("required_fixes", []),
+        warnings=res.get("warnings", []),
+        suppressed=ev.get("suppressed", []),
+        next_actions=res.get("next_actions", []),
+        raw=res,
+    )
+
+
+@dataclass
+class DeployedPlaybook:
+    """Outcome of :func:`build_and_deploy` — verify → compile → push, as one step."""
+
+    verified: VerifiedPlaybook
+    compiled: CompiledPlaybook | None = None
+    deployed: bool = False
+    response: Any = None
+    stopped_at: str | None = None  # "verify" | "compile" | None (success)
+
+    @property
+    def ok(self) -> bool:
+        return self.deployed
+
+    def __bool__(self) -> bool:
+        return self.deployed
+
+
+def build_and_deploy(
+    text: str,
+    *,
+    client: Any,
+    db_path: str | Path | None = None,
+    skip: list[str] | None = None,
+    live_probe: bool = False,
+    force: bool = False,
+    replace: bool = False,
+) -> DeployedPlaybook:
+    """Build-then-push in one call: **verify → compile → import**. Stops (without
+    pushing) at the first hard failure and tells you where via ``stopped_at``.
+
+    The verify gate is the guard rail: a not-ready playbook is *not* pushed
+    unless ``force=True``. ``skip`` forwards to the gate (same groups/codes as
+    :func:`verify_playbook_yaml`). The catalog is warmed once from ``client`` and
+    reused for both verify and compile. ``replace=True`` overwrites an existing
+    collection on import.
+    """
+    catalog = _resolve_catalog(client, db_path)
+    verified = verify_playbook_yaml(text, db_path=catalog, live_probe=live_probe, skip=skip)
+    if not verified.ready and not force:
+        return DeployedPlaybook(verified=verified, stopped_at="verify")
+    compiled = compile_playbook_yaml(text, db_path=catalog)
+    if not compiled.ok:
+        return DeployedPlaybook(verified=verified, compiled=compiled, stopped_at="compile")
+    response = client.workflow_collections.import_export(compiled.fsr_json, replace=replace)
+    return DeployedPlaybook(verified=verified, compiled=compiled, deployed=True, response=response)
+
+
+def find_operation(
+    connector: str,
+    query: str = "",
+    *,
+    client: Any = None,
+    db_path: str | Path | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Discover a connector's operations from the reference catalog — the
+    fastest way to find *what to call* when authoring a connector step.
+
+    Wraps the fsr_playbooks discovery surface (``find_operation``) against the
+    same catalog the compiler uses; pass ``client`` to warm it from the live
+    instance. On a single match the result embeds the op's parameter schema, so
+    you can drop straight into a step without a follow-up call.
+    """
+    try:
+        from fsr_playbooks.mcp_server.tools_discovery import (
+            find_operation as _find_operation,
+        )
+    except ImportError as exc:  # pragma: no cover
+        raise PlaybooksExtraNotInstalled(exc) from exc
+    catalog = _resolve_catalog(client, db_path)
+    return _find_operation(connector, query, limit=limit, db_path=str(catalog))
+
+
 def format_diagnostic(diag: dict[str, Any]) -> str:
     """Render one diagnostic dict as a single human-readable line."""
     sev = diag.get("severity", "error").upper()
