@@ -1552,7 +1552,7 @@ class ModulesAdminAPI(BaseAPI):
           the whole appliance, while leaving the metadata-serving layer up.
 
         See ``Miscellaneous/fortisoar/repro/publish_blast_radius_repro.py`` and
-        :class:`~pyfsr.PublishProbe` for the per-surface measurement.
+        :class:`~pyfsr.publish_probe.PublishProbe` for the per-surface measurement.
 
         **No-op publishes return immediately.** If :meth:`pending_changes` is empty there is
         nothing to migrate — the PUT returns 200 but no backup/migrate runs and
