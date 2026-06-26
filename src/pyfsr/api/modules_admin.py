@@ -134,6 +134,30 @@ _BOGUS_DB_TYPES = {
     "bool": "booleans store 'boolean' — use checkbox_field()",
 }
 
+# The "Only show users from selected teams" field option is new in FortiSOAR 8.0 — there is
+# no equivalent on 7.6.x. It binds to ``dataSourceFilters.showTeams`` (bool) +
+# ``dataSourceFilters.teams`` (a list of team IRIs); the engine adds a ``teams`` filter to the
+# People lookup query so the picker only offers users on those teams. pyfsr refuses to stage it
+# on an older appliance rather than silently shipping a no-op attribute.
+_TEAM_SCOPE_MIN_VERSION = (8, 0, 0)
+_VERSION_RE = re.compile(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?")
+_UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+def _parse_version(raw: str | dict[str, Any]) -> tuple[int, int, int] | None:
+    """Parse a FortiSOAR version (``"8.0.0-6034"`` or ``{"version": ...}``) to ``(maj, min, patch)``.
+
+    Tolerant of the several shapes :meth:`FortiSOAR.version` can return; the build suffix
+    after ``-``/``+`` is ignored. Returns ``None`` when no ``N[.N[.N]]`` can be found, so the
+    caller can decide how to treat an unknown version.
+    """
+    if isinstance(raw, dict):
+        raw = raw.get("version") or raw.get("build") or raw.get("@version") or ""
+    m = _VERSION_RE.search(str(raw))
+    if not m:
+        return None
+    return (int(m.group(1)), int(m.group(2) or 0), int(m.group(3) or 0))
+
 
 class ModulesAdminAPI(BaseAPI):
     """Create modules, add/alter fields, and publish schema changes."""
@@ -564,6 +588,7 @@ class ModulesAdminAPI(BaseAPI):
         label: str | None = None,
         ownable_filter: bool = False,
         owning_module: str | None = None,
+        team_scope: list[str] | None = None,
         **opts: Any,
     ) -> dict[str, Any]:
         """Build a **lookup** (many-to-one) field: a *single* reference to one record of
@@ -581,6 +606,13 @@ class ModulesAdminAPI(BaseAPI):
         ``ownable_filter`` adds the ``isOwnable``/``modulePermissions`` ``dataSourceFilters``
         the in-product editor sets for team-ownable lookups (``owning_module`` defaults to
         the module being edited; set it when building fields ahead of the module).
+
+        ``team_scope`` (FortiSOAR **8.0+ only**, for ``target_module="people"``) is the
+        editor's "Only show users from selected teams": pass the teams whose members may be
+        picked — by name, bare uuid, or IRI — and the lookup only offers users on those teams.
+        It sets ``dataSourceFilters.showTeams``/``teams``; :meth:`add_field` /
+        :meth:`create_module` resolve the team identifiers to IRIs and **refuse to stage it on
+        an appliance older than 8.0** (7.6.x has no equivalent). See :meth:`scope_field_to_teams`.
         """
         attr = cls.field(name, db_type=target_module, form_type="lookup", label=label, **opts)
         attr["collection"] = False
@@ -592,7 +624,21 @@ class ModulesAdminAPI(BaseAPI):
                 "modulePermissions": owning_module,
                 "modulePermissionsType": {"canUpdate": True, "canRead": True},
             }
+        if team_scope:
+            cls._apply_team_scope(attr, team_scope)
         return attr
+
+    @staticmethod
+    def _apply_team_scope(attr: dict[str, Any], teams: list[str]) -> None:
+        """Set the ``dataSourceFilters.showTeams``/``teams`` pair on a People field in place.
+
+        Stores the raw team identifiers as given; :meth:`_guard_team_scope` normalizes them to
+        IRIs (and version-gates) at the staging boundary, where a client is available to resolve
+        names. Merges into any existing ``dataSourceFilters`` (e.g. an ``ownable_filter``).
+        """
+        dsf = attr.setdefault("dataSourceFilters", {})
+        dsf["showTeams"] = True
+        dsf["teams"] = list(teams)
 
     @classmethod
     def relationship_field(
@@ -604,11 +650,18 @@ class ModulesAdminAPI(BaseAPI):
         label: str | None = None,
         inversed_field: str | None = None,
         owns_relationship: bool = True,
+        team_scope: list[str] | None = None,
         **opts: Any,
     ) -> dict[str, Any]:
         """Build a **collection** relationship to ``target_module`` (its module ``type``).
 
         ``many`` selects ``manyToMany`` (default) vs ``oneToMany``; both are collections.
+
+        ``team_scope`` (FortiSOAR **8.0+ only**, for ``target_module="people"``) is the
+        editor's "Only show users from selected teams" — restrict the pickable users to members
+        of the given teams (name, uuid, or IRI). It sets ``dataSourceFilters.showTeams``/
+        ``teams``; :meth:`add_field`/:meth:`create_module` resolve the teams to IRIs and refuse
+        to stage it on an appliance older than 8.0 (7.6.x has no equivalent).
 
         This is a pure builder — it returns the owning-side attribute only. Add it with
         :meth:`add_field`, which **creates the reverse side on the target for you** so the
@@ -640,6 +693,8 @@ class ModulesAdminAPI(BaseAPI):
         if inversed_field is not None:
             attr["inversedField"] = inversed_field
         attr["dataSource"] = {"model": target_module}
+        if team_scope:
+            cls._apply_team_scope(attr, team_scope)
         return attr
 
     # ----------------------------------------------------- view templates
@@ -882,6 +937,7 @@ class ModulesAdminAPI(BaseAPI):
         label = label or module
         if fields is None:
             fields = [self.text_field("name", required=True)]
+        self._guard_team_scope(fields)
         if display_template is None:
             names = [f.get("name") for f in fields if f.get("name")]
             anchor = "name" if "name" in names else (names[0] if names else "name")
@@ -1017,6 +1073,80 @@ class ModulesAdminAPI(BaseAPI):
             raise FortiSOARException(f"module settings did not apply for {module!r}: {sorted(not_applied)}")
         return updated
 
+    def _appliance_version(self) -> tuple[int, int, int] | None:
+        """The appliance's ``(major, minor, patch)``, fetched once and cached, or ``None``.
+
+        ``None`` means the version could not be determined (endpoint failure or an
+        unparseable string); callers gating a feature treat that as "cannot confirm".
+        """
+        cached = getattr(self, "_appliance_version_cache", "unset")
+        if cached != "unset":
+            return cached  # type: ignore[return-value]
+        try:
+            parsed = _parse_version(self.client.version())
+        except FortiSOARException:
+            parsed = None
+        self._appliance_version_cache: tuple[int, int, int] | None = parsed
+        return parsed
+
+    def _appliance_at_least(self, minimum: tuple[int, int, int]) -> bool | None:
+        """``True``/``False`` if the appliance is ≥ ``minimum``; ``None`` if version is unknown."""
+        version = self._appliance_version()
+        if version is None:
+            return None
+        return version >= minimum
+
+    def scope_field_to_teams(self, field: dict[str, Any], teams: list[str]) -> dict[str, Any]:
+        """Restrict a People lookup/relationship ``field``'s pickable users to members of ``teams``.
+
+        The in-product "Only show users from selected teams" option (FortiSOAR **8.0+**). Mutates
+        and returns ``field`` so you can apply it to a pre-built attribute, e.g.::
+
+            f = admin.relationship_field("approvers", "people")
+            admin.scope_field_to_teams(f, ["SOC Team", "TeamA"])
+
+        Equivalent to passing ``team_scope=`` to :meth:`lookup_field`/:meth:`relationship_field`.
+        Version-gating + team→IRI resolution still happen when the field is staged via
+        :meth:`add_field`/:meth:`create_module`.
+        """
+        self._apply_team_scope(field, teams)
+        return field
+
+    def _guard_team_scope(self, fields: list[dict[str, Any]]) -> None:
+        """Version-gate + normalize the team-scope option on any People field in ``fields``.
+
+        For each field carrying ``dataSourceFilters.showTeams``: refuse to stage it unless the
+        appliance is ≥ 8.0 (7.6.x has no equivalent — staging it there ships a silent no-op), and
+        rewrite the ``teams`` list from whatever the caller gave (team name, bare uuid, or IRI) to
+        the ``/api/3/teams/<uuid>`` IRIs the engine stores. Mutates the field dicts in place.
+        """
+        scoped = [f for f in fields if isinstance(f, dict) and (f.get("dataSourceFilters") or {}).get("showTeams")]
+        if not scoped:
+            return
+        at_least = self._appliance_at_least(_TEAM_SCOPE_MIN_VERSION)
+        if at_least is False:
+            version = self._appliance_version()
+            raise FortiSOARException(
+                "the 'Only show users from selected teams' field option (dataSourceFilters.showTeams) "
+                f"requires FortiSOAR {'.'.join(map(str, _TEAM_SCOPE_MIN_VERSION))}+, but this appliance "
+                f"is {'.'.join(map(str, version)) if version else 'older'}; 7.6.x has no equivalent. "
+                "Drop team_scope=/scope_field_to_teams() for this appliance."
+            )
+        # at_least is None (unknown version) → proceed; the appliance itself is the backstop.
+        for field in scoped:
+            field["dataSourceFilters"]["teams"] = [self._team_iri(t) for t in field["dataSourceFilters"]["teams"]]
+
+    def _team_iri(self, team: str) -> str:
+        """Normalize a team identifier (IRI, bare uuid, or display name) to a ``/api/3/teams/..`` IRI."""
+        if team.startswith("/api/"):
+            return team
+        if _UUID_RE.fullmatch(team):
+            return f"/api/3/teams/{team}"
+        uuid = self.client.teams.team_uuid_by_name(team)
+        if not uuid:
+            raise FortiSOARException(f"no team named {team!r} found to scope the field to")
+        return f"/api/3/teams/{uuid}"
+
     def add_field(self, module: str, field: dict[str, Any], *, create_reverse: bool = True) -> dict[str, Any]:
         """Append a field (build it with :meth:`field`) to ``module`` in staging.
 
@@ -1037,6 +1167,7 @@ class ModulesAdminAPI(BaseAPI):
         Raises ``ValueError`` if the reverse is needed but the target module does not
         exist, or already has a *different* field under the reverse name.
         """
+        self._guard_team_scope([field])
         mod = self.get_staging(module)
         if not mod:
             raise ValueError(f"module {module!r} not found in staging")

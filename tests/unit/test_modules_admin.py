@@ -252,6 +252,144 @@ def test_lookup_field_is_single_ref_with_no_reverse():
     assert f["dataSource"] == {"model": "people"}
 
 
+class FakeTeamsAPI:
+    """Fake teams API: resolves a fixed set of team names to uuids."""
+
+    _UUIDS = {
+        "TeamA": "11111111-1111-1111-1111-111111111111",
+        "TeamB": "22222222-2222-2222-2222-222222222222",
+        "SOC Team": "33333333-3333-3333-3333-333333333333",
+    }
+
+    def team_uuid_by_name(self, name):
+        return self._UUIDS.get(name)
+
+
+class TeamScopeClient(RecordingClient):
+    """RecordingClient that also answers version() and exposes a teams API."""
+
+    def __init__(self, version="8.0.0-6034"):
+        super().__init__()
+        self._version = version
+        self.teams = FakeTeamsAPI()
+
+    def version(self):
+        return self._version
+
+
+def test_lookup_field_team_scope_sets_datasource_filters():
+    # Pure builder: stores the raw identifiers under dataSourceFilters; no resolution yet.
+    f = ModulesAdminAPI.lookup_field("approver", "people", team_scope=["TeamA"])
+    assert f["dataSourceFilters"]["showTeams"] is True
+    assert f["dataSourceFilters"]["teams"] == ["TeamA"]
+
+
+def test_team_scope_merges_with_ownable_filter():
+    f = ModulesAdminAPI.lookup_field(
+        "approver", "people", ownable_filter=True, owning_module="widgets", team_scope=["TeamA"]
+    )
+    assert f["dataSourceFilters"]["isOwnable"] is True
+    assert f["dataSourceFilters"]["showTeams"] is True
+    assert f["dataSourceFilters"]["teams"] == ["TeamA"]
+
+
+def test_relationship_field_team_scope():
+    f = ModulesAdminAPI.relationship_field("members", "people", team_scope=["TeamA", "TeamB"])
+    assert f["formType"] == "manyToMany"
+    assert f["dataSourceFilters"]["teams"] == ["TeamA", "TeamB"]
+
+
+def test_team_scope_resolves_names_to_iris_on_8_0():
+    c = TeamScopeClient(version="8.0.0-6034")
+    api = ModulesAdminAPI(c)
+    field = api.relationship_field("members", "people", team_scope=["TeamA", "TeamB"])
+    api.create_module("widgets", fields=[api.text_field("name"), field], create_view_templates=False)
+    _, _, data = c.calls[-1]
+    members = next(a for a in data["attributes"] if a["name"] == "members")
+    assert members["dataSourceFilters"]["teams"] == [
+        "/api/3/teams/11111111-1111-1111-1111-111111111111",
+        "/api/3/teams/22222222-2222-2222-2222-222222222222",
+    ]
+
+
+def test_team_scope_accepts_iri_and_uuid_unchanged():
+    c = TeamScopeClient(version="8.0.0")
+    api = ModulesAdminAPI(c)
+    field = api.lookup_field(
+        "approver",
+        "people",
+        team_scope=["/api/3/teams/abc", "33333333-3333-3333-3333-333333333333"],
+    )
+    api.create_module("widgets", fields=[api.text_field("name"), field], create_view_templates=False)
+    _, _, data = c.calls[-1]
+    approver = next(a for a in data["attributes"] if a["name"] == "approver")
+    assert approver["dataSourceFilters"]["teams"] == [
+        "/api/3/teams/abc",
+        "/api/3/teams/33333333-3333-3333-3333-333333333333",
+    ]
+
+
+def test_team_scope_rejected_below_8_0():
+    import pytest
+
+    from pyfsr.exceptions import FortiSOARException
+
+    c = TeamScopeClient(version="7.6.5-1234")
+    api = ModulesAdminAPI(c)
+    field = api.relationship_field("members", "people", team_scope=["TeamA"])
+    with pytest.raises(FortiSOARException, match="8.0"):
+        api.create_module("widgets", fields=[api.text_field("name"), field], create_view_templates=False)
+    # nothing was POSTed — the guard runs before any staging write
+    assert not any(m == "POST" for m, _, _ in c.calls)
+
+
+def test_team_scope_unknown_team_name_raises():
+    import pytest
+
+    from pyfsr.exceptions import FortiSOARException
+
+    c = TeamScopeClient(version="8.0.0")
+    api = ModulesAdminAPI(c)
+    field = api.lookup_field("approver", "people", team_scope=["NoSuchTeam"])
+    with pytest.raises(FortiSOARException, match="NoSuchTeam"):
+        api.create_module("widgets", fields=[field], create_view_templates=False)
+
+
+def test_team_scope_proceeds_when_version_unknown():
+    # version() failing must not block the feature — the appliance is the backstop.
+    from pyfsr.exceptions import FortiSOARException
+
+    class NoVersionClient(TeamScopeClient):
+        def version(self):
+            raise FortiSOARException("all endpoints failed")
+
+    c = NoVersionClient()
+    api = ModulesAdminAPI(c)
+    field = api.lookup_field("approver", "people", team_scope=["TeamA"])
+    api.create_module("widgets", fields=[field], create_view_templates=False)
+    _, _, data = c.calls[-1]
+    approver = next(a for a in data["attributes"] if a["name"] == "approver")
+    assert approver["dataSourceFilters"]["teams"] == ["/api/3/teams/11111111-1111-1111-1111-111111111111"]
+
+
+def test_scope_field_to_teams_helper_matches_kwarg():
+    built = ModulesAdminAPI.relationship_field("members", "people", team_scope=["TeamA"])
+    api = ModulesAdminAPI(TeamScopeClient())
+    manual = api.scope_field_to_teams(api.relationship_field("members", "people"), ["TeamA"])
+    assert built["dataSourceFilters"] == manual["dataSourceFilters"]
+
+
+def test_parse_version_tolerates_shapes():
+    from pyfsr.api.modules_admin import _parse_version
+
+    assert _parse_version("8.0.0-6034") == (8, 0, 0)
+    assert _parse_version("7.6.5") == (7, 6, 5)
+    assert _parse_version("8.0") == (8, 0, 0)
+    assert _parse_version({"version": "8.0.0-6034"}) == (8, 0, 0)
+    assert _parse_version({"build": "7.4.2"}) == (7, 4, 2)
+    assert _parse_version("unknown") is None
+
+
 def test_relationship_field_custom_inverse_and_one_to_many():
     f = ModulesAdminAPI.relationship_field("agents", "agents", many=False, inversed_field="router")
     assert f["formType"] == "oneToMany" and f["collection"] is True
