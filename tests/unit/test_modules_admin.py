@@ -476,6 +476,66 @@ def test_pending_changes_diffs_staging_vs_published():
     assert changes == {"alerts": "modified", "widgets": "created", "legacy": "deleted"}
 
 
+def test_pending_changes_requests_relationships():
+    """pending_changes must list with $relationships=true, else the attributes (fields)
+    relationship is omitted and field-only changes are invisible (false-empty)."""
+    c = RecordingClient()
+    ModulesAdminAPI(c).pending_changes()
+    list_gets = [p for (m, e, p) in c.calls if m == "GET" and "model_metadatas" in e]
+    assert list_gets, "expected list GETs against the metadata stores"
+    assert all((p or {}).get("$relationships") == "true" for p in list_gets)
+
+
+def _meta(store, attr_store, *, visibility):
+    """Build a staging/published module record whose only store-relative differences are
+    the hypermedia @id/@type and the attribute back-reference IRIs (which must NOT count
+    as a semantic change)."""
+    return {
+        "@id": f"/api/3/{store}/u-1",
+        "@type": "ModelMetadata",
+        "type": "widgets",
+        "taggable": True,
+        "attributes": [
+            {
+                "@id": f"/api/3/{attr_store}/a-1",
+                "@type": "AttributeMetadata",
+                "name": "payload",
+                "visibility": visibility,
+                "sattrib": f"/api/3/{store}/u-1",
+            }
+        ],
+    }
+
+
+def test_pending_changes_ignores_store_relative_iris():
+    """Identical modules whose attribute @id/@type/sattrib differ only by store
+    (staging vs published) must NOT be reported as modified."""
+
+    class IdenticalClient(RecordingClient):
+        def get(self, endpoint, params=None, **kw):
+            self.calls.append(("GET", endpoint, params))
+            if "staging_model_metadatas" in endpoint:
+                return {"hydra:member": [_meta("staging_model_metadatas", "attribute_metadatas", visibility=True)]}
+            return {"hydra:member": [_meta("model_metadatas", "attrib_model_metadatas", visibility=True)]}
+
+    assert ModulesAdminAPI(IdenticalClient()).pending_changes() == []
+
+
+def test_pending_changes_detects_field_only_change():
+    """A field-only difference (visibility flip) nested inside attributes must be detected
+    even though every top-level scalar is identical."""
+
+    class FieldDiffClient(RecordingClient):
+        def get(self, endpoint, params=None, **kw):
+            self.calls.append(("GET", endpoint, params))
+            if "staging_model_metadatas" in endpoint:
+                return {"hydra:member": [_meta("staging_model_metadatas", "attribute_metadatas", visibility=False)]}
+            return {"hydra:member": [_meta("model_metadatas", "attrib_model_metadatas", visibility=True)]}
+
+    changes = ModulesAdminAPI(FieldDiffClient()).pending_changes()
+    assert changes == [{"module": "widgets", "change": "modified"}]
+
+
 def test_set_field_type_puts_only_attributes():
     c = RecordingClient()
     ModulesAdminAPI(c).set_field_type("widgets", "payload", db_type="object", form_type="object")
@@ -973,3 +1033,147 @@ def test_permission_error_hint_without_module_in_url():
         assert "Access Denied" in msg
         assert "newly created module" in msg
         assert "grant_module_permissions(role, module='<module>')" in msg
+
+
+def test_publish_status_reads_400_body():
+    """`/api/publish/error` returns HTTP 400 (with a usable body) when a prior publish
+    error is on record. _publish_status must read it via raise_on_status=False, not
+    swallow it the way a plain client.get (raise_on_status=True) would."""
+
+    class FourHundredResp:
+        status_code = 400
+
+        def json(self):
+            return {"status": "Fail", "last_publish_time": 777}
+
+    class Client400(RecordingClient):
+        def get(self, endpoint, params=None, raise_on_status=True, **kw):
+            self.calls.append(("GET", endpoint, params))
+            if endpoint == "/api/publish/error":
+                # Mimic the client contract: a 4xx raises unless raise_on_status=False,
+                # in which case the raw Response is returned for the caller to inspect.
+                if raise_on_status:
+                    raise RuntimeError("400 Bad Request")
+                return FourHundredResp()
+            return super().get(endpoint, params=params, **kw)
+
+    api = ModulesAdminAPI(Client400())
+    assert api._publish_status() == {"status": "Fail", "last_publish_time": 777}
+    assert api._last_publish_time() == 777
+
+
+def test_publish_noop_skips_wait_when_nothing_pending():
+    """With no pending changes, publish() still PUTs but must NOT enter the poll loop
+    (which would block for the full timeout waiting for a migrate that never runs)."""
+
+    class NoopClient(RecordingClient):
+        def get(self, endpoint, params=None, raise_on_status=True, **kw):
+            self.calls.append(("GET", endpoint, params))
+            if endpoint == "/api/publish/error":
+                return {"status": "Success", "last_publish_time": 1}
+            return super().get(endpoint, params=params, **kw)
+
+    c = NoopClient()
+    # staging == published (RecordingClient mirrors widgets in both) → pending_changes == []
+    result = ModulesAdminAPI(c).publish(poll_interval=0)
+    assert ("PUT", "/api/publish", {}) in c.calls
+    pe_reads = sum(1 for m, ep, _ in c.calls if m == "GET" and ep == "/api/publish/error")
+    # short-circuit path reads publish/error at most twice (prev_time + final status),
+    # never the unbounded poll loop.
+    assert pe_reads <= 2
+    assert result["status"] == "Success"
+
+
+def test_publish_completes_metadata_only_change_without_timeout():
+    """A field-only publish (visibility/required) commits with NO 503 outage and WITHOUT
+    advancing last_publish_time. The wait must still detect completion via staging clearing
+    (pending_changes going empty), not block until timeout."""
+
+    class MetaOnlyClient(RecordingClient):
+        def __init__(self):
+            super().__init__()
+            self.published = False  # flips True after the publish PUT
+
+        def get(self, endpoint, params=None, raise_on_status=True, **kw):
+            self.calls.append(("GET", endpoint, params))
+            if endpoint == "/api/publish/error":
+                # status Success but last_publish_time NEVER advances (metadata-only).
+                return {"status": "Success", "last_publish_time": 5}
+            if "staging_model_metadatas" in endpoint:
+                vis = self.published  # before publish staging differs; after it matches
+                return {"hydra:member": [{"type": "widgets", "visibility": vis}]}
+            if "model_metadatas" in endpoint:
+                return {"hydra:member": [{"type": "widgets", "visibility": True}]}
+            return super().get(endpoint, params=params, **kw)
+
+        def put(self, endpoint, data=None, params=None, **kw):
+            self.calls.append(("PUT", endpoint, data))
+            if endpoint == "/api/publish":
+                self.published = True
+            return {"ok": True, **(data or {})}
+
+    c = MetaOnlyClient()
+    result = ModulesAdminAPI(c).publish(precheck=False, timeout=5, poll_interval=0)
+    assert result["status"] == "Success"
+    assert ("PUT", "/api/publish", {}) in c.calls
+
+
+class _JsonResp:
+    def __init__(self, body, status_code=400):
+        self._body = body
+        self.status_code = status_code
+
+    def json(self):
+        return self._body
+
+
+def test_wait_for_publish_treats_unchanged_error_log_as_success():
+    """A box with a persistent stale Fail log: after riding the outage and advancing
+    last_publish_time, an UNCHANGED errors text means the logged failure is stale → success."""
+    from pyfsr.exceptions import FortiSOARException
+
+    class StaleClient(RecordingClient):
+        def __init__(self):
+            super().__init__()
+            self.n = 0
+
+        def get(self, endpoint, params=None, raise_on_status=True, **kw):
+            self.calls.append(("GET", endpoint, params))
+            if endpoint == "/api/publish/error":
+                self.n += 1
+                if self.n <= 2:
+                    raise RuntimeError("503 migrate outage")  # -> _publish_status None -> saw_outage
+                return _JsonResp({"status": "Fail", "last_publish_time": 200, "errors": "OLD"})
+            return super().get(endpoint, params=params, **kw)
+
+    api = ModulesAdminAPI(StaleClient())
+    body = api._wait_for_publish(prev_time=100, timeout=5, poll_interval=0, prev_errors="OLD")
+    assert body["last_publish_time"] == 200  # returned as success despite status=Fail
+    # sanity: a fresh (changed) error log on the same shape DOES raise
+    try:
+        api2 = ModulesAdminAPI(StaleClient())
+        api2._wait_for_publish(prev_time=100, timeout=5, poll_interval=0, prev_errors="DIFFERENT-OLD")
+        raised = False
+    except FortiSOARException:
+        raised = True
+    assert raised
+
+
+def test_wait_for_publish_raises_on_fresh_error_log():
+    """A changed errors text (vs. before the PUT) is a real, fresh failure → raise."""
+    from pyfsr.exceptions import FortiSOARException
+
+    class FreshFailClient(RecordingClient):
+        def get(self, endpoint, params=None, raise_on_status=True, **kw):
+            self.calls.append(("GET", endpoint, params))
+            if endpoint == "/api/publish/error":
+                return _JsonResp({"status": "Fail", "last_publish_time": 200, "errors": "NEW ERROR"})
+            return super().get(endpoint, params=params, **kw)
+
+    api = ModulesAdminAPI(FreshFailClient())
+    try:
+        api._wait_for_publish(prev_time=100, timeout=5, poll_interval=0, prev_errors="OLD")
+        raised = False
+    except FortiSOARException:
+        raised = True
+    assert raised

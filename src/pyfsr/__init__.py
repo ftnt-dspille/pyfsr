@@ -52,6 +52,13 @@ from .models import (
 )
 from .pagination import HydraPage, paginate
 from .projection import SUMMARY_FIELDS, project, project_record, to_jsonable
+from .publish_probe import (
+    PublishProbe,
+    PublishReport,
+    Sample,
+    SurfaceReport,
+    default_surfaces,
+)
 from .query import Query
 from .query_models import OPERATOR_SPECS, QueryBody
 from .records import RecordSet
@@ -133,6 +140,12 @@ __all__ = [
     "OutageWindowLoadHelper",
     "OutageWindow",
     "TrialResult",
+    # publish blast-radius probing
+    "PublishProbe",
+    "PublishReport",
+    "SurfaceReport",
+    "Sample",
+    "default_surfaces",
     # agent tool registry
     "ToolSpec",
     "REGISTRY",

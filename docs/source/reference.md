@@ -52,6 +52,7 @@ autoapi/pyfsr/playbook_freshness/index
 autoapi/pyfsr/playbook_lint/index
 autoapi/pyfsr/concurrency/index
 autoapi/pyfsr/loadtest/index
+autoapi/pyfsr/publish_probe/index
 autoapi/pyfsr/tools/index
 autoapi/pyfsr/mcp/index
 autoapi/pyfsr/cli/index

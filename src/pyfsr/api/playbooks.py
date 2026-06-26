@@ -616,12 +616,21 @@ class PlaybooksAPI(BaseAPI):
         page_obj.members = [Workflow(**m) if isinstance(m, dict) else m for m in page_obj.members]
         return page_obj if raw else page_obj.members
 
-    def _fetch_runs_both(self, *, limit: int, extra_qs: str = "") -> list[dict[str, Any]]:
-        """Fetch + merge ``/workflows/`` and ``/historical-workflows/``."""
+    def _fetch_runs_both(
+        self, *, limit: int, extra_qs: str = "", parent_filter: str = "parent_wf__isnull=True"
+    ) -> list[dict[str, Any]]:
+        """Fetch + merge ``/workflows/`` and ``/historical-workflows/``.
+
+        ``parent_filter`` is the run-tree scope clause appended to the query.
+        The default (``parent_wf__isnull=True``) returns only top-level runs —
+        async sub-playbook children are excluded. Pass ``parent_wf=<pk>`` to
+        fetch the children of one run, or ``""`` for an unscoped list.
+        """
         out: list[dict[str, Any]] = []
         seen: set[str] = set()
         for path in _RUN_PATHS:
-            qs = f"?format=json&limit={limit}&ordering=-modified&parent_wf__isnull=True{extra_qs}"
+            scope = f"&{parent_filter}" if parent_filter else ""
+            qs = f"?format=json&limit={limit}&ordering=-modified{scope}{extra_qs}"
             try:
                 resp = self.client.get(path + qs)
             except Exception:  # noqa: BLE001 - one table being down shouldn't blank the other
@@ -661,6 +670,79 @@ class PlaybooksAPI(BaseAPI):
             extra = f"&template_iri=/api/3/workflows/{playbook_uuid}"
         members = self._fetch_runs_both(limit=limit, extra_qs=extra)[:limit]
         return [_shape_run(m) for m in members]
+
+    def child_runs(
+        self,
+        parent: str | int,
+        *,
+        limit: int = 100,
+    ) -> list[RunSummary]:
+        """List the child executions spawned by one parent run, newest first.
+
+        A loop step with ``parallel`` + ``apply_async`` (or any ``apply_async``
+        workflow_reference) records each sub-playbook invocation as its OWN
+        execution, linked to the parent by ``parent_wf``. :meth:`execution_history`
+        filters these out (it scopes to ``parent_wf__isnull=True``), so this is the
+        method to retrieve them — e.g. to measure loop max-parallel concurrency by
+        feeding the returned runs (``created``/``modified`` timestamps) to
+        :func:`pyfsr.concurrency.compute_overlap`.
+
+        The parent run is tagged ``#has_async_childwf_cyops`` when it has async
+        children; see :meth:`has_async_children`.
+
+        Args:
+            parent: the parent run — a numeric run pk (``210`` / ``"210"``), a run
+                ``@id``/path (``"/wf/api/workflows/210/"``), or a ``task_id`` uuid
+                (resolved to its pk via the live log).
+            limit: maximum number of children to return (default 100).
+
+        Returns:
+            A list of typed :class:`~pyfsr.models.RunSummary` children, newest
+            first. Empty if the parent has no async children (or isn't found).
+        """
+        pk = self._resolve_run_pk(parent)
+        if pk is None:
+            return []
+        members = self._fetch_runs_both(limit=limit, parent_filter=f"parent_wf={pk}")[:limit]
+        return [_shape_run(m) for m in members]
+
+    def has_async_children(self, parent: str | int) -> bool:
+        """Whether a run dispatched async sub-playbook children.
+
+        Checks for the ``#has_async_childwf_cyops`` tag FortiSOAR stamps on a run
+        once it launches an ``apply_async`` child — the same signal the UI uses to
+        decide whether to offer a child-run drill-down. ``parent`` accepts the same
+        forms as :meth:`child_runs`.
+        """
+        pk = self._resolve_run_pk(parent)
+        if pk is None:
+            return False
+        try:
+            run = self.get_execution(str(pk))
+        except Exception:  # noqa: BLE001 - absence is a clean "no"
+            return False
+        return "has_async_childwf_cyops" in str(run.get("tags") or "")
+
+    def _resolve_run_pk(self, parent: str | int) -> str | None:
+        """Coerce a pk / @id-path / task_id into a numeric run pk string."""
+        if isinstance(parent, int):
+            return str(parent)
+        s = str(parent).strip()
+        if not s:
+            return None
+        if s.isdigit():
+            return s
+        if "/" in s:  # an @id or path like /wf/api/workflows/210/
+            tail = s.rstrip("/").rsplit("/", 1)[-1]
+            return tail if tail.isdigit() else None
+        if _looks_like_uuid(s):  # a task_id — map to its pk via the live log
+            resp = self.log_list(task_id=s, limit=1)
+            members = (resp or {}).get("hydra:member") or []
+            if members:
+                iri = members[0].get("@id") or ""
+                tail = iri.rstrip("/").rsplit("/", 1)[-1]
+                return tail if tail.isdigit() else None
+        return None
 
     def get_execution(
         self,
@@ -918,8 +1000,12 @@ class PlaybooksAPI(BaseAPI):
 
         POSTs to ``/api/triggers/1/notrigger/<playbook_uuid>`` — the route the
         FortiSOAR UI uses for the *Execute* button on a manual-trigger playbook —
-        and returns ``{"task_id": ...}`` for the started run. Track it with
-        :meth:`runs` / :meth:`get` (the ``task_id`` matches a run record's).
+        and returns ``{"task_id": ...}`` for the started run. The ``task_id`` is a
+        **query-only** key: pass it to :meth:`get_execution` / :meth:`wait` (which
+        resolve it server-side via ``log_list(task_id=...)``) to track the run. Note
+        the run *log records do not echo* ``task_id`` — it is a filter parameter, not
+        a field on the returned run, so matching it against a listed run's fields will
+        not work; query *by* it instead.
 
         Args:
             playbook: the playbook to run — a uuid, or a name resolved to its

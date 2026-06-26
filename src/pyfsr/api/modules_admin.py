@@ -68,14 +68,18 @@ if TYPE_CHECKING:
 _STAGING = "/api/3/staging_model_metadatas"
 _PUBLISHED = "/api/3/model_metadatas"
 _PUBLISH = "/api/publish"
-# After a publish is kicked off, ``/api/3`` (the API entrypoint) returns 503 for the whole
+# After a publish is kicked off, ``/api/3`` (the API entrypoint) may return 503 during the
 # backup + migrate window and 200 once it completes — the same signal the in-product UI
-# polls. ``/api/publish/error`` reports the *last* publish's outcome
+# polls. (On 7.6.x this 503 covers the whole window for every publish; on 8.0+ only
+# structural changes disrupt a subset of surfaces — see :meth:`publish` for the measured
+# blast radius.) ``/api/publish/error`` reports the *last* publish's outcome
 # (``{"status": "Success"|..., "last_publish_time": <epoch>}``); a fresh ``last_publish_time``
 # with ``status == "Success"`` means this publish committed, any other status is a failure.
 _ENTRYPOINT = "/api/3"
 _PUBLISH_ERROR = "/api/publish/error"
 _REVERT = "/api/publish/revert"
+#: Sentinel for "no prior errors captured" — distinct from a real ``errors`` value of None.
+_UNSET = object()
 _VIEW_TEMPLATES = "/api/3/system_view_templates"
 _VIEW_TEMPLATES_BULK = "/api/3/bulkupsert/system_view_templates"
 _REL = {"$relationships": "true"}
@@ -797,13 +801,18 @@ class ModulesAdminAPI(BaseAPI):
         :meth:`publish` to commit. Use this before a (appliance-wide) publish to see
         exactly what would be promoted.
         """
+        # ``$relationships=true`` is REQUIRED: without it the list payload omits the
+        # ``attributes`` (fields) relationship entirely, so a field-only change — adding /
+        # removing a field, toggling visibility, setting required-by-condition — leaves the
+        # bare scalar records identical and ``_differs`` reports no change (false-empty).
+        # Only module create/delete would be caught. See _REL.
         stg = {
             str(m.get("type", "")).lower(): m
-            for m in (self.client.get(_STAGING, params=_ALL) or {}).get("hydra:member", [])
+            for m in (self.client.get(_STAGING, params={**_ALL, **_REL}) or {}).get("hydra:member", [])
         }
         pub = {
             str(m.get("type", "")).lower(): m
-            for m in (self.client.get(_PUBLISHED, params=_ALL) or {}).get("hydra:member", [])
+            for m in (self.client.get(_PUBLISHED, params={**_ALL, **_REL}) or {}).get("hydra:member", [])
         }
         changes: list[dict[str, Any]] = []
         for mod in sorted(set(stg) | set(pub)):
@@ -853,11 +862,31 @@ class ModulesAdminAPI(BaseAPI):
     @staticmethod
     def _differs(staged: dict[str, Any], published: dict[str, Any]) -> bool:
         """True if a staged record differs from its published one, ignoring the
-        endpoint-relative ``@id``/``@type`` keys (which always differ by store)."""
+        endpoint-relative ``@id``/``@type``/``@context`` keys.
+
+        These hypermedia keys differ by *store* at **every** nesting level, not just the
+        top — e.g. a field's ``@id`` is ``/api/3/attribute_metadatas/<uuid>`` in staging but
+        ``/api/3/attrib_model_metadatas/<uuid>`` in published (same uuid, different path), and
+        each attribute also carries a ``sattrib`` back-reference IRI
+        (``/api/3/staging_model_metadatas/<uuid>`` vs ``/api/3/model_metadatas/<uuid>``). A
+        shallow strip would therefore flag every module as ``modified`` once ``attributes``
+        are compared. We (1) drop the ``@id``/``@type``/``@context`` keys recursively and
+        (2) canonicalize the store segment of any metadata IRI *value* (staging vs published
+        names → one token, keeping the shared uuid) so only semantic differences remain."""
         skip = {"@id", "@type", "@context"}
-        return {k: v for k, v in staged.items() if k not in skip} != {
-            k: v for k, v in published.items() if k not in skip
-        }
+        # staging/published variants of the model + attribute metadata store segments.
+        store_iri = re.compile(r"/api/3/(?:staging_)?(?:model_metadatas|attrib_model_metadatas|attribute_metadatas)/")
+
+        def scrub(value: Any) -> Any:
+            if isinstance(value, dict):
+                return {k: scrub(v) for k, v in value.items() if k not in skip}
+            if isinstance(value, list):
+                return [scrub(v) for v in value]
+            if isinstance(value, str):
+                return store_iri.sub("/api/3/_metadata_/", value)
+            return value
+
+        return scrub(staged) != scrub(published)
 
     # -------------------------------------------------------------- write
     def create_module(
@@ -1454,12 +1483,26 @@ class ModulesAdminAPI(BaseAPI):
 
     _is_publish_transient = staticmethod(is_migrate_transient)
 
-    def _last_publish_time(self) -> int | None:
-        """Best-effort read of the last publish's ``last_publish_time`` (epoch), or None."""
+    def _publish_status(self) -> dict[str, Any] | None:
+        """Parse ``/api/publish/error`` regardless of HTTP status.
+
+        ``/api/publish/error`` returns **HTTP 400** (not 200) whenever the appliance has a
+        prior publish error on record — and the body still carries the authoritative
+        ``status`` / ``last_publish_time`` fields. A plain ``client.get`` raises on that 400
+        and the caller loses the body, so we read with ``raise_on_status=False`` and parse
+        the JSON for any status code. Returns the parsed dict, or None if unparseable.
+        """
         try:
-            body = self.client.get(_PUBLISH_ERROR)
+            resp = self.client.get(_PUBLISH_ERROR, raise_on_status=False)
+            # raise_on_status=False yields the raw Response; parse its JSON best-effort.
+            body = resp.json() if hasattr(resp, "json") else resp
+            return body if isinstance(body, dict) else None
         except Exception:
             return None
+
+    def _last_publish_time(self) -> int | None:
+        """Best-effort read of the last publish's ``last_publish_time`` (epoch), or None."""
+        body = self._publish_status()
         return body.get("last_publish_time") if isinstance(body, dict) else None
 
     def publish(
@@ -1485,10 +1528,43 @@ class ModulesAdminAPI(BaseAPI):
 
         **Always synchronous.** The PUT only *starts* the publish (the response is
         ``{"status": "started"}``); the backup + DB migrate + commit then runs server-side,
-        during which the **entire API — including ``/api/3`` — returns 503**. Since the whole
-        appliance is unusable for that window there is nothing a caller could do concurrently,
-        so this method blocks: it waits out the outage and confirms the result via
-        ``/api/publish/error``, returning only once the schema is actually live (or raising).
+        during which some or all of the API may be unavailable. This method blocks until the
+        migrate finishes and confirms the result via ``/api/publish/error``, returning only
+        once the schema is actually live (or raising).
+
+        **Blast radius is version- and change-dependent** (measured, not assumed):
+
+        - On **7.6.x** every publish — even a no-op — runs the full backup + migrate + cache
+          rebuild, during which the **entire ``/api/3`` surface returns 503** for the whole
+          window (~50–57s observed on 7.6.5).
+        - On **8.0+** the impact is greatly reduced. Minor field-only edits (toggling
+          *visibility* or setting *required-by-condition*) commit in **~3s with no observable
+          outage** on any read surface. A **structural** change (adding a field/module) takes
+          longer (~30s) and disrupts only the *record/query/auth* layer: record-list endpoints
+          (``GET /api/3/<module>``) return transient **404** for ~13s and ``/api/query`` returns
+          **400/401** for ~2.5s while the migrate runs — *not* a global 503. Module-metadata,
+          view-resolve, app-config and picklist surfaces stay available throughout.
+
+          That record-layer blip is **instance-wide, not scoped to the changed module**:
+          reads on *unrelated* modules (measured: ``alerts``/``incidents``/``indicators``) go
+          down for the same window as the module being altered, because the migrate cycles the
+          shared ORM/query services. So a structural publish briefly breaks record reads across
+          the whole appliance, while leaving the metadata-serving layer up.
+
+        See ``Miscellaneous/fortisoar/repro/publish_blast_radius_repro.py`` and
+        :class:`~pyfsr.PublishProbe` for the per-surface measurement.
+
+        **No-op publishes return immediately.** If :meth:`pending_changes` is empty there is
+        nothing to migrate — the PUT returns 200 but no backup/migrate runs and
+        ``last_publish_time`` never advances — so this returns right after the PUT instead of
+        blocking for the full ``timeout`` waiting for an outage that will never happen.
+
+        Note ``/api/publish/error`` returns **HTTP 400** (with a usable JSON body) whenever the
+        appliance has a prior publish error on record; the poller reads that body
+        status-agnostically (see ``_publish_status``) rather than treating the 400 as an
+        outage. A box whose error record stays stale across a successful publish can therefore
+        report a misleading ``status`` — trust :meth:`pending_changes` / a schema check to
+        confirm the live state.
 
         Note that *schema validation* errors (e.g. a relationship with no matching lookup on
         the target, or a field whose ``type`` does not exist) are returned **synchronously**
@@ -1522,7 +1598,13 @@ class ModulesAdminAPI(BaseAPI):
                     f"appliance-wide migrate: {names}. Fix or discard them "
                     "(discard_staging_draft), or pass precheck=False to override."
                 )
-        prev_time = self._last_publish_time()
+        # A publish with nothing staged is a server-side no-op: the PUT returns 200 but no
+        # migrate runs, so ``last_publish_time`` never advances and there is no 503 outage.
+        # Capture this up front so we can skip the (otherwise full-timeout) wait below.
+        had_pending = bool(self.pending_changes())
+        prev_state = self._publish_status() or {}
+        prev_time = prev_state.get("last_publish_time")
+        prev_errors = prev_state.get("errors", _UNSET)
         try:
             self.client.put(_PUBLISH, data={})
         except (FortiSOARException, requests.exceptions.RequestException) as exc:
@@ -1533,7 +1615,13 @@ class ModulesAdminAPI(BaseAPI):
             # the true outcome via /api/publish/error regardless.
             if not self._is_publish_transient(exc):
                 raise
-        result = self._wait_for_publish(prev_time, timeout, poll_interval)
+        if not had_pending:
+            # Nothing to migrate: ``_wait_for_publish`` would block for the full timeout
+            # waiting for a ``last_publish_time`` advance that never comes. Return now.
+            # (Deferred role grants from create_module(grant_to=) are still flushed below.)
+            self._flush_pending_grants()
+            return self._publish_status() or {"status": "Success", "note": "no pending changes"}
+        result = self._wait_for_publish(prev_time, timeout, poll_interval, prev_errors=prev_errors)
         # The schema is now live — apply any role grants deferred from create_module(grant_to=).
         self._flush_pending_grants()
         return result
@@ -1561,30 +1649,42 @@ class ModulesAdminAPI(BaseAPI):
         result = self.client.put(_REVERT, data={})
         return result if isinstance(result, dict) else {}
 
-    def _wait_for_publish(self, prev_time: int | None, timeout: float, poll_interval: float) -> dict[str, Any]:
+    def _wait_for_publish(
+        self,
+        prev_time: int | None,
+        timeout: float,
+        poll_interval: float,
+        prev_errors: Any = _UNSET,
+    ) -> dict[str, Any]:
         """Block until the async publish finishes, using ``/api/publish/error`` as the truth.
 
         Polls ``/api/publish/error`` until ``last_publish_time`` advances past ``prev_time``.
         Returns the final body on ``status == "Success"``; raises
         :class:`~pyfsr.exceptions.FortiSOARException` with the appliance's reported
-        status/error on any other terminal state, or :class:`TimeoutError` if it never
-        reports back.
+        status/error on a **fresh** failure, or :class:`TimeoutError` if it never reports back.
 
         While the migrate runs the **whole API is unstable** — ``/api/publish/error`` itself
         may return 503s, gateway errors, or unparseable bodies ("Unknown error occurred").
         Every such failure is treated as "still in progress, keep waiting": only a cleanly
-        parsed 200 body is allowed to decide the outcome. That is why a publish error is
-        reported from the JSON ``status`` field, never inferred from a failed poll.
+        parsed body is allowed to decide the outcome.
+
+        **Stale error logs.** Some appliances keep a *persistent* publish-error record: after
+        a wedge, ``/api/publish/error`` returns ``status == "Fail"`` (HTTP 400) with the old
+        ``errors`` text **forever**, even after subsequent publishes succeed. Trusting
+        ``status`` alone would then report a false failure on every publish. So a failure is
+        only believed when the ``errors`` text **changed** versus ``prev_errors`` (captured by
+        :meth:`publish` before the PUT): an unchanged error log after we have ridden the 503
+        outage and ``last_publish_time`` advanced means the logged failure is stale → success.
         """
         deadline = time.monotonic() + timeout
         last: dict[str, Any] | None = None
         saw_outage = False
         while True:
-            body: dict[str, Any] | None = None
-            try:
-                got = self.client.get(_PUBLISH_ERROR)
-                body = got if isinstance(got, dict) else None
-            except Exception:
+            # ``/api/publish/error`` returns 400 (with a usable body) when a prior error is
+            # on record, so read it status-agnostically. A None here means the endpoint was
+            # genuinely unreachable/unparseable — i.e. mid-migrate API outage.
+            body = self._publish_status()
+            if body is None:
                 # API down / unparseable mid-migrate — the outage itself is the signal that
                 # the publish is running; keep polling until it stabilises or we time out.
                 saw_outage = True
@@ -1595,10 +1695,32 @@ class ModulesAdminAPI(BaseAPI):
                 # past what we captured, or we have ridden through the 503 migrate outage and
                 # come out the other side (covers the case where ``prev_time`` was unreadable
                 # — never trust a stale "Success" that predates this publish).
-                fresh = body.get("last_publish_time") != prev_time or saw_outage
+                advanced = body.get("last_publish_time") != prev_time
+                fresh = advanced or saw_outage
+                # A reported failure is only real if its error log changed vs. before the PUT;
+                # an unchanged log on a box that committed (rode the outage, advanced the time)
+                # is a stale record, not this publish's outcome.
+                errors_stale = prev_errors is not _UNSET and body.get("errors") == prev_errors
                 if fresh and status == "success":
                     return body
-                if fresh and status not in ("", "started", "in progress", "inprogress"):
+                if saw_outage and advanced and errors_stale:
+                    return body
+                # Lightweight (metadata-only) publishes — toggling visibility, setting
+                # required-by-condition — commit on 8.0 WITHOUT a migrate: no 503 outage and
+                # ``last_publish_time`` never advances, so the signals above never fire and we
+                # would wait out the full timeout. Detect completion structurally instead: once
+                # staging matches published again (nothing pending), the publish is done. Guard
+                # it to the "no outage, no advance" case so it never races a real migrate, and
+                # only when there is no *fresh* failure on record. ``pending_changes`` itself can
+                # error mid-migrate — treat that as "still in progress".
+                if not advanced and not saw_outage and (errors_stale or status in ("", "success")):
+                    try:
+                        committed = not self.pending_changes()
+                    except Exception:
+                        committed = False
+                    if committed:
+                        return body
+                if fresh and not errors_stale and status not in ("", "started", "in progress", "inprogress"):
                     raise FortiSOARException(
                         describe_migrate_failure(body.get("status"), body.get("message") or body.get("error") or body)
                     )

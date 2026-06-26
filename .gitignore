@@ -51,3 +51,4 @@ docs/plans/
 examples/fortisiem_investigation_*.json
 examples/alert_investigation.txt
 examples/SIEM_MCP_INFLUENCE_REPORT.md
+docs/_build/

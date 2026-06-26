@@ -1318,3 +1318,48 @@ def test_create_playbook_request_builds_body_and_validates():
 def test_create_playbook_blank_name_raises_value_error():
     with pytest.raises(ValueError, match="non-empty name"):
         PlaybooksAPI(_Rec()).create_playbook("   ", "coll-uuid")
+
+
+# -- child_runs / has_async_children (async loop sub-playbook lookup) --------
+def test_child_runs_scopes_by_parent_wf_pk():
+    kids = [
+        _run(
+            "/api/wf/api/workflows/301/",
+            "Child",
+            "finished",
+            "2026-06-26T00:00:02",
+            created="2026-06-26T00:00:00",
+            parent_wf="/wf/api/workflows/210/",
+        ),
+        _run(
+            "/api/wf/api/workflows/302/",
+            "Child",
+            "finished",
+            "2026-06-26T00:00:03",
+            created="2026-06-26T00:00:01",
+            parent_wf="/wf/api/workflows/210/",
+        ),
+    ]
+    client = FakeClient(workflows=kids)
+    runs = PlaybooksAPI(client).child_runs(210)
+    assert len(runs) == 2
+    # the live-table query must scope by parent_wf=<pk>, NOT the parent_wf__isnull
+    # default that execution_history uses (which would exclude children).
+    qs = [ep for ep, _ in client.get_calls if ep.startswith("/api/wf/api/workflows/?")]
+    assert any("parent_wf=210" in ep for ep in qs)
+    assert all("parent_wf__isnull=True" not in ep for ep in qs)
+
+
+def test_child_runs_resolves_path_and_taskid():
+    api = PlaybooksAPI(FakeClient())
+    assert api._resolve_run_pk("/wf/api/workflows/210/") == "210"
+    assert api._resolve_run_pk(210) == "210"
+    assert api._resolve_run_pk("not-a-pk") is None
+
+
+def test_has_async_children_reads_tag():
+    parent = _run(
+        "/api/wf/api/workflows/210/", "Parent", "finished", "2026-06-26T00:00:05", tags="#has_async_childwf_cyops"
+    )
+    client = FakeClient(workflows=[parent])
+    assert PlaybooksAPI(client).has_async_children(210) is True

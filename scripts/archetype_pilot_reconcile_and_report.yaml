@@ -5,6 +5,16 @@ description: >
   join key (serial), writes a finding record to the reconciliation_results module, and
   emails a CSV report via SMTP (localhost-postfix). Source data is canned; the module,
   connectors, compiled playbook, schedule, and SMTP email are all real.
+
+  NOTE on the code-snippet sandbox (validated live on 7.6.5 / code-snippet v2.1.4):
+  the connector execs `python_function` at MODULE LEVEL, so a top-level `return` is a
+  SyntaxError ('return' outside function), and `open` is restricted, so the snippet
+  cannot write a CSV file. The snippet therefore `print(json.dumps(...))` and the
+  connector auto-deserializes that JSON into a structured `code_output` dict; the
+  create_record step reads it directly and the email embeds the CSV text in the body
+  (no file attachment). See archetype-recipe-framework follow-up: the seed's
+  playbook_skeletons (which assume `return` + a file_path attachment) need this
+  sandbox-compatible rewrite baked in.
 visible: true
 
 playbooks:
@@ -21,7 +31,7 @@ playbooks:
         next: Write finding
         arguments:
           code: |
-            import csv, io
+            import csv, io, json
             # Canned inventories (lab box has no live FortiCloud/ServiceNow creds).
             a = [
                 {"serial": "FGT-001", "name": "edge-fw-01", "license": "active"},
@@ -32,36 +42,50 @@ playbooks:
                 {"serial": "FGT-001", "name": "edge-fw-01", "status": "installed"},
                 {"serial": "FGT-004", "name": "branch-fw-09", "status": "installed"},
             ]
+            # The code-snippet sandbox is restricted (no API access, no open()), so it
+            # cannot resolve picklist friendly values to IRIs at runtime. The create_record
+            # step needs IRIs (friendly values are rejected with FSR_CH_0000001), so the
+            # MismatchType IRIs are resolved at DEPLOY time and embedded here. In a real
+            # deploy the archetype router/agent resolves these from the live picklists.
+            MT = {
+                "missing-in-A": "/api/3/picklists/26399476-3fbf-4443-8240-a374c988126e",
+                "missing-in-B": "/api/3/picklists/2b7b652f-3e22-4f52-b76c-e4d12bf3e5f6",
+                "license-expiring": "/api/3/picklists/c61d5134-e24f-448a-a2c0-d1e4d2352268",
+                "field-mismatch": "/api/3/picklists/e42f12d5-ed5c-43ee-b8d2-f2a314a32a2f",
+            }
             ka = {r["serial"]: r for r in a}
             kb = {r["serial"]: r for r in b}
             findings = []
             for s, r in ka.items():
                 if s not in kb:
-                    findings.append({"join_key": s, "mismatch_type": "missing-in-B",
+                    findings.append({"join_key": s, "mismatch_type": MT["missing-in-B"],
                                      "source_system": "FortiCloud", "target_system": "ServiceNow",
+                                     "source_id": s, "target_id": "",
                                      "details": f"{r['name']} missing in ServiceNow"})
                 elif r.get("license") == "expired":
-                    findings.append({"join_key": s, "mismatch_type": "license-expiring",
+                    findings.append({"join_key": s, "mismatch_type": MT["license-expiring"],
                                      "source_system": "FortiCloud", "target_system": "ServiceNow",
+                                     "source_id": s, "target_id": s,
                                      "details": f"{r['name']} license expired"})
             for s, r in kb.items():
                 if s not in ka:
-                    findings.append({"join_key": s, "mismatch_type": "missing-in-A",
+                    findings.append({"join_key": s, "mismatch_type": MT["missing-in-A"],
                                      "source_system": "FortiCloud", "target_system": "ServiceNow",
+                                     "source_id": "", "target_id": s,
                                      "details": f"{r['name']} missing in FortiCloud"})
             buf = io.StringIO()
             w = csv.writer(buf)
             w.writerow(["join_key", "mismatch_type", "source_system", "target_system", "details"])
+            mt_rev = {v: k for k, v in MT.items()}  # IRI -> friendly label, for the human CSV
             for f in findings:
-                w.writerow([f["join_key"], f["mismatch_type"], f["source_system"],
-                            f["target_system"], f["details"]])
-            csv_path = "/tmp/pyfsr_recon_report.csv"
-            with open(csv_path, "w") as fh:
-                fh.write(buf.getvalue())
-            return {"findings": findings,
-                    "first": findings[0] if findings else None,
-                    "csv_path": csv_path,
-                    "count": len(findings)}
+                w.writerow([f["join_key"], mt_rev.get(f["mismatch_type"], f["mismatch_type"]),
+                            f["source_system"], f["target_system"], f["details"]])
+            # Module-level exec: no `return`, no `open`. print(json.dumps(...)) -> the
+            # connector auto-deserializes this into a structured code_output dict.
+            print(json.dumps({"findings": findings,
+                              "first": findings[0] if findings else None,
+                              "csv_content": buf.getvalue(),
+                              "count": len(findings)}))
 
       - name: Write finding
         type: create_record
@@ -70,12 +94,16 @@ playbooks:
           module: reconciliation_results
           operation: Create
           resource:
-            source_system: "{{ vars.steps.Reconcile.output.first.source_system }}"
-            target_system: "{{ vars.steps.Reconcile.output.first.target_system }}"
-            join_key: "{{ vars.steps.Reconcile.output.first.join_key }}"
-            mismatch_type: "{{ vars.steps.Reconcile.output.first.mismatch_type }}"
-            status: "Open"
-            details: "{{ vars.steps.Reconcile.output.first.details }}"
+            source_system: "{{ vars.steps.Reconcile.data.code_output.first.source_system }}"
+            source_id: "{{ vars.steps.Reconcile.data.code_output.first.source_id }}"
+            target_system: "{{ vars.steps.Reconcile.data.code_output.first.target_system }}"
+            target_id: "{{ vars.steps.Reconcile.data.code_output.first.target_id }}"
+            join_key: "{{ vars.steps.Reconcile.data.code_output.first.join_key }}"
+            mismatch_type: "{{ vars.steps.Reconcile.data.code_output.first.mismatch_type }}"
+            # ReconStatus picklist IRI for "Open" (resolved at deploy time; create_record
+            # needs an IRI, not the friendly value "Open").
+            status: "/api/3/picklists/58200b01-3cca-4b6b-a3c3-a83415def3e2"
+            details: "{{ vars.steps.Reconcile.data.code_output.first.details }}"
           step_variables: []
 
       - name: Email report
@@ -85,9 +113,7 @@ playbooks:
           operation: send_email
           config: localhost-postfix
           params:
-            to_recipients: "{{ vars.input.params.recipients }}"
-            subject: "Reconciliation Report - {{ vars.steps.Reconcile.output.count }} findings"
-            body: "Reconciliation report attached."
+            to_recipients: "{{ vars.inputs.recipients }}"
+            subject: "Reconciliation Report - {{ vars.steps.Reconcile.data.code_output.count }} findings"
+            body: "Reconciliation report ({{ vars.steps.Reconcile.data.code_output.count }} findings):\n\n{{ vars.steps.Reconcile.data.code_output.csv_content }}"
             content_type: "text"
-            file_path: "{{ vars.steps.Reconcile.output.csv_path }}"
-            file_name: "reconciliation_report.csv"

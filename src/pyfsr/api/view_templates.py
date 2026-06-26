@@ -318,9 +318,12 @@ class ViewTemplatesAPI(BaseAPI):
             The bulk-upsert response.
 
         Note:
-            Whether the platform auto-demotes a previously-default row for the same
-            ``(module, viewOptions)`` is not guaranteed — re-read with
-            :meth:`get_default_template` if you require exactly one default.
+            The platform enforces **exactly one default per ``(module, viewOptions)``**
+            (verified live, 8.0): promoting a row to default auto-demotes the previously
+            default row server-side. The corollary — you cannot directly *unset* the
+            lone default (``isDefault=False`` on the only default 500s on
+            ``bulkupsert/system_view_templates``); instead **promote another row**, which
+            demotes this one. So to change a module's default, call this on the new row.
         """
         if not isinstance(template, dict) or not template.get("uuid"):
             raise ValueError("set_default_template() needs a full SVT row dict with a 'uuid'")

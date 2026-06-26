@@ -148,7 +148,7 @@ class SystemSettingsAPI(BaseAPI):
         if all(v is None for v in wanted.values()):
             raise ValueError("set_development_mode() needs at least one flag")
 
-        record = self.get_named(self._DEV_SETTINGS_NAME)
+        record = self._dev_settings_record()
         values = list((record.get("privateValues") or {}).get("values") or [{}])
         entry = dict(values[0])
         for arg, value in wanted.items():
@@ -160,6 +160,51 @@ class SystemSettingsAPI(BaseAPI):
             data={"privateValues": {"values": values}},
             params=_RELATIONSHIPS,
         )
+
+    def set_custom_code_execution(self, enabled: bool = True) -> dict[str, Any]:
+        """Enable/disable *Custom Code Execution* (the ``code_snippet`` gate).
+
+        Convenience wrapper over :meth:`set_development_mode`: in FortiSOAR the
+        "Custom Code Execution" toggle in *System Settings → Advanced Development
+        Features* is the SAME flag as the custom-**connector** toggle
+        (``allowCustomConnector``) — its in-product notice/risk strings are the
+        ``..._CUSTOM_CODE_EXECUTION`` ones. With it off, a ``code_snippet`` step
+        fails at runtime with *"Custom Code Execution is disabled. Enable this
+        feature in Settings"*.
+
+        Equivalent to ``set_development_mode(connectors=enabled)``; creates the
+        *Advanced Development Settings* record on a fresh appliance where it has
+        never been saved. Returns the updated record.
+        """
+        return self.set_development_mode(connectors=enabled)
+
+    def _dev_settings_record(self) -> dict[str, Any]:
+        """The *Advanced Development Settings* record, created if it doesn't exist.
+
+        On a freshly-installed appliance this record (an 8.0 child of the root
+        ``system_settings`` whose ``privateValues.values[0]`` holds the
+        ``allowCustomConnector``/``allowCustomWidget`` flags) is absent until the
+        page is first saved — the UI lazily creates it. Mirror that: create it
+        with all flags off so the caller's PUT then flips the requested one.
+        """
+        try:
+            return self.get_named(self._DEV_SETTINGS_NAME)
+        except ValueError:
+            root_uuid = self.get_root()["uuid"]
+            body = {
+                "name": self._DEV_SETTINGS_NAME,
+                "publicValues": {"values": []},
+                "privateValues": {
+                    "values": [
+                        {
+                            "allowCustomConnector": False,
+                            "allowCustomWidget": False,
+                        }
+                    ]
+                },
+                "parent": f"{self._ENDPOINT}/{root_uuid}",
+            }
+            return self.client.post(self._ENDPOINT, data=body)
 
     @staticmethod
     def _dev_entry(record: dict[str, Any]) -> dict[str, Any]:
