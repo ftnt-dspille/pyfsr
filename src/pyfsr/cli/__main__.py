@@ -135,6 +135,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_drop.add_argument("--yes", action="store_true", help="skip confirmation")
     p_drop.set_defaults(func=cmd_db_drop_module_tables)
 
+    p_orphans = dbsub.add_parser(
+        "orphans",
+        help="sweep for physical tables left behind by deleted modules",
+    )
+    _add_connection_args(p_orphans)
+    _add_fmt(p_orphans)
+    p_orphans.add_argument("--drop", action="store_true", help="DROP each reported orphan family (gated by --yes)")
+    p_orphans.add_argument("--yes", action="store_true", help="skip confirmation when --drop")
+    p_orphans.set_defaults(func=cmd_db_orphans)
+
     # --- service group ---
     p_svc = asub.add_parser("service", help="systemd / cyops service verbs")
     svcsub = p_svc.add_subparsers(dest="svc_command", required=True)
@@ -475,6 +485,29 @@ def cmd_db_drop_module_tables(args: argparse.Namespace) -> int:
         {"db": result["db"], "dropped": ", ".join(result["dropped"]) or "(none)"},
         fmt=args.fmt,
     )
+    return 0
+
+
+def cmd_db_orphans(args: argparse.Namespace) -> int:
+    facts = _make_facts(args)
+    orphans = db_cmds.find_orphan_module_tables(facts)
+    _emit_target(facts.content_db(), args.fmt)
+    rows = [[o.base, o.table, o.kind] for o in orphans]
+    _output.render(rows, ["base", "table", "kind"], fmt=args.fmt)
+    if not orphans:
+        return 0
+    if not args.drop:
+        bases = sorted({o.base for o in orphans})
+        print(
+            f"# {len(orphans)} orphan table(s) across {len(bases)} module(s): "
+            f"{', '.join(bases)}. Reclaim with `db orphans --drop --yes`.",
+            file=sys.stderr,
+        )
+        return 1  # non-zero so it's usable as a hygiene gate
+    for base in sorted({o.base for o in orphans}):
+        print(f"# plan: DROP TABLE CASCADE for module {base!r}", file=sys.stderr)
+        result = db_cmds.drop_module_tables(facts, base, yes=args.yes)
+        print(f"  {result['db']}: dropped {', '.join(result['dropped']) or '(none)'}")
     return 0
 
 

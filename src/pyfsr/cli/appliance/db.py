@@ -204,6 +204,104 @@ def find_module_tables(facts: Facts, base_table: str) -> list[str]:
     return [r[0] for r in rows if r and r[0]]
 
 
+# Join tables FortiSOAR auto-creates for EVERY module (team-based access control +
+# record ownership). A leftover ``<base>_team`` / ``<base>_actor`` whose ``<base>`` is
+# no longer a live module is the reliable fingerprint of a deleted-module orphan — it
+# distinguishes module litter from Django/Celery/system tables, which never carry these
+# companions. (This is exactly the ``teamscoperepro_team`` / ``teamscoperepro_actor``
+# shape left behind on fsr130; see CREATE_DELETE_ORPHAN_HARDENING_PLAN.md.)
+_MODULE_MARKER_SUFFIXES = ("team", "actor")
+
+
+@dataclass
+class OrphanTable:
+    """A physical table left behind by a deleted module (no metadata row backs it)."""
+
+    table: str  # the physical table name present in pg_tables
+    base: str  # the inferred former module base table (the family prefix)
+    kind: str  # "base" (the module's own table) or "join" (a ``<base>_<rel>`` table)
+
+
+def _metadata_table_col(facts: Facts, target: str) -> str:
+    """Resolve the column holding a module's table name in ``model_metadatas``.
+
+    FortiSOAR's Doctrine mapping has shipped this as both ``tableName`` and
+    ``table_name`` across versions, so discover it from ``information_schema``
+    rather than hard-coding either spelling.
+    """
+    rows = facts.psql(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema='public' "
+        "AND table_name='model_metadatas' AND lower(column_name) IN ('tablename','table_name') "
+        "ORDER BY column_name LIMIT 1",
+        db=target,
+    )
+    col = rows[0][0] if rows and rows[0] and rows[0][0] else ""
+    if not col:
+        raise RuntimeError(
+            "could not resolve the table-name column on model_metadatas (expected 'tableName' or 'table_name')"
+        )
+    return col
+
+
+def live_module_tables(facts: Facts) -> set[str]:
+    """Base table names backing every *live* module — published (``model_metadatas``)
+    UNION staging (``staging_model_metadatas``). The complement of this set, over the
+    physical tables, is what :func:`find_orphan_module_tables` reasons about."""
+    target = facts.content_db()
+    col = _metadata_table_col(facts, target)
+    bases: set[str] = set()
+    for meta in ("model_metadatas", "staging_model_metadatas"):
+        rows = facts.psql(f'SELECT "{col}" FROM public.{meta}', db=target)
+        bases.update(r[0] for r in rows if r and r[0])
+    return bases
+
+
+def find_orphan_module_tables(facts: Facts) -> list[OrphanTable]:
+    """Sweep the content DB for physical tables left behind by deleted modules.
+
+    A module delete over the API discards the module's metadata but the FortiSOAR
+    API cannot ``DROP`` the physical tables, so ``<base>`` and its join tables linger
+    (see :func:`drop_module_tables`). This finds them appliance-wide without needing
+    the deleted module's name:
+
+    1. ``live`` = every base table still backed by a metadata row (:func:`live_module_tables`).
+    2. Any table named ``<base>_team`` / ``<base>_actor`` whose ``<base>`` is **not** live
+       marks ``<base>`` as a deleted module (these join tables are auto-created for every
+       module, so they are an unambiguous orphan fingerprint — system tables never have them).
+    3. The orphan family is ``<base>`` plus every ``<base>_*`` physical table present.
+
+    Non-destructive: returns the candidate list; use ``drop_module_tables(base, yes=True)``
+    (or the CLI ``--drop``) to reclaim. Returns ``OrphanTable`` rows sorted by base then table.
+    """
+    target = facts.content_db()
+    live = {b.lower() for b in live_module_tables(facts)}
+    rows = facts.psql(
+        "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename",
+        db=target,
+    )
+    all_tables = [r[0] for r in rows if r and r[0]]
+    present = {t.lower(): t for t in all_tables}
+
+    # Identify deleted-module bases from leftover marker join tables.
+    orphan_bases: set[str] = set()
+    for t in all_tables:
+        for suffix in _MODULE_MARKER_SUFFIXES:
+            marker = "_" + suffix
+            if t.lower().endswith(marker):
+                base = t[: -len(marker)]
+                if base and base.lower() not in live:
+                    orphan_bases.add(base.lower())
+                break
+
+    out: list[OrphanTable] = []
+    for base in sorted(orphan_bases):
+        family = [t for low, t in present.items() if low == base or low.startswith(base + "_")]
+        for tbl in sorted(family):
+            kind = "base" if tbl.lower() == base else "join"
+            out.append(OrphanTable(table=tbl, base=base, kind=kind))
+    return out
+
+
 def drop_module_tables(facts: Facts, base_table: str, *, yes: bool = False) -> dict:
     """Drop the orphaned physical tables for a deleted module (``DROP TABLE ... CASCADE``).
 

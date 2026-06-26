@@ -430,6 +430,40 @@ def test_create_module_rejects_invalid_module_names():
         admin.create_module("goodmod", fields=[])  # empty field list
 
 
+def test_create_module_orphan_table_collision_precheck():
+    import pytest
+
+    from pyfsr._testing.replay import ReplayTransport
+    from pyfsr.cli.appliance.facts import Facts
+    from pyfsr.exceptions import FortiSOARException
+
+    c = RecordingClient()
+    admin = ModulesAdminAPI(c)
+    # The module is NOT live (no metadata) but its tableName already has leftover
+    # physical tables from a prior delete → publishing would wedge on 42P07.
+    admin.get_published = lambda module: None
+    admin.get_staging = lambda module: None
+    facts = Facts(ReplayTransport(tables=["leftovermod", "leftovermod_team", "leftovermod_actor"]))
+
+    with pytest.raises(FortiSOARException, match="orphaned physical table"):
+        admin.create_module("leftovermod", facts=facts)
+    # Nothing staged — the guard fired before any POST.
+    assert not any(m == "POST" for m, _e, _d in c.calls)
+
+
+def test_create_module_no_collision_when_tables_clean():
+    from pyfsr._testing.replay import ReplayTransport
+    from pyfsr.cli.appliance.facts import Facts
+
+    c = RecordingClient()
+    admin = ModulesAdminAPI(c)
+    admin.get_published = lambda module: None
+    admin.get_staging = lambda module: None
+    facts = Facts(ReplayTransport(tables=["widgets", "gadgets"]))  # no 'freshmod*' tables
+    admin.create_module("freshmod", facts=facts, create_view_templates=False)
+    assert any(m == "POST" for m, _e, _d in c.calls)  # creation proceeded
+
+
 def test_find_invalid_drafts_and_publish_precheck():
     import pytest
 

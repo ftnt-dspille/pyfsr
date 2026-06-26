@@ -908,6 +908,7 @@ class ModulesAdminAPI(BaseAPI):
         default_sort: list[dict[str, Any]] | None = None,
         create_view_templates: bool = True,
         grant_to: list[str] | str | None = None,
+        facts: Any | None = None,
         **opts: Any,
     ) -> dict[str, Any]:
         """Create a new module in **staging** (not yet live — call :meth:`publish`).
@@ -956,6 +957,16 @@ class ModulesAdminAPI(BaseAPI):
                 fields=[admin.text_field("name")],
                 grant_to=["Full App Permissions", "SOC Analyst"],
             )
+
+        ``facts`` (optional :class:`pyfsr.cli.appliance.Facts`) enables a **create-side
+        collision precheck**: a previously-deleted module of the same name leaves orphaned
+        physical tables behind (FortiSOAR cannot ``DROP`` them over the API — see
+        :meth:`delete_module`), and reusing that ``tableName`` wedges the next
+        :meth:`publish` on a Postgres ``42P07`` index-name collision. With ``facts`` given,
+        this refuses up front (before staging anything) if leftover tables exist for
+        ``module`` while no live module backs them, pointing you at the reclaim path. This
+        is symmetric with :meth:`find_invalid_drafts` (which catches bad *names*); here we
+        catch leftover *tables*.
         """
         if not isinstance(module, str) or not _MODULE_NAME_RE.match(module):
             raise ValueError(
@@ -965,6 +976,8 @@ class ModulesAdminAPI(BaseAPI):
             )
         if len(module) > _MAX_NAME_LEN:
             raise ValueError(f"module name {module!r} exceeds {_MAX_NAME_LEN} characters")
+        if facts is not None:
+            self._guard_orphan_table_collision(module, facts)
         if fields is not None and not fields:
             raise ValueError("a module needs at least one field; pass fields=None for a default 'name'")
         label = label or module
@@ -1177,6 +1190,27 @@ class ModulesAdminAPI(BaseAPI):
         """
         self._apply_team_scope(field, teams)
         return field
+
+    def _guard_orphan_table_collision(self, module: str, facts: Any) -> None:
+        """Refuse to create ``module`` if leftover physical tables already occupy its
+        ``tableName`` while no live module backs them — the ``42P07`` publish wedge.
+
+        Only fires when the module is not currently live (a live module legitimately owns
+        its tables). Needs an appliance ``Facts`` context (the API can't see physical tables).
+        """
+        if self.get_published(module) or self.get_staging(module):
+            return  # the module is live/staged — its tables belong to it, no collision
+        from ..cli.appliance import db as _appliance_db
+
+        leftover = _appliance_db.find_module_tables(facts, module)
+        if leftover:
+            raise FortiSOARException(
+                f"cannot create module {module!r}: {len(leftover)} orphaned physical table(s) "
+                f"from a previously-deleted module still occupy this tableName "
+                f"({', '.join(leftover)}). Publishing would wedge on a Postgres 42P07 index "
+                f"collision. Reclaim them first with `pyfsr appliance db orphans --drop --yes` "
+                f"or delete_module(..., drop_orphan_tables=facts), then retry."
+            )
 
     def _guard_team_scope(self, fields: list[dict[str, Any]]) -> None:
         """Version-gate + normalize the team-scope option on any People field in ``fields``.

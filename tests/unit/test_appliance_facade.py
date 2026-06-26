@@ -53,6 +53,37 @@ def test_drop_module_tables_requires_yes():
         a.db.drop_module_tables("widgets", yes=False)
 
 
+def test_find_orphan_module_tables_empty_on_healthy_box():
+    a = _appliance()  # stock tables are all backed by live modules
+    assert a.db.find_orphan_module_tables() == []
+
+
+def test_find_orphan_module_tables_detects_deleted_module():
+    # A deleted module leaves <base> + its auto-created <base>_team/<base>_actor
+    # join tables behind, with no model_metadatas row backing <base>.
+    a = _appliance(
+        tables=[
+            "widgets",
+            "widgets_team",
+            "teamscoperepro",
+            "teamscoperepro_team",
+            "teamscoperepro_actor",
+            "gadgets",
+        ],
+        live_modules=["widgets", "gadgets"],
+    )
+    orphans = a.db.find_orphan_module_tables()
+    assert {o.table for o in orphans} == {
+        "teamscoperepro",
+        "teamscoperepro_team",
+        "teamscoperepro_actor",
+    }
+    assert {o.base for o in orphans} == {"teamscoperepro"}
+    kinds = {o.table: o.kind for o in orphans}
+    assert kinds["teamscoperepro"] == "base"
+    assert kinds["teamscoperepro_team"] == "join"
+
+
 def test_license_device_uuid_delegates():
     a = _appliance()
     assert a.license.device_uuid() == UUID

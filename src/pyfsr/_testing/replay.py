@@ -46,9 +46,13 @@ class ReplayTransport(Transport):
         file_uuid: str | None = cap.DEVICE_UUID,
         csadm_uuid: str | None = cap.DEVICE_UUID,
         es_health_payload: str | None = None,
+        live_modules=None,
     ):
         self.commands: list[tuple[list[str], dict | None, bool]] = []
         self._tables = tables or ["widgets", "widgets_alerts", "widgets_team", "gadgets"]
+        # Base tableNames carried by model_metadatas/staging (the "live" module set the
+        # orphan sweep diffs against). Default keeps the stock tables orphan-free.
+        self._live_modules = live_modules if live_modules is not None else ["widgets", "gadgets"]
         self._databases = databases or {"venom": "7 GB", "das": "200 MB", "postgres": "8 MB"}
         self._service_wedged = service_wedged
         self._queues_backlog = queues_backlog
@@ -165,6 +169,14 @@ class ReplayTransport(Transport):
             return "\n".join(rows) + "\n"
         if "from pg_database" in sql:
             return "\n".join(self._databases) + "\n"
+        # Orphan sweep: column discovery + the live-module SELECT against model_metadatas.
+        if "information_schema.columns" in sql and "model_metadatas" in sql:
+            return "tableName\n"
+        if "from public.model_metadatas" in sql:
+            return "\n".join(self._live_modules) + "\n"
+        if "from public.staging_model_metadatas" in sql:
+            # Staging mirrors published in the fake (same live set).
+            return "\n".join(self._live_modules) + "\n"
         if "information_schema.tables" in sql and "model_metadatas" in sql:
             # Only the content DB (venom) has model_metadatas.
             return (

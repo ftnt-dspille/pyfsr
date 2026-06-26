@@ -35,7 +35,7 @@ from .cli.appliance import certs, db, host, info, logs, mq, service
 from .cli.appliance import es as es_mod
 from .cli.appliance import ha as ha_mod
 from .cli.appliance import license as license_mod
-from .cli.appliance.db import DatabaseInfo, DataClassSize
+from .cli.appliance.db import DatabaseInfo, DataClassSize, OrphanTable
 from .cli.appliance.es import ESHealth
 from .cli.appliance.facts import Facts
 from .cli.appliance.ha import HaHealth, HaNode
@@ -93,6 +93,13 @@ class _DbNamespace:
     def drop_module_tables(self, base_table: str, *, yes: bool = False) -> dict:
         """Drop orphaned module tables (``DROP ... CASCADE``). Refuses unless ``yes=True``."""
         return db.drop_module_tables(self._facts, base_table, yes=yes)
+
+    def find_orphan_module_tables(self) -> list[OrphanTable]:
+        """Sweep the content DB for physical tables left behind by deleted modules.
+
+        Non-destructive. Reclaim a reported base with :meth:`drop_module_tables`.
+        """
+        return db.find_orphan_module_tables(self._facts)
 
 
 class _ServiceNamespace:
