@@ -856,60 +856,71 @@ def test_add_field_reverse_is_idempotent():
 # --------------------------------------------------------------- grant_to / RBAC
 
 
-def test_create_module_with_grant_to_single_role():
-    c = RecordingClient()
-    ModulesAdminAPI(c).create_module(
-        "widgets",
-        label="Widget",
-        grant_to="Full App Permissions",
-        create_view_templates=False,
-    )
-    # Verify grant was called with the role name
+class PublishGrantClient(RecordingClient):
+    """RecordingClient whose /api/publish/error always reports a fresh Success, so publish()
+    completes and its deferred-grant flush runs."""
+
+    def __init__(self):
+        super().__init__()
+        self._ts = 100
+
+    def get(self, endpoint, params=None, **kw):
+        self.calls.append(("GET", endpoint, params))
+        if endpoint == "/api/publish/error":
+            self._ts += 1
+            return {"status": "Success", "last_publish_time": self._ts}
+        return super().get(endpoint, params=params, **kw)
+
+
+def test_create_module_grant_to_is_deferred_until_publish():
+    # A brand-new module is staging-only, so the grant must NOT fire at create time (it would
+    # 404 against /api/3/modules) — it is recorded and applied on the next publish().
+    c = PublishGrantClient()
+    admin = ModulesAdminAPI(c)
+    admin.create_module("widgets", label="Widget", grant_to="Full App Permissions", create_view_templates=False)
+    assert c.roles.grant_calls == []  # nothing granted yet
+    assert admin._pending_grants == {"widgets": ["Full App Permissions"]}
+
+    admin.publish(poll_interval=0)
     assert len(c.roles.grant_calls) == 1
     grant = c.roles.grant_calls[0]
-    assert grant["role"] == "Full App Permissions"
-    assert grant["module"] == "widgets"
-    # Full CRUD+execute granted
-    assert grant["can_read"] is True
-    assert grant["can_create"] is True
-    assert grant["can_update"] is True
-    assert grant["can_delete"] is True
-    assert grant["can_execute"] is True
+    assert grant["role"] == "Full App Permissions" and grant["module"] == "widgets"
+    assert all(grant[k] for k in ("can_read", "can_create", "can_update", "can_delete", "can_execute"))
+    assert admin._pending_grants == {}  # cleared after flushing
 
 
-def test_create_module_with_grant_to_multiple_roles():
-    c = RecordingClient()
-    ModulesAdminAPI(c).create_module(
-        "widgets",
-        label="Widget",
-        grant_to=["Full App Permissions", "SOC Analyst"],
-        create_view_templates=False,
+def test_create_module_grant_to_multiple_roles_flush_on_publish():
+    c = PublishGrantClient()
+    admin = ModulesAdminAPI(c)
+    admin.create_module(
+        "widgets", label="Widget", grant_to=["Full App Permissions", "SOC Analyst"], create_view_templates=False
     )
-    # Verify grant was called once per role
-    assert len(c.roles.grant_calls) == 2
-    roles_granted = [g["role"] for g in c.roles.grant_calls]
-    assert "Full App Permissions" in roles_granted
-    assert "SOC Analyst" in roles_granted
-    # Both grants are for the same module
-    modules = {g["module"] for g in c.roles.grant_calls}
-    assert modules == {"widgets"}
+    assert c.roles.grant_calls == []
+    admin.publish(poll_interval=0)
+    assert {g["role"] for g in c.roles.grant_calls} == {"Full App Permissions", "SOC Analyst"}
+    assert {g["module"] for g in c.roles.grant_calls} == {"widgets"}
 
 
-def test_create_module_without_grant_to_no_grants():
+def test_publish_with_no_pending_grants_grants_nothing():
+    c = PublishGrantClient()
+    ModulesAdminAPI(c).publish(poll_interval=0)
+    assert c.roles.grant_calls == []
+
+
+def test_create_module_without_grant_to_no_pending():
     c = RecordingClient()
-    ModulesAdminAPI(c).create_module("widgets", create_view_templates=False)
-    # No roles granted when grant_to is not specified
+    admin = ModulesAdminAPI(c)
+    admin.create_module("widgets", create_view_templates=False)
+    assert admin._pending_grants == {}
     assert len(c.roles.grant_calls) == 0
 
 
-def test_create_module_with_empty_grant_to_list_no_grants():
+def test_create_module_with_empty_grant_to_list_no_pending():
     c = RecordingClient()
-    ModulesAdminAPI(c).create_module(
-        "widgets",
-        grant_to=[],
-        create_view_templates=False,
-    )
-    # Empty list means no grants
+    admin = ModulesAdminAPI(c)
+    admin.create_module("widgets", grant_to=[], create_view_templates=False)
+    # Empty list means no grant intent recorded
+    assert admin._pending_grants == {}
     assert len(c.roles.grant_calls) == 0
 
 

@@ -910,11 +910,15 @@ class ModulesAdminAPI(BaseAPI):
         "direction": "DESC"}]``).
 
         ``grant_to`` (optional) grants full CRUD+execute permissions on the new module to
-        one or more roles immediately after creation. Pass a single role name (string) or a
-        list of role names. **This is explicit opt-in** — no roles are auto-granted unless
-        you specify them, ensuring RBAC changes are intentional. If you do not grant
-        permissions up front, the module will exist but records cannot be accessed until you
-        call :meth:`~pyfsr.api.roles.RolesAPI.grant_module_permissions` manually.
+        one or more roles. Pass a single role name (string) or a list of role names. **This is
+        explicit opt-in** — no roles are auto-granted unless you specify them, ensuring RBAC
+        changes are intentional. The grant is **deferred until the next** :meth:`publish`: a
+        brand-new module lives only in staging, and role grants resolve the module via
+        ``/api/3/modules`` (published only), so granting at create time would fail with "module
+        not found … call publish() first". ``publish()`` applies the pending grants once the
+        module is live. If you never publish (or grant manually), the module exists but its
+        records cannot be accessed until a role is granted via
+        :meth:`~pyfsr.api.roles.RolesAPI.grant_module_permissions`.
 
         Example::
 
@@ -967,19 +971,52 @@ class ModulesAdminAPI(BaseAPI):
         if create_view_templates:
             self.create_view_templates(module)
         if grant_to is not None:
-            # grant_to can be a single role name (string) or a list of role names
+            # A brand-new module lives only in STAGING; role grants resolve the module via
+            # /api/3/modules (PUBLISHED only), so granting here would raise "not found ... call
+            # publish() first". Defer the grant — publish() flushes it once the module is live.
             roles = grant_to if isinstance(grant_to, list) else [grant_to]
-            for role_name in roles:
-                self.client.roles.grant_module_permissions(
-                    role_name,
-                    module=module,
-                    can_read=True,
-                    can_create=True,
-                    can_update=True,
-                    can_delete=True,
-                    can_execute=True,
-                )
+            if roles:
+                self._pending_grants.setdefault(module, []).extend(roles)
         return created
+
+    @property
+    def _pending_grants(self) -> dict[str, list[str]]:
+        """Role grants requested via ``create_module(grant_to=...)``, applied on the next publish.
+
+        Keyed by module type → role names. A new module is staging-only, so its grants can only
+        be applied after :meth:`publish` makes it resolvable in ``/api/3/modules``.
+        """
+        cache: dict[str, list[str]] | None = getattr(self, "_pending_grants_cache", None)
+        if cache is None:
+            cache = {}
+            self._pending_grants_cache = cache
+        return cache
+
+    def _flush_pending_grants(self) -> None:
+        """Apply (and clear) deferred ``grant_to`` grants after a successful publish.
+
+        Invalidates the roles module cache first (the just-published module would otherwise be
+        absent), then grants each role full CRUD+execute. A grant failure is surfaced verbatim
+        — the publish itself already committed, so this raises rather than swallowing the error.
+        """
+        pending = self._pending_grants
+        if not pending:
+            return
+        self.client.roles._module_cache = None  # the new module is now published; refresh
+        try:
+            for module, roles in pending.items():
+                for role_name in roles:
+                    self.client.roles.grant_module_permissions(
+                        role_name,
+                        module=module,
+                        can_read=True,
+                        can_create=True,
+                        can_update=True,
+                        can_delete=True,
+                        can_execute=True,
+                    )
+        finally:
+            pending.clear()
 
     def get_staging_typed(self, module: str) -> StagingModelMetadata | None:
         """Typed convenience wrapper for :meth:`get_staging` — always returns
@@ -1496,7 +1533,10 @@ class ModulesAdminAPI(BaseAPI):
             # the true outcome via /api/publish/error regardless.
             if not self._is_publish_transient(exc):
                 raise
-        return self._wait_for_publish(prev_time, timeout, poll_interval)
+        result = self._wait_for_publish(prev_time, timeout, poll_interval)
+        # The schema is now live — apply any role grants deferred from create_module(grant_to=).
+        self._flush_pending_grants()
+        return result
 
     def revert(self) -> dict[str, Any]:
         """Discard **all** pending staged schema changes (``PUT /api/publish/revert``).
