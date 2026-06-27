@@ -28,6 +28,7 @@ from __future__ import annotations
 import os
 import shutil
 import sqlite3
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -52,7 +53,13 @@ def _load_compiler():
 
 
 # --------------------------------------------------------------------- warmup
-def warm_catalog(client: Any, db_path: str | Path) -> dict[str, int]:
+def warm_catalog(
+    client: Any,
+    db_path: str | Path,
+    *,
+    connectors: bool = True,
+    max_age: float | None = None,
+) -> dict[str, int]:
     """Warm a reference catalog DB with the target SOAR's per-install data.
 
     The ``fsr_playbooks`` compiler resolves author-friendly tokens (team
@@ -69,15 +76,37 @@ def warm_catalog(client: Any, db_path: str | Path) -> dict[str, int]:
     file or ``~/.cache/pyfsr/fsr_reference.db``); the packaged catalog in
     site-packages is read-only and must not be warmed in place.
 
+    With ``connectors=True`` (default) it also syncs the **installed connector
+    catalog** — ``connectors``/``operations``/``operation_params`` — from the live
+    box, so the compiler validates connector/operation/param tokens against what
+    is actually installed, INCLUDING custom connectors the packaged catalog can
+    never know (e.g. a locally built ``code-runner``). Each installed connector is
+    upserted from its live definition; other catalog connectors are left intact.
+
     Each section is synced independently — a failure in one (e.g. an empty
     picklists response) does not abort the others, mirroring the probe.
 
     Args:
         client: a connected :class:`pyfsr.FortiSOAR` client.
         db_path: writable path to warm (created from the slim catalog if absent).
+        connectors: also sync the installed connector catalog (default True);
+            set False to warm only teams/picklists/tags (faster, no per-connector
+            definition fetches).
+        max_age: incremental warm. When set (seconds), a section whose last warm
+            (recorded in the ``_catalog_meta`` table) is younger than ``max_age``
+            is **skipped** — its existing rows are kept and no HTTP is done, so
+            repeated warms in a session cost nothing for unchanged surfaces. The
+            default ``None`` always re-pulls every section (so freshly-created
+            teams/tags are picked up immediately). A skipped section reports its
+            cached row count and ``<section>_skipped=1`` in the summary.
 
     Returns:
-        A ``{table: row_count}`` summary of what was written.
+        A ``{table: row_count}`` summary of what was written (``connectors``/
+        ``operations``/``operation_params`` included when ``connectors=True``),
+        plus per-section wall-clock under ``<section>_ms`` keys
+        (``teams_ms``/``picklists_ms``/``tags_ms``/``connectors_ms``) and the
+        overall ``total_ms`` — so a caller can see where warm time goes (the
+        connector-definition fan-out is almost always the dominant cost).
 
     Raises:
         PlaybooksExtraNotInstalled: if the ``pyfsr[playbooks]`` extra is missing.
@@ -89,21 +118,71 @@ def warm_catalog(client: Any, db_path: str | Path) -> dict[str, int]:
         shutil.copy(default_db_path(), db)
 
     summary: dict[str, int] = {}
+    now = time.time()
+    src_path = str(getattr(client, "base_url", "") or "")
+    # Incremental-warm bookkeeping is best-effort: the _catalog_meta table is DDL,
+    # and the fsr_playbooks compiler keeps a cached read connection to the same
+    # cache DB. If that connection is open, the CREATE can't get its lock — in
+    # which case we degrade to a full (non-incremental) warm rather than failing.
+    meta_ok = [False]
+
+    def _lap(key: str, t0: float) -> None:
+        """Stamp a section's wall-clock (ms) into ``summary[f"{key}_ms"]`` so warm
+        timing is observable per surface."""
+        summary[f"{key}_ms"] = int((time.perf_counter() - t0) * 1000)
+
+    def _fresh(section: str) -> bool:
+        """True when ``section`` was warmed within ``max_age`` seconds (skip it)."""
+        if max_age is None or not meta_ok[0]:
+            return False
+        row = conn.execute("SELECT warmed_at FROM _catalog_meta WHERE section = ?", (section,)).fetchone()
+        return bool(row and row[0] is not None and (now - row[0]) < max_age)
+
+    def _stamp(section: str) -> None:
+        """Record ``section``'s warm time + provenance for future ``max_age`` skips."""
+        if not meta_ok[0]:
+            return
+        conn.execute(
+            "INSERT OR REPLACE INTO _catalog_meta (section, warmed_at, source) VALUES (?, ?, ?)",
+            (section, now, src_path or "live"),
+        )
+
+    def _count(table: str) -> int:
+        return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
+    t_start = time.perf_counter()
     conn = sqlite3.connect(db)
+    conn.execute("PRAGMA busy_timeout = 5000")
     try:
+        # Provenance + incremental-warm bookkeeping (P2/P3) — best-effort (see above).
+        try:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS _catalog_meta (  section TEXT PRIMARY KEY, warmed_at REAL, source TEXT)"
+            )
+            meta_ok[0] = True
+        except sqlite3.OperationalError:
+            meta_ok[0] = False
         # `teams` — playbook owners (name -> /api/3/teams/<uuid>).
         conn.execute("CREATE TABLE IF NOT EXISTS teams (name TEXT PRIMARY KEY, iri TEXT NOT NULL)")
-        try:
-            team_rows = [
-                (t["name"], f"/api/3/teams/{t['uuid']}")
-                for t in client.users.list_teams()
-                if t.get("name") and t.get("uuid")
-            ]
-            conn.execute("DELETE FROM teams")
-            conn.executemany("INSERT OR REPLACE INTO teams (name, iri) VALUES (?, ?)", team_rows)
-            summary["teams"] = len(team_rows)
-        except Exception:
-            summary["teams"] = 0
+        if _fresh("teams"):
+            summary["teams"] = _count("teams")
+            summary["teams_ms"] = 0
+            summary["teams_skipped"] = 1
+        else:
+            _t = time.perf_counter()
+            try:
+                team_rows = [
+                    (t["name"], f"/api/3/teams/{t['uuid']}")
+                    for t in client.users.list_teams()
+                    if t.get("name") and t.get("uuid")
+                ]
+                conn.execute("DELETE FROM teams")
+                conn.executemany("INSERT OR REPLACE INTO teams (name, iri) VALUES (?, ?)", team_rows)
+                summary["teams"] = len(team_rows)
+            except Exception:
+                summary["teams"] = 0
+            _lap("teams", _t)
+            _stamp("teams")
 
         # `picklists` — record-field picklist values (list, value -> item IRI).
         conn.execute(
@@ -113,42 +192,188 @@ def warm_catalog(client: Any, db_path: str | Path) -> dict[str, int]:
             "  item_iri TEXT NOT NULL,"
             "  PRIMARY KEY (list_name, item_value))"
         )
-        try:
-            item_rows: list[tuple[str, str, str]] = []
-            for name in client.picklists.list():
-                for item in client.picklists.values(name):
-                    iri = item.get("iri")
-                    val = item.get("itemValue")
-                    if iri and val is not None:
-                        item_rows.append((name, str(val), iri))
-            conn.execute("DELETE FROM picklists")
-            conn.executemany(
-                "INSERT OR REPLACE INTO picklists (list_name, item_value, item_iri) VALUES (?, ?, ?)",
-                item_rows,
-            )
-            summary["picklist_items"] = len(item_rows)
-        except Exception:
-            summary["picklist_items"] = 0
+        if _fresh("picklists"):
+            summary["picklist_items"] = _count("picklists")
+            summary["picklists_ms"] = 0
+            summary["picklists_skipped"] = 1
+        else:
+            _t = time.perf_counter()
+            try:
+                # One bulk fetch (2 HTTP calls) backs every picklist + its items —
+                # was 1 list() + N values(). See PicklistsAPI.all().
+                item_rows: list[tuple[str, str, str]] = []
+                for nm, items in client.picklists.all().items():
+                    for item in items:
+                        iri, val = item.iri, item.itemValue
+                        if iri and val is not None:
+                            item_rows.append((nm, str(val), iri))
+                conn.execute("DELETE FROM picklists")
+                conn.executemany(
+                    "INSERT OR REPLACE INTO picklists (list_name, item_value, item_iri) VALUES (?, ?, ?)",
+                    item_rows,
+                )
+                summary["picklist_items"] = len(item_rows)
+            except Exception:
+                summary["picklist_items"] = 0
+            _lap("picklists", _t)
+            _stamp("picklists")
 
         # `tags` — set_variable.message.tags (name -> /api/3/tags/<uuid>).
         conn.execute("CREATE TABLE IF NOT EXISTS tags (name TEXT PRIMARY KEY, iri TEXT NOT NULL)")
-        try:
-            resp = client.get("/api/3/tags", params={"$limit": 2147483647, "$orderby": "name"})
-            tag_rows = [
-                (str(m["name"]), str(m["@id"]))
-                for m in (resp or {}).get("hydra:member") or []
-                if isinstance(m, dict) and m.get("name") and m.get("@id")
-            ]
-            conn.execute("DELETE FROM tags")
-            conn.executemany("INSERT OR REPLACE INTO tags (name, iri) VALUES (?, ?)", tag_rows)
-            summary["tags"] = len(tag_rows)
-        except Exception:
-            summary["tags"] = 0
+        if _fresh("tags"):
+            summary["tags"] = _count("tags")
+            summary["tags_ms"] = 0
+            summary["tags_skipped"] = 1
+        else:
+            _t = time.perf_counter()
+            try:
+                tag_rows = [(name, iri) for name, iri in client.tags.map_names().items()]
+                conn.execute("DELETE FROM tags")
+                conn.executemany("INSERT OR REPLACE INTO tags (name, iri) VALUES (?, ?)", tag_rows)
+                summary["tags"] = len(tag_rows)
+            except Exception:
+                summary["tags"] = 0
+            _lap("tags", _t)
+            _stamp("tags")
+
+        # `connectors`/`operations`/`operation_params` — the INSTALLED connector
+        # catalog, so the compiler validates connector/operation/param tokens
+        # against what is actually on this box, INCLUDING custom connectors the
+        # packaged catalog can never know (e.g. a locally built code-runner). Each
+        # installed connector is upserted from its live definition, replacing its
+        # own ops/params; other connectors already in the catalog are left intact.
+        if connectors and _fresh("connectors"):
+            summary["connectors"] = _count("connectors")
+            summary["operations"] = _count("operations")
+            summary["operation_params"] = _count("operation_params")
+            summary["connectors_ms"] = 0
+            summary["connectors_skipped"] = 1
+        elif connectors:
+            _t = time.perf_counter()
+            try:
+                n_conn = n_ops = n_params = 0
+                # Provenance (P3): each row stamps source='live' + source_path so
+                # live-synced connectors are distinguishable from packaged ones;
+                # `source` is NOT NULL in the catalog schema, so this is required.
+                # Fetch every installed connector's definition concurrently
+                # (network-bound), then write serially (one sqlite connection isn't
+                # shareable across threads). Cuts warm time from ~Nx one-RTT to
+                # ~one-RTT. Uses the public connectors API, not raw endpoints.
+                for name, ver, d in _fetch_connector_defs(client):
+                    cat = d.get("category")
+                    if isinstance(cat, list):
+                        cat = cat[0] if cat else None
+                    conn.execute(
+                        "INSERT OR REPLACE INTO connectors "
+                        "(name, version, label, category, description, publisher, active, "
+                        " cs_approved, cs_compatible, source, source_path) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            name,
+                            str(ver or ""),
+                            d.get("label"),
+                            cat,
+                            d.get("description"),
+                            d.get("publisher"),
+                            1 if d.get("active") else 0,
+                            1 if d.get("cs_approved") else 0,
+                            1 if d.get("cs_compatible") else 0,
+                            "live",
+                            src_path,
+                        ),
+                    )
+                    n_conn += 1
+                    conn.execute("DELETE FROM operations WHERE connector_name = ?", (name,))
+                    conn.execute("DELETE FROM operation_params WHERE connector_name = ?", (name,))
+                    for op in d.get("operations") or []:
+                        op_name = op.get("operation")
+                        if not op_name:
+                            continue
+                        conn.execute(
+                            "INSERT INTO operations "
+                            "(connector_name, op_name, title, annotation, category, description, "
+                            " visible, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            (
+                                name,
+                                op_name,
+                                op.get("title"),
+                                op.get("annotation"),
+                                op.get("category"),
+                                op.get("description"),
+                                1 if op.get("visible", True) else 0,
+                                1 if op.get("enabled", True) else 0,
+                            ),
+                        )
+                        n_ops += 1
+                        for ordi, p in enumerate(op.get("parameters") or []):
+                            # p is a typed OperationParam (or a raw dict for
+                            # offline callers) — both expose .get(); a bare value
+                            # (no .get) or one without a name is skipped.
+                            if not hasattr(p, "get") or not p.get("name"):
+                                continue
+                            conn.execute(
+                                "INSERT INTO operation_params "
+                                "(connector_name, op_name, param_name, title, type, required, "
+                                " default_value, tooltip, placeholder, description, visible, editable, ord) "
+                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                (
+                                    name,
+                                    op_name,
+                                    p.get("name"),
+                                    p.get("title"),
+                                    p.get("type"),
+                                    1 if p.get("required") else 0,
+                                    None if p.get("value") is None else str(p.get("value")),
+                                    p.get("tooltip"),
+                                    p.get("placeholder"),
+                                    p.get("description"),
+                                    1 if p.get("visible", True) else 0,
+                                    1 if p.get("editable", True) else 0,
+                                    ordi,
+                                ),
+                            )
+                            n_params += 1
+                summary["connectors"] = n_conn
+                summary["operations"] = n_ops
+                summary["operation_params"] = n_params
+            except Exception:
+                summary.setdefault("connectors", 0)
+            _lap("connectors", _t)
+            _stamp("connectors")
 
         conn.commit()
+        summary["total_ms"] = int((time.perf_counter() - t_start) * 1000)
     finally:
         conn.close()
     return summary
+
+
+def _fetch_connector_defs(client: Any, *, max_workers: int = 8) -> list[tuple[str, str, Any]]:
+    """Fetch each installed connector's full definition concurrently.
+
+    Enumerates the installed set via ``client.connectors.list_configured()`` and
+    pulls each definition via ``client.connectors.definition()`` — the public,
+    typed API, no raw endpoints. Each definition fetch is an independent network
+    call, so they run through the shared :func:`~pyfsr._concurrency.map_threaded`
+    pool (requests sessions are safe for concurrent calls). Returns
+    ``(name, version, definition)`` tuples; connectors whose fetch fails or
+    returns a non-dict are dropped.
+    """
+    from ._concurrency import map_threaded
+
+    installed = [c for c in client.connectors.list_configured() if c.name]
+    if not installed:
+        return []
+
+    def _one(ic: Any) -> tuple[str, str, Any] | None:
+        # definition() returns a typed ConnectorDefinition (dict-compatible —
+        # the warm writer reads it via .get(...)).
+        name, ver = ic.name, ic.version
+        d = client.connectors.definition(name, version=ver)
+        return (name, str(ver or ""), d) if d is not None else None
+
+    results = map_threaded(_one, installed, max_workers=max_workers)
+    return [r for r in results if r is not None]
 
 
 @dataclass

@@ -53,6 +53,7 @@ from ..models._integration import (
     ConfigValidationResult,
     ConnectorConfig,
     ConnectorConfigSummary,
+    ConnectorDefinition,
     EnsureVersionResult,
     ExecuteResult,
     HealthcheckResult,
@@ -708,22 +709,51 @@ class ConnectorsAPI(BaseAPI):
                 )
             raise
 
+    def healthcheck_all(
+        self, connectors: list[str] | None = None, *, max_workers: int = 8
+    ) -> dict[str, HealthcheckResult]:
+        """Healthcheck many connectors **concurrently**, keyed by connector name.
+
+        With ``connectors=None`` (default), checks every configured connector
+        (the :meth:`list_configured` set with a resolvable version). Each check is
+        an independent ``GET``, so they run in a bounded thread pool — a fleet
+        status sweep that was N round-trips becomes roughly one. A connector whose
+        check raises lands as a ``status="error"`` :class:`HealthcheckResult` so
+        one failure never sinks the whole sweep.
+        """
+        from .._concurrency import map_threaded
+
+        names = (
+            connectors if connectors is not None else [c.name for c in self.list_configured() if c.name and c.version]
+        )
+
+        def _one(name: str) -> tuple[str, HealthcheckResult]:
+            try:
+                return name, self.healthcheck(name)
+            except Exception as e:  # noqa: BLE001 - report, don't abort the sweep
+                return name, HealthcheckResult(name=name, status="error", message=str(e))
+
+        return dict(map_threaded(_one, names, max_workers=max_workers, on_error="raise"))
+
     # ------------------------------------------------------------- definition
-    def definition(self, connector: str, *, version: str | None = None) -> dict[str, Any]:
+    def definition(self, connector: str, *, version: str | None = None) -> ConnectorDefinition:
         """Fetch a connector's full definition (config schema + operations).
 
         ``POST /api/integration/connectors/<name>/<version>/?format=json`` (the
         endpoint forbids GET). ``version`` is resolved from the configured
-        connector when omitted. The returned dict includes ``config_schema``,
-        ``configuration``, and ``operations`` (each with ``operation``,
-        ``title``, ``parameters``, ``output_schema``).
+        connector when omitted. The returned :class:`ConnectorDefinition` carries
+        ``config_schema``, ``configuration``, and typed ``operations`` (each an
+        :class:`~pyfsr.models._integration.Operation` with ``operation``,
+        ``title``, typed ``parameters``, ``output_schema``). Dict-compatible, so
+        ``defn["operations"][0]["operation"]`` still works.
 
         Raises ``ValueError`` if the version can't be resolved.
         """
         version = version or self.resolve_version(connector)
         if not version:
             raise ValueError(f"{connector!r} is not configured; pass version= to fetch its definition")
-        return self.client.post(f"/api/integration/connectors/{connector}/{version}/?format=json", data={})
+        resp = self.client.post(f"/api/integration/connectors/{connector}/{version}/?format=json", data={})
+        return ConnectorDefinition.model_validate(resp if isinstance(resp, dict) else {})
 
     def operations(self, connector: str, *, version: str | None = None) -> list[dict[str, Any]]:
         """List a connector's operations (the ``operations`` of :meth:`definition`).

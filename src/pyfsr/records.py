@@ -140,6 +140,46 @@ class RecordSet(Generic[T]):
             return project(rec, fields=fields, summary=summary)
         return rec
 
+    def get_many(
+        self,
+        refs: list[str] | tuple[str, ...],
+        *,
+        relationships: bool = False,
+        show_deleted: bool = False,
+        raw: bool = False,
+        fields: list[str] | tuple[str, ...] | None = None,
+        summary: bool = False,
+        max_workers: int = 8,
+        on_error: str = "none",
+    ) -> list[Any]:
+        """Fetch many records by id **concurrently**, results ordered like ``refs``.
+
+        Each ref is fetched with the same semantics as :meth:`get` (a uuid,
+        ``module:uuid`` shorthand, or IRI), in a bounded thread pool — N
+        independent ``GET``s collapse from N round-trips to roughly one. Use this
+        when you need *full* per-record reads (relationships, soft-deleted rows,
+        or :mod:`pyfsr.projection` trimming) for a known id list; for a plain
+        field read across ids, a single ``list(params={"uuid__in": ...})`` filter
+        is cheaper.
+
+        ``on_error="none"`` (default) puts ``None`` in the slot of any ref whose
+        fetch fails (e.g. a 404) and keeps the rest; ``on_error="raise"`` lets the
+        first failure propagate. See :func:`pyfsr._concurrency.map_threaded`.
+        """
+        from ._concurrency import map_threaded
+
+        def _one(ref: str) -> Any:
+            return self.get(
+                ref,
+                relationships=relationships,
+                show_deleted=show_deleted,
+                raw=raw,
+                fields=fields,
+                summary=summary,
+            )
+
+        return map_threaded(_one, list(refs), max_workers=max_workers, on_error=on_error)
+
     def comments(
         self,
         ref: str,

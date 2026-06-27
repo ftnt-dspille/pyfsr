@@ -102,6 +102,83 @@ class InstalledConnector(ApiResult):
 
 
 # ---------------------------------------------------------------------------
+# Connector definition (config schema + operations)
+# ---------------------------------------------------------------------------
+
+
+class OperationParam(ApiResult):
+    """One input parameter of a connector operation, from a connector definition.
+
+    The ``parameters[]`` of an operation in
+    ``POST /api/integration/connectors/<name>/<version>/?format=json``. ``value``
+    is the declared default (its type varies by field). ``visible``/``editable``
+    default to ``True`` when the wire omits them. Curated fields are typed; the
+    rest (``options``, ``onchange``, ``apiOperation``, …) stay in ``extra``.
+    """
+
+    name: str | None = None
+    title: str | None = None
+    type: str | None = None
+    description: str | None = None
+    tooltip: str | None = None
+    placeholder: str | None = None
+    # Wire defaults: a param is not required unless stated, and visible/editable
+    # unless the definition explicitly turns them off. Matching these here keeps
+    # ``param.visible`` correct whether or not the key was present on the wire.
+    required: bool = False
+    value: Any = None
+    visible: bool = True
+    editable: bool = True
+
+
+class Operation(ApiResult):
+    """One action a connector exposes, from its definition's ``operations[]``.
+
+    Richer than :class:`~pyfsr.models._system.ConnectorOperation` (the Content-Hub
+    catalog shape) — this is the *runtime* definition, carrying typed
+    :class:`OperationParam` inputs. ``visible``/``enabled`` default to ``True``
+    when omitted. Dict-compatible (``op["operation"]`` still works).
+    """
+
+    operation: str | None = None
+    title: str | None = None
+    description: str | None = None
+    annotation: str | None = None
+    category: str | None = None
+    # Visible/enabled unless the definition explicitly turns them off (matches
+    # the wire default and the warm-catalog reader's ``op.get("visible", True)``).
+    visible: bool = True
+    enabled: bool = True
+    parameters: list[OperationParam] = Field(default_factory=list)
+    output_schema: Any = None
+
+
+class ConnectorDefinition(ApiResult):
+    """A connector's full definition (config schema + operations).
+
+    Returned by :meth:`~pyfsr.api.connectors.ConnectorsAPI.definition` — the
+    ``POST /api/integration/connectors/<name>/<version>/?format=json`` payload
+    ``warm_catalog`` reads to sync the installed connector catalog. ``category``
+    may arrive as a string or a list; both are tolerated. Curated fields are
+    typed; ``config_schema``/``configuration`` stay loose (shape varies by
+    connector). Dict-compatible.
+    """
+
+    name: str | None = None
+    version: str | None = None
+    label: str | None = None
+    description: str | None = None
+    publisher: str | None = None
+    category: str | list[str] | None = None
+    active: bool | None = None
+    cs_approved: bool | None = None
+    cs_compatible: bool | None = None
+    operations: list[Operation] = Field(default_factory=list)
+    config_schema: dict[str, Any] = Field(default_factory=dict)
+    configuration: Any = None
+
+
+# ---------------------------------------------------------------------------
 # Connector configuration record
 # ---------------------------------------------------------------------------
 

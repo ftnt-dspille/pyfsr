@@ -20,6 +20,7 @@ from ._integration import (
     ConfigValidationResult,
     ConnectorConfig,
     ConnectorConfigSummary,
+    ConnectorDefinition,
     EnsureVersionResult,
     ExecuteResult,
     ExportJobResult,
@@ -28,6 +29,8 @@ from ._integration import (
     InstalledConnector,
     InstallJobStatus,
     LogMessage,
+    Operation,
+    OperationParam,
 )
 from ._modules_admin import (
     AttributeBulkAction,
@@ -64,6 +67,7 @@ from ._system import (
     FileRecord,
     ImportJob,
     ModulePermission,
+    PicklistItem,
     Role,
     SolutionPack,
     SolutionPackInstallResponse,
@@ -114,6 +118,9 @@ __all__ = [
     "InstalledConnector",
     "ConnectorConfigSummary",
     "ConnectorConfig",
+    "ConnectorDefinition",
+    "Operation",
+    "OperationParam",
     "ConfigValidationResult",
     "ConfigValidationError",
     "HealthcheckResult",
@@ -161,6 +168,7 @@ __all__ = [
     "Widget",
     "ConnectorOperation",
     "ConnectorVersionInfo",
+    "PicklistItem",
     "MODEL_REGISTRY",
     "model_for",
     # module admin

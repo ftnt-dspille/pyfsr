@@ -5,23 +5,22 @@ from pyfsr.records import RecordSet
 
 # --- canned server payloads ------------------------------------------------
 
+# picklist_names now carries each picklist's IRI (@id) so bulk items can map
+# their listName IRI back to a name.
 _NAMES = {
     "hydra:member": [
-        {"name": "Severity"},
-        {"name": "AlertStatus"},
+        {"name": "Severity", "@id": "/api/3/picklist_names/sev"},
+        {"name": "AlertStatus", "@id": "/api/3/picklist_names/st"},
     ]
 }
 
-_SEVERITY_ITEMS = {
+# The bulk /api/3/picklists listing: every item across every picklist in one
+# page, each tagged with the listName IRI of its owning picklist.
+_ALL_ITEMS = {
     "hydra:member": [
-        {"itemValue": "High", "uuid": "sev-high", "ordinal": 1},
-        {"itemValue": "Low", "uuid": "sev-low", "ordinal": 2},
-    ]
-}
-
-_STATUS_ITEMS = {
-    "hydra:member": [
-        {"itemValue": "Open", "uuid": "st-open", "ordinal": 1},
+        {"itemValue": "High", "uuid": "sev-high", "ordinal": 1, "listName": "/api/3/picklist_names/sev"},
+        {"itemValue": "Low", "uuid": "sev-low", "ordinal": 2, "listName": "/api/3/picklist_names/sev"},
+        {"itemValue": "Open", "uuid": "st-open", "ordinal": 1, "listName": "/api/3/picklist_names/st"},
     ]
 }
 
@@ -62,10 +61,8 @@ class FakeClient:
             return _NAMES
         if endpoint.startswith("/api/3/staging_model_metadatas"):
             return _META
-        if "listName.name=Severity" in endpoint:
-            return _SEVERITY_ITEMS
-        if "listName.name=AlertStatus" in endpoint:
-            return _STATUS_ITEMS
+        if endpoint.startswith("/api/3/picklists"):
+            return _ALL_ITEMS
         return {"hydra:member": []}
 
     def post(self, endpoint, data=None, params=None, **kwargs):
@@ -105,7 +102,8 @@ def test_values_cached():
     api, client = _api()
     api.values("Severity")
     api.values("Severity")
-    pl_calls = [c for c in client.get_calls if "listName.name=Severity" in c[0]]
+    # One bulk /api/3/picklists fetch backs every values() call.
+    pl_calls = [c for c in client.get_calls if c[0].startswith("/api/3/picklists")]
     assert len(pl_calls) == 1
 
 
@@ -162,7 +160,7 @@ def test_resolve_caches_iri():
     api, client = _api()
     api.resolve("High", picklist="Severity")
     api.resolve("High", picklist="Severity")
-    pl_calls = [c for c in client.get_calls if "listName.name=Severity" in c[0]]
+    pl_calls = [c for c in client.get_calls if c[0].startswith("/api/3/picklists")]
     assert len(pl_calls) == 1
 
 

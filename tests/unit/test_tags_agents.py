@@ -32,8 +32,30 @@ def test_tags_list_prefix_filter():
 
 
 def test_tags_list_skips_blank_rows():
-    c = RecordingClient([{"uuid": "ok"}, {"uuid": ""}, {"name": "no-uuid"}, "garbage"])
+    # Genuinely blank members (empty uuid, empty dict, empty string) are dropped;
+    # everything carrying a name survives.
+    c = RecordingClient([{"uuid": "ok"}, {"uuid": ""}, {}, ""])
     assert TagsAPI(c).list() == ["ok"]
+
+
+def test_tags_list_tolerates_string_and_name_members():
+    # Some appliances (7.6.x demo) return bare name strings; others put the name
+    # under "name" instead of "uuid". Both resolve.
+    c = RecordingClient(["phishing", {"name": "mitre.t1059"}, {"uuid": "malware"}])
+    assert TagsAPI(c).list() == ["phishing", "mitre.t1059", "malware"]
+
+
+def test_tags_map_names_dual_shape_iris():
+    c = RecordingClient(
+        [
+            "phishing",  # bare string -> /api/3/tags/<name>
+            {"uuid": "malware", "@id": "/api/3/tags/abc-123"},  # dict with explicit IRI
+        ]
+    )
+    assert TagsAPI(c).map_names() == {
+        "phishing": "/api/3/tags/phishing",
+        "malware": "/api/3/tags/abc-123",
+    }
 
 
 def test_agents_list_returns_all_records():

@@ -443,5 +443,46 @@ class ConnectorVersionInfo(ApiResult):
     help: str | None = None
     releaseNotes: str | None = None
     availableVersions: list[str] | None = None
+
+
+class PicklistItem(ApiResult):
+    """One item of a picklist, from ``GET /api/3/picklists``.
+
+    The bulk listing returns every item across every picklist in one page; each
+    carries its own ``@id`` (the IRI the API stores on records), its friendly
+    ``itemValue``, and the ``listName`` IRI of the picklist it belongs to. Map
+    that ``listName`` IRI to a name via ``GET /api/3/picklist_names``. Curated
+    fields are typed; ordinal/color/icon extras stay in ``extra``. Dict-compatible.
+    """
+
+    id_iri: str | None = Field(default=None, alias="@id")
+    uuid: str | None = None
+    itemValue: str | None = None
+    # The owning picklist. Usually the listName IRI
+    # (``/api/3/picklist_names/<uuid>``); some appliances expand it to a dict.
+    # Resolve an IRI to a name via picklist_names. Kept loose so neither shape fails.
+    listName: str | dict[str, Any] | None = None
+    ordinal: int | None = None
+    color: str | None = None
+
+    @property
+    def iri(self) -> str | None:
+        """The IRI a record stores for this item (``/api/3/picklists/<uuid>``)."""
+        if self.id_iri:
+            return self.id_iri
+        return f"/api/3/picklists/{self.uuid}" if self.uuid else None
+
+    @property
+    def list_name_iri(self) -> str | None:
+        """The owning picklist's ``listName`` IRI, whether it arrived as a string
+        or an expanded ``{@id: ...}`` dict."""
+        ln = self.listName
+        if isinstance(ln, str):
+            return ln
+        if isinstance(ln, dict):
+            v = ln.get("@id")
+            return v if isinstance(v, str) else None
+        return None
+
     operations: list[ConnectorOperation] | None = None
     dependentSolutionPacks: list[Any] | None = None

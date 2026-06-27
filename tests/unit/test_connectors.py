@@ -157,6 +157,31 @@ def test_healthcheck_unconfigured_connector():
     assert res["status"] == "no-config"
 
 
+def test_healthcheck_all_default_checks_every_configured():
+    api, _ = _api(get_map={"healthcheck": {"status": "Available"}})
+    out = api.healthcheck_all()
+    # every configured connector with a version, keyed by name
+    assert set(out) == {"virustotal", "fortigate", "fortinet-fortisiem"}
+    assert all(r["status"] == "Available" for r in out.values())
+
+
+def test_healthcheck_all_explicit_subset():
+    api, _ = _api(get_map={"healthcheck": {"status": "Available"}})
+    out = api.healthcheck_all(["virustotal"])
+    assert set(out) == {"virustotal"}
+
+
+def test_healthcheck_all_one_failure_does_not_sink_sweep():
+    def raiser(endpoint):
+        if "healthcheck/fortigate/" in endpoint:
+            raise RuntimeError("boom")
+
+    api, _ = _api(raiser=raiser)
+    out = api.healthcheck_all()
+    assert out["fortigate"]["status"] == "error"
+    assert out["virustotal"]["status"] == "Available"
+
+
 def test_healthcheck_404_normalized():
     class Resp:
         status_code = 404
@@ -593,6 +618,20 @@ def test_definition_posts_with_format_json_and_resolves_version():
     endpoint, body = client.post_calls[0]
     assert endpoint == "/api/integration/connectors/virustotal/3.1.0/?format=json"
     assert body == {}
+
+
+def test_definition_returns_typed_but_dict_compatible():
+    from pyfsr.models import ConnectorDefinition, Operation
+
+    api, _ = _api(post_resp=_DEFINITION)
+    defn = api.definition("virustotal")
+    # Typed...
+    assert isinstance(defn, ConnectorDefinition)
+    assert defn.name == "virustotal"
+    assert isinstance(defn.operations[0], Operation)
+    assert defn.operations[0].operation == "get_reputation_ip"
+    # ...and still dict-compatible (existing callers unaffected).
+    assert defn["operations"][0]["operation"] == "get_reputation_ip"
 
 
 def test_definition_explicit_version_overrides():

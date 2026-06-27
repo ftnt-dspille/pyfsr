@@ -177,26 +177,63 @@ class _FakeUsers:
 
 class _FakePicklists:
     def __init__(self, data):
-        self._data = data  # {name: [{itemValue, iri}]}
+        from pyfsr.models import PicklistItem
+
+        # {name: [PicklistItem]} — warm_catalog reads typed items via .all().
+        self._data = {
+            name: [PicklistItem(itemValue=it["itemValue"], **{"@id": it["iri"]}) for it in items]
+            for name, items in data.items()
+        }
 
     def list(self):
         return list(self._data)
 
-    def values(self, name):
-        return self._data.get(name, [])
+    def all(self, *, refresh=False):
+        return self._data
+
+
+class _FakeTags:
+    def __init__(self, tags_resp):
+        # tags_resp uses the legacy {hydra:member:[{name, @id}]} shape; expose it
+        # as the {name: iri} map warm_catalog now consumes.
+        self._map = {
+            m["name"]: m["@id"] for m in (tags_resp or {}).get("hydra:member", []) if m.get("name") and m.get("@id")
+        }
+
+    def map_names(self, *, limit=None):
+        return self._map
+
+
+class _FakeConnectors:
+    """Returns one configured connector + a typed definition for warm_catalog."""
+
+    def __init__(self, definitions):
+        from pyfsr.models import ConnectorDefinition, InstalledConnector
+
+        self._defs = {name: ConnectorDefinition.model_validate(d) for name, d in (definitions or {}).items()}
+        self._configured = [
+            InstalledConnector(name=name, version=d.version or "1.0.0") for name, d in self._defs.items()
+        ]
+
+    def list_configured(self, *, refresh=False):
+        return self._configured
+
+    def definition(self, name, *, version=None):
+        return self._defs[name]
 
 
 class _WarmFakeClient:
-    """Minimal client for warm_catalog: users + picklists + a raw GET."""
+    """Minimal client for warm_catalog: users + picklists + tags + connectors."""
 
-    def __init__(self, teams, picklists, tags_resp):
+    base_url = "https://box.example.com:443"
+
+    def __init__(self, teams, picklists, tags_resp, definitions=None):
         self.users = _FakeUsers(teams)
         self.picklists = _FakePicklists(picklists)
-        self._tags_resp = tags_resp
+        self.tags = _FakeTags(tags_resp)
+        self.connectors = _FakeConnectors(definitions)
 
     def get(self, endpoint, params=None, **kw):
-        if endpoint.startswith("/api/3/tags"):
-            return self._tags_resp
         return {"hydra:member": []}
 
 
@@ -219,6 +256,9 @@ def test_warm_catalog_populates_teams_picklists_tags(tmp_path):
     assert summary["teams"] == 2
     assert summary["picklist_items"] == 1
     assert summary["tags"] == 1
+    # Per-section + total timing is tracked (ints, milliseconds).
+    for key in ("teams_ms", "picklists_ms", "tags_ms", "total_ms"):
+        assert key in summary and isinstance(summary[key], int)
 
     import sqlite3
 
@@ -232,6 +272,97 @@ def test_warm_catalog_populates_teams_picklists_tags(tmp_path):
         "SELECT item_iri FROM picklists WHERE list_name='Severity' AND item_value='High'"
     ).fetchone() == ("/api/3/picklists/p-1",)
     assert conn.execute("SELECT iri FROM tags WHERE name='phishing'").fetchone() == ("/api/3/tags/g-1",)
+    conn.close()
+
+
+@requires_compiler
+def test_warm_catalog_incremental_skips_fresh_sections(tmp_path):
+    """With max_age set, a second warm skips sections warmed within the window —
+    no client calls, cached counts reported, <section>_skipped flagged."""
+    from pyfsr.authoring import warm_catalog
+
+    class _CountingTeams(_FakeUsers):
+        def __init__(self, teams):
+            super().__init__(teams)
+            self.calls = 0
+
+        def list_teams(self, params=None):
+            self.calls += 1
+            return super().list_teams(params)
+
+    client = _WarmFakeClient(
+        teams=[{"name": "TeamA", "uuid": "t-1"}],
+        picklists={"Severity": [{"itemValue": "High", "iri": "/api/3/picklists/p-1"}]},
+        tags_resp={"hydra:member": []},
+    )
+    client.users = _CountingTeams([{"name": "TeamA", "uuid": "t-1"}])
+    db = tmp_path / "incr.db"
+
+    first = warm_catalog(client, db, connectors=False, max_age=3600)
+    assert first["teams"] == 1
+    assert "teams_skipped" not in first
+    assert client.users.calls == 1
+
+    second = warm_catalog(client, db, connectors=False, max_age=3600)
+    assert second["teams"] == 1  # cached count preserved
+    assert second["teams_skipped"] == 1
+    assert second["teams_ms"] == 0
+    assert client.users.calls == 1  # NOT re-fetched
+
+    # max_age=None (default) always re-pulls
+    third = warm_catalog(client, db, connectors=False)
+    assert "teams_skipped" not in third
+    assert client.users.calls == 2
+
+
+@requires_compiler
+def test_warm_catalog_writes_connector_ops_and_params(tmp_path):
+    """The connector path writes operations AND params from a typed definition,
+    and stamps provenance. Guards the typed-OperationParam + source regressions
+    that the live run surfaced."""
+    from pyfsr.authoring import warm_catalog
+
+    client = _WarmFakeClient(
+        teams=[],
+        picklists={},
+        tags_resp={"hydra:member": []},
+        definitions={
+            "code-runner": {
+                "name": "code-runner",
+                "version": "1.2.0",
+                "label": "Code Runner",
+                "operations": [
+                    {
+                        "operation": "run",
+                        "title": "Run",
+                        # visible/enabled omitted -> default True
+                        "parameters": [
+                            {"name": "code", "type": "text", "required": True},
+                            {"name": "timeout", "type": "integer", "value": 30},
+                        ],
+                    }
+                ],
+            }
+        },
+    )
+    db = tmp_path / "warm_conn.db"
+    summary = warm_catalog(client, db)
+    assert summary["connectors"] == 1
+    assert summary["operations"] == 1
+    assert summary["operation_params"] == 2  # both params written (not skipped)
+
+    import sqlite3
+
+    conn = sqlite3.connect(db)
+    # provenance stamped (P3) + NOT NULL source satisfied
+    assert conn.execute("SELECT source, source_path FROM connectors WHERE name='code-runner'").fetchone() == (
+        "live",
+        "https://box.example.com:443",
+    )
+    # omitted visible/enabled default to visible=1 on the op
+    assert conn.execute("SELECT visible, enabled FROM operations WHERE op_name='run'").fetchone() == (1, 1)
+    params = dict(conn.execute("SELECT param_name, required FROM operation_params WHERE op_name='run'").fetchall())
+    assert params == {"code": 1, "timeout": 0}
     conn.close()
 
 

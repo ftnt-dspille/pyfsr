@@ -22,9 +22,9 @@ Example:
 
 from __future__ import annotations
 
-import urllib.parse
 from typing import Any
 
+from ..models._system import PicklistItem
 from .base import BaseAPI
 
 # staging_model_metadatas needs $relationships=true to expose each attribute's
@@ -55,7 +55,7 @@ class PicklistsAPI(BaseAPI):
     def __init__(self, client):
         super().__init__(client)
         self._names: list[str] | None = None
-        self._values: dict[str, list[dict]] = {}  # listName -> items
+        self._items: dict[str, list[PicklistItem]] | None = None  # name -> typed items
         self._iri: dict[str, str] = {}  # "ListName:value" -> IRI
         # module -> {field_name: picklist_name (or None)}
         self._module_fields: dict[str, dict[str, str | None]] = {}
@@ -64,39 +64,65 @@ class PicklistsAPI(BaseAPI):
     def clear_cache(self) -> None:
         """Drop all in-process picklist caches."""
         self._names = None
-        self._values.clear()
+        self._items = None
         self._iri.clear()
         self._module_fields.clear()
+
+    # ----------------------------------------------------------------- bulk load
+    def _load_bulk(self, *, refresh: bool = False) -> None:
+        """Warm every picklist + its items in **two calls**, not ``1+N``.
+
+        ``GET /api/3/picklist_names`` gives the full name set and the listName-IRI
+        → name map; ``GET /api/3/picklists`` returns every item across every
+        picklist in one page (each carries its own ``listName`` IRI). We group the
+        items under their picklist name from the first call's map. Both responses
+        are cached for the client's lifetime; pass ``refresh=True`` to re-pull.
+        """
+        if self._items is not None and self._names is not None and not refresh:
+            return
+        names_resp = self.client.get("/api/3/picklist_names", params={"$limit": 2147483647})
+        iri_to_name: dict[str, str] = {}
+        names: set[str] = set()
+        for m in (names_resp or {}).get("hydra:member") or []:
+            nm, iri = m.get("name"), m.get("@id")
+            if nm:
+                names.add(nm)
+                if iri:
+                    iri_to_name[iri] = nm
+        items_resp = self.client.get("/api/3/picklists", params={"$limit": 2147483647})
+        grouped: dict[str, list[PicklistItem]] = {}
+        for m in (items_resp or {}).get("hydra:member") or []:
+            item = PicklistItem.model_validate(m)
+            ln_iri = item.list_name_iri
+            name = iri_to_name.get(ln_iri) if ln_iri else None
+            if name is None:
+                continue
+            grouped.setdefault(name, []).append(item)
+        self._items = grouped
+        self._names = sorted(names)
 
     # -------------------------------------------------------------- names/values
     def list(self) -> list[str]:
         """Return every picklist name on the server (sorted, cached)."""
-        if self._names is not None:
-            return self._names
-        data = self.client.get("/api/3/picklist_names", params={"$limit": 500})
-        members = (data or {}).get("hydra:member") or []
-        self._names = sorted({m.get("name") for m in members if m.get("name")})
-        return self._names
+        self._load_bulk()
+        return self._names or []
+
+    def all(self, *, refresh: bool = False) -> dict[str, list[PicklistItem]]:
+        """Every picklist's items, keyed by picklist name (typed, bulk-warmed).
+
+        One bulk fetch backs this and :meth:`list`/:meth:`values`/:meth:`resolve`,
+        so warming a whole catalog costs two HTTP calls rather than ``1+N``.
+        """
+        self._load_bulk(refresh=refresh)
+        return self._items or {}
 
     def values(self, picklist_name: str) -> list[dict[str, Any]]:
         """List a picklist's items as ``[{itemValue, uuid, iri, ordinal}, ...]``."""
-        if picklist_name in self._values:
-            return self._values[picklist_name]
-        qs = urllib.parse.urlencode({"listName.name": picklist_name, "$limit": 200})
-        data = self.client.get(f"/api/3/picklists?{qs}")
-        out: list[dict[str, Any]] = []
-        for m in (data or {}).get("hydra:member") or []:
-            u = m.get("uuid")
-            out.append(
-                {
-                    "itemValue": m.get("itemValue"),
-                    "uuid": u,
-                    "iri": f"/api/3/picklists/{u}" if u else None,
-                    "ordinal": m.get("ordinal"),
-                }
-            )
-        self._values[picklist_name] = out
-        return out
+        self._load_bulk()
+        return [
+            {"itemValue": it.itemValue, "uuid": it.uuid, "iri": it.iri, "ordinal": it.ordinal}
+            for it in (self._items or {}).get(picklist_name, [])
+        ]
 
     # ---------------------------------------------------------- (module,field)
     def _field_map(self, module: str) -> dict[str, str | None]:

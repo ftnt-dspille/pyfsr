@@ -89,6 +89,24 @@ def test_get_by_uuid():
     assert RecordSet(client, "incidents").get("u1", raw=True) == {"uuid": "u1"}
 
 
+def test_get_many_concurrent_ordered():
+    client = FakeClient(
+        {
+            "/api/3/incidents/u1": {"uuid": "u1"},
+            "/api/3/incidents/u2": {"uuid": "u2"},
+            "/api/3/incidents/u3": {"uuid": "u3"},
+        }
+    )
+    out = RecordSet(client, "incidents").get_many(["u1", "u2", "u3"], raw=True)
+    # results ordered like the input refs regardless of thread completion order
+    assert out == [{"uuid": "u1"}, {"uuid": "u2"}, {"uuid": "u3"}]
+
+
+def test_get_many_empty():
+    client = FakeClient()
+    assert RecordSet(client, "incidents").get_many([]) == []
+
+
 def test_get_with_relationships():
     client = FakeClient()
     RecordSet(client, "incidents").get("u1", relationships=True)
