@@ -14,6 +14,17 @@ on:
         required: false
         type: string
         description: 'The Git ref to checkout'
+  # Weekly run on main so unpinned (`>=`) runtime/docs deps that break the build
+  # surface on a schedule, not at release time. Mondays 07:00 UTC.
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+# Cancel superseded runs for the same PR/branch to save CI minutes; never cancel
+# scheduled or release (workflow_call) runs.
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: write
@@ -80,5 +91,7 @@ jobs:
       contents: write
     uses: ./.github/workflows/docs.yml
     with:
-      ref: ${{ github.event.pull_request.head.sha }}
+      # Fall back to the triggering ref for schedule / workflow_dispatch /
+      # workflow_call runs, which have no pull_request context.
+      ref: ${{ github.event.pull_request.head.sha || github.sha }}
     secrets: inherit

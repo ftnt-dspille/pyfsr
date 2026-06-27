@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # Keep pinned action SHAs current (security + bugfix bumps as reviewable PRs).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+
+  # Surface breaking runtime/dev dependency bumps as PRs (CI runs against them)
+  # instead of discovering them at release time. Grouped to limit PR noise.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      python-deps:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"
