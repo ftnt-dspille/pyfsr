@@ -281,6 +281,12 @@ def test_default_seed_reconcile_and_report_is_curated(tmp_path):
     assert roles["source_a"] == ("forticloud-asset-management", "list_assets")
     assert roles["source_b"] == ("servicenow-cmdb", "get_configuration_items")
     assert roles["notify"] == ("smtp", "send_email")
+    # the diff/CSV step uses the custom unrestricted code-runner connector (not the
+    # stock sandboxed code-snippet, whose module-level exec + restricted open() broke
+    # the archetype's natural design).
+    assert roles["compute"] == ("code-runner", "run_python")
+    # the on-disk CSV becomes a real Attachment record via the utilities step
+    assert roles["attach"] == ("cyops_utilities", "create_cyops_attachment")
 
     # module_schema parameterized with the {{results_module}} slot; picklist fields grounded
     assert all(f.module == "{{results_module}}" for f in arch.module_schema)

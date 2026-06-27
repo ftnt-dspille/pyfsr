@@ -1,0 +1,139 @@
+collection: PyFSR Archetype Pilot
+description: >
+  reconcile-and-report pilot, code-runner variant. Same flow as
+  archetype_pilot_reconcile_and_report.yaml but the diff/CSV step uses the custom
+  unrestricted `code-runner` connector (run_python) instead of the stock sandboxed
+  `code_snippet`. This restores the archetype's NATURAL design:
+
+    * a top-level `return <dict>` sets code_output (no print(json.dumps(...)) hack), and
+    * open() works, so the snippet writes a real CSV file to disk.
+
+  code-runner returns {code_output: <value>} as its operation result, so the Jinja
+  output paths (vars.steps.<name>.data.code_output.*) are identical to the
+  code_snippet variant. Deploy code-runner first: scripts/deploy_code_runner.py
+  (which also enables the allowCustomConnector gate this uncertified connector needs).
+
+  Picklist IRIs are still resolved at DEPLOY time and embedded (create_record needs
+  IRIs, not friendly values; the in-playbook compute step has no API to resolve them).
+  In a real deploy the archetype router/agent resolves these from the live picklists.
+visible: true
+
+playbooks:
+  - name: PyFSR Pilot Reconcile and Report (code-runner)
+    is_active: true
+    parameters: [recipients]
+    steps:
+      - name: Start
+        type: start
+        next: Reconcile
+
+      - name: Reconcile
+        type: connector
+        next: Create attachment
+        arguments:
+          connector: code-runner
+          operation: run_python
+          config: Default
+          params:
+            code: |
+              import csv, io, json
+              # Canned inventories (swap for real source_a/source_b connector outputs).
+              a = [
+                  {"serial": "FGT-001", "name": "edge-fw-01", "license": "active"},
+                  {"serial": "FGT-002", "name": "edge-fw-02", "license": "expired"},
+                  {"serial": "FGT-003", "name": "core-fw-01", "license": "active"},
+              ]
+              b = [
+                  {"serial": "FGT-001", "name": "edge-fw-01", "status": "installed"},
+                  {"serial": "FGT-004", "name": "branch-fw-09", "status": "installed"},
+              ]
+              MT = {
+                  "missing-in-A": "/api/3/picklists/26399476-3fbf-4443-8240-a374c988126e",
+                  "missing-in-B": "/api/3/picklists/2b7b652f-3e22-4f52-b76c-e4d12bf3e5f6",
+                  "license-expiring": "/api/3/picklists/c61d5134-e24f-448a-a2c0-d1e4d2352268",
+                  "field-mismatch": "/api/3/picklists/e42f12d5-ed5c-43ee-b8d2-f2a314a32a2f",
+              }
+              ka = {r["serial"]: r for r in a}
+              kb = {r["serial"]: r for r in b}
+              findings = []
+              for s, r in ka.items():
+                  if s not in kb:
+                      findings.append({"join_key": s, "mismatch_type": MT["missing-in-B"],
+                                       "source_system": "FortiCloud", "target_system": "ServiceNow",
+                                       "source_id": s, "target_id": "",
+                                       "details": f"{r['name']} missing in ServiceNow"})
+                  elif r.get("license") == "expired":
+                      findings.append({"join_key": s, "mismatch_type": MT["license-expiring"],
+                                       "source_system": "FortiCloud", "target_system": "ServiceNow",
+                                       "source_id": s, "target_id": s,
+                                       "details": f"{r['name']} license expired"})
+              for s, r in kb.items():
+                  if s not in ka:
+                      findings.append({"join_key": s, "mismatch_type": MT["missing-in-A"],
+                                       "source_system": "FortiCloud", "target_system": "ServiceNow",
+                                       "source_id": "", "target_id": s,
+                                       "details": f"{r['name']} missing in FortiCloud"})
+              buf = io.StringIO()
+              w = csv.writer(buf)
+              w.writerow(["join_key", "mismatch_type", "source_system", "target_system", "details"])
+              mt_rev = {v: k for k, v in MT.items()}
+              for f in findings:
+                  w.writerow([f["join_key"], mt_rev.get(f["mismatch_type"], f["mismatch_type"]),
+                              f["source_system"], f["target_system"], f["details"]])
+              csv_text = buf.getvalue()
+              # code-runner allows open(): write the CSV to disk too (natural design).
+              csv_path = "/tmp/reconciliation_report.csv"
+              with open(csv_path, "w") as fh:
+                  fh.write(csv_text)
+              # Top-level return works under code-runner -> becomes code_output.
+              return {"findings": findings,
+                      "first": findings[0] if findings else None,
+                      "csv_content": csv_text,
+                      "csv_path": csv_path,
+                      "count": len(findings)}
+
+      # code-runner wrote the CSV to disk (open() works); the utilities step turns
+      # that on-disk file into a real Attachment record (live-verified: returns an
+      # /api/3/attachments/<uuid> @id wrapping the uploaded File). create_cyops_attachment
+      # requires a non-blank `name` (upload_file_to_cyops omits it and 400s).
+      - name: Create attachment
+        type: connector
+        next: Write finding
+        arguments:
+          connector: cyops_utilities
+          operation: create_cyops_attachment
+          params:
+            filename: "{{ vars.steps.Reconcile.data.code_output.csv_path }}"
+            name: "Reconciliation Report - {{ vars.steps.Reconcile.data.code_output.count }} findings"
+            description: "CSV report generated by the reconcile-and-report pilot."
+
+      - name: Write finding
+        type: create_record
+        next: Email report
+        arguments:
+          module: reconciliation_results
+          operation: Create
+          resource:
+            source_system: "{{ vars.steps.Reconcile.data.code_output.first.source_system }}"
+            source_id: "{{ vars.steps.Reconcile.data.code_output.first.source_id }}"
+            target_system: "{{ vars.steps.Reconcile.data.code_output.first.target_system }}"
+            target_id: "{{ vars.steps.Reconcile.data.code_output.first.target_id }}"
+            join_key: "{{ vars.steps.Reconcile.data.code_output.first.join_key }}"
+            mismatch_type: "{{ vars.steps.Reconcile.data.code_output.first.mismatch_type }}"
+            status: "/api/3/picklists/58200b01-3cca-4b6b-a3c3-a83415def3e2"
+            details: "{{ vars.steps.Reconcile.data.code_output.first.details }}"
+          step_variables: []
+
+      - name: Email report
+        type: connector
+        arguments:
+          connector: smtp
+          operation: send_email
+          config: localhost-postfix
+          params:
+            to_recipients: "{{ vars.inputs.recipients }}"
+            subject: "Reconciliation Report - {{ vars.steps.Reconcile.data.code_output.count }} findings"
+            body: "Reconciliation report ({{ vars.steps.Reconcile.data.code_output.count }} findings). CSV attached.\n\n{{ vars.steps.Reconcile.data.code_output.csv_content }}"
+            content_type: "text"
+            # Attach the Attachment record created by the utilities step.
+            iri_list: "{{ vars.steps.Create_attachment.data['@id'] }}"
