@@ -164,7 +164,7 @@ class RecordSet(Generic[T]):
 
         ``on_error="none"`` (default) puts ``None`` in the slot of any ref whose
         fetch fails (e.g. a 404) and keeps the rest; ``on_error="raise"`` lets the
-        first failure propagate. See :func:`pyfsr._concurrency.map_threaded`.
+        first failure propagate. See ``pyfsr._concurrency.map_threaded``.
         """
         from ._concurrency import map_threaded
 

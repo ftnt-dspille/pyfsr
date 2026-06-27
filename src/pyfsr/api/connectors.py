@@ -718,7 +718,8 @@ class ConnectorsAPI(BaseAPI):
         (the :meth:`list_configured` set with a resolvable version). Each check is
         an independent ``GET``, so they run in a bounded thread pool — a fleet
         status sweep that was N round-trips becomes roughly one. A connector whose
-        check raises lands as a ``status="error"`` :class:`HealthcheckResult` so
+        check raises lands as a ``status="error"``
+        :class:`~pyfsr.models._integration.HealthcheckResult` so
         one failure never sinks the whole sweep.
         """
         from .._concurrency import map_threaded
@@ -741,7 +742,8 @@ class ConnectorsAPI(BaseAPI):
 
         ``POST /api/integration/connectors/<name>/<version>/?format=json`` (the
         endpoint forbids GET). ``version`` is resolved from the configured
-        connector when omitted. The returned :class:`ConnectorDefinition` carries
+        connector when omitted. The returned
+        :class:`~pyfsr.models._integration.ConnectorDefinition` carries
         ``config_schema``, ``configuration``, and typed ``operations`` (each an
         :class:`~pyfsr.models._integration.Operation` with ``operation``,
         ``title``, typed ``parameters``, ``output_schema``). Dict-compatible, so
