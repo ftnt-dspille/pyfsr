@@ -1022,6 +1022,45 @@ def test_why_failed_finds_newest_run_and_fetches_step_detail():
     assert result["error_message"] == "step error"
 
 
+def test_why_failed_skips_incipient_downstream_steps():
+    """A non-last step failing leaves downstream steps ``incipient``; why_failed must
+    report the actual failed step, not the first incipient one (regression: run 686500)."""
+    run_record = {
+        "@id": "/api/wf/api/workflows/run1/",
+        "name": "Recon",
+        "status": "failed",
+        "modified": "2026-06-08T03:00",
+        "uuid": "u1",
+    }
+    full_record = {
+        "@id": "/api/wf/api/workflows/run1/",
+        "status": "failed",
+        "result": {},
+        # Step order here is NOT execution order: an ``incipient`` (never-ran) step
+        # appears BEFORE the actually-failed step, exactly as on run 686500. The old
+        # predicate matched the first non-(finished/success/running) step and so
+        # reported "Email report"; the fix must skip it and report "Write finding".
+        "steps": [
+            {"name": "Start", "status": "finished", "result": {}},
+            {"name": "Email report", "status": "incipient", "result": {}},
+            {"name": "Write finding", "status": "failed", "result": {"error": "real failure"}},
+        ],
+    }
+
+    class _WhyFailedClient(FakeClient):
+        def get(self, endpoint, params=None, **kw):
+            if "step_detail=true" in endpoint:
+                return full_record
+            return super().get(endpoint, params, **kw)
+
+    client = _WhyFailedClient(workflows=[run_record])
+    result = PlaybooksAPI(client).why_failed(playbook_uuid="pb-uuid")
+
+    assert result is not None
+    assert result["failing_step"] == "Write finding"
+    assert result["error_message"] == "real failure"
+
+
 def test_why_failed_returns_none_if_no_runs():
     client = FakeClient(workflows=[], historical=[])
     result = PlaybooksAPI(client).why_failed(playbook_uuid="pb-uuid")

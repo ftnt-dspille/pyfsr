@@ -61,6 +61,12 @@ def _build(model_cls, op: str, **kwargs):
 
 _TERMINAL_STATUSES = frozenset({"finished", "failed", "error", "cancelled", "aborted"})
 
+# Statuses that mean a step actually FAILED — used by ``why_failed`` to pick the
+# real failing step. Deliberately excludes ``incipient``/``pending``/``skipped``/
+# ``running``: when a non-last step fails, its downstream steps stay ``incipient``,
+# and those must NOT be mistaken for the failure (live-confirmed on run 686500).
+_STEP_FAILURE_STATUSES = frozenset({"failure", "failed", "error", "errored", "cancelled", "aborted"})
+
 _RUN_PATHS = ("/api/wf/api/workflows/", "/api/wf/api/historical-workflows/")
 # Playbook *definitions* (the templates), distinct from the run-history tables above.
 _WORKFLOWS = "/api/3/workflows"
@@ -923,8 +929,10 @@ class PlaybooksAPI(BaseAPI):
             if not isinstance(step, dict):
                 continue
             status = (step.get("status") or "").lower()
-            # Look for non-success statuses: failure, failed, error, errored, etc.
-            if status and status not in ("finished", "success", "running"):
+            # Match only ACTUAL failure statuses. A non-last step failing leaves its
+            # downstream steps ``incipient``/``pending``/``skipped`` — those are not
+            # failures and must be skipped, else the wrong step is reported.
+            if status in _STEP_FAILURE_STATUSES:
                 failing_step = step.get("name")
                 result = step.get("result") or {}
                 if isinstance(result, dict):
