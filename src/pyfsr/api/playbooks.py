@@ -438,6 +438,64 @@ class PlaybooksAPI(BaseAPI):
         """Playbooks exposing the API-endpoint ``route`` (``POST /api/triggers/1/<route>``)."""
         return self.find(route=route, **kwargs)
 
+    def match(
+        self,
+        predicate: Callable[[Any], bool],
+        *,
+        prefilter: dict[str, Any] | None = None,
+        limit: int = 2000,
+    ) -> list[dict[str, Any]]:
+        """Structural search the server filter language can't express.
+
+        Fetches playbook definitions **with steps inlined**, parses each into a
+        :class:`~pyfsr.playbook_match.ParsedPlaybook`, and returns the raw
+        definitions whose parse satisfies ``predicate`` (built from
+        :mod:`pyfsr.playbook_match` helpers — ``step``/``count``/``has``/
+        ``trigger``/``all_of``/``any_of``/``none_of``).
+
+        Use this for same-step precision ("fortigate AND block_ip on one step"),
+        quantities ("exactly 2 set-variable steps"), or any boolean mix. Pass
+        ``prefilter`` (a :meth:`find` kwargs dict) to narrow server-side first and
+        avoid pulling every playbook — e.g. ``prefilter={"trigger_type": "manual"}``.
+
+        Example:
+            >>> from pyfsr.playbook_match import step, count, all_of
+            >>> pred = all_of(count(step(step_type="set_variable"), n=2),
+            ...               count(step(step_type="code_snippet"), n=1))
+            >>> client.playbooks.match(pred)  # doctest: +SKIP
+        """
+        from ..playbook_match import parse_playbook
+
+        kwargs = dict(prefilter or {})
+        kwargs.pop("relationships", None)
+        defs = self.find(limit=limit, relationships=True, **kwargs)
+        return [d for d in defs if predicate(parse_playbook(d))]
+
+    def match_across(
+        self,
+        parent_predicate: Callable[[Any], bool],
+        child_predicate: Callable[[Any], bool],
+        *,
+        limit: int = 2000,
+    ) -> list[dict[str, Any]]:
+        """Parent/child join: parents matching ``parent_predicate`` that reference a
+        child matching ``child_predicate``.
+
+        Pulls the playbook corpus once (with steps), resolves each parent's
+        reference steps to children by name, and returns the raw parent
+        definitions. Answers questions like "a manual playbook whose referenced
+        child blocks an IP"::
+
+            from pyfsr.playbook_match import trigger, has, step
+            client.playbooks.match_across(
+                trigger("manual"), has(step(operation="block_ip")))
+        """
+        from ..playbook_match import join_parent_child, parse_playbook
+
+        corpus = [parse_playbook(d) for d in self.find(limit=limit, relationships=True)]
+        matched = join_parent_child(corpus, parent_predicate, child_predicate)
+        return [pb.raw for pb in matched]
+
     def get_definition(
         self,
         uuid: str,

@@ -57,6 +57,7 @@ docstring states which it expects.
 | [`create_safe_playbook.py`](create_safe_playbook.py) | Create a harmless playbook collection and verify round-trip | 🔌 |
 | [`deploy_playbook_from_yaml.py`](deploy_playbook_from_yaml.py) | Author a playbook in YAML and deploy it (uses [`playbooks/yaml_demo.yaml`](playbooks/yaml_demo.yaml)) | 🔌 |
 | [`heist_tracker.py`](heist_tracker.py) | **Big end-to-end demo:** two linked modules → publish → RBAC grant → on-create YAML playbook ([`playbooks/heist_intake.yaml`](playbooks/heist_intake.yaml)) → a record that triggers it. Syntax in the [YAML reference](../docs/source/guides/playbook-yaml-reference.md). | 🔌 |
+| [`playbook_structural_queries.py`](playbook_structural_queries.py) | Query playbooks by *shape* across all three tiers: server filter, server `aggregate()`, and the client-side `match()`/`match_across()` structural matcher (same-step precision, step quantities, parent↔child joins) | 🔌 |
 
 ## Appliance administration CLI
 

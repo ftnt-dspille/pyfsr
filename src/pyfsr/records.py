@@ -239,6 +239,76 @@ class RecordSet(Generic[T]):
             return project(page_obj, fields=fields, summary=summary)
         return page_obj
 
+    def aggregate(
+        self,
+        *,
+        group_by: str | list[str] | None = None,
+        metrics: list[tuple[str, str, str]] | None = None,
+        count: bool = False,
+        filters: list[dict[str, Any]] | None = None,
+        logic: str = "AND",
+        search: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Server-side aggregation via ``POST /api/query/<module>`` ``aggregates[]``.
+
+        Pushes grouping/counting to the database instead of pulling records and
+        tallying client-side. Each result row is a dict keyed by the aliases.
+
+        Args:
+            group_by: field path(s) to ``GROUP BY`` (e.g. ``"severity.itemValue"``,
+                or ``"triggerStep.stepType.name"`` on ``workflows``). Each becomes a
+                ``groupby`` aggregate aliased to the field's last path segment.
+            metrics: explicit ``(operator, field, alias)`` triples — ``operator`` is
+                an ``AggregateOperators`` name (``count``/``countdistinct``/``sum``/
+                ``avg``/``min``/``max``/``median``). ``field="*"`` counts rows.
+            count: shorthand to append ``("countdistinct", "*", "total")``.
+            filters: leaf/group filter dicts applied before aggregation (two-phase:
+                filtered to a uuid subquery, then aggregated). Same grammar as
+                :meth:`query`.
+            logic: ``"AND"``/``"OR"`` for ``filters``.
+            search: optional ``$search`` term (AND-combined with filters).
+            limit: max aggregate rows (``$limit``).
+
+        Returns:
+            The aggregate rows (``hydra:member``), e.g.
+            ``[{"itemValue": "high", "total": 42}, …]``.
+
+        Note:
+            Grouping by an association *from the child side* (e.g. grouping
+            ``workflow_steps`` by ``workflow.uuid``) is rejected server-side, and
+            there is no ``HAVING`` — post-aggregate count thresholds must be applied
+            client-side. For per-playbook step quantities use
+            :meth:`~pyfsr.api.playbooks.PlaybooksAPI.match`.
+
+        Example:
+            >>> client.records("workflows").aggregate(
+            ...     group_by="triggerStep.stepType.name", count=True)  # doctest: +SKIP
+            [{'name': 'cybersponse.action', 'total': 390}, ...]
+        """
+        aggregates: list[dict[str, Any]] = []
+        for field in [group_by] if isinstance(group_by, str) else (group_by or []):
+            aggregates.append({"operator": "groupby", "field": field, "alias": field.split(".")[-1]})
+        for operator, field, alias in metrics or []:
+            aggregates.append({"operator": operator, "field": field, "alias": alias})
+        if count:
+            aggregates.append({"operator": "countdistinct", "field": "*", "alias": "total"})
+        if not aggregates:
+            raise ValueError("aggregate() needs group_by, metrics, or count=True")
+
+        body: dict[str, Any] = {"logic": logic, "filters": filters or [], "aggregates": aggregates}
+        params: dict[str, Any] = {}
+        if search is not None:
+            params["$search"] = search
+        if limit is not None:
+            params["$limit"] = limit
+        resp = self.client.post(f"/api/query/{self.module}", data=body, params=params or None)
+        if isinstance(resp, dict):
+            members = resp.get("hydra:member")
+            if isinstance(members, list):
+                return members
+        return resp if isinstance(resp, list) else []
+
     def query(
         self,
         query: Query | dict[str, Any],

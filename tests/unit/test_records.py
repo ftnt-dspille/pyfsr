@@ -446,3 +446,46 @@ def test_comments_scopes_to_record_path():
     method, endpoint, params, _ = c.calls[-1]
     assert method == "GET" and endpoint == "/api/3/alerts/abc-123/comments"
     assert params["$limit"] == 10 and params["$orderby"] == "-createDate"
+
+
+# --- aggregate() ----------------------------------------------------------
+
+
+def test_aggregate_builds_groupby_count_body():
+    rows = [{"name": "cybersponse.action", "total": 390}]
+    client = FakeClient(responses={"/api/query/workflows": {"hydra:member": rows}})
+    out = RecordSet(client, "workflows").aggregate(group_by="triggerStep.stepType.name", count=True)
+    assert out == rows
+    method, endpoint, params, data = client.calls[-1]
+    assert (method, endpoint) == ("POST", "/api/query/workflows")
+    assert data["aggregates"] == [
+        {"operator": "groupby", "field": "triggerStep.stepType.name", "alias": "name"},
+        {"operator": "countdistinct", "field": "*", "alias": "total"},
+    ]
+
+
+def test_aggregate_metrics_and_filters():
+    client = FakeClient(responses={"/api/query/alerts": {"hydra:member": []}})
+    RecordSet(client, "alerts").aggregate(
+        group_by=["severity.itemValue", "status.itemValue"],
+        metrics=[("count", "*", "cnt")],
+        filters=[{"field": "isActive", "operator": "eq", "value": True}],
+        search="phish",
+        limit=100,
+    )
+    _, _, params, data = client.calls[-1]
+    assert params["$search"] == "phish"
+    assert params["$limit"] == 100
+    assert data["filters"] == [{"field": "isActive", "operator": "eq", "value": True}]
+    ops = [(a["operator"], a["field"], a["alias"]) for a in data["aggregates"]]
+    assert ops == [
+        ("groupby", "severity.itemValue", "itemValue"),
+        ("groupby", "status.itemValue", "itemValue"),
+        ("count", "*", "cnt"),
+    ]
+
+
+def test_aggregate_requires_something():
+    client = FakeClient()
+    with pytest.raises(ValueError):
+        RecordSet(client, "alerts").aggregate()
