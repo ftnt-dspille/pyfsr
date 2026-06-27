@@ -140,6 +140,11 @@ nitpick_ignore = [
     ("py:class", "Transport"),
     ("py:class", "QueryBody"),
     ("py:class", "FileRecord"),
+    # Module-level type aliases (``Callable[...]``) autoapi renders as xrefs from
+    # function signatures; they have no class target under `-n` (sphinx <9).
+    ("py:class", "StepMatcher"),
+    ("py:class", "PlaybookPredicate"),
+    ("py:class", "SurfaceFn"),
     # Bare method names in cross-module docstring xrefs (e.g. :meth:`runs`)
     # that resolve at runtime but not in autoapi's per-page context.
     ("py:meth", "run"),
