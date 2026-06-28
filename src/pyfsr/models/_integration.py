@@ -58,6 +58,54 @@ class ApiResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Custom (non-Hydra) list envelope
+# ---------------------------------------------------------------------------
+
+
+class IntegrationListEnvelope(ApiResult):
+    """The custom (non-Hydra) list envelope several ``/api/integration`` endpoints return.
+
+    Unlike the JSON-LD collection wrapped by :class:`~pyfsr.pagination.HydraPage`
+    (``hydra:member``/``hydra:totalItems``), endpoints like
+    ``GET /api/integration/connectors/`` and
+    ``GET /api/integration/configuration/`` page with a plain envelope::
+
+        {"status": "...", "totalItems": 73, "itemsPerPage": 30,
+         "nextPage": 2, "previousPage": null, "data": [ {...}, ... ]}
+
+    Typed once here so callers parse it the same way everywhere (it has been
+    mis-read as a bare list more than once). ``data`` stays ``list[Any]`` —
+    the per-endpoint method validates each row into its own model.
+    """
+
+    status: str | None = None
+    totalItems: int | None = None
+    itemsPerPage: int | None = None
+    nextPage: int | None = None
+    previousPage: int | None = None
+    data: list[Any] = Field(default_factory=list)
+
+    @classmethod
+    def parse(cls, response: Any) -> IntegrationListEnvelope:
+        """Coerce a raw response into an envelope, tolerating a bare list/None.
+
+        A dict is validated as the envelope; a bare list is wrapped as its
+        ``data`` (some endpoints/versions return the array directly); anything
+        else yields an empty envelope.
+        """
+        if isinstance(response, dict):
+            return cls.model_validate(response)
+        if isinstance(response, list):
+            return cls(data=response)
+        return cls()
+
+    @property
+    def has_next(self) -> bool:
+        """Whether the envelope advertises a further page (``nextPage`` set)."""
+        return self.nextPage is not None
+
+
+# ---------------------------------------------------------------------------
 # Connector listing
 # ---------------------------------------------------------------------------
 
@@ -129,6 +177,24 @@ class OperationParam(ApiResult):
     value: Any = None
     visible: bool = True
     editable: bool = True
+
+    @field_validator("title", "description", "tooltip", "placeholder", mode="before")
+    @classmethod
+    def _coerce_display_text(cls, v: Any) -> Any:
+        """Tolerate non-string display values from sloppy connector definitions.
+
+        Connector authors sometimes put a bare int (e.g. an example port
+        ``34510``) or an empty ``{}`` in a free-text display field like
+        ``placeholder``. FortiSOAR itself accepts these, so the SDK must too,
+        rather than failing the whole ``definition()`` parse (which would
+        silently drop the connector from a warmed catalog). Empty containers
+        become ``None``; other non-strings are stringified.
+        """
+        if v is None or isinstance(v, str):
+            return v
+        if isinstance(v, (dict, list)) and not v:
+            return None
+        return str(v)
 
 
 class Operation(ApiResult):

@@ -59,6 +59,8 @@ from ..models._integration import (
     HealthcheckResult,
     InstalledConnector,
     InstallJobStatus,
+    IntegrationListEnvelope,
+    Operation,
 )
 from .base import BaseAPI
 
@@ -552,26 +554,23 @@ class ConnectorsAPI(BaseAPI):
         page = 1
         page_size = 100
         while True:
-            resp = (
+            env = IntegrationListEnvelope.parse(
                 self.client.get(
                     "/api/integration/connectors/",
                     params={"page": page, "page_size": page_size},
                 )
-                or {}
             )
-            data = resp.get("data") or []
-            for m in data:
-                # Normalise: API uses "configuration" (list), model uses "configuration"
-                if "label" not in m and "title" in m:
+            for m in env.data:
+                # Some versions label the field "title" rather than "label".
+                if isinstance(m, dict) and "label" not in m and "title" in m:
                     m = dict(m, label=m["title"])
                 out.append(InstalledConnector.model_validate(m))
-            total = resp.get("totalItems")
-            if not data:
+            if not env.data:
                 break
-            if total is not None:
-                if len(out) >= total:
+            if env.totalItems is not None:
+                if len(out) >= env.totalItems:
                     break
-            elif len(data) < page_size:
+            elif not env.has_next and len(env.data) < page_size:
                 break
             page += 1
         self._configured = out
@@ -600,13 +599,8 @@ class ConnectorsAPI(BaseAPI):
             params["name"] = name
         if active is not None:
             params["active"] = active
-        resp = self.client.get("/api/integration/configuration/", params=params) or {}
-        rows: list[dict[str, Any]] = []
-        if isinstance(resp, dict):
-            rows = resp.get("data") or []
-        elif isinstance(resp, list):
-            rows = resp
-        return [ConnectorConfig.model_validate(r) for r in rows]
+        env = IntegrationListEnvelope.parse(self.client.get("/api/integration/configuration/", params=params))
+        return [ConnectorConfig.model_validate(r) for r in env.data]
 
     def _find_configured(self, connector: str) -> InstalledConnector | None:
         return next((c for c in self.list_configured() if c.name == connector), None)
@@ -757,14 +751,17 @@ class ConnectorsAPI(BaseAPI):
         resp = self.client.post(f"/api/integration/connectors/{connector}/{version}/?format=json", data={})
         return ConnectorDefinition.model_validate(resp if isinstance(resp, dict) else {})
 
-    def operations(self, connector: str, *, version: str | None = None) -> list[dict[str, Any]]:
+    def operations(self, connector: str, *, version: str | None = None) -> list[Operation]:
         """List a connector's operations (the ``operations`` of :meth:`definition`).
 
-        Each entry carries ``operation`` (the api name), ``title``,
-        ``description``, ``parameters``, and ``output_schema``.
+        Returns typed, dict-compatible
+        :class:`~pyfsr.models._integration.Operation` objects — each carries
+        ``operation`` (the api name), ``title``, ``description``, typed
+        ``parameters`` (:class:`~pyfsr.models._integration.OperationParam`), and
+        ``output_schema``.
         """
         defn = self.definition(connector, version=version)
-        return defn.get("operations") or []
+        return defn.operations
 
     def config_schema(self, connector: str, *, version: str | None = None) -> list[dict[str, Any]]:
         """Return a connector's configuration field schema (its ``config_schema``).

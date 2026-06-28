@@ -28,6 +28,7 @@ from ._integration import (
     ImportJobResult,
     InstalledConnector,
     InstallJobStatus,
+    IntegrationListEnvelope,
     LogMessage,
     Operation,
     OperationParam,
@@ -37,8 +38,10 @@ from ._modules_admin import (
     AttributeMetadata,
     AttributeValidation,
     DefaultSortEntry,
+    InvalidDraft,
     ModuleDescriptions,
     ModuleMetadata,
+    PendingChange,
     PublishedModelMetadata,
     StagingModelMetadata,
 )
@@ -55,6 +58,7 @@ from ._playbooks import (
     TriggerResponse,
 )
 from ._system import (
+    AggregateRow,
     ApiKey,
     ApiKeyMaterial,
     ApiKeyUser,
@@ -125,6 +129,7 @@ __all__ = [
     "ConfigValidationError",
     "HealthcheckResult",
     "ExecuteResult",
+    "IntegrationListEnvelope",
     "InstallJobStatus",
     "EnsureVersionResult",
     "ImportJobResult",
@@ -169,6 +174,7 @@ __all__ = [
     "ConnectorOperation",
     "ConnectorVersionInfo",
     "PicklistItem",
+    "AggregateRow",
     "MODEL_REGISTRY",
     "model_for",
     # module admin
@@ -180,4 +186,6 @@ __all__ = [
     "ModuleMetadata",
     "StagingModelMetadata",
     "PublishedModelMetadata",
+    "PendingChange",
+    "InvalidDraft",
 ]

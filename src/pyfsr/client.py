@@ -56,6 +56,7 @@ from .exceptions import FortiSOARException, handle_api_error
 if TYPE_CHECKING:
     from .appliance import Appliance
 from .models import (
+    AggregateRow,
     Alert,
     ApiKey,
     Comment,
@@ -787,6 +788,36 @@ class FortiSOAR:
             ...     print(inc.uuid, inc["name"])
         """
         return RecordSet(self, module)
+
+    def aggregate_many(
+        self, specs: dict[str, dict[str, Any]], *, max_workers: int = 8
+    ) -> dict[str, list[AggregateRow]]:
+        """Run several modules' aggregations **concurrently**, keyed by module.
+
+        ``specs`` maps a module name to the keyword arguments for that module's
+        :meth:`RecordSet.aggregate <pyfsr.records.RecordSet.aggregate>` call —
+        e.g. ``{"alerts": {"group_by": "severity.itemValue", "count": True},
+        "incidents": {"count": True}}``. Each aggregation is an independent
+        ``POST /api/query/<module>``, so they run in a bounded thread pool
+        instead of one-after-another; the dashboard-style sweep that was N
+        round-trips becomes roughly one. A module whose aggregation raises lands
+        as an empty ``[]`` so one failure never sinks the whole sweep.
+
+        Returns a dict mapping each module to its list of
+        :class:`~pyfsr.models._system.AggregateRow` results.
+        """
+        from ._concurrency import map_threaded
+
+        items = list(specs.items())
+
+        def _one(item: tuple[str, dict[str, Any]]) -> tuple[str, list[AggregateRow]]:
+            module, kwargs = item
+            try:
+                return module, self.records(module).aggregate(**kwargs)
+            except Exception:  # noqa: BLE001 - report empty, don't abort the sweep
+                return module, []
+
+        return dict(map_threaded(_one, items, max_workers=max_workers, on_error="raise"))
 
     def list_modules(self, *, refresh: bool = False) -> list[dict[str, Any]]:
         """List every module on the appliance as ``[{type, label, plural}, ...]``.

@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, overload
 
-from .models import BaseRecord, model_for
+from .models import AggregateRow, BaseRecord, model_for
 from .pagination import HydraPage, paginate
 from .projection import project
 from .query import Query
@@ -289,7 +289,7 @@ class RecordSet(Generic[T]):
         logic: str = "AND",
         search: str | None = None,
         limit: int | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[AggregateRow]:
         """Server-side aggregation via ``POST /api/query/<module>`` ``aggregates[]``.
 
         Pushes grouping/counting to the database instead of pulling records and
@@ -311,7 +311,9 @@ class RecordSet(Generic[T]):
             limit: max aggregate rows (``$limit``).
 
         Returns:
-            The aggregate rows (``hydra:member``), e.g.
+            The aggregate rows as dict-compatible
+            :class:`~pyfsr.models._system.AggregateRow` objects keyed by the
+            aliases — e.g. ``row["total"]`` / ``row.value("total")`` for
             ``[{"itemValue": "high", "total": 42}, …]``.
 
         Note:
@@ -343,11 +345,13 @@ class RecordSet(Generic[T]):
         if limit is not None:
             params["$limit"] = limit
         resp = self.client.post(f"/api/query/{self.module}", data=body, params=params or None)
+        rows: list[Any]
         if isinstance(resp, dict):
             members = resp.get("hydra:member")
-            if isinstance(members, list):
-                return members
-        return resp if isinstance(resp, list) else []
+            rows = members if isinstance(members, list) else []
+        else:
+            rows = resp if isinstance(resp, list) else []
+        return [AggregateRow.model_validate(r) if isinstance(r, dict) else AggregateRow() for r in rows]
 
     def query(
         self,
@@ -411,6 +415,7 @@ class RecordSet(Generic[T]):
         page_size: int = ...,
         max_records: int | None = ...,
         show_deleted: bool = ...,
+        prefetch: int = ...,
         raw: Literal[True],
     ) -> Iterator[dict[str, Any]]: ...
 
@@ -422,6 +427,7 @@ class RecordSet(Generic[T]):
         page_size: int = ...,
         max_records: int | None = ...,
         show_deleted: bool = ...,
+        prefetch: int = ...,
         raw: Literal[False] = ...,
     ) -> Iterator[T]: ...
 
@@ -432,6 +438,7 @@ class RecordSet(Generic[T]):
         page_size: int = 100,
         max_records: int | None = None,
         show_deleted: bool = False,
+        prefetch: int = 0,
         raw: bool = False,
     ) -> Iterator[Any]:
         """Lazily yield every matching record across all pages.
@@ -440,6 +447,12 @@ class RecordSet(Generic[T]):
         plain list. The page size overrides any ``limit`` on the query. Yields
         typed models unless ``raw=True``. Pass ``show_deleted=True`` to include
         recycle-bin records.
+
+        Set ``prefetch=N`` to pipeline the page fetches — the next ``N`` pages
+        download in a background thread pool while you process the current one,
+        overlapping network latency with consumer work. Order is preserved; the
+        walk may fetch up to ``N`` pages past the end (results discarded). Leave
+        it ``0`` (default) for strictly sequential fetching.
         """
         if query is None:
 
@@ -457,7 +470,7 @@ class RecordSet(Generic[T]):
                     body["showDeleted"] = True
                 return self.client.post(f"/api/query/{self.module}", data=body, params=params)
 
-        for record in paginate(fetch, page_size=page_size, max_records=max_records):
+        for record in paginate(fetch, page_size=page_size, max_records=max_records, prefetch=prefetch):
             yield self._parse(record, raw=raw)
 
     # -- writes -------------------------------------------------------------

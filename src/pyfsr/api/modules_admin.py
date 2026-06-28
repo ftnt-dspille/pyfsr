@@ -62,7 +62,13 @@ from ..exceptions import FortiSOARException, describe_migrate_failure, is_migrat
 from .base import BaseAPI
 
 if TYPE_CHECKING:
-    from ..models import AttributeMetadata, PublishedModelMetadata, StagingModelMetadata
+    from ..models import (
+        AttributeMetadata,
+        InvalidDraft,
+        PendingChange,
+        PublishedModelMetadata,
+        StagingModelMetadata,
+    )
     from ..query import Query
 
 _STAGING = "/api/3/staging_model_metadatas"
@@ -785,7 +791,7 @@ class ModulesAdminAPI(BaseAPI):
         )
 
     # ----------------------------------------------------- change tracking
-    def pending_changes(self) -> list[dict[str, Any]]:
+    def pending_changes(self) -> list[PendingChange]:
         """Modules with **uncommitted** schema changes (staged but not yet published).
 
         Both ``staging_model_metadatas`` and ``model_metadatas`` mirror every module;
@@ -814,17 +820,19 @@ class ModulesAdminAPI(BaseAPI):
             str(m.get("type", "")).lower(): m
             for m in (self.client.get(_PUBLISHED, params={**_ALL, **_REL}) or {}).get("hydra:member", [])
         }
-        changes: list[dict[str, Any]] = []
+        from ..models import PendingChange
+
+        changes: list[PendingChange] = []
         for mod in sorted(set(stg) | set(pub)):
             if mod not in pub:
-                changes.append({"module": mod, "change": "created"})
+                changes.append(PendingChange(module=mod, change="created"))
             elif mod not in stg:
-                changes.append({"module": mod, "change": "deleted"})
+                changes.append(PendingChange(module=mod, change="deleted"))
             elif self._differs(stg[mod], pub[mod]):
-                changes.append({"module": mod, "change": "modified"})
+                changes.append(PendingChange(module=mod, change="modified"))
         return changes
 
-    def find_invalid_drafts(self, *, deep: bool = False) -> list[dict[str, Any]]:
+    def find_invalid_drafts(self, *, deep: bool = False) -> list[InvalidDraft]:
         """Scan **staging** for drafts whose names would break the next publish.
 
         Because :meth:`publish` is appliance-wide, a single staged module or field with an
@@ -841,22 +849,24 @@ class ModulesAdminAPI(BaseAPI):
         pyfsr's own builders reject these inputs up front, so a hit here is typically a draft
         created in the in-product editor or by another tool.
         """
-        problems: list[dict[str, Any]] = []
+        from ..models import InvalidDraft
+
+        problems: list[InvalidDraft] = []
         members = (self.client.get(_STAGING, params=_ALL) or {}).get("hydra:member", [])
         for m in members:
             t = m.get("type") or ""
             uuid = m.get("uuid")
             if not _MODULE_NAME_RE.match(t):
-                problems.append({"module": t, "uuid": uuid, "problem": "invalid module name"})
+                problems.append(InvalidDraft(module=t, uuid=uuid, problem="invalid module name"))
             elif len(t) > _MAX_NAME_LEN:
-                problems.append({"module": t, "uuid": uuid, "problem": "module name too long"})
+                problems.append(InvalidDraft(module=t, uuid=uuid, problem="module name too long"))
             if not deep:
                 continue
             full = self.client.get(f"{_STAGING}/{uuid}", params=_REL) or {}
             for a in full.get("attributes", []) or []:
                 n = a.get("name") or ""
                 if not _FIELD_NAME_RE.match(n):
-                    problems.append({"module": t, "uuid": uuid, "field": n, "problem": "invalid field name"})
+                    problems.append(InvalidDraft(module=t, uuid=uuid, field=n, problem="invalid field name"))
         return problems
 
     @staticmethod

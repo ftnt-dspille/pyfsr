@@ -481,7 +481,10 @@ def test_find_invalid_drafts_and_publish_precheck():
 
     admin = ModulesAdminAPI(BadDraftClient())
     bad = admin.find_invalid_drafts()
-    assert bad == [{"module": "9probe", "uuid": "u-bad", "problem": "invalid module name"}]
+    assert [d.to_dict(exclude_none=True) for d in bad] == [
+        {"module": "9probe", "uuid": "u-bad", "problem": "invalid module name"}
+    ]
+    assert bad[0]["module"] == "9probe" and bad[0].problem == "invalid module name"
     # publish must refuse before issuing the destructive appliance-wide PUT
     with pytest.raises(ValueError, match="9probe"):
         admin.publish()
@@ -567,7 +570,7 @@ def test_pending_changes_detects_field_only_change():
             return {"hydra:member": [_meta("model_metadatas", "attrib_model_metadatas", visibility=True)]}
 
     changes = ModulesAdminAPI(FieldDiffClient()).pending_changes()
-    assert changes == [{"module": "widgets", "change": "modified"}]
+    assert [c.to_dict(exclude_none=True) for c in changes] == [{"module": "widgets", "change": "modified"}]
 
 
 def test_set_field_type_puts_only_attributes():

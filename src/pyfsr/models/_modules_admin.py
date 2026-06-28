@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic import Field
 
+from ._integration import ApiResult
 from .base import BaseRecord
 from .types import RecordIRI
 
@@ -224,6 +225,39 @@ class PublishedModelMetadata(ModuleMetadata):
     """A published module record from ``/api/3/model_metadatas``."""
 
 
+# ---------------------------------------------------------------------------
+# Synthesized publish-state result rows (not wire records — computed by the API)
+# ---------------------------------------------------------------------------
+
+
+class PendingChange(ApiResult):
+    """One module with an uncommitted (staged-but-unpublished) schema change.
+
+    Synthesized by
+    :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.pending_changes` by diffing
+    the staging vs published metadata stores. Dict-compatible
+    (``row["module"]``).
+    """
+
+    module: str | None = None
+    #: ``"created"`` (staging only), ``"deleted"`` (published only), or ``"modified"``.
+    change: str | None = None
+
+
+class InvalidDraft(ApiResult):
+    """One staged module/field whose name would break the next publish.
+
+    Synthesized by
+    :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.find_invalid_drafts`.
+    ``field`` is set only for an attribute-level problem. Dict-compatible.
+    """
+
+    module: str | None = None
+    uuid: str | None = None
+    field: str | None = None
+    problem: str | None = None
+
+
 __all__ = [
     "AttributeValidation",
     "AttributeBulkAction",
@@ -233,4 +267,6 @@ __all__ = [
     "ModuleMetadata",
     "StagingModelMetadata",
     "PublishedModelMetadata",
+    "PendingChange",
+    "InvalidDraft",
 ]

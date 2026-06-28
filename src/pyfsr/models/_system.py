@@ -77,6 +77,7 @@ class WorkflowCollection(BaseRecord):
     deletedAt: float | None = None  # soft-delete epoch (like create/modifyDate); null until deleted
     importedBy: list[Any] | None = None
     recordTags: list[str] | None = None  # tag name strings
+    workflows: list[Any] | None = None  # nested Workflow objects when relationships are pulled
     id: int | None = None
 
 
@@ -110,6 +111,28 @@ class FeaturedTag(ApiResult):
 
     tag: str | None = None
     color: str | None = None
+
+
+class AggregateRow(ApiResult):
+    """One row of a server-side aggregation.
+
+    Returned by :meth:`~pyfsr.records.RecordSet.aggregate`. The keys are the
+    aliases supplied to that call — group-by fields keep the field's last path
+    segment, metrics use their explicit alias, and ``count=True`` adds
+    ``total`` — so the shape is entirely caller-defined and every key lives in
+    ``extra``. Dict-compatible (``row["total"]`` works alongside
+    :meth:`value`); :meth:`value` is just a typed accessor for one alias.
+
+    Example::
+
+        rows = client.records("workflows").aggregate(
+            group_by="triggerStep.stepType.name", count=True)
+        rows[0]["name"], rows[0].value("total")
+    """
+
+    def value(self, alias: str, default: Any = None) -> Any:
+        """The value stored under ``alias`` (a group-by segment or metric alias)."""
+        return self.get(alias, default)
 
 
 class ContentHubItem(BaseRecord):

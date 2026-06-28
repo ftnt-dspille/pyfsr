@@ -473,13 +473,51 @@ def test_aggregate_builds_groupby_count_body():
     rows = [{"name": "cybersponse.action", "total": 390}]
     client = FakeClient(responses={"/api/query/workflows": {"hydra:member": rows}})
     out = RecordSet(client, "workflows").aggregate(group_by="triggerStep.stepType.name", count=True)
-    assert out == rows
+    # Rows are typed AggregateRow now, but stay dict-compatible.
+    assert [r.to_dict() for r in out] == rows
+    assert out[0]["name"] == "cybersponse.action"
+    assert out[0].value("total") == 390
     method, endpoint, params, data = client.calls[-1]
     assert (method, endpoint) == ("POST", "/api/query/workflows")
     assert data["aggregates"] == [
         {"operator": "groupby", "field": "triggerStep.stepType.name", "alias": "name"},
         {"operator": "countdistinct", "field": "*", "alias": "total"},
     ]
+
+
+def test_aggregate_many_fans_out_per_module():
+    from pyfsr.client import FortiSOAR
+
+    client = FakeClient(
+        responses={
+            "/api/query/alerts": {"hydra:member": [{"itemValue": "high", "total": 7}]},
+            "/api/query/incidents": {"hydra:member": [{"total": 3}]},
+        }
+    )
+    # aggregate_many only needs ``records`` + ``post`` from the client.
+    client.records = lambda module: RecordSet(client, module)  # type: ignore[attr-defined]
+    out = FortiSOAR.aggregate_many(
+        client,
+        {
+            "alerts": {"group_by": "severity.itemValue", "count": True},
+            "incidents": {"count": True},
+        },
+    )
+    assert set(out) == {"alerts", "incidents"}
+    assert out["alerts"][0].value("total") == 7
+    assert out["incidents"][0]["total"] == 3
+
+
+def test_aggregate_many_isolates_failures():
+    from pyfsr.client import FortiSOAR
+
+    client = FakeClient(responses={"/api/query/alerts": {"hydra:member": [{"total": 1}]}})
+    client.records = lambda module: RecordSet(client, module)  # type: ignore[attr-defined]
+    # A bad spec (no group_by/metrics/count) raises inside aggregate → empty list,
+    # without sinking the sibling module.
+    out = FortiSOAR.aggregate_many(client, {"alerts": {"count": True}, "broken": {}})
+    assert out["alerts"][0]["total"] == 1
+    assert out["broken"] == []
 
 
 def test_aggregate_metrics_and_filters():
