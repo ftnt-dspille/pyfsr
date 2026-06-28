@@ -1,9 +1,12 @@
 # pyfsr
 
 [![PyPI version](https://badge.fury.io/py/pyfsr.svg)](https://badge.fury.io/py/pyfsr)
+[![Python versions](https://img.shields.io/pypi/pyversions/pyfsr)](https://pypi.org/project/pyfsr/)
+[![License: MIT](https://img.shields.io/pypi/l/pyfsr)](https://github.com/ftnt-dspille/pyfsr/blob/main/LICENSE)
 [![Tests](https://github.com/ftnt-dspille/pyfsr/actions/workflows/pr-tests.yml/badge.svg)](https://github.com/ftnt-dspille/pyfsr/actions/workflows/pr-tests.yml)
 [![Documentation Status](https://github.com/ftnt-dspille/pyfsr/actions/workflows/docs.yml/badge.svg)](https://github.com/ftnt-dspille/pyfsr/actions/workflows/docs.yml)
 [![codecov](https://codecov.io/gh/ftnt-dspille/pyfsr/branch/main/graph/badge.svg)](https://codecov.io/gh/ftnt-dspille/pyfsr)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 [Documentation](https://ftnt-dspille.github.io/pyfsr/) · [Installation](#installation) · [Quick start](#quick-start) · [CLI](#command-line-tools) · [AI / agents](#ai--agent-friendly)
 
