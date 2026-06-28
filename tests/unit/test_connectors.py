@@ -1437,3 +1437,73 @@ def test_ensure_configured_installed_version_optional(monkeypatch):
     api.ensure_configured("servicenow", {"k": "v"}, config_name="pilot")  # no version
     assert calls["install"] == []
     assert calls["upsert"] == [("servicenow", "pilot", None)]
+
+
+# ---------------------------------------------------------------------------
+# ensure_version auto_fetch fallback (T3.6) — Content Hub fails -> repo download
+# ---------------------------------------------------------------------------
+
+
+def _ensure_version_api(monkeypatch, *, hub_install_ok):
+    """A ConnectorsAPI wired so install() (Content Hub) succeeds or fails on demand.
+
+    Connector starts absent (no backup path), so ensure_version goes straight to
+    _do_install. resolve_version returns None first, then the target version
+    after a successful install_from_file.
+    """
+    api = ConnectorsAPI(FakeClient())
+    calls = {"install": 0, "install_from_file": [], "downloaded": []}
+    state = {"installed": False}
+
+    def _resolve(_name):
+        return "1.0.0" if state["installed"] else None
+
+    def _install(_name, _version, **_kw):
+        calls["install"] += 1
+        if not hub_install_ok:
+            raise RuntimeError("Content Hub will not serve 1.0.0")
+        state["installed"] = True
+
+    def _install_from_file(path, **_kw):
+        calls["install_from_file"].append(path)
+        state["installed"] = True
+
+    monkeypatch.setattr(api, "resolve_version", _resolve)
+    monkeypatch.setattr(api, "configurations", lambda _n: [])
+    monkeypatch.setattr(api, "install", _install)
+    monkeypatch.setattr(api, "install_from_file", _install_from_file)
+    monkeypatch.setattr(api, "clear_cache", lambda: None)
+    monkeypatch.setattr(api, "resolve_connector_id", lambda _n: None)
+
+    import pyfsr.repo as _repo
+
+    def _download(name, version, dest=None, **_kw):
+        calls["downloaded"].append((name, version, dest))
+        return f"/tmp/{name}.tgz"
+
+    monkeypatch.setattr(_repo, "download_connector", _download)
+    return api, calls
+
+
+def test_ensure_version_uses_content_hub_when_it_works(monkeypatch):
+    api, calls = _ensure_version_api(monkeypatch, hub_install_ok=True)
+    result = api.ensure_version("servicenow", "1.0.0")
+    assert result["action"] == "in_place"
+    assert calls["install"] == 1
+    assert calls["install_from_file"] == []  # never fell back
+    assert calls["downloaded"] == []
+
+
+def test_ensure_version_auto_fetches_when_content_hub_fails(monkeypatch):
+    api, calls = _ensure_version_api(monkeypatch, hub_install_ok=False)
+    result = api.ensure_version("servicenow", "1.0.0")
+    assert result["action"] == "in_place"
+    assert calls["downloaded"] == [("servicenow", "1.0.0", None)]
+    assert calls["install_from_file"] == ["/tmp/servicenow.tgz"]
+
+
+def test_ensure_version_no_auto_fetch_reraises(monkeypatch):
+    api, calls = _ensure_version_api(monkeypatch, hub_install_ok=False)
+    with pytest.raises(RuntimeError, match="Content Hub"):
+        api.ensure_version("servicenow", "1.0.0", auto_fetch=False)
+    assert calls["downloaded"] == []

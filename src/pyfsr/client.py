@@ -253,6 +253,13 @@ class FortiSOAR:
         self.attachments: AttachmentsAPI = AttachmentsAPI(self)
         self.export_templates: ExportTemplatesAPI = ExportTemplatesAPI(self)
 
+        # Public content-repository downloads (standalone, unauthenticated):
+        # client.repo.download_connector(...) etc. The module needs no client,
+        # but exposing it here keeps discovery consistent with the rest of the API.
+        from . import repo as _repo
+
+        self.repo = _repo
+
         # Add solution packs API
         self.export_config: ExportConfigAPI = ExportConfigAPI(self)
 

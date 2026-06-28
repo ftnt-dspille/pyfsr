@@ -4,6 +4,7 @@ PyFSR: Python client for the FortiSOAR REST API.
 For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
 """
 
+from . import repo
 from .api.connectors import pack_connector
 from .appliance import Appliance
 from .client import FortiSOAR
@@ -134,6 +135,8 @@ __all__ = [
     "iri_to_uuid",
     "to_jsonable",
     "SUMMARY_FIELDS",
+    # content repository (standalone, unauthenticated downloads)
+    "repo",
     # concurrency analysis
     "compute_overlap",
     "ConcurrencyResult",

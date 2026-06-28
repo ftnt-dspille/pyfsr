@@ -388,6 +388,7 @@ class ConnectorsAPI(BaseAPI):
         version: str,
         *,
         bundle_path: str | None = None,
+        auto_fetch: bool = True,
         backup_dir: str | None = None,
         allow_uninstall_fallback: bool = False,
         wait: bool = True,
@@ -409,8 +410,9 @@ class ConnectorsAPI(BaseAPI):
         2. If installed *and* configured, export a backup ``.zip`` (configs +
            encrypted secrets) via ``client.export_config.export_connector``.
         3. Install ``version`` in place — from ``bundle_path`` if given (a local
-           ``.tgz``/zip, needed when the Content Hub won't serve the target),
-           else by name from Content Hub.
+           ``.tgz``/zip), else by name from Content Hub; if Content Hub won't
+           serve that version and ``auto_fetch`` is set (default), the exact-
+           version ``.tgz`` is downloaded from the public repo and installed.
         4. Verify. If configs survived, done. If they didn't (downgrade schema
            drift, or a forced replace), re-import the backup.
         5. Only if the in-place install didn't reach ``version`` *and*
@@ -421,8 +423,13 @@ class ConnectorsAPI(BaseAPI):
             name: connector machine name (e.g. ``"code-snippet"``).
             version: target version (e.g. ``"2.1.5"``).
             bundle_path: optional local connector archive to install instead of
-                pulling ``version`` from Content Hub (use when the repo no longer
-                serves the older version).
+                pulling ``version`` from Content Hub. Usually unnecessary now —
+                when Content Hub won't serve the target, ``auto_fetch`` downloads
+                the exact-version ``.tgz`` from the public repo for you.
+            auto_fetch: when no ``bundle_path`` is given and the by-name Content
+                Hub install fails, download ``version`` from the public content
+                repository (:mod:`pyfsr.repo`) and install that. On by default;
+                set False to require Content Hub / an explicit bundle.
             backup_dir: directory to write the backup ``.zip`` into (default cwd).
             allow_uninstall_fallback: permit the destructive uninstall→reinstall
                 path if an in-place install can't reach ``version``. Off by
@@ -464,8 +471,19 @@ class ConnectorsAPI(BaseAPI):
         def _do_install() -> None:
             if bundle_path:
                 self.install_from_file(bundle_path, replace=True, wait=wait, interval=interval, timeout=timeout)
-            else:
+                return
+            try:
                 self.install(name, version, wait=wait, interval=interval, timeout=timeout)
+            except Exception:
+                # Content Hub wouldn't serve ``version`` in place — fall back to
+                # downloading the exact-version .tgz from the public repo and
+                # installing that, so the caller doesn't have to fetch by hand.
+                if not auto_fetch:
+                    raise
+                from .. import repo as _repo
+
+                fetched = _repo.download_connector(name, version, backup_dir)
+                self.install_from_file(fetched, replace=True, wait=wait, interval=interval, timeout=timeout)
 
         _do_install()
         self.clear_cache()
