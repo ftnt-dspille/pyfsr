@@ -1214,3 +1214,90 @@ def test_wait_for_publish_raises_on_fresh_error_log():
     except FortiSOARException:
         raised = True
     assert raised
+
+
+# -- get_or_create_module (idempotent ensure-state) -------------------------
+class _FakeStub:
+    """Minimal client; get_or_create_module is exercised via monkeypatched API methods."""
+
+    def __init__(self):
+        self.roles = FakeRolesAPI()
+
+
+def _api_with_tracking(monkeypatch, *, published, staging):
+    api = ModulesAdminAPI(_FakeStub())
+    calls = {"create": 0, "publish": 0}
+    monkeypatch.setattr(api, "get_published", lambda m, **k: published)
+    monkeypatch.setattr(api, "get_staging", lambda m, **k: staging)
+
+    def _create(m, **kw):
+        calls["create"] += 1
+        return {"uuid": "new", "type": m}
+
+    def _publish(**kw):
+        calls["publish"] += 1
+        return {"status": "started"}
+
+    monkeypatch.setattr(api, "create_module", _create)
+    monkeypatch.setattr(api, "publish", _publish)
+    return api, calls
+
+
+def test_get_or_create_module_existing_published_no_side_effects(monkeypatch):
+    api, calls = _api_with_tracking(monkeypatch, published={"type": "widgets", "uuid": "p"}, staging=None)
+    meta, created = api.get_or_create_module("widgets")
+    assert created is False
+    assert meta["uuid"] == "p"
+    assert calls == {"create": 0, "publish": 0}  # nothing created, nothing published
+
+
+def test_get_or_create_module_existing_staging_only_not_force_published(monkeypatch):
+    api, calls = _api_with_tracking(monkeypatch, published=None, staging={"type": "widgets", "uuid": "s"})
+    meta, created = api.get_or_create_module("widgets")
+    assert created is False
+    assert meta["uuid"] == "s"
+    assert calls["publish"] == 0  # appliance-wide publish not triggered for an existing draft
+
+
+def test_get_or_create_module_creates_and_publishes_when_absent(monkeypatch):
+    # absent on first look; after create+publish, published metadata is available.
+    states = {"published": None}
+    api = ModulesAdminAPI(_FakeStub())
+    calls = {"create": 0, "publish": 0}
+    monkeypatch.setattr(api, "get_published", lambda m, **k: states["published"])
+    monkeypatch.setattr(api, "get_staging", lambda m, **k: None)
+
+    def _create(m, **kw):
+        calls["create"] += 1
+
+    def _publish(**kw):
+        calls["publish"] += 1
+        states["published"] = {"type": "widgets", "uuid": "live"}
+
+    monkeypatch.setattr(api, "create_module", _create)
+    monkeypatch.setattr(api, "publish", _publish)
+
+    meta, created = api.get_or_create_module("widgets", fields=[{"name": "name"}])
+    assert created is True
+    assert meta["uuid"] == "live"
+    assert calls == {"create": 1, "publish": 1}
+
+
+def test_get_or_create_module_no_publish_returns_staging(monkeypatch):
+    states = {"staging": None}
+    api = ModulesAdminAPI(_FakeStub())
+    calls = {"create": 0, "publish": 0}
+    monkeypatch.setattr(api, "get_published", lambda m, **k: None)
+    monkeypatch.setattr(api, "get_staging", lambda m, **k: states["staging"])
+
+    def _create(m, **kw):
+        calls["create"] += 1
+        states["staging"] = {"type": "widgets", "uuid": "stg"}
+
+    monkeypatch.setattr(api, "create_module", _create)
+    monkeypatch.setattr(api, "publish", lambda **k: calls.__setitem__("publish", calls["publish"] + 1))
+
+    meta, created = api.get_or_create_module("widgets", publish=False)
+    assert created is True
+    assert meta["uuid"] == "stg"
+    assert calls["publish"] == 0

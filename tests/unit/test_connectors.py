@@ -1394,3 +1394,46 @@ def test_create_configuration_exist_ok_default_false():
     # No exist_ok parameter → defaults to False
     with pytest.raises(ConfigurationExistsError):
         api.create_configuration("virustotal", {"k": "v"}, name="prod", version="3.1.0", validate=False)
+
+
+# -- ensure_configured (install-if-missing + upsert, idempotent) ------------
+def _ensure_api(monkeypatch, *, installed):
+    api = ConnectorsAPI(FakeClient())
+    calls = {"install": [], "upsert": []}
+    monkeypatch.setattr(api, "resolve_connector_id", lambda c: 7 if installed else None)
+    monkeypatch.setattr(api, "install", lambda c, v, **k: calls["install"].append((c, v)) or {"status": "Completed"})
+
+    def _upsert(connector, config, **kw):
+        calls["upsert"].append((connector, kw.get("name"), kw.get("version")))
+        return object()
+
+    monkeypatch.setattr(api, "upsert_configuration", _upsert)
+    return api, calls
+
+
+def test_ensure_configured_installed_skips_install(monkeypatch):
+    api, calls = _ensure_api(monkeypatch, installed=True)
+    api.ensure_configured("servicenow", {"k": "v"}, config_name="pilot", version="1.0.0")
+    assert calls["install"] == []  # already installed -> no reinstall
+    assert calls["upsert"] == [("servicenow", "pilot", "1.0.0")]
+
+
+def test_ensure_configured_absent_installs_then_upserts(monkeypatch):
+    api, calls = _ensure_api(monkeypatch, installed=False)
+    api.ensure_configured("servicenow", {"k": "v"}, config_name="pilot", version="1.0.0")
+    assert calls["install"] == [("servicenow", "1.0.0")]
+    assert calls["upsert"] == [("servicenow", "pilot", "1.0.0")]
+
+
+def test_ensure_configured_absent_without_version_raises(monkeypatch):
+    api, calls = _ensure_api(monkeypatch, installed=False)
+    with pytest.raises(ValueError, match="not installed"):
+        api.ensure_configured("servicenow", {"k": "v"}, config_name="pilot")
+    assert calls["install"] == []  # never attempted without a version
+
+
+def test_ensure_configured_installed_version_optional(monkeypatch):
+    api, calls = _ensure_api(monkeypatch, installed=True)
+    api.ensure_configured("servicenow", {"k": "v"}, config_name="pilot")  # no version
+    assert calls["install"] == []
+    assert calls["upsert"] == [("servicenow", "pilot", None)]

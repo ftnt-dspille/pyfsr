@@ -1031,6 +1031,52 @@ class ModulesAdminAPI(BaseAPI):
                 self._pending_grants.setdefault(module, []).extend(roles)
         return created
 
+    def get_or_create_module(
+        self,
+        module: str,
+        *,
+        publish: bool = True,
+        publish_kwargs: dict[str, Any] | None = None,
+        **create_kwargs: Any,
+    ) -> tuple[dict[str, Any], bool]:
+        """Idempotently ensure ``module`` exists; return ``(metadata, created)``.
+
+        The structural-object analogue of
+        :meth:`~pyfsr.records.RecordSet.get_or_create`, returning the same Django-style
+        ``(obj, created)`` tuple:
+
+        - If ``module`` already exists (published **or** staging), return its current
+          metadata with ``created=False`` and make **no** changes — nothing is created,
+          nothing is published.
+        - Otherwise call :meth:`create_module` with ``create_kwargs`` (``fields=``,
+          ``grant_to=``, ``label=``, etc.) and, when ``publish`` is True (default),
+          :meth:`publish` so the module goes live (which also flushes any ``grant_to``).
+          Return the resulting metadata with ``created=True``.
+
+        Because :meth:`publish` is appliance-wide, an existing staging-only module is
+        returned as-is rather than force-published — re-publishing is left to the caller.
+        Pass ``publish_kwargs`` to forward options (e.g. ``{"timeout": 420}``) to
+        :meth:`publish`.
+
+        Example::
+
+            meta, created = admin.get_or_create_module(
+                "reconciliation_result",
+                fields=[admin.text_field("name", required=True)],
+                grant_to=["Security Administrator"],
+            )
+        """
+        existing = self.get_published(module) or self.get_staging(module)
+        if existing is not None:
+            return existing, False
+
+        self.create_module(module, **create_kwargs)
+        if publish:
+            self.publish(**(publish_kwargs or {}))
+
+        meta = (self.get_published(module) if publish else None) or self.get_staging(module)
+        return meta or {}, True
+
     @property
     def _pending_grants(self) -> dict[str, list[str]]:
         """Role grants requested via ``create_module(grant_to=...)``, applied on the next publish.

@@ -18,12 +18,14 @@ from .api.alerts import AlertsAPI
 from .api.api_keys import ApiKeysAPI
 from .api.api_users import ApiKeyUsersAPI
 from .api.app_config import AppConfigAPI
+from .api.attachments import AttachmentsAPI
 from .api.audit import AuditAPI
 from .api.auth_config import AuthConfigAPI
 from .api.comments import CommentsAPI
 from .api.connectors import ConnectorsAPI
 from .api.content_hub import ContentHubSearch
 from .api.export_config import ExportConfigAPI
+from .api.export_templates import ExportTemplatesAPI
 from .api.feeds import IngestFeedsAPI
 from .api.import_config import ImportConfigAPI
 from .api.incidents import IncidentsAPI
@@ -247,6 +249,10 @@ class FortiSOAR:
         # Initialize file operations utility
         self.files: FileOperations = FileOperations(self)
 
+        # Attachment records (upload + link), and export templates
+        self.attachments: AttachmentsAPI = AttachmentsAPI(self)
+        self.export_templates: ExportTemplatesAPI = ExportTemplatesAPI(self)
+
         # Add solution packs API
         self.export_config: ExportConfigAPI = ExportConfigAPI(self)
 
@@ -421,6 +427,38 @@ class FortiSOAR:
             raise ValueError("username was given without a password.")
 
         raise ValueError("No authentication provided — pass token=<api-key> or username=<user>, password=<pass>.")
+
+    @classmethod
+    def from_config_file(cls, path: str, **overrides: Any) -> "FortiSOAR":
+        """Build a client from a TOML config file (the ``[fortisoar]`` layout).
+
+        Convenience wrapper over ``EnvConfig.from_config_file(path).client()``;
+        see :meth:`pyfsr.config.EnvConfig.from_config_file`. ``overrides`` pass
+        straight through to the constructor.
+        """
+        from .config import EnvConfig
+
+        return EnvConfig.from_config_file(path).client(**overrides)
+
+    @classmethod
+    def from_env_file(cls, path: str, *, override: bool = False, **overrides: Any) -> "FortiSOAR":
+        """Build a client from a ``KEY=VALUE`` env file plus ``os.environ``.
+
+        Convenience wrapper over ``EnvConfig.from_env_file(path).client()``.
+        """
+        from .config import EnvConfig
+
+        return EnvConfig.from_env_file(path, override=override).client(**overrides)
+
+    @classmethod
+    def from_env(cls, **overrides: Any) -> "FortiSOAR":
+        """Build a client from ``FSR_*`` environment variables.
+
+        Convenience wrapper over ``EnvConfig.from_env().client()``.
+        """
+        from .config import EnvConfig
+
+        return EnvConfig.from_env().client(**overrides)
 
     def request(
         self,

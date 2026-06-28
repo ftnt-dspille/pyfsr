@@ -51,7 +51,7 @@ from .models import (
     model_for,
 )
 from .pagination import HydraPage, paginate
-from .projection import SUMMARY_FIELDS, project, project_record, to_jsonable
+from .projection import SUMMARY_FIELDS, iri_to_uuid, project, project_record, to_jsonable
 from .publish_probe import (
     PublishProbe,
     PublishReport,
@@ -131,6 +131,7 @@ __all__ = [
     # projection
     "project",
     "project_record",
+    "iri_to_uuid",
     "to_jsonable",
     "SUMMARY_FIELDS",
     # concurrency analysis

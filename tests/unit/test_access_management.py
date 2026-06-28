@@ -306,6 +306,22 @@ def test_api_key_plaintext_none_when_masked():
     assert _api_key_plaintext(c, _U_UID) is None
 
 
+def test_api_keys_get_plaintext_public_method_round_trip():
+    # T3.3: public wrapper over the private _api_key_plaintext recovery flow.
+    c = _api_users_client()
+    assert ApiKeysAPI(c).get_plaintext(_U_UID) == "PLAIN"
+
+
+def test_api_keys_get_plaintext_none_when_masked():
+    c = _api_users_client()
+    c.route(
+        "GET",
+        "/api/auth/users",
+        {"usersresp": [{"uuid": _U_UID, "api_key": {"key": "xxxxxxxxd517", "retrievable": False}}]},
+    )
+    assert ApiKeysAPI(c).get_plaintext(_U_UID) is None
+
+
 # ----------------------------------------------------------------- api_keys
 def _api_keys_client() -> _FakeClient:
     c = _FakeClient()

@@ -360,6 +360,16 @@ class ExecuteResult(ApiResult):
     message: str | None = None
     data: Any = None
 
+    @property
+    def ok(self) -> bool:
+        """True when the connector reported success (``status == "Success"``).
+
+        Saves callers the recurring ``str(r.status).lower() == "success"`` check.
+        Note (see ``ConnectorsAPI.execute``): an agent-bound, fire-and-forget call
+        can succeed with empty ``data`` — ``ok`` reflects ``status``, not ``data``.
+        """
+        return str(self.status).strip().lower() == "success"
+
 
 # ---------------------------------------------------------------------------
 # Install job status

@@ -6,19 +6,9 @@ Prereqs on the FortiSOAR side (all doable via this client):
   * The FortiAI solution pack installed     -> client.ai.list_providers()
 """
 
-import tomllib
-
 from pyfsr import FortiSOAR
 
-with open("config.toml", "rb") as f:
-    config = tomllib.load(f)
-
-client = FortiSOAR(
-    base_url=config["fortisoar"]["base_url"],
-    auth=(config["fortisoar"]["auth"]["username"], config["fortisoar"]["auth"]["password"]),
-    verify_ssl=config["fortisoar"].get("verify_ssl", True),
-    suppress_insecure_warnings=True,
-)
+client = FortiSOAR.from_config_file("config.toml", suppress_insecure_warnings=True)
 
 # One-time: make sure FortiAI is turned on (accepts the AI terms & conditions).
 if not client.ai.features_enabled():

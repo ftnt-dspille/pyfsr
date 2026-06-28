@@ -1438,6 +1438,67 @@ class ConnectorsAPI(BaseAPI):
                 return ConnectorConfig.model_validate(confirmed)
             raise
 
+    def ensure_configured(
+        self,
+        connector: str,
+        config: dict[str, Any],
+        *,
+        config_name: str,
+        version: str | None = None,
+        default: bool = True,
+        agent: str | None = None,
+        validate: bool = True,
+        autofill: bool = True,
+        wait: bool = True,
+        interval: float = 3.0,
+        timeout: float = 300.0,
+    ) -> ConnectorConfig:
+        """Ensure ``connector`` is installed **and** has the named configuration.
+
+        Consolidates the common setup sequence — "install from Content Hub if it
+        isn't here yet, then create-or-update the config" — into one idempotent
+        call, joining the existing :meth:`ensure_version` in the ``ensure_*``
+        family. Re-running it is safe: an already-installed connector is not
+        reinstalled, and :meth:`upsert_configuration` updates the named config in
+        place rather than duplicating it.
+
+        ``version`` is only needed to *install* a missing connector (it is passed
+        to :meth:`install`); when the connector is already installed it may be
+        omitted and the configuration is applied against the installed version. If
+        the connector is absent and ``version`` is ``None``, a clear ``ValueError``
+        is raised rather than guessing.
+
+        ``config_name`` is the configuration's display name (passed through as
+        ``name=`` to :meth:`upsert_configuration`); ``default=True`` (the default)
+        makes it the connector's default config so a config-less connector step
+        picks it up. Returns the resulting :class:`~pyfsr.models.ConnectorConfig`.
+
+        Example::
+
+            cfg = client.connectors.ensure_configured(
+                "servicenow",
+                {"server_url": "...", "username": "...", "password": "..."},
+                config_name="pilot",
+                version="1.0.0",
+            )
+        """
+        if self.resolve_connector_id(connector) is None:
+            if not version:
+                raise ValueError(
+                    f"connector {connector!r} is not installed; pass version= to install it from the Content Hub"
+                )
+            self.install(connector, version, wait=wait, interval=interval, timeout=timeout)
+        return self.upsert_configuration(
+            connector,
+            config,
+            name=config_name,
+            version=version,
+            default=default,
+            agent=agent,
+            validate=validate,
+            autofill=autofill,
+        )
+
     # ------------------------------------------------------------- execute
     def execute(
         self,

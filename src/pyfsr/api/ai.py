@@ -560,6 +560,36 @@ class AIApi(BaseAPI):
             return self.update_mcp_server(uuid, config)
         return self.register_mcp_server(config)
 
+    def upsert_mcp_server(self, config: dict[str, Any], *, validate: bool = True) -> dict[str, Any]:
+        """Create or update an MCP server **keyed by name** — re-runnable setup.
+
+        :meth:`save_mcp_server` routes on ``uuid`` (present → update, absent →
+        create), which means a caller must look the row up by name and inject the
+        uuid themselves to avoid duplicating a server on every run. This does that
+        lookup: if a registered server already has the same ``name``, its uuid is
+        merged into ``config`` so the existing row is updated in place; otherwise a
+        new one is created. Mirrors :meth:`~pyfsr.api.connectors.ConnectorsAPI.upsert_configuration`.
+
+        The returned record always carries a usable ``uuid`` key (back-filled from
+        the matched row when the create/update response omits it), so callers can
+        use ``upsert_mcp_server(cfg)["uuid"]`` directly.
+        """
+        name = config.get("name")
+        existing_uuid = None
+        if name:
+            existing_uuid = next(
+                (m.get("uuid") or m.get("id") for m in self.list_mcp_servers() if m.get("name") == name),
+                None,
+            )
+        if existing_uuid:
+            config = {**config, "uuid": existing_uuid}
+        saved = self.save_mcp_server(config, validate=validate)
+        if isinstance(saved, dict) and not saved.get("uuid"):
+            uuid = existing_uuid or str(saved.get("@id", "")).rsplit("/", 1)[-1] or None
+            if uuid:
+                saved = {**saved, "uuid": uuid}
+        return saved
+
     def delete_mcp_server(self, uuid: str) -> None:
         """Delete a registered MCP server by uuid."""
         self.client.delete(f"/api/3/mcp_configurations/{uuid}")
