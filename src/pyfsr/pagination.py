@@ -110,6 +110,7 @@ def paginate(
     page_size: int = 100,
     start_page: int = 1,
     max_records: int | None = None,
+    prefetch: int = 0,
 ) -> Iterator[Any]:
     """Lazily yield every record across pages.
 
@@ -119,11 +120,22 @@ def paginate(
         page_size: Page size the caller requested; used for the count heuristic.
         start_page: First page to fetch.
         max_records: Optional ceiling on total records yielded.
+        prefetch: When > 0, fetch up to this many pages **ahead** in a background
+            thread pool so a page's network round-trip overlaps the consumer's
+            processing of the previous page. ``0`` (default) fetches strictly
+            sequentially. Because the terminal page isn't known until it returns,
+            a prefetching walk may fetch up to ``prefetch`` extra pages past the
+            end; their results are simply discarded.
 
     Yields:
         Individual records, page after page, stopping when a page is empty,
         ``has_next`` is false, or ``max_records`` is reached.
     """
+    if prefetch and prefetch > 0:
+        yield from _paginate_prefetch(
+            fetch_page, page_size=page_size, start_page=start_page, max_records=max_records, prefetch=prefetch
+        )
+        return
     page = start_page
     yielded = 0
     while True:
@@ -139,3 +151,46 @@ def paginate(
         if not hp.has_next:
             return
         page += 1
+
+
+def _paginate_prefetch(
+    fetch_page: Callable[[int], Any],
+    *,
+    page_size: int,
+    start_page: int,
+    max_records: int | None,
+    prefetch: int,
+) -> Iterator[Any]:
+    """Pipelined variant of :func:`paginate` that keeps ``prefetch`` pages in flight.
+
+    Submits page fetches to a bounded thread pool so the next page(s) download
+    while the consumer processes the current one. Pages are still yielded in
+    order. Speculative fetches past the final page are tolerated (their futures
+    resolve to empty pages and are dropped).
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    yielded = 0
+    with ThreadPoolExecutor(max_workers=prefetch, thread_name_prefix="pyfsr-prefetch") as pool:
+        futures = {}
+        next_submit = start_page
+        for _ in range(prefetch):
+            futures[next_submit] = pool.submit(fetch_page, next_submit)
+            next_submit += 1
+        page = start_page
+        while page in futures:
+            envelope = futures.pop(page).result()
+            hp = HydraPage.from_response(envelope, page=page, limit=page_size)
+            if not hp.members:
+                return
+            for record in hp.members:
+                yield record
+                yielded += 1
+                if max_records is not None and yielded >= max_records:
+                    return
+            if not hp.has_next:
+                return
+            # Keep the in-flight window full as we advance.
+            futures[next_submit] = pool.submit(fetch_page, next_submit)
+            next_submit += 1
+            page += 1

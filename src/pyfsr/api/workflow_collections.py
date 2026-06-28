@@ -45,6 +45,7 @@ import uuid as _uuid
 from pathlib import Path
 from typing import Any
 
+from ..models import WorkflowCollection
 from ..pagination import extract_members
 from ..records import RecordSet
 from .base import BaseAPI
@@ -59,23 +60,27 @@ _HARD_DELETE = {"$hardDelete": "true", "$showDeleted": "true"}
 class WorkflowCollectionsAPI(BaseAPI):
     """CRUD for playbook (workflow) collections."""
 
-    def list(self, *, limit: int = 2147483647, relationships: bool = False) -> list[dict[str, Any]]:
+    def list(self, *, limit: int = 2147483647, relationships: bool = False) -> list[WorkflowCollection]:
         """List workflow collections (the ``hydra:member`` array).
 
         ``relationships=True`` adds ``$relationships=true`` so each collection's nested
-        ``workflows`` come back inline (heavier; off by default).
+        ``workflows`` come back inline (heavier; off by default). Returns typed,
+        dict-compatible :class:`~pyfsr.models.WorkflowCollection` records.
         """
         params: dict[str, Any] = {"$limit": limit}
         if relationships:
             params["$relationships"] = "true"
-        return extract_members(self.client.get(_BASE, params=params))
+        return [_as_collection(m) for m in extract_members(self.client.get(_BASE, params=params))]
 
-    def get(self, uuid: str, *, relationships: bool = True) -> dict[str, Any]:
+    def get(self, uuid: str, *, relationships: bool = True) -> WorkflowCollection:
         """Fetch one collection by uuid. ``relationships=True`` (default) inlines its
-        ``workflows`` — the usual reason to fetch a single collection."""
+        ``workflows`` — the usual reason to fetch a single collection.
+
+        Returns a typed, dict-compatible :class:`~pyfsr.models.WorkflowCollection`.
+        """
         uuid = _require_uuid(uuid, "get")
         params = {"$relationships": "true"} if relationships else None
-        return self.client.get(f"{_BASE}/{uuid}", params=params)
+        return _as_collection(self.client.get(f"{_BASE}/{uuid}", params=params))
 
     def create_collection(
         self,
@@ -87,11 +92,12 @@ class WorkflowCollectionsAPI(BaseAPI):
         uuid: str | None = None,
         record_tags: list[str] | None = None,
         image: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> WorkflowCollection:
         """Create a collection, optionally with workflows (``POST /api/3/workflow_collections``).
 
         Nested ``workflows`` (full Workflow objects with ``steps``/``routes``) are accepted
-        inline. ``uuid`` is generated if omitted. Returns the created collection record.
+        inline. ``uuid`` is generated if omitted. Returns the created collection record
+        as a typed :class:`~pyfsr.models.WorkflowCollection`.
         """
         if not isinstance(name, str) or not name.strip():
             raise ValueError("create_collection() requires a non-empty collection name")
@@ -105,16 +111,17 @@ class WorkflowCollectionsAPI(BaseAPI):
             "recordTags": list(record_tags or []),
             "workflows": list(workflows or []),
         }
-        return self.client.post(_BASE, data=collection)
+        return _as_collection(self.client.post(_BASE, data=collection))
 
-    def upsert(self, data: dict[str, Any]) -> dict[str, Any]:
+    def upsert(self, data: dict[str, Any]) -> WorkflowCollection:
         """Insert-or-update one collection via ``POST /api/3/upsert/workflow_collections``.
 
         FortiSOAR matches on the collection's natural key, restoring a soft-deleted row
         instead of creating a duplicate. This is the safest write path when a collection
-        may already exist in the recycle bin.
+        may already exist in the recycle bin. Returns the persisted
+        :class:`~pyfsr.models.WorkflowCollection`.
         """
-        return self.client.post("/api/3/upsert/workflow_collections", data=data)
+        return _as_collection(self.client.post("/api/3/upsert/workflow_collections", data=data))
 
     def create_collections(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
         """Create or re-push many collections (``POST /api/3/bulkupsert/workflow_collections``)."""
@@ -143,7 +150,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         data: dict[str, Any],
         *,
         replace: bool = False,
-    ) -> list[dict[str, Any]]:
+    ) -> list[WorkflowCollection]:
         """Import a FortiSOAR export envelope, preserving original UUIDs and structure.
 
         Accepts the ``{"type": "workflow_collections", "data": [...]}`` envelope produced
@@ -171,7 +178,7 @@ class WorkflowCollectionsAPI(BaseAPI):
             raise ValueError(
                 "import_export() expects an export envelope with a 'data' key; got keys: " + ", ".join(sorted(data))
             )
-        results: list[dict[str, Any]] = []
+        results: list[WorkflowCollection] = []
         for raw_col in data["data"]:
             col = self._clean_item(raw_col)
             if replace:
@@ -179,7 +186,7 @@ class WorkflowCollectionsAPI(BaseAPI):
                 if col_uuid and self.exists(col_uuid):
                     self._make_playbooks_public(col_uuid)
                     self.delete(col_uuid)
-            results.append(self.client.post(_BASE, data=col))
+            results.append(_as_collection(self.client.post(_BASE, data=col)))
         return results
 
     def import_from_file(
@@ -187,7 +194,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         path: str | Path,
         *,
         replace: bool = False,
-    ) -> list[dict[str, Any]]:
+    ) -> list[WorkflowCollection]:
         """Load a FortiSOAR export JSON file and import it via :meth:`import_export`.
 
         ``path`` points to a ``*.json`` file produced by the UI's Export button. Pass
@@ -240,7 +247,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         replace: bool = False,
         db_path: str | Path | None = None,
         strict_warnings: bool = False,
-    ) -> list[dict[str, Any]]:
+    ) -> list[WorkflowCollection]:
         """Compile playbook YAML and import the result onto the appliance.
 
         Compiles ``source`` (YAML text or a ``.yaml`` path) via :meth:`compile_yaml`
@@ -271,13 +278,13 @@ class WorkflowCollectionsAPI(BaseAPI):
             raise ValueError(f"playbook YAML failed to compile: {detail}")
         return self.import_export(result.fsr_json, replace=replace)
 
-    def restore(self, uuid: str) -> dict[str, Any]:
+    def restore(self, uuid: str) -> WorkflowCollection:
         """Restore a soft-deleted collection from the recycle bin.
 
         This mirrors :meth:`pyfsr.records.RecordSet.restore` but keeps the collection-specific
-        API self-contained.
+        API self-contained. Returns the restored :class:`~pyfsr.models.WorkflowCollection`.
         """
-        return RecordSet(self.client, "workflow_collections").restore(uuid, raw=True)
+        return _as_collection(RecordSet(self.client, "workflow_collections").restore(uuid, raw=True))
 
     def exists(self, uuid: str) -> bool:
         """Return True if a collection with ``uuid`` exists on the appliance.
@@ -293,13 +300,16 @@ class WorkflowCollectionsAPI(BaseAPI):
         except Exception:
             return False
 
-    def update(self, uuid: str, **fields: Any) -> dict[str, Any]:
+    def update(self, uuid: str, **fields: Any) -> WorkflowCollection:
         """Partially update a collection (``PUT``); pass only the keys you want changed
-        (e.g. ``name=...``, ``visible=False``, ``description=...``)."""
+        (e.g. ``name=...``, ``visible=False``, ``description=...``).
+
+        Returns the updated :class:`~pyfsr.models.WorkflowCollection`.
+        """
         uuid = _require_uuid(uuid, "update")
         if not fields:
             raise ValueError("update() requires at least one field to change")
-        return self.client.put(f"{_BASE}/{uuid}", data=fields)
+        return _as_collection(self.client.put(f"{_BASE}/{uuid}", data=fields))
 
     def _make_playbooks_public(self, col_uuid: str) -> None:
         """Set every private playbook in a collection public, so it can be deleted.
@@ -335,6 +345,11 @@ class WorkflowCollectionsAPI(BaseAPI):
         uuid = _require_uuid(uuid, "delete")
         params = dict(_HARD_DELETE) if hard else None
         self.client.delete(f"{_BASE}/{uuid}", params=params)
+
+
+def _as_collection(resp: Any) -> WorkflowCollection:
+    """Coerce a raw collection response into a typed, dict-compatible record."""
+    return WorkflowCollection.model_validate(resp if isinstance(resp, dict) else {"result": resp})
 
 
 def _require_uuid(uuid: str, op: str) -> str:

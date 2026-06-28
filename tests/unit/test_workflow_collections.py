@@ -38,7 +38,9 @@ def api():
 def test_list_returns_members_and_sets_limit():
     a, c = api()
     out = a.list()
-    assert out == [{"uuid": "c-1", "name": "Pack"}]
+    # Typed WorkflowCollection records now, but dict-compatible.
+    assert [r.to_dict(exclude_none=True) for r in out] == [{"uuid": "c-1", "name": "Pack"}]
+    assert out[0]["uuid"] == "c-1" and out[0].name == "Pack"
     method, endpoint, params = c.calls[-1]
     assert method == "GET" and endpoint == "/api/3/workflow_collections"
     assert params["$limit"] == 2147483647 and "$relationships" not in params

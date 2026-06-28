@@ -65,3 +65,25 @@ def test_paginate_respects_max_records():
     pages = {p: _envelope([p * 10, p * 10 + 1]) for p in range(1, 10)}
     got = list(paginate(lambda p: pages[p], page_size=2, max_records=3))
     assert got == [10, 11, 20]
+
+
+def test_paginate_prefetch_preserves_order():
+    pages = {
+        1: _envelope([1, 2]),
+        2: _envelope([3, 4]),
+        3: _envelope([5]),  # short page → stop after
+    }
+    got = list(paginate(lambda p: pages.get(p, _envelope([])), page_size=2, prefetch=2))
+    assert got == [1, 2, 3, 4, 5]
+
+
+def test_paginate_prefetch_respects_max_records():
+    pages = {p: _envelope([p * 10, p * 10 + 1]) for p in range(1, 10)}
+    got = list(paginate(lambda p: pages[p], page_size=2, max_records=3, prefetch=3))
+    assert got == [10, 11, 20]
+
+
+def test_paginate_prefetch_stops_on_empty_page():
+    pages = {1: _envelope([1, 2]), 2: _envelope([])}
+    got = list(paginate(lambda p: pages.get(p, _envelope([])), page_size=2, prefetch=2))
+    assert got == [1, 2]

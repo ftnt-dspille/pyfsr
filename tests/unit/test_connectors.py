@@ -298,6 +298,35 @@ def test_list_configured_paginates():
     assert [c["name"] for c in out] == ["a", "b", "c"]
 
 
+def test_list_configured_paginates_via_nextpage():
+    # No totalItems: pagination is driven by the envelope's nextPage marker.
+    pages = {
+        1: {"data": [{"name": "a"}, {"name": "b"}], "nextPage": 2},
+        2: {"data": [{"name": "c"}], "nextPage": None},
+    }
+
+    class PagingClient(FakeClient):
+        def get(self, endpoint, params=None, **kwargs):
+            self.get_calls.append((endpoint, params))
+            if endpoint == "/api/integration/connectors/":
+                return pages.get(params["page"], {"data": []})
+            return {}
+
+    out = ConnectorsAPI(PagingClient()).list_configured()
+    assert [c["name"] for c in out] == ["a", "b", "c"]
+
+
+def test_integration_list_envelope_parse_tolerates_shapes():
+    from pyfsr.models import IntegrationListEnvelope
+
+    env = IntegrationListEnvelope.parse({"totalItems": 2, "nextPage": 2, "data": [{"x": 1}]})
+    assert env.totalItems == 2 and env.has_next is True and env.data == [{"x": 1}]
+    # A bare list is wrapped as data; a non-collection yields an empty envelope.
+    assert IntegrationListEnvelope.parse([{"y": 2}]).data == [{"y": 2}]
+    assert IntegrationListEnvelope.parse(None).data == []
+    assert IntegrationListEnvelope.parse({"data": []}).has_next is False
+
+
 # -- configuration ----------------------------------------------------------
 _FSIEM_CONFIG = {
     "server": "https://siem.example.com",
