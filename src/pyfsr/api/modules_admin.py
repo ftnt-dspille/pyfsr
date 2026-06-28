@@ -59,11 +59,11 @@ from typing import TYPE_CHECKING, Any
 import requests
 
 from ..exceptions import FortiSOARException, describe_migrate_failure, is_migrate_transient
+from ..models import AttributeMetadata
 from .base import BaseAPI
 
 if TYPE_CHECKING:
     from ..models import (
-        AttributeMetadata,
         InvalidDraft,
         PendingChange,
         PublishedModelMetadata,
@@ -300,7 +300,7 @@ class ModulesAdminAPI(BaseAPI):
         if form_type == "oneToMany":
             reverse_name = field.get("inversedField") or source_module
             reverse = self.lookup_field(reverse_name, source_module, inversedField=name)
-            return target, reverse
+            return target, self._to_field_dict(reverse)
         if form_type == "manyToMany" and field.get("inversedField"):
             reverse = self.relationship_field(
                 field["inversedField"],
@@ -309,7 +309,7 @@ class ModulesAdminAPI(BaseAPI):
                 inversed_field=name,
                 owns_relationship=False,
             )
-            return target, reverse
+            return target, self._to_field_dict(reverse)
         # lookup / default-inverse manyToMany: nothing for pyfsr to create.
         return None
 
@@ -351,8 +351,12 @@ class ModulesAdminAPI(BaseAPI):
         enable_range: bool = False,
         bulk_edit: bool = False,
         **extra: Any,
-    ) -> dict[str, Any]:
-        """Build an attribute (field) dict with sane defaults for create/add.
+    ) -> AttributeMetadata:
+        """Build an attribute (field) with sane defaults for create/add.
+
+        Returns a typed :class:`~pyfsr.models.AttributeMetadata` (dict-compatible
+        for reads — ``f["type"]`` / ``f.get(...)`` / ``"type" in f`` all work — so
+        existing code that treated the result as a dict keeps working).
 
         Mirrors the Field **Properties** panel of the in-product editor:
 
@@ -423,7 +427,19 @@ class ModulesAdminAPI(BaseAPI):
             },
         }
         attr.update(extra)
-        return attr
+        return AttributeMetadata.model_validate(attr)
+
+    @classmethod
+    def _field_dict(cls, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Build a field as a plain, mutable wire dict (for post-processing builders).
+
+        :meth:`field` now returns a typed (immutable-keyed) ``AttributeMetadata``;
+        builders that need to mutate the result in place (picklist / lookup /
+        relationship) build through this and re-wrap at the end. The dump is
+        byte-identical to the pre-typing builder output (``exclude_unset`` emits
+        only the keys ``field`` actually set, extras included).
+        """
+        return cls.field(*args, **kwargs).model_dump(by_alias=True, exclude_unset=True)
 
     @classmethod
     def picklist_field(
@@ -434,14 +450,14 @@ class ModulesAdminAPI(BaseAPI):
         multi: bool = False,
         label: str | None = None,
         **opts: Any,
-    ) -> dict[str, Any]:
+    ) -> AttributeMetadata:
         """Build a single- or multi-select **picklist** field bound to ``picklist_name``.
 
         ``picklist_name`` is the picklist's *list name* (e.g. ``"AlertStatus"``). ``multi``
         switches between ``picklist`` and ``multiselectpicklist`` (a collection). Pass
         through any :meth:`field` option (``required``, ``grid_column``, ...).
         """
-        attr = cls.field(
+        attr = cls._field_dict(
             name,
             db_type="picklists",
             form_type="multiselectpicklist" if multi else "picklist",
@@ -457,13 +473,13 @@ class ModulesAdminAPI(BaseAPI):
                 "sort": [{"field": "orderIndex", "direction": "ASC"}],
             },
         }
-        return attr
+        return AttributeMetadata.model_validate(attr)
 
     # ------------------------------------------------ typed scalar builders
     @classmethod
     def typed_field(
         cls, name: str, display_type: str | None = None, *, label: str | None = None, **opts: Any
-    ) -> dict[str, Any]:
+    ) -> AttributeMetadata:
         """Build a scalar field by **display type**, deriving the storage ``type`` for you.
 
         ``display_type`` is the kind of field as shown in the editor — any key of
@@ -498,31 +514,31 @@ class ModulesAdminAPI(BaseAPI):
         html: bool = False,
         label: str | None = None,
         **opts: Any,
-    ) -> dict[str, Any]:
+    ) -> AttributeMetadata:
         """Build a string field: single-line (default), ``textarea``, ``richtext`` or
         ``html``. ``area``/``rich``/``html`` pick the display type (all store ``string``)."""
         display_type = "html" if html else "richtext" if rich else "textarea" if area else "text"
         return cls.typed_field(name, display_type, label=label, **opts)
 
     @classmethod
-    def integer_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def integer_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build an integer field (stores ``integer``)."""
         return cls.typed_field(name, "integer", label=label, **opts)
 
     @classmethod
-    def decimal_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def decimal_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a Decimal field (stores ``float``) for fractional numbers — the
         floating-point counterpart of :meth:`integer_field`."""
         return cls.typed_field(name, "decimal", label=label, **opts)
 
     @classmethod
-    def datetime_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def datetime_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a date/time field. Stored as an epoch-millis ``integer`` — that storage
         type is intentional, not a bug."""
         return cls.typed_field(name, "datetime", label=label, **opts)
 
     @classmethod
-    def checkbox_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def checkbox_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a boolean checkbox field (stores ``boolean``)."""
         return cls.typed_field(name, "checkbox", label=label, **opts)
 
@@ -530,60 +546,60 @@ class ModulesAdminAPI(BaseAPI):
     boolean_field = checkbox_field
 
     @classmethod
-    def email_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def email_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build an email field (stores ``string``, with email-format validation)."""
         return cls.typed_field(name, "email", label=label, **opts)
 
     @classmethod
-    def url_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def url_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a URL field (stores ``string``)."""
         return cls.typed_field(name, "url", label=label, **opts)
 
     @classmethod
-    def phone_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def phone_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a phone field (stores ``string``)."""
         return cls.typed_field(name, "phone", label=label, **opts)
 
     @classmethod
-    def domain_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def domain_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a Domain field (stores ``string``)."""
         return cls.typed_field(name, "domain", label=label, **opts)
 
     @classmethod
-    def ipv4_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def ipv4_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build an IPv4 field (stores ``string``)."""
         return cls.typed_field(name, "ipv4", label=label, **opts)
 
     @classmethod
-    def ipv6_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def ipv6_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build an IPv6 field (stores ``string``)."""
         return cls.typed_field(name, "ipv6", label=label, **opts)
 
     @classmethod
-    def filehash_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def filehash_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a FileHash field (stores ``string``)."""
         return cls.typed_field(name, "filehash", label=label, **opts)
 
     @classmethod
-    def file_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def file_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a file-attachment field (stores ``string``)."""
         return cls.typed_field(name, "file", label=label, **opts)
 
     @classmethod
-    def password_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def password_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a masked password field. Pass ``encrypted=True`` to store it encrypted
         at rest (encrypted fields cannot be ``searchable``)."""
         return cls.typed_field(name, "password", label=label, **opts)
 
     @classmethod
-    def json_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def json_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a JSON field (stores ``object``) — the editor's "JSON" type with a JSON
         editor control. See also :meth:`object_field` (the raw ``object`` type): both store
         ``object`` and differ only in the editor control."""
         return cls.typed_field(name, "json", label=label, **opts)
 
     @classmethod
-    def object_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def object_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a raw object field (stores ``object``). For the editor's "JSON" field type
         (a JSON editor control) use :meth:`json_field` instead."""
         return cls.typed_field(name, "object", label=label, **opts)
@@ -600,7 +616,7 @@ class ModulesAdminAPI(BaseAPI):
         owning_module: str | None = None,
         team_scope: list[str] | None = None,
         **opts: Any,
-    ) -> dict[str, Any]:
+    ) -> AttributeMetadata:
         """Build a **lookup** (many-to-one) field: a *single* reference to one record of
         ``target_module``.
 
@@ -624,7 +640,7 @@ class ModulesAdminAPI(BaseAPI):
         :meth:`create_module` resolve the team identifiers to IRIs and **refuse to stage it on
         an appliance older than 8.0** (7.6.x has no equivalent). See :meth:`scope_field_to_teams`.
         """
-        attr = cls.field(name, db_type=target_module, form_type="lookup", label=label, **opts)
+        attr = cls._field_dict(name, db_type=target_module, form_type="lookup", label=label, **opts)
         attr["collection"] = False
         attr["ownsRelationship"] = False
         attr["dataSource"] = {"model": target_module}
@@ -636,7 +652,20 @@ class ModulesAdminAPI(BaseAPI):
             }
         if team_scope:
             cls._apply_team_scope(attr, team_scope)
-        return attr
+        return AttributeMetadata.model_validate(attr)
+
+    @staticmethod
+    def _to_field_dict(field: dict[str, Any] | AttributeMetadata) -> dict[str, Any]:
+        """Normalize a field (typed :class:`AttributeMetadata` or plain dict) to a wire dict.
+
+        The staging consumers (:meth:`create_module` / :meth:`add_field` /
+        :meth:`scope_field_to_teams`) mutate field dicts in place and POST them, so
+        they coerce a typed field back to a plain dict at their boundary.
+        ``exclude_unset`` keeps the body byte-identical to a hand-built dict.
+        """
+        if isinstance(field, AttributeMetadata):
+            return field.model_dump(by_alias=True, exclude_unset=True)
+        return field
 
     @staticmethod
     def _apply_team_scope(attr: dict[str, Any], teams: list[str]) -> None:
@@ -662,7 +691,7 @@ class ModulesAdminAPI(BaseAPI):
         owns_relationship: bool = True,
         team_scope: list[str] | None = None,
         **opts: Any,
-    ) -> dict[str, Any]:
+    ) -> AttributeMetadata:
         """Build a **collection** relationship to ``target_module`` (its module ``type``).
 
         ``many`` selects ``manyToMany`` (default) vs ``oneToMany``; both are collections.
@@ -691,7 +720,7 @@ class ModulesAdminAPI(BaseAPI):
         ``owns_relationship`` (default True) marks this as the owning side of the join.
         Pass ``owns_relationship=False`` for the non-owning mirror of an existing relation.
         """
-        attr = cls.field(
+        attr = cls._field_dict(
             name,
             db_type=target_module,
             form_type="manyToMany" if many else "oneToMany",
@@ -705,7 +734,7 @@ class ModulesAdminAPI(BaseAPI):
         attr["dataSource"] = {"model": target_module}
         if team_scope:
             cls._apply_team_scope(attr, team_scope)
-        return attr
+        return AttributeMetadata.model_validate(attr)
 
     # ----------------------------------------------------- view templates
     @staticmethod
@@ -905,7 +934,7 @@ class ModulesAdminAPI(BaseAPI):
         *,
         label: str | None = None,
         plural: str | None = None,
-        fields: list[dict[str, Any]] | None = None,
+        fields: list[dict[str, Any] | AttributeMetadata] | None = None,
         display_template: str | None = None,
         ownable: bool = True,
         trackable: bool = True,
@@ -993,9 +1022,10 @@ class ModulesAdminAPI(BaseAPI):
         label = label or module
         if fields is None:
             fields = [self.text_field("name", required=True)]
-        self._guard_team_scope(fields)
+        field_dicts: list[dict[str, Any]] = [self._to_field_dict(f) for f in fields]
+        self._guard_team_scope(field_dicts)
         if display_template is None:
-            names = [f.get("name") for f in fields if f.get("name")]
+            names = [f.get("name") for f in field_dicts if f.get("name")]
             anchor = "name" if "name" in names else (names[0] if names else "name")
             display_template = f"{{{{ {anchor} }}}}"
         payload = {
@@ -1016,7 +1046,7 @@ class ModulesAdminAPI(BaseAPI):
             "uniqueConstraint": self._unique_constraint(module, record_uniqueness),
             "defaultSort": default_sort or [],
             "system": False,
-            "attributes": fields,
+            "attributes": field_dicts,
         }
         payload.update(opts)
         created = self.client.post(_STAGING, data=payload, params=_REL)
@@ -1231,21 +1261,23 @@ class ModulesAdminAPI(BaseAPI):
             return None
         return version >= minimum
 
-    def scope_field_to_teams(self, field: dict[str, Any], teams: list[str]) -> dict[str, Any]:
+    def scope_field_to_teams(self, field: dict[str, Any] | AttributeMetadata, teams: list[str]) -> AttributeMetadata:
         """Restrict a People lookup/relationship ``field``'s pickable users to members of ``teams``.
 
-        The in-product "Only show users from selected teams" option (FortiSOAR **8.0+**). Mutates
-        and returns ``field`` so you can apply it to a pre-built attribute, e.g.::
+        The in-product "Only show users from selected teams" option (FortiSOAR **8.0+**). Takes a
+        field (built with :meth:`lookup_field`/:meth:`relationship_field`) and returns a typed
+        :class:`~pyfsr.models.AttributeMetadata` with the team-scope option applied::
 
             f = admin.relationship_field("approvers", "people")
-            admin.scope_field_to_teams(f, ["SOC Team", "TeamA"])
+            f = admin.scope_field_to_teams(f, ["SOC Team", "TeamA"])
 
         Equivalent to passing ``team_scope=`` to :meth:`lookup_field`/:meth:`relationship_field`.
         Version-gating + team→IRI resolution still happen when the field is staged via
         :meth:`add_field`/:meth:`create_module`.
         """
-        self._apply_team_scope(field, teams)
-        return field
+        attr = self._to_field_dict(field)
+        self._apply_team_scope(attr, teams)
+        return AttributeMetadata.model_validate(attr)
 
     def _guard_orphan_table_collision(self, module: str, facts: Any) -> None:
         """Refuse to create ``module`` if leftover physical tables already occupy its
@@ -1303,7 +1335,9 @@ class ModulesAdminAPI(BaseAPI):
             raise FortiSOARException(f"no team named {team!r} found to scope the field to")
         return f"/api/3/teams/{uuid}"
 
-    def add_field(self, module: str, field: dict[str, Any], *, create_reverse: bool = True) -> dict[str, Any]:
+    def add_field(
+        self, module: str, field: dict[str, Any] | AttributeMetadata, *, create_reverse: bool = True
+    ) -> dict[str, Any]:
         """Append a field (build it with :meth:`field`) to ``module`` in staging.
 
         When ``field`` is a relationship whose reverse side FortiSOAR does **not**
@@ -1323,6 +1357,7 @@ class ModulesAdminAPI(BaseAPI):
         Raises ``ValueError`` if the reverse is needed but the target module does not
         exist, or already has a *different* field under the reverse name.
         """
+        field = self._to_field_dict(field)
         self._guard_team_scope([field])
         mod = self.get_staging(module)
         if not mod:

@@ -1301,3 +1301,68 @@ def test_get_or_create_module_no_publish_returns_staging(monkeypatch):
     assert created is True
     assert meta["uuid"] == "stg"
     assert calls["publish"] == 0
+
+
+# ---------------------------------------------------------------------------
+# T3.7 — builders return typed AttributeMetadata (dict-compatible), consumers
+# still POST plain wire dicts (byte-identical to the pre-typing behavior).
+# ---------------------------------------------------------------------------
+
+from pyfsr.models import AttributeMetadata  # noqa: E402
+
+
+def test_builders_return_typed_attribute_metadata():
+    assert isinstance(ModulesAdminAPI.field("a"), AttributeMetadata)
+    assert isinstance(ModulesAdminAPI.text_field("b"), AttributeMetadata)
+    assert isinstance(ModulesAdminAPI.integer_field("c"), AttributeMetadata)
+    assert isinstance(ModulesAdminAPI.picklist_field("d", "AlertSeverity"), AttributeMetadata)
+    assert isinstance(ModulesAdminAPI.lookup_field("e", "people"), AttributeMetadata)
+    assert isinstance(ModulesAdminAPI.relationship_field("f", "alerts"), AttributeMetadata)
+
+
+def test_typed_field_is_dict_compatible_for_reads():
+    f = ModulesAdminAPI.text_field("name", required=True, label="Name")
+    # __getitem__, get, __contains__ all behave like the old dict
+    assert f["type"] == "string"
+    assert f["formType"] == "text"
+    assert f.get("name") == "name"
+    assert "validation" in f
+    assert f["validation"]["required"] is True
+
+
+def test_create_module_posts_plain_dict_attributes():
+    c = RecordingClient()
+    api = ModulesAdminAPI(c)
+    api.create_module(
+        "widgets",
+        fields=[api.text_field("name", required=True), api.picklist_field("sev", "AlertSeverity")],
+        create_view_templates=False,
+    )
+    _, _, data = c.calls[-1]
+    attrs = data["attributes"]
+    # every posted attribute is a plain dict, not a model
+    assert all(type(a) is dict for a in attrs)
+    assert [a["name"] for a in attrs] == ["name", "sev"]
+
+
+def test_add_field_accepts_typed_field():
+    c = RecordingClient()
+    # seed a staging module so add_field can append
+    ModulesAdminAPI(c).create_module("widgets", create_view_templates=False)
+    api = ModulesAdminAPI(c)
+    # staging lookup is via get; RecordingClient returns {} so stub get_staging
+    api.get_staging = lambda m: {"@id": "/api/3/staging_model_metadatas/x", "attributes": []}
+    api._put_attributes = lambda mod, attrs: {"attributes": attrs}
+    result = api.add_field("widgets", api.integer_field("count"), create_reverse=False)
+    posted = result["attributes"]
+    assert all(type(a) is dict for a in posted)
+    assert posted[-1]["name"] == "count" and posted[-1]["type"] == "integer"
+
+
+def test_scope_field_to_teams_accepts_and_returns_typed():
+    api = ModulesAdminAPI(TeamScopeClient())
+    f = api.relationship_field("approvers", "people")
+    scoped = api.scope_field_to_teams(f, ["TeamA", "SOC Team"])
+    assert isinstance(scoped, AttributeMetadata)
+    assert scoped["dataSourceFilters"]["showTeams"] is True
+    assert scoped["dataSourceFilters"]["teams"] == ["TeamA", "SOC Team"]
