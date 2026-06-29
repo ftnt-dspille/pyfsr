@@ -45,6 +45,7 @@ import uuid as _uuid
 from pathlib import Path
 from typing import Any
 
+from ..exceptions import ResourceNotFoundError
 from ..models import WorkflowCollection
 from ..pagination import extract_members
 from ..records import RecordSet
@@ -81,6 +82,49 @@ class WorkflowCollectionsAPI(BaseAPI):
         uuid = _require_uuid(uuid, "get")
         params = {"$relationships": "true"} if relationships else None
         return _as_collection(self.client.get(f"{_BASE}/{uuid}", params=params))
+
+    def export_to_yaml(
+        self,
+        collection: str,
+        *,
+        db_path: str | Path | None = None,
+    ) -> str:
+        """Decompile a live collection into authored-style playbook YAML.
+
+        The inverse of :meth:`import_from_yaml` — pull a playbook collection off
+        the appliance and get back the friendly YAML source, so live edits made
+        in the UI can be captured into version control. ``collection`` is the
+        collection's uuid, or its name (resolved against :meth:`list`).
+
+        Catalog resolution is seamless (warmed from this client) so connector,
+        team, and picklist IRIs render back as friendly names — including custom
+        connectors like ``code-runner``. Pass ``db_path`` to use a specific
+        pre-warmed catalog instead.
+
+        Requires the compiler extra (``pip install "pyfsr[playbooks]"``).
+        """
+        from ..authoring import decompile_playbook_yaml
+
+        coll = self._resolve_collection(collection)
+        envelope = {"type": "workflow_collections", "data": [coll.to_dict()]}
+        return decompile_playbook_yaml(envelope, client=self.client, db_path=db_path)
+
+    def _resolve_collection(self, collection: str) -> WorkflowCollection:
+        """Resolve a collection by uuid, else by exact name via :meth:`list`."""
+        if not isinstance(collection, str) or not collection.strip():
+            raise ValueError("export_to_yaml() requires a collection uuid or name")
+        ident = collection.strip()
+        if _UUID_RE.match(ident):
+            return self.get(ident, relationships=True)
+        matches = [c for c in self.list(relationships=True) if (c.get("name") or "") == ident]
+        if not matches:
+            raise ResourceNotFoundError(
+                f"no workflow collection named {ident!r} (pass its uuid if the name is ambiguous)",
+                None,
+            )
+        if len(matches) > 1:
+            raise ValueError(f"{len(matches)} collections named {ident!r}; pass the uuid to disambiguate")
+        return matches[0]
 
     def create_collection(
         self,
