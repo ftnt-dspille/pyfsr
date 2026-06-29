@@ -284,6 +284,94 @@ class EmailTemplate(BaseRecord):
     visible: bool | None = None
 
 
+class Notification(BaseRecord):
+    """A FortiSOAR **system notification** from ``/api/rule/api/system-notification/notifications/``.
+
+    The per-user bell-icon notifications the platform raises for record events
+    (task assignments, approvals, SLA breaches, …). This is a ``rule`` API entity,
+    not a ``/api/3`` module, so there is no JSON-LD envelope — ``uuid`` is the
+    identity and ``id_iri``/``record_type`` stay ``None``. Field set captured from
+    a live 8.0 box.
+
+    ``content`` is the rendered HTML shown in the notification panel; ``entity_type``
+    / ``entity_id`` point at the record the event fired on (e.g. ``"tasks"`` plus a
+    uuid), and ``event_type`` is the action (``"create"`` / ``"update"`` / …).
+    ``read`` / ``dismissible`` drive the panel's unread badge and dismiss control.
+    """
+
+    content: str | None = None
+    footer: list[Any] | None = None
+    entity_type: str | None = None
+    event_type: str | None = None
+    entity_id: str | None = None
+    read: bool | None = None
+    dismissible: bool | None = None
+    created_on: str | None = None
+    roles: list[Any] | None = None
+    user: str | None = None  # owning person uuid
+    teams: list[Any] | None = None
+
+
+class ManualInput(BaseRecord):
+    """A pending **manual workflow input** from ``/api/wf/api/manual-wf-input/``.
+
+    A playbook paused on a Manual Input / Approval step, waiting on a human. This
+    is a ``wf`` API entity, not a ``/api/3`` module, so there is no JSON-LD
+    envelope -- ``id`` (int) is the identity and ``id_iri``/``record_type`` stay
+    ``None``. Field set captured from a live 8.0 box.
+
+    ``workflow`` is the encrypted run token (Fernet), ``step_id`` the paused
+    step, and ``is_approval`` distinguishes an approval gate from a data-input
+    prompt. ``assignment_type`` / ``owners`` / ``owner_details`` describe who the
+    input is assigned to.
+    """
+
+    id: int | None = None
+    record: str | None = None
+    type: str | None = None
+    title: str | None = None
+    external_channel_list: list[Any] | None = None
+    inline_channel_list: list[Any] | None = None
+    owners: list[Any] | None = None
+    assignment_type: str | None = None
+    owner_details: dict[str, Any] | None = None
+    created: str | None = None
+    timeout: Any | None = None
+    timeout_details: Any | None = None
+    step_id: int | None = None
+    unauthenticated_input: bool | None = None
+    agent_id: str | None = None
+    is_approval: bool | None = None
+    workflow: str | int | None = None  # encrypted run token (list) or numeric run id (retrieve)
+    # Present only on the single-item retrieve (``retrieve_wfinput``), not the list:
+    input: dict[str, Any] | None = None  # {"schema": {title, description, inputVariables}}
+    response_mapping: dict[str, Any] | None = None  # approval/input options + messages
+    custom_fields: dict[str, Any] | None = None  # custom email subject/body/attachment IRIs
+
+
+class ManualInputResume(ApiResult):
+    """The ack from resuming a manual input (``.../wfinput_resume/``).
+
+    Live-verified shape: ``task_id`` (the async resume task) plus the step's
+    ``message`` (e.g. ``"Awaiting Playbook resumed successfully."``). Dict-compatible,
+    so ``resp["task_id"]`` works alongside ``resp.task_id``.
+    """
+
+    task_id: str | None = None
+    message: str | None = None
+
+
+class NotificationPurge(ApiResult):
+    """The ack from a system-notification purge (``.../system-notification/purge/``).
+
+    Live-verified shape: ``result`` (human message) and ``status`` (e.g.
+    ``"started"`` -- the purge runs asynchronously). Dict-compatible.
+    """
+
+    result: str | None = None
+    status: str | None = None
+
+
 class ModulePermission(BaseRecord):
     """One module's CRUD/execute grant inside a :class:`Role`.
 
