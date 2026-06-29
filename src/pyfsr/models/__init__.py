@@ -69,6 +69,7 @@ from ._system import (
     ConnectorVersionInfo,
     ContentHubConnector,
     ContentHubItem,
+    EmailTemplate,
     ExportConnectorRef,
     ExportOptions,
     ExportTemplate,
@@ -103,6 +104,7 @@ MODEL_REGISTRY: dict[str, type[BaseRecord]] = {
     "files": FileRecord,
     "people": User,
     "teams": Team,
+    "email_templates": EmailTemplate,
     "roles": Role,
     "api_keys": ApiKey,
 }
@@ -168,6 +170,7 @@ __all__ = [
     "ExportConnectorRef",
     "User",
     "Team",
+    "EmailTemplate",
     "Role",
     "ModulePermission",
     "ApiKey",
