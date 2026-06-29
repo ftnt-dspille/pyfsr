@@ -671,13 +671,17 @@ class ConnectorVersionInfo(ApiResult):
 
 
 class PicklistItem(ApiResult):
-    """One item of a picklist, from ``GET /api/3/picklists``.
+    """One item (option) of a picklist, from ``GET /api/3/picklists`` or a create.
 
     The bulk listing returns every item across every picklist in one page; each
     carries its own ``@id`` (the IRI the API stores on records), its friendly
     ``itemValue``, and the ``listName`` IRI of the picklist it belongs to. Map
     that ``listName`` IRI to a name via ``GET /api/3/picklist_names``. Curated
-    fields are typed; ordinal/color/icon extras stay in ``extra``. Dict-compatible.
+    fields are typed (``itemValue``/``order_index``/``color``/``icon``); the rest
+    of the JSON-LD envelope rides through in ``extra``. Dict-compatible.
+
+    ``order_index`` is the wire ``orderIndex`` (the int sort key). The legacy
+    ``ordinal`` attribute is kept as a read alias so existing callers keep working.
     """
 
     id_iri: str | None = Field(default=None, alias="@id")
@@ -687,8 +691,9 @@ class PicklistItem(ApiResult):
     # (``/api/3/picklist_names/<uuid>``); some appliances expand it to a dict.
     # Resolve an IRI to a name via picklist_names. Kept loose so neither shape fails.
     listName: str | dict[str, Any] | None = None
-    ordinal: int | None = None
+    order_index: int | None = Field(default=None, alias="orderIndex")
     color: str | None = None
+    icon: str | None = None
 
     @property
     def iri(self) -> str | None:
@@ -709,5 +714,42 @@ class PicklistItem(ApiResult):
             return v if isinstance(v, str) else None
         return None
 
-    operations: list[ConnectorOperation] | None = None
-    dependentSolutionPacks: list[Any] | None = None
+    @property
+    def ordinal(self) -> int | None:
+        """Legacy alias for :attr:`order_index` (the wire field is ``orderIndex``)."""
+        return self.order_index
+
+
+class PicklistName(ApiResult):
+    """A picklist *list* (the taxonomy an option belongs to), from
+    ``GET /api/3/picklist_names`` or a create.
+
+    Each list carries a friendly ``name`` (unique instance-wide — a duplicate POST
+    409s with ``UniqueConstraintViolationException``), a ``system`` flag, and its
+    ``picklists`` items (embedded only when the request asks for
+    ``$relationships=true``; absent/empty otherwise). ``iri`` is the
+    ``/api/3/picklist_names/<uuid>`` an option's ``listName`` points back at.
+    Dict-compatible; the JSON-LD envelope (``@context``/``@type``/``id``/
+    ``importedBy``) rides through in ``extra``.
+    """
+
+    id_iri: str | None = Field(default=None, alias="@id")
+    uuid: str | None = None
+    name: str | None = None
+    system: bool | None = None
+    # Items embedded under $relationships=true; absent on a bare list (empty []).
+    picklists: list[PicklistItem] | None = Field(default=None, alias="picklists")
+
+    @property
+    def iri(self) -> str | None:
+        """The list's IRI (``/api/3/picklist_names/<uuid>``) — what an option's
+        ``listName`` field references."""
+        if self.id_iri:
+            return self.id_iri
+        return f"/api/3/picklist_names/{self.uuid}" if self.uuid else None
+
+    @property
+    def items(self) -> list[PicklistItem]:
+        """The list's options (embedded under ``$relationships=true``); empty
+        when not expanded or the list has none."""
+        return self.picklists or []

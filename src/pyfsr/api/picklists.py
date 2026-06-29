@@ -24,12 +24,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..models._system import PicklistItem
+from ..models._system import PicklistItem, PicklistName
 from .base import BaseAPI
 
 # staging_model_metadatas needs $relationships=true to expose each attribute's
 # dataSource (where the bound picklist listName lives).
 _META_PATH = "/api/3/staging_model_metadatas?$limit=2147483647&$orderby=type&$relationships=true"
+
+# Wire endpoints (live-verified on 8.0.0):
+#   POST   /api/3/picklist_names  {name, system}          -> 201 PicklistName
+#   POST   /api/3/picklists       {itemValue, listName}   -> 201 Picklist (item)
+#   DELETE /api/3/picklists/<uuid>                         -> 204
+#   DELETE /api/3/picklist_names/<uuid>                    -> 204 (cascades to items)
+# A duplicate list NAME 409s (UniqueConstraintViolationException on `name`);
+# duplicate itemValue within a list is allowed (no unique constraint on it).
+_PICKLIST_NAMES = "/api/3/picklist_names"
+_PICKLISTS = "/api/3/picklists"
 
 
 def _picklist_name_from_attr(attr: dict) -> str | None:
@@ -120,7 +130,7 @@ class PicklistsAPI(BaseAPI):
         """List a picklist's items as ``[{itemValue, uuid, iri, ordinal}, ...]``."""
         self._load_bulk()
         return [
-            {"itemValue": it.itemValue, "uuid": it.uuid, "iri": it.iri, "ordinal": it.ordinal}
+            {"itemValue": it.itemValue, "uuid": it.uuid, "iri": it.iri, "ordinal": it.order_index}
             for it in (self._items or {}).get(picklist_name, [])
         ]
 
@@ -246,3 +256,220 @@ class PicklistsAPI(BaseAPI):
         report: list[dict[str, Any]] = []
         self.resolve_record_fields(module, fields, report=report)
         return report
+
+    # --------------------------------------------------------------- write ops
+    # Live-verified on 8.0.0. These are NOT
+    # cached-read operations — each performs a real write, then invalidates the
+    # read cache so the next :meth:`values`/`resolve` reflects the change.
+    #
+    # FortiSOAR has no batch "create list + options" endpoint, so the list and
+    # each option are individual POSTs (sequential, ordered). A list NAME is
+    # unique instance-wide (a duplicate POST 409s); option itemValue is NOT
+    # unique within a list, so callers dedup explicitly or use :meth:`ensure_picklist`.
+
+    def create_picklist(
+        self,
+        name: str,
+        *,
+        system: bool = False,
+        options: list[str] | list[dict[str, Any]] | None = None,
+    ) -> PicklistName:
+        """Create a picklist *list* (optionally with initial options).
+
+        Args:
+            name: the list's friendly name (unique instance-wide — a duplicate
+                409s; use :meth:`get_or_create_picklist` for idempotency).
+            system: the ``system`` flag (custom lists are ``False``).
+            options: optional initial option labels. A bare string becomes an item
+                with auto orderIndex; a dict can carry ``{"value", "color",
+                "order"}`` (``order`` overrides the position). Created in order.
+
+        Returns:
+            The created :class:`~pyfsr.models.PicklistName` (with its options
+            embedded when ``options`` was given).
+
+        Raises:
+            APIError: on a 409 duplicate name (``UniqueConstraintViolationException``).
+        """
+
+        created = self.client.post(_PICKLIST_NAMES, data={"name": name, "system": system})
+        pn = PicklistName.model_validate(created)
+        if options:
+            for idx, opt in enumerate(options):
+                if isinstance(opt, dict):
+                    value = opt.get("value")
+                    color = opt.get("color")
+                    order = opt.get("order", idx)
+                else:
+                    value, color, order = opt, None, idx
+                if value:
+                    self.add_option(pn.iri or pn.uuid, value, color=color, order=order)
+            # re-read with relationships to embed the created options
+            pn = self.get_picklist(pn.uuid)
+        self.clear_cache()
+        return pn
+
+    def get_or_create_picklist(
+        self,
+        name: str,
+        *,
+        system: bool = False,
+        options: list[str] | list[dict[str, Any]] | None = None,
+    ) -> tuple[PicklistName, bool]:
+        """Idempotently ensure picklist ``name`` exists; return ``(list, created)``.
+
+        If the list already exists, its options are **not** modified (only the list
+        is ensured) — use :meth:`add_option` to append. Returns ``created=True``
+        only when the list was newly created.
+        """
+        existing = self.get_picklist(name)
+        if existing is not None:
+            return existing, False
+        return self.create_picklist(name, system=system, options=options), True
+
+    def add_option(
+        self,
+        picklist: str,
+        value: str,
+        *,
+        color: str | None = None,
+        order: int | None = None,
+    ) -> PicklistItem:
+        """Add an option (item) to an existing picklist.
+
+        Args:
+            picklist: the target list — a name, a list IRI
+                (``/api/3/picklist_names/<uuid>``), or a bare uuid.
+            value: the option's friendly label (``itemValue``).
+            color: optional hex color (e.g. ``"#FF0000"``).
+            order: the ``orderIndex``; defaults to appending after the list's
+                current highest index.
+
+        Returns:
+            The created :class:`~pyfsr.models.PicklistItem` (its ``iri`` is what a
+            record stores for this value).
+
+        Raises:
+            ValueError: if ``picklist`` can't be resolved to a list IRI.
+        """
+        list_iri = self._resolve_list_iri(picklist)
+        if list_iri is None:
+            raise ValueError(f"picklist {picklist!r} not found — create it first with create_picklist()")
+        payload: dict[str, Any] = {"itemValue": value, "listName": list_iri}
+        if color is not None:
+            payload["color"] = color
+        if order is not None:
+            payload["orderIndex"] = order
+        created = self.client.post(_PICKLISTS, data=payload)
+        item = PicklistItem.model_validate(created)
+        self.clear_cache()
+        return item
+
+    def remove_option(
+        self,
+        picklist: str | None = None,
+        *,
+        value: str | None = None,
+        item: str | None = None,
+        missing_ok: bool = True,
+    ) -> bool:
+        """Remove an option from a picklist.
+
+        Identify the item either by its ``value`` within ``picklist`` (resolved to
+        an IRI) or directly by its ``item`` IRI/uuid. Returns ``True`` if an item
+        was deleted; with ``missing_ok=True`` (default) an absent item returns
+        ``False`` rather than raising.
+
+        Raises:
+            ValueError: if neither ``item`` nor ``value`` is given, or ``value``
+                is given without ``picklist``.
+            ResourceNotFoundError: if the item is absent and ``missing_ok=False``.
+        """
+        from ..exceptions import ResourceNotFoundError
+
+        if item is None and value is None:
+            raise ValueError("remove_option() requires `item=` or `value=`")
+        if item is None:
+            if not picklist:
+                raise ValueError("remove_option(value=...) requires picklist=")
+            item_iri = self.resolve(value, picklist=picklist)
+            if item_iri is None:
+                if missing_ok:
+                    return False
+                raise ResourceNotFoundError(f"option {value!r} not in picklist {picklist!r}")
+        else:
+            item_iri = item if str(item).startswith("/api/") else f"/api/3/picklists/{item}"
+        self.client.delete(item_iri)
+        self.clear_cache()
+        return True
+
+    def remove_picklist(
+        self,
+        picklist: str,
+        *,
+        missing_ok: bool = True,
+    ) -> bool:
+        """Delete a picklist *list* and (per the platform) cascade-delete its items.
+
+        Args:
+            picklist: the list — a name, IRI, or bare uuid.
+            missing_ok: when ``True`` (default), an absent list returns ``False``
+                instead of raising.
+
+        Returns:
+            ``True`` if a list was deleted.
+
+        Raises:
+            ResourceNotFoundError: if the list is absent and ``missing_ok=False``.
+        """
+        from ..exceptions import ResourceNotFoundError
+
+        list_iri = self._resolve_list_iri(picklist)
+        if list_iri is None:
+            if missing_ok:
+                return False
+            raise ResourceNotFoundError(f"picklist {picklist!r} not found")
+        self.client.delete(list_iri)
+        self.clear_cache()
+        return True
+
+    def get_picklist(self, picklist: str, *, relationships: bool = True) -> PicklistName | None:
+        """Fetch one picklist list by name, IRI, or uuid (None if absent).
+
+        With ``relationships=True`` (default) the options are embedded under
+        ``picklists`` (so ``.items`` is populated); without it the list is returned
+        bare. Resolves a name to its IRI via the bulk name index first.
+        """
+        from ..exceptions import ResourceNotFoundError
+
+        list_iri = self._resolve_list_iri(picklist)
+        if list_iri is None:
+            return None
+        params: dict[str, Any] = {"$relationships": "true"} if relationships else None
+        try:
+            data = self.client.get(list_iri, params=params)
+        except ResourceNotFoundError:
+            return None
+        return PicklistName.model_validate(data) if data else None
+
+    # ------------------------------------------------------------- write helpers
+    def _list_name_to_iri(self, name: str) -> str | None:
+        """Resolve a picklist NAME to its list IRI via the bulk name index."""
+        self._load_bulk()
+        # The bulk load groups items by name but drops the listName IRI→name inverse
+        # mapping after use; fetch names once to build it.
+        names_resp = self.client.get(_PICKLIST_NAMES, params={"$limit": 2147483647})
+        for m in (names_resp or {}).get("hydra:member") or []:
+            if m.get("name") == name:
+                return m.get("@id")
+        return None
+
+    def _resolve_list_iri(self, picklist: str) -> str | None:
+        """Coerce a picklist identifier (name | IRI | uuid) to its list IRI, or None."""
+        if not picklist:
+            return None
+        if isinstance(picklist, str) and picklist.startswith("/api/3/picklist_names/"):
+            return picklist
+        if isinstance(picklist, str) and "/" not in picklist and len(picklist) == 36:
+            return f"/api/3/picklist_names/{picklist}"
+        return self._list_name_to_iri(picklist)
