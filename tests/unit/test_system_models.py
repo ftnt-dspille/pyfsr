@@ -44,6 +44,48 @@ def test_model_for_workflows():
     assert model_for("workflow_collections") is WorkflowCollection
 
 
+# -- EmailTemplate model + Team.actors (live shapes from an 8.0 box) ---------
+def test_email_template_model_and_registry():
+    from pyfsr.models import EmailTemplate
+
+    assert model_for("email_templates") is EmailTemplate
+    assert MODEL_REGISTRY["email_templates"] is EmailTemplate
+    tpl = EmailTemplate.model_validate(
+        {
+            "@id": "/api/3/email_templates/12f23d8d",
+            "@type": "EmailTemplate",
+            "name": "System: Send email to new user",
+            "subject": "FortiSOAR password reset",
+            "content": "<p>Hi {{user}}</p>",
+            "visible": True,
+        }
+    )
+    assert tpl.name == "System: Send email to new user"
+    assert tpl.subject == "FortiSOAR password reset"
+    assert tpl.iri == "/api/3/email_templates/12f23d8d"
+    assert tpl["content"] == "<p>Hi {{user}}</p>"  # dict access compat
+
+
+def test_team_actors_expand_to_users_with_relationships():
+    from pyfsr.models import Team
+
+    team = Team.model_validate(
+        {
+            "@id": "/api/3/teams/t-1",
+            "@type": "Team",
+            "name": "SOC Team",
+            "actors": [
+                {"@id": "/api/3/people/u-1", "@type": "Person", "email": "admin@example.com"},
+                "/api/3/people/u-2",  # IRI string when relationships not expanded
+            ],
+        }
+    )
+    assert team.name == "SOC Team"
+    expanded, ref = team.actors
+    assert expanded.email == "admin@example.com"  # parsed into a User
+    assert ref == "/api/3/people/u-2"  # bare IRI kept as str
+
+
 # -- Workflow / WorkflowCollection models -----------------------------------
 def test_workflow_typed_fields_and_dict_compat():
     wf = Workflow.model_validate(

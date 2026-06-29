@@ -263,6 +263,25 @@ class Team(BaseRecord):
     name: str | None = None
     description: str | None = None
     importedBy: list[Any] | None = None
+    actors: list[User | str] | None = None  # member people; expanded User per $relationships=true
+    parents: list[Any] | None = None
+    siblings: list[Any] | None = None
+    children: list[Any] | None = None
+
+
+class EmailTemplate(BaseRecord):
+    """A FortiSOAR **email template** record from ``/api/3/email_templates/``.
+
+    Reusable subject/body used by notification playbooks and the SMTP connector's
+    "Email Template" body type. The module slug is ``email_templates``; ``@type``
+    on the wire is ``EmailTemplate``. ``subject`` and ``content`` may contain
+    Jinja that the platform expands at send time (verified against a live 8.0 box).
+    """
+
+    name: str | None = None
+    subject: str | None = None
+    content: str | None = None
+    visible: bool | None = None
 
 
 class ModulePermission(BaseRecord):
