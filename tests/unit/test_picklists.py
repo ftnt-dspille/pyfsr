@@ -18,9 +18,9 @@ _NAMES = {
 # page, each tagged with the listName IRI of its owning picklist.
 _ALL_ITEMS = {
     "hydra:member": [
-        {"itemValue": "High", "uuid": "sev-high", "ordinal": 1, "listName": "/api/3/picklist_names/sev"},
-        {"itemValue": "Low", "uuid": "sev-low", "ordinal": 2, "listName": "/api/3/picklist_names/sev"},
-        {"itemValue": "Open", "uuid": "st-open", "ordinal": 1, "listName": "/api/3/picklist_names/st"},
+        {"itemValue": "High", "uuid": "sev-high", "orderIndex": 1, "listName": "/api/3/picklist_names/sev"},
+        {"itemValue": "Low", "uuid": "sev-low", "orderIndex": 2, "listName": "/api/3/picklist_names/sev"},
+        {"itemValue": "Open", "uuid": "st-open", "orderIndex": 1, "listName": "/api/3/picklist_names/st"},
     ]
 }
 
