@@ -54,12 +54,12 @@ from __future__ import annotations
 import re
 import time
 import uuid as _uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import requests
 
 from ..exceptions import FortiSOARException, describe_migrate_failure, is_migrate_transient
-from ..models import AttributeMetadata
+from ..models import AttributeMetadata, NavItem, NavRequire, NavState
 from .base import BaseAPI
 
 if TYPE_CHECKING:
@@ -947,6 +947,11 @@ class ModulesAdminAPI(BaseAPI):
         default_sort: list[dict[str, Any]] | None = None,
         create_view_templates: bool = True,
         grant_to: list[str] | str | None = None,
+        add_to_nav: bool = False,
+        nav_title: str | None = None,
+        nav_icon: str | None = None,
+        nav_parent: str | None = None,
+        nav_position: Literal["top", "bottom"] = "bottom",
         facts: Any | None = None,
         **opts: Any,
     ) -> dict[str, Any]:
@@ -989,12 +994,24 @@ class ModulesAdminAPI(BaseAPI):
         records cannot be accessed until a role is granted via
         :meth:`~pyfsr.api.roles.RolesAPI.grant_module_permissions`.
 
+        ``add_to_nav`` (optional, default False) adds the module to the application
+        navigation bar so it is reachable in the UI. Like ``grant_to`` it is **deferred
+        until the next** :meth:`publish` (the nav entry's ``require`` gate and route only
+        resolve once the module is live). By default it appends a **new top-level section
+        at the bottom** of the navigation, gated by ``read`` permission on the module and
+        routing to the module's record list. Customize with ``nav_title`` (defaults to the
+        module label), ``nav_icon`` (defaults to a generic icon), ``nav_parent`` (a group
+        title/module to nest under instead of top-level), and ``nav_position``
+        (``"top"``/``"bottom"``). For full control, edit navigation directly via
+        :class:`~pyfsr.api.app_config.AppConfigAPI` (``client.app_config``).
+
         Example::
 
             admin.create_module(
                 "custom_alerts",
                 fields=[admin.text_field("name")],
                 grant_to=["Full App Permissions", "SOC Analyst"],
+                add_to_nav=True,  # new section at the bottom of the nav bar
             )
 
         ``facts`` (optional :class:`pyfsr.cli.appliance.Facts`) enables a **create-side
@@ -1059,6 +1076,15 @@ class ModulesAdminAPI(BaseAPI):
             roles = grant_to if isinstance(grant_to, list) else [grant_to]
             if roles:
                 self._pending_grants.setdefault(module, []).extend(roles)
+        if add_to_nav:
+            # Deferred for the same reason as grants: the nav entry routes to a live
+            # module and gates on a permission that only resolves post-publish.
+            self._pending_nav[module] = {
+                "title": nav_title or label,
+                "icon": nav_icon,
+                "parent": nav_parent,
+                "position": nav_position,
+            }
         return created
 
     def get_or_create_module(
@@ -1143,6 +1169,45 @@ class ModulesAdminAPI(BaseAPI):
                         can_delete=True,
                         can_execute=True,
                     )
+        finally:
+            pending.clear()
+
+    @property
+    def _pending_nav(self) -> dict[str, dict[str, Any]]:
+        """Navigation entries requested via ``create_module(add_to_nav=...)``, applied on publish.
+
+        Keyed by module type → the nav-entry spec (title/icon/parent/position). Deferred for
+        the same reason as :attr:`_pending_grants`: the entry routes to a live module and gates
+        on a permission that only resolves once the module is published.
+        """
+        cache: dict[str, dict[str, Any]] | None = getattr(self, "_pending_nav_cache", None)
+        if cache is None:
+            cache = {}
+            self._pending_nav_cache = cache
+        return cache
+
+    def _flush_pending_nav(self) -> None:
+        """Add (and clear) deferred ``add_to_nav`` entries after a successful publish.
+
+        Builds a :class:`~pyfsr.models.NavItem` for each pending module — a leaf routing to
+        the module's record list, gated by ``read`` permission on the module — and inserts it
+        via :meth:`~pyfsr.api.app_config.AppConfigAPI.add_navigation_item`. A failure is
+        surfaced verbatim (the publish itself already committed).
+        """
+        pending = self._pending_nav
+        if not pending:
+            return
+        try:
+            for module, spec in pending.items():
+                item = NavItem(
+                    title=spec.get("title") or module,
+                    icon=spec.get("icon") or "icon icon-bookmark",
+                    state=NavState(name="main.modules.list", parameters={"module": module}),
+                    require=NavRequire(module=module, action="read"),
+                )
+                self.client.app_config.add_navigation_item(
+                    item, parent=spec.get("parent"), position=spec.get("position", "bottom")
+                )
         finally:
             pending.clear()
 
@@ -1471,6 +1536,7 @@ class ModulesAdminAPI(BaseAPI):
         publish: bool = True,
         drop_view_templates: bool = True,
         drop_orphan_tables: Any | None = None,
+        remove_from_nav: bool = False,
         timeout: float = 600.0,
         poll_interval: float = 10.0,
     ) -> dict[str, Any]:
@@ -1508,6 +1574,10 @@ class ModulesAdminAPI(BaseAPI):
                 delete. If False, the staging changes are staged but the module is not yet
                 gone (you must publish later).
             drop_view_templates: Also delete the module's ``system_view_templates``.
+            remove_from_nav: If True, also remove the module's navigation entry (the inverse
+                of ``create_module(add_to_nav=True)``) via
+                :meth:`~pyfsr.api.app_config.AppConfigAPI.remove_navigation_item`. Done after
+                the publish commits the delete; a no-op if the module has no nav entry.
             drop_orphan_tables: Optional :class:`pyfsr.cli.appliance.Facts` (an
                 appliance transport context). When given **and** ``publish`` is
                 True, the orphaned physical Postgres tables (base + join tables)
@@ -1522,7 +1592,8 @@ class ModulesAdminAPI(BaseAPI):
         Returns:
             A dict with keys ``module``, ``detached`` (list), ``orphan_table``
             (``str`` or ``None``), ``published`` (publish result or ``None``),
-            and ``dropped_tables`` (``list`` or ``None``).
+            ``dropped_tables`` (``list`` or ``None``), and ``nav_removed``
+            (``True`` if a nav entry was removed, else ``None``).
 
         Raises:
             ValueError: if the module is not found.
@@ -1560,9 +1631,14 @@ class ModulesAdminAPI(BaseAPI):
             "orphan_table": orphan_table,
             "published": None,
             "dropped_tables": None,
+            "nav_removed": None,
         }
         if publish:
             result["published"] = self.publish(timeout=timeout, poll_interval=poll_interval)
+            if remove_from_nav:
+                # The module is gone; drop its nav entry too (no-op if it had none).
+                self.client.app_config.remove_navigation_item(module=module, missing_ok=True)
+                result["nav_removed"] = True
             if drop_orphan_tables is not None and orphan_table:
                 # Lazy import: keeps the API client free of the CLI/SSH/psql layer
                 # unless an appliance context is actually handed in.
@@ -1743,12 +1819,14 @@ class ModulesAdminAPI(BaseAPI):
         if not had_pending:
             # Nothing to migrate: ``_wait_for_publish`` would block for the full timeout
             # waiting for a ``last_publish_time`` advance that never comes. Return now.
-            # (Deferred role grants from create_module(grant_to=) are still flushed below.)
+            # (Deferred grants/nav from create_module(grant_to=/add_to_nav=) are flushed below.)
             self._flush_pending_grants()
+            self._flush_pending_nav()
             return self._publish_status() or {"status": "Success", "note": "no pending changes"}
         result = self._wait_for_publish(prev_time, timeout, poll_interval, prev_errors=prev_errors)
-        # The schema is now live — apply any role grants deferred from create_module(grant_to=).
+        # The schema is now live — apply role grants and nav entries deferred from create_module.
         self._flush_pending_grants()
+        self._flush_pending_nav()
         return result
 
     def revert(self) -> dict[str, Any]:

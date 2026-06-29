@@ -13,6 +13,7 @@ falling back to ``BaseRecord`` for modules without a curated model.
 from __future__ import annotations
 
 from ._agents import Agent, AgentConnectorStatus
+from ._app_config import NavItem, NavRequire, NavState
 from ._generated import Alert, Comment, Incident, Task
 from ._integration import (
     ApiResult,
@@ -196,4 +197,8 @@ __all__ = [
     "PublishedModelMetadata",
     "PendingChange",
     "InvalidDraft",
+    # application navigation
+    "NavItem",
+    "NavRequire",
+    "NavState",
 ]

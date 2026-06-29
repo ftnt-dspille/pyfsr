@@ -17,6 +17,7 @@ class RecordingClient:
             ],
         }
         self.roles = FakeRolesAPI()
+        self.app_config = FakeAppConfigAPI()
 
     def get(self, endpoint, params=None, **kw):
         self.calls.append(("GET", endpoint, params))
@@ -66,6 +67,22 @@ class FakeRolesAPI:
             }
         )
         return {"uuid": "r-1", "name": role}
+
+
+class FakeAppConfigAPI:
+    """Fake app_config API recording add_navigation_item calls for inspection."""
+
+    def __init__(self):
+        self.nav_calls = []
+        self.nav_removed = []
+
+    def add_navigation_item(self, item, *, parent=None, position="bottom"):
+        self.nav_calls.append({"item": item, "parent": parent, "position": position})
+        return {"ok": True}
+
+    def remove_navigation_item(self, module=None, title=None, *, missing_ok=True):
+        self.nav_removed.append({"module": module, "title": title})
+        return {"ok": True}
 
 
 def test_field_builder_defaults_and_overrides():
@@ -696,6 +713,7 @@ class DeleteClient:
 
     def __init__(self, *, published=True, staging=True, referrer=False):
         self.calls = []
+        self.app_config = FakeAppConfigAPI()
         self._published = published
         self._staging = staging
         widget_rec = {
@@ -826,6 +844,26 @@ def test_delete_module_drops_orphan_tables_when_appliance_given(monkeypatch):
     res = api.delete_module("widgets", drop_orphan_tables=sentinel_facts)
     assert dropped_for == {"table": "widgets", "yes": True}
     assert res["dropped_tables"] == ["widgets", "widgets_team"]
+
+
+def test_delete_module_remove_from_nav(monkeypatch):
+    c = DeleteClient(referrer=False)
+    api = ModulesAdminAPI(c)
+    monkeypatch.setattr(api, "publish", lambda **kw: {"ok": True})
+    monkeypatch.setattr(api, "get_view_templates", lambda module: [])
+    res = api.delete_module("widgets", remove_from_nav=True)
+    assert res["nav_removed"] is True
+    assert c.app_config.nav_removed == [{"module": "widgets", "title": None}]
+
+
+def test_delete_module_no_nav_removal_by_default(monkeypatch):
+    c = DeleteClient(referrer=False)
+    api = ModulesAdminAPI(c)
+    monkeypatch.setattr(api, "publish", lambda **kw: {"ok": True})
+    monkeypatch.setattr(api, "get_view_templates", lambda module: [])
+    res = api.delete_module("widgets")
+    assert res["nav_removed"] is None
+    assert c.app_config.nav_removed == []
 
 
 def test_delete_module_skips_table_drop_when_no_appliance(monkeypatch):
@@ -1019,6 +1057,55 @@ def test_create_module_with_empty_grant_to_list_no_pending():
     # Empty list means no grant intent recorded
     assert admin._pending_grants == {}
     assert len(c.roles.grant_calls) == 0
+
+
+def test_create_module_add_to_nav_is_deferred_until_publish():
+    # A new module is staging-only; the nav entry routes to a live module and gates on a
+    # permission that only resolves post-publish, so it must be deferred like grants.
+    c = PublishGrantClient()
+    admin = ModulesAdminAPI(c)
+    admin.create_module("widgets", label="Widget", add_to_nav=True, create_view_templates=False)
+    assert c.app_config.nav_calls == []  # nothing added yet
+    assert admin._pending_nav == {"widgets": {"title": "Widget", "icon": None, "parent": None, "position": "bottom"}}
+
+    admin.publish(poll_interval=0)
+    assert len(c.app_config.nav_calls) == 1
+    call = c.app_config.nav_calls[0]
+    # Default: new top-level section at the bottom, gated by read on the module.
+    assert call["parent"] is None and call["position"] == "bottom"
+    item = call["item"]
+    assert item.title == "Widget"
+    assert item.icon == "icon icon-bookmark"
+    assert item.state.parameters == {"module": "widgets"}
+    assert item.require.module == "widgets" and item.require.action == "read"
+    assert admin._pending_nav == {}  # cleared after flushing
+
+
+def test_create_module_add_to_nav_custom_placement():
+    c = PublishGrantClient()
+    admin = ModulesAdminAPI(c)
+    admin.create_module(
+        "widgets",
+        label="Widget",
+        add_to_nav=True,
+        nav_title="My Widgets",
+        nav_icon="icon icon-star",
+        nav_parent="Incident Response",
+        nav_position="top",
+        create_view_templates=False,
+    )
+    admin.publish(poll_interval=0)
+    call = c.app_config.nav_calls[0]
+    assert call["parent"] == "Incident Response" and call["position"] == "top"
+    assert call["item"].title == "My Widgets" and call["item"].icon == "icon icon-star"
+
+
+def test_create_module_without_add_to_nav_no_pending():
+    c = RecordingClient()
+    admin = ModulesAdminAPI(c)
+    admin.create_module("widgets", create_view_templates=False)
+    assert admin._pending_nav == {}
+    assert len(c.app_config.nav_calls) == 0
 
 
 def test_permission_error_includes_rbac_hint():
