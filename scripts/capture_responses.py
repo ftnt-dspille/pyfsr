@@ -70,16 +70,15 @@ class ResponseCapture:
 
     def capture_export_responses(self):
         """Capture export-related responses"""
-        # Create export template
-        template_data = {
-            "name": "Response Capture Template",
-            "options": {
+        # Create export template (typed ExportTemplate back)
+        template = self.client.export_templates.create(
+            "Response Capture Template",
+            options={
                 "modules": ["alerts"],
                 "picklistNames": ["/api/3/picklist_names/alert-severity"],
             },
-        }
-        template_response = self.client.post("/api/3/export_templates", data=template_data)
-        self.save_response("export_template_response.json", template_response)
+        )
+        self.save_response("export_template_response.json", template.to_dict(by_alias=True))
 
     def capture_all(self):
         """Capture all response types"""

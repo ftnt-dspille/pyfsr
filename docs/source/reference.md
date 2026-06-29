@@ -30,6 +30,7 @@ autoapi/pyfsr/pagination/index
 autoapi/pyfsr/projection/index
 autoapi/pyfsr/fields/index
 autoapi/pyfsr/config/index
+autoapi/pyfsr/repo/index
 autoapi/pyfsr/exceptions/index
 ```
 

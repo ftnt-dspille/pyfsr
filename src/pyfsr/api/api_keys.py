@@ -133,6 +133,18 @@ class ApiKeysAPI(BaseAPI):
         """
         self.client.delete(f"{_BASE}/{uuid}")
 
+    def get_plaintext(self, user_uuid: str) -> str | None:
+        """Recover an API-key user's plaintext key, or ``None`` if it is masked.
+
+        Public wrapper over the ``GET /api/auth/users?show_api_key`` recovery flow.
+        Returns ``None`` when the key's per-key ``retrievable`` flag is false (it was
+        minted while global ``retrievable_mode`` was off) — a masked key is non-empty
+        but useless, so ``None`` signals "regenerate it" rather than "no key". Toggling
+        ``retrievable_mode`` on does **not** retroactively unmask existing keys, so a
+        ``None`` here means :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.regenerate`.
+        """
+        return _api_key_plaintext(self.client, user_uuid)
+
     def get_or_create(
         self,
         *,

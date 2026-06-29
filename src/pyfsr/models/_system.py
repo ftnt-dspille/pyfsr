@@ -15,11 +15,24 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from ._integration import ApiResult
 from .base import BaseRecord
 from .types import PicklistIRI
+
+
+def _empty_to_none(value: Any) -> Any:
+    """Coerce FortiSOAR's empty-object placeholders (``[]``, ``""``, ``{}``) to None.
+
+    The platform returns an empty list or empty string for an *unset* object or
+    reference field; this lets such fields be typed as their real model instead of
+    a ``... | list[Any]`` union.
+    """
+    if value == [] or value == "" or value == {}:
+        return None
+    return value
+
 
 # Relationship / embedded-object fields (createUser, modifyUser, priority, ...)
 # come back as expanded dicts; keep them ``Any`` so the model never breaks.
@@ -369,6 +382,88 @@ class FileRecord(BaseRecord):
     modifyUser: str | dict[str, Any] | None = None
     modifyDate: float | None = None
     id: int | str | None = None
+
+
+class ExportConnectorRef(ApiResult):
+    """One connector entry in an export template's ``options.connectors``.
+
+    Field set captured from a live 7.6.5 export-template ``options.connectors[]``
+    entry — every value is a scalar (str/bool/int).
+    """
+
+    name: str | None = None
+    value: str | None = None
+    version: str | None = None
+    rpm: bool | None = None
+    rpm_name: str | None = None
+    rpm_exists: bool | None = Field(default=None, alias="rpmExists")
+    exists: bool | None = None
+    include: bool | None = None
+    include_install: bool | None = Field(default=None, alias="includeInstall")
+    install_mode: str | None = None
+    installer_path: str | None = None
+    configurations: bool | None = None
+    config_count: int | None = Field(default=None, alias="configCount")
+    configuration_count: int | None = Field(default=None, alias="configurationCount")
+
+
+class ExportOptions(ApiResult):
+    """An export template's selection manifest (``export_template.options``).
+
+    ``connectors`` is modeled (see :class:`ExportConnectorRef`). The manifest's
+    other selection lists (``modules``, ``playbooks``, ``roles``, ``views`` …) are
+    preserved verbatim in ``extra`` rather than typed, because their element shapes
+    have not been captured populated from live wire — they are added here as they
+    are observed, never guessed.
+    """
+
+    connectors: list[ExportConnectorRef] = []
+
+
+class Attachment(BaseRecord):
+    """An ``/api/3/attachments`` record linking an uploaded :class:`FileRecord`.
+
+    Field set captured from a live 7.6.5 ``/api/3/attachments`` response. ``file``
+    is the linked :class:`FileRecord` (the create response expands it; a bare IRI
+    string is also accepted). Storage/audit/tenancy keys stay in ``extra``.
+    """
+
+    name: str | None = None
+    description: str | None = None
+    file: FileRecord | str | None = None
+    type: str | None = None
+    assignee: User | str | None = None
+    createUser: str | User | None = None
+    createDate: float | None = None
+    modifyUser: str | User | None = None
+    modifyDate: float | None = None
+    id: int | str | None = None
+
+    # FortiSOAR returns ``[]``/``""`` for an unset reference — normalize to None.
+    _empty_refs = field_validator("file", "assignee", "createUser", "modifyUser", mode="before")(_empty_to_none)
+
+
+class ExportTemplate(BaseRecord):
+    """An ``/api/3/export_templates`` record — a reusable export selection.
+
+    Field set captured from a live 7.6.5 ``/api/3/export_templates`` response.
+    ``options`` is the typed :class:`ExportOptions` selection manifest. Export
+    bookkeeping (``metadata``, ``solutionPack``) is preserved in ``extra`` until
+    captured populated from live wire.
+    """
+
+    name: str | None = None
+    options: ExportOptions | None = None
+    last_export_date: float | None = Field(default=None, alias="lastExportDate")
+    type: str | None = None
+    createUser: str | User | None = None
+    createDate: float | None = None
+    modifyUser: str | User | None = None
+    modifyDate: float | None = None
+    id: int | str | None = None
+
+    # ``options`` comes back as ``[]`` when empty — normalize to None.
+    _empty_options = field_validator("options", mode="before")(_empty_to_none)
 
 
 class SolutionPack(ContentHubItem):

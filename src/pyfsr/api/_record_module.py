@@ -57,7 +57,16 @@ class RecordModuleAPI(BaseAPI):
         return self.client.post(f"/api/3/{self.module}", data=data)
 
     def list(self, params: dict | None = None) -> dict[str, Any]:
-        """List records, optionally filtered via query parameters."""
+        """List records, optionally filtered via query parameters.
+
+        .. note::
+
+            Returns the raw hydra envelope (``{"hydra:member": [...], ...}``).
+            Prefer the modern :meth:`client.records(module)
+            <pyfsr.client.FortiSOAR.records>` surface, which unpacks the envelope,
+            returns typed (dict-compatible) records, and offers ``.first()`` /
+            ``.list()`` / iteration.
+        """
         return self.client.get(f"/api/3/{self.module}", params=params)
 
     def get(self, record_id: str) -> dict[str, Any]:

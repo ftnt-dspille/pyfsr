@@ -1,20 +1,24 @@
 collection: PyFSR Archetype Pilot
 description: >
-  End-to-end archetype pilot (reconcile-and-report). Mocks two inventories via a single
-  code_snippet step (the lab box has no usable FortiCloud/ServiceNow creds), diffs by a
-  join key (serial), writes a finding record to the reconciliation_results module, and
-  emails a CSV report via SMTP (localhost-postfix). Source data is canned; the module,
-  connectors, compiled playbook, schedule, and SMTP email are all real.
+  End-to-end archetype pilot (reconcile-and-report) driven by LIVE connector data.
+  Step 1 queries FortiCloud Asset Management (source A), step 2 queries the
+  ServiceNow CMDB (source B), then a code_snippet diffs the two by serial-number
+  join key, writes a finding record to the reconciliation_results module, and
+  emails a CSV report via SMTP (localhost-postfix).
 
-  NOTE on the code-snippet sandbox (validated live on 7.6.5 / code-snippet v2.1.4):
-  the connector execs `python_function` at MODULE LEVEL, so a top-level `return` is a
-  SyntaxError ('return' outside function), and `open` is restricted, so the snippet
-  cannot write a CSV file. The snippet therefore `print(json.dumps(...))` and the
-  connector auto-deserializes that JSON into a structured `code_output` dict; the
-  create_record step reads it directly and the email embeds the CSV text in the body
-  (no file attachment). See archetype-recipe-framework follow-up: the seed's
-  playbook_skeletons (which assume `return` + a file_path attachment) need this
-  sandbox-compatible rewrite baked in.
+  Connectors (configured + live-verified on .205 2026-06-26):
+    forticloud-asset-management  cfg 'forticloud-reconcile'  -> 152 real assets
+    servicenow-cmdb              cfg 'servicenow-reconcile'  -> real cmdb_ci CIs
+  FortiCloud's native list_assets op cannot send accountId (no config field for
+  it in v1.0.0), so source A uses the generic_api_call bypass -> POST /products/list
+  with the mandatory accountId, exactly as the live smoke test does.
+
+  CODE-SNIPPET SANDBOX (code-snippet v2.1.4, validated live on 7.6.5): the connector
+  execs the python at MODULE LEVEL, so a top-level `return` is a SyntaxError and
+  `open` is restricted. The snippet therefore reads the two upstream datasets via
+  jinja (rendered as python literals), diffs them, and `print(json.dumps(...))`;
+  the connector auto-deserializes that JSON into a structured `code_output` dict
+  the downstream steps consume. The email embeds the CSV in the body (no attachment).
 visible: true
 
 playbooks:
@@ -24,29 +28,78 @@ playbooks:
     steps:
       - name: Start
         type: start
-        next: Reconcile
+        next: FetchFortiCloud
 
+      # --- Source A: FortiCloud Asset Management (live) ----------------------
+      # generic_api_call bypass: native list_assets can't send the mandatory
+      # accountId. accountId is hardcoded to the int the API requires (a string
+      # would 301); it is account-specific, not a per-run input.
+      - name: FetchFortiCloud
+        type: connector
+        next: FetchServiceNow
+        arguments:
+          connector: forticloud-asset-management
+          operation: generic_api_call
+          config: forticloud-reconcile
+          params:
+            method: POST
+            endpoint: /products/list
+            payload:
+              accountId: 1245007
+              status: Registered
+              expireBefore: "2030-01-01T00:00:00-00:00"
+
+      # --- Source B: ServiceNow CMDB (live) ----------------------------------
+      - name: FetchServiceNow
+        type: connector
+        next: Reconcile
+        arguments:
+          connector: servicenow-cmdb
+          operation: get_configuration_items
+          config: servicenow-reconcile
+          params:
+            class_name: cmdb_ci
+            sysparm_limit: 1000
+
+      # --- Diff the two live inventories by serial ---------------------------
       - name: Reconcile
         type: code_snippet
         next: Write finding
         arguments:
           code: |
             import csv, io, json
-            # Canned inventories (lab box has no live FortiCloud/ServiceNow creds).
-            a = [
-                {"serial": "FGT-001", "name": "edge-fw-01", "license": "active"},
-                {"serial": "FGT-002", "name": "edge-fw-02", "license": "expired"},
-                {"serial": "FGT-003", "name": "core-fw-01", "license": "active"},
-            ]
-            b = [
-                {"serial": "FGT-001", "name": "edge-fw-01", "status": "installed"},
-                {"serial": "FGT-004", "name": "branch-fw-09", "status": "installed"},
-            ]
-            # The code-snippet sandbox is restricted (no API access, no open()), so it
-            # cannot resolve picklist friendly values to IRIs at runtime. The create_record
-            # step needs IRIs (friendly values are rejected with FSR_CH_0000001), so the
-            # MismatchType IRIs are resolved at DEPLOY time and embedded here. In a real
-            # deploy the archetype router/agent resolves these from the live picklists.
+            # Upstream connector outputs, rendered as python literals by jinja.
+            fc_raw = {{ vars.steps.FetchFortiCloud.data.assets }}
+            sn_raw = {{ vars.steps.FetchServiceNow.data.result }}
+            fc_raw = fc_raw if isinstance(fc_raw, list) else []
+            sn_raw = sn_raw if isinstance(sn_raw, list) else []
+
+            # Normalize each source to a common shape keyed by serial number.
+            # FortiCloud: serialNumber is the join key; license derived from the
+            # asset status / decommission flag.
+            a = []
+            for x in fc_raw:
+                serial = (x.get("serialNumber") or "").strip()
+                if not serial:
+                    continue
+                license = "expired" if x.get("isDecommissioned") else "active"
+                a.append({"serial": serial,
+                          "name": (x.get("description") or x.get("productModel") or serial),
+                          "license": license})
+            # ServiceNow: join on serial_number when present (CMDB CIs without a
+            # serial cannot be reconciled against assets and are skipped).
+            b = []
+            for x in sn_raw:
+                serial = (x.get("serial_number") or "").strip()
+                if not serial:
+                    continue
+                b.append({"serial": serial,
+                          "name": (x.get("name") or serial),
+                          "status": "installed"})
+
+            # MismatchType picklist IRIs (resolved at DEPLOY time; create_record
+            # needs IRIs, not friendly values). RE-RESOLVE these after the
+            # reconciliation_results module + picklists are (re)created.
             MT = {
                 "missing-in-A": "/api/3/picklists/26399476-3fbf-4443-8240-a374c988126e",
                 "missing-in-B": "/api/3/picklists/2b7b652f-3e22-4f52-b76c-e4d12bf3e5f6",
@@ -61,18 +114,19 @@ playbooks:
                     findings.append({"join_key": s, "mismatch_type": MT["missing-in-B"],
                                      "source_system": "FortiCloud", "target_system": "ServiceNow",
                                      "source_id": s, "target_id": "",
-                                     "details": f"{r['name']} missing in ServiceNow"})
+                                     "details": f"{r['name']} present in FortiCloud, missing in ServiceNow CMDB"})
                 elif r.get("license") == "expired":
                     findings.append({"join_key": s, "mismatch_type": MT["license-expiring"],
                                      "source_system": "FortiCloud", "target_system": "ServiceNow",
                                      "source_id": s, "target_id": s,
-                                     "details": f"{r['name']} license expired"})
+                                     "details": f"{r['name']} is decommissioned/expired in FortiCloud"})
             for s, r in kb.items():
                 if s not in ka:
                     findings.append({"join_key": s, "mismatch_type": MT["missing-in-A"],
                                      "source_system": "FortiCloud", "target_system": "ServiceNow",
                                      "source_id": "", "target_id": s,
-                                     "details": f"{r['name']} missing in FortiCloud"})
+                                     "details": f"{r['name']} present in ServiceNow CMDB, missing in FortiCloud"})
+
             buf = io.StringIO()
             w = csv.writer(buf)
             w.writerow(["join_key", "mismatch_type", "source_system", "target_system", "details"])
@@ -80,11 +134,12 @@ playbooks:
             for f in findings:
                 w.writerow([f["join_key"], mt_rev.get(f["mismatch_type"], f["mismatch_type"]),
                             f["source_system"], f["target_system"], f["details"]])
-            # Module-level exec: no `return`, no `open`. print(json.dumps(...)) -> the
-            # connector auto-deserializes this into a structured code_output dict.
+            # Module-level exec: no `return`, no `open`. print(json.dumps(...)) ->
+            # the connector auto-deserializes this into a structured code_output dict.
             print(json.dumps({"findings": findings,
                               "first": findings[0] if findings else None,
                               "csv_content": buf.getvalue(),
+                              "fc_count": len(a), "sn_count": len(b),
                               "count": len(findings)}))
 
       - name: Write finding
@@ -101,7 +156,7 @@ playbooks:
             join_key: "{{ vars.steps.Reconcile.data.code_output.first.join_key }}"
             mismatch_type: "{{ vars.steps.Reconcile.data.code_output.first.mismatch_type }}"
             # ReconStatus picklist IRI for "Open" (resolved at deploy time; create_record
-            # needs an IRI, not the friendly value "Open").
+            # needs an IRI, not the friendly value "Open"). RE-RESOLVE after module rebuild.
             status: "/api/3/picklists/58200b01-3cca-4b6b-a3c3-a83415def3e2"
             details: "{{ vars.steps.Reconcile.data.code_output.first.details }}"
           step_variables: []
@@ -113,7 +168,7 @@ playbooks:
           operation: send_email
           config: localhost-postfix
           params:
-            to_recipients: "{{ vars.inputs.recipients }}"
-            subject: "Reconciliation Report - {{ vars.steps.Reconcile.data.code_output.count }} findings"
-            body: "Reconciliation report ({{ vars.steps.Reconcile.data.code_output.count }} findings):\n\n{{ vars.steps.Reconcile.data.code_output.csv_content }}"
+            to: "root@localhost"
+            subject: "Reconciliation Report - {{ vars.steps.Reconcile.data.code_output.count }} findings (FortiCloud {{ vars.steps.Reconcile.data.code_output.fc_count }} vs ServiceNow {{ vars.steps.Reconcile.data.code_output.sn_count }})"
+            body: "Reconciliation report ({{ vars.steps.Reconcile.data.code_output.count }} findings):\n\nFortiCloud assets: {{ vars.steps.Reconcile.data.code_output.fc_count }}\nServiceNow CIs (with serial): {{ vars.steps.Reconcile.data.code_output.sn_count }}\n\n{{ vars.steps.Reconcile.data.code_output.csv_content }}"
             content_type: "text"

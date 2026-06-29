@@ -93,3 +93,36 @@ def test_project_list_of_records():
 def test_project_no_opts_is_jsonable():
     page = _page([{"uuid": "a"}])
     assert project(page) == to_jsonable(page)
+
+
+# -- iri_to_uuid ------------------------------------------------------------
+from pyfsr import iri_to_uuid  # noqa: E402
+
+
+def test_iri_to_uuid_from_iri_string():
+    assert iri_to_uuid("/api/3/alerts/abc-123") == "abc-123"
+
+
+def test_iri_to_uuid_from_bare_uuid_string():
+    assert iri_to_uuid("u-1") == "u-1"
+
+
+def test_iri_to_uuid_prefers_atid_over_uuid_key():
+    assert iri_to_uuid({"@id": "/api/3/alerts/from-iri", "uuid": "from-uuid"}) == "from-iri"
+
+
+def test_iri_to_uuid_falls_back_to_uuid_then_id():
+    assert iri_to_uuid({"uuid": "u-9"}) == "u-9"
+    assert iri_to_uuid({"id": "i-9"}) == "i-9"
+
+
+def test_iri_to_uuid_from_model():
+    inc = Incident(name="x")  # BaseRecord; no @id/uuid set -> None
+    assert iri_to_uuid(inc) is None
+
+
+def test_iri_to_uuid_none_and_empty():
+    assert iri_to_uuid(None) is None
+    assert iri_to_uuid({}) is None
+    assert iri_to_uuid("") is None
+    assert iri_to_uuid(123) is None

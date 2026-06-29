@@ -83,6 +83,21 @@ class AlertsAPI(BaseAPI):
         """
         List all alerts with optional filtering.
 
+        .. note::
+
+            This returns the raw hydra envelope (``{"hydra:member": [...], ...}``),
+            so callers index ``["hydra:member"]`` by hand. Prefer the modern
+            :meth:`client.records("alerts") <pyfsr.client.FortiSOAR.records>`
+            surface, which unpacks the envelope, returns typed (dict-compatible)
+            :class:`~pyfsr.models.Alert` records, and offers ``.first()`` /
+            ``.list()`` / iteration::
+
+                from pyfsr import Query
+
+                latest = client.records("alerts").first(
+                    Query().sort("createDate", "DESC")
+                )
+
         Args:
             params: Optional query parameters for filtering results
 

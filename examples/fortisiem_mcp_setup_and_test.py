@@ -44,7 +44,7 @@ import time
 
 import httpx
 
-from pyfsr import FortiSOAR
+from pyfsr import FortiSOAR, iri_to_uuid
 
 FSR_BASE_URL = os.environ.get("FSR_BASE_URL", "fortisoar.example.com:13002")
 FSR_USERNAME = os.environ.get("FSR_USERNAME", "csadmin")
@@ -126,13 +126,10 @@ def setup(client: FortiSOAR) -> str:
     for t in tools:
         print(f"  - {t.get('name')}")
 
-    # 2. Save it the way the UI does — validate-then-save. Reuse an existing row
-    #    with the same name (update via uuid) so this is re-runnable.
-    existing = {m.get("name"): m.get("id") for m in client.ai.list_mcp_servers()}
-    if MCP_NAME in existing:
-        config["uuid"] = existing[MCP_NAME]
-    saved = client.ai.save_mcp_server(config)
-    mcp_uuid = saved.get("uuid") or existing.get(MCP_NAME) or saved.get("@id", "").split("/")[-1]
+    # 2. Save it the way the UI does — validate-then-save. upsert keys on name,
+    #    so re-running updates the existing row instead of duplicating it.
+    saved = client.ai.upsert_mcp_server(config)
+    mcp_uuid = saved["uuid"]
     print(f"Saved MCP server {MCP_NAME} ({mcp_uuid})")
 
     # 3. Bind to each target agent's allowlist.
@@ -165,7 +162,7 @@ def _pick_fortisiem_alert(client: FortiSOAR) -> str:
     rows = resp.get("hydra:member") or resp.get("data") or []
     if not rows:
         sys.exit(f"No alerts with source={FSIEM_SOURCE!r} found — create one first.")
-    return rows[0]["@id"].split("/")[-1] if "@id" in rows[0] else rows[0]["id"]
+    return iri_to_uuid(rows[0])
 
 
 def _poll(client: FortiSOAR, task_id: str, *, interval: float = 5.0, timeout: float = 600.0) -> str:

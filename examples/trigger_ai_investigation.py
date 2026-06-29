@@ -6,19 +6,9 @@ Prereqs on the FortiSOAR side (all doable via this client):
   * The FortiAI solution pack installed     -> client.ai.list_providers()
 """
 
-import tomllib
+from pyfsr import FortiSOAR, Query
 
-from pyfsr import FortiSOAR
-
-with open("config.toml", "rb") as f:
-    config = tomllib.load(f)
-
-client = FortiSOAR(
-    base_url=config["fortisoar"]["base_url"],
-    auth=(config["fortisoar"]["auth"]["username"], config["fortisoar"]["auth"]["password"]),
-    verify_ssl=config["fortisoar"].get("verify_ssl", True),
-    suppress_insecure_warnings=True,
-)
+client = FortiSOAR.from_config_file("config.toml", suppress_insecure_warnings=True)
 
 # One-time: make sure FortiAI is turned on (accepts the AI terms & conditions).
 if not client.ai.features_enabled():
@@ -29,8 +19,12 @@ print("Providers:   ", [p.get("label") for p in client.ai.list_providers()])
 print("Reasoning:   ", [c.get("name") for c in client.ai.list_llm_configs()])
 print("MCP servers: ", [m.get("name") for m in client.ai.list_mcp_servers()])
 
-# Pick the newest alert and investigate it, blocking until a verdict.
-alert = client.alerts.list({"$limit": 1, "$orderby": "-createDate"})["hydra:member"][0]
+# Pick the newest alert and investigate it, blocking until a verdict. The modern
+# records() surface returns a typed (dict-compatible) Alert and unpacks the hydra
+# envelope for us — no ["hydra:member"][0] indexing.
+alert = client.records("alerts").first(Query().sort("createDate", "DESC"))
+if alert is None:
+    raise SystemExit("No alerts found to investigate.")
 print(f"\nInvestigating alert {alert['@id']} — {alert.get('name')!r} ...")
 
 report = client.ai.investigate_alert(alert, wait=True, timeout=600)

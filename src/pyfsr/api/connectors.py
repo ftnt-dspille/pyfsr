@@ -388,6 +388,7 @@ class ConnectorsAPI(BaseAPI):
         version: str,
         *,
         bundle_path: str | None = None,
+        auto_fetch: bool = True,
         backup_dir: str | None = None,
         allow_uninstall_fallback: bool = False,
         wait: bool = True,
@@ -409,8 +410,9 @@ class ConnectorsAPI(BaseAPI):
         2. If installed *and* configured, export a backup ``.zip`` (configs +
            encrypted secrets) via ``client.export_config.export_connector``.
         3. Install ``version`` in place — from ``bundle_path`` if given (a local
-           ``.tgz``/zip, needed when the Content Hub won't serve the target),
-           else by name from Content Hub.
+           ``.tgz``/zip), else by name from Content Hub; if Content Hub won't
+           serve that version and ``auto_fetch`` is set (default), the exact-
+           version ``.tgz`` is downloaded from the public repo and installed.
         4. Verify. If configs survived, done. If they didn't (downgrade schema
            drift, or a forced replace), re-import the backup.
         5. Only if the in-place install didn't reach ``version`` *and*
@@ -421,8 +423,13 @@ class ConnectorsAPI(BaseAPI):
             name: connector machine name (e.g. ``"code-snippet"``).
             version: target version (e.g. ``"2.1.5"``).
             bundle_path: optional local connector archive to install instead of
-                pulling ``version`` from Content Hub (use when the repo no longer
-                serves the older version).
+                pulling ``version`` from Content Hub. Usually unnecessary now —
+                when Content Hub won't serve the target, ``auto_fetch`` downloads
+                the exact-version ``.tgz`` from the public repo for you.
+            auto_fetch: when no ``bundle_path`` is given and the by-name Content
+                Hub install fails, download ``version`` from the public content
+                repository (:mod:`pyfsr.repo`) and install that. On by default;
+                set False to require Content Hub / an explicit bundle.
             backup_dir: directory to write the backup ``.zip`` into (default cwd).
             allow_uninstall_fallback: permit the destructive uninstall→reinstall
                 path if an in-place install can't reach ``version``. Off by
@@ -464,8 +471,19 @@ class ConnectorsAPI(BaseAPI):
         def _do_install() -> None:
             if bundle_path:
                 self.install_from_file(bundle_path, replace=True, wait=wait, interval=interval, timeout=timeout)
-            else:
+                return
+            try:
                 self.install(name, version, wait=wait, interval=interval, timeout=timeout)
+            except Exception:
+                # Content Hub wouldn't serve ``version`` in place — fall back to
+                # downloading the exact-version .tgz from the public repo and
+                # installing that, so the caller doesn't have to fetch by hand.
+                if not auto_fetch:
+                    raise
+                from .. import repo as _repo
+
+                fetched = _repo.download_connector(name, version, backup_dir)
+                self.install_from_file(fetched, replace=True, wait=wait, interval=interval, timeout=timeout)
 
         _do_install()
         self.clear_cache()
@@ -1437,6 +1455,67 @@ class ConnectorsAPI(BaseAPI):
                 self.clear_cache()
                 return ConnectorConfig.model_validate(confirmed)
             raise
+
+    def ensure_configured(
+        self,
+        connector: str,
+        config: dict[str, Any],
+        *,
+        config_name: str,
+        version: str | None = None,
+        default: bool = True,
+        agent: str | None = None,
+        validate: bool = True,
+        autofill: bool = True,
+        wait: bool = True,
+        interval: float = 3.0,
+        timeout: float = 300.0,
+    ) -> ConnectorConfig:
+        """Ensure ``connector`` is installed **and** has the named configuration.
+
+        Consolidates the common setup sequence — "install from Content Hub if it
+        isn't here yet, then create-or-update the config" — into one idempotent
+        call, joining the existing :meth:`ensure_version` in the ``ensure_*``
+        family. Re-running it is safe: an already-installed connector is not
+        reinstalled, and :meth:`upsert_configuration` updates the named config in
+        place rather than duplicating it.
+
+        ``version`` is only needed to *install* a missing connector (it is passed
+        to :meth:`install`); when the connector is already installed it may be
+        omitted and the configuration is applied against the installed version. If
+        the connector is absent and ``version`` is ``None``, a clear ``ValueError``
+        is raised rather than guessing.
+
+        ``config_name`` is the configuration's display name (passed through as
+        ``name=`` to :meth:`upsert_configuration`); ``default=True`` (the default)
+        makes it the connector's default config so a config-less connector step
+        picks it up. Returns the resulting :class:`~pyfsr.models.ConnectorConfig`.
+
+        Example::
+
+            cfg = client.connectors.ensure_configured(
+                "servicenow",
+                {"server_url": "...", "username": "...", "password": "..."},
+                config_name="pilot",
+                version="1.0.0",
+            )
+        """
+        if self.resolve_connector_id(connector) is None:
+            if not version:
+                raise ValueError(
+                    f"connector {connector!r} is not installed; pass version= to install it from the Content Hub"
+                )
+            self.install(connector, version, wait=wait, interval=interval, timeout=timeout)
+        return self.upsert_configuration(
+            connector,
+            config,
+            name=config_name,
+            version=version,
+            default=default,
+            agent=agent,
+            validate=validate,
+            autofill=autofill,
+        )
 
     # ------------------------------------------------------------- execute
     def execute(

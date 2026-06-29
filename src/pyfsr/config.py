@@ -24,10 +24,40 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 from .client import FortiSOAR
 
 _FALSEY = {"0", "false", "no", "off", ""}
+
+
+def _load_toml(path: str | Path) -> dict[str, Any]:
+    """Parse a TOML file, tolerating Python 3.10 (no stdlib ``tomllib``)."""
+    try:
+        import tomllib  # Python 3.11+
+    except ModuleNotFoundError:  # pragma: no cover - exercised on 3.10 only
+        try:
+            import tomli as tomllib  # type: ignore[no-redef,unused-ignore]
+        except ModuleNotFoundError as exc:  # pragma: no cover
+            raise RuntimeError(
+                "reading a TOML config on Python 3.10 needs the 'tomli' package "
+                "(`pip install tomli`); on 3.11+ it is built in"
+            ) from exc
+    with open(path, "rb") as fh:
+        return tomllib.load(fh)
+
+
+def _parse_env_text(text: str) -> dict[str, str]:
+    """Parse ``KEY=VALUE`` lines (``#`` comments, blanks ignored) into a dict."""
+    out: dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        out[key.strip()] = value.strip()
+    return out
 
 
 def _flag(env: dict[str, str], name: str, default: str) -> bool:
@@ -55,23 +85,26 @@ class EnvConfig:
     def from_env(cls, env: dict[str, str] | None = None) -> EnvConfig:
         """Build configuration from ``FSR_*`` environment variables.
 
-        Raises ``ValueError`` with an actionable message when the host or auth
-        is missing. Pass ``env`` to read from a dict instead of ``os.environ``.
+        Raises ``ValueError`` naming **every** missing required key at once
+        (host and/or auth) so a misconfigured environment is fixed in one pass.
+        Pass ``env`` to read from a dict instead of ``os.environ``.
         """
         env = env if env is not None else dict(os.environ)
         base_url = (env.get("FSR_BASE_URL") or env.get("FSR_HOST") or "").strip()
-        if not base_url:
-            raise ValueError("FSR_BASE_URL (or FSR_HOST) is required")
 
         api_key = (env.get("FSR_API_KEY") or "").strip()
         username = (env.get("FSR_USERNAME") or "").strip()
         password = env.get("FSR_PASSWORD") or ""
-        if api_key:
-            auth: str | tuple[str, str] = api_key
-        elif username and password:
-            auth = (username, password)
-        else:
-            raise ValueError("set FSR_API_KEY, or both FSR_USERNAME and FSR_PASSWORD")
+
+        missing: list[str] = []
+        if not base_url:
+            missing.append("FSR_BASE_URL (or FSR_HOST)")
+        if not (api_key or (username and password)):
+            missing.append("FSR_API_KEY, or both FSR_USERNAME and FSR_PASSWORD")
+        if missing:
+            raise ValueError("missing required configuration: " + "; ".join(missing))
+
+        auth: str | tuple[str, str] = api_key if api_key else (username, password)
 
         port_raw = (env.get("FSR_PORT") or "").strip()
         timeout_raw = (env.get("FSR_TIMEOUT") or "").strip()
@@ -82,6 +115,69 @@ class EnvConfig:
             suppress_insecure_warnings=_flag(env, "FSR_SUPPRESS_INSECURE_WARNINGS", "false"),
             port=int(port_raw) if port_raw else None,
             timeout=int(timeout_raw) if timeout_raw else 30,
+        )
+
+    @classmethod
+    def from_env_file(cls, path: str | Path, *, override: bool = False) -> EnvConfig:
+        """Build configuration from a ``KEY=VALUE`` env file plus ``os.environ``.
+
+        Real environment variables win over the file unless ``override=True``.
+        This loads only the ``FSR_*`` keys this class understands; it is **not** a
+        general ``.env`` loader — for that, use ``python-dotenv`` and then call
+        :meth:`from_env`.
+        """
+        file_vars = _parse_env_text(Path(path).read_text(encoding="utf-8"))
+        env = dict(os.environ)
+        for key, value in file_vars.items():
+            if override or key not in env:
+                env[key] = value
+        return cls.from_env(env)
+
+    @classmethod
+    def from_config_file(cls, path: str | Path) -> EnvConfig:
+        """Build configuration from a TOML file (the ``[fortisoar]`` layout).
+
+        Mirrors the ``config.toml`` used by the examples::
+
+            [fortisoar]
+            base_url = "https://soar.example.com"
+            verify_ssl = false
+
+            [fortisoar.auth]
+            type = "user_pass"   # or "api_key"
+            username = "csadmin"
+            password = "..."
+            # key = "..."        # when type = "api_key"
+        """
+        data = _load_toml(path)
+        fsr = data.get("fortisoar", data)
+        base_url = str(fsr.get("base_url") or fsr.get("host") or "").strip()
+        if not base_url:
+            raise ValueError(f"{path}: [fortisoar].base_url is required")
+
+        auth_cfg = fsr.get("auth", {}) or {}
+        auth_type = str(auth_cfg.get("type") or "").strip().lower()
+        key = (auth_cfg.get("key") or auth_cfg.get("api_key") or "").strip()
+        username = (auth_cfg.get("username") or "").strip()
+        password = auth_cfg.get("password") or ""
+        if auth_type == "api_key" or (key and not username):
+            if not key:
+                raise ValueError(f"{path}: [fortisoar.auth].key is required for api_key auth")
+            auth: str | tuple[str, str] = key
+        elif username and password:
+            auth = (username, password)
+        else:
+            raise ValueError(f"{path}: set [fortisoar.auth] key (api_key), or both username and password")
+
+        port = fsr.get("port")
+        timeout = fsr.get("timeout")
+        return cls(
+            base_url=base_url,
+            auth=auth,
+            verify_ssl=bool(fsr.get("verify_ssl", True)),
+            suppress_insecure_warnings=bool(fsr.get("suppress_insecure_warnings", False)),
+            port=int(port) if port is not None else None,
+            timeout=int(timeout) if timeout is not None else 30,
         )
 
     def client(self, **overrides) -> FortiSOAR:

@@ -570,3 +570,39 @@ def test_find_investigations_groups_distinct_correlation_ids():
     found = ai.find_investigations("alerts:740a751c")
     assert {f["task_id"] for f in found} == {"task-a", "task-b"}
     assert next(f for f in found if f["task_id"] == "task-a")["log_count"] == 2
+
+
+# -- upsert_mcp_server (create-or-update keyed by name) ---------------------
+def test_upsert_mcp_server_updates_existing_by_name():
+    # An existing row with the same name -> uuid injected -> PUT (update).
+    c = RecordingClient(responses={("GET", "/api/ai/mcp"): [{"uuid": "m-7", "name": "FortiSIEM"}]})
+    ai = AIApi(c)
+    saved = ai.upsert_mcp_server({"name": "FortiSIEM", "active": True}, validate=False)
+    put = [call for call in c.calls if call[0] == "PUT"][0]
+    assert put[1] == "/api/3/mcp_configurations/m-7"
+    assert saved["uuid"] == "m-7"
+
+
+def test_upsert_mcp_server_creates_when_name_absent():
+    c = RecordingClient(
+        responses={
+            ("GET", "/api/ai/mcp"): [{"uuid": "m-1", "name": "Other"}],
+            ("POST", "/api/3/mcp_configurations"): {"uuid": "m-new"},
+        }
+    )
+    ai = AIApi(c)
+    saved = ai.upsert_mcp_server({"name": "FortiSIEM"}, validate=False)
+    assert [call for call in c.calls if call[0] == "POST"]
+    assert saved["uuid"] == "m-new"
+
+
+def test_upsert_mcp_server_backfills_uuid_from_atid():
+    c = RecordingClient(
+        responses={
+            ("GET", "/api/ai/mcp"): [],
+            ("POST", "/api/3/mcp_configurations"): {"@id": "/api/3/mcp_configurations/m-x"},
+        }
+    )
+    ai = AIApi(c)
+    saved = ai.upsert_mcp_server({"name": "New"}, validate=False)
+    assert saved["uuid"] == "m-x"
