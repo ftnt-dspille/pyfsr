@@ -46,6 +46,10 @@ src/pyfsr/_version.py
 # Planning docs (may accrue infra detail / creds) — keep local
 docs/plans/
 
+# Env / secret files (appliance creds) — never commit
+.env*
+
+
 # Scratch / scratchpad: throwaway scripts, pilot data, reference DBs — keep local
 scratch/
 
