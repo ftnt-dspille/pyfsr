@@ -52,6 +52,45 @@ def _load_compiler():
     return compile_yaml, default_db_path
 
 
+def _load_decompiler():
+    """Import the fsr_playbooks decompiler (playbook JSON -> authored YAML)."""
+    try:
+        from fsr_playbooks.compiler.decompiler import decompile_to_yaml
+    except ImportError as exc:  # pragma: no cover - exercised via the missing-extra test
+        raise PlaybooksExtraNotInstalled(exc) from exc
+    return decompile_to_yaml
+
+
+def decompile_playbook_yaml(
+    fsr_json: dict[str, Any],
+    *,
+    client: Any = None,
+    db_path: str | Path | None = None,
+) -> str:
+    """Decompile a FortiSOAR WorkflowCollection export envelope into authored YAML.
+
+    The inverse of :func:`compile_playbook_yaml` — turns the JSON a live playbook
+    exports as back into the friendly YAML shape (so you can pull a playbook off
+    an appliance and edit/version it as source). Catalog resolution mirrors
+    compile: explicit ``db_path`` > warm-from-``client`` > packaged slim catalog,
+    so connector/team/picklist IRIs render back as friendly names.
+
+    Args:
+        fsr_json: the export envelope (``{"type": "workflow_collections",
+            "data": [<collection>]}``), e.g. from
+            :meth:`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI.get`.
+        client: optional connected client to warm the catalog from (recommended,
+            so custom connectors like ``code-runner`` decompile by name).
+        db_path: explicit reference catalog path (overrides ``client``).
+
+    Returns:
+        The authored-style YAML as a string.
+    """
+    decompile_to_yaml = _load_decompiler()
+    resolved = _resolve_catalog(client, db_path)
+    return decompile_to_yaml(fsr_json, resolved)
+
+
 # --------------------------------------------------------------------- warmup
 def warm_catalog(
     client: Any,

@@ -52,7 +52,6 @@ TEAM = os.environ.get("DX_TEAM") or ""
 KEY_NAME = f"pyfsr-dx-validate-{int(time.time())}"
 
 from pyfsr import FortiSOAR  # noqa: E402
-from pyfsr.api.api_keys import _api_key_plaintext  # noqa: E402
 from pyfsr.exceptions import APIError, ResourceNotFoundError  # noqa: E402
 
 
@@ -113,7 +112,7 @@ def validate_ensure_usable(client: FortiSOAR) -> None:
     user = client.api_users.get(sample["userId"], show_api_key=True)
     assert "api_key" in user, user.keys()
     ak = user["api_key"] or {}
-    plaintext = _api_key_plaintext(client, sample["userId"])
+    plaintext = client.api_keys.get_plaintext(sample["userId"])
     line(
         f"  recover shape ok: api_key keys={sorted(ak.keys())}; "
         f"plaintext {'present' if plaintext else 'masked (per-key retrievable=False)'}"

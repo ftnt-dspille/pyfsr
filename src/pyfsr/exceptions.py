@@ -116,6 +116,40 @@ class UnsupportedAuthOperationError(FortiSOARException):
         super().__init__(msg)
 
 
+class RepoError(FortiSOARException):
+    """Base for content-repository (``repo.fortisoar.fortinet.com``) errors."""
+
+    pass
+
+
+class RepoUnreachableError(RepoError):
+    """The public content repository could not be reached.
+
+    Raised by the :mod:`pyfsr.repo` download helpers when a connectivity
+    preflight (or the download itself) fails with a connection/timeout error —
+    i.e. no FDN access, an air-gapped box, or a firewall — as opposed to the
+    repo being reachable but not having the requested artifact
+    (:class:`RepoArtifactNotFoundError`). Callers can branch on the two to tell
+    "can't reach the repo" from "that version doesn't exist".
+    """
+
+    def __init__(self, message: str | None = None, *, url: str | None = None):
+        self.url = url
+        super().__init__(message or f"content repository unreachable{f' ({url})' if url else ''}")
+
+
+class RepoArtifactNotFoundError(RepoError):
+    """The repo is reachable but has no artifact at the requested name/version.
+
+    A genuine 404 — the host answered, the path just doesn't exist (bad slug or
+    a version that was never published / has been pulled).
+    """
+
+    def __init__(self, message: str | None = None, *, url: str | None = None):
+        self.url = url
+        super().__init__(message or f"no artifact at {url}" if url else (message or "artifact not found"))
+
+
 # Substrings the appliance returns (as 5xx bodies / error messages) while it is
 # mid-migrate — a publish *or* a module-bearing import runs a full backup + DB
 # migrate + cache-rebuild cycle, during which the API is briefly unavailable and

@@ -4,6 +4,7 @@ PyFSR: Python client for the FortiSOAR REST API.
 For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
 """
 
+from . import repo
 from .api.connectors import pack_connector
 from .appliance import Appliance
 from .client import FortiSOAR
@@ -51,7 +52,7 @@ from .models import (
     model_for,
 )
 from .pagination import HydraPage, paginate
-from .projection import SUMMARY_FIELDS, project, project_record, to_jsonable
+from .projection import SUMMARY_FIELDS, iri_to_uuid, project, project_record, to_jsonable
 from .publish_probe import (
     PublishProbe,
     PublishReport,
@@ -131,8 +132,11 @@ __all__ = [
     # projection
     "project",
     "project_record",
+    "iri_to_uuid",
     "to_jsonable",
     "SUMMARY_FIELDS",
+    # content repository (standalone, unauthenticated downloads)
+    "repo",
     # concurrency analysis
     "compute_overlap",
     "ConcurrencyResult",

@@ -54,16 +54,16 @@ from __future__ import annotations
 import re
 import time
 import uuid as _uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import requests
 
 from ..exceptions import FortiSOARException, describe_migrate_failure, is_migrate_transient
+from ..models import AttributeMetadata, NavItem, NavRequire, NavState
 from .base import BaseAPI
 
 if TYPE_CHECKING:
     from ..models import (
-        AttributeMetadata,
         InvalidDraft,
         PendingChange,
         PublishedModelMetadata,
@@ -300,7 +300,7 @@ class ModulesAdminAPI(BaseAPI):
         if form_type == "oneToMany":
             reverse_name = field.get("inversedField") or source_module
             reverse = self.lookup_field(reverse_name, source_module, inversedField=name)
-            return target, reverse
+            return target, self._to_field_dict(reverse)
         if form_type == "manyToMany" and field.get("inversedField"):
             reverse = self.relationship_field(
                 field["inversedField"],
@@ -309,7 +309,7 @@ class ModulesAdminAPI(BaseAPI):
                 inversed_field=name,
                 owns_relationship=False,
             )
-            return target, reverse
+            return target, self._to_field_dict(reverse)
         # lookup / default-inverse manyToMany: nothing for pyfsr to create.
         return None
 
@@ -351,8 +351,12 @@ class ModulesAdminAPI(BaseAPI):
         enable_range: bool = False,
         bulk_edit: bool = False,
         **extra: Any,
-    ) -> dict[str, Any]:
-        """Build an attribute (field) dict with sane defaults for create/add.
+    ) -> AttributeMetadata:
+        """Build an attribute (field) with sane defaults for create/add.
+
+        Returns a typed :class:`~pyfsr.models.AttributeMetadata` (dict-compatible
+        for reads — ``f["type"]`` / ``f.get(...)`` / ``"type" in f`` all work — so
+        existing code that treated the result as a dict keeps working).
 
         Mirrors the Field **Properties** panel of the in-product editor:
 
@@ -423,7 +427,19 @@ class ModulesAdminAPI(BaseAPI):
             },
         }
         attr.update(extra)
-        return attr
+        return AttributeMetadata.model_validate(attr)
+
+    @classmethod
+    def _field_dict(cls, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Build a field as a plain, mutable wire dict (for post-processing builders).
+
+        :meth:`field` now returns a typed (immutable-keyed) ``AttributeMetadata``;
+        builders that need to mutate the result in place (picklist / lookup /
+        relationship) build through this and re-wrap at the end. The dump is
+        byte-identical to the pre-typing builder output (``exclude_unset`` emits
+        only the keys ``field`` actually set, extras included).
+        """
+        return cls.field(*args, **kwargs).model_dump(by_alias=True, exclude_unset=True)
 
     @classmethod
     def picklist_field(
@@ -434,14 +450,14 @@ class ModulesAdminAPI(BaseAPI):
         multi: bool = False,
         label: str | None = None,
         **opts: Any,
-    ) -> dict[str, Any]:
+    ) -> AttributeMetadata:
         """Build a single- or multi-select **picklist** field bound to ``picklist_name``.
 
         ``picklist_name`` is the picklist's *list name* (e.g. ``"AlertStatus"``). ``multi``
         switches between ``picklist`` and ``multiselectpicklist`` (a collection). Pass
         through any :meth:`field` option (``required``, ``grid_column``, ...).
         """
-        attr = cls.field(
+        attr = cls._field_dict(
             name,
             db_type="picklists",
             form_type="multiselectpicklist" if multi else "picklist",
@@ -457,13 +473,13 @@ class ModulesAdminAPI(BaseAPI):
                 "sort": [{"field": "orderIndex", "direction": "ASC"}],
             },
         }
-        return attr
+        return AttributeMetadata.model_validate(attr)
 
     # ------------------------------------------------ typed scalar builders
     @classmethod
     def typed_field(
         cls, name: str, display_type: str | None = None, *, label: str | None = None, **opts: Any
-    ) -> dict[str, Any]:
+    ) -> AttributeMetadata:
         """Build a scalar field by **display type**, deriving the storage ``type`` for you.
 
         ``display_type`` is the kind of field as shown in the editor — any key of
@@ -498,31 +514,31 @@ class ModulesAdminAPI(BaseAPI):
         html: bool = False,
         label: str | None = None,
         **opts: Any,
-    ) -> dict[str, Any]:
+    ) -> AttributeMetadata:
         """Build a string field: single-line (default), ``textarea``, ``richtext`` or
         ``html``. ``area``/``rich``/``html`` pick the display type (all store ``string``)."""
         display_type = "html" if html else "richtext" if rich else "textarea" if area else "text"
         return cls.typed_field(name, display_type, label=label, **opts)
 
     @classmethod
-    def integer_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def integer_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build an integer field (stores ``integer``)."""
         return cls.typed_field(name, "integer", label=label, **opts)
 
     @classmethod
-    def decimal_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def decimal_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a Decimal field (stores ``float``) for fractional numbers — the
         floating-point counterpart of :meth:`integer_field`."""
         return cls.typed_field(name, "decimal", label=label, **opts)
 
     @classmethod
-    def datetime_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def datetime_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a date/time field. Stored as an epoch-millis ``integer`` — that storage
         type is intentional, not a bug."""
         return cls.typed_field(name, "datetime", label=label, **opts)
 
     @classmethod
-    def checkbox_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def checkbox_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a boolean checkbox field (stores ``boolean``)."""
         return cls.typed_field(name, "checkbox", label=label, **opts)
 
@@ -530,60 +546,60 @@ class ModulesAdminAPI(BaseAPI):
     boolean_field = checkbox_field
 
     @classmethod
-    def email_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def email_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build an email field (stores ``string``, with email-format validation)."""
         return cls.typed_field(name, "email", label=label, **opts)
 
     @classmethod
-    def url_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def url_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a URL field (stores ``string``)."""
         return cls.typed_field(name, "url", label=label, **opts)
 
     @classmethod
-    def phone_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def phone_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a phone field (stores ``string``)."""
         return cls.typed_field(name, "phone", label=label, **opts)
 
     @classmethod
-    def domain_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def domain_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a Domain field (stores ``string``)."""
         return cls.typed_field(name, "domain", label=label, **opts)
 
     @classmethod
-    def ipv4_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def ipv4_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build an IPv4 field (stores ``string``)."""
         return cls.typed_field(name, "ipv4", label=label, **opts)
 
     @classmethod
-    def ipv6_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def ipv6_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build an IPv6 field (stores ``string``)."""
         return cls.typed_field(name, "ipv6", label=label, **opts)
 
     @classmethod
-    def filehash_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def filehash_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a FileHash field (stores ``string``)."""
         return cls.typed_field(name, "filehash", label=label, **opts)
 
     @classmethod
-    def file_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def file_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a file-attachment field (stores ``string``)."""
         return cls.typed_field(name, "file", label=label, **opts)
 
     @classmethod
-    def password_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def password_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a masked password field. Pass ``encrypted=True`` to store it encrypted
         at rest (encrypted fields cannot be ``searchable``)."""
         return cls.typed_field(name, "password", label=label, **opts)
 
     @classmethod
-    def json_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def json_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a JSON field (stores ``object``) — the editor's "JSON" type with a JSON
         editor control. See also :meth:`object_field` (the raw ``object`` type): both store
         ``object`` and differ only in the editor control."""
         return cls.typed_field(name, "json", label=label, **opts)
 
     @classmethod
-    def object_field(cls, name: str, *, label: str | None = None, **opts: Any) -> dict[str, Any]:
+    def object_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
         """Build a raw object field (stores ``object``). For the editor's "JSON" field type
         (a JSON editor control) use :meth:`json_field` instead."""
         return cls.typed_field(name, "object", label=label, **opts)
@@ -600,7 +616,7 @@ class ModulesAdminAPI(BaseAPI):
         owning_module: str | None = None,
         team_scope: list[str] | None = None,
         **opts: Any,
-    ) -> dict[str, Any]:
+    ) -> AttributeMetadata:
         """Build a **lookup** (many-to-one) field: a *single* reference to one record of
         ``target_module``.
 
@@ -624,7 +640,7 @@ class ModulesAdminAPI(BaseAPI):
         :meth:`create_module` resolve the team identifiers to IRIs and **refuse to stage it on
         an appliance older than 8.0** (7.6.x has no equivalent). See :meth:`scope_field_to_teams`.
         """
-        attr = cls.field(name, db_type=target_module, form_type="lookup", label=label, **opts)
+        attr = cls._field_dict(name, db_type=target_module, form_type="lookup", label=label, **opts)
         attr["collection"] = False
         attr["ownsRelationship"] = False
         attr["dataSource"] = {"model": target_module}
@@ -636,7 +652,20 @@ class ModulesAdminAPI(BaseAPI):
             }
         if team_scope:
             cls._apply_team_scope(attr, team_scope)
-        return attr
+        return AttributeMetadata.model_validate(attr)
+
+    @staticmethod
+    def _to_field_dict(field: dict[str, Any] | AttributeMetadata) -> dict[str, Any]:
+        """Normalize a field (typed :class:`AttributeMetadata` or plain dict) to a wire dict.
+
+        The staging consumers (:meth:`create_module` / :meth:`add_field` /
+        :meth:`scope_field_to_teams`) mutate field dicts in place and POST them, so
+        they coerce a typed field back to a plain dict at their boundary.
+        ``exclude_unset`` keeps the body byte-identical to a hand-built dict.
+        """
+        if isinstance(field, AttributeMetadata):
+            return field.model_dump(by_alias=True, exclude_unset=True)
+        return field
 
     @staticmethod
     def _apply_team_scope(attr: dict[str, Any], teams: list[str]) -> None:
@@ -662,7 +691,7 @@ class ModulesAdminAPI(BaseAPI):
         owns_relationship: bool = True,
         team_scope: list[str] | None = None,
         **opts: Any,
-    ) -> dict[str, Any]:
+    ) -> AttributeMetadata:
         """Build a **collection** relationship to ``target_module`` (its module ``type``).
 
         ``many`` selects ``manyToMany`` (default) vs ``oneToMany``; both are collections.
@@ -691,7 +720,7 @@ class ModulesAdminAPI(BaseAPI):
         ``owns_relationship`` (default True) marks this as the owning side of the join.
         Pass ``owns_relationship=False`` for the non-owning mirror of an existing relation.
         """
-        attr = cls.field(
+        attr = cls._field_dict(
             name,
             db_type=target_module,
             form_type="manyToMany" if many else "oneToMany",
@@ -705,7 +734,7 @@ class ModulesAdminAPI(BaseAPI):
         attr["dataSource"] = {"model": target_module}
         if team_scope:
             cls._apply_team_scope(attr, team_scope)
-        return attr
+        return AttributeMetadata.model_validate(attr)
 
     # ----------------------------------------------------- view templates
     @staticmethod
@@ -905,7 +934,7 @@ class ModulesAdminAPI(BaseAPI):
         *,
         label: str | None = None,
         plural: str | None = None,
-        fields: list[dict[str, Any]] | None = None,
+        fields: list[dict[str, Any] | AttributeMetadata] | None = None,
         display_template: str | None = None,
         ownable: bool = True,
         trackable: bool = True,
@@ -918,6 +947,11 @@ class ModulesAdminAPI(BaseAPI):
         default_sort: list[dict[str, Any]] | None = None,
         create_view_templates: bool = True,
         grant_to: list[str] | str | None = None,
+        add_to_nav: bool = False,
+        nav_title: str | None = None,
+        nav_icon: str | None = None,
+        nav_parent: str | None = None,
+        nav_position: Literal["top", "bottom"] = "bottom",
         facts: Any | None = None,
         **opts: Any,
     ) -> dict[str, Any]:
@@ -960,12 +994,24 @@ class ModulesAdminAPI(BaseAPI):
         records cannot be accessed until a role is granted via
         :meth:`~pyfsr.api.roles.RolesAPI.grant_module_permissions`.
 
+        ``add_to_nav`` (optional, default False) adds the module to the application
+        navigation bar so it is reachable in the UI. Like ``grant_to`` it is **deferred
+        until the next** :meth:`publish` (the nav entry's ``require`` gate and route only
+        resolve once the module is live). By default it appends a **new top-level section
+        at the bottom** of the navigation, gated by ``read`` permission on the module and
+        routing to the module's record list. Customize with ``nav_title`` (defaults to the
+        module label), ``nav_icon`` (defaults to a generic icon), ``nav_parent`` (a group
+        title/module to nest under instead of top-level), and ``nav_position``
+        (``"top"``/``"bottom"``). For full control, edit navigation directly via
+        :class:`~pyfsr.api.app_config.AppConfigAPI` (``client.app_config``).
+
         Example::
 
             admin.create_module(
                 "custom_alerts",
                 fields=[admin.text_field("name")],
                 grant_to=["Full App Permissions", "SOC Analyst"],
+                add_to_nav=True,  # new section at the bottom of the nav bar
             )
 
         ``facts`` (optional :class:`pyfsr.cli.appliance.Facts`) enables a **create-side
@@ -993,9 +1039,10 @@ class ModulesAdminAPI(BaseAPI):
         label = label or module
         if fields is None:
             fields = [self.text_field("name", required=True)]
-        self._guard_team_scope(fields)
+        field_dicts: list[dict[str, Any]] = [self._to_field_dict(f) for f in fields]
+        self._guard_team_scope(field_dicts)
         if display_template is None:
-            names = [f.get("name") for f in fields if f.get("name")]
+            names = [f.get("name") for f in field_dicts if f.get("name")]
             anchor = "name" if "name" in names else (names[0] if names else "name")
             display_template = f"{{{{ {anchor} }}}}"
         payload = {
@@ -1016,7 +1063,7 @@ class ModulesAdminAPI(BaseAPI):
             "uniqueConstraint": self._unique_constraint(module, record_uniqueness),
             "defaultSort": default_sort or [],
             "system": False,
-            "attributes": fields,
+            "attributes": field_dicts,
         }
         payload.update(opts)
         created = self.client.post(_STAGING, data=payload, params=_REL)
@@ -1029,7 +1076,62 @@ class ModulesAdminAPI(BaseAPI):
             roles = grant_to if isinstance(grant_to, list) else [grant_to]
             if roles:
                 self._pending_grants.setdefault(module, []).extend(roles)
+        if add_to_nav:
+            # Deferred for the same reason as grants: the nav entry routes to a live
+            # module and gates on a permission that only resolves post-publish.
+            self._pending_nav[module] = {
+                "title": nav_title or label,
+                "icon": nav_icon,
+                "parent": nav_parent,
+                "position": nav_position,
+            }
         return created
+
+    def get_or_create_module(
+        self,
+        module: str,
+        *,
+        publish: bool = True,
+        publish_kwargs: dict[str, Any] | None = None,
+        **create_kwargs: Any,
+    ) -> tuple[dict[str, Any], bool]:
+        """Idempotently ensure ``module`` exists; return ``(metadata, created)``.
+
+        The structural-object analogue of
+        :meth:`~pyfsr.records.RecordSet.get_or_create`, returning the same Django-style
+        ``(obj, created)`` tuple:
+
+        - If ``module`` already exists (published **or** staging), return its current
+          metadata with ``created=False`` and make **no** changes — nothing is created,
+          nothing is published.
+        - Otherwise call :meth:`create_module` with ``create_kwargs`` (``fields=``,
+          ``grant_to=``, ``label=``, etc.) and, when ``publish`` is True (default),
+          :meth:`publish` so the module goes live (which also flushes any ``grant_to``).
+          Return the resulting metadata with ``created=True``.
+
+        Because :meth:`publish` is appliance-wide, an existing staging-only module is
+        returned as-is rather than force-published — re-publishing is left to the caller.
+        Pass ``publish_kwargs`` to forward options (e.g. ``{"timeout": 420}``) to
+        :meth:`publish`.
+
+        Example::
+
+            meta, created = admin.get_or_create_module(
+                "reconciliation_result",
+                fields=[admin.text_field("name", required=True)],
+                grant_to=["Security Administrator"],
+            )
+        """
+        existing = self.get_published(module) or self.get_staging(module)
+        if existing is not None:
+            return existing, False
+
+        self.create_module(module, **create_kwargs)
+        if publish:
+            self.publish(**(publish_kwargs or {}))
+
+        meta = (self.get_published(module) if publish else None) or self.get_staging(module)
+        return meta or {}, True
 
     @property
     def _pending_grants(self) -> dict[str, list[str]]:
@@ -1067,6 +1169,45 @@ class ModulesAdminAPI(BaseAPI):
                         can_delete=True,
                         can_execute=True,
                     )
+        finally:
+            pending.clear()
+
+    @property
+    def _pending_nav(self) -> dict[str, dict[str, Any]]:
+        """Navigation entries requested via ``create_module(add_to_nav=...)``, applied on publish.
+
+        Keyed by module type → the nav-entry spec (title/icon/parent/position). Deferred for
+        the same reason as :attr:`_pending_grants`: the entry routes to a live module and gates
+        on a permission that only resolves once the module is published.
+        """
+        cache: dict[str, dict[str, Any]] | None = getattr(self, "_pending_nav_cache", None)
+        if cache is None:
+            cache = {}
+            self._pending_nav_cache = cache
+        return cache
+
+    def _flush_pending_nav(self) -> None:
+        """Add (and clear) deferred ``add_to_nav`` entries after a successful publish.
+
+        Builds a :class:`~pyfsr.models.NavItem` for each pending module — a leaf routing to
+        the module's record list, gated by ``read`` permission on the module — and inserts it
+        via :meth:`~pyfsr.api.app_config.AppConfigAPI.add_navigation_item`. A failure is
+        surfaced verbatim (the publish itself already committed).
+        """
+        pending = self._pending_nav
+        if not pending:
+            return
+        try:
+            for module, spec in pending.items():
+                item = NavItem(
+                    title=spec.get("title") or module,
+                    icon=spec.get("icon") or "icon icon-bookmark",
+                    state=NavState(name="main.modules.list", parameters={"module": module}),
+                    require=NavRequire(module=module, action="read"),
+                )
+                self.client.app_config.add_navigation_item(
+                    item, parent=spec.get("parent"), position=spec.get("position", "bottom")
+                )
         finally:
             pending.clear()
 
@@ -1185,21 +1326,23 @@ class ModulesAdminAPI(BaseAPI):
             return None
         return version >= minimum
 
-    def scope_field_to_teams(self, field: dict[str, Any], teams: list[str]) -> dict[str, Any]:
+    def scope_field_to_teams(self, field: dict[str, Any] | AttributeMetadata, teams: list[str]) -> AttributeMetadata:
         """Restrict a People lookup/relationship ``field``'s pickable users to members of ``teams``.
 
-        The in-product "Only show users from selected teams" option (FortiSOAR **8.0+**). Mutates
-        and returns ``field`` so you can apply it to a pre-built attribute, e.g.::
+        The in-product "Only show users from selected teams" option (FortiSOAR **8.0+**). Takes a
+        field (built with :meth:`lookup_field`/:meth:`relationship_field`) and returns a typed
+        :class:`~pyfsr.models.AttributeMetadata` with the team-scope option applied::
 
             f = admin.relationship_field("approvers", "people")
-            admin.scope_field_to_teams(f, ["SOC Team", "TeamA"])
+            f = admin.scope_field_to_teams(f, ["SOC Team", "TeamA"])
 
         Equivalent to passing ``team_scope=`` to :meth:`lookup_field`/:meth:`relationship_field`.
         Version-gating + team→IRI resolution still happen when the field is staged via
         :meth:`add_field`/:meth:`create_module`.
         """
-        self._apply_team_scope(field, teams)
-        return field
+        attr = self._to_field_dict(field)
+        self._apply_team_scope(attr, teams)
+        return AttributeMetadata.model_validate(attr)
 
     def _guard_orphan_table_collision(self, module: str, facts: Any) -> None:
         """Refuse to create ``module`` if leftover physical tables already occupy its
@@ -1257,7 +1400,9 @@ class ModulesAdminAPI(BaseAPI):
             raise FortiSOARException(f"no team named {team!r} found to scope the field to")
         return f"/api/3/teams/{uuid}"
 
-    def add_field(self, module: str, field: dict[str, Any], *, create_reverse: bool = True) -> dict[str, Any]:
+    def add_field(
+        self, module: str, field: dict[str, Any] | AttributeMetadata, *, create_reverse: bool = True
+    ) -> dict[str, Any]:
         """Append a field (build it with :meth:`field`) to ``module`` in staging.
 
         When ``field`` is a relationship whose reverse side FortiSOAR does **not**
@@ -1277,6 +1422,7 @@ class ModulesAdminAPI(BaseAPI):
         Raises ``ValueError`` if the reverse is needed but the target module does not
         exist, or already has a *different* field under the reverse name.
         """
+        field = self._to_field_dict(field)
         self._guard_team_scope([field])
         mod = self.get_staging(module)
         if not mod:
@@ -1390,6 +1536,7 @@ class ModulesAdminAPI(BaseAPI):
         publish: bool = True,
         drop_view_templates: bool = True,
         drop_orphan_tables: Any | None = None,
+        remove_from_nav: bool = False,
         timeout: float = 600.0,
         poll_interval: float = 10.0,
     ) -> dict[str, Any]:
@@ -1427,6 +1574,10 @@ class ModulesAdminAPI(BaseAPI):
                 delete. If False, the staging changes are staged but the module is not yet
                 gone (you must publish later).
             drop_view_templates: Also delete the module's ``system_view_templates``.
+            remove_from_nav: If True, also remove the module's navigation entry (the inverse
+                of ``create_module(add_to_nav=True)``) via
+                :meth:`~pyfsr.api.app_config.AppConfigAPI.remove_navigation_item`. Done after
+                the publish commits the delete; a no-op if the module has no nav entry.
             drop_orphan_tables: Optional :class:`pyfsr.cli.appliance.Facts` (an
                 appliance transport context). When given **and** ``publish`` is
                 True, the orphaned physical Postgres tables (base + join tables)
@@ -1441,7 +1592,8 @@ class ModulesAdminAPI(BaseAPI):
         Returns:
             A dict with keys ``module``, ``detached`` (list), ``orphan_table``
             (``str`` or ``None``), ``published`` (publish result or ``None``),
-            and ``dropped_tables`` (``list`` or ``None``).
+            ``dropped_tables`` (``list`` or ``None``), and ``nav_removed``
+            (``True`` if a nav entry was removed, else ``None``).
 
         Raises:
             ValueError: if the module is not found.
@@ -1479,9 +1631,14 @@ class ModulesAdminAPI(BaseAPI):
             "orphan_table": orphan_table,
             "published": None,
             "dropped_tables": None,
+            "nav_removed": None,
         }
         if publish:
             result["published"] = self.publish(timeout=timeout, poll_interval=poll_interval)
+            if remove_from_nav:
+                # The module is gone; drop its nav entry too (no-op if it had none).
+                self.client.app_config.remove_navigation_item(module=module, missing_ok=True)
+                result["nav_removed"] = True
             if drop_orphan_tables is not None and orphan_table:
                 # Lazy import: keeps the API client free of the CLI/SSH/psql layer
                 # unless an appliance context is actually handed in.
@@ -1662,12 +1819,14 @@ class ModulesAdminAPI(BaseAPI):
         if not had_pending:
             # Nothing to migrate: ``_wait_for_publish`` would block for the full timeout
             # waiting for a ``last_publish_time`` advance that never comes. Return now.
-            # (Deferred role grants from create_module(grant_to=) are still flushed below.)
+            # (Deferred grants/nav from create_module(grant_to=/add_to_nav=) are flushed below.)
             self._flush_pending_grants()
+            self._flush_pending_nav()
             return self._publish_status() or {"status": "Success", "note": "no pending changes"}
         result = self._wait_for_publish(prev_time, timeout, poll_interval, prev_errors=prev_errors)
-        # The schema is now live — apply any role grants deferred from create_module(grant_to=).
+        # The schema is now live — apply role grants and nav entries deferred from create_module.
         self._flush_pending_grants()
+        self._flush_pending_nav()
         return result
 
     def revert(self) -> dict[str, Any]:

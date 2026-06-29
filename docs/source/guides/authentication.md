@@ -82,12 +82,12 @@ message — pass an explicit `env` dict to make the failure deterministic:
 ...     EnvConfig.from_env({})                     # no host
 ... except ValueError as e:
 ...     str(e)
-'FSR_BASE_URL (or FSR_HOST) is required'
+'missing required configuration: FSR_BASE_URL (or FSR_HOST); FSR_API_KEY, or both FSR_USERNAME and FSR_PASSWORD'
 >>> try:
 ...     EnvConfig.from_env({"FSR_BASE_URL": "https://soar.example.com"})  # no auth
 ... except ValueError as e:
 ...     str(e)
-'set FSR_API_KEY, or both FSR_USERNAME and FSR_PASSWORD'
+'missing required configuration: FSR_API_KEY, or both FSR_USERNAME and FSR_PASSWORD'
 ```
 
 | Variable | Purpose |

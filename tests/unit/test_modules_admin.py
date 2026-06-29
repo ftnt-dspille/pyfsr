@@ -17,6 +17,7 @@ class RecordingClient:
             ],
         }
         self.roles = FakeRolesAPI()
+        self.app_config = FakeAppConfigAPI()
 
     def get(self, endpoint, params=None, **kw):
         self.calls.append(("GET", endpoint, params))
@@ -66,6 +67,22 @@ class FakeRolesAPI:
             }
         )
         return {"uuid": "r-1", "name": role}
+
+
+class FakeAppConfigAPI:
+    """Fake app_config API recording add_navigation_item calls for inspection."""
+
+    def __init__(self):
+        self.nav_calls = []
+        self.nav_removed = []
+
+    def add_navigation_item(self, item, *, parent=None, position="bottom"):
+        self.nav_calls.append({"item": item, "parent": parent, "position": position})
+        return {"ok": True}
+
+    def remove_navigation_item(self, module=None, title=None, *, missing_ok=True):
+        self.nav_removed.append({"module": module, "title": title})
+        return {"ok": True}
 
 
 def test_field_builder_defaults_and_overrides():
@@ -696,6 +713,7 @@ class DeleteClient:
 
     def __init__(self, *, published=True, staging=True, referrer=False):
         self.calls = []
+        self.app_config = FakeAppConfigAPI()
         self._published = published
         self._staging = staging
         widget_rec = {
@@ -826,6 +844,26 @@ def test_delete_module_drops_orphan_tables_when_appliance_given(monkeypatch):
     res = api.delete_module("widgets", drop_orphan_tables=sentinel_facts)
     assert dropped_for == {"table": "widgets", "yes": True}
     assert res["dropped_tables"] == ["widgets", "widgets_team"]
+
+
+def test_delete_module_remove_from_nav(monkeypatch):
+    c = DeleteClient(referrer=False)
+    api = ModulesAdminAPI(c)
+    monkeypatch.setattr(api, "publish", lambda **kw: {"ok": True})
+    monkeypatch.setattr(api, "get_view_templates", lambda module: [])
+    res = api.delete_module("widgets", remove_from_nav=True)
+    assert res["nav_removed"] is True
+    assert c.app_config.nav_removed == [{"module": "widgets", "title": None}]
+
+
+def test_delete_module_no_nav_removal_by_default(monkeypatch):
+    c = DeleteClient(referrer=False)
+    api = ModulesAdminAPI(c)
+    monkeypatch.setattr(api, "publish", lambda **kw: {"ok": True})
+    monkeypatch.setattr(api, "get_view_templates", lambda module: [])
+    res = api.delete_module("widgets")
+    assert res["nav_removed"] is None
+    assert c.app_config.nav_removed == []
 
 
 def test_delete_module_skips_table_drop_when_no_appliance(monkeypatch):
@@ -1021,6 +1059,55 @@ def test_create_module_with_empty_grant_to_list_no_pending():
     assert len(c.roles.grant_calls) == 0
 
 
+def test_create_module_add_to_nav_is_deferred_until_publish():
+    # A new module is staging-only; the nav entry routes to a live module and gates on a
+    # permission that only resolves post-publish, so it must be deferred like grants.
+    c = PublishGrantClient()
+    admin = ModulesAdminAPI(c)
+    admin.create_module("widgets", label="Widget", add_to_nav=True, create_view_templates=False)
+    assert c.app_config.nav_calls == []  # nothing added yet
+    assert admin._pending_nav == {"widgets": {"title": "Widget", "icon": None, "parent": None, "position": "bottom"}}
+
+    admin.publish(poll_interval=0)
+    assert len(c.app_config.nav_calls) == 1
+    call = c.app_config.nav_calls[0]
+    # Default: new top-level section at the bottom, gated by read on the module.
+    assert call["parent"] is None and call["position"] == "bottom"
+    item = call["item"]
+    assert item.title == "Widget"
+    assert item.icon == "icon icon-bookmark"
+    assert item.state.parameters == {"module": "widgets"}
+    assert item.require.module == "widgets" and item.require.action == "read"
+    assert admin._pending_nav == {}  # cleared after flushing
+
+
+def test_create_module_add_to_nav_custom_placement():
+    c = PublishGrantClient()
+    admin = ModulesAdminAPI(c)
+    admin.create_module(
+        "widgets",
+        label="Widget",
+        add_to_nav=True,
+        nav_title="My Widgets",
+        nav_icon="icon icon-star",
+        nav_parent="Incident Response",
+        nav_position="top",
+        create_view_templates=False,
+    )
+    admin.publish(poll_interval=0)
+    call = c.app_config.nav_calls[0]
+    assert call["parent"] == "Incident Response" and call["position"] == "top"
+    assert call["item"].title == "My Widgets" and call["item"].icon == "icon icon-star"
+
+
+def test_create_module_without_add_to_nav_no_pending():
+    c = RecordingClient()
+    admin = ModulesAdminAPI(c)
+    admin.create_module("widgets", create_view_templates=False)
+    assert admin._pending_nav == {}
+    assert len(c.app_config.nav_calls) == 0
+
+
 def test_permission_error_includes_rbac_hint():
     """Test that 403 PermissionError messages are enriched with RBAC guidance."""
     from pyfsr.exceptions import PermissionError, handle_api_error
@@ -1214,3 +1301,155 @@ def test_wait_for_publish_raises_on_fresh_error_log():
     except FortiSOARException:
         raised = True
     assert raised
+
+
+# -- get_or_create_module (idempotent ensure-state) -------------------------
+class _FakeStub:
+    """Minimal client; get_or_create_module is exercised via monkeypatched API methods."""
+
+    def __init__(self):
+        self.roles = FakeRolesAPI()
+
+
+def _api_with_tracking(monkeypatch, *, published, staging):
+    api = ModulesAdminAPI(_FakeStub())
+    calls = {"create": 0, "publish": 0}
+    monkeypatch.setattr(api, "get_published", lambda m, **k: published)
+    monkeypatch.setattr(api, "get_staging", lambda m, **k: staging)
+
+    def _create(m, **kw):
+        calls["create"] += 1
+        return {"uuid": "new", "type": m}
+
+    def _publish(**kw):
+        calls["publish"] += 1
+        return {"status": "started"}
+
+    monkeypatch.setattr(api, "create_module", _create)
+    monkeypatch.setattr(api, "publish", _publish)
+    return api, calls
+
+
+def test_get_or_create_module_existing_published_no_side_effects(monkeypatch):
+    api, calls = _api_with_tracking(monkeypatch, published={"type": "widgets", "uuid": "p"}, staging=None)
+    meta, created = api.get_or_create_module("widgets")
+    assert created is False
+    assert meta["uuid"] == "p"
+    assert calls == {"create": 0, "publish": 0}  # nothing created, nothing published
+
+
+def test_get_or_create_module_existing_staging_only_not_force_published(monkeypatch):
+    api, calls = _api_with_tracking(monkeypatch, published=None, staging={"type": "widgets", "uuid": "s"})
+    meta, created = api.get_or_create_module("widgets")
+    assert created is False
+    assert meta["uuid"] == "s"
+    assert calls["publish"] == 0  # appliance-wide publish not triggered for an existing draft
+
+
+def test_get_or_create_module_creates_and_publishes_when_absent(monkeypatch):
+    # absent on first look; after create+publish, published metadata is available.
+    states = {"published": None}
+    api = ModulesAdminAPI(_FakeStub())
+    calls = {"create": 0, "publish": 0}
+    monkeypatch.setattr(api, "get_published", lambda m, **k: states["published"])
+    monkeypatch.setattr(api, "get_staging", lambda m, **k: None)
+
+    def _create(m, **kw):
+        calls["create"] += 1
+
+    def _publish(**kw):
+        calls["publish"] += 1
+        states["published"] = {"type": "widgets", "uuid": "live"}
+
+    monkeypatch.setattr(api, "create_module", _create)
+    monkeypatch.setattr(api, "publish", _publish)
+
+    meta, created = api.get_or_create_module("widgets", fields=[{"name": "name"}])
+    assert created is True
+    assert meta["uuid"] == "live"
+    assert calls == {"create": 1, "publish": 1}
+
+
+def test_get_or_create_module_no_publish_returns_staging(monkeypatch):
+    states = {"staging": None}
+    api = ModulesAdminAPI(_FakeStub())
+    calls = {"create": 0, "publish": 0}
+    monkeypatch.setattr(api, "get_published", lambda m, **k: None)
+    monkeypatch.setattr(api, "get_staging", lambda m, **k: states["staging"])
+
+    def _create(m, **kw):
+        calls["create"] += 1
+        states["staging"] = {"type": "widgets", "uuid": "stg"}
+
+    monkeypatch.setattr(api, "create_module", _create)
+    monkeypatch.setattr(api, "publish", lambda **k: calls.__setitem__("publish", calls["publish"] + 1))
+
+    meta, created = api.get_or_create_module("widgets", publish=False)
+    assert created is True
+    assert meta["uuid"] == "stg"
+    assert calls["publish"] == 0
+
+
+# ---------------------------------------------------------------------------
+# T3.7 — builders return typed AttributeMetadata (dict-compatible), consumers
+# still POST plain wire dicts (byte-identical to the pre-typing behavior).
+# ---------------------------------------------------------------------------
+
+from pyfsr.models import AttributeMetadata  # noqa: E402
+
+
+def test_builders_return_typed_attribute_metadata():
+    assert isinstance(ModulesAdminAPI.field("a"), AttributeMetadata)
+    assert isinstance(ModulesAdminAPI.text_field("b"), AttributeMetadata)
+    assert isinstance(ModulesAdminAPI.integer_field("c"), AttributeMetadata)
+    assert isinstance(ModulesAdminAPI.picklist_field("d", "AlertSeverity"), AttributeMetadata)
+    assert isinstance(ModulesAdminAPI.lookup_field("e", "people"), AttributeMetadata)
+    assert isinstance(ModulesAdminAPI.relationship_field("f", "alerts"), AttributeMetadata)
+
+
+def test_typed_field_is_dict_compatible_for_reads():
+    f = ModulesAdminAPI.text_field("name", required=True, label="Name")
+    # __getitem__, get, __contains__ all behave like the old dict
+    assert f["type"] == "string"
+    assert f["formType"] == "text"
+    assert f.get("name") == "name"
+    assert "validation" in f
+    assert f["validation"]["required"] is True
+
+
+def test_create_module_posts_plain_dict_attributes():
+    c = RecordingClient()
+    api = ModulesAdminAPI(c)
+    api.create_module(
+        "widgets",
+        fields=[api.text_field("name", required=True), api.picklist_field("sev", "AlertSeverity")],
+        create_view_templates=False,
+    )
+    _, _, data = c.calls[-1]
+    attrs = data["attributes"]
+    # every posted attribute is a plain dict, not a model
+    assert all(type(a) is dict for a in attrs)
+    assert [a["name"] for a in attrs] == ["name", "sev"]
+
+
+def test_add_field_accepts_typed_field():
+    c = RecordingClient()
+    # seed a staging module so add_field can append
+    ModulesAdminAPI(c).create_module("widgets", create_view_templates=False)
+    api = ModulesAdminAPI(c)
+    # staging lookup is via get; RecordingClient returns {} so stub get_staging
+    api.get_staging = lambda m: {"@id": "/api/3/staging_model_metadatas/x", "attributes": []}
+    api._put_attributes = lambda mod, attrs: {"attributes": attrs}
+    result = api.add_field("widgets", api.integer_field("count"), create_reverse=False)
+    posted = result["attributes"]
+    assert all(type(a) is dict for a in posted)
+    assert posted[-1]["name"] == "count" and posted[-1]["type"] == "integer"
+
+
+def test_scope_field_to_teams_accepts_and_returns_typed():
+    api = ModulesAdminAPI(TeamScopeClient())
+    f = api.relationship_field("approvers", "people")
+    scoped = api.scope_field_to_teams(f, ["TeamA", "SOC Team"])
+    assert isinstance(scoped, AttributeMetadata)
+    assert scoped["dataSourceFilters"]["showTeams"] is True
+    assert scoped["dataSourceFilters"]["teams"] == ["TeamA", "SOC Team"]

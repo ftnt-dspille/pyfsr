@@ -145,25 +145,15 @@ def main() -> int:
         name, label = spec["name"], spec["config_name"]
         print(f"===== {name} =====")
 
-        # 1. ensure installed (servicenow-cmdb may need a Content-Hub install)
-        installed = any(
-            (getattr(ic, "name", None) or (ic.get("name") if isinstance(ic, dict) else None)) == name
-            for ic in conn.list_configured()
-        )
-        if not installed:
-            print(f"  not installed — installing {name} 1.0.0 from Content Hub ...")
-            final = conn.install(name, "1.0.0", wait=True, timeout=300, interval=3)
-            print(f"  install: {getattr(final, 'status', None)}")
-        else:
-            print("  installed: yes")
-
-        # 2. configure (upsert = idempotent; validate structurally; default=True so a
-        #    config-less connector step picks it up)
+        # 1+2. ensure installed (Content-Hub install if missing) AND configured.
+        #      Idempotent: install is skipped when present, the named config is
+        #      upserted; default=True so a config-less connector step picks it up.
         try:
-            cfg = conn.upsert_configuration(
+            cfg = conn.ensure_configured(
                 name,
                 spec["config"],
-                name=label,
+                config_name=label,
+                version="1.0.0",
                 default=True,
                 validate=True,
                 autofill=True,
@@ -190,13 +180,10 @@ def main() -> int:
             continue
         try:
             r = conn.execute(name, op, config_name=label, params=params)
-            status = getattr(r, "status", None)
-            msg = getattr(r, "message", "") or ""
-            data = getattr(r, "data", None)
-            ok = str(status).lower() == "success"
-            print(f"  smoke {op} -> status={status} msg={msg!r}")
-            print(f"    output preview: {_show(data)}")
-            results.append((name, op, ok, msg or ("success" if ok else f"status={status}")))
+            msg = r.message or ""
+            print(f"  smoke {op} -> status={r.status} msg={msg!r}")
+            print(f"    output preview: {_show(r.data)}")
+            results.append((name, op, r.ok, msg or ("success" if r.ok else f"status={r.status}")))
         except FortiSOARException as e:
             print(f"  SMOKE FAILED ({op}): {e}")
             results.append((name, op, False, str(e)))

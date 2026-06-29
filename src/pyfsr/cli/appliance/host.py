@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from .transport import Transport
+from .transport import Transport, TransportError
 
 # Default process patterns worth tracking on a FortiSOAR box: the celery worker
 # pool (sticky-RSS suspect) and the integrations uwsgi workers (unbounded-alloc
@@ -90,9 +90,13 @@ class HostSnapshot:
 
 
 def meminfo(transport: Transport) -> MemInfo:
-    """Memory + swap usage in MB."""
+    """Memory + swap usage in MB.
+
+    Raises :class:`~pyfsr.cli.appliance.transport.TransportError` if the command
+    produced no usable output (a real host always reports a non-zero total).
+    """
     out = transport.run(["free", "-m"]).stdout
-    return _parse_meminfo(out)
+    return _require_captured_mem(_parse_meminfo(out), source="free -m")
 
 
 def loadavg(transport: Transport) -> LoadAvg:
@@ -143,12 +147,41 @@ def snapshot(
     out = transport.run(["sh", "-c", script]).stdout
     sections = _split_sections(out)
 
+    # A capture can come back empty or truncated — most commonly when the box is
+    # under heavy load/swap and the SSH command returns no (or partial) output
+    # *without* raising. Parsed naively that yields an all-zeros snapshot that is
+    # indistinguishable from a real reading and silently corrupts callers (e.g. a
+    # spurious "0 worker" pool-collapse). A live host always reports a non-zero
+    # memory total, so validate the headline section before trusting the rest.
+    mem = _require_captured_mem(_parse_meminfo(sections.get("FREE", "")), source="snapshot")
+
     return HostSnapshot(
-        mem=_parse_meminfo(sections.get("FREE", "")),
+        mem=mem,
         load=_parse_loadavg(sections.get("LOAD", "")),
         procs={label: _parse_process_rss(sections.get("PS", ""), pat) for label, pat in procs.items()},
         disk=_parse_disk(sections.get("DF", ""), disk_path) if disk_path else None,
     )
+
+
+# --- capture validation --------------------------------------------------------
+
+
+def _require_captured_mem(mem: MemInfo, *, source: str) -> MemInfo:
+    """Return ``mem`` unchanged, or raise if it is a degenerate (all-zeros) read.
+
+    ``free -m`` on any running host reports a non-zero ``total``; a zero total
+    means the command produced empty or truncated output (the parsers default to
+    zero on missing input). Surfacing this as a
+    :class:`~pyfsr.cli.appliance.transport.TransportError` lets
+    callers' existing transport-error handling skip the bad sample instead of
+    treating ``0 MB`` as real data.
+    """
+    if mem.total_mb <= 0:
+        raise TransportError(
+            f"{source}: captured no host metrics (memory total parsed as "
+            f"{mem.total_mb} MB — empty or truncated command output)"
+        )
+    return mem
 
 
 # --- parsers (pure functions — unit-tested without a live box) -----------------

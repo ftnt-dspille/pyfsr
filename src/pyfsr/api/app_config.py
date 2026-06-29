@@ -19,29 +19,84 @@ visibility rule gates on permission, not installation status.
 
 Accessed as ``client.app_config``.
 
-Example:
-    .. code-block:: python
+The navigation tree is modelled as :class:`~pyfsr.models.NavItem` throughout: reads
+return typed items, and writes accept them. Construct entries with the typed models
+and the SDK serializes them to the wire shape::
 
-        # Fetch the current navigation config
-        config = client.app_config.get()
-        nav = config["config"]["navigation"]
+    from pyfsr.models import NavItem, NavRequire, NavState
 
-        # Find the SLA Templates entry (if present)
-        sla_item = client.app_config.find_navigation_item(module="sla_templates")
-        print(sla_item["require"])  # {"module": "sla_templates", "action": "canRead"}
-
-        # Update navigation items
-        updated = client.app_config.update_navigation([...updated items...])
+    leaf = NavItem(
+        title="My Module",
+        icon="icon icon-bookmark",
+        state=NavState(name="main.modules.list", parameters={"module": "my_module"}),
+        require=NavRequire(module="my_module", action="read"),
+    )
+    client.app_config.add_navigation_item(leaf, parent="Incident Response", position="top")
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
+from ..models import NavItem, NavRequire, NavState
 from .base import BaseAPI
 
 #: Fixed endpoint for application configuration (navigation, module visibility).
 _APP_CONFIG = "/api/views/1/app"
+
+
+def _item_module(item: NavItem) -> str | None:
+    """Extract the module a nav leaf binds, from ``require`` or ``state``.
+
+    A leaf's module may live on ``require.module`` (the visibility gate) or on
+    ``state.parameters.module`` (the route param); ``parameters`` is sometimes an
+    empty list rather than a dict, so the state hop is type-guarded.
+    """
+    require = item.require
+    if isinstance(require, NavRequire) and require.module:
+        return require.module
+    params = item.state.parameters if isinstance(item.state, NavState) else None
+    if isinstance(params, dict):
+        return params.get("module")
+    return None
+
+
+def _find(nav: list[NavItem], module: str | None, title: str | None) -> NavItem | None:
+    """Depth-first search of the (nested) navigation tree for one item.
+
+    Top-level entries are menu *groups* carrying their leaves under ``items``;
+    only leaves bind a module. Matches by ``title`` or by bound module name.
+    """
+    for item in nav:
+        if title is not None and item.title == title:
+            return item
+        if module is not None and _item_module(item) == module:
+            return item
+        if item.items:
+            hit = _find(item.items, module, title)
+            if hit is not None:
+                return hit
+    return None
+
+
+def _remove(nav: list[NavItem], module: str | None, title: str | None) -> int:
+    """Remove every entry matching ``module``/``title`` from the (nested) tree in place.
+
+    Returns the number of entries removed (descends into groups). Matches by ``title`` or
+    by bound module name — the same criteria as :func:`_find`.
+    """
+    removed = 0
+    kept: list[NavItem] = []
+    for item in nav:
+        matches = (title is not None and item.title == title) or (module is not None and _item_module(item) == module)
+        if matches:
+            removed += 1
+            continue
+        if item.items:
+            removed += _remove(item.items, module, title)
+        kept.append(item)
+    nav[:] = kept
+    return removed
 
 
 class AppConfigAPI(BaseAPI):
@@ -53,67 +108,58 @@ class AppConfigAPI(BaseAPI):
     with ``module`` and ``action`` keys restricts visibility to users with that
     permission on that module.
 
-    Use these methods to inspect or modify navigation items and their visibility
-    constraints.
+    Reads and writes both speak :class:`~pyfsr.models.NavItem`; use these methods
+    to inspect or modify navigation items and their visibility constraints.
     """
 
     def get(self) -> dict[str, Any]:
-        """Fetch the current application configuration (navigation + visibility).
+        """Fetch the full application configuration document (the raw envelope).
 
         Returns:
             dict[str, Any]: The full application configuration document
-            (``{"id": "app", "type": "app", "config": {"header": {...}, "navigation": [...]}}``).
-
-        Example:
-            .. code-block:: python
-
-                config = client.app_config.get()
-                nav_items = config["config"]["navigation"]
+            (``{"id": "app", "type": "app", "config": {"navigation": [...]}}``).
+            For just the navigation tree, use :meth:`get_navigation`.
         """
         result = self.client.get(_APP_CONFIG)
         assert isinstance(result, dict)
         return result
 
-    def get_navigation(self) -> list[dict[str, Any]]:
-        """Return just the ``navigation`` array from the application config.
+    def get_navigation(self) -> list[NavItem]:
+        """Return the navigation tree as typed :class:`~pyfsr.models.NavItem` models.
 
-        The navigation array is a list of navigation items; each item has
-        ``title``, ``icon``, ``require``, ``state``, and other fields that
-        define a module's presence in the navigation bar.
+        Parses ``config.navigation`` recursively (including nested groups under
+        ``items``). Items preserve unknown keys, so they round-trip cleanly back
+        through :meth:`update_navigation`.
 
         Returns:
-            List of navigation items (the ``config.navigation`` array).
+            List of :class:`~pyfsr.models.NavItem` (top-level entries; groups
+            carry their children under ``.items``).
 
         Example:
             .. code-block:: python
 
-                nav = client.app_config.get_navigation()
-                print(f"Navigation has {len(nav)} items")
+                for item in client.app_config.get_navigation():
+                    print(item.title, "group" if item.is_group else _item_module(item))
         """
         config = self.get()
         nav = config.get("config", {}).get("navigation", [])
         assert isinstance(nav, list)
-        return nav
+        return [NavItem.model_validate(item) for item in nav]
 
-    def find_navigation_item(
-        self, module: str | None = None, title: str | None = None, nav: list[dict[str, Any]] | None = None
-    ) -> dict[str, Any] | None:
+    def find_navigation_item(self, module: str | None = None, title: str | None = None) -> NavItem | None:
         """Find a single navigation item by module name or title.
 
-        Searches the current navigation for an item matching the given criteria.
-        Returns the first match, or ``None`` if no item is found.
+        Searches the current navigation (depth-first, including nested groups) for
+        the first item matching the criteria. Returns ``None`` if not found.
 
         Args:
-            module: Module name to match (e.g. ``"sla_templates"``). Matched
-                against the item's ``state.parameters.module`` field.
-            title: Human-readable title to match (e.g. ``"SLA Templates"``).
-                Matched against the item's ``title`` field (case-sensitive).
-            nav: Optional pre-fetched navigation array. If not provided, will call
-                :meth:`get_navigation` to fetch it. Internal use.
+            module: Module name to match (e.g. ``"sla_templates"``), against the
+                item's ``require.module`` or ``state.parameters.module``.
+            title: Human-readable title to match (e.g. ``"Alerts"``), against the
+                item's ``title`` (case-sensitive).
 
         Returns:
-            The matching navigation item dict (with ``title``, ``icon``, ``require``,
-            ``state``, etc.), or ``None`` if not found.
+            The matching :class:`~pyfsr.models.NavItem`, or ``None``.
 
         Raises:
             ValueError: if both ``module`` and ``title`` are ``None``.
@@ -121,116 +167,166 @@ class AppConfigAPI(BaseAPI):
         Example:
             .. code-block:: python
 
-                # Find SLA Templates by module name
                 item = client.app_config.find_navigation_item(module="sla_templates")
                 if item:
-                    print(item["title"], item["require"])
-
-                # Find by title instead
-                alerts_item = client.app_config.find_navigation_item(title="Alerts")
+                    print(item.title, item.require)
         """
         if module is None and title is None:
             raise ValueError("find_navigation_item() requires module or title")
+        return _find(self.get_navigation(), module, title)
 
-        if nav is None:
-            nav = self.get_navigation()
-        return self._search_nav(nav, module, title)
-
-    @classmethod
-    def _search_nav(cls, nav: list[dict[str, Any]], module: str | None, title: str | None) -> dict[str, Any] | None:
-        """Depth-first search of the (nested) navigation tree.
-
-        Top-level entries are menu *groups* carrying their leaf entries under
-        ``items``; only the leaves bind a module. A leaf's module may live on
-        ``require.module`` (the visibility gate) or ``state.parameters.module``
-        (the route param) — and ``state``/``parameters`` are frequently ``None``
-        or an empty list rather than a dict, so every hop is type-guarded.
-        """
-        for item in nav:
-            if not isinstance(item, dict):
-                continue
-            if title is not None and item.get("title") == title:
-                return item
-            if module is not None and cls._item_module(item) == module:
-                return item
-            children = item.get("items")
-            if isinstance(children, list):
-                hit = cls._search_nav(children, module, title)
-                if hit is not None:
-                    return hit
-        return None
-
-    @staticmethod
-    def _item_module(item: dict[str, Any]) -> str | None:
-        """Extract the module a nav leaf binds, from ``require`` or ``state``."""
-        require = item.get("require")
-        if isinstance(require, dict) and require.get("module"):
-            return require["module"]
-        state = item.get("state")
-        params = state.get("parameters") if isinstance(state, dict) else None
-        if isinstance(params, dict):
-            return params.get("module")
-        return None
-
-    def update_navigation(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+    def update_navigation(self, items: list[NavItem]) -> dict[str, Any]:
         """Replace the entire ``navigation`` array and commit via PUT.
 
-        Updates the navigation configuration by replacing the ``navigation`` array
-        with the provided items, then PUTs the entire configuration back to the
-        appliance.
-
-        This is a full replacement, not a merge: the entire navigation array is
-        substituted. To make a surgical change to one item, use
-        :meth:`find_navigation_item` to read it, modify it, then collect all
-        items (unchanged + modified) and pass them here.
+        Full replacement, not a merge: the whole ``navigation`` array is
+        substituted with ``items`` (serialized to the wire shape) and the document
+        is PUT back. To change one item surgically, read with :meth:`get_navigation`,
+        mutate the item you want, and pass the whole list back here.
 
         Args:
-            items: New list of navigation items. Each item should have at minimum
-                ``title``, ``icon``, ``require``, and ``state`` fields. ``require``
-                may be an empty list ``[]`` (unrestricted) or an object
-                ``{"module": "...", "action": "..."}`` (gated by permission).
+            items: New list of :class:`~pyfsr.models.NavItem`.
 
         Returns:
             The API response (the updated configuration document).
 
         Raises:
-            ValueError: if ``items`` is not a list or is empty.
+            ValueError: if ``items`` is empty.
 
         Example:
             .. code-block:: python
 
-                # Read current navigation, modify one item, save
                 nav = client.app_config.get_navigation()
-                sla_item = next((x for x in nav if x["title"] == "SLA Templates"), None)
-                if sla_item:
-                    sla_item["require"] = []  # Make unrestricted
+                sla = next((x for x in nav if x.title == "SLA Templates"), None)
+                if sla:
+                    sla.require = []  # make unrestricted
                 client.app_config.update_navigation(nav)
         """
-        if not isinstance(items, list):
-            raise ValueError("items must be a list of navigation objects")
         if not items:
             raise ValueError("items list cannot be empty")
 
         config = self.get()
-        config["config"]["navigation"] = items
+        config["config"]["navigation"] = [it.to_dict(by_alias=True, exclude_none=True) for it in items]
         result = self.client.put(_APP_CONFIG, data=config)
         assert isinstance(result, dict)
         return result
 
+    def add_navigation_item(
+        self,
+        item: NavItem,
+        *,
+        parent: str | None = None,
+        position: Literal["top", "bottom"] = "bottom",
+    ) -> dict[str, Any]:
+        """Add a single item to the navigation, then commit via PUT.
+
+        Reads the current navigation, inserts ``item`` at the requested location,
+        and writes the whole tree back. Existing items round-trip unchanged.
+
+        Args:
+            item: The :class:`~pyfsr.models.NavItem` to add. A leaf binds a module
+                via ``state``/``require``; a group carries children under ``items``.
+            parent: Where to add it. ``None`` (default) targets the top-level bar.
+                Otherwise the string matches an existing entry by its ``title`` or
+                bound module name (depth-first), and the item is inserted into that
+                entry's ``items`` — making it a group if it was a leaf. Groups are
+                matched by title; modules resolve to the leaf that binds them.
+            position: ``"bottom"`` (default) appends; ``"top"`` prepends — within
+                the target array (top-level or the parent group's children).
+
+        Returns:
+            The API response (the updated configuration document).
+
+        Raises:
+            ValueError: if ``position`` is invalid, or ``parent`` is given but no
+                matching group is found.
+
+        Example:
+            .. code-block:: python
+
+                from pyfsr.models import NavItem, NavRequire, NavState
+
+                leaf = NavItem(
+                    title="My Module",
+                    icon="icon icon-bookmark",
+                    state=NavState(name="main.modules.list", parameters={"module": "my_module"}),
+                    require=NavRequire(module="my_module", action="read"),
+                )
+                client.app_config.add_navigation_item(leaf)                       # top-level, bottom
+                client.app_config.add_navigation_item(leaf, parent="Incident Response", position="top")
+        """
+        if position not in ("top", "bottom"):
+            raise ValueError("position must be 'top' or 'bottom'")
+
+        nav = self.get_navigation()
+        if parent is None:
+            target = nav
+        else:
+            group = _find(nav, module=parent, title=parent)
+            if group is None:
+                raise ValueError(f"No navigation group found for parent {parent!r}")
+            if group.items is None:
+                group.items = []
+            target = group.items
+
+        if position == "top":
+            target.insert(0, item)
+        else:
+            target.append(item)
+
+        return self.update_navigation(nav)
+
+    def remove_navigation_item(
+        self, module: str | None = None, title: str | None = None, *, missing_ok: bool = True
+    ) -> dict[str, Any] | None:
+        """Remove navigation entries matching ``module`` or ``title``, then commit via PUT.
+
+        The inverse of :meth:`add_navigation_item`. Removes **every** matching entry from the
+        (nested) tree — descending into groups — and writes the result back. Removing a group
+        removes its children with it.
+
+        Args:
+            module: Module name to match (against ``require.module`` / ``state.parameters.module``).
+            title: Title to match (case-sensitive).
+            missing_ok: If True (default), a no-match is a no-op that returns ``None`` without
+                writing. If False, a no-match raises ``ValueError``.
+
+        Returns:
+            The updated configuration document, or ``None`` if nothing matched and
+            ``missing_ok`` is True.
+
+        Raises:
+            ValueError: if both ``module`` and ``title`` are ``None``, or if nothing matched
+                and ``missing_ok`` is False.
+
+        Example:
+            .. code-block:: python
+
+                client.app_config.remove_navigation_item(module="navprobe")
+                client.app_config.remove_navigation_item(title="Old Section")
+        """
+        if module is None and title is None:
+            raise ValueError("remove_navigation_item() requires module or title")
+
+        nav = self.get_navigation()
+        removed = _remove(nav, module, title)
+        if removed == 0:
+            if missing_ok:
+                return None
+            raise ValueError(f"no navigation item matched module={module!r}, title={title!r}")
+        return self.update_navigation(nav)
+
     def set_navigation_visibility(
-        self, module: str, *, require: list[Any] | dict[str, str] | None = None
+        self, module: str, *, require: NavRequire | dict[str, str] | list[Any] | None = None
     ) -> dict[str, Any]:
         """Update the visibility gate (``require``) for a single navigation item.
 
-        Finds the navigation item for the given module, updates its ``require``
-        field, and commits the change. This is a convenience wrapper around
-        :meth:`find_navigation_item` + :meth:`update_navigation`.
+        Finds the item for ``module``, updates its ``require``, and commits.
 
         Args:
             module: Module name (e.g. ``"sla_templates"``).
-            require: Visibility gate — ``None`` or ``[]`` for unrestricted
-                visibility, or ``{"module": "...", "action": "..."}`` to gate by
-                permission on a specific module.
+            require: Visibility gate — ``None`` or ``[]`` for unrestricted, or a
+                :class:`~pyfsr.models.NavRequire` / ``{"module": ..., "action": ...}``
+                to gate by permission.
 
         Returns:
             The API response (the updated configuration document).
@@ -244,21 +340,21 @@ class AppConfigAPI(BaseAPI):
                 # Make SLA Templates unrestricted
                 client.app_config.set_navigation_visibility("sla_templates", require=[])
 
-                # Gate visibility by canRead permission on sla_templates module
+                # Gate by canRead permission
                 client.app_config.set_navigation_visibility(
-                    "sla_templates",
-                    require={"module": "sla_templates", "action": "canRead"}
+                    "sla_templates", require=NavRequire(module="sla_templates", action="canRead")
                 )
         """
         nav = self.get_navigation()
-        item = self.find_navigation_item(module=module, nav=nav)
+        item = _find(nav, module=module, title=None)
         if item is None:
             raise ValueError(f"No navigation item found for module {module!r}")
 
-        # Update the item's require field (note: modifies item in-place in nav)
         if require is None:
-            item["require"] = []
+            item.require = []
+        elif isinstance(require, dict):
+            item.require = NavRequire.model_validate(require)
         else:
-            item["require"] = require
+            item.require = require
 
         return self.update_navigation(nav)

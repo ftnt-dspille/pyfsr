@@ -103,6 +103,10 @@ def ensure_modules(admin) -> bool:
                 admin.datetime_field("goTime"),
                 admin.relationship_field("crew", "crew", label="Crew"),
             ],
+            # Surface the module in the UI nav bar — a new top-level section at the
+            # bottom, gated by read permission on `heists`. Deferred until publish()
+            # (same as grant_to), since the entry routes to the live module.
+            add_to_nav=True,
         )
         changed = True
 

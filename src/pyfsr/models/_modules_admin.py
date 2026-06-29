@@ -73,7 +73,8 @@ class AttributeMetadata(BaseRecord):
     grid_column: bool = Field(default=False, alias="gridColumn")
     skip_serialization: bool = Field(default=False, alias="skipSerialization")
     html_escape: bool = Field(default=False, alias="htmlEscape")
-    visibility: bool = True
+    # bool for plain Visible/Hidden, or a condition object for "Visible by Condition"
+    visibility: bool | dict[str, Any] = True
     readable: bool = True
     writeable: bool = True
     unique: bool = False

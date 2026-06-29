@@ -73,6 +73,39 @@ def to_jsonable(obj: Any) -> Any:
     return obj
 
 
+def iri_to_uuid(value: Any) -> str | None:
+    """Extract the uuid from a FortiSOAR IRI, record, or model.
+
+    FortiSOAR identifies records by IRI (``@id``, e.g. ``/api/3/alerts/<uuid>``);
+    the uuid is the last path segment. This accepts whatever you have on hand and
+    returns the uuid, or ``None`` if none can be found:
+
+    - a **string** IRI (``"/api/3/alerts/abc-123"`` → ``"abc-123"``) or a bare uuid
+      (returned unchanged),
+    - a **record dict** — preferring ``@id``, then a literal ``uuid`` / ``id`` key,
+    - a **model** (``BaseRecord``/``ApiResult``) — normalized then read the same way.
+
+    Replaces the recurring ``rec["@id"].split("/")[-1] if "@id" in rec else rec["id"]``
+    idiom.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (BaseRecord, ApiResult)):
+        value = value.to_dict(by_alias=True)
+    if isinstance(value, dict):
+        iri = value.get("@id")
+        if isinstance(iri, str) and iri:
+            return iri.rstrip("/").rsplit("/", 1)[-1]
+        for key in ("uuid", "id"):
+            v = value.get(key)
+            if isinstance(v, str) and v:
+                return v.rstrip("/").rsplit("/", 1)[-1] if "/" in v else v
+        return None
+    if isinstance(value, str):
+        return value.rstrip("/").rsplit("/", 1)[-1] if value else None
+    return None
+
+
 def _collapse_value(value: Any) -> Any:
     """Reduce an expanded picklist / relationship object to a readable scalar.
 
