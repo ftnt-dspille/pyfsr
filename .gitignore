@@ -46,6 +46,9 @@ src/pyfsr/_version.py
 # Planning docs (may accrue infra detail / creds) — keep local
 docs/plans/
 
+# Scratch / scratchpad: throwaway scripts, pilot data, reference DBs — keep local
+scratch/
+
 # Generated investigation dumps (real incident data: internal IPs, hostnames,
 # telemetry) — keep local, never commit
 examples/fortisiem_investigation_*.json
