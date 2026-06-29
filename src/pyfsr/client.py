@@ -29,8 +29,10 @@ from .api.export_templates import ExportTemplatesAPI
 from .api.feeds import IngestFeedsAPI
 from .api.import_config import ImportConfigAPI
 from .api.incidents import IncidentsAPI
+from .api.manual_input import ManualInputAPI
 from .api.modules import ModulesAPI
 from .api.modules_admin import ModulesAdminAPI
+from .api.notifications import NotificationsAPI
 from .api.picklists import PicklistsAPI
 from .api.playbooks import PlaybooksAPI
 from .api.roles import RolesAPI
@@ -306,6 +308,8 @@ class FortiSOAR:
         self.user_settings: UserSettingsAPI = UserSettingsAPI(self)
         self.auth_config: AuthConfigAPI = AuthConfigAPI(self)
         self.schedules: SchedulesAPI = SchedulesAPI(self)
+        self.notifications: NotificationsAPI = NotificationsAPI(self)
+        self.manual_input: ManualInputAPI = ManualInputAPI(self)
         self.users: UsersAPI = UsersAPI(self)
         self.ai: AIApi = AIApi(self)
 
