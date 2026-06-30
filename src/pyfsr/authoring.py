@@ -564,7 +564,7 @@ def compile_playbook_yaml(
             warning. Accepts the friendly code string (``"unknown_param"``), the
             ``ErrorCode`` enum, or the enum name (``"UNKNOWN_PARAM"``) — all are
             normalized to the enum the compiler matches on (see
-            :func:`_normalize_lax_codes`).
+            ``_normalize_lax_codes``).
 
     Raises:
         PlaybooksExtraNotInstalled: if the ``pyfsr[playbooks]`` extra is missing.
