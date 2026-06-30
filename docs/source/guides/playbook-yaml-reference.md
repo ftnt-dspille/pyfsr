@@ -270,18 +270,94 @@ exact `connector` / `operation` / param names with the discovery tools
 `collection:` stays the *record* IRI you're updating). Bare picklist labels
 (e.g. `status: Briefed`) are auto-resolved to picklist IRIs.
 
-### `delay`, `code_snippet`, `manual_input`, `approval`, `workflow_reference`
+### `delay`, `code_snippet`, `approval`
 
 These accept their canonical `arguments:` (see `pyfsr playbook validate` /
-`get_step_type`). `manual_input` keys (`title`, `description`, `options`,
-`inputs`) go at the **step level**, not under `arguments:`, and its `options`,
-like `decision` conditions, carry a per-entry `next:` for branching.
+`pyfsr playbook step-help <type>`).
+
+### `manual_input` — pause for human input
+
+`manual_input` keys (`title`, `description`, `options`, `inputs`) go at the
+**step level**, not under `arguments:`. `options`, like `decision` conditions,
+carry a per-entry `next:` for branching; `inputs` declare the fields the human
+fills in. A submitted field is read downstream as
+`vars.steps.<thisStep>.input.<field>`:
+
+```yaml
+- name: AskNumber
+  type: manual_input
+  title: Enter a six digit number
+  description: Please enter a number that is exactly 6 digits long.
+  inputs:
+    - {name: my_number, kind: integer, label: My Number, required: true}
+  options:
+    - {option: Submit, primary: true}
+  next: Validate
+```
 
 ```{note}
-`description:` on `manual_input` is optional: when omitted the compiler now falls
-back to the step's `title:` (the FortiSOAR runtime rejects a genuinely empty
-description body, so the fallback keeps a description-less prompt runnable). Set
-an explicit `description:` when you want prompt text distinct from the title.
+`description:` is optional: when omitted the compiler falls back to the step's
+`title:` (the FortiSOAR runtime rejects a genuinely empty description body, so
+the fallback keeps a description-less prompt runnable). Set an explicit
+`description:` when you want prompt text distinct from the title.
+```
+
+```{note}
+When driving a paused prompt with `client.manual_input`, a pending input's
+`.title` field is the **step name** (`AskNumber` above), not the schema title.
+The one-call `client.manual_input.answer(value, by_step=...)` hides this and the
+list-token-vs-numeric-id gotcha.
+```
+
+### `workflow_reference` — call another playbook
+
+Name the target playbook under `arguments:` as `target:` (a friendly alias the
+compiler resolves to the wire `workflowReference:` IRI — prefer `target:`).
+`apply_async: false` makes the parent wait synchronously so it can read the
+child's output:
+
+```yaml
+- name: CallChild
+  type: workflow_reference
+  next: StampResult
+  apply_async: false
+  arguments:
+    target: Validate Six Digit Number
+```
+
+**Cross-playbook output contract.** The child's output is whatever its *last*
+`set_variable` step sets. The parent reads it as `vars.steps.<refStep>.<childVar>`
+— so if the child ends with `set_variable` writing `is_valid_number`, the parent
+reads `vars.steps.CallChild.is_valid_number`. (In Jinja, spaces in a step name
+become underscores.)
+
+### `do_until` / `retry:` — loop a step until a condition holds
+
+Attach a `retry:` block (`until` / `times` / `delay`) to re-run a step until the
+Jinja `until` evaluates true. On a `workflow_reference` this re-launches the
+child each turn — e.g. re-popping a `manual_input` until the answer validates:
+
+```yaml
+- name: CallChild
+  type: workflow_reference
+  next: StampResult
+  apply_async: false
+  arguments:
+    target: Validate Six Digit Number
+  retry:
+    until: "{{ vars.steps.CallChild.is_valid_number == true }}"
+    times: 8
+    delay: 1
+```
+
+```{note}
+Each `retry:` turn produces its own child run linked to the parent by
+`parent_wf`; the parent itself may also span several run records. Locate the
+real parent as the top-level run (`parent_wf` null) and enumerate loop turns
+with `client.playbooks.child_runs(parent_pk)` (or `run_tree`) rather than
+counting runs by name. The full worked example is
+`examples/playbooks/do_until_validation_demo.yaml` (driver:
+`examples/do_until_validation_loop.py`).
 ```
 
 ### `stop` / `end`

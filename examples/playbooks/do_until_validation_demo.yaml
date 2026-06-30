@@ -1,0 +1,72 @@
+# Do-Until manual-input validation demo (parent + child).
+#
+# Parent ("Loop Until Six Digits") calls a child ("Validate Six Digit Number")
+# inside a do-until / retry loop. The child pops a Manual Input that collects an
+# integer `my_number`, a jinja validation decides whether it is exactly 6 digits,
+# and the child's last step returns `is_valid_number` (plus the echoed number).
+# The parent re-runs the child until `is_valid_number` is true, then stamps a
+# final variable from the child's output via `vars.steps.<ref>.<child var>`.
+#
+# Deploy + drive it with: examples/do_until_validation_loop.py
+
+collection: PyFSR Do-Until Validation Demo
+description: Parent do-until loop re-prompts a child manual input until a 6-digit number validates.
+visible: true
+
+playbooks:
+  # --- Child: ask + validate ------------------------------------------------
+  - name: Validate Six Digit Number
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        next: AskNumber
+
+      # Manual Input collecting one integer field `my_number`. After the human
+      # submits, the value is exposed at vars.steps.AskNumber.input.my_number.
+      - name: AskNumber
+        type: manual_input
+        title: Enter a six digit number
+        description: Please enter a number that is exactly 6 digits long.
+        inputs:
+          - {name: my_number, kind: integer, label: My Number, required: true}
+        options:
+          - {option: Submit, primary: true}
+        next: Validate
+
+      # Jinja validation: exactly 6 digits. The last step's vars become the
+      # child's output that the parent reads as vars.steps.<ref>.<name>.
+      - name: Validate
+        type: set_variable
+        vars:
+          is_valid_number: "{{ (vars.steps.AskNumber.input.my_number | string | length) == 6 }}"
+          validated_number: "{{ vars.steps.AskNumber.input.my_number }}"
+
+  # --- Parent: loop the child until valid -----------------------------------
+  - name: Loop Until Six Digits
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        next: CallChild
+
+      # Reference the child synchronously and retry the whole call until the
+      # child returns is_valid_number == true. Each retry re-launches the child,
+      # which pops a fresh Manual Input.
+      - name: CallChild
+        type: workflow_reference
+        next: StampResult
+        apply_async: false
+        arguments:
+          target: Validate Six Digit Number
+        retry:
+          until: "{{ vars.steps.CallChild.is_valid_number == true }}"
+          times: 8
+          delay: 1
+
+      # Prove the parent can consume the child's output via vars.steps.<ref>.*.
+      - name: StampResult
+        type: set_variable
+        vars:
+          final_number: "{{ vars.steps.CallChild.validated_number }}"
+          final_valid: "{{ vars.steps.CallChild.is_valid_number }}"

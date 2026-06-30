@@ -78,6 +78,22 @@ class RunEnv(ApiResult):
     steps: dict[str, RunStep] = Field(default_factory=dict)
 
 
+class RunNode(ApiResult):
+    """One node in a run tree, from :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_tree`.
+
+    The run plus its referenced-child runs (linked by ``parent_wf``), recursively.
+    ``pk`` is the numeric run id; ``children`` are the sub-playbook runs this run
+    spawned. Encodes the trigger→run→child linkage so callers don't have to find
+    the parent by name in the raw ``/api/wf/api/workflows`` listing.
+    """
+
+    pk: str | None = None
+    name: str | None = None
+    status: str | None = None
+    task_id: str | None = None
+    children: list[RunNode] = Field(default_factory=list)
+
+
 class RunFailure(ApiResult):
     """The slim failure projection from :meth:`~pyfsr.api.playbooks.PlaybooksAPI.why_failed`.
 

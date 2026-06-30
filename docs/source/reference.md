@@ -49,6 +49,7 @@ autoapi/pyfsr/auth/index
 
 Playbooks (authoring) <autoapi/pyfsr/authoring/index>
 autoapi/pyfsr/archetypes/index
+autoapi/pyfsr/playbook_catalog/index
 autoapi/pyfsr/playbook_freshness/index
 autoapi/pyfsr/playbook_lint/index
 autoapi/pyfsr/playbook_match/index

@@ -191,6 +191,57 @@ pyfsr playbook deploy alert_triage.yaml --replace \
     --port 13002 --no-verify-ssl
 ```
 
+## Discovering step types
+
+You don't have to memorize the friendly `type:` keywords or their keys. The
+`pyfsr playbook` group is the authoring index — `pyfsr playbook --help` lists
+every affordance, and two offline commands enumerate the step catalog:
+
+```bash
+# List every friendly step type with its canonical FSR name + purpose
+pyfsr playbook steps
+
+# Keys, pitfalls, the typed-args schema, and a real compiling example for one type
+pyfsr playbook step-help manual_input
+pyfsr playbook step-help decision --schema
+```
+
+The same data is available from Python via {func}`pyfsr.playbook_catalog.list_step_types`
+and {func}`pyfsr.playbook_catalog.step_help`.
+
+## Testing interactive playbooks & inspecting runs
+
+A playbook that pauses on a **Manual Input** / **Approval** step can be driven
+end to end from Python. {meth}`~pyfsr.api.manual_input.ManualInputAPI.answer`
+finds the pending prompt, resolves the numeric run id / submit option / user, and
+resumes — in one call (it hides the gotcha that a prompt's `.title` is the *step
+name*):
+
+```python
+client.playbooks.trigger("Loop Until Six Digits")
+client.manual_input.answer(654321, by_title="AskNumber")   # fill + resume
+```
+
+To inspect what ran, {meth}`~pyfsr.api.playbooks.PlaybooksAPI.run_tree` resolves a
+`task_id` to the run **plus its child runs** (no finding the parent by name), and
+{meth}`~pyfsr.api.playbooks.PlaybooksAPI.step_status` reads a step's outcome:
+
+```python
+resp = client.playbooks.trigger("Loop Until Six Digits")
+tree = client.playbooks.run_tree(resp["task_id"])   # parent + child runs, with pks
+client.playbooks.step_status(tree.pk, "StampResult")  # -> "finished"
+```
+
+```{note}
+FortiSOAR only records runtime `set_variable` / jinja values in the retrievable
+run record when **global workflow debug logging is enabled**; with it off (the
+default) `run_env(...).env` is empty for them. Either enable debug logging on the
+appliance to inspect env, or assert on a step's **status** (via `step_status`),
+which is always recorded.
+```
+
+A complete worked example lives in `examples/do_until_validation_loop.py`.
+
 ## Importing an existing export
 
 If you already have a `*.json` export from the UI's **Export** button (no

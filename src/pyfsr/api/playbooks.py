@@ -35,6 +35,7 @@ from ..models import (
     ResumeRequest,
     RunEnv,
     RunFailure,
+    RunNode,
     RunStep,
     RunSummary,
     TriggerActionRequest,
@@ -1031,6 +1032,15 @@ class PlaybooksAPI(BaseAPI):
 
         Step names are returned verbatim; in Jinja they are referenced as
         ``vars.steps.<name with spaces replaced by underscores>``.
+
+        .. note::
+            Runtime ``set_variable`` / jinja values are only captured in the
+            retrievable run record when the appliance has **global workflow debug
+            logging enabled**; with it off (the default), ``env`` and a step's
+            ``result`` come back empty for them. So unless you've turned debug
+            logging on, assert on the *verifiable* signal -- the step's
+            ``status`` -- via :meth:`step_status` rather than a value that may not
+            be recorded.
         """
         full = self.get_execution(run_pk, step_detail=True)
         steps: dict[str, RunStep] = {}
@@ -1049,6 +1059,76 @@ class PlaybooksAPI(BaseAPI):
             status=full.get("status"),
             steps=steps,
         )
+
+    def step_status(self, run: str | int, step_name: str) -> str | None:
+        """The status of one step in a run (or ``None`` if the step isn't found).
+
+        Use this to assert on a step's *verifiable* outcome rather than chasing a
+        runtime value: FortiSOAR only records ``set_variable`` / jinja values in
+        the retrievable run record when **global workflow debug logging is
+        enabled**, so ``run_env(...).env`` is empty for them with debug logging
+        off (the default). A step's ``status`` (``"finished"``, ``"failed"``, …)
+        always survives — assert on that instead.
+
+        Args:
+            run: a run pk / ``@id`` path / ``task_id`` (resolved like
+                :meth:`child_runs`).
+            step_name: the step's display ``name``.
+        """
+        pk = self._resolve_run_pk(run)
+        if pk is None:
+            return None
+        env = self.run_env(str(pk))
+        step = env.steps.get(step_name)
+        return step.status if step else None
+
+    def run_tree(
+        self,
+        run: str | int,
+        *,
+        depth: int = 3,
+        limit: int = 100,
+    ) -> RunNode:
+        """Resolve a run to its execution tree: the run plus its child runs.
+
+        Returns a :class:`~pyfsr.models.RunNode` (``pk``/``name``/``status`` +
+        nested ``children``), walking ``parent_wf`` links down to ``depth``. This
+        encodes the trigger→run→child linkage so you don't have to locate a
+        parent/child by name in the raw ``/api/wf/api/workflows`` listing.
+
+        A ``task_id`` from :meth:`trigger` resolves to the run it directly started;
+        any sub-playbooks that run launches (``workflow_reference`` /
+        ``apply_async`` loop children, linked by ``parent_wf``) appear as
+        ``children``. Synchronous references whose children the platform links by
+        ``parent_wf`` are included too.
+
+        Args:
+            run: a run pk / ``@id`` path / ``task_id`` (same forms as
+                :meth:`child_runs`).
+            depth: how many generations to descend (default 3; ``1`` = the run and
+                its immediate children only, ``0`` = just the run).
+            limit: max children fetched per node (default 100).
+
+        Returns:
+            the root :class:`~pyfsr.models.RunNode`. ``pk`` is ``None`` if ``run``
+            can't be resolved (the node still carries the original ``task_id``).
+        """
+        pk = self._resolve_run_pk(run)
+        task_id = str(run) if _looks_like_uuid(str(run)) else None
+        if pk is None:
+            return RunNode(pk=None, task_id=task_id)
+        try:
+            summary = self.get_execution(str(pk))
+            name, status = summary.get("name"), summary.get("status")
+        except Exception:  # noqa: BLE001 - a missing run still yields a node
+            name = status = None
+        node = RunNode(pk=str(pk), name=name, status=status, task_id=task_id)
+        if depth > 0:
+            for child in self.child_runs(pk, limit=limit):
+                child_pk = child.get("pk")
+                if child_pk:
+                    node.children.append(self.run_tree(child_pk, depth=depth - 1, limit=limit))
+        return node
 
     # --------------------------------------------------------------- trigger
     def trigger(
@@ -1093,6 +1173,12 @@ class PlaybooksAPI(BaseAPI):
             When ``follow=False`` (default): the trigger response, typically
             ``{"task_id": "<run-uuid>"}``. When ``follow=True``: the shaped run
             dict after completion (same shape as :meth:`wait`).
+
+        See also:
+            :meth:`run_tree` resolves the returned ``task_id`` to the run **plus
+            its child runs** (so you don't find a referenced child by name);
+            :meth:`step_status` asserts a step finished without relying on
+            ``set_variable`` values (only recorded with debug logging on).
         """
         uuid = playbook if _looks_like_uuid(playbook) else self._resolve_uuid(playbook)
         if not uuid:
