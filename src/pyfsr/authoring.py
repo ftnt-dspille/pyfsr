@@ -25,6 +25,7 @@ Example::
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sqlite3
@@ -344,25 +345,37 @@ def warm_catalog(
                             ),
                         )
                         n_ops += 1
-                        for ordi, p in enumerate(op.get("parameters") or []):
-                            # p is a typed OperationParam (or a raw dict for
-                            # offline callers) — both expose .get(); a bare value
-                            # (no .get) or one without a name is skipped.
-                            if not hasattr(p, "get") or not p.get("name"):
-                                continue
+                        # Flatten the param tree: top-level params plus every
+                        # `onchange` conditional sub-param (tagged with the
+                        # parent param + the option value that reveals it), so
+                        # conditional params like smtp_ng.send_email_new's
+                        # to/subject/content are known and don't false-positive
+                        # as `unknown_param`. See _flatten_op_params.
+                        for ordi, (p, parent_name, cond_value) in enumerate(_flatten_op_params(op.get("parameters"))):
+                            opts = p.get("options")
+                            options_json = json.dumps(opts) if isinstance(opts, list) and opts else None
+                            # OR IGNORE: a few connectors (e.g. fortigate-firewall
+                            # create_address) repeat a sub-param under nested
+                            # onchange branches that collapse to the same
+                            # (parent, condition, name) PK; keep the first and
+                            # don't let one quirk abort the whole connector warm.
                             conn.execute(
-                                "INSERT INTO operation_params "
-                                "(connector_name, op_name, param_name, title, type, required, "
-                                " default_value, tooltip, placeholder, description, visible, editable, ord) "
-                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                "INSERT OR IGNORE INTO operation_params "
+                                "(connector_name, op_name, parent_param_name, condition_value, "
+                                " param_name, title, type, required, default_value, options_json, "
+                                " tooltip, placeholder, description, visible, editable, ord) "
+                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                 (
                                     name,
                                     op_name,
+                                    parent_name,
+                                    cond_value,
                                     p.get("name"),
                                     p.get("title"),
                                     p.get("type"),
                                     1 if p.get("required") else 0,
                                     None if p.get("value") is None else str(p.get("value")),
+                                    options_json,
                                     p.get("tooltip"),
                                     p.get("placeholder"),
                                     p.get("description"),
@@ -385,6 +398,37 @@ def warm_catalog(
     finally:
         conn.close()
     return summary
+
+
+def _flatten_op_params(params: Any):
+    """Yield ``(param, parent_param_name, condition_value)`` for every operation
+    param, descending into ``onchange`` conditional sub-params.
+
+    FortiSOAR connector params nest: a ``select`` param carries an ``onchange``
+    map ``{option_value: [sub-param, ...]}`` of params that only appear once that
+    option is chosen (e.g. ``smtp_ng.send_email_new`` reveals ``to``/``cc`` only
+    after Recipient Type is set, and ``subject``/``content`` after Body Type).
+    The connector's flat ``parameters`` list omits these, so a playbook that sets
+    one looks like it passes an ``unknown_param``. Recording them — each tagged
+    with its parent param name and the option value that reveals it (the
+    ``parent_param_name``/``condition_value`` catalog columns) — lets the compiler
+    accept them without globally requiring them. Top-level params yield
+    ``(param, None, None)``. Params lacking ``.get`` or a ``name`` are skipped.
+    """
+
+    def _walk(items: Any, parent: str | None, cond: str | None):
+        for p in items or []:
+            if not hasattr(p, "get") or not p.get("name"):
+                continue
+            yield p, parent, cond
+            onchange = p.get("onchange")
+            if isinstance(onchange, dict):
+                pname = p.get("name")
+                for opt_value, sub in onchange.items():
+                    if isinstance(sub, list):
+                        yield from _walk(sub, pname, opt_value)
+
+    yield from _walk(params, None, None)
 
 
 def _fetch_connector_defs(client: Any, *, max_workers: int = 8) -> list[tuple[str, str, Any]]:
@@ -452,6 +496,33 @@ class CompiledPlaybook:
         return names
 
 
+def _normalize_lax_codes(lax_codes: Any) -> set | None:
+    """Normalize ``lax_codes`` entries to the ``ErrorCode`` enum the compiler matches.
+
+    Callers may pass the friendly code value (``"unknown_param"``), the enum name
+    (``"UNKNOWN_PARAM"``), or the ``ErrorCode`` enum itself. The compiler's demote
+    pass matches on ``str(ErrorCode.X)`` (== ``"ErrorCode.UNKNOWN_PARAM"``), so a
+    bare ``.value`` string silently never matches. Resolving every entry to the
+    enum here makes all three forms work — including against compiler builds whose
+    own matching only accepts the enum form. Unknown strings pass through verbatim.
+    """
+    if not lax_codes:
+        return None
+    try:
+        from fsr_playbooks.compiler.errors import ErrorCode
+    except ImportError:
+        return set(lax_codes)
+    by_value = {e.value: e for e in ErrorCode}
+    by_name = {e.name: e for e in ErrorCode}
+    out: set = set()
+    for c in lax_codes:
+        if isinstance(c, str):
+            out.add(by_value.get(c) or by_name.get(c) or by_name.get(c.upper()) or c)
+        else:
+            out.add(c)
+    return out
+
+
 def _default_cache_db() -> Path:
     """A writable per-user cache location for the warmed reference catalog."""
     base = os.environ.get("XDG_CACHE_HOME")
@@ -490,7 +561,10 @@ def compile_playbook_yaml(
             ``client``/the default. Use this to compile against a pre-warmed or
             custom catalog without a live client.
         lax_codes: optional set of diagnostic codes to downgrade from error to
-            warning (forwarded to the compiler).
+            warning. Accepts the friendly code string (``"unknown_param"``), the
+            ``ErrorCode`` enum, or the enum name (``"UNKNOWN_PARAM"``) — all are
+            normalized to the enum the compiler matches on (see
+            :func:`_normalize_lax_codes`).
 
     Raises:
         PlaybooksExtraNotInstalled: if the ``pyfsr[playbooks]`` extra is missing.
@@ -509,7 +583,7 @@ def compile_playbook_yaml(
         warm_catalog(client, resolved)
     else:
         resolved = default_db_path()
-    result = compile_yaml(text, resolved, lax_codes=lax_codes)
+    result = compile_yaml(text, resolved, lax_codes=_normalize_lax_codes(lax_codes))
     errors = [e.to_dict() for e in result.errors]
     return CompiledPlaybook(fsr_json=result.fsr_json, errors=errors, ok=result.ok)
 
