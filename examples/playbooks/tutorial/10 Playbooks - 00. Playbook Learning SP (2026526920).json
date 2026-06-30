@@ -1,0 +1,2836 @@
+{
+  "type": "workflow_collections",
+  "data": [
+    {
+      "@context": "/api/3/contexts/WorkflowCollection",
+      "@type": "WorkflowCollection",
+      "name": "00. Playbook Learning SP",
+      "description": "FortiSOAR",
+      "visible": true,
+      "image": null,
+      "uuid": "5f6beeeb-e593-4f9f-9a05-b1f044109a3a",
+      "id": 114,
+      "createDate": 1779796642.64962,
+      "modifyDate": 1779796642.64962,
+      "deletedAt": null,
+      "importedBy": [],
+      "recordTags": [],
+      "workflows": [
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Link CVE to Alert",
+          "aliasName": null,
+          "tag": null,
+          "description": "FortiSOAR Correlation Exercise",
+          "isActive": true,
+          "debug": false,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779797863,
+          "collection": "/api/3/workflow_collections/5f6beeeb-e593-4f9f-9a05-b1f044109a3a",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/0e25509e-adb6-479f-a227-6190adece358",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Atualiza CVE ligando com Alerta",
+              "description": null,
+              "arguments": {
+                "resource": {
+                  "__link": {
+                    "alerts": "{{vars.steps.Procura_Alerta[0]['@id']}}"
+                  }
+                },
+                "operation": "Append",
+                "collection": "{{vars.input.records[0]['@id']}}",
+                "__recommend": [],
+                "collectionType": "/api/3/c_v_es",
+                "fieldOperation": {
+                  "recordTags": "Append"
+                },
+                "step_variables": []
+              },
+              "status": null,
+              "top": "440",
+              "left": "120",
+              "stepType": "/api/3/workflow_step_types/b593663d-7d13-40ce-a3a3-96dece928722",
+              "group": null,
+              "uuid": "c78dd5d3-656c-45d1-93ea-e52b32def8e3"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "End",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.4.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "580",
+              "left": "120",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "ce71282f-be24-4693-a605-094f1449e356"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Liga CVE com Alerta",
+              "description": null,
+              "arguments": {
+                "route": "76aa65f3-b390-4df1-876b-cca60b5530d1",
+                "title": "Oi: Liga CVE com Alerta",
+                "resources": [
+                  "c_v_es"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "displayConditions": {
+                  "c_v_es": {
+                    "sort": [],
+                    "limit": 30,
+                    "logic": "AND",
+                    "filters": []
+                  }
+                },
+                "executeButtonText": "Execute",
+                "noRecordExecution": false,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": true
+              },
+              "status": null,
+              "top": "20",
+              "left": "120",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "0e25509e-adb6-479f-a227-6190adece358"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "My Vars",
+              "description": null,
+              "arguments": {
+                "alertaNumber": "6231"
+              },
+              "status": null,
+              "top": "160",
+              "left": "120",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "41cc0819-c13b-40ef-9e67-0c59dcfaf2d8"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Procura Alerta",
+              "description": null,
+              "arguments": {
+                "query": {
+                  "sort": [],
+                  "limit": 30,
+                  "logic": "AND",
+                  "filters": [
+                    {
+                      "type": "primitive",
+                      "field": "id",
+                      "value": "{{vars.alertaNumber}}",
+                      "operator": "eq",
+                      "_operator": "eq"
+                    }
+                  ]
+                },
+                "module": "alerts?$limit=30",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "300",
+              "left": "120",
+              "stepType": "/api/3/workflow_step_types/b593663d-7d13-40ce-a3a3-96dece928770",
+              "group": null,
+              "uuid": "0b463084-cdd9-4ebb-ba08-8522486f263d"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Atualiza CVE ligando com Alerta -> End",
+              "targetStep": "/api/3/workflow_steps/ce71282f-be24-4693-a605-094f1449e356",
+              "sourceStep": "/api/3/workflow_steps/c78dd5d3-656c-45d1-93ea-e52b32def8e3",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "4e349c38-c384-4767-bc6d-88a1e5699434"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Liga CVE com Alerta -> My Vars",
+              "targetStep": "/api/3/workflow_steps/41cc0819-c13b-40ef-9e67-0c59dcfaf2d8",
+              "sourceStep": "/api/3/workflow_steps/0e25509e-adb6-479f-a227-6190adece358",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "72b4c8ac-fe3a-45e7-809f-0acb9b9b85e2"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "My Vars -> Procura Alerta",
+              "targetStep": "/api/3/workflow_steps/0b463084-cdd9-4ebb-ba08-8522486f263d",
+              "sourceStep": "/api/3/workflow_steps/41cc0819-c13b-40ef-9e67-0c59dcfaf2d8",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "f82703d5-27f8-4324-ada3-3e263334df1b"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Procura Alerta -> Atualiza CVE ligando com Alerta",
+              "targetStep": "/api/3/workflow_steps/c78dd5d3-656c-45d1-93ea-e52b32def8e3",
+              "sourceStep": "/api/3/workflow_steps/0b463084-cdd9-4ebb-ba08-8522486f263d",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "5b1f0b90-589c-40a7-b746-f70c93bca3e1"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/b6d710a9-a8ec-41ec-8817-fe9fa062fcdd",
+          "isEditable": true,
+          "uuid": "22c28764-6086-4aed-9f8d-e206b4816d31",
+          "id": 320,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "alerts",
+            "cve",
+            "linking records"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "FortiSOAR Playbook API test 2",
+          "aliasName": null,
+          "tag": null,
+          "description": "(token auth) Call FortiSOAR playbooks using curl command and token auth",
+          "isActive": true,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779797983,
+          "collection": "/api/3/workflow_collections/5f6beeeb-e593-4f9f-9a05-b1f044109a3a",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/556ec7de-a1c4-4ca4-90bc-e952fe9e2189",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "End",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.3.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "297",
+              "left": "753",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "206dabdb-4f79-44dc-b2d7-32de537afb2b"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "api_endpoint2",
+                "__triggerLimit": true,
+                "step_variables": {
+                  "input": {
+                    "params": {
+                      "api_body": "{{vars.request.data}}",
+                      "api_params": "{{vars.request.params}}"
+                    }
+                  }
+                },
+                "triggerOnSource": true,
+                "triggerOnReplicate": false,
+                "authentication_methods": [
+                  ""
+                ]
+              },
+              "status": null,
+              "top": "40",
+              "left": "40",
+              "stepType": "/api/3/workflow_step_types/df26c7a2-4166-4ca5-91e5-548e24c01b5f",
+              "group": null,
+              "uuid": "556ec7de-a1c4-4ca4-90bc-e952fe9e2189"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "VT",
+              "description": null,
+              "arguments": {
+                "name": "VirusTotal",
+                "config": "2df52cf6-e4e2-4eee-bce1-7fc6d22d9fc1",
+                "params": {
+                  "ip": "220.197.51.62",
+                  "relationships": [
+                    "Comments",
+                    "Historical SSL Certificates",
+                    "Graphs",
+                    "Historical Whois",
+                    "Referrer Files",
+                    "Resolutions",
+                    "Votes",
+                    "Related Comments"
+                  ]
+                },
+                "version": "3.1.2",
+                "connector": "virustotal",
+                "operation": "query_ip",
+                "operationTitle": "Get IP Reputation",
+                "pickFromTenant": false,
+                "step_variables": []
+              },
+              "status": null,
+              "top": "185",
+              "left": "314",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "5cd075f5-8325-4abe-978c-cc0029b238aa"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> VT",
+              "targetStep": "/api/3/workflow_steps/5cd075f5-8325-4abe-978c-cc0029b238aa",
+              "sourceStep": "/api/3/workflow_steps/556ec7de-a1c4-4ca4-90bc-e952fe9e2189",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "a39e94f8-64de-4c60-bc82-80e6e6bd3f75"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "VT -> End",
+              "targetStep": "/api/3/workflow_steps/206dabdb-4f79-44dc-b2d7-32de537afb2b",
+              "sourceStep": "/api/3/workflow_steps/5cd075f5-8325-4abe-978c-cc0029b238aa",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "631bb521-8853-4790-93d2-0afb27c4d57f"
+            }
+          ],
+          "groups": [
+            {
+              "@type": "WorkflowGroup",
+              "name": "API",
+              "description": "curl -k -X POST -H \"Accept: application/json\" https://fortisoar.example.com/auth/authenticate -d @auth.json",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "40",
+              "left": "1040",
+              "height": "212",
+              "width": "491",
+              "uuid": "fd5c6b28-0715-4553-95a7-b8f064a60f91",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Auth.json file",
+              "description": "{\n        \"credentials\":\n    {\n        \"loginid\": \"admin\",\n        \"password\":\"PlaybookLearning\"\n    }\n}",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "40",
+              "left": "1540",
+              "height": "188",
+              "width": "399",
+              "uuid": "96afd4ad-b174-4463-8e75-558d546df6d8",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "using the token",
+              "description": "curl -k -H \"Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1dWlkIjoiOWZhYzE2NzgtODk2MC00YTUwLWIzYjctZjg2ZjczYmFjNTgxIiwiaXNzIjoiZGFzIiwiZXhwIjoxNzMwMzA0NzkxLCJuYmYiOjE3MzAzMDExOTEsImlhdCI6MTczMDMwMTE5MSwidHlwZSI6ImF1dGgiLCJqdGkiOiI4Zjk5NWM4OGMwNjA0ODNlYjg1MjQ3ZGY3MGY0M2YxMyIsInVzZXJfdHlwZSI6NX0.OPKn5j296F4twL2J6XL5oihYiXzYRtYTKcCrkmVMNUeCCf1cJw9buPaMy4HWSbcnK9Y1_BUtKvcHiUpUx6DeFviCir5V0ZKyYtDw7zZ8ROHItdcykAwEHUXZwePv4MWQosgW5Ru4s6FLST7UdARt5fSmgd_-4hGzIQqpJ4CPKGDp0qh8smxLUfiTC_7musAHiX7uh5j0WG1NvqJlFDUwFWfd022uAXuxajRSY4jLao0tJ0VmgZhipoV9UAicmmGzsWtkUm7-lgU6Nkhh10SHrPYWPwGSEqom-CyZAqys81vavqar86havQsTkNNR08D2bflHF7ATEQ4b3DpyAY6YgA\" -d @alert_test2.json -X POST https://fortisoar.example.com:443/api/triggers/1/webhook",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "300",
+              "left": "1040",
+              "height": "298",
+              "width": "498",
+              "uuid": "ddb0690f-5ec9-4a31-b3c7-30e4f558edaf",
+              "recordTags": []
+            }
+          ],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/b6d710a9-a8ec-41ec-8817-fe9fa062fcdd",
+          "isEditable": true,
+          "uuid": "382367be-b27c-48dc-97eb-9cae130546f8",
+          "id": 333,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "Custom API Endpoint",
+            "token authentication",
+            "webook"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Change Incident Lead for Critical Incidents - first",
+          "aliasName": null,
+          "tag": null,
+          "description": "Linking Objects + Referece Playbook (part1)",
+          "isActive": true,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779797921,
+          "collection": "/api/3/workflow_collections/5f6beeeb-e593-4f9f-9a05-b1f044109a3a",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/f529a1c4-b4b7-4373-937e-489d395098f3",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Call Specific playbook",
+              "description": null,
+              "arguments": {
+                "for_each": {
+                  "item": "{{vars.steps.Find_Incidents}}",
+                  "parallel": false,
+                  "condition": ""
+                },
+                "arguments": {
+                  "IncidentIRI": "{{vars.item['@id']}}"
+                },
+                "apply_async": false,
+                "step_variables": [],
+                "pass_parent_env": false,
+                "pass_input_record": false,
+                "workflowReference": "/api/3/workflows/98088c22-2006-43c1-bf73-ef1c151c1cd6"
+              },
+              "status": null,
+              "top": "440",
+              "left": "120",
+              "stepType": "/api/3/workflow_step_types/74932bdc-b8b6-4d24-88c4-1a4dfbc524f3",
+              "group": null,
+              "uuid": "5a401f8d-0800-442f-ab10-f5f4a83caa8f"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Find Incidents",
+              "description": null,
+              "arguments": {
+                "query": {
+                  "sort": [],
+                  "limit": 30,
+                  "logic": "AND",
+                  "filters": [
+                    {
+                      "type": "object",
+                      "field": "severity",
+                      "value": "{{vars.sev2}}",
+                      "_value": {
+                        "@id": "{{vars.sev2}}",
+                        "display": "Critical",
+                        "itemValue": ""
+                      },
+                      "operator": "eq"
+                    }
+                  ]
+                },
+                "module": "incidents?$limit=30",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "300",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/b593663d-7d13-40ce-a3a3-96dece928770",
+              "group": null,
+              "uuid": "6f74bf4c-4ef4-48e4-b1b4-4ad138ed20a9"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "myVars",
+              "description": null,
+              "arguments": {
+                "num": "0",
+                "sev2": "/api/3/picklists/7efa2220-39bb-44e4-961f-ac368776e3b0",
+                "mySeverity": "'Critical'"
+              },
+              "status": null,
+              "top": "165",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "c35a9219-f105-4349-840e-7552eb74de6d"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "53d35d8e-be2c-4116-aecf-a02fb3aa8460",
+                "title": "Set FortiSIEM User to Critical Incidents",
+                "resources": [
+                  "incidents"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "displayConditions": {
+                  "incidents": {
+                    "sort": [],
+                    "limit": 30,
+                    "logic": "AND",
+                    "filters": []
+                  },
+                  "attachments": {
+                    "sort": [],
+                    "limit": 30,
+                    "logic": "AND",
+                    "filters": []
+                  }
+                },
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "30",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "f529a1c4-b4b7-4373-937e-489d395098f3"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Find Incidents -> Call Specific playbook",
+              "targetStep": "/api/3/workflow_steps/5a401f8d-0800-442f-ab10-f5f4a83caa8f",
+              "sourceStep": "/api/3/workflow_steps/6f74bf4c-4ef4-48e4-b1b4-4ad138ed20a9",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "fcebeab1-963d-401a-a6d5-c758d0bac82a"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "myVars -> Find Alert",
+              "targetStep": "/api/3/workflow_steps/6f74bf4c-4ef4-48e4-b1b4-4ad138ed20a9",
+              "sourceStep": "/api/3/workflow_steps/c35a9219-f105-4349-840e-7552eb74de6d",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "1caa947c-481e-4d72-af4c-0719c4694c89"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> myVars",
+              "targetStep": "/api/3/workflow_steps/c35a9219-f105-4349-840e-7552eb74de6d",
+              "sourceStep": "/api/3/workflow_steps/f529a1c4-b4b7-4373-937e-489d395098f3",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "caeac1f5-2714-4d6f-8613-f8199b281a3b"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/b6d710a9-a8ec-41ec-8817-fe9fa062fcdd",
+          "isEditable": true,
+          "uuid": "3eef22f2-8be5-4f40-a78b-1c06c0f59ba6",
+          "id": 332,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "correlation"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Count Bad Indicators",
+          "aliasName": null,
+          "tag": null,
+          "description": "Number of Malicious or Suspicious indicators",
+          "isActive": true,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1758568831,
+          "collection": "/api/3/workflow_collections/5f6beeeb-e593-4f9f-9a05-b1f044109a3a",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/02301350-9511-47ea-8434-10985d9f83dc",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Amount of bad Indicators",
+              "description": null,
+              "arguments": {
+                "conditions": [
+                  {
+                    "option": ">= 0",
+                    "step_iri": "/api/3/workflow_steps/45979c24-d8ed-41a7-b2b8-91ba999a1651",
+                    "condition": "{{ vars.num_indicators > 0 }}",
+                    "step_name": "Create Comment YOU HAVE A PROBLEM"
+                  },
+                  {
+                    "option": "0",
+                    "default": true,
+                    "step_iri": "/api/3/workflow_steps/9d2158b5-7ccd-4f6f-b483-8260fec1dbf0",
+                    "step_name": "Create Comment YOU HAVE NO PROBLEM BY NOW"
+                  }
+                ],
+                "step_variables": []
+              },
+              "status": null,
+              "top": "500",
+              "left": "360",
+              "stepType": "/api/3/workflow_step_types/12254cf5-5db7-4b1a-8cb1-3af081924b28",
+              "group": null,
+              "uuid": "8e0b272d-9274-4177-a527-23e9e2b57d6f"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Create Comment YOU HAVE A PROBLEM",
+              "description": null,
+              "arguments": {
+                "resource": {
+                  "type": "/api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b",
+                  "alerts": "{{vars.alert_IRI}}",
+                  "people": [],
+                  "content": "<p>There are<span style=\"font-size: 14pt; color: rgb(224, 62, 45);\"><strong> {{vars.num_indicators}}</strong></span> Malicious or Suspicious Indicators in this alert. Pay attention to them! One interesting suggesting could be creating PIR (Priority Intelligence Requests) for each Indicator.&nbsp;<span style=\"color: rgb(230, 126, 35);\"><strong>{{arrow.utcnow().format(\"YYYY-MM-DD HH:mm:ss ZZ\")}}</strong></span></p>",
+                  "__replace": "",
+                  "isImportant": false,
+                  "peopleUpdated": false
+                },
+                "operation": "Overwrite",
+                "collection": "/api/3/comments",
+                "__recommend": [],
+                "fieldOperation": {
+                  "recordTags": "Overwrite"
+                },
+                "step_variables": []
+              },
+              "status": null,
+              "top": "620",
+              "left": "700",
+              "stepType": "/api/3/workflow_step_types/2597053c-e718-44b4-8394-4d40fe26d357",
+              "group": null,
+              "uuid": "45979c24-d8ed-41a7-b2b8-91ba999a1651"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Create Comment YOU HAVE NO PROBLEM BY NOW",
+              "description": null,
+              "arguments": {
+                "resource": {
+                  "type": "/api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b",
+                  "alerts": "{{vars.alert_IRI}}",
+                  "people": [],
+                  "content": "<p>There are<span style=\"font-size: 14pt; color: rgb(224, 62, 45);\"><strong> <span style=\"font-size: 14pt; color: rgb(22, 145, 121);\">{{vars.num_indicators}}</span></strong></span><span style=\"font-size: 14pt;\"> </span>Malicious or Suspicious Indicators in this alert. <span style=\"color: rgb(45, 194, 107);\"><strong>This is good news.</strong></span>&nbsp;<span style=\"color: rgb(53, 152, 219);\"><strong><span style=\"color: rgb(230, 126, 35);\">{{arrow.utcnow().format(\"YYYY-MM-DD HH:mm:ss ZZ\")}}</span></strong></span></p>",
+                  "__replace": "",
+                  "isImportant": false,
+                  "peopleUpdated": false
+                },
+                "operation": "Overwrite",
+                "collection": "/api/3/comments",
+                "__recommend": [],
+                "fieldOperation": {
+                  "recordTags": "Overwrite"
+                },
+                "step_variables": []
+              },
+              "status": null,
+              "top": "620",
+              "left": "40",
+              "stepType": "/api/3/workflow_step_types/2597053c-e718-44b4-8394-4d40fe26d357",
+              "group": null,
+              "uuid": "9d2158b5-7ccd-4f6f-b483-8260fec1dbf0"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Get Alert Id IRI",
+              "description": null,
+              "arguments": {
+                "alert_IRI": "{{vars.input.records[0]['@id']}}"
+              },
+              "status": null,
+              "top": "200",
+              "left": "360",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "c45e9df2-b820-4d5e-9768-5e87558871f2"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Get Bad Indicators",
+              "description": null,
+              "arguments": {
+                "query": {
+                  "sort": [],
+                  "limit": 30,
+                  "logic": "AND",
+                  "filters": [
+                    {
+                      "type": "primitive",
+                      "field": "alerts.uuid",
+                      "value": "{{vars.input.records[0].uuid}}",
+                      "operator": "eq",
+                      "_operator": "eq"
+                    },
+                    {
+                      "type": "array",
+                      "field": "reputation",
+                      "value": [
+                        "7074e547-7785-4979-be32-c6d0c863e4bd",
+                        "50bfd06c-9aff-4f7d-b6d9-821339e31fe7"
+                      ],
+                      "module": "reputation",
+                      "display": "",
+                      "operator": "in",
+                      "template": "multiselectpicklist",
+                      "enableJinja": true,
+                      "OPERATOR_KEY": "$",
+                      "useInOperator": true,
+                      "previousOperator": "in",
+                      "previousTemplate": "multiselectpicklist"
+                    }
+                  ]
+                },
+                "module": "indicators?$limit=30&$relationships=true&$fsr_max_relation_count=100",
+                "checkboxFields": false,
+                "step_variables": {
+                  "my_indicators": "{{vars.steps.Get_Bad_Indicators}}",
+                  "num_indicators": "{{vars.steps.Get_Bad_Indicators | length}}"
+                }
+              },
+              "status": null,
+              "top": "340",
+              "left": "360",
+              "stepType": "/api/3/workflow_step_types/b593663d-7d13-40ce-a3a3-96dece928770",
+              "group": null,
+              "uuid": "4dad3dd2-cad9-4cc5-af26-5f20298f3071"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "3e68095b-2d17-4a11-815b-24ab4088739a",
+                "title": "MSSP: Count Bad Indicators",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "displayConditions": {
+                  "alerts": {
+                    "sort": [],
+                    "limit": 30,
+                    "logic": "AND",
+                    "filters": []
+                  }
+                },
+                "executeButtonText": "Execute",
+                "noRecordExecution": false,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": true
+              },
+              "status": null,
+              "top": "80",
+              "left": "360",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "02301350-9511-47ea-8434-10985d9f83dc"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "The End",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.4.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "780",
+              "left": "360",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "a2a1e0e0-0057-4dfa-bec2-8a459f33836f"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Amount of bad Indicators -> Create Comment YOU HAVE A PROBLEM",
+              "targetStep": "/api/3/workflow_steps/45979c24-d8ed-41a7-b2b8-91ba999a1651",
+              "sourceStep": "/api/3/workflow_steps/8e0b272d-9274-4177-a527-23e9e2b57d6f",
+              "label": ">= 0",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "98428566-47ea-4d2a-98f2-0b2064f989b8"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Amount of bad Indicators -> Create Comment YOU HAVE NO PROBLEM BY NOW",
+              "targetStep": "/api/3/workflow_steps/9d2158b5-7ccd-4f6f-b483-8260fec1dbf0",
+              "sourceStep": "/api/3/workflow_steps/8e0b272d-9274-4177-a527-23e9e2b57d6f",
+              "label": "0",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "80544cd8-944c-442a-b93a-bdcf6bf7a550"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Create Comment YOU HAVE A PROBLEM -> The End",
+              "targetStep": "/api/3/workflow_steps/a2a1e0e0-0057-4dfa-bec2-8a459f33836f",
+              "sourceStep": "/api/3/workflow_steps/45979c24-d8ed-41a7-b2b8-91ba999a1651",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "2136c78f-9679-4014-bbf4-dbe55e0bcc5e"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Create Comment YOU HAVE NO PROBLEM BY NOW -> The End",
+              "targetStep": "/api/3/workflow_steps/a2a1e0e0-0057-4dfa-bec2-8a459f33836f",
+              "sourceStep": "/api/3/workflow_steps/9d2158b5-7ccd-4f6f-b483-8260fec1dbf0",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "8424f0f9-571e-4b8b-a866-8e460daf514b"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Get Bad Indicators -> Amount of bad Indicators",
+              "targetStep": "/api/3/workflow_steps/8e0b272d-9274-4177-a527-23e9e2b57d6f",
+              "sourceStep": "/api/3/workflow_steps/4dad3dd2-cad9-4cc5-af26-5f20298f3071",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "6148283d-bc74-4328-ae65-54a2fe951675"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "My Vars -> Get Bad Indicators",
+              "targetStep": "/api/3/workflow_steps/4dad3dd2-cad9-4cc5-af26-5f20298f3071",
+              "sourceStep": "/api/3/workflow_steps/c45e9df2-b820-4d5e-9768-5e87558871f2",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "8cd0c691-57a8-42c8-a2c2-4428a1f95330"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> My Vars",
+              "targetStep": "/api/3/workflow_steps/c45e9df2-b820-4d5e-9768-5e87558871f2",
+              "sourceStep": "/api/3/workflow_steps/02301350-9511-47ea-8434-10985d9f83dc",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "8c6c4b5e-893a-4a2a-a937-15a0ffb7958a"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/b6d710a9-a8ec-41ec-8817-fe9fa062fcdd",
+          "isEditable": true,
+          "uuid": "606ebb4a-a5b0-495a-9101-67f9612f6113",
+          "id": 342,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "Indicators"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "VT + IP Stack basics",
+          "aliasName": null,
+          "tag": null,
+          "description": "Reaching the Malicious status",
+          "isActive": true,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1758568831,
+          "collection": "/api/3/workflow_collections/5f6beeeb-e593-4f9f-9a05-b1f044109a3a",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/6d6b1899-a30f-4758-b123-7f592ca2f917",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Enter IP",
+              "description": null,
+              "arguments": {
+                "type": "InputBased",
+                "input": {
+                  "schema": {
+                    "title": "Enter the IP",
+                    "description": "Insert the IP",
+                    "inputVariables": [
+                      {
+                        "name": "iP",
+                        "type": "string",
+                        "label": "IP",
+                        "title": "IPv4",
+                        "usable": true,
+                        "tooltip": "",
+                        "dataType": "text",
+                        "formType": "ipv4",
+                        "required": true,
+                        "_expanded": true,
+                        "mmdUpdate": true,
+                        "collection": false,
+                        "searchable": true,
+                        "templateUrl": "app/components/form/fields/webAddress.html",
+                        "defaultValue": "1.1.1.1",
+                        "_previousName": "",
+                        "playbookField": true,
+                        "lengthConstraint": false,
+                        "allowedEncryption": true,
+                        "allowedGridColumn": true,
+                        "jinjaExpressionView": true,
+                        "useRecordFieldDefault": false
+                      }
+                    ]
+                  }
+                },
+                "record": "",
+                "agent_id": null,
+                "resources": "indicators",
+                "is_approval": false,
+                "owner_detail": {
+                  "isAssigned": false,
+                  "emailRecipients": ""
+                },
+                "isRecordLinked": false,
+                "step_variables": [],
+                "response_mapping": {
+                  "options": [
+                    {
+                      "option": "Go",
+                      "primary": true,
+                      "step_iri": "/api/3/workflow_steps/55e7f85c-566d-424c-b1e6-2e4829f39690"
+                    }
+                  ],
+                  "duplicateOption": false,
+                  "customSuccessMessage": "Awaiting Playbook resumed successfully."
+                },
+                "email_notification": {
+                  "enabled": false,
+                  "smtpParameters": []
+                },
+                "customEmailExternal": false,
+                "inline_channel_list": [],
+                "external_channel_list": [],
+                "unauthenticated_input": false,
+                "external_email_subject": null,
+                "internal_email_subject": "A FortiSOAR playbook is requesting your input",
+                "custom_email_body_external": null,
+                "external_email_attachments": null
+              },
+              "status": null,
+              "top": "300",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/fc04082a-d7dc-4299-96fb-6837b1baa0fe",
+              "group": null,
+              "uuid": "235e9916-2c57-4f85-8695-75309e57907a"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Finish",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.2.5",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "975",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "b19a2b12-ad25-44bf-b237-d814335c4ab1"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "is Malicious",
+              "description": null,
+              "arguments": {
+                "conditions": [
+                  {
+                    "option": "Bad",
+                    "step_iri": "/api/3/workflow_steps/f0847ee1-dbe9-4e7d-80c3-351c592f7bcc",
+                    "condition": "{{ vars.isMalicious > vars.vt_score }}",
+                    "step_name": "Malicious"
+                  },
+                  {
+                    "option": "Good",
+                    "default": true,
+                    "step_iri": "/api/3/workflow_steps/cae96f45-cc53-4081-b799-913f5d357710",
+                    "step_name": "No Malicious"
+                  }
+                ],
+                "step_variables": []
+              },
+              "status": null,
+              "top": "705",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/12254cf5-5db7-4b1a-8cb1-3af081924b28",
+              "group": null,
+              "uuid": "10dfe72d-3dd5-4e02-a541-a6dcdc179c30"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Lookup IP Stack",
+              "description": null,
+              "arguments": {
+                "name": "IPStack",
+                "config": "4dd23fc8-5493-444a-bca5-043cebd8b503",
+                "params": {
+                  "query": "{{vars.steps.Enter_IP.input.iP}}",
+                  "fields": "",
+                  "enable_hostname": false,
+                  "enable_security": false
+                },
+                "version": "1.0.1",
+                "connector": "ipstack",
+                "operation": "ip_locate",
+                "operationTitle": "Geolocate IP",
+                "pickFromTenant": false,
+                "step_variables": []
+              },
+              "status": null,
+              "top": "500",
+              "left": "660",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "7a188fd1-95ce-41aa-a019-25eb65122372"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Malicious",
+              "description": null,
+              "arguments": {
+                "malicious": "1"
+              },
+              "status": null,
+              "top": "840",
+              "left": "100",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "f0847ee1-dbe9-4e7d-80c3-351c592f7bcc"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "My variables Update After VT",
+              "description": "Updating IsMalicious",
+              "arguments": {
+                "isMalicious": "{{vars.steps.VT_Lookup.data.attributes['total_votes'].malicious}}"
+              },
+              "status": null,
+              "top": "570",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "2727a443-95bd-4445-a3e3-e5f4e01d7841"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "My Vars",
+              "description": null,
+              "arguments": {
+                "malicous": "0",
+                "vt_score": "10",
+                "isMalicious": "1"
+              },
+              "status": null,
+              "top": "165",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "dfb0a9c5-1380-4b8d-95f9-7f825a422922"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "No Malicious",
+              "description": null,
+              "arguments": {
+                "malicious": "0"
+              },
+              "status": null,
+              "top": "840",
+              "left": "500",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "cae96f45-cc53-4081-b799-913f5d357710"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "b62d0995-461f-4c21-b01b-064cac0fddbb",
+                "title": "BR: IP Investigation",
+                "resources": [
+                  "indicators"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "_promptexpanded": false,
+                "triggerOnSource": true,
+                "displayConditions": {
+                  "indicators": {
+                    "sort": [],
+                    "limit": 30,
+                    "logic": "AND",
+                    "filters": []
+                  }
+                },
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "message": "Starting the show",
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "30",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "6d6b1899-a30f-4758-b123-7f592ca2f917"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "VT Lookup",
+              "description": null,
+              "arguments": {
+                "name": "VirusTotal",
+                "config": "2df52cf6-e4e2-4eee-bce1-7fc6d22d9fc1",
+                "params": {
+                  "ip": "{{vars.steps.Enter_IP.input.iP}}",
+                  "relationships": ""
+                },
+                "version": "3.1.2",
+                "connector": "virustotal",
+                "operation": "query_ip",
+                "operationTitle": "Get IP Reputation",
+                "pickFromTenant": false,
+                "step_variables": []
+              },
+              "status": null,
+              "top": "435",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "55e7f85c-566d-424c-b1e6-2e4829f39690"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Enter IP -> VT Lookup",
+              "targetStep": "/api/3/workflow_steps/55e7f85c-566d-424c-b1e6-2e4829f39690",
+              "sourceStep": "/api/3/workflow_steps/235e9916-2c57-4f85-8695-75309e57907a",
+              "label": "Go",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "a1011d08-88ef-415c-881c-4b107db719f3"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "is Malicious -> Malicious",
+              "targetStep": "/api/3/workflow_steps/f0847ee1-dbe9-4e7d-80c3-351c592f7bcc",
+              "sourceStep": "/api/3/workflow_steps/10dfe72d-3dd5-4e02-a541-a6dcdc179c30",
+              "label": "Bad",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "828ed7a2-d85a-423d-a376-888ebfcc14d3"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "is Malicious -> No Malicious",
+              "targetStep": "/api/3/workflow_steps/cae96f45-cc53-4081-b799-913f5d357710",
+              "sourceStep": "/api/3/workflow_steps/10dfe72d-3dd5-4e02-a541-a6dcdc179c30",
+              "label": "Good",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "825f189c-8f75-4b88-88d7-77f01a9906f5"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Lookup IP Stack -> My variables Update After VT",
+              "targetStep": "/api/3/workflow_steps/2727a443-95bd-4445-a3e3-e5f4e01d7841",
+              "sourceStep": "/api/3/workflow_steps/7a188fd1-95ce-41aa-a019-25eb65122372",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "8cc9f32d-3150-4465-94fb-dfe2ba18beda"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Malicious -> Finish",
+              "targetStep": "/api/3/workflow_steps/b19a2b12-ad25-44bf-b237-d814335c4ab1",
+              "sourceStep": "/api/3/workflow_steps/f0847ee1-dbe9-4e7d-80c3-351c592f7bcc",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "4d70f41e-268e-48d7-b5b2-20d2f9f22779"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "My variables -> is Malicious",
+              "targetStep": "/api/3/workflow_steps/10dfe72d-3dd5-4e02-a541-a6dcdc179c30",
+              "sourceStep": "/api/3/workflow_steps/2727a443-95bd-4445-a3e3-e5f4e01d7841",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "4b5be10e-a2ef-4aa6-aab7-ed7da204d98a"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "My Vars -> Enter IP",
+              "targetStep": "/api/3/workflow_steps/235e9916-2c57-4f85-8695-75309e57907a",
+              "sourceStep": "/api/3/workflow_steps/dfb0a9c5-1380-4b8d-95f9-7f825a422922",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "532229dd-923c-421e-b8a4-78bf1eda4cae"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "No Malicious -> Finish",
+              "targetStep": "/api/3/workflow_steps/b19a2b12-ad25-44bf-b237-d814335c4ab1",
+              "sourceStep": "/api/3/workflow_steps/cae96f45-cc53-4081-b799-913f5d357710",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "86f1ebd2-40c1-4cdc-9d90-872122d65bec"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> My Vars",
+              "targetStep": "/api/3/workflow_steps/dfb0a9c5-1380-4b8d-95f9-7f825a422922",
+              "sourceStep": "/api/3/workflow_steps/6d6b1899-a30f-4758-b123-7f592ca2f917",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "57aecee1-113e-4205-8cee-02e2c6551504"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "VT Lookup -> Lookup IP Stack",
+              "targetStep": "/api/3/workflow_steps/7a188fd1-95ce-41aa-a019-25eb65122372",
+              "sourceStep": "/api/3/workflow_steps/55e7f85c-566d-424c-b1e6-2e4829f39690",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "6c2881d0-5d11-487a-a95c-c1dfc455db47"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/b6d710a9-a8ec-41ec-8817-fe9fa062fcdd",
+          "isEditable": true,
+          "uuid": "875f13ab-7a8e-4934-bad7-b10267929505",
+          "id": 339,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "first",
+            "poc"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Change Incident Lead for Critical Incidents - second",
+          "aliasName": null,
+          "tag": null,
+          "description": "Linking Objects + Referece Playbook (part2)",
+          "isActive": true,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [
+            "IncidentIRI"
+          ],
+          "synchronous": false,
+          "lastModifyDate": 1779797937,
+          "collection": "/api/3/workflow_collections/5f6beeeb-e593-4f9f-9a05-b1f044109a3a",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/48ae890a-68a0-4684-9851-e842e4809fb4",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "End",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.3.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "300",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "e7eb5c39-f1ec-4896-b72c-d29470ed2dba"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "__triggerLimit": true,
+                "step_variables": {
+                  "input": {
+                    "params": []
+                  }
+                },
+                "triggerOnSource": true,
+                "triggerOnReplicate": false
+              },
+              "status": null,
+              "top": "30",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/b348f017-9a94-471f-87f8-ce88b6a7ad62",
+              "group": null,
+              "uuid": "48ae890a-68a0-4684-9851-e842e4809fb4"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Update Lead",
+              "description": null,
+              "arguments": {
+                "resource": {
+                  "phase": "/api/3/picklists/bb740d30-f699-11e7-8c3f-9a214cf093ae",
+                  "impactROI": 4,
+                  "incidentLead": "/api/3/people/1f7f125a-6a71-40ad-8813-da67de1d77aa"
+                },
+                "operation": "Append",
+                "collection": "{{vars.input.params.IncidentIRI}}",
+                "__recommend": [],
+                "collectionType": "/api/3/incidents",
+                "fieldOperation": [],
+                "step_variables": []
+              },
+              "status": null,
+              "top": "165",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/b593663d-7d13-40ce-a3a3-96dece928722",
+              "group": null,
+              "uuid": "6c8ad2c0-66b4-4d47-aa52-4ff2b0392e6d"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> Update Lead",
+              "targetStep": "/api/3/workflow_steps/6c8ad2c0-66b4-4d47-aa52-4ff2b0392e6d",
+              "sourceStep": "/api/3/workflow_steps/48ae890a-68a0-4684-9851-e842e4809fb4",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "70357927-c4e3-45a8-8a7a-f9ea0ce08444"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Update Lead -> End",
+              "targetStep": "/api/3/workflow_steps/e7eb5c39-f1ec-4896-b72c-d29470ed2dba",
+              "sourceStep": "/api/3/workflow_steps/6c8ad2c0-66b4-4d47-aa52-4ff2b0392e6d",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "4a582c8b-6075-427f-ba2e-a5e9d46a6dfc"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/b6d710a9-a8ec-41ec-8817-fe9fa062fcdd",
+          "isEditable": true,
+          "uuid": "98088c22-2006-43c1-bf73-ef1c151c1cd6",
+          "id": 329,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "correlation"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Dad Joke API Playbook Auto - Multiple times",
+          "aliasName": null,
+          "tag": null,
+          "description": "Simple Playbook to show the FortiSOAR concepts",
+          "isActive": true,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779797838,
+          "collection": "/api/3/workflow_collections/5f6beeeb-e593-4f9f-9a05-b1f044109a3a",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/8d060a7e-04be-470a-a507-c1c78602bb8e",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Displaing Jokes",
+              "description": null,
+              "arguments": {
+                "type": "InputBased",
+                "input": {
+                  "schema": {
+                    "title": "Your Jokes My Friends",
+                    "description": "Below your {{vars.joke_count}} jokes:\n\n{{vars.jokes | join(\"\\n\")}}",
+                    "inputVariables": []
+                  }
+                },
+                "record": "",
+                "agent_id": null,
+                "resources": "alerts",
+                "is_approval": false,
+                "owner_detail": {
+                  "isAssigned": false,
+                  "emailRecipients": ""
+                },
+                "isRecordLinked": false,
+                "step_variables": [],
+                "response_mapping": {
+                  "options": [
+                    {
+                      "option": "Done",
+                      "step_iri": "/api/3/workflow_steps/d7b468fe-448b-4461-b58b-3a05303ca97c"
+                    }
+                  ],
+                  "duplicateOption": false,
+                  "customSuccessMessage": "Awaiting Playbook resumed successfully."
+                },
+                "email_notification": {
+                  "enabled": false,
+                  "smtpParameters": []
+                },
+                "customEmailExternal": false,
+                "inline_channel_list": [],
+                "external_channel_list": [],
+                "unauthenticated_input": false,
+                "external_email_subject": null,
+                "internal_email_subject": "A FortiSOAR playbook is requesting your input",
+                "custom_email_body_external": null,
+                "external_email_attachments": null
+              },
+              "status": null,
+              "top": "540",
+              "left": "1100",
+              "stepType": "/api/3/workflow_step_types/fc04082a-d7dc-4299-96fb-6837b1baa0fe",
+              "group": null,
+              "uuid": "fa840773-fe86-4942-bb1b-4bafa03f333d"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Finish",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.2.5",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "720",
+              "left": "800",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "d7b468fe-448b-4461-b58b-3a05303ca97c"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "First Playbook Step",
+              "description": null,
+              "arguments": {
+                "route": "03c6754b-20b9-4a55-954e-0e74ba4749fc",
+                "title": "Dad Joke",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "displayConditions": {
+                  "alerts": {
+                    "sort": [],
+                    "limit": 30,
+                    "logic": "OR",
+                    "filters": []
+                  },
+                  "incidents": {
+                    "sort": [],
+                    "limit": 30,
+                    "logic": "AND",
+                    "filters": []
+                  }
+                },
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "message": "The playbook Dad joke is about to run",
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "20",
+              "left": "80",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "8d060a7e-04be-470a-a507-c1c78602bb8e"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Get_joke",
+              "description": null,
+              "arguments": {
+                "params": {
+                  "url": "https://icanhazdadjoke.com/",
+                  "body": "",
+                  "method": "GET",
+                  "params": "",
+                  "verify": true,
+                  "headers": "{\"Accept\": \"application/json\"}",
+                  "password": "",
+                  "username": "",
+                  "auth_config": ""
+                },
+                "version": "3.2.5",
+                "for_each": {
+                  "item": "{{range(vars.joke_count) | list}}",
+                  "parallel": false,
+                  "condition": ""
+                },
+                "connector": "cyops_utilities",
+                "operation": "api_call",
+                "ignore_errors": false,
+                "operationTitle": "Utils: Make REST API Call",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "320",
+              "left": "580",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "3ca72516-ab06-4ebf-aed7-1b7e870e7182"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "My N Jokes",
+              "description": null,
+              "arguments": {
+                "jokes": "{{vars.steps.Get_joke | json_query('[].data.joke')}}"
+              },
+              "status": null,
+              "top": "500",
+              "left": "760",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "1f545cec-c389-4c8c-9312-f04902bc36c4"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Setting my variables",
+              "description": null,
+              "arguments": {
+                "joke_count": "35"
+              },
+              "status": null,
+              "top": "160",
+              "left": "280",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "6da56c3b-bdc9-4721-8715-f7bec236ebfe"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Displaing Jokes -> Finish",
+              "targetStep": "/api/3/workflow_steps/d7b468fe-448b-4461-b58b-3a05303ca97c",
+              "sourceStep": "/api/3/workflow_steps/fa840773-fe86-4942-bb1b-4bafa03f333d",
+              "label": "Done",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "8b1ae005-0a1d-4e7e-9f7e-b54bdcbf30db"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "First Playbook Step -> Setting my variables",
+              "targetStep": "/api/3/workflow_steps/6da56c3b-bdc9-4721-8715-f7bec236ebfe",
+              "sourceStep": "/api/3/workflow_steps/8d060a7e-04be-470a-a507-c1c78602bb8e",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "29ae6984-75b4-4664-a303-e5517fdc8575"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Get_Joke -> My N Jokes",
+              "targetStep": "/api/3/workflow_steps/1f545cec-c389-4c8c-9312-f04902bc36c4",
+              "sourceStep": "/api/3/workflow_steps/3ca72516-ab06-4ebf-aed7-1b7e870e7182",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "8a1d80e1-de25-4d7b-befe-a9a5524aa7f7"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "My N Jokes -> Displaing Jokes",
+              "targetStep": "/api/3/workflow_steps/fa840773-fe86-4942-bb1b-4bafa03f333d",
+              "sourceStep": "/api/3/workflow_steps/1f545cec-c389-4c8c-9312-f04902bc36c4",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "1d84bb5c-54f9-4301-bdfe-f7626eb8a454"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Setting my variables -> Get Dad Joke",
+              "targetStep": "/api/3/workflow_steps/3ca72516-ab06-4ebf-aed7-1b7e870e7182",
+              "sourceStep": "/api/3/workflow_steps/6da56c3b-bdc9-4721-8715-f7bec236ebfe",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "42223817-9d77-448c-b529-6b4101570a4d"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/b6d710a9-a8ec-41ec-8817-fe9fa062fcdd",
+          "isEditable": true,
+          "uuid": "9eb42c65-74e5-4c55-a1c2-6040b7f0234e",
+          "id": 343,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "dad joke",
+            "rest api",
+            "utilities"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "FortiSOAR API call to itself",
+          "aliasName": null,
+          "tag": null,
+          "description": "API tests",
+          "isActive": false,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779798017,
+          "collection": "/api/3/workflow_collections/5f6beeeb-e593-4f9f-9a05-b1f044109a3a",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/1b50f32d-06b5-4e8d-88ce-0a84882ffbcd",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "API Call for Licenses",
+              "description": null,
+              "arguments": {
+                "params": {
+                  "iri": "/api/auth/license/?param=license_details",
+                  "body": "",
+                  "method": "GET"
+                },
+                "version": "3.7.0",
+                "connector": "cyops_utilities",
+                "operation": "make_cyops_request",
+                "mock_result": "{\n  \"data\": {\n    \"type\": \"Subscription Based\",\n    \"nodes\": {\n      \"5a14dbc01b72665bf2a3d6c2fa3aa0e5\": {\n        \"node\": {\n          \"role\": \"primary\",\n          \"nodeId\": \"5a14dbc01b72665bf2a3d6c2fa3aa0e5\",\n          \"status\": \"active\",\n          \"comment\": \"primary server\",\n          \"nodeName\": \"fortisoar\"\n        },\n        \"details\": {\n          \"role\": null,\n          \"type\": \"Subscription\",\n          \"edition\": \"Enterprise\",\n          \"sub_type\": null,\n          \"contracts\": {\n            \"users\": 2,\n            \"expiry_time\": \"2024-11-08 00:00:00\",\n            \"fsre_is_active\": true,\n            \"has_tim_subscription\": false,\n            \"tim_supported_query_limit\": 100,\n            \"has_additional_users_active\": true,\n            \"tim_supported_ingestion_limit\": 1000\n          },\n          \"serial_no\": \"FSRVMSTM23000389\",\n          \"issue_time\": \"2023-11-06 19:45:34.073970\",\n          \"expiring_on\": \"2024-11-08\",\n          \"total_users\": 2,\n          \"entitlements\": {\n            \"branding\": \"advanced\"\n          },\n          \"customer_name\": null,\n          \"is_distributed\": false,\n          \"remaining_days\": 135,\n          \"remaining_users\": -1\n        }\n      }\n    },\n    \"users\": 2,\n    \"details\": {\n      \"role\": null,\n      \"users\": 2,\n      \"contracts\": {\n        \"users\": 2,\n        \"expiry_time\": \"2024-11-08 00:00:00\",\n        \"fsre_is_active\": true,\n        \"has_tim_subscription\": false,\n        \"tim_supported_query_limit\": 100,\n        \"has_additional_users_active\": true,\n        \"tim_supported_ingestion_limit\": 1000\n      },\n      \"entitlements\": {\n        \"branding\": \"advanced\"\n      },\n      \"is_distributed\": false\n    },\n    \"edition\": \"Enterprise\",\n    \"expired\": false,\n    \"sub_type\": null,\n    \"duplicate\": false,\n    \"setup_type\": \"single-node\",\n    \"user_stats\": {\n      \"fixed_active_users\": 1,\n      \"fixed_logged_in_users\": 1,\n      \"concurrent_active_users\": 2,\n      \"concurrent_logged_in_users\": 0\n    },\n    \"expiring_on\": \"2024-11-08\",\n    \"expired_nodes\": [],\n    \"remaining_days\": 135,\n    \"duplicate_nodes\": [],\n    \"is_cloud_instance\": false,\n    \"device_uuid_changed\": false,\n    \"device_uuid_changed_nodes\": []\n  },\n  \"status\": \"Success\",\n  \"message\": \"\",\n  \"operation\": null,\n  \"execution_time\": \"226 ms\"\n}",
+                "operationTitle": "FSR: Make FortiSOAR API Call",
+                "step_variables": {
+                  "open_sesame": "5a14dbc01b72665bf2a3d6c2fa3aa0e5",
+                  "license_details": "{{vars.steps.API_Call_for_Licenses.data}}"
+                }
+              },
+              "status": null,
+              "top": "360",
+              "left": "420",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "68448edb-53aa-4a00-9774-89b7ae0602e0"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "API Call Full Alerts",
+              "description": null,
+              "arguments": {
+                "params": {
+                  "iri": "/api/3/alerts",
+                  "body": "",
+                  "method": "GET"
+                },
+                "version": "3.3.1",
+                "connector": "cyops_utilities",
+                "operation": "make_cyops_request",
+                "operationTitle": "FSR: Make FortiSOAR API Call",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "189",
+              "left": "196",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "1a0f5bda-bacb-4ce7-8718-0f3e82937018"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "API Call Search Alerts",
+              "description": null,
+              "arguments": {
+                "params": {
+                  "iri": "/api/3/alerts?name$like=%mail%",
+                  "body": "",
+                  "method": "GET"
+                },
+                "version": "3.3.1",
+                "connector": "cyops_utilities",
+                "operation": "make_cyops_request",
+                "operationTitle": "FSR: Make FortiSOAR API Call",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "540",
+              "left": "720",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "288b0cb2-d00d-4042-9e09-507fa3ac886f"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "7349f3f3-bdbd-41e1-b1a2-d06bdfd880fa",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  },
+                  "useMockOutput": "True"
+                },
+                "triggerOnSource": true,
+                "displayConditions": {
+                  "alerts": {
+                    "sort": [],
+                    "limit": 30,
+                    "logic": "AND",
+                    "filters": []
+                  }
+                },
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "40",
+              "left": "40",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "1b50f32d-06b5-4e8d-88ce-0a84882ffbcd"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "API Call -> API Call for Licenses",
+              "targetStep": "/api/3/workflow_steps/68448edb-53aa-4a00-9774-89b7ae0602e0",
+              "sourceStep": "/api/3/workflow_steps/1a0f5bda-bacb-4ce7-8718-0f3e82937018",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "28555c05-1494-4bf5-b80a-6b8c664384ca"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "API Call for Licenses -> API Call Search Alerts",
+              "targetStep": "/api/3/workflow_steps/288b0cb2-d00d-4042-9e09-507fa3ac886f",
+              "sourceStep": "/api/3/workflow_steps/68448edb-53aa-4a00-9774-89b7ae0602e0",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "d5c6082c-eb5c-4a90-bc5e-09c20ee8c755"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> API Call",
+              "targetStep": "/api/3/workflow_steps/1a0f5bda-bacb-4ce7-8718-0f3e82937018",
+              "sourceStep": "/api/3/workflow_steps/1b50f32d-06b5-4e8d-88ce-0a84882ffbcd",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "a4c25b70-1826-4916-b53d-6cbd5cbc3085"
+            }
+          ],
+          "groups": [
+            {
+              "@type": "WorkflowGroup",
+              "name": "API Guide - Worth Reading",
+              "description": "https://docs.fortinet.com/document/fortisoar/7.5.0/api-guide/846127/overview",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": false,
+              "metadata": [],
+              "reusable": false,
+              "top": "240",
+              "left": "720",
+              "height": "0",
+              "width": "300",
+              "uuid": "0141e2dc-cf0e-4e20-b13f-2e0569ca4511",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Mockup Data",
+              "description": "See the Vars in the first step",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": false,
+              "metadata": [],
+              "reusable": false,
+              "top": "40",
+              "left": "360",
+              "height": "0",
+              "width": "300",
+              "uuid": "da8badf9-7a67-4b55-a393-d41d737f35f2",
+              "recordTags": []
+            }
+          ],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/b6d710a9-a8ec-41ec-8817-fe9fa062fcdd",
+          "isEditable": true,
+          "uuid": "cc89a25e-f95a-44c5-b978-64c6303f949b",
+          "id": 328,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "API",
+            "self API call"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "IP lookup on many sources + Basic Response and Approval",
+          "aliasName": null,
+          "tag": null,
+          "description": "VT + IP Stack + IP Info + Abuse IPDB",
+          "isActive": false,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1758568831,
+          "collection": "/api/3/workflow_collections/5f6beeeb-e593-4f9f-9a05-b1f044109a3a",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/5fc8a0af-1010-4ce8-86f2-85047a5e97d1",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Approve Blocking",
+              "description": null,
+              "arguments": {
+                "type": "InputBased",
+                "input": {
+                  "schema": {
+                    "title": "Do you approve blocking? the IP{{vars.steps.Enter_IP.input.iP}} on FW",
+                    "description": "IP: {{vars.steps.Enter_IP.input.iP}} ",
+                    "inputVariables": []
+                  }
+                },
+                "record": "",
+                "agent_id": null,
+                "resources": "indicators",
+                "is_approval": true,
+                "owner_detail": {
+                  "isAssigned": true,
+                  "assignedToTeam": [
+                    {
+                      "iri": "/api/3/teams/6e569c09-3bd4-40f1-98b0-cc994464c3c5",
+                      "teamname": "SOC Team"
+                    }
+                  ],
+                  "assignedToField": null,
+                  "emailRecipients": "",
+                  "assignedToPerson": [],
+                  "assignedToRecord": false
+                },
+                "isRecordLinked": false,
+                "step_variables": [],
+                "response_mapping": {
+                  "options": [
+                    {
+                      "option": "Approve",
+                      "primary": true,
+                      "step_iri": "/api/3/workflow_steps/8a676a56-ad4f-4828-8f59-37f6126ff457"
+                    },
+                    {
+                      "option": "Reject",
+                      "primary": false,
+                      "step_iri": "/api/3/workflow_steps/4981f1cd-88f6-4718-951a-75deb145381e"
+                    }
+                  ],
+                  "connecteStepsLength": 2,
+                  "customSuccessMessage": "Awaiting Playbook resumed successfully."
+                },
+                "email_notification": {
+                  "enabled": false,
+                  "smtpParameters": []
+                },
+                "customEmailExternal": false,
+                "inline_channel_list": [],
+                "external_channel_list": [],
+                "unauthenticated_input": false,
+                "external_email_subject": null,
+                "internal_email_subject": "A FortiSOAR playbook is requesting your input",
+                "custom_email_body_external": null,
+                "external_email_attachments": null
+              },
+              "status": null,
+              "top": "280",
+              "left": "1760",
+              "stepType": "/api/3/workflow_step_types/a19333c2-c822-11ed-afa1-0242ac120002",
+              "group": null,
+              "uuid": "8bb76e1d-b679-4d74-89c1-c0ac0a8402dd"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Enter IP",
+              "description": null,
+              "arguments": {
+                "type": "InputBased",
+                "input": {
+                  "schema": {
+                    "title": "Enter the IP",
+                    "description": "Insert the IP",
+                    "inputVariables": [
+                      {
+                        "name": "iP",
+                        "type": "string",
+                        "label": "IP",
+                        "title": "IPv4",
+                        "usable": true,
+                        "tooltip": "",
+                        "dataType": "text",
+                        "formType": "ipv4",
+                        "required": true,
+                        "_expanded": true,
+                        "mmdUpdate": true,
+                        "collection": false,
+                        "searchable": true,
+                        "templateUrl": "app/components/form/fields/webAddress.html",
+                        "defaultValue": "1.1.1.1",
+                        "_previousName": "",
+                        "playbookField": true,
+                        "lengthConstraint": false,
+                        "allowedEncryption": true,
+                        "allowedGridColumn": true,
+                        "jinjaExpressionView": true,
+                        "useRecordFieldDefault": false
+                      }
+                    ]
+                  }
+                },
+                "record": "",
+                "agent_id": null,
+                "resources": "indicators",
+                "is_approval": false,
+                "owner_detail": {
+                  "isAssigned": false,
+                  "emailRecipients": ""
+                },
+                "isRecordLinked": false,
+                "step_variables": [],
+                "response_mapping": {
+                  "options": [
+                    {
+                      "option": "Go",
+                      "primary": true,
+                      "step_iri": "/api/3/workflow_steps/981b5c0c-35fc-4009-84b9-4a87b223b057"
+                    }
+                  ],
+                  "duplicateOption": false,
+                  "customSuccessMessage": "Awaiting Playbook resumed successfully."
+                },
+                "email_notification": {
+                  "enabled": false,
+                  "smtpParameters": []
+                },
+                "customEmailExternal": false,
+                "inline_channel_list": [],
+                "external_channel_list": [],
+                "unauthenticated_input": false,
+                "external_email_subject": null,
+                "internal_email_subject": "A FortiSOAR playbook is requesting your input",
+                "custom_email_body_external": null,
+                "external_email_attachments": null
+              },
+              "status": null,
+              "top": "240",
+              "left": "540",
+              "stepType": "/api/3/workflow_step_types/fc04082a-d7dc-4299-96fb-6837b1baa0fe",
+              "group": null,
+              "uuid": "1d93e0fe-539c-410a-9e35-d33b314fc1a8"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "FGT Block",
+              "description": null,
+              "arguments": {
+                "name": "Fortinet FortiGate",
+                "config": "8b6d9137-f2df-4d37-9687-b38bbaba82e1",
+                "params": {
+                  "vdom": "",
+                  "method": "Quarantine Based",
+                  "ip_addresses": "{{vars.steps.Enter_IP.input.iP}}",
+                  "time_to_live": "12 Hour"
+                },
+                "version": "5.2.3",
+                "connector": "fortigate-firewall",
+                "operation": "block_ip",
+                "operationTitle": "Block IP Address",
+                "pickFromTenant": false,
+                "step_variables": []
+              },
+              "status": null,
+              "top": "500",
+              "left": "1760",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "8a676a56-ad4f-4828-8f59-37f6126ff457"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "JSON to HTML for IPStack",
+              "description": null,
+              "arguments": {
+                "when": "{{vars.myipstack == 1}}",
+                "params": {
+                  "data": "{{vars.steps.Lookup_IP_Stack.data}}",
+                  "display": "Horizontal",
+                  "styling": false,
+                  "template": "Stylized with row selection",
+                  "row_fields": ""
+                },
+                "version": "3.3.0",
+                "connector": "cyops_utilities",
+                "operation": "json_to_html",
+                "operationTitle": "Utils: Convert JSON into a HTML Table",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "240",
+              "left": "1380",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "484e5685-62f5-4063-be59-8b799cfbccd4"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "JSON to HTML for VT",
+              "description": null,
+              "arguments": {
+                "when": "{{vars.myvt == 1}}",
+                "params": {
+                  "data": "{{vars.steps.VT_Lookup.data.attributes['last_analysis_stats']}}",
+                  "display": "Horizontal",
+                  "styling": false,
+                  "template": "Stylized with row selection",
+                  "row_fields": ""
+                },
+                "version": "3.3.0",
+                "connector": "cyops_utilities",
+                "operation": "json_to_html",
+                "operationTitle": "Utils: Convert JSON into a HTML Table",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "120",
+              "left": "1380",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "846dde6f-dba7-4b56-aaeb-e4ec29c677af"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Lokkup IPInfo",
+              "description": null,
+              "arguments": {
+                "name": "ipinfo.io",
+                "config": "f6128dad-bdae-468a-825d-0bc63dd90cd2",
+                "params": {
+                  "ip_address": "{{vars.steps.Enter_IP.input.iP}}"
+                },
+                "version": "1.0.0",
+                "connector": "ipinfo",
+                "operation": "lookup_ip",
+                "operationTitle": "Lookup IP Address",
+                "pickFromTenant": false,
+                "step_variables": []
+              },
+              "status": null,
+              "top": "360",
+              "left": "920",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "78c6eb7f-42cd-4971-8f95-d789b07096a0"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Lookup Abuse IP Database",
+              "description": null,
+              "arguments": {
+                "name": "AbuseIPDB",
+                "config": "030f3d6e-ec70-4a5c-89ac-ba5674cb71b0",
+                "params": {
+                  "ip": "{{vars.steps.Enter_IP.input.iP}}",
+                  "days": 30
+                },
+                "version": "2.0.0",
+                "connector": "abuseipdb",
+                "operation": "ip_lookup",
+                "operationTitle": "IP Lookup",
+                "pickFromTenant": false,
+                "step_variables": []
+              },
+              "status": null,
+              "top": "500",
+              "left": "920",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "3f7f7989-4667-4e8a-8888-02671469ef67"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Lookup IP Stack",
+              "description": null,
+              "arguments": {
+                "name": "IPStack",
+                "when": "{{vars.myipstack == 1}}",
+                "config": "4dd23fc8-5493-444a-bca5-043cebd8b503",
+                "params": {
+                  "query": "{{vars.steps.Enter_IP.input.iP}}",
+                  "fields": "",
+                  "enable_hostname": false,
+                  "enable_security": false
+                },
+                "version": "1.0.1",
+                "connector": "ipstack",
+                "operation": "ip_locate",
+                "operationTitle": "Geolocate IP",
+                "pickFromTenant": false,
+                "step_variables": []
+              },
+              "status": null,
+              "top": "240",
+              "left": "920",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "4a8180a5-fa59-453f-8d2d-5c7d90252e8a"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Playbook Config",
+              "description": null,
+              "arguments": {
+                "myvt": "1",
+                "malicous": "0",
+                "myipinfo": "1",
+                "vt_score": "10",
+                "myipstack": "1",
+                "isMalicious": "1",
+                "myabuseipdb": "1",
+                "myipquality": "1"
+              },
+              "status": null,
+              "top": "140",
+              "left": "540",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "e70e7583-f8be-4075-8dff-7371d66f1def"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Presenting results",
+              "description": null,
+              "arguments": {
+                "type": "InputBased",
+                "input": {
+                  "schema": {
+                    "title": "Your Results for{{vars.steps.Enter_IP.input.iP}}",
+                    "description": "VT Result:\n{{vars.steps.JSON_to_HTML_for_VT.data }}\n\n<BR><BR>\n\nIP Quality:\n{{vars.steps.JSON_to_HTML_for_IPStack.data }}\n",
+                    "inputVariables": []
+                  }
+                },
+                "record": "",
+                "agent_id": null,
+                "resources": "indicators",
+                "is_approval": false,
+                "owner_detail": {
+                  "isAssigned": false,
+                  "emailRecipients": ""
+                },
+                "isRecordLinked": false,
+                "step_variables": [],
+                "response_mapping": {
+                  "options": [
+                    {
+                      "option": "Finish",
+                      "primary": true,
+                      "step_iri": "/api/3/workflow_steps/4981f1cd-88f6-4718-951a-75deb145381e"
+                    },
+                    {
+                      "option": "Continue for Blocking",
+                      "step_iri": "/api/3/workflow_steps/8bb76e1d-b679-4d74-89c1-c0ac0a8402dd"
+                    }
+                  ],
+                  "duplicateOption": false,
+                  "customSuccessMessage": "Awaiting Playbook resumed successfully."
+                },
+                "email_notification": {
+                  "enabled": false,
+                  "smtpParameters": []
+                },
+                "customEmailExternal": false,
+                "inline_channel_list": [],
+                "external_channel_list": [],
+                "unauthenticated_input": false,
+                "external_email_subject": null,
+                "internal_email_subject": "A FortiSOAR playbook is requesting your input",
+                "custom_email_body_external": null,
+                "external_email_attachments": null
+              },
+              "status": null,
+              "top": "120",
+              "left": "1760",
+              "stepType": "/api/3/workflow_step_types/fc04082a-d7dc-4299-96fb-6837b1baa0fe",
+              "group": null,
+              "uuid": "0c5f7a18-8037-4837-be0f-e6d0506d694f"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "337ab01c-ccd4-4a8f-93cc-daf9cf052b91",
+                "resources": [
+                  "indicators"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "message": "Starting the show",
+                  "visible": true,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "40",
+              "left": "540",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "5fc8a0af-1010-4ce8-86f2-85047a5e97d1"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "The End",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.3.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "280",
+              "left": "2280",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "4981f1cd-88f6-4718-951a-75deb145381e"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "VT Lookup",
+              "description": null,
+              "arguments": {
+                "name": "VirusTotal",
+                "when": "{{vars.myvt == 1}}",
+                "config": "2df52cf6-e4e2-4eee-bce1-7fc6d22d9fc1",
+                "params": {
+                  "ip": "{{vars.steps.Enter_IP.input.iP}}",
+                  "relationships": ""
+                },
+                "version": "3.1.2",
+                "connector": "virustotal",
+                "operation": "query_ip",
+                "operationTitle": "Get IP Reputation",
+                "pickFromTenant": false,
+                "step_variables": []
+              },
+              "status": null,
+              "top": "120",
+              "left": "920",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "981b5c0c-35fc-4009-84b9-4a87b223b057"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Approve Blocking -> FGT Block",
+              "targetStep": "/api/3/workflow_steps/8a676a56-ad4f-4828-8f59-37f6126ff457",
+              "sourceStep": "/api/3/workflow_steps/8bb76e1d-b679-4d74-89c1-c0ac0a8402dd",
+              "label": "Approve",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "f87c2bac-a3c9-4b2a-84b6-cea43a622293"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Approve Blocking -> The End",
+              "targetStep": "/api/3/workflow_steps/4981f1cd-88f6-4718-951a-75deb145381e",
+              "sourceStep": "/api/3/workflow_steps/8bb76e1d-b679-4d74-89c1-c0ac0a8402dd",
+              "label": "Reject",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "57325c1c-df83-4460-8a49-32d9a493296b"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Enter IP -> VT Lookup",
+              "targetStep": "/api/3/workflow_steps/981b5c0c-35fc-4009-84b9-4a87b223b057",
+              "sourceStep": "/api/3/workflow_steps/1d93e0fe-539c-410a-9e35-d33b314fc1a8",
+              "label": "Go",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "9dcc24fd-8907-4c53-b707-d93514efb2ec"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "FGT Block -> The End",
+              "targetStep": "/api/3/workflow_steps/4981f1cd-88f6-4718-951a-75deb145381e",
+              "sourceStep": "/api/3/workflow_steps/8a676a56-ad4f-4828-8f59-37f6126ff457",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "d2f57330-370d-4947-8a34-9252ecde8e63"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "JSON to HTML -> Copy of JSON to HTML",
+              "targetStep": "/api/3/workflow_steps/484e5685-62f5-4063-be59-8b799cfbccd4",
+              "sourceStep": "/api/3/workflow_steps/846dde6f-dba7-4b56-aaeb-e4ec29c677af",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "febfdfce-cf42-4cc5-99f7-e4e68533afe0"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "JSON to HTML for IPStack -> Presenting results",
+              "targetStep": "/api/3/workflow_steps/0c5f7a18-8037-4837-be0f-e6d0506d694f",
+              "sourceStep": "/api/3/workflow_steps/484e5685-62f5-4063-be59-8b799cfbccd4",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "17e9a28d-3085-4ef5-9b8c-db35c606dfa3"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Lokkup IPInfo -> Lookup Abuse IP Database",
+              "targetStep": "/api/3/workflow_steps/3f7f7989-4667-4e8a-8888-02671469ef67",
+              "sourceStep": "/api/3/workflow_steps/78c6eb7f-42cd-4971-8f95-d789b07096a0",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "e88fa762-011b-4d41-bd49-469c64ac14ef"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Lookup Abuse IP Database -> End",
+              "targetStep": "/api/3/workflow_steps/846dde6f-dba7-4b56-aaeb-e4ec29c677af",
+              "sourceStep": "/api/3/workflow_steps/3f7f7989-4667-4e8a-8888-02671469ef67",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "bdf7bead-30b6-455a-8960-ba9397726385"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Lookup IP Stack -> Lokkup IPInfo",
+              "targetStep": "/api/3/workflow_steps/78c6eb7f-42cd-4971-8f95-d789b07096a0",
+              "sourceStep": "/api/3/workflow_steps/4a8180a5-fa59-453f-8d2d-5c7d90252e8a",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "41ea6c36-76fb-4808-875b-30da134a32d8"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "My Vars -> Enter IP",
+              "targetStep": "/api/3/workflow_steps/1d93e0fe-539c-410a-9e35-d33b314fc1a8",
+              "sourceStep": "/api/3/workflow_steps/e70e7583-f8be-4075-8dff-7371d66f1def",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "08356f86-2e94-4349-8af1-096ad3434bc9"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Presenting results -> Approve Blocking",
+              "targetStep": "/api/3/workflow_steps/8bb76e1d-b679-4d74-89c1-c0ac0a8402dd",
+              "sourceStep": "/api/3/workflow_steps/0c5f7a18-8037-4837-be0f-e6d0506d694f",
+              "label": "Continue for Blocking",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "c94814c6-7a79-4bb2-83da-c155e839e013"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Presenting results -> The End",
+              "targetStep": "/api/3/workflow_steps/4981f1cd-88f6-4718-951a-75deb145381e",
+              "sourceStep": "/api/3/workflow_steps/0c5f7a18-8037-4837-be0f-e6d0506d694f",
+              "label": "Finish",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "8f508b01-e527-48e1-b858-b9dce9860049"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> My Vars",
+              "targetStep": "/api/3/workflow_steps/e70e7583-f8be-4075-8dff-7371d66f1def",
+              "sourceStep": "/api/3/workflow_steps/5fc8a0af-1010-4ce8-86f2-85047a5e97d1",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "942b3a5f-e8e6-4c62-91c5-42d4093609b3"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "VT Lookup -> Lookup IP Stack",
+              "targetStep": "/api/3/workflow_steps/4a8180a5-fa59-453f-8d2d-5c7d90252e8a",
+              "sourceStep": "/api/3/workflow_steps/981b5c0c-35fc-4009-84b9-4a87b223b057",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "b8b9dbea-92fa-4c90-adc7-f5cdfe6fc0a2"
+            }
+          ],
+          "groups": [
+            {
+              "@type": "WorkflowGroup",
+              "name": "Main Engines",
+              "description": "The 4 engines that are helping evaluating the IP",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": false,
+              "metadata": [],
+              "reusable": false,
+              "top": "20",
+              "left": "920",
+              "height": "0",
+              "width": "300",
+              "uuid": "4b967748-3838-49f9-aa80-3ac4b4d82367",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Results and Block Approval Blocks",
+              "description": "Presenting the Enrichment results and (if needed) Blocking the IP on the perimeter",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "20",
+              "left": "1740",
+              "height": "0",
+              "width": "300",
+              "uuid": "f34849d9-4009-441e-94fd-376dde92b21c",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "The Remediation!",
+              "description": "FGT Blocking using 12h Quarantine",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "600",
+              "left": "1740",
+              "height": "0",
+              "width": "300",
+              "uuid": "8096a131-2708-483e-8b46-970a7a3b1989",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "The Transformations",
+              "description": "Using Utilities to tansform JSON into HTML tables",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "20",
+              "left": "1360",
+              "height": "0",
+              "width": "300",
+              "uuid": "9cce54cd-f16f-41bd-b464-f26aca2062b2",
+              "recordTags": []
+            }
+          ],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/b6d710a9-a8ec-41ec-8817-fe9fa062fcdd",
+          "isEditable": true,
+          "uuid": "cf2aac00-0021-4233-a043-2cc3bac849ad",
+          "id": 338,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "fortigate",
+            "poc"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "FortiSOAR Playbook API test 1",
+          "aliasName": null,
+          "tag": null,
+          "description": "(basic auth) Call FortiSOAR playbooks using curl command and basic auth",
+          "isActive": true,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779797268,
+          "collection": "/api/3/workflow_collections/5f6beeeb-e593-4f9f-9a05-b1f044109a3a",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/56177986-be2e-4130-bf19-1929d70e3872",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "End",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.3.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "297",
+              "left": "753",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "6da4e342-65d7-4a52-a83f-1fc4fd3a35e9"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "deferred/api_endpoint",
+                "__triggerLimit": true,
+                "step_variables": {
+                  "input": {
+                    "params": {
+                      "api_body": "{{vars.request.data}}",
+                      "api_params": "{{vars.request.params}}"
+                    }
+                  }
+                },
+                "triggerOnSource": true,
+                "triggerOnReplicate": false,
+                "authentication_methods": [
+                  "Basic"
+                ]
+              },
+              "status": null,
+              "top": "40",
+              "left": "40",
+              "stepType": "/api/3/workflow_step_types/df26c7a2-4166-4ca5-91e5-548e24c01b5f",
+              "group": null,
+              "uuid": "56177986-be2e-4130-bf19-1929d70e3872"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "VT",
+              "description": null,
+              "arguments": {
+                "name": "VirusTotal",
+                "config": "2df52cf6-e4e2-4eee-bce1-7fc6d22d9fc1",
+                "params": {
+                  "ip": "220.197.51.62",
+                  "relationships": [
+                    "Comments",
+                    "Historical SSL Certificates",
+                    "Graphs",
+                    "Historical Whois",
+                    "Referrer Files",
+                    "Resolutions",
+                    "Votes",
+                    "Related Comments"
+                  ]
+                },
+                "version": "3.1.2",
+                "connector": "virustotal",
+                "operation": "query_ip",
+                "operationTitle": "Get IP Reputation",
+                "pickFromTenant": false,
+                "step_variables": []
+              },
+              "status": null,
+              "top": "180",
+              "left": "340",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "ad2cbe0d-f015-4e87-a0b1-eb3a350a67a6"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> VT",
+              "targetStep": "/api/3/workflow_steps/ad2cbe0d-f015-4e87-a0b1-eb3a350a67a6",
+              "sourceStep": "/api/3/workflow_steps/56177986-be2e-4130-bf19-1929d70e3872",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "7467f026-8cc3-4e46-aa0f-7c9578b50a6f"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "VT -> End",
+              "targetStep": "/api/3/workflow_steps/6da4e342-65d7-4a52-a83f-1fc4fd3a35e9",
+              "sourceStep": "/api/3/workflow_steps/ad2cbe0d-f015-4e87-a0b1-eb3a350a67a6",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "353669e1-5b12-4ea3-846f-11e007b597c7"
+            }
+          ],
+          "groups": [
+            {
+              "@type": "WorkflowGroup",
+              "name": "API",
+              "description": "curl -k -X POST -u 'rafael:PASS' https://fortisoar.example.com/api/triggers/1/deferred/api_endpoint",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "300",
+              "left": "180",
+              "height": "203",
+              "width": "346",
+              "uuid": "a36dbf70-7f3d-4a22-8a1f-c6d7ad0223a2",
+              "recordTags": []
+            }
+          ],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/b6d710a9-a8ec-41ec-8817-fe9fa062fcdd",
+          "isEditable": true,
+          "uuid": "eafdda4b-bc6b-49d2-a9fb-b14ce552caed",
+          "id": 335,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "basic webhook",
+            "Custom API Endpoint",
+            "user and pass authentication"
+          ]
+        }
+      ]
+    }
+  ],
+  "exported_tags": [
+    "alerts",
+    "cve",
+    "linking records",
+    "Custom API Endpoint",
+    "token authentication",
+    "webook",
+    "correlation",
+    "Indicators",
+    "first",
+    "poc",
+    "dad joke",
+    "rest api",
+    "utilities",
+    "API",
+    "self API call",
+    "fortigate",
+    "basic webhook",
+    "user and pass authentication"
+  ]
+}

@@ -3,11 +3,22 @@ description: >
   End-to-end archetype pilot (reconcile-and-report) driven by LIVE connector data.
   Step 1 queries FortiCloud Asset Management (source A), step 2 queries the
   ServiceNow CMDB (source B), then a code_snippet diffs the two by serial-number
-  join key, writes a finding record to the reconciliation_results module, and
-  emails a CSV report via SMTP (localhost-postfix).
+  join key and emits an asset list (one per reconciled serial) plus a findings
+  list (one per discrepancy). Two for_each create_record steps then UPSERT every
+  asset (by join_key) and every finding as an issue (by issue_key = join_key +
+  mismatch_type), so re-runs UPDATE existing records instead of duplicating
+  (idempotent). A CSV report is emailed via SMTP (localhost-postfix).
 
-  Connectors (configured + live-verified on .205 2026-06-26):
-    forticloud-asset-management  cfg 'forticloud-reconcile'  -> 152 real assets
+  Asset-centric model: recon_assets (parent, natural key join_key) +
+  recon_issues (child, natural key issue_key) linked by a shared join_key. The
+  `asset` lookup relationship field is created on recon_issues by the deploy
+  script but is left unpopulated in this v1 (the link is the join_key string,
+  queryable via records.find). Populating the relationship IRI per issue needs a
+  find_record -> join_key:IRI map whose output shape is a live-verification gate
+  (see docs/plans + the live-verify task); that is the v2 follow-up.
+
+  Connectors (configured + live-verified on a 7.6.5 appliance):
+    forticloud-asset-management  cfg 'forticloud-reconcile'  -> real asset inventory
     servicenow-cmdb              cfg 'servicenow-reconcile'  -> real cmdb_ci CIs
   FortiCloud's native list_assets op cannot send accountId (no config field for
   it in v1.0.0), so source A uses the generic_api_call bypass -> POST /products/list
@@ -18,7 +29,11 @@ description: >
   `open` is restricted. The snippet therefore reads the two upstream datasets via
   jinja (rendered as python literals), diffs them, and `print(json.dumps(...))`;
   the connector auto-deserializes that JSON into a structured `code_output` dict
-  the downstream steps consume. The email embeds the CSV in the body (no attachment).
+  the downstream steps consume.
+
+  PICKLIST IRIs (MismatchType + ReconStatus) are appliance-specific placeholders below
+  with RE-RESOLVE comments; the deploy script (scripts/deploy_recon_modules.py)
+  resolves them at deploy time and substitutes the real IRIs before compile+push.
 visible: true
 
 playbooks:
@@ -62,9 +77,12 @@ playbooks:
             sysparm_limit: 1000
 
       # --- Diff the two live inventories by serial ---------------------------
+      # Emits `assets` (one per reconciled serial, union of both sources) and
+      # `findings` (one per discrepancy, each carrying issue_key = join_key +
+      # "|" + mismatch_type). print(json.dumps) -> auto-deserialized code_output.
       - name: Reconcile
         type: code_snippet
-        next: Write finding
+        next: Upsert assets
         arguments:
           code: |
             import csv, io, json
@@ -74,31 +92,40 @@ playbooks:
             fc_raw = fc_raw if isinstance(fc_raw, list) else []
             sn_raw = sn_raw if isinstance(sn_raw, list) else []
 
-            # Normalize each source to a common shape keyed by serial number.
-            # FortiCloud: serialNumber is the join key; license derived from the
-            # asset status / decommission flag.
-            a = []
+            # Normalize each source to {serial: {join_key, name, <side>_state}}.
+            a = {}
             for x in fc_raw:
                 serial = (x.get("serialNumber") or "").strip()
                 if not serial:
                     continue
-                license = "expired" if x.get("isDecommissioned") else "active"
-                a.append({"serial": serial,
-                          "name": (x.get("description") or x.get("productModel") or serial),
-                          "license": license})
-            # ServiceNow: join on serial_number when present (CMDB CIs without a
-            # serial cannot be reconciled against assets and are skipped).
-            b = []
+                a[serial] = {
+                    "join_key": serial,
+                    "name": (x.get("description") or x.get("productModel") or serial),
+                    "source_a": "decommissioned" if x.get("isDecommissioned") else "active",
+                }
+            b = {}
             for x in sn_raw:
                 serial = (x.get("serial_number") or "").strip()
                 if not serial:
                     continue
-                b.append({"serial": serial,
-                          "name": (x.get("name") or serial),
-                          "status": "installed"})
+                b[serial] = {
+                    "join_key": serial,
+                    "name": (x.get("name") or serial),
+                    "source_b": "installed",
+                }
+
+            # Assets = union of serials seen in either source (one row each).
+            assets = []
+            for s in sorted(set(a) | set(b)):
+                assets.append({
+                    "join_key": s,
+                    "name": (a.get(s, {}).get("name") or b.get(s, {}).get("name") or s),
+                    "source_a": a.get(s, {}).get("source_a", "absent"),
+                    "source_b": b.get(s, {}).get("source_b", "absent"),
+                })
 
             # MismatchType picklist IRIs (resolved at DEPLOY time; create_record
-            # needs IRIs, not friendly values). RE-RESOLVE these after the
+            # needs IRIs, not friendly values). RE-RESOLVE after the
             # reconciliation_results module + picklists are (re)created.
             MT = {
                 "missing-in-A": "/api/3/picklists/26399476-3fbf-4443-8240-a374c988126e",
@@ -106,23 +133,28 @@ playbooks:
                 "license-expiring": "/api/3/picklists/c61d5134-e24f-448a-a2c0-d1e4d2352268",
                 "field-mismatch": "/api/3/picklists/e42f12d5-ed5c-43ee-b8d2-f2a314a32a2f",
             }
-            ka = {r["serial"]: r for r in a}
-            kb = {r["serial"]: r for r in b}
+            mt_label = {v: k for k, v in MT.items()}  # IRI -> friendly label, for the CSV
+
+            # Findings = issues, each keyed by join_key + mismatch_type (so a serial
+            # can carry several distinct findings without colliding).
             findings = []
-            for s, r in ka.items():
-                if s not in kb:
-                    findings.append({"join_key": s, "mismatch_type": MT["missing-in-B"],
+            for s, r in a.items():
+                if s not in b:
+                    findings.append({"issue_key": s + "|missing-in-B", "join_key": s,
+                                     "mismatch_type": MT["missing-in-B"],
                                      "source_system": "FortiCloud", "target_system": "ServiceNow",
                                      "source_id": s, "target_id": "",
                                      "details": f"{r['name']} present in FortiCloud, missing in ServiceNow CMDB"})
-                elif r.get("license") == "expired":
-                    findings.append({"join_key": s, "mismatch_type": MT["license-expiring"],
+                elif r.get("source_a") == "decommissioned":
+                    findings.append({"issue_key": s + "|license-expiring", "join_key": s,
+                                     "mismatch_type": MT["license-expiring"],
                                      "source_system": "FortiCloud", "target_system": "ServiceNow",
                                      "source_id": s, "target_id": s,
                                      "details": f"{r['name']} is decommissioned/expired in FortiCloud"})
-            for s, r in kb.items():
-                if s not in ka:
-                    findings.append({"join_key": s, "mismatch_type": MT["missing-in-A"],
+            for s, r in b.items():
+                if s not in a:
+                    findings.append({"issue_key": s + "|missing-in-A", "join_key": s,
+                                     "mismatch_type": MT["missing-in-A"],
                                      "source_system": "FortiCloud", "target_system": "ServiceNow",
                                      "source_id": "", "target_id": s,
                                      "details": f"{r['name']} present in ServiceNow CMDB, missing in FortiCloud"})
@@ -130,36 +162,58 @@ playbooks:
             buf = io.StringIO()
             w = csv.writer(buf)
             w.writerow(["join_key", "mismatch_type", "source_system", "target_system", "details"])
-            mt_rev = {v: k for k, v in MT.items()}  # IRI -> friendly label, for the human CSV
             for f in findings:
-                w.writerow([f["join_key"], mt_rev.get(f["mismatch_type"], f["mismatch_type"]),
+                w.writerow([f["join_key"], mt_label.get(f["mismatch_type"], f["mismatch_type"]),
                             f["source_system"], f["target_system"], f["details"]])
             # Module-level exec: no `return`, no `open`. print(json.dumps(...)) ->
             # the connector auto-deserializes this into a structured code_output dict.
-            print(json.dumps({"findings": findings,
-                              "first": findings[0] if findings else None,
+            print(json.dumps({"assets": assets, "findings": findings,
                               "csv_content": buf.getvalue(),
                               "fc_count": len(a), "sn_count": len(b),
                               "count": len(findings)}))
 
-      - name: Write finding
+      # --- Upsert every asset (idempotent by join_key) -----------------------
+      # is_upsert -> /api/3/upsert/recon_assets + operation: Overwrite; sourceId
+      # is the natural key, so a re-run updates the existing asset row, not a dup.
+      - name: Upsert assets
+        type: create_record
+        next: Upsert issues
+        for_each:
+          item: "{{ vars.steps.Reconcile.data.code_output.assets }}"
+        arguments:
+          module: recon_assets
+          is_upsert: true
+          resource:
+            sourceId: "{{ vars.item.join_key }}"
+            join_key: "{{ vars.item.join_key }}"
+            name: "{{ vars.item.name }}"
+            source_a: "{{ vars.item.source_a }}"
+            source_b: "{{ vars.item.source_b }}"
+
+      # --- Upsert every finding as an issue (idempotent by issue_key) --------
+      # The `asset` lookup relationship is left unset in v1 (link = join_key
+      # string); populating it needs the find_record -> IRI map (v2 follow-up).
+      - name: Upsert issues
         type: create_record
         next: Email report
+        for_each:
+          item: "{{ vars.steps.Reconcile.data.code_output.findings }}"
         arguments:
-          module: reconciliation_results
-          operation: Create
+          module: recon_issues
+          is_upsert: true
           resource:
-            source_system: "{{ vars.steps.Reconcile.data.code_output.first.source_system }}"
-            source_id: "{{ vars.steps.Reconcile.data.code_output.first.source_id }}"
-            target_system: "{{ vars.steps.Reconcile.data.code_output.first.target_system }}"
-            target_id: "{{ vars.steps.Reconcile.data.code_output.first.target_id }}"
-            join_key: "{{ vars.steps.Reconcile.data.code_output.first.join_key }}"
-            mismatch_type: "{{ vars.steps.Reconcile.data.code_output.first.mismatch_type }}"
+            sourceId: "{{ vars.item.issue_key }}"
+            issue_key: "{{ vars.item.issue_key }}"
+            join_key: "{{ vars.item.join_key }}"
+            mismatch_type: "{{ vars.item.mismatch_type }}"
             # ReconStatus picklist IRI for "Open" (resolved at deploy time; create_record
             # needs an IRI, not the friendly value "Open"). RE-RESOLVE after module rebuild.
             status: "/api/3/picklists/58200b01-3cca-4b6b-a3c3-a83415def3e2"
-            details: "{{ vars.steps.Reconcile.data.code_output.first.details }}"
-          step_variables: []
+            source_system: "{{ vars.item.source_system }}"
+            target_system: "{{ vars.item.target_system }}"
+            source_id: "{{ vars.item.source_id }}"
+            target_id: "{{ vars.item.target_id }}"
+            details: "{{ vars.item.details }}"
 
       - name: Email report
         type: connector
