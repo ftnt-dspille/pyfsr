@@ -1,0 +1,77 @@
+# Library playbook: Scheduled hunt: summarize recent alerts by severity and post a digest comment.
+# goal: Scheduled hunt: a periodic (cron/schedule) trigger that runs find_record over recent alerts matching a filter, summarizes the count by severity into a set_variable, and posts a digest comment.
+# trigger: start (scheduled)
+# inputs: vars.input (trigger context, none required)
+# outputs: a comment record with the digest summary
+# connectors: cyops_utilities (no external connectors); # swap-in: <your connector> (config: <uuid or name>) if needed for comment posting
+# adapts-to: SOC monitoring intent – recurring alert summary and notification
+
+collection: 00. Playbook Learning SP - Specific Playbooks
+description: ''
+visible: true
+playbooks:
+  - name: Scheduled Hunt Summarize Notify
+    description: Summarize recent alerts by severity and post a digest comment.
+    is_active: true
+    trigger_step_id: Start
+    steps:
+      - type: start
+        name: Start
+        # scheduled trigger fires this playbook automatically
+        next: Playbook Config
+
+      - type: set_variable
+        name: Playbook Config
+        vars:
+          daysAgo: "{{ arrow.utcnow().shift(days=-1) }}"
+        next: Find Recent Alerts
+
+      - type: find_record
+        name: Find Recent Alerts
+        module: alerts?$limit=200
+        arguments:
+          query:
+            sort: []
+            limit: 200
+            logic: AND
+            filters:
+              - type: datetime
+                field: assigneddate
+                operator: gt
+                value: "{{ vars.daysAgo }}"
+        next: Summarize Severity Counts
+
+      - type: set_variable
+        name: Summarize Severity Counts
+        vars:
+          critical_count: "{{ (vars.steps.Find_Recent_Alerts.data | json_query('[?severity==`critical`].severity') ) | length }}"
+          high_count: "{{ (vars.steps.Find_Recent_Alerts.data | json_query('[?severity==`high`].severity') ) | length }}"
+          medium_count: "{{ (vars.steps.Find_Recent_Alerts.data | json_query('[?severity==`medium`].severity') ) | length }}"
+          low_count: "{{ (vars.steps.Find_Recent_Alerts.data | json_query('[?severity==`low`].severity') ) | length }}"
+        next: Post Digest Comment
+
+      - type: insert_record
+        name: Post Digest Comment
+        arguments:
+          collection: /api/3/comments
+          operation: Overwrite
+          resource:
+            content: |
+              <p><strong>Scheduled Hunt Summary (last 24h)</strong></p>
+              <ul>
+                <li>Critical: {{ vars.critical_count }}</li>
+                <li>High: {{ vars.high_count }}</li>
+                <li>Medium: {{ vars.medium_count }}</li>
+                <li>Low: {{ vars.low_count }}</li>
+              </ul>
+            isImportant: true
+        next: This is the End
+
+      - type: CyopsUtilites
+        name: This is the End
+        arguments:
+          connector: cyops_utilities
+          version: 3.7.0
+          operation: no_op
+          operationTitle: "Utils: No Operation"
+          params: []

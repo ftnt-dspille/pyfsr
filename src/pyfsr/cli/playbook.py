@@ -11,6 +11,10 @@ Subcommands (this group is the authoring "start here" index):
   name and one-line purpose (offline).
 - ``step-help <type> [--schema]`` — keys + a real compiling friendly-YAML
   example for one step type (offline).
+- ``examples [--intent ".."] [--stage S] [--manifest]`` -- list the foundational
+  playbook library (whole, compiling, use-case-shaped worked examples an agent
+  retrieves and adapts); ``--manifest`` emits the retrieval JSON payload (offline).
+- ``show <slug>`` — print one library playbook's metadata + full friendly YAML (offline).
 - ``compile <file.yaml> [-o out.json]`` — compile only (no network); emit the
   ``workflow_collections`` envelope, diagnostics to stderr.
 - ``validate <file.yaml>`` — compile and report diagnostics; nonzero exit on
@@ -357,6 +361,91 @@ def cmd_step_help(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_examples(args: argparse.Namespace) -> int:
+    """List the foundational playbook library (the worked-examples layer).
+
+    Prints every library playbook with its stage, intent (goal), step types, and
+    compile status — the table an agent scans to find the closest worked example to
+    adapt. With ``--intent`` filters by goal substring; ``--manifest`` emits the
+    retrieval JSON payload instead of a table; ``--stage`` filters by stage.
+    """
+    from ..playbook_library import library_manifest, list_library
+
+    if args.manifest:
+        print(json.dumps(library_manifest(), indent=2))
+        return 0
+
+    entries = list_library()
+    if not entries:
+        print(
+            "no library found — examples/playbooks/library/ is the worked-examples layer.",
+            file=sys.stderr,
+        )
+        return 1
+    if getattr(args, "stage", None):
+        entries = [e for e in entries if e.stage == args.stage]
+    if getattr(args, "intent", None):
+        needle = args.intent.lower()
+        entries = [e for e in entries if needle in e.goal.lower() or needle in e.name.lower()]
+
+    rows = [
+        [
+            e.stage,
+            e.slug,
+            e.goal[:60] + ("…" if len(e.goal) > 60 else ""),
+            ",".join(e.step_types),
+            "yes" if e.compiles_ok else "cold*",
+        ]
+        for e in entries
+    ]
+    _output.render(rows, ["stage", "slug", "goal", "step types", "compiles"], fmt="table")
+    print(
+        f"\n{len(entries)} playbooks. cold* = compiles but needs --refresh-catalog to "
+        f"resolve connector names. Run `pyfsr playbook show <slug>` for one in full.",
+        file=sys.stderr,
+    )
+    return 0
+
+
+def cmd_show(args: argparse.Namespace) -> int:
+    """Print one library playbook: its metadata + the full friendly YAML."""
+    from ..playbook_library import library_show
+
+    entry = library_show(args.slug)
+    if entry is None:
+        print(f"error: no library playbook with slug {args.slug!r}", file=sys.stderr)
+        print(
+            "run `pyfsr playbook examples` to list available slugs.",
+            file=sys.stderr,
+        )
+        return 1
+    _output.kv(
+        {
+            "slug": entry.slug,
+            "stage": entry.stage,
+            "name": entry.name,
+            "goal": entry.goal,
+            "source": entry.source,
+            "path": entry.path,
+            "step_types": ",".join(entry.step_types),
+            "connectors": ",".join(entry.connectors) or "(none)",
+            "jinja_filters": ",".join(entry.jinja_filters) or "(none)",
+            "triggers": ",".join(entry.triggers) or "(none)",
+            "compiles_ok": "yes" if entry.compiles_ok else "cold*",
+        },
+        fmt="table",
+    )
+    print("\nfriendly YAML:\n")
+
+    from ..playbook_library import _LIBRARY_DEFAULT
+
+    # entry.path is repo-relative; resolve against the library dir's repo root,
+    # which is two parents above the library directory (examples/playbooks/library).
+    repo_root = _LIBRARY_DEFAULT.parents[2]
+    print((repo_root / entry.path).read_text(encoding="utf-8"))
+    return 0
+
+
 def _workflows_of(result: CompiledPlaybook, collection_name: str) -> list[str]:
     for col in (result.fsr_json or {}).get("data", []):
         if col.get("name") == collection_name:
@@ -378,6 +467,21 @@ def build_subparser(asub: argparse._SubParsersAction) -> None:
         "--schema", action="store_true", help="also print the arguments JSON schema (modeled types)"
     )
     p_step_help.set_defaults(func=cmd_step_help)
+
+    p_examples = asub.add_parser(
+        "examples",
+        help="list the foundational playbook library (worked examples to adapt) (offline)",
+    )
+    p_examples.add_argument("--intent", help="filter by goal/name substring (case-insensitive)")
+    p_examples.add_argument("--stage", help="filter by stage (triggers/enrichment/decision/action/notify/control)")
+    p_examples.add_argument(
+        "--manifest", action="store_true", help="emit the retrieval manifest JSON instead of a table"
+    )
+    p_examples.set_defaults(func=cmd_examples)
+
+    p_show = asub.add_parser("show", help="print one library playbook: metadata + the full friendly YAML (offline)")
+    p_show.add_argument("slug", help="library playbook slug (see `pyfsr playbook examples`)")
+    p_show.set_defaults(func=cmd_show)
 
     p_compile = asub.add_parser("compile", help="compile YAML to the FSR import envelope (offline)")
     add_connection_args(p_compile)  # harmless here; keeps args uniform

@@ -1,0 +1,107 @@
+# Library playbook: Close a FortiSIEM incident with a reason, comment the alert, and update alert status.
+#
+# source: tutorial-corpus: FortiSIEM: Close Incidents with a Reason
+# cleaned: no_trigger:retype-start-nop, delete_mistype:2, branches:0
+#
+# goal: Close a FortiSIEM incident with a reason, comment the alert, and update alert status.
+# trigger: (see the Start step below; original export's trigger re-typed)
+# inputs:  vars.input.records[0] (inbound record) unless noted
+# outputs: a comment / record update on the source record
+# connectors: see connector steps (connector-pluggable; swap the config for your appliance)
+# adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+
+collection: 00. Playbook Learning SP - Specific Playbooks
+description: ''
+visible: true
+playbooks:
+- name: 'FortiSIEM: Close Incidents with a Reason'
+  description: FortiSIEM customizations
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: insert_record
+    name: Add Comment to Alert
+    step_variables: []
+    arguments:
+      resource:
+        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+        alerts: '{{vars.input.records[0][''@id'']}}'
+        people: []
+        content: '<p>{{vars.clearReason}}</p>
+
+          <p>&nbsp;</p>
+
+          <p>Resolution set to TRUE POSITIVE.</p>'
+        __replace: ''
+        isImportant: true
+        peopleUpdated: false
+      operation: Overwrite
+      collection: /api/3/comments
+      __recommend: []
+      fieldOperation:
+        recordTags: Overwrite
+    next: update_alert_status
+  - type: connector
+    name: Change the Resolution Field
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: Fortinet FortiSIEM
+      config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
+      params:
+        comments: ''
+        incidentId: '{{vars.incidentId}}'
+        resolution: True Positive
+        actionStatus: ''
+        externalTicketId: ''
+        externalAssignedUser: ''
+      connector: fortinet-fortisiem
+      operation: update_incident
+      operationTitle: Update Incident
+    next: add_comment_to_alert
+  - type: connector
+    name: Clear Manually an Incident with a Reason
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: Fortinet FortiSIEM
+      config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
+      params:
+        id: '{{vars.incidentId}}'
+        comment_text: '{{vars.clearReason}}'
+      connector: fortinet-fortisiem
+      operation: clear_incident
+      operationTitle: Clear Incident With Reason
+    next: change_the_resolution_field
+  - type: set_variable
+    name: Configuration
+    vars:
+      incidentId: '{{vars.input.records[0].sourceId}}'
+      clearReason: Incident closed by FortiSOAR Playbook on {{arrow.utcnow().format("YYYY-MM-DD HH:mm:ss ZZ")}} UTC.
+    next: clear_manually_an_incident_with_a_reason
+  - type: CyopsUtilites
+    name: End
+    step_variables: []
+    arguments:
+      params: []
+      version: 3.5.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'
+  - type: start
+    name: Start
+    next: configuration
+  - type: update_record
+    name: Update Alert Status
+    step_variables: []
+    arguments:
+      resource:
+        status: /api/3/picklists/fac53e73-8d16-4189-98d5-95fbd1555232
+        assignedTo: /api/3/people/3451141c-bac6-467c-8d72-85e0fab569ce
+      operation: Append
+      collection: '{{vars.input.records[0][''@id'']}}'
+      __recommend: []
+      collectionType: /api/3/alerts
+      fieldOperation:
+        recordTags: Append
+    next: end

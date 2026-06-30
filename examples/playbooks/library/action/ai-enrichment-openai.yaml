@@ -1,0 +1,118 @@
+# Library playbook: AI enrichment: build a prompt from alert title/description, query OpenAI, write the response back as a comment + tags.
+#
+# source: tutorial-corpus: Simple OpenAI Query
+# cleaned: no_trigger:retype-start-nop, delete_mistype:1, branches:0
+#
+# goal: AI enrichment: build a prompt from alert title/description, query OpenAI, write the response back as a comment + tags.
+# trigger: (see the Start step below; original export's trigger re-typed)
+# inputs:  vars.input.records[0] (inbound record) unless noted
+# outputs: a comment / record update on the source record
+# connectors: see connector steps (connector-pluggable; swap the config for your appliance)
+# adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+
+collection: 00. Playbook Learning SP - Specific Playbooks
+description: ''
+visible: true
+playbooks:
+- name: Simple OpenAI Query
+  description: Dynamic Query sent to OpenAI
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: insert_record
+    name: Add Comment to Alert with OpenAI Output
+    step_variables: []
+    arguments:
+      resource:
+        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+        alerts: '{{vars.input.records[0][''@id'']}}'
+        people: []
+        content: '<p><span style="color: rgb(241, 196, 15);"><span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);">OpenAI:</span> </span>{{vars.openaiOutput.choices.0.message.content}} <span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);">Model:</span> {{vars.openaiOutput.model}}</p>'
+        __replace: ''
+        isImportant: true
+        peopleUpdated: false
+      operation: Overwrite
+      collection: /api/3/comments
+      __recommend: []
+      fieldOperation:
+        recordTags: Overwrite
+    next: add_tags_to_alert
+  - type: update_record
+    name: Add Tags to Alert
+    step_variables: []
+    arguments:
+      resource:
+        __link:
+          recordTags: '{{vars.myTags}}'
+      operation: Append
+      collection: '{{vars.input.records[0][''@id'']}}'
+      __recommend: []
+      collectionType: /api/3/alerts
+      fieldOperation:
+        recordTags: Append
+    next: end
+  - type: CyopsUtilites
+    name: End
+    step_variables: []
+    arguments:
+      params: []
+      version: 3.4.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'
+  - type: set_variable
+    name: Final Query to OpenAI
+    vars:
+      final_query: '{{vars.prefix ~ vars.alerttitle ~ vars.alertdescription ~ vars.sufix}}'
+    next: the_query
+  - type: set_variable
+    name: GPT Model and Other Vars
+    vars:
+      sufix: '"?"'
+      model1: gpt-4-turbo
+      model2: chatgpt-4o-latest
+      model3: gpt-3.5-turbo
+      myTags: '[ "OpenAiReviewed", "POC" ]'
+      prefix: '"Could you help creating a summary for the the given cyber security alert:\n"'
+      alerttitle: '{{vars.input.records[0].name}}'
+      alertdescription: '{{vars.input.records[0].description}}'
+    next: final_query_to_openai
+  - type: start
+    name: Start
+    next: gpt_model_and_other_vars
+  - type: connector
+    name: The Query
+    pickFromTenant: false
+    step_variables:
+      openaiOutput: '{{vars.steps.The_Query.data}}'
+    arguments:
+      name: OpenAI
+      config: a2aec12c-5dec-4f20-bf85-d4d3a38438a1
+      params:
+        model: '{{vars.model1}}'
+        top_p: ''
+        message: '{{vars.final_query}}'
+        timeout: 600
+        max_tokens: ''
+        temperature: ''
+        other_fields: ''
+      connector: openai
+      operation: chat_completions
+      operationTitle: Ask a Question
+    next: add_comment_to_alert_with_openai_output
+  annotations:
+  - id: important
+    title: Important
+    body: My first attempt was to send the entire alert JSON. However, the length was so big and OpenAI was complaing about the number of Tokens. Inthe end, I´ve chosen to select TITLE + DESCRIPTION to send to OpenAI.
+    position:
+      top: 20
+      left: 560
+      height: 153
+      width: 366
+  - id: important_2
+    title: Important 2
+    body: Google Bard (Gemini) is the new test
+    position:
+      top: 480
+      left: 560
+      width: 300

@@ -1,0 +1,224 @@
+# Library playbook: Quarantine a malicious IP on FortiGate behind an optional approval gate; comment the indicator.
+#
+# source: tutorial-corpus: Remediation on FortiGate - Complete
+# cleaned: no_trigger:retype-start-nop, delete_mistype:1, branches:1
+#
+# goal: Quarantine a malicious IP on FortiGate behind an optional approval gate; comment the indicator.
+# trigger: (see the Start step below; original export's trigger re-typed)
+# inputs:  vars.input.records[0] (inbound record) unless noted
+# outputs: a comment / record update on the source record
+# connectors: see connector steps (connector-pluggable; swap the config for your appliance)
+# adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+
+collection: 00. Playbook Learning SP - Specific Playbooks
+description: ''
+visible: true
+playbooks:
+- name: Remediation on FortiGate - Complete
+  description: Quarantine IPs
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: insert_record
+    name: Add Comment to Indicator
+    when: '{{vars.writeComment == 1}}'
+    step_variables: []
+    arguments:
+      resource:
+        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+        people: []
+        content: '<p>IP {{vars.input.records[0].value}} with Reputation Malicious {{vars.input.records[0].reputation.itemValue}} was<span style="color: rgb(0, 0, 0);"> </span><span style="background-color: rgb(224, 62, 45); color: rgb(0, 0, 0);">Blocked on FGT</span>. Below the status:</p>
+
+          <p>&nbsp;</p>
+
+          <p><span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);">FGT:</span> {{vars.steps.Apply_Quarantine_on_FGT.status}}</p>
+
+          <p>&nbsp;</p>
+
+          <p>{% if vars.userApproved %}<br><span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);">USER who Approved:</span> {{vars.userApproved}}<br>{% endif %}</p>
+
+          <p>&nbsp;</p>
+
+          <p>&nbsp;</p>'
+        __replace: ''
+        indicators: '{{vars.input.records[0][''@id'']}}'
+        recordTags: '{{vars.commentTags}}'
+        isImportant: true
+        peopleUpdated: false
+      _showJson: false
+      operation: Overwrite
+      collection: /api/3/comments
+      __recommend: []
+      fieldOperation:
+        recordTags: Overwrite
+    next: update_indicator
+  - type: connector
+    name: Apply Quarantine on FGT
+    agent: HomeOfficeAgent1
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: Fortinet FortiGate
+      config: c177a2e5-2052-4c93-83b6-b7f34f8dffa8
+      params:
+        vdom: ''
+        method: Quarantine Based
+        ip_addresses: '{{vars.input.records[0].value}}'
+        time_to_live: '{{vars.blockPeriod}}'
+      connector: fortigate-firewall
+      operation: block_ip_new
+      operationTitle: Block IP Address
+      dynamicallySelected: false
+    next: add_comment_to_indicator
+  - type: ApprovalManualInput
+    name: Approval Request
+    step_variables: []
+    description: Approval Specs
+    arguments:
+      type: InputBased
+      input:
+        schema:
+          title: Do you Agree with this Blocking?
+          description: IP to be blocked {{vars.input.records[0].value}}
+          inputVariables: []
+      record: '{{ vars.input.records[0]["@id"] }}'
+      resources: indicators
+      is_approval: true
+      owner_detail:
+        isAssigned: true
+        assignedToTeam: []
+        emailRecipients: ''
+        assignedToPerson:
+        - iri: /api/3/people/2833b1dc-8173-4729-8343-21922c33f182
+          lastname: Righi
+          firstname: Rafael
+        assignedToRecord: false
+      isRecordLinked: false
+      response_mapping:
+        options:
+        - option: Approve
+          primary: true
+          step_iri: /api/3/workflow_steps/233a81fd-4377-4d65-8a49-3dee065e0e8d
+        - option: Reject
+          primary: false
+          step_iri: /api/3/workflow_steps/851c44e7-e6ed-48fe-81c8-64b48988ec01
+        connecteStepsLength: 2
+        customSuccessMessage: Awaiting Playbook resumed successfully.
+      email_notification:
+        enabled: false
+        smtpParameters: []
+      customEmailExternal: false
+      inline_channel_list: []
+      external_channel_list: []
+      unauthenticated_input: false
+      internal_email_subject: A FortiSOAR playbook is requesting your input
+  - type: CyopsUtilites
+    name: End
+    step_variables: []
+    arguments:
+      params: []
+      version: 3.3.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'
+  - type: set_variable
+    name: Plyabook Configuration
+    vars:
+      sendEmail: '0'
+      askApproval: '0'
+      blockPeriod: Never
+      commentTags: '[ ''SMX'', ''Cyber Automation'', ''POC'' ]'
+      writeComment: '1'
+    next: short_path_or_log_path
+  - type: SendMail
+    name: Send Email Notification
+    when: '{{vars.sendEmail == 1}}'
+    step_variables: []
+    arguments:
+      config: 420864d3-364c-4ebb-a49f-87fa7ecc717e
+      params:
+        body: <p>{{vars.steps.Add_Comment_to_Indicator.content}}</p>
+        subject: FortiGate was updated - Quarantine IP
+        iri_list: ''
+        cc_recipients: ''
+        to_recipients: admin@example.com
+        bcc_recipients: ''
+      version: 2.5.0
+      from_str: admin@example.com
+      connector: smtp
+      operation: send_email
+      operationTitle: Send Email
+    next: end
+  - type: decision
+    name: Short Path OR Log Path
+    step_variables: []
+    conditions:
+    - display: Fast track
+      when: '{{ vars.askApproval == 0 }}'
+      next: apply_quarantine_on_fgt
+    - display: Approval Request
+      default: true
+      next: approval_request
+  - type: start
+    name: Start
+    next: plyabook_configuration
+  - type: update_record
+    name: Update Indicator
+    step_variables: []
+    arguments:
+      resource:
+        description: Indicator has been Blocked by a FortiSOAR Playbook.
+        indicatorStatus: /api/3/picklists/fa29fe48-f01e-476f-bb33-c910f5795b57
+      operation: Append
+      collection: '{{vars.input.records[0][''@id'']}}'
+      __recommend: []
+      collectionType: /api/3/indicators
+      fieldOperation:
+        recordTags: Append
+    next: send_email_notification
+  - type: set_variable
+    name: User Who Approved
+    vars:
+      userApproved: '{{vars.steps.Approval_Request.username}}'
+    next: apply_quarantine_on_fgt
+  annotations:
+  - id: remember_1
+    title: Remember 1
+    body: Now we are using Never for the Quarantine Parameter
+    position:
+      top: 180
+      left: 1260
+      height: 101
+      width: 487
+  - id: remember_2
+    title: Remember 2
+    body: Step with IF "Decision" will only run if the Variable is set to 1
+    position:
+      top: 340
+      left: 1260
+      height: 92
+      width: 495
+  - id: remember_3
+    title: Remember 3
+    body: This step updated the Indicator Status to BLOCKED
+    position:
+      top: 480
+      left: 1260
+      height: 85
+      width: 498
+  - id: remember_4
+    title: Remember 4
+    body: You should have configured the SMTP Connector
+    position:
+      top: 620
+      left: 1260
+      height: 92
+      width: 497
+  - id: remember_5
+    title: Remember 5
+    body: You can set what user (or Group) should approve the Blocking
+    position:
+      top: 760
+      left: 1260
+      height: 112
+      width: 451

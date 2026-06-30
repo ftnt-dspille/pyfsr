@@ -1,0 +1,99 @@
+# Library playbook: False-positive suppression / auto-close
+# goal: Decide whether an alert matches a known false-positive signature; if so, tag it
+#       false-positive, add the indicator to an allowlist, auto-close, and comment. Else
+#       leave it for normal triage.
+# trigger: on create of an alert (start_on_create)
+# inputs:  vars.input.records[0]  (the new alert: .value, .source, .type, .description)
+# outputs: the alert is tagged "false-positive", status set to Closed, and an allowlist
+#          set_variable is updated; a comment explains the verdict. No-op if not an FP.
+# connectors: cyops_utilities only (connector-light). No external threat-intel needed —
+#             the FP signature is a set_variable allowlist you curate.
+# adapts-to: "suppress false positives", "auto-close benign alerts",
+#            "add to allowlist", "filter known-good sources"
+
+collection: False Positive Suppression
+description: Auto-close alerts matching a known false-positive signature; allowlist the indicator.
+visible: true
+
+playbooks:
+  - name: False Positive Suppression
+    description: Detect a known-FP alert, tag + allowlist + auto-close it; otherwise stop for triage.
+    is_active: true
+    trigger_step_id: Start
+    steps:
+      - name: Start
+        type: start_on_create
+        module: alerts
+        next: Capture Alert Facts
+
+      # Pull the fields the FP signature tests against off the new alert.
+      - name: Capture Alert Facts
+        type: set_variable
+        vars:
+          indicator_value: "{{ vars.input.records[0].value | default('') }}"
+          alert_source: "{{ vars.input.records[0].source | default('') }}"
+          alert_type: "{{ vars.input.records[0].type | default('') }}"
+          # The curated allowlist of known-benign indicator values. Add entries here as
+          # you confirm false positives; this is the "learned" FP list.
+          fp_allowlist: "{{ vars.fp_allowlist | default(['10.0.0.1', '127.0.0.1', 'safe.example.com']) }}"
+        next: Is Known False Positive
+
+      # FP signature: indicator value is in the allowlist OR source is a known-good feeder.
+      - name: Is Known False Positive
+        type: decision
+        next: Stop For Triage            # else: not an FP — let normal triage handle it
+        conditions:
+          - option: FalsePositive
+            condition: "{{ (vars.indicator_value in vars.fp_allowlist) or (vars.alert_source == 'health-check') }}"
+            next: Tag As False Positive
+
+      # Confirmed FP: stamp the tag and move to allowlist + close.
+      - name: Tag As False Positive
+        type: update_record
+        arguments:
+          module: alerts
+          collection: "{{ vars.input.records[0]['@id'] }}"
+          resource:
+            tags: false-positive
+        next: Add Indicator To Allowlist
+
+      # Add the indicator to the runtime allowlist set (deduped) so future hits auto-close.
+      - name: Add Indicator To Allowlist
+        type: set_variable
+        vars:
+          fp_allowlist: "{{ (vars.fp_allowlist + [vars.indicator_value]) | unique }}"
+        next: Post FP Comment
+
+      # Comment the alert explaining the auto-close verdict.
+      - name: Post FP Comment
+        type: insert_record
+        arguments:
+          collection: /api/3/comments
+          operation: Overwrite
+          resource:
+            content: >-
+              <p>Auto-closed as <b>false positive</b>.</p>
+              <p>Indicator <code>{{ vars.indicator_value }}</code> matched the FP
+              allowlist (source: <code>{{ vars.alert_source }}</code>).</p>
+            isImportant: false
+            people: []
+            peopleUpdated: false
+            attachments: '{{ vars.input.records[0]["@id"] }}'
+        next: Close Alert
+
+      # Auto-close the alert.
+      - name: Close Alert
+        type: update_record
+        arguments:
+          module: alerts
+          collection: "{{ vars.input.records[0]['@id'] }}"
+          resource:
+            status: Closed
+        next: Stop
+
+      # Not an FP: stop here so normal triage (other playbooks / a human) picks it up.
+      - name: Stop For Triage
+        type: stop
+
+      - name: Stop
+        type: stop

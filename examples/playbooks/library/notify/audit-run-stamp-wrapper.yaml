@@ -1,0 +1,53 @@
+# Library playbook: Stamp a run-audit record on each playbook execution.
+# goal: Audit run-stamp: a reusable sub-pattern that stamps a run-audit record (who/when/verdict/inputs-hash) on every playbook execution.
+# trigger: Invoked as a wrapped step (first or last) by any playbook.
+# inputs: vars.input (the inbound playbook vars/records)
+# outputs: audit_record_iri (IRI of the created audit record)
+# connectors: cyops_utilities (swap-in: <your audit connector> (config: <uuid or name>))
+# adapts-to: audit logging, run‑stamp intent
+
+collection: Audit Run Stamps
+description: Reusable wrapper to create an audit record for a playbook run.
+visible: true
+playbooks:
+- name: Audit Run Stamp Wrapper
+  description: Creates an audit record for the playbook execution and hashes inputs.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - name: Start
+    type: start
+    next: Compute Inputs Hash
+
+  - type: set_variable
+    name: Compute Inputs Hash
+    vars:
+      inputs_hash: "{{ (vars.input | tojson) | hash('md5') }}"
+    next: Create Audit Record
+
+  - type: create_record
+    name: Create Audit Record
+    # swap-in: <your audit connector> (config: <uuid or name>)
+    arguments:
+      module: audit
+      resource:
+        user: "{{ state.session_user | default('unknown') }}"
+        timestamp: "{{ now() }}"
+        verdict: "{{ vars.verdict | default('unknown') }}"
+        inputs_hash: "{{ vars.inputs_hash }}"
+    next: Set Audit IRI
+
+  - type: set_variable
+    name: Set Audit IRI
+    vars:
+      audit_record_iri: "{{ vars.steps.Create_Audit_Record.record_iri }}"
+    next: End
+
+  - type: CyopsUtilites
+    name: End
+    arguments:
+      params: []
+      version: 3.5.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'

@@ -1,0 +1,61 @@
+# Library playbook: Enrich a record with Active Directory attributes looked up by email; render as an HTML table comment.
+#
+# source: tutorial-corpus: Active Directory Search by Email
+# cleaned: no_trigger:retype-start-nop, delete_mistype:1, branches:0
+#
+# goal: Enrich a record with Active Directory attributes looked up by email; render as an HTML table comment.
+# trigger: (see the Start step below; original export's trigger re-typed)
+# inputs:  vars.input.records[0] (inbound record) unless noted
+# outputs: a comment / record update on the source record
+# connectors: see connector steps (connector-pluggable; swap the config for your appliance)
+# adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+
+collection: 00. Playbook Learning SP - Specific Playbooks
+description: ''
+visible: true
+playbooks:
+- name: Active Directory Search by Email
+  description: Search records or entities from Active Directory based on Email
+  tag: '#Active Directory'
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: set_variable
+    name: Save Resource Details
+    vars:
+      dn: '{{vars.result.data.entries[0].dn if vars.result.data.entries | length else '''' }}'
+      attributes: '{{ vars.result.data.entries[0].attributes if vars.result.data.entries | length else '''' }}'
+      resource_info: '{{vars.result}}'
+    next: save_tabular_format
+  - type: CyopsUtilites
+    name: Save Tabular Format
+    step_variables: []
+    arguments:
+      params:
+        iri: '{{vars.request.data.records[0]["@id"]}}'
+        body: "{   \"description\": \"<h3>Active Directory Resource</h3><table class='table margin-bottom-sm' border='1'> <tr><td width ='30%'>dn</td><td width ='30%'>{{vars.dn}}</td> {% if vars.attributes|length > 1 %}{% for key,value in vars.attributes.items() %} \t<tr><td width = '30%'>{{ key }}</td><td width = '70%'>{{ value}}</td></tr>{% endfor %}{% endif %}</table>\"  }"
+      version: 3.3.0
+      connector: cyops_utilities
+      operation: update_cyops_resource
+      operationTitle: 'CyOPs: Update Record'
+  - type: connector
+    name: Search by Email
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: Active Directory
+      config: 65262d44-9202-4501-bc06-9e5b3ef5c9c5
+      params:
+        cookie: ''
+        page_size: ''
+        size_limit: ''
+        search_object: User
+        search_attr_name: Email
+        search_attr_value: '{{vars.input.records[0].value}}'
+      connector: activedirectory
+      operation: global_search
+      operationTitle: Global Search
+    next: save_resource_details
+  - type: start
+    name: Start
+    next: search_by_email

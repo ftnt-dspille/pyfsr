@@ -1,0 +1,117 @@
+# Library playbook: On-create alert trigger: count malicious/suspicious indicators and post a verdict comment.
+#
+# source: tutorial-corpus: Count Bad Indicators
+# cleaned: no_trigger:retype-start-nop, delete_mistype:0, branches:0
+#
+# goal: On-create alert trigger: count malicious/suspicious indicators and post a verdict comment.
+# trigger: (see the Start step below; original export's trigger re-typed)
+# inputs:  vars.input.records[0] (inbound record) unless noted
+# outputs: a comment / record update on the source record
+# connectors: see connector steps (connector-pluggable; swap the config for your appliance)
+# adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+
+collection: 00. Playbook Learning SP
+description: ''
+visible: true
+playbooks:
+- name: Count Bad Indicators
+  description: Number of Malicious or Suspicious indicators
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: decision
+    name: Amount of bad Indicators
+    step_variables: []
+    conditions:
+    - display: '>= 0'
+      when: '{{ vars.num_indicators > 0 }}'
+      next: create_comment_you_have_a_problem
+    - display: '0'
+      default: true
+      next: create_comment_you_have_no_problem_by_now
+  - type: insert_record
+    name: Create Comment YOU HAVE A PROBLEM
+    step_variables: []
+    arguments:
+      resource:
+        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+        alerts: '{{vars.alert_IRI}}'
+        people: []
+        content: '<p>There are<span style="font-size: 14pt; color: rgb(224, 62, 45);"><strong> {{vars.num_indicators}}</strong></span> Malicious or Suspicious Indicators in this alert. Pay attention to them! One interesting suggesting could be creating PIR (Priority Intelligence Requests) for each Indicator.&nbsp;<span style="color: rgb(230, 126, 35);"><strong>{{arrow.utcnow().format("YYYY-MM-DD HH:mm:ss ZZ")}}</strong></span></p>'
+        __replace: ''
+        isImportant: false
+        peopleUpdated: false
+      operation: Overwrite
+      collection: /api/3/comments
+      __recommend: []
+      fieldOperation:
+        recordTags: Overwrite
+    next: the_end
+  - type: insert_record
+    name: Create Comment YOU HAVE NO PROBLEM BY NOW
+    step_variables: []
+    arguments:
+      resource:
+        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+        alerts: '{{vars.alert_IRI}}'
+        people: []
+        content: '<p>There are<span style="font-size: 14pt; color: rgb(224, 62, 45);"><strong> <span style="font-size: 14pt; color: rgb(22, 145, 121);">{{vars.num_indicators}}</span></strong></span><span style="font-size: 14pt;"> </span>Malicious or Suspicious Indicators in this alert. <span style="color: rgb(45, 194, 107);"><strong>This is good news.</strong></span>&nbsp;<span style="color: rgb(53, 152, 219);"><strong><span style="color: rgb(230, 126, 35);">{{arrow.utcnow().format("YYYY-MM-DD HH:mm:ss ZZ")}}</span></strong></span></p>'
+        __replace: ''
+        isImportant: false
+        peopleUpdated: false
+      operation: Overwrite
+      collection: /api/3/comments
+      __recommend: []
+      fieldOperation:
+        recordTags: Overwrite
+    next: the_end
+  - type: set_variable
+    name: Get Alert Id IRI
+    vars:
+      alert_IRI: '{{vars.input.records[0][''@id'']}}'
+    next: get_bad_indicators
+  - type: find_record
+    name: Get Bad Indicators
+    step_variables:
+      my_indicators: '{{vars.steps.Get_Bad_Indicators}}'
+      num_indicators: '{{vars.steps.Get_Bad_Indicators | length}}'
+    module: indicators?$limit=30&$relationships=true&$fsr_max_relation_count=100
+    arguments:
+      query:
+        sort: []
+        limit: 30
+        logic: AND
+        filters:
+        - type: primitive
+          field: alerts.uuid
+          value: '{{vars.input.records[0].uuid}}'
+          operator: eq
+          _operator: eq
+        - type: array
+          field: reputation
+          value:
+          - 7074e547-7785-4979-be32-c6d0c863e4bd
+          - 50bfd06c-9aff-4f7d-b6d9-821339e31fe7
+          module: reputation
+          display: ''
+          operator: in
+          template: multiselectpicklist
+          enableJinja: true
+          OPERATOR_KEY: $
+          useInOperator: true
+          previousOperator: in
+          previousTemplate: multiselectpicklist
+      checkboxFields: false
+    next: amount_of_bad_indicators
+  - type: start
+    name: Start
+    next: get_alert_id_iri
+  - type: CyopsUtilites
+    name: The End
+    step_variables: []
+    arguments:
+      params: []
+      version: 3.4.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'

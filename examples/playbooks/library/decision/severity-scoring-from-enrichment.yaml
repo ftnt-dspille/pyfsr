@@ -1,0 +1,82 @@
+# Library playbook: Severity scoring from enrichment fields
+# goal: Weighted severity scoring from enrichment fields feeding a decision step that tags and escalates or monitors.
+# trigger: Manual or upstream playbook triggers this playbook with enriched record input.
+# inputs: vars.input.records[0] containing enrichment fields (malicious_hits, asset_criticality)
+# outputs: severity_score, tags applied, updated record severity field
+# connectors: cyops_utilities (logic only), # swap-in: <your connector> (config: <uuid or name>)
+# adapts-to: severity assessment intent
+
+collection: Severity Scoring Library
+description: Compute a weighted severity score from enrichment data and update the record with tags.
+visible: true
+
+playbooks:
+  - name: Severity Scoring from Enrichment
+    is_active: true
+    trigger_step_id: Start
+    steps:
+      # 1. Load enrichment fields into variables.
+      - name: Start
+        type: start
+        next: Load enrichment data
+      - name: Load enrichment data
+        type: set_variable
+        vars:
+          malicious_hits: "{{ vars.input.records[0].malicious_hits | default(0) }}"
+          asset_criticality: "{{ vars.input.records[0].asset_criticality | default('low') }}"
+        next: Compute severity score
+
+      # 2. Compute weighted severity score using Python logic.
+      - name: Compute severity score
+        type: code_snippet
+        arguments:
+          code: |
+            hits = int('{{ vars.malicious_hits }}' or 0)
+            # Map criticality string to weight
+            crit_map = {'low': 1, 'medium': 3, 'high': 5}
+            crit = crit_map.get('{{ vars.asset_criticality }}'.lower(), 1)
+            # Example weighting: each hit = 10 points, criticality weight = 20 points per level
+            score = hits * 10 + crit * 20
+            output = {'severity_score': score}
+        next: Set severity variable
+
+      # 3. Store the computed severity score.
+      - name: Set severity variable
+        type: set_variable
+        vars:
+          severity_score: "{{ output.severity_score }}"
+        next: Assess severity decision
+
+      # 4. Decision based on severity score.
+      - name: Assess severity decision
+        type: decision
+        next: Tag and Monitor  # default path when no condition matches
+        conditions:
+          - option: High Severity
+            condition: "{{ (vars.severity_score | int) >= 70 }}"
+            next: Tag and Escalate
+
+      # 5a. High severity path – add escalation tag and update record.
+      - name: Tag and Escalate
+        type: set_variable
+        vars:
+          tags: "{{ (vars.tags | default('')) + ',escalated' }}"
+        next: Update record with severity
+
+      # 5b. Low/medium severity path – add monitor tag and update record.
+      - name: Tag and Monitor
+        type: set_variable
+        vars:
+          tags: "{{ (vars.tags | default('')) + ',monitor' }}"
+        next: Update record with severity
+
+      # 6. Update the record with computed severity and tags.
+      - name: Update record with severity
+        type: update_record
+        arguments:
+          module: alerts
+          collection: "{{ vars.input.records[0]['@id'] }}"
+          resource:
+            severity: "{{ vars.severity_score }}"
+            tags: "{{ vars.tags | trim(',') }}"
+        # End of playbook – no next.
