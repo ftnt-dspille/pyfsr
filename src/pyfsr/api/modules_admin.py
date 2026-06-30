@@ -1,4 +1,4 @@
-"""Module schema administration: create modules, add/alter fields, publish.
+"""Module editor: create modules, add/alter fields, publish.
 
 Where :class:`~pyfsr.api.modules.ModulesAPI` is read-only *discovery*, this is the
 *write* surface for the Application/Module Editor. It drives the same endpoints the
@@ -124,6 +124,12 @@ DISPLAY_STORAGE_TYPE: dict[str, str] = {
 # Backward-compatible alias for the pre-0.x name (the constant was previously framed in
 # terms of "widget"; "display type" reads clearer and matches the rest of the API).
 WIDGET_STORAGE_TYPE = DISPLAY_STORAGE_TYPE
+
+# Display types that should NOT default to a grid column. All six are grid columns 0% of
+# the time across the captured module corpus (password = security; object/json/array =
+# opaque blobs; manyToMany/oneToMany = collection relationships). Everything else defaults
+# visible; override per-field with grid_column=True/False. See :meth:`ModulesAdminAPI.field`.
+_NON_GRID_FORM_TYPES = frozenset({"password", "object", "json", "array", "manyToMany", "oneToMany"})
 
 # A field's ``name`` is its immutable **API key** — it must start with a letter and contain
 # only letters, digits, or underscores (it becomes a DB column / JSON key). The appliance
@@ -341,7 +347,7 @@ class ModulesAdminAPI(BaseAPI):
         required: bool | dict[str, Any] | Query = False,
         searchable: bool = False,
         editable: bool = True,
-        grid_column: bool = False,
+        grid_column: bool | None = None,
         encrypted: bool = False,
         visibility: bool | dict[str, Any] | Query = True,
         default_value: Any = None,
@@ -368,7 +374,12 @@ class ModulesAdminAPI(BaseAPI):
         - ``label`` — the **Field Title** (``name`` is the immutable **Field API Key**).
         - ``editable`` — UI "Editable" (maps to ``writeable``).
         - ``searchable`` / ``grid_column`` / ``encrypted`` — the **Field Options** row.
-          Note: encrypted fields can't be searchable and vice-versa.
+          ``grid_column`` (Default Grid Column) is **on by default** for scalar, lookup and
+          picklist fields (visible in the list/grid view) and **off** for ``password``,
+          ``object``/``json``/``array`` and collection relationships (``manyToMany``/
+          ``oneToMany``) — the types that are never grid columns in practice. Override
+          either way with ``grid_column=True/False``. Note: encrypted fields can't be
+          searchable and vice-versa.
         - ``required`` — ``False`` / ``True``, a **condition** for "Required by condition",
           or a :class:`~pyfsr.query.Query` that pyfsr renders to the condition shape.
         - ``visibility`` — ``True`` (Visible) / ``False`` (Hidden), a **condition** for
@@ -403,6 +414,11 @@ class ModulesAdminAPI(BaseAPI):
         }
         if enable_range:
             validation["_enableRange"] = True
+        if grid_column is None:
+            # Visible in the list/grid view by default — except for the types that are
+            # never grid columns in practice (see _NON_GRID_FORM_TYPES). A caller can
+            # still force either way with grid_column=True/False.
+            grid_column = (form_type or db_type) not in _NON_GRID_FORM_TYPES
         attr = {
             "name": name,
             "type": db_type,

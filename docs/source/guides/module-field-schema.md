@@ -101,7 +101,7 @@ Every builder accepts these keyword options (they map 1:1 to the in-product edit
 | `required` | `validation.required` | `True`/`False`, or a **condition dict** for "Required by condition". |
 | `searchable` | `searchable` | Indexed for search. **Mutually exclusive with `encrypted`.** |
 | `editable` | `writeable` | Editable in the UI. |
-| `grid_column` | `gridColumn` | Shown as a default column in the list/grid view. |
+| `grid_column` | `gridColumn` | Shown as a default column in the list/grid view. **Defaults `True`** (visible) for scalar/lookup/picklist fields; **`False`** for `password`, `object`/`json`/`array`, `manyToMany`/`oneToMany`. Override per field. |
 | `encrypted` | `encrypted` | Stored encrypted at rest. Cannot be searchable. |
 | `visibility` | `visibility` | `True`/`False`, or a **condition dict** for "Visible by condition". |
 | `default_value` | `defaultValue` | Pre-filled value on new records. |

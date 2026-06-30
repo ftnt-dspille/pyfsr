@@ -1,4 +1,4 @@
-# Module Schema Administration
+# Module Editor
 
 Where {class}`~pyfsr.api.modules.ModulesAPI` (`client.modules`) is read-only
 *discovery*, `client.modules_admin` ({class}`~pyfsr.api.modules_admin.ModulesAdminAPI`)
@@ -46,7 +46,7 @@ admin.create_module(
     label="Crew Member",
     plural="Crew",
     fields=[
-        admin.text_field("alias", required=True, grid_column=True),  # "The Brains", "Wheels"
+        admin.text_field("alias", required=True),  # "The Brains", "Wheels"  (grid column by default)
         admin.picklist_field("specialty", "AlertType"),              # reuse any existing picklist
         admin.checkbox_field("trustworthy"),
     ],
@@ -60,8 +60,8 @@ admin.create_module(
     label="Heist",
     plural="Heists",
     fields=[
-        admin.text_field("codename", required=True, grid_column=True),  # "Operation Cannoli"
-        admin.text_field("target", grid_column=True),
+        admin.text_field("codename", required=True),  # "Operation Cannoli"
+        admin.text_field("target"),
         admin.integer_field("takeUsd"),
         admin.datetime_field("goTime"),
         admin.relationship_field("crew", "crew", label="Crew"),         # <-- the linkage
@@ -189,7 +189,11 @@ type for any scalar display type. The object field above produces:
 ### Field options
 
 `field()` mirrors the editor's **Properties** panel. Beyond `db_type`/`form_type`, it
-exposes the full options surface:
+exposes the full options surface. **`grid_column` (Default Grid Column) is on by default**
+for scalar, lookup and picklist fields — they show in the module's list/grid view without
+opting each one in — and **off** for `password`, `object`/`json`/`array` and collection
+relationships (`manyToMany`/`oneToMany`), the types that are never grid columns in
+practice. Override either way with `grid_column=True/False`:
 
 ```python
 admin.field(
@@ -197,7 +201,7 @@ admin.field(
     label="API Secret",          # Field Title (name is the immutable API Key)
     editable=True,               # UI "Editable"  -> writeable
     searchable=False,            # Field Options row...
-    grid_column=True,            # "Default Grid Column"
+    grid_column=False,           # "Default Grid Column" — text defaults visible; hide this one
     encrypted=True,              # "Encrypted" (mutually exclusive with searchable)
     required=True,               # or a condition dict for "Required by condition"
     visibility=True,             # or a condition dict for "Visible by Condition"
@@ -206,13 +210,17 @@ admin.field(
     minlength=0, maxlength=1024, enable_range=True,   # Length Constraints
     bulk_edit=True,              # "Allow Bulk Edit" -> bulkAction.allow
 )
+
+# the default picks a sensible value per type, so most fields need no grid_column at all:
+admin.password_field("apiKey")               # -> gridColumn: false  (default for password)
+admin.text_field("notes", grid_column=False) # scalar, but kept out of the list view
 ```
 
 ### Picklist and relationship fields
 
 ```python
 # single- or multi-select picklist, bound to a picklist list name
-admin.picklist_field("severity", "AlertSeverity", grid_column=True)
+admin.picklist_field("severity", "AlertSeverity")
 admin.picklist_field("tags", "AlertType", multi=True)   # -> multiselectpicklist
 
 # a single reference to one record of another module (many-to-one, no reverse field)
@@ -242,7 +250,7 @@ admin.create_module(
     label="Widget",
     plural="Widgets",
     fields=[
-        admin.text_field("name", required=True, grid_column=True),
+        admin.text_field("name", required=True),
         admin.text_field("payload", area=True),
         admin.picklist_field("severity", "AlertSeverity"),
         admin.relationship_field("relatedalerts", "alerts"),
