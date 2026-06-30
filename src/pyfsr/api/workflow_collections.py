@@ -261,7 +261,13 @@ class WorkflowCollectionsAPI(BaseAPI):
             raise ValueError(f"export file is not valid JSON: {path}: {exc}") from exc
         return self.import_export(data, replace=replace)
 
-    def compile_yaml(self, source: str | Path, *, db_path: str | Path | None = None):
+    def compile_yaml(
+        self,
+        source: str | Path,
+        *,
+        db_path: str | Path | None = None,
+        refresh_catalog: bool = True,
+    ):
         """Compile playbook YAML into the FortiSOAR import envelope.
 
         ``source`` is either YAML text or a path (``str``/``Path``) to a ``.yaml``/
@@ -269,11 +275,17 @@ class WorkflowCollectionsAPI(BaseAPI):
         ``fsr_json`` is ready for :meth:`import_export`; inspect ``ok``/``errors``/
         ``warnings`` before deploying.
 
-        Warming is **seamless**: with no ``db_path``, the reference catalog is
-        warmed from this client's instance (so author-friendly tokens like
-        ``owners: ["TeamA"]`` resolve to IRIs) — the caller never touches
-        SQLite. Pass ``db_path`` to compile against a specific pre-warmed
-        catalog instead (offline, no network).
+        ``refresh_catalog`` (default ``True``) re-warms the local reference
+        catalog from **this** appliance before compiling, so connector / operation
+        / team / picklist tokens resolve against what is *currently* installed —
+        including a connector you just imported that the cached catalog has never
+        seen. Without a fresh warm, a connector step compiles with no
+        ``name``/``version``/``operationTitle`` and the playbook editor renders it
+        as "undefined". Set it to ``False`` to skip the network round-trip and
+        compile offline (against ``db_path`` if given, else the packaged slim
+        catalog) — faster, but it won't know about connectors added since the last
+        warm. ``db_path`` always wins: an explicit catalog is used verbatim with no
+        warm regardless of this flag.
 
         Requires the optional compiler — install with ``pip install
         "pyfsr[playbooks]"`` (raises
@@ -282,7 +294,10 @@ class WorkflowCollectionsAPI(BaseAPI):
         from ..authoring import compile_playbook_yaml
 
         text = _read_yaml_source(source)
-        return compile_playbook_yaml(text, client=self.client, db_path=db_path)
+        # db_path pins a catalog (no warm); otherwise refresh_catalog decides
+        # whether to warm from this client (True) or compile offline (False).
+        client = self.client if (refresh_catalog and db_path is None) else None
+        return compile_playbook_yaml(text, client=client, db_path=db_path)
 
     def import_from_yaml(
         self,
@@ -291,6 +306,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         replace: bool = False,
         db_path: str | Path | None = None,
         strict_warnings: bool = False,
+        refresh_catalog: bool = True,
     ) -> list[WorkflowCollection]:
         """Compile playbook YAML and import the result onto the appliance.
 
@@ -302,6 +318,12 @@ class WorkflowCollectionsAPI(BaseAPI):
         before re-creating it. ``strict_warnings=True`` treats compiler warnings as
         blocking. ``db_path`` overrides the reference catalog.
 
+        ``refresh_catalog`` (default ``True``, forwarded to :meth:`compile_yaml`)
+        re-warms the local catalog from this appliance before compiling so a
+        just-imported connector is known and connector steps don't render as
+        "undefined" in the editor. Set ``False`` to compile offline (skip the warm)
+        when you know the cached catalog is current.
+
         Raises:
             ValueError: if compilation produces blocking errors (or warnings when
                 ``strict_warnings`` is set).
@@ -311,7 +333,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         Returns:
             List of created collection records (one per compiled collection).
         """
-        result = self.compile_yaml(source, db_path=db_path)
+        result = self.compile_yaml(source, db_path=db_path, refresh_catalog=refresh_catalog)
         blocking = list(result.blocking)
         if strict_warnings:
             blocking += result.warnings

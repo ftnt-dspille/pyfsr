@@ -150,6 +150,62 @@ def test_import_from_yaml_raises_on_compile_error():
     assert [call for call in c.calls if call[0] == "POST"] == []
 
 
+# --- refresh_catalog: explicit "warm the local DB live" toggle -----------
+def _patch_compile(monkeypatch):
+    """Patch the underlying compiler; return a dict capturing its kwargs."""
+    from pyfsr.authoring import CompiledPlaybook
+
+    captured: dict = {}
+
+    def fake(text, *, client=None, db_path=None, lax_codes=None):
+        captured["client"] = client
+        captured["db_path"] = db_path
+        return CompiledPlaybook(fsr_json={"type": "workflow_collections", "data": []}, errors=[], ok=True)
+
+    monkeypatch.setattr("pyfsr.authoring.compile_playbook_yaml", fake)
+    return captured
+
+
+@requires_compiler
+def test_compile_yaml_warms_from_client_by_default(monkeypatch):
+    a, c = api()
+    captured = _patch_compile(monkeypatch)
+    a.compile_yaml(GOOD_YAML)
+    # Default refresh_catalog=True → the live client is threaded through to warm.
+    assert captured["client"] is c
+    assert captured["db_path"] is None
+
+
+@requires_compiler
+def test_compile_yaml_refresh_false_compiles_offline(monkeypatch):
+    a, _ = api()
+    captured = _patch_compile(monkeypatch)
+    a.compile_yaml(GOOD_YAML, refresh_catalog=False)
+    # No warm: client is withheld so the compile stays offline.
+    assert captured["client"] is None
+    assert captured["db_path"] is None
+
+
+@requires_compiler
+def test_compile_yaml_db_path_pins_catalog_without_warm(monkeypatch):
+    a, _ = api()
+    captured = _patch_compile(monkeypatch)
+    # An explicit catalog wins over refresh_catalog: used verbatim, no warm.
+    a.compile_yaml(GOOD_YAML, db_path="/tmp/pinned.db", refresh_catalog=True)
+    assert captured["client"] is None
+    assert captured["db_path"] == "/tmp/pinned.db"
+
+
+@requires_compiler
+def test_import_from_yaml_forwards_refresh_catalog(monkeypatch):
+    a, c = api()
+    captured = _patch_compile(monkeypatch)
+    a.import_from_yaml(GOOD_YAML, refresh_catalog=False)
+    assert captured["client"] is None  # forwarded → no warm
+    a.import_from_yaml(GOOD_YAML)
+    assert captured["client"] is c  # default → warm
+
+
 @requires_compiler
 def test_read_yaml_source_reads_file(tmp_path):
     f = tmp_path / "pb.yaml"
