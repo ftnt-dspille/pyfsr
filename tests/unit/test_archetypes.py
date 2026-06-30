@@ -274,7 +274,15 @@ def test_default_seed_reconcile_and_report_is_curated(tmp_path):
 
     # the router/agent-facing parameter slots
     names = {p["name"] for p in arch.parameters}
-    assert {"results_module", "source_a_label", "source_b_label", "join_key", "recipients", "cron"} <= names
+    assert {
+        "assets_module",
+        "issues_module",
+        "source_a_label",
+        "source_b_label",
+        "join_key",
+        "recipients",
+        "cron",
+    } <= names
 
     # connector roles assigned to the plan-verified pilot connectors
     roles = {c.role: (c.connector, c.operation) for c in arch.connector_manifest}
@@ -288,9 +296,19 @@ def test_default_seed_reconcile_and_report_is_curated(tmp_path):
     # the on-disk CSV becomes a real Attachment record via the utilities step
     assert roles["attach"] == ("cyops_utilities", "create_cyops_attachment")
 
-    # module_schema parameterized with the {{results_module}} slot; picklist fields grounded
-    assert all(f.module == "{{results_module}}" for f in arch.module_schema)
+    # module_schema parameterized with the {{assets_module}}/{{issues_module}} slots (the
+    # two-module asset/issue model); picklist + relationship fields grounded.
+    modules = {f.module for f in arch.module_schema}
+    assert modules == {"{{assets_module}}", "{{issues_module}}"}
     assert any(f.picklist == "MismatchType" and f.type == "picklists" for f in arch.module_schema)
+    assert any(f.picklist == "ReconStatus" and f.type == "picklists" for f in arch.module_schema)
+    # the issue->asset lookup relationship field
+    asset = next(f for f in arch.module_schema if f.name == "asset")
+    assert asset.relationship == "{{assets_module}}"
+    assert asset.form_type == "lookup"
+    # natural keys declared in the round-trippable source dict (built at publish as
+    # the module uniqueConstraint, and used as the upsert sourceId by the playbook)
+    assert arch.source["natural_keys"] == {"{{assets_module}}": ["join_key"], "{{issues_module}}": ["issue_key"]}
 
 
 def test_store_default_db_path_under_cache(monkeypatch):
@@ -482,9 +500,9 @@ def _seeded_store(tmp_path):
 def test_map_use_case_matches_reconcile_pilot(tmp_path):
     """The pilot use case classifies to reconcile-and-report with parameters filled.
 
-    Labels + join_key are inferred from the archetype's own manifest/schema; results_module +
-    cron take their shipped defaults; recipients stays pending (a deployment value the use
-    case text cannot supply).
+    Labels + join_key are inferred from the archetype's own manifest/schema; the module
+    names + cron take their shipped defaults; recipients stays pending (a deployment value
+    the use case text cannot supply).
     """
     store = _seeded_store(tmp_path)
     r = map_use_case(
@@ -505,8 +523,10 @@ def test_map_use_case_matches_reconcile_pilot(tmp_path):
     assert params["join_key"]["value"] == "join_key"
     assert params["join_key"]["source"] == "inferred"
     # prompt params with shipped defaults
-    assert params["results_module"]["value"] == "reconciliation_results"
-    assert params["results_module"]["source"] == "default"
+    assert params["assets_module"]["value"] == "recon_assets"
+    assert params["assets_module"]["source"] == "default"
+    assert params["issues_module"]["value"] == "recon_issues"
+    assert params["issues_module"]["source"] == "default"
     assert params["cron"]["value"] == "7 2 * * *"
     assert params["cron"]["source"] == "default"
     # recipients cannot be inferred -- still pending
@@ -517,11 +537,11 @@ def test_map_use_case_matches_reconcile_pilot(tmp_path):
     assert params["cron"]["required"] is False
     assert all(
         params[n]["required"] is True
-        for n in ("results_module", "source_a_label", "source_b_label", "join_key", "recipients")
+        for n in ("assets_module", "issues_module", "source_a_label", "source_b_label", "join_key", "recipients")
     )
 
     assert r["pending"] == ["recipients"]
-    assert "5/6 parameters filled" in r["notes"]
+    assert "6/7 parameters filled" in r["notes"]
 
 
 def test_map_use_case_no_fit_returns_candidates(tmp_path):
