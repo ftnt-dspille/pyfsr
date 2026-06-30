@@ -160,6 +160,7 @@ def _patch_compile(monkeypatch):
     def fake(text, *, client=None, db_path=None, lax_codes=None):
         captured["client"] = client
         captured["db_path"] = db_path
+        captured["lax_codes"] = lax_codes
         return CompiledPlaybook(fsr_json={"type": "workflow_collections", "data": []}, errors=[], ok=True)
 
     monkeypatch.setattr("pyfsr.authoring.compile_playbook_yaml", fake)
@@ -204,6 +205,33 @@ def test_import_from_yaml_forwards_refresh_catalog(monkeypatch):
     assert captured["client"] is None  # forwarded → no warm
     a.import_from_yaml(GOOD_YAML)
     assert captured["client"] is c  # default → warm
+
+
+@requires_compiler
+def test_compile_and_import_forward_lax_codes(monkeypatch):
+    a, _ = api()
+    captured = _patch_compile(monkeypatch)
+    a.compile_yaml(GOOD_YAML, lax_codes={"unknown_param"})
+    assert captured["lax_codes"] == {"unknown_param"}
+    a.import_from_yaml(GOOD_YAML, lax_codes={"bad_value"})
+    assert captured["lax_codes"] == {"bad_value"}
+
+
+@requires_compiler
+def test_normalize_lax_codes_accepts_value_name_and_enum():
+    from fsr_playbooks.compiler.errors import ErrorCode
+
+    from pyfsr.authoring import _normalize_lax_codes
+
+    assert _normalize_lax_codes(None) is None
+    assert _normalize_lax_codes(set()) is None
+    out = _normalize_lax_codes({"unknown_param", "BAD_VALUE", ErrorCode.MISSING_FIELD, "nope"})
+    # friendly value, enum name, and the enum itself all resolve to the enum;
+    # an unrecognized string passes through verbatim.
+    assert ErrorCode.UNKNOWN_PARAM in out
+    assert ErrorCode.BAD_VALUE in out
+    assert ErrorCode.MISSING_FIELD in out
+    assert "nope" in out
 
 
 @requires_compiler
@@ -328,6 +356,96 @@ def test_warm_catalog_populates_teams_picklists_tags(tmp_path):
         "SELECT item_iri FROM picklists WHERE list_name='Severity' AND item_value='High'"
     ).fetchone() == ("/api/3/picklists/p-1",)
     assert conn.execute("SELECT iri FROM tags WHERE name='phishing'").fetchone() == ("/api/3/tags/g-1",)
+    conn.close()
+
+
+# --- conditional connector params (onchange flattening) -----------------
+def test_flatten_op_params_walks_onchange_branches():
+    from pyfsr.authoring import _flatten_op_params
+
+    # A select param whose `onchange` reveals sub-params per chosen option,
+    # mirroring smtp_ng.send_email_new (type -> to/cc, body_type -> subject).
+    params = [
+        {
+            "name": "type",
+            "type": "select",
+            "options": ["User", "Manual Input"],
+            "onchange": {
+                "User": [{"name": "to", "type": "multiselect"}],
+                "Manual Input": [{"name": "to", "type": "text"}],
+            },
+        },
+        {"name": "from", "type": "text"},
+    ]
+    out = [(p.get("name"), parent, cond) for p, parent, cond in _flatten_op_params(params)]
+    assert ("type", None, None) in out  # top-level
+    assert ("from", None, None) in out
+    # `to` appears once per branch, tagged with parent + the revealing option
+    assert ("to", "type", "User") in out
+    assert ("to", "type", "Manual Input") in out
+
+
+def test_flatten_op_params_skips_non_param_entries():
+    from pyfsr.authoring import _flatten_op_params
+
+    # Bare values and nameless dicts are dropped; valid ones survive.
+    params = ["junk", {"no": "name"}, {"name": "ok", "type": "text"}]
+    out = [p.get("name") for p, _parent, _cond in _flatten_op_params(params)]
+    assert out == ["ok"]
+
+
+@requires_compiler
+def test_warm_catalog_records_conditional_params(tmp_path):
+    """Conditional (onchange) connector params land in operation_params tagged
+    with parent_param_name + condition_value, so the compiler accepts them."""
+    from pyfsr.authoring import warm_catalog
+
+    definitions = {
+        "demo_mailer": {
+            "name": "demo_mailer",
+            "version": "1.0.0",
+            "label": "Demo Mailer",
+            "operations": [
+                {
+                    "operation": "send",
+                    "title": "Send",
+                    "parameters": [
+                        {
+                            "name": "recipient_type",
+                            "type": "select",
+                            "options": ["User", "Manual Input"],
+                            "onchange": {
+                                "Manual Input": [{"name": "to", "type": "text"}],
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+    }
+    client = _WarmFakeClient(teams=[], picklists={}, tags_resp={"hydra:member": []}, definitions=definitions)
+    db = tmp_path / "warmed.db"
+    warm_catalog(client, db)
+
+    import sqlite3
+
+    conn = sqlite3.connect(db)
+    rows = {
+        (r[0], r[1], r[2])
+        for r in conn.execute(
+            "SELECT param_name, parent_param_name, condition_value FROM operation_params "
+            "WHERE connector_name='demo_mailer' AND op_name='send'"
+        ).fetchall()
+    }
+    # Top-level select param, plus its conditional sub-param tagged with the option.
+    assert ("recipient_type", None, None) in rows
+    assert ("to", "recipient_type", "Manual Input") in rows
+    # options_json captured for the select param (enables enum validation).
+    opts = conn.execute(
+        "SELECT options_json FROM operation_params "
+        "WHERE connector_name='demo_mailer' AND op_name='send' AND param_name='recipient_type'"
+    ).fetchone()[0]
+    assert opts and "Manual Input" in opts
     conn.close()
 
 

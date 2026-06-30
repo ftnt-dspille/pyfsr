@@ -267,6 +267,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         *,
         db_path: str | Path | None = None,
         refresh_catalog: bool = True,
+        lax_codes: set | None = None,
     ):
         """Compile playbook YAML into the FortiSOAR import envelope.
 
@@ -287,6 +288,12 @@ class WorkflowCollectionsAPI(BaseAPI):
         warm. ``db_path`` always wins: an explicit catalog is used verbatim with no
         warm regardless of this flag.
 
+        ``lax_codes`` downgrades the given diagnostic codes from error to warning
+        so they don't block emission — accepts the friendly code string
+        (``{"unknown_param"}``), the enum name, or the ``ErrorCode`` enum. Use it
+        for known false-positives (e.g. a conditional connector param the catalog
+        can't model) when you've verified the value is valid at runtime.
+
         Requires the optional compiler — install with ``pip install
         "pyfsr[playbooks]"`` (raises
         :class:`~pyfsr.authoring.PlaybooksExtraNotInstalled` otherwise).
@@ -297,7 +304,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         # db_path pins a catalog (no warm); otherwise refresh_catalog decides
         # whether to warm from this client (True) or compile offline (False).
         client = self.client if (refresh_catalog and db_path is None) else None
-        return compile_playbook_yaml(text, client=client, db_path=db_path)
+        return compile_playbook_yaml(text, client=client, db_path=db_path, lax_codes=lax_codes)
 
     def import_from_yaml(
         self,
@@ -307,6 +314,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         db_path: str | Path | None = None,
         strict_warnings: bool = False,
         refresh_catalog: bool = True,
+        lax_codes: set | None = None,
     ) -> list[WorkflowCollection]:
         """Compile playbook YAML and import the result onto the appliance.
 
@@ -322,7 +330,9 @@ class WorkflowCollectionsAPI(BaseAPI):
         re-warms the local catalog from this appliance before compiling so a
         just-imported connector is known and connector steps don't render as
         "undefined" in the editor. Set ``False`` to compile offline (skip the warm)
-        when you know the cached catalog is current.
+        when you know the cached catalog is current. ``lax_codes`` (forwarded too)
+        downgrades specific diagnostic codes from error to warning so a known
+        false-positive doesn't block the import.
 
         Raises:
             ValueError: if compilation produces blocking errors (or warnings when
@@ -333,7 +343,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         Returns:
             List of created collection records (one per compiled collection).
         """
-        result = self.compile_yaml(source, db_path=db_path, refresh_catalog=refresh_catalog)
+        result = self.compile_yaml(source, db_path=db_path, refresh_catalog=refresh_catalog, lax_codes=lax_codes)
         blocking = list(result.blocking)
         if strict_warnings:
             blocking += result.warnings
