@@ -65,8 +65,12 @@ mcp = [
 
 # Author playbooks in YAML and deploy them (`pyfsr playbook`, import_from_yaml).
 # Pulls in the fsr_playbooks compiler; the core library never imports it.
+# Floor is 0.4.10: the authoring-DX surface (manual_input.answer, do_until
+# example) relies on the compiler's step-level manual_input inputs/title/
+# description hoist (F3) + the default-on reference lint, both first shipped in
+# 0.4.10 — older versions silently drop those inputs.
 playbooks = [
-    "fsr_playbooks>=0.4.8",
+    "fsr_playbooks>=0.4.10",
 ]
 
 [project.scripts]
