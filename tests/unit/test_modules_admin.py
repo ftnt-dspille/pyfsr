@@ -1453,3 +1453,32 @@ def test_scope_field_to_teams_accepts_and_returns_typed():
     assert isinstance(scoped, AttributeMetadata)
     assert scoped["dataSourceFilters"]["showTeams"] is True
     assert scoped["dataSourceFilters"]["teams"] == ["TeamA", "SOC Team"]
+
+
+def test_grid_column_default_is_per_type():
+    # scalar / lookup / picklist fields are grid columns by default (visible in the list view)
+    visible = [
+        ModulesAdminAPI.text_field("a"),
+        ModulesAdminAPI.integer_field("b"),
+        ModulesAdminAPI.decimal_field("c"),
+        ModulesAdminAPI.datetime_field("d"),
+        ModulesAdminAPI.checkbox_field("e"),
+        ModulesAdminAPI.email_field("f"),
+        ModulesAdminAPI.picklist_field("g", "SomePicklist"),
+        ModulesAdminAPI.lookup_field("h", "alerts"),
+    ]
+    assert all(f["gridColumn"] is True for f in visible), [f["name"] for f in visible if f["gridColumn"] is not True]
+
+    # password, blob, and collection-relationship types are never grid columns by default
+    hidden = [
+        ModulesAdminAPI.password_field("p"),
+        ModulesAdminAPI.object_field("o"),
+        ModulesAdminAPI.json_field("j"),
+        ModulesAdminAPI.relationship_field("m2m", "alerts", many=True),
+        ModulesAdminAPI.relationship_field("o2m", "alerts", many=False),
+    ]
+    assert all(f["gridColumn"] is False for f in hidden), [f["name"] for f in hidden if f["gridColumn"] is not False]
+
+    # an explicit grid_column always wins, in either direction
+    assert ModulesAdminAPI.text_field("x", grid_column=False)["gridColumn"] is False
+    assert ModulesAdminAPI.password_field("y", grid_column=True)["gridColumn"] is True
