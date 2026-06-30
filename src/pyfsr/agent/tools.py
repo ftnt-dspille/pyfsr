@@ -8,7 +8,7 @@ returns JSON-serializable, token-trimmed results.
 
 It is deliberately transport-neutral — no MCP, no provider SDK — so it can feed:
 
-- the optional bundled MCP server (``python -m pyfsr.mcp``, a thin consumer),
+- the optional bundled MCP server (``python -m pyfsr.agent.mcp``, a thin consumer),
 - Anthropic tool-use (:func:`to_anthropic_tools`),
 - OpenAI-style function calling (:func:`to_openai_tools`),
 - or any home-grown agent loop (:func:`tool_schemas` + :func:`dispatch`).
@@ -16,7 +16,7 @@ It is deliberately transport-neutral — no MCP, no provider SDK — so it can f
 Example::
 
     from pyfsr import FortiSOAR
-    from pyfsr.tools import to_anthropic_tools, dispatch
+    from pyfsr.agent.tools import to_anthropic_tools, dispatch
 
     client = FortiSOAR("soar.example.com", api_key)
     tools = to_anthropic_tools()                       # feed to Claude
@@ -35,9 +35,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from ..exceptions import FortiSOARException
+from ..projection import project, to_jsonable
 from .archetypes import map_use_case
-from .exceptions import FortiSOARException
-from .projection import project, to_jsonable
 
 # --------------------------------------------------------------------------- spec
 

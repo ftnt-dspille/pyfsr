@@ -1,21 +1,26 @@
-"""Unit tests for :mod:`pyfsr.loadtest` — outage window detection.
+"""Unit tests for ``scripts/loadtest.py`` — outage window detection.
 
 All tests run offline with mocked client and no live appliance.
 """
 
 from __future__ import annotations
 
+import os
+import sys
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
 
-from pyfsr.exceptions import FortiSOARException
-from pyfsr.loadtest import (
+sys.path.insert(0, os.path.dirname(__file__))
+
+from loadtest import (  # noqa: E402 — scripts/ sibling module
     OutageWindow,
     OutageWindowLoadHelper,
     TrialResult,
 )
+
+from pyfsr.exceptions import FortiSOARException
 
 
 @pytest.fixture

@@ -1,7 +1,7 @@
 """Measure the *blast radius* of a FortiSOAR publish: which API surfaces break,
 and for how long, while a schema change is committed.
 
-Unlike :mod:`pyfsr.loadtest` (which hammers a *single* playbook trigger to find one
+Unlike ``scripts/loadtest.py`` (which hammers a *single* playbook trigger to find one
 outage window), this probe runs a **matrix** of API surfaces concurrently — record
 list, query, view resolve, module schema, playbook trigger, … — each in its own
 poller thread, while the caller drives a publish in the foreground. For every surface
@@ -27,7 +27,7 @@ never flagged on that same status, so a misconfigured probe can't masquerade as 
 Example::
 
     from pyfsr import FortiSOAR
-    from pyfsr.publish_probe import PublishProbe, default_surfaces
+    from publish_probe import PublishProbe, default_surfaces  # scripts/ helper, run from scripts/
 
     client = FortiSOAR("https://soar.example.com", api_key="...")
     probe = PublishProbe(client, default_surfaces(client))
@@ -45,7 +45,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .client import FortiSOAR
+    from pyfsr.client import FortiSOAR
 
 #: A surface probe: called with no args, returns an HTTP status code (or None for a
 #: non-HTTP success), and raises on a connection-level failure.

@@ -6,7 +6,7 @@ A solution pack (whether the git source tree under
 ``info.json`` (pack metadata), ``modules/<mod>/mmd.json`` (module field/relationship/picklist
 schema), ``playbooks/<collection>/*.json`` (playbook step graphs), and ``picklists/*.json``.
 
-The harvester turns that into a draft :class:`~pyfsr.archetypes.record.Archetype` -- a honest
+The harvester turns that into a draft :class:`~pyfsr.agent.archetypes.record.Archetype` -- a honest
 extraction of the module fields, the connector/operation pairs the playbooks use, and a step
 skeleton per playbook. It does **not** parameterize (no ``{{param}}`` slots), assign connector
 *roles*, or write a ``when_to_use`` -- that curation is step 3. Call ``store.put(draft)`` to
@@ -17,7 +17,7 @@ Pure stdlib (``zipfile`` / ``json`` / ``pathlib``); the only network I/O is the 
 
 Example::
 
-    from pyfsr.archetypes import harvest_from_dir, ArchetypeStore
+    from pyfsr.agent.archetypes import harvest_from_dir, ArchetypeStore
 
     draft = harvest_from_dir("path/to/solution-pack-servicenow-...", name="snow-sir-draft")
     ArchetypeStore().put(draft)
@@ -185,7 +185,7 @@ def harvest_from_dir(pack_dir: str | Path, *, name: str | None = None) -> Archet
 
     Works on both the git source tree and an unpacked export ``.zip`` (discovery uses ``rglob``,
     so a top-level prefix directory in the export is tolerated). Parses ``info.json``,
-    ``modules/*/mmd.json``, and ``playbooks/**/*.json`` into a draft :class:`~pyfsr.archetypes.record.Archetype`.
+    ``modules/*/mmd.json``, and ``playbooks/**/*.json`` into a draft :class:`~pyfsr.agent.archetypes.record.Archetype`.
 
     Args:
         pack_dir: path to the unpacked pack.
@@ -193,7 +193,7 @@ def harvest_from_dir(pack_dir: str | Path, *, name: str | None = None) -> Archet
             back to the directory name.
 
     Returns:
-        A draft :class:`~pyfsr.archetypes.record.Archetype` (``when_to_use`` empty, ``parameters`` empty).
+        A draft :class:`~pyfsr.agent.archetypes.record.Archetype` (``when_to_use`` empty, ``parameters`` empty).
     """
     root = Path(pack_dir)
     info_path = _find_info(root)

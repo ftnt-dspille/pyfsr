@@ -181,7 +181,7 @@ trimming, picklist IRIs, and error reporting so the agent stays on task.
 ## The registry
 
 ```{code-block} python
-from pyfsr.tools import list_tools, tool_schemas, dispatch
+from pyfsr.agent.tools import list_tools, tool_schemas, dispatch
 
 list_tools()        # names of every registered tool
 tool_schemas()      # raw JSON-Schema definitions
@@ -204,7 +204,7 @@ import json
 
 import anthropic
 from pyfsr import FortiSOAR
-from pyfsr.tools import to_anthropic_tools, dispatch
+from pyfsr.agent.tools import to_anthropic_tools, dispatch
 
 soar = FortiSOAR("soar.example.com", "your-api-token")
 llm = anthropic.Anthropic()                 # reads ANTHROPIC_API_KEY
@@ -258,7 +258,7 @@ not the registry.
 ## OpenAI function calling
 
 ```{code-block} python
-from pyfsr.tools import to_openai_tools, dispatch
+from pyfsr.agent.tools import to_openai_tools, dispatch
 
 tools = to_openai_tools()                          # feed to chat.completions
 result = dispatch(client, "search_records", {"module": "alerts"})
@@ -270,7 +270,7 @@ Install the extra and run the server over the tool registry:
 
 ```{code-block} bash
 pip install "pyfsr[mcp]"
-python -m pyfsr.mcp
+python -m pyfsr.agent.mcp
 ```
 
 The server reads `FSR_*` environment variables (see
@@ -302,6 +302,6 @@ and recipes. The two don't overlap on the four tasks, so running both gives an
 agent the full create-configure-run-build loop with no gaps.
 
 ```{seealso}
-The {mod}`pyfsr.tools` and {mod}`pyfsr.mcp` modules in the {doc}`../reference`
+The {mod}`pyfsr.agent.tools` and {mod}`pyfsr.agent.mcp` modules in the {doc}`../reference`
 for the complete tool list and dispatch signatures.
 ```

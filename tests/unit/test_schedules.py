@@ -2,8 +2,8 @@
 
 import pytest
 
+from pyfsr.agent.tools import dispatch
 from pyfsr.api.schedules import SchedulesAPI, _parse_cron, _utc_offset
-from pyfsr.tools import dispatch
 
 _ENDPOINT = "/api/wf/api/scheduled/"
 _TRIGGER_NOW = "/api/wf/api/scheduled/trigger-now/"

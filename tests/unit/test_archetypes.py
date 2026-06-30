@@ -13,15 +13,15 @@ from pathlib import Path
 
 import pytest
 
-from pyfsr.archetypes import (
+from pyfsr.agent.archetypes import (
     Archetype,
     ArchetypeStore,
     harvest_from_dir,
     harvest_from_zip,
     map_use_case,
 )
-from pyfsr.archetypes.harvest import _dedupe_manifest, _picklist_name, _uuid_tail
-from pyfsr.archetypes.record import ConnectorUse
+from pyfsr.agent.archetypes.harvest import _dedupe_manifest, _picklist_name, _uuid_tail
+from pyfsr.agent.archetypes.record import ConnectorUse
 
 # Machine-local corpus root (skipped when absent).
 _CORPUS = Path("/Users/dylanspille/PycharmProjects/Miscellaneous/fortisoar/corpus_builder/repos/fortisoar")
@@ -312,7 +312,7 @@ def test_default_seed_reconcile_and_report_is_curated(tmp_path):
 
 
 def test_store_default_db_path_under_cache(monkeypatch):
-    from pyfsr.archetypes.store import _default_db_path
+    from pyfsr.agent.archetypes.store import _default_db_path
 
     monkeypatch.setenv("XDG_CACHE_HOME", str(__import__("pathlib").Path("/tmp/pyfsr-cache-test")))
     p = _default_db_path()

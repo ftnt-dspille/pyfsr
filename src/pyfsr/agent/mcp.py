@@ -2,7 +2,7 @@
 
 Point an MCP-capable agent at *any* FortiSOAR with one command::
 
-    FSR_BASE_URL=soar.example.com FSR_API_KEY=... python -m pyfsr.mcp
+    FSR_BASE_URL=soar.example.com FSR_API_KEY=... python -m pyfsr.agent.mcp
 
 This is a deliberately thin, generic consumer of :mod:`pyfsr.tools`: it exposes
 the same 16 core operations (record CRUD, schema discovery, picklists,
@@ -29,8 +29,8 @@ import asyncio
 import json
 from typing import TYPE_CHECKING, Any
 
-from .client import FortiSOAR
-from .config import EnvConfig
+from ..client import FortiSOAR
+from ..config import EnvConfig
 from .tools import dispatch, tool_schemas
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -106,9 +106,9 @@ async def serve(client: FortiSOAR | None = None) -> None:
 
 
 def main() -> None:
-    """Console entry point: ``python -m pyfsr.mcp``."""
+    """Console entry point: ``python -m pyfsr.agent.mcp``."""
     asyncio.run(serve())
 
 
-if __name__ == "__main__":  # pragma: no cover - exercised via `python -m pyfsr.mcp`
+if __name__ == "__main__":  # pragma: no cover - exercised via `python -m pyfsr.agent.mcp`
     main()

@@ -10,7 +10,7 @@ This package ships the harvester + store (steps 1-2), the first curated archetyp
 
 Public surface::
 
-    from pyfsr.archetypes import (
+    from pyfsr.agent.archetypes import (
         Archetype,
         ArchetypeStore,
         map_use_case,

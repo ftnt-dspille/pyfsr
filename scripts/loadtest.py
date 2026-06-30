@@ -6,7 +6,7 @@ Detects first failure, first recovery, and calculates outage window duration.
 
 Example:
     >>> from pyfsr import FortiSOAR
-    >>> from pyfsr.loadtest import OutageWindowLoadHelper
+    >>> from loadtest import OutageWindowLoadHelper  # scripts/ helper, run from scripts/
     >>> client = FortiSOAR("https://soar.example.com", api_key="...")
     >>> helper = OutageWindowLoadHelper(client, "Block IP", num_threads=5)
     >>> results = helper.run_load_test(num_iterations=100, interval=1.0)
@@ -23,10 +23,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from .exceptions import FortiSOARException
+from pyfsr.exceptions import FortiSOARException
 
 if TYPE_CHECKING:
-    from .client import FortiSOAR
+    from pyfsr.client import FortiSOAR
 
 
 @dataclass
