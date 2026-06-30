@@ -53,6 +53,10 @@ docs/plans/
 # Scratch / scratchpad: throwaway scripts, pilot data, reference DBs — keep local
 scratch/
 
+# Generated per-box picklist option IRIs (resolved from a live appliance by
+# scripts/deploy_recon_modules.py) — box-specific, never commit
+scripts/_recon_picklists.json
+
 # Generated investigation dumps (real incident data: internal IPs, hostnames,
 # telemetry) — keep local, never commit
 examples/fortisiem_investigation_*.json

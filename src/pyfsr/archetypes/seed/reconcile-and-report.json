@@ -22,7 +22,7 @@
       "connector": "code-runner",
       "operation": "run_python",
       "role": "compute",
-      "step_name": "Diff sources and build CSV"
+      "step_name": "Diff sources, emit assets + findings"
     },
     {
       "connector": "cyops_utilities",
@@ -31,52 +31,82 @@
       "step_name": "Create CSV attachment record"
     }
   ],
-  "description": "Reconcile two inventories -- e.g. FortiCloud/FortiCare assets vs a CMDB such as ServiceNow -- by a join key (typically a serial number), classify each discrepancy (missing-in-A, missing-in-B, field mismatch, expiring license), write the findings to a reconciliation_results module, and email a CSV report. The archetype fixes the module schema, the connector roles, and the playbook flow; the router/agent fills the deployment-specific slots (module name, join key, recipients, schedule). First pilot instance: FortiCloud assets vs ServiceNow CMDB.",
+  "description": "Reconcile two inventories -- e.g. FortiCloud/FortiCare assets vs a CMDB such as ServiceNow -- by a join key (typically a serial number), and persist the result as an asset-centric model: one recon_assets record per reconciled serial, with one or more recon_issues records (a missing-in-A, missing-in-B, field-mismatch, or license-expiring finding) linked to it. The playbook upserts by natural key (assets by join_key, issues by issue_key = join_key + mismatch_type) so re-runs update findings instead of duplicating, then emails a CSV report. The archetype fixes the two-module schema (assets parent, issues child + relationship), the connector roles, and the playbook flow; the router/agent fills the deployment-specific slots (module names, join key, recipients, schedule). First pilot instance: FortiCloud assets vs ServiceNow CMDB.",
   "module_schema": [
     {
-      "display_name": "Source System",
+      "display_name": "Join Key",
       "form_type": "text",
-      "module": "{{results_module}}",
-      "name": "source_system",
+      "module": "{{assets_module}}",
+      "name": "join_key",
       "picklist": null,
       "relationship": null,
       "required": true,
       "type": "string"
     },
     {
-      "display_name": "Source ID",
+      "display_name": "Name",
       "form_type": "text",
-      "module": "{{results_module}}",
-      "name": "source_id",
-      "picklist": null,
-      "relationship": null,
-      "required": true,
-      "type": "string"
-    },
-    {
-      "display_name": "Target System",
-      "form_type": "text",
-      "module": "{{results_module}}",
-      "name": "target_system",
-      "picklist": null,
-      "relationship": null,
-      "required": true,
-      "type": "string"
-    },
-    {
-      "display_name": "Target ID",
-      "form_type": "text",
-      "module": "{{results_module}}",
-      "name": "target_id",
+      "module": "{{assets_module}}",
+      "name": "name",
       "picklist": null,
       "relationship": null,
       "required": false,
       "type": "string"
     },
     {
+      "display_name": "Source A State",
+      "form_type": "text",
+      "module": "{{assets_module}}",
+      "name": "source_a",
+      "picklist": null,
+      "relationship": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "display_name": "Source B State",
+      "form_type": "text",
+      "module": "{{assets_module}}",
+      "name": "source_b",
+      "picklist": null,
+      "relationship": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "display_name": "Last Reconciled At",
+      "form_type": "datetime",
+      "module": "{{assets_module}}",
+      "name": "last_reconciled_at",
+      "picklist": null,
+      "relationship": null,
+      "required": false,
+      "type": "datetime"
+    },
+    {
+      "display_name": "Issue Key",
+      "form_type": "text",
+      "module": "{{issues_module}}",
+      "name": "issue_key",
+      "picklist": null,
+      "relationship": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "display_name": "Asset",
+      "form_type": "lookup",
+      "module": "{{issues_module}}",
+      "name": "asset",
+      "picklist": null,
+      "relationship": "{{assets_module}}",
+      "required": true,
+      "type": "{{assets_module}}"
+    },
+    {
       "display_name": "Join Key",
       "form_type": "text",
-      "module": "{{results_module}}",
+      "module": "{{issues_module}}",
       "name": "join_key",
       "picklist": null,
       "relationship": null,
@@ -86,7 +116,7 @@
     {
       "display_name": "Mismatch Type",
       "form_type": "picklist",
-      "module": "{{results_module}}",
+      "module": "{{issues_module}}",
       "name": "mismatch_type",
       "picklist": "MismatchType",
       "relationship": null,
@@ -96,7 +126,7 @@
     {
       "display_name": "Status",
       "form_type": "picklist",
-      "module": "{{results_module}}",
+      "module": "{{issues_module}}",
       "name": "status",
       "picklist": "ReconStatus",
       "relationship": null,
@@ -104,9 +134,49 @@
       "type": "picklists"
     },
     {
+      "display_name": "Source System",
+      "form_type": "text",
+      "module": "{{issues_module}}",
+      "name": "source_system",
+      "picklist": null,
+      "relationship": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "display_name": "Target System",
+      "form_type": "text",
+      "module": "{{issues_module}}",
+      "name": "target_system",
+      "picklist": null,
+      "relationship": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "display_name": "Source ID",
+      "form_type": "text",
+      "module": "{{issues_module}}",
+      "name": "source_id",
+      "picklist": null,
+      "relationship": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "display_name": "Target ID",
+      "form_type": "text",
+      "module": "{{issues_module}}",
+      "name": "target_id",
+      "picklist": null,
+      "relationship": null,
+      "required": false,
+      "type": "string"
+    },
+    {
       "display_name": "Reported At",
       "form_type": "datetime",
-      "module": "{{results_module}}",
+      "module": "{{issues_module}}",
       "name": "reported_at",
       "picklist": null,
       "relationship": null,
@@ -116,7 +186,7 @@
     {
       "display_name": "Details",
       "form_type": "textarea",
-      "module": "{{results_module}}",
+      "module": "{{issues_module}}",
       "name": "details",
       "picklist": null,
       "relationship": null,
@@ -127,10 +197,17 @@
   "name": "reconcile-and-report",
   "parameters": [
     {
-      "default": "reconciliation_results",
-      "description": "Name of the FortiSOAR module that holds reconciliation-result records.",
+      "default": "recon_assets",
+      "description": "Name of the FortiSOAR module that holds one record per reconciled asset (parent).",
       "from": "prompt",
-      "name": "results_module",
+      "name": "assets_module",
+      "required": true
+    },
+    {
+      "default": "recon_issues",
+      "description": "Name of the FortiSOAR module that holds one record per reconciliation finding (child, linked to the asset).",
+      "from": "prompt",
+      "name": "issues_module",
       "required": true
     },
     {
@@ -146,7 +223,7 @@
       "required": true
     },
     {
-      "description": "Field used to match records across the two sources (typically a serial number). Inferred from the module schema when possible, else prompted.",
+      "description": "Field used to match records across the two sources (typically a serial number). Inferred from the module schema when possible, else prompted. Becomes the assets natural key and the upsert sourceId.",
       "from": "module_schema|prompt",
       "name": "join_key",
       "required": true
@@ -167,7 +244,7 @@
   ],
   "playbook_skeletons": [
     {
-      "description": "Fetch both sources, diff by the join key, write findings to reconciliation_results, and email a CSV report. Abstract trigger (fired by an out-of-band schedule).",
+      "description": "Fetch both sources, diff by the join key, upsert every asset (by join_key) and every issue (by issue_key, linked to its asset), and email a CSV report. Abstract trigger (fired by an out-of-band schedule). Re-runs are idempotent: upsert + natural-key uniqueness update existing records instead of duplicating.",
       "name": "Reconcile and Report",
       "steps": [
         {
@@ -190,26 +267,38 @@
         },
         {
           "connector": "code-runner",
-          "name": "Diff and Build CSV",
+          "name": "Reconcile",
           "operation": "run_python",
+          "step_type": null
+        },
+        {
+          "connector": null,
+          "name": "Upsert Assets",
+          "operation": null,
+          "step_type": null
+        },
+        {
+          "connector": null,
+          "name": "Find Assets",
+          "operation": null,
+          "step_type": null
+        },
+        {
+          "connector": null,
+          "name": "Build Asset IRI Map",
+          "operation": null,
+          "step_type": null
+        },
+        {
+          "connector": null,
+          "name": "Upsert Issues",
+          "operation": null,
           "step_type": null
         },
         {
           "connector": "cyops_utilities",
           "name": "Create Attachment",
           "operation": "create_cyops_attachment",
-          "step_type": null
-        },
-        {
-          "connector": null,
-          "name": "Findings?",
-          "operation": null,
-          "step_type": null
-        },
-        {
-          "connector": null,
-          "name": "Write Findings",
-          "operation": null,
           "step_type": null
         },
         {
@@ -224,9 +313,13 @@
   "source": {
     "basis": "ServiceNow + FortiCare reconciliation pilot (mutable-yawning-fox plan, Form 1)",
     "curated": true,
-    "curated_on": "2026-06-25",
-    "note": "Hand-curated (no single reconciliation solution pack exists to harvest). Module field types grounded in real mmd.json (string/text, picklists/picklist, datetime); connector ops research-verified per plan. The diff/CSV step uses the custom 'code-runner' connector (role 'compute') instead of the stock 'code-snippet': code-snippet's sandbox execs at module level (no top-level return) and restricts open() (no CSV file write), which broke this archetype's natural design; code-runner removes both restrictions. code-runner is UNRESTRICTED arbitrary-code execution with filesystem access -- a deliberate trade-off for this trusted, operator-authored archetype. Source: connector-code-runner repo.",
+    "curated_on": "2026-06-29",
+    "natural_keys": {
+      "{{assets_module}}": ["join_key"],
+      "{{issues_module}}": ["issue_key"]
+    },
+    "note": "Hand-curated (no single reconciliation solution pack exists to harvest). Asset-centric two-module model: recon_assets (parent, natural key join_key) + recon_issues (child, natural key issue_key = join_key + mismatch_type) with an `asset` lookup linking each issue to its asset. Module field types grounded in real mmd.json (string/text, picklists/picklist, datetime, lookup -> target module type). Dedup is two-layered: the module uniqueConstraint (built at publish) is the DB backstop; the playbook upserts via /api/3/upsert/<module> + sourceId=<natural key> + operation=Overwrite so re-runs update instead of duplicating (the data_ingest ruleset pattern). The diff step uses the custom 'code-runner' connector (role 'compute') instead of the stock 'code-snippet': code-snippet's sandbox execs at module level (no top-level return) and restricts open() (no CSV file write), which broke this archetype's natural design; code-runner removes both restrictions. code-runner is UNRESTRICTED arbitrary-code execution with filesystem access -- a deliberate trade-off for this trusted, operator-authored archetype. Source: connector-code-runner repo.",
     "pilot_connectors": "forticloud-asset-management, servicenow-cmdb, smtp, code-runner"
   },
-  "when_to_use": "Compare two data sources, surface records present in one but not the other plus field mismatches on a join key, persist each finding to a reconciliation-results record, and notify stakeholders with a CSV report. Triggered on a schedule (an out-of-band Celery task pointing at an abstract-trigger playbook), not by an inbound event."
+  "when_to_use": "Compare two data sources, surface records present in one but not the other plus field mismatches on a join key, persist each reconciled asset and its findings to a parent asset / child issue record model (upserted by natural key so re-runs do not duplicate), and notify stakeholders with a CSV report. Triggered on a schedule (an out-of-band Celery task pointing at an abstract-trigger playbook), not by an inbound event."
 }
