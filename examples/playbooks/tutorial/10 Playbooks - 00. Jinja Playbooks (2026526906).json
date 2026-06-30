@@ -1,0 +1,2149 @@
+{
+  "type": "workflow_collections",
+  "data": [
+    {
+      "@context": "/api/3/contexts/WorkflowCollection",
+      "@type": "WorkflowCollection",
+      "name": "00. Jinja Playbooks",
+      "description": null,
+      "visible": true,
+      "image": null,
+      "uuid": "0d07fa96-b8ee-445e-9f4f-682ac9e4dfe5",
+      "id": 31,
+      "createDate": 1758569047.946043,
+      "modifyDate": 1758569047.946043,
+      "deletedAt": null,
+      "importedBy": [],
+      "recordTags": [
+        "poc"
+      ],
+      "workflows": [
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Example 5 - Working with IP addresses",
+          "aliasName": null,
+          "tag": null,
+          "description": "Jinja: Functions for handling IPs",
+          "isActive": false,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779796380,
+          "collection": "/api/3/workflow_collections/0d07fa96-b8ee-445e-9f4f-682ac9e4dfe5",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/dbb0067d-7491-4b70-8795-ac8e06a5747d",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Extracting IPs",
+              "description": null,
+              "arguments": {
+                "IPRange": "{{ vars.IPList | ipaddr('192.0.0.0/8') }}",
+                "RealIPs": "{{vars.IPList | ipaddr}}",
+                "PrivateIPs": "{{ vars.IPList | ipaddr('private') }}"
+              },
+              "status": null,
+              "top": "400",
+              "left": "660",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "e501c89e-3650-474a-b429-0a4ee4b6f576"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "My IPs",
+              "description": null,
+              "arguments": {
+                "IPList": "['192.24.2.1', 'host.fqdn', '::1', '192.168.32.0/24', 'fe80::100/10', True, '', '42540766412265424405338506004571095040/64', '192.168.1.1', '172.16.1.1', '200.1.1.19']"
+              },
+              "status": null,
+              "top": "180",
+              "left": "340",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "ac545f71-7e77-4b68-b97b-2ca4f5b03fb7"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "85cd1831-6a23-49f9-a925-787c033f0904",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "40",
+              "left": "40",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "dbb0067d-7491-4b70-8795-ac8e06a5747d"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "My IPs -> Extracting IPs",
+              "targetStep": "/api/3/workflow_steps/e501c89e-3650-474a-b429-0a4ee4b6f576",
+              "sourceStep": "/api/3/workflow_steps/ac545f71-7e77-4b68-b97b-2ca4f5b03fb7",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "47c15bdc-ffe3-4f27-9024-83b3d476d7fe"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> My IPs",
+              "targetStep": "/api/3/workflow_steps/ac545f71-7e77-4b68-b97b-2ca4f5b03fb7",
+              "sourceStep": "/api/3/workflow_steps/dbb0067d-7491-4b70-8795-ac8e06a5747d",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "7aeef670-decb-4b61-9904-531d3fd903dc"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/15c1e8c9-22bf-4e66-8fbb-0a502d4a4a3f",
+          "isEditable": true,
+          "uuid": "2939a94f-84d1-4423-9c0d-d7a29d342ecf",
+          "id": 346,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "ipaddr"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Example 1 - INTERNAL and EXTERNAL if and other functions",
+          "aliasName": null,
+          "tag": null,
+          "description": "Jinja: Working with structures IF + lists + Length + Md5 + Counter",
+          "isActive": false,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779796410,
+          "collection": "/api/3/workflow_collections/0d07fa96-b8ee-445e-9f4f-682ac9e4dfe5",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/1c7e8b9e-ab84-41ed-87fd-9d971fe587ea",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "A bigger",
+              "description": null,
+              "arguments": {
+                "type": "InputBased",
+                "input": {
+                  "schema": {
+                    "title": "And the result is...",
+                    "description": "A bigger {{vars.a}}",
+                    "inputVariables": []
+                  }
+                },
+                "record": "",
+                "agent_id": null,
+                "resources": "alerts",
+                "is_approval": false,
+                "owner_detail": {
+                  "isAssigned": false,
+                  "emailRecipients": ""
+                },
+                "isRecordLinked": false,
+                "step_variables": [],
+                "response_mapping": {
+                  "options": [
+                    {
+                      "option": "End",
+                      "primary": true,
+                      "step_iri": "/api/3/workflow_steps/d8cb8bc0-f50e-4a2a-80c4-afcac329fa01"
+                    }
+                  ],
+                  "duplicateOption": false,
+                  "customSuccessMessage": "Awaiting Playbook resumed successfully."
+                },
+                "email_notification": {
+                  "enabled": false,
+                  "smtpParameters": []
+                },
+                "customEmailExternal": false,
+                "inline_channel_list": [],
+                "external_channel_list": [],
+                "unauthenticated_input": false,
+                "external_email_subject": null,
+                "internal_email_subject": "A FortiSOAR playbook is requesting your input",
+                "custom_email_body_external": null,
+                "external_email_attachments": null
+              },
+              "status": null,
+              "top": "705",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/fc04082a-d7dc-4299-96fb-6837b1baa0fe",
+              "group": null,
+              "uuid": "93820fca-e25f-45d3-bebf-a18653b49b7f"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "B bigger",
+              "description": null,
+              "arguments": {
+                "type": "InputBased",
+                "input": {
+                  "schema": {
+                    "title": "And the result is",
+                    "description": "B is bigger {{vars.b}}",
+                    "inputVariables": []
+                  }
+                },
+                "record": "",
+                "agent_id": null,
+                "resources": "alerts",
+                "is_approval": false,
+                "owner_detail": {
+                  "isAssigned": false,
+                  "emailRecipients": ""
+                },
+                "isRecordLinked": false,
+                "step_variables": [],
+                "response_mapping": {
+                  "options": [
+                    {
+                      "option": "End",
+                      "primary": true,
+                      "step_iri": "/api/3/workflow_steps/d8cb8bc0-f50e-4a2a-80c4-afcac329fa01"
+                    }
+                  ],
+                  "duplicateOption": false,
+                  "customSuccessMessage": "Awaiting Playbook resumed successfully."
+                },
+                "email_notification": {
+                  "enabled": false,
+                  "smtpParameters": []
+                },
+                "customEmailExternal": false,
+                "inline_channel_list": [],
+                "external_channel_list": [],
+                "unauthenticated_input": false,
+                "external_email_subject": null,
+                "internal_email_subject": "A FortiSOAR playbook is requesting your input",
+                "custom_email_body_external": null,
+                "external_email_attachments": null
+              },
+              "status": null,
+              "top": "705",
+              "left": "475",
+              "stepType": "/api/3/workflow_step_types/fc04082a-d7dc-4299-96fb-6837b1baa0fe",
+              "group": null,
+              "uuid": "9ceb4d37-4b0f-47ee-98c6-94b5fd8e9225"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "b9128521-86e1-4108-aba1-b99f5b8c9eb9",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "displayConditions": {
+                  "alerts": {
+                    "sort": [],
+                    "limit": 30,
+                    "logic": "AND",
+                    "filters": []
+                  }
+                },
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "30",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "1c7e8b9e-ab84-41ed-87fd-9d971fe587ea"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Step if",
+              "description": null,
+              "arguments": {
+                "conditions": [
+                  {
+                    "option": "A bigger",
+                    "step_iri": "/api/3/workflow_steps/93820fca-e25f-45d3-bebf-a18653b49b7f",
+                    "condition": "{{ vars.a >= vars.b }}",
+                    "step_name": "A bigger"
+                  },
+                  {
+                    "option": "B Bigger",
+                    "step_iri": "/api/3/workflow_steps/9ceb4d37-4b0f-47ee-98c6-94b5fd8e9225",
+                    "condition": "{{ vars.b > vars.a }}",
+                    "step_name": "B bigger"
+                  }
+                ],
+                "step_variables": []
+              },
+              "status": null,
+              "top": "560",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/12254cf5-5db7-4b1a-8cb1-3af081924b28",
+              "group": null,
+              "uuid": "2a2d85b3-1600-4301-9b36-92fc6a3db448"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Tests part 1 IF dentro do codigo",
+              "description": null,
+              "arguments": {
+                "a": "10",
+                "b": "20",
+                "c": "{% if vars.a > vars.b %}\n'A Maior'\n{% elif vars.b > vars.a %}\n'B Maior' \n{% endif %}",
+                "d": "{{vars.c | length }}",
+                "e": "{{ vars.c | hash('md5') }}"
+              },
+              "status": null,
+              "top": "165",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "761c688f-828d-4406-9904-13c5c3acb4a1"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Tests part 2 Lista",
+              "description": null,
+              "arguments": {
+                "data2": "['val1', 'val2', 'val3', 'val1']"
+              },
+              "status": null,
+              "top": "300",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "86930da7-518e-4d2e-b208-ce90e1feb2cf"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Tests part 3",
+              "description": null,
+              "arguments": {
+                "contador": "{{vars.data2 | counter}}"
+              },
+              "status": null,
+              "top": "435",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "1754bd27-67df-46f8-84c8-d2bda7133091"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "The End",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.3.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "840",
+              "left": "300",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "d8cb8bc0-f50e-4a2a-80c4-afcac329fa01"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "A bigger -> The End",
+              "targetStep": "/api/3/workflow_steps/d8cb8bc0-f50e-4a2a-80c4-afcac329fa01",
+              "sourceStep": "/api/3/workflow_steps/93820fca-e25f-45d3-bebf-a18653b49b7f",
+              "label": "End",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "3660f8d0-7d46-41ee-b299-6687361c1a72"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "B bigger -> The End",
+              "targetStep": "/api/3/workflow_steps/d8cb8bc0-f50e-4a2a-80c4-afcac329fa01",
+              "sourceStep": "/api/3/workflow_steps/9ceb4d37-4b0f-47ee-98c6-94b5fd8e9225",
+              "label": "End",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "79925ec8-164c-4cb1-8bff-6b9cd3167b44"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> Myvars",
+              "targetStep": "/api/3/workflow_steps/761c688f-828d-4406-9904-13c5c3acb4a1",
+              "sourceStep": "/api/3/workflow_steps/1c7e8b9e-ab84-41ed-87fd-9d971fe587ea",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "2649784b-17b7-4283-8e65-f56f3f97ff4c"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Step if -> A bigger",
+              "targetStep": "/api/3/workflow_steps/93820fca-e25f-45d3-bebf-a18653b49b7f",
+              "sourceStep": "/api/3/workflow_steps/2a2d85b3-1600-4301-9b36-92fc6a3db448",
+              "label": "A bigger",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "39bb3cbe-9064-42ba-8852-3e401af6baf7"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Step if -> B bigger",
+              "targetStep": "/api/3/workflow_steps/9ceb4d37-4b0f-47ee-98c6-94b5fd8e9225",
+              "sourceStep": "/api/3/workflow_steps/2a2d85b3-1600-4301-9b36-92fc6a3db448",
+              "label": "B Bigger",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "9588e5fc-aa07-44de-849b-a7a08e0c1439"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Tests part 1 -> Tests part 2",
+              "targetStep": "/api/3/workflow_steps/86930da7-518e-4d2e-b208-ce90e1feb2cf",
+              "sourceStep": "/api/3/workflow_steps/761c688f-828d-4406-9904-13c5c3acb4a1",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "f8271265-7389-46e6-83c5-850235e9647e"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Tests part 2 -> Tests part 3",
+              "targetStep": "/api/3/workflow_steps/1754bd27-67df-46f8-84c8-d2bda7133091",
+              "sourceStep": "/api/3/workflow_steps/86930da7-518e-4d2e-b208-ce90e1feb2cf",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "3da4fc63-f541-44e6-834c-b3a4ec89b7b4"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Tests part 3 -> Step if",
+              "targetStep": "/api/3/workflow_steps/2a2d85b3-1600-4301-9b36-92fc6a3db448",
+              "sourceStep": "/api/3/workflow_steps/1754bd27-67df-46f8-84c8-d2bda7133091",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "aed29447-4572-4bd0-924a-3dbec85baa8a"
+            }
+          ],
+          "groups": [
+            {
+              "@type": "WorkflowGroup",
+              "name": "EXTERNAL IF",
+              "description": "Step If",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "560",
+              "left": "660",
+              "height": "0",
+              "width": "300",
+              "uuid": "5f4048b3-4909-4b4b-b962-5685344addd4",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "INTERNAL IF",
+              "description": "Tests part 1",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "160",
+              "left": "640",
+              "height": "0",
+              "width": "300",
+              "uuid": "f7776eaa-7811-47c2-817a-f768836098e8",
+              "recordTags": []
+            }
+          ],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/15c1e8c9-22bf-4e66-8fbb-0a502d4a4a3f",
+          "isEditable": true,
+          "uuid": "4060329e-b145-49e6-8c8d-0bdecb0e405d",
+          "id": 353,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "functions",
+            "if"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Example 7 - URL Split",
+          "aliasName": null,
+          "tag": null,
+          "description": "Jinja: Getting the URL parts + working with dates",
+          "isActive": false,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779796332,
+          "collection": "/api/3/workflow_collections/0d07fa96-b8ee-445e-9f4f-682ac9e4dfe5",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/20593fbe-079e-4199-949b-0fadf59bdccf",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "End",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.4.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "700",
+              "left": "1200",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "ec5be71d-4106-4513-8259-deef1f8210ec"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "MyVars",
+              "description": null,
+              "arguments": {
+                "Parts": "{{ \"http://user:password@www.acme.com:9000/dir/index.html?query=term#frament\" | urlsplit }}"
+              },
+              "status": null,
+              "top": "180",
+              "left": "340",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "7e13db2c-cb4c-43e4-a601-121bbc5dae21"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Other examples",
+              "description": null,
+              "arguments": {
+                "uuidfinal": "{{ 'user.example.com' | to_uuid }}",
+                "datefinal2": "{{ \"2016-08-14 20:00:12\" | to_datetime}}"
+              },
+              "status": null,
+              "top": "360",
+              "left": "560",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "ca0ced5f-62bd-42cf-a89f-d8641c9a17a5"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Output",
+              "description": null,
+              "arguments": {
+                "type": "InputBased",
+                "input": {
+                  "schema": {
+                    "title": "And the Output is",
+                    "description": "{{ \"Comment\" | comment }}\n\n{{ \"C style\" | comment('c') }}\n\n{{ \"C Block\" | comment('cblock') }}\n\n{{ \"C Erlang\" | comment('erlang') }}",
+                    "inputVariables": []
+                  }
+                },
+                "record": "",
+                "agent_id": null,
+                "resources": "alerts",
+                "is_approval": false,
+                "owner_detail": {
+                  "isAssigned": false,
+                  "emailRecipients": ""
+                },
+                "isRecordLinked": false,
+                "step_variables": [],
+                "response_mapping": {
+                  "options": [
+                    {
+                      "option": "End",
+                      "primary": true,
+                      "step_iri": "/api/3/workflow_steps/ec5be71d-4106-4513-8259-deef1f8210ec"
+                    }
+                  ],
+                  "duplicateOption": false,
+                  "customSuccessMessage": "Awaiting Playbook resumed successfully."
+                },
+                "email_notification": {
+                  "enabled": false,
+                  "smtpParameters": []
+                },
+                "customEmailExternal": false,
+                "inline_channel_list": [],
+                "external_channel_list": [],
+                "unauthenticated_input": false,
+                "external_email_subject": null,
+                "internal_email_subject": "A FortiSOAR playbook is requesting your input",
+                "custom_email_body_external": null,
+                "external_email_attachments": null
+              },
+              "status": null,
+              "top": "520",
+              "left": "900",
+              "stepType": "/api/3/workflow_step_types/fc04082a-d7dc-4299-96fb-6837b1baa0fe",
+              "group": null,
+              "uuid": "de13fe2e-e8da-47ff-b70f-260aa26d7224"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "ed47fa95-b000-4302-bd4d-52697b703555",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "40",
+              "left": "40",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "20593fbe-079e-4199-949b-0fadf59bdccf"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "MyVars -> Other examples",
+              "targetStep": "/api/3/workflow_steps/ca0ced5f-62bd-42cf-a89f-d8641c9a17a5",
+              "sourceStep": "/api/3/workflow_steps/7e13db2c-cb4c-43e4-a601-121bbc5dae21",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "a36d03ee-6435-4c09-ab89-8a32e369e8c9"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Other examples -> Output",
+              "targetStep": "/api/3/workflow_steps/de13fe2e-e8da-47ff-b70f-260aa26d7224",
+              "sourceStep": "/api/3/workflow_steps/ca0ced5f-62bd-42cf-a89f-d8641c9a17a5",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "c289731a-56df-4778-a8e8-8f36d7c371a2"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Output -> No Op",
+              "targetStep": "/api/3/workflow_steps/ec5be71d-4106-4513-8259-deef1f8210ec",
+              "sourceStep": "/api/3/workflow_steps/de13fe2e-e8da-47ff-b70f-260aa26d7224",
+              "label": "End",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "c00c4af4-3655-47cd-9423-fbf31beaab30"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> MyVars",
+              "targetStep": "/api/3/workflow_steps/7e13db2c-cb4c-43e4-a601-121bbc5dae21",
+              "sourceStep": "/api/3/workflow_steps/20593fbe-079e-4199-949b-0fadf59bdccf",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "0a7bd746-921b-41bf-ac8a-758fa8862264"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/15c1e8c9-22bf-4e66-8fbb-0a502d4a4a3f",
+          "isEditable": true,
+          "uuid": "63e59f9f-eeb6-4696-9963-f8c4fb06012f",
+          "id": 348,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "dates",
+            "url"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Example 8 - Combination Filters",
+          "aliasName": null,
+          "tag": null,
+          "description": "Jinja: Learning Permutations, Dates. Sorting and Poping elements",
+          "isActive": false,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779796344,
+          "collection": "/api/3/workflow_collections/0d07fa96-b8ee-445e-9f4f-682ac9e4dfe5",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/82d90d8f-fa6f-4d43-8db9-ed6ab14cbc70",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Dates",
+              "description": null,
+              "arguments": {
+                "date1": "{{ '%Y-%m-%d' | strftime }}",
+                "date2": "{{ '%H:%M:%S' | strftime }}",
+                "date3": "{{ '%Y-%m-%d' | strftime(0) }}",
+                "date4": "{{ '%Y-%m-%d' | strftime(1441357287) }}"
+              },
+              "status": null,
+              "top": "300",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "a9b7cbd6-6757-46e0-957c-b43de62005ae"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "MyVars",
+              "description": null,
+              "arguments": {
+                "perm1": "{{ [1,2,3,4,5] |permutations|list }}",
+                "perm2": "{{ [1,2,3,4,5] |permutations(3)|list }}",
+                "perm3": "{{ [1,2,3] |zip(['a','b','c','d','e','f'])|list }}"
+              },
+              "status": null,
+              "top": "165",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "136771d5-5549-44b1-977b-fba89bb516d7"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "POP from stak",
+              "description": null,
+              "arguments": {
+                "element": "{{vars.mylist.pop()}}",
+                "neelist": "{{vars.mylist}}"
+              },
+              "status": null,
+              "top": "660",
+              "left": "120",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "c33a081e-b719-4512-9238-8e650f466b7f"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Sorting",
+              "description": null,
+              "arguments": {
+                "myjoin": "{{ [1, 2, 3]|join }}",
+                "mylist": "[\n{'Description': 'val1', \n'Item': 2}, \n{'Description': 'val2',\n 'Item': 4},\n{'Description': 'val3', \n'Item': 5}\n]",
+                "numbers": "{{ [ 50, 30, 60, 100] }}",
+                "replacing": "{{ \"Hello World\"|replace(\"Hello\", \"Goodbye\") }}",
+                "dictionary": "[\n{\n    'abc': {'name': 'B', 'is_sth': True},\n    'xyz': {'name': 'A', 'is_sth': True},\n'efg': {'name': 'ai', 'is_sth': True}\n}\n]"
+              },
+              "status": null,
+              "top": "460",
+              "left": "120",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "883130de-203f-4531-9fc3-567ffe243331"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "7b24e927-1d6f-4fd8-b409-8f25f7783586",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "30",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "82d90d8f-fa6f-4d43-8db9-ed6ab14cbc70"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "this is new",
+              "description": null,
+              "arguments": {
+                "newdate": "{{ now() | datetime_modify('-2 days') | strftime('%Y-%m-%d %H:%M:%S') }}"
+              },
+              "status": null,
+              "top": "320",
+              "left": "560",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "4dcf75d6-43aa-4e9b-9d4c-f6f4b6293c36"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Dates -> Dict Sorting",
+              "targetStep": "/api/3/workflow_steps/883130de-203f-4531-9fc3-567ffe243331",
+              "sourceStep": "/api/3/workflow_steps/a9b7cbd6-6757-46e0-957c-b43de62005ae",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "e7bd9f57-44d0-4ff3-ac9d-f812f90aa19c"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Dates -> this is new",
+              "targetStep": "/api/3/workflow_steps/4dcf75d6-43aa-4e9b-9d4c-f6f4b6293c36",
+              "sourceStep": "/api/3/workflow_steps/a9b7cbd6-6757-46e0-957c-b43de62005ae",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "05a6545a-1597-4721-8a55-6784f7246fdf"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "MyVars -> Dates",
+              "targetStep": "/api/3/workflow_steps/a9b7cbd6-6757-46e0-957c-b43de62005ae",
+              "sourceStep": "/api/3/workflow_steps/136771d5-5549-44b1-977b-fba89bb516d7",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "34837414-0191-4908-be6b-85a316c5b320"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Sorting -> Others",
+              "targetStep": "/api/3/workflow_steps/c33a081e-b719-4512-9238-8e650f466b7f",
+              "sourceStep": "/api/3/workflow_steps/883130de-203f-4531-9fc3-567ffe243331",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "1d34d28d-7d36-4f92-a4c5-d28d8a16935a"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> MyVars",
+              "targetStep": "/api/3/workflow_steps/136771d5-5549-44b1-977b-fba89bb516d7",
+              "sourceStep": "/api/3/workflow_steps/82d90d8f-fa6f-4d43-8db9-ed6ab14cbc70",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "667ed9e4-3e48-49a1-9d7a-fa6b1f51325a"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/15c1e8c9-22bf-4e66-8fbb-0a502d4a4a3f",
+          "isEditable": true,
+          "uuid": "68cf942e-3a2c-48cd-83d8-13819c83d082",
+          "id": 351,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "dates",
+            "dictionaries",
+            "permutations"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Example 10 - Add Random comments to Alerts",
+          "aliasName": null,
+          "tag": null,
+          "description": "Testing Comments and Random function",
+          "isActive": true,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779797145,
+          "collection": "/api/3/workflow_collections/0d07fa96-b8ee-445e-9f4f-682ac9e4dfe5",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/fc222f60-3f1c-4592-9124-6cbb34d01433",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Create Comment",
+              "description": null,
+              "arguments": {
+                "resource": {
+                  "type": "/api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b",
+                  "__link": {
+                    "recordTags": [
+                      "/api/3/tags/PlaybookAutomation",
+                      "/api/3/tags/hash"
+                    ]
+                  },
+                  "alerts": "{{vars.input.records[0]['@id']}}",
+                  "people": [],
+                  "content": "<p>I am aware of this alert. Will start working on it in<span style=\"color: rgb(241, 196, 15);\"> {{vars.random}}</span> minutes.</p>\n<p>&nbsp;</p>",
+                  "__replace": "",
+                  "isImportant": false,
+                  "peopleUpdated": false
+                },
+                "operation": "Overwrite",
+                "collection": "/api/3/comments",
+                "__recommend": [],
+                "fieldOperation": {
+                  "recordTags": "Append"
+                },
+                "step_variables": []
+              },
+              "status": null,
+              "top": "340",
+              "left": "400",
+              "stepType": "/api/3/workflow_step_types/2597053c-e718-44b4-8394-4d40fe26d357",
+              "group": null,
+              "uuid": "da778dce-65df-47be-9c83-dbbe374ead1b"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "End",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.3.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "500",
+              "left": "680",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "eeb2aad2-c8ea-42ad-a85f-b38baf5dadfe"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "myVars",
+              "description": null,
+              "arguments": {
+                "random": "{{ 300 | random }}"
+              },
+              "status": null,
+              "top": "180",
+              "left": "240",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "aaea5320-e617-452d-82e3-10cc666443d2"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "4890acac-be23-4340-a005-135cce50907b",
+                "title": "Add a Random Comment to Alert",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "displayConditions": {
+                  "alerts": {
+                    "sort": [],
+                    "limit": 30,
+                    "logic": "AND",
+                    "filters": []
+                  }
+                },
+                "executeButtonText": "Execute",
+                "noRecordExecution": false,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": true
+              },
+              "status": null,
+              "top": "40",
+              "left": "40",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "fc222f60-3f1c-4592-9124-6cbb34d01433"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Create Comment -> End",
+              "targetStep": "/api/3/workflow_steps/eeb2aad2-c8ea-42ad-a85f-b38baf5dadfe",
+              "sourceStep": "/api/3/workflow_steps/da778dce-65df-47be-9c83-dbbe374ead1b",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "f8e82a5b-977c-456b-9c8b-239e2abaeee0"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "myVars -> Create Comment",
+              "targetStep": "/api/3/workflow_steps/da778dce-65df-47be-9c83-dbbe374ead1b",
+              "sourceStep": "/api/3/workflow_steps/aaea5320-e617-452d-82e3-10cc666443d2",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "4923a0db-9626-4070-9b91-77462faade21"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> myVars",
+              "targetStep": "/api/3/workflow_steps/aaea5320-e617-452d-82e3-10cc666443d2",
+              "sourceStep": "/api/3/workflow_steps/fc222f60-3f1c-4592-9124-6cbb34d01433",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "edd01811-630f-4b82-a792-ebc7613f56f4"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/b6d710a9-a8ec-41ec-8817-fe9fa062fcdd",
+          "isEditable": true,
+          "uuid": "6c0b02e6-02e5-4398-bc47-4be076a354c3",
+          "id": 337,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "comments",
+            "correlation",
+            "create record",
+            "random function"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Example 4 - Shuffle",
+          "aliasName": null,
+          "tag": null,
+          "description": "Jinja: Randomize items from an array",
+          "isActive": false,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779796394,
+          "collection": "/api/3/workflow_collections/0d07fa96-b8ee-445e-9f4f-682ac9e4dfe5",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/f2f05dbe-74ca-44a0-8bc9-9fb81a8c2315",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Call_Shuffle",
+              "description": null,
+              "arguments": {
+                "for_each": {
+                  "item": "{{range(vars.mynumber) | list}}",
+                  "parallel": false,
+                  "condition": ""
+                },
+                "shuffle_result": "{{vars.analysts |shuffle }}"
+              },
+              "status": null,
+              "top": "300",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "baf6b238-e3dd-4699-bd57-925fa53a1495"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "MyVars Shuffle",
+              "description": null,
+              "arguments": {
+                "analysts": "{{ ['Rafael', 'Paulo', 'Roberto', 'Thiago' ] }}"
+              },
+              "status": null,
+              "top": "160",
+              "left": "120",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "96ffd301-6880-4fa0-ad69-f456d22de01f"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Print results",
+              "description": null,
+              "arguments": {
+                "type": "InputBased",
+                "input": {
+                  "schema": {
+                    "title": "Here are the results",
+                    "description": "Below your {{vars.mynumber}} shuffles:\n\n{{ vars.steps.Call_Shuffle | join(\"\\n\\n\") }}\n",
+                    "inputVariables": []
+                  }
+                },
+                "record": "",
+                "agent_id": null,
+                "resources": "alerts",
+                "is_approval": false,
+                "owner_detail": {
+                  "isAssigned": false,
+                  "emailRecipients": ""
+                },
+                "isRecordLinked": false,
+                "step_variables": [],
+                "response_mapping": {
+                  "options": [
+                    {
+                      "option": "The end",
+                      "primary": true,
+                      "step_iri": "/api/3/workflow_steps/158e1e29-e38c-4fed-b4f0-f3fe44753eb1"
+                    }
+                  ],
+                  "duplicateOption": false,
+                  "customSuccessMessage": "Awaiting Playbook resumed successfully."
+                },
+                "email_notification": {
+                  "enabled": false,
+                  "smtpParameters": []
+                },
+                "customEmailExternal": false,
+                "inline_channel_list": [],
+                "external_channel_list": [],
+                "unauthenticated_input": false,
+                "external_email_subject": null,
+                "internal_email_subject": "A FortiSOAR playbook is requesting your input",
+                "custom_email_body_external": null,
+                "external_email_attachments": null
+              },
+              "status": null,
+              "top": "435",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/fc04082a-d7dc-4299-96fb-6837b1baa0fe",
+              "group": null,
+              "uuid": "8ab06a0c-2f0a-4704-967d-a9e3877b2c24"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "ee7e73da-198e-49c2-988d-5194bfb95db6",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  },
+                  "mynumber": "100"
+                },
+                "triggerOnSource": true,
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "20",
+              "left": "120",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "f2f05dbe-74ca-44a0-8bc9-9fb81a8c2315"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "The end",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.3.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "570",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "158e1e29-e38c-4fed-b4f0-f3fe44753eb1"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Call Shuffle 10 times -> Print results",
+              "targetStep": "/api/3/workflow_steps/8ab06a0c-2f0a-4704-967d-a9e3877b2c24",
+              "sourceStep": "/api/3/workflow_steps/baf6b238-e3dd-4699-bd57-925fa53a1495",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "4442986d-f3a3-4525-9e9b-42876fc9c315"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "MyVars Shuffle -> Call Shuffle 10 times",
+              "targetStep": "/api/3/workflow_steps/baf6b238-e3dd-4699-bd57-925fa53a1495",
+              "sourceStep": "/api/3/workflow_steps/96ffd301-6880-4fa0-ad69-f456d22de01f",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "a4f1dc40-7213-40ec-a2a3-143d16b1da5a"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Print results -> The end",
+              "targetStep": "/api/3/workflow_steps/158e1e29-e38c-4fed-b4f0-f3fe44753eb1",
+              "sourceStep": "/api/3/workflow_steps/8ab06a0c-2f0a-4704-967d-a9e3877b2c24",
+              "label": "The end",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "eff86e10-eeea-413d-b012-e075dd18a626"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> MyVars Shuffle",
+              "targetStep": "/api/3/workflow_steps/96ffd301-6880-4fa0-ad69-f456d22de01f",
+              "sourceStep": "/api/3/workflow_steps/f2f05dbe-74ca-44a0-8bc9-9fb81a8c2315",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "f103bfab-e33b-4a7c-a6bd-3364cb4f8dfe"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/15c1e8c9-22bf-4e66-8fbb-0a502d4a4a3f",
+          "isEditable": true,
+          "uuid": "6edddcca-8564-4215-95dd-be35e0a28450",
+          "id": 350,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "loop",
+            "shuffle"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Example 2 - Complex Data Types",
+          "aliasName": null,
+          "tag": null,
+          "description": "Jinja: Working with complex data types",
+          "isActive": false,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779796403,
+          "collection": "/api/3/workflow_collections/0d07fa96-b8ee-445e-9f4f-682ac9e4dfe5",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/2aaa73a4-80c3-48fc-b3bc-a0415accf590",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Array",
+              "description": null,
+              "arguments": {
+                "myarray": "{\n'Alvian': 42,\n'Kreb': 413,\n'Mandu': 1\n}"
+              },
+              "status": null,
+              "top": "30",
+              "left": "450",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "6c925b58-ef1f-42d9-9546-dfea2d773ea4"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Show results",
+              "description": null,
+              "arguments": {
+                "type": "InputBased",
+                "input": {
+                  "schema": {
+                    "title": "And the result is",
+                    "description": "Kreb has value: **{{ vars.myarray.Kreb }}**",
+                    "inputVariables": []
+                  }
+                },
+                "record": "",
+                "agent_id": null,
+                "resources": "alerts",
+                "is_approval": false,
+                "owner_detail": {
+                  "isAssigned": false,
+                  "emailRecipients": ""
+                },
+                "isRecordLinked": false,
+                "step_variables": [],
+                "response_mapping": {
+                  "options": [
+                    {
+                      "option": "End",
+                      "primary": true,
+                      "step_iri": "/api/3/workflow_steps/3ece731d-6bfb-4b14-912b-8f81660050a6"
+                    }
+                  ],
+                  "duplicateOption": false,
+                  "customSuccessMessage": "Awaiting Playbook resumed successfully."
+                },
+                "email_notification": {
+                  "enabled": false,
+                  "smtpParameters": []
+                },
+                "customEmailExternal": false,
+                "inline_channel_list": [],
+                "external_channel_list": [],
+                "unauthenticated_input": false,
+                "external_email_subject": null,
+                "internal_email_subject": "A FortiSOAR playbook is requesting your input",
+                "custom_email_body_external": null,
+                "external_email_attachments": null
+              },
+              "status": null,
+              "top": "30",
+              "left": "775",
+              "stepType": "/api/3/workflow_step_types/fc04082a-d7dc-4299-96fb-6837b1baa0fe",
+              "group": null,
+              "uuid": "1a0c7a43-e845-4613-b2ca-142945edd298"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "340c21cb-73d8-4861-a7b6-96bec7e48dbc",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "30",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "2aaa73a4-80c3-48fc-b3bc-a0415accf590"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "The End",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.3.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "30",
+              "left": "1100",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "3ece731d-6bfb-4b14-912b-8f81660050a6"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Array -> Show results",
+              "targetStep": "/api/3/workflow_steps/1a0c7a43-e845-4613-b2ca-142945edd298",
+              "sourceStep": "/api/3/workflow_steps/6c925b58-ef1f-42d9-9546-dfea2d773ea4",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "62932d8b-3187-4a99-b2a3-b2eb983cc93e"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Show results -> The End",
+              "targetStep": "/api/3/workflow_steps/3ece731d-6bfb-4b14-912b-8f81660050a6",
+              "sourceStep": "/api/3/workflow_steps/1a0c7a43-e845-4613-b2ca-142945edd298",
+              "label": "End",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "81bb7214-dffa-4e45-abe2-e124ab4bb7b7"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start with Variables inside -> Array",
+              "targetStep": "/api/3/workflow_steps/6c925b58-ef1f-42d9-9546-dfea2d773ea4",
+              "sourceStep": "/api/3/workflow_steps/2aaa73a4-80c3-48fc-b3bc-a0415accf590",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "8e111654-1782-4ee8-b864-dee0295b889d"
+            }
+          ],
+          "groups": [
+            {
+              "@type": "WorkflowGroup",
+              "name": "ARRAY with 3 elements",
+              "description": "simple array",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "120",
+              "left": "440",
+              "height": "173",
+              "width": "353",
+              "uuid": "e73b921a-dafb-44e3-9d6d-ba171b298c79",
+              "recordTags": []
+            }
+          ],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/15c1e8c9-22bf-4e66-8fbb-0a502d4a4a3f",
+          "isEditable": true,
+          "uuid": "8b0de52e-a1a6-491a-916b-82fde697f114",
+          "id": 349,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "array"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Example 6 - Interesting FOR with Jinja2",
+          "aliasName": null,
+          "tag": null,
+          "description": "Jinja: Working with Looping and For",
+          "isActive": false,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779796363,
+          "collection": "/api/3/workflow_collections/0d07fa96-b8ee-445e-9f4f-682ac9e4dfe5",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/83df1033-de88-4f13-a16f-88b151f4278b",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "List",
+              "description": null,
+              "arguments": {
+                "mylist": "[ 1, 5, 15, 20, 25 ]"
+              },
+              "status": null,
+              "top": "160",
+              "left": "340",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "8b0182f5-8316-43e4-b7a9-ffcd7d7e5717"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "MyVars2",
+              "description": null,
+              "arguments": {
+                "stringfinal": "{{vars.mylist | join(\" \") }}"
+              },
+              "status": null,
+              "top": "320",
+              "left": "340",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "96d3ed11-f4c4-497c-a7bd-e599173d386e"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Print Sum with FOR",
+              "description": null,
+              "arguments": {
+                "type": "InputBased",
+                "input": {
+                  "schema": {
+                    "title": "And the List SUM is...",
+                    "description": "List: {{vars.mylist | to_json}}\nSum: {{vars.mylist | sum}}\n\nLoop:\n{% for val in vars.mylist %}\n    {{ val }}\n{% endfor %}",
+                    "inputVariables": []
+                  }
+                },
+                "record": "",
+                "agent_id": null,
+                "resources": "alerts",
+                "is_approval": false,
+                "owner_detail": {
+                  "isAssigned": false,
+                  "emailRecipients": ""
+                },
+                "isRecordLinked": false,
+                "step_variables": [],
+                "response_mapping": {
+                  "options": [
+                    {
+                      "option": "End",
+                      "primary": true,
+                      "step_iri": "/api/3/workflow_steps/857af36a-b84f-4988-9abb-364f8cd52f01"
+                    }
+                  ],
+                  "duplicateOption": false,
+                  "customSuccessMessage": "Awaiting Playbook resumed successfully."
+                },
+                "email_notification": {
+                  "enabled": false,
+                  "smtpParameters": []
+                },
+                "customEmailExternal": false,
+                "inline_channel_list": [],
+                "external_channel_list": [],
+                "unauthenticated_input": false,
+                "external_email_subject": null,
+                "internal_email_subject": "A FortiSOAR playbook is requesting your input",
+                "custom_email_body_external": null,
+                "external_email_attachments": null
+              },
+              "status": null,
+              "top": "460",
+              "left": "640",
+              "stepType": "/api/3/workflow_step_types/fc04082a-d7dc-4299-96fb-6837b1baa0fe",
+              "group": null,
+              "uuid": "a194d6a6-d5bc-4aa3-af11-7fbda238b24f"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "2ca314ed-ac58-4e12-92f7-7d167326373e",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "displayConditions": {
+                  "alerts": {
+                    "sort": [],
+                    "limit": 30,
+                    "logic": "AND",
+                    "filters": []
+                  }
+                },
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "40",
+              "left": "40",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "83df1033-de88-4f13-a16f-88b151f4278b"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "The End",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.3.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "620",
+              "left": "860",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "857af36a-b84f-4988-9abb-364f8cd52f01"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "List -> MyVars2",
+              "targetStep": "/api/3/workflow_steps/96d3ed11-f4c4-497c-a7bd-e599173d386e",
+              "sourceStep": "/api/3/workflow_steps/8b0182f5-8316-43e4-b7a9-ffcd7d7e5717",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "65f8c67c-db3f-4c90-aad2-4bb97b753797"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "MyVars2 -> Print Sum with FOR",
+              "targetStep": "/api/3/workflow_steps/a194d6a6-d5bc-4aa3-af11-7fbda238b24f",
+              "sourceStep": "/api/3/workflow_steps/96d3ed11-f4c4-497c-a7bd-e599173d386e",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "abc2a07b-a4c7-413e-839f-b7c7a6fb872a"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Print Sum with FOR -> The End",
+              "targetStep": "/api/3/workflow_steps/857af36a-b84f-4988-9abb-364f8cd52f01",
+              "sourceStep": "/api/3/workflow_steps/a194d6a6-d5bc-4aa3-af11-7fbda238b24f",
+              "label": "End",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "4486fbcf-bcaf-4d3b-b56d-870e28947821"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> List",
+              "targetStep": "/api/3/workflow_steps/8b0182f5-8316-43e4-b7a9-ffcd7d7e5717",
+              "sourceStep": "/api/3/workflow_steps/83df1033-de88-4f13-a16f-88b151f4278b",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "da848642-f950-441f-8558-3f1f4223ada1"
+            }
+          ],
+          "groups": [
+            {
+              "@type": "WorkflowGroup",
+              "name": "FOR",
+              "description": "{% for i in range(11) %}\n  {{ i }}\n{% endfor %}",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "80",
+              "left": "660",
+              "height": "208",
+              "width": "302",
+              "uuid": "d46e04c3-1dce-420a-ac45-525f4f329072",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Important Reading - FOR LOOPS",
+              "description": "https://stackoverflow.com/questions/46939756/setting-variable-in-jinja-for-loop-doesnt-persist-between-iterations",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "80",
+              "left": "980",
+              "height": "158",
+              "width": "323",
+              "uuid": "dbd2c443-b108-4369-92bc-cc63b4a63c50",
+              "recordTags": []
+            }
+          ],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/15c1e8c9-22bf-4e66-8fbb-0a502d4a4a3f",
+          "isEditable": true,
+          "uuid": "9ff2167e-28c4-4e30-8010-486e32d993c7",
+          "id": 352,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "for",
+            "join"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Example 3 - Data transformations",
+          "aliasName": null,
+          "tag": null,
+          "description": "Jinja: Working with Lists, methods, artifacts and XML",
+          "isActive": false,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779796427,
+          "collection": "/api/3/workflow_collections/0d07fa96-b8ee-445e-9f4f-682ac9e4dfe5",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/1c94dc71-a832-47d6-8964-43a3b0dab22d",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Lets code",
+              "description": null,
+              "arguments": {
+                "myip": "{{ \"192.168.1.10\" | ipv4 }}",
+                "mydict": "{{ '<?xml version=\"1.0\" ?><person><name>john</name><age>20</age></person>' | xml_to_dict }}",
+                "mylist": "{{ [300,400,500,100,200,300,500] }}",
+                "maxlist": "{{ [3, 4, 2] | max }}",
+                "artifacts": "{{'abc.com 192.168.42.23 rafael righi' | extract_artifacts}}"
+              },
+              "status": null,
+              "top": "40",
+              "left": "440",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "73086e6d-5220-41d2-8fcb-b858c3882feb"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Second Myvars",
+              "description": null,
+              "arguments": {
+                "secondlist": "{{ [300,400,1000,2000,50,7] }}",
+                "uniquelist": "{{vars.mylist | unique | sort}}"
+              },
+              "status": null,
+              "top": "30",
+              "left": "775",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "ec8e03c5-8210-4f6f-8d2c-968c206a30f3"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "b0376856-e490-4609-b1bc-3a2721c8123e",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  },
+                  "inputip": "'192.168.0.10'"
+                },
+                "triggerOnSource": true,
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "30",
+              "left": "125",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "1c94dc71-a832-47d6-8964-43a3b0dab22d"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Third MyVars",
+              "description": null,
+              "arguments": {
+                "intersectlist": "{{vars.uniquelist | intersect(vars.secondlist)}}"
+              },
+              "status": null,
+              "top": "30",
+              "left": "1100",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "ae74744e-715e-4349-acc7-81f1d37f0d51"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Lets code -> Second Myvars",
+              "targetStep": "/api/3/workflow_steps/ec8e03c5-8210-4f6f-8d2c-968c206a30f3",
+              "sourceStep": "/api/3/workflow_steps/73086e6d-5220-41d2-8fcb-b858c3882feb",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "0d08afa7-999e-44bb-ad1e-406b9ff08480"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Second Myvars -> Third MyVars",
+              "targetStep": "/api/3/workflow_steps/ae74744e-715e-4349-acc7-81f1d37f0d51",
+              "sourceStep": "/api/3/workflow_steps/ec8e03c5-8210-4f6f-8d2c-968c206a30f3",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "7af86ed6-1721-48da-a1fb-b7fdda4e514a"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> Lets code",
+              "targetStep": "/api/3/workflow_steps/73086e6d-5220-41d2-8fcb-b858c3882feb",
+              "sourceStep": "/api/3/workflow_steps/1c94dc71-a832-47d6-8964-43a3b0dab22d",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "20922ca7-44d8-4ecf-b6ae-c353c42b1f7e"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/15c1e8c9-22bf-4e66-8fbb-0a502d4a4a3f",
+          "isEditable": true,
+          "uuid": "b4b6f69b-47b3-4be3-b38b-3bc26e6fb396",
+          "id": 347,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "arrays",
+            "functions"
+          ]
+        },
+        {
+          "@type": "Workflow",
+          "triggerLimit": null,
+          "name": "Example 9 - Dictionary test",
+          "aliasName": null,
+          "tag": null,
+          "description": "Jinja: Automatic alert creation from Jinja dict",
+          "isActive": false,
+          "debug": true,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": false,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1779796356,
+          "collection": "/api/3/workflow_collections/0d07fa96-b8ee-445e-9f4f-682ac9e4dfe5",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/7ff98297-f1c2-4aee-8a54-923ce3e0e9a0",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Create Alerts",
+              "description": null,
+              "arguments": {
+                "for_each": {
+                  "item": "{{vars.dict}}",
+                  "__bulk": true,
+                  "parallel": false,
+                  "condition": "",
+                  "batch_size": 100
+                },
+                "resource": {
+                  "name": "New Alert - {{vars.item.Description}}",
+                  "type": "/api/3/picklists/574a6ee2-7265-4701-815e-cff83b053bce",
+                  "state": "/api/3/picklists/a1bac09b-1441-45aa-ad1b-c88744e48e72",
+                  "status": "/api/3/picklists/7de816ff-7140-4ee5-bd05-93ce22002146",
+                  "severity": "/api/3/picklists/58d0753f-f7e4-403b-953c-b0f521eab759",
+                  "__replace": "",
+                  "sourceType": "Playbok",
+                  "description": "Teste de Alerta novo.",
+                  "ackSlaStatus": "/api/3/picklists/72979f64-e8b9-4888-a965-957e0ec24818",
+                  "respSlaStatus": "/api/3/picklists/72979f64-e8b9-4888-a965-957e0ec24818",
+                  "priorityWeight": 1,
+                  "escalatedtoincident": "/api/3/picklists/2128a09c-153d-4db3-985d-de6be33deae5",
+                  "resolvedAutomatedly": false,
+                  "alertRemainingAckSLA": 0
+                },
+                "operation": "Overwrite",
+                "collection": "/api/3/alerts",
+                "__recommend": [],
+                "fieldOperation": [],
+                "step_variables": []
+              },
+              "status": null,
+              "top": "320",
+              "left": "360",
+              "stepType": "/api/3/workflow_step_types/2597053c-e718-44b4-8394-4d40fe26d357",
+              "group": null,
+              "uuid": "655e7af5-79a9-4d93-a6c7-7ad5efa33eb1"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "myvars",
+              "description": null,
+              "arguments": {
+                "dict": "[{'Description': 'val1', 'Item': 'value1'}, {'Description': 'val2', 'Item': 'value2'},{'Description': 'val3', 'Item': 'value3'}]"
+              },
+              "status": null,
+              "top": "180",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "d84e2b08-6201-4008-9102-f02840f0af00"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "route": "849407de-bf80-4921-9055-7117b482c66c",
+                "title": "Lab Int: Create automatic ALerts from Dict",
+                "resources": [
+                  "alerts"
+                ],
+                "__triggerLimit": true,
+                "inputVariables": [],
+                "step_variables": {
+                  "input": {
+                    "params": [],
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "executeButtonText": "Execute",
+                "noRecordExecution": true,
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "triggerOnReplicate": false,
+                "singleRecordExecution": false
+              },
+              "status": null,
+              "top": "40",
+              "left": "40",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "7ff98297-f1c2-4aee-8a54-923ce3e0e9a0"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "The End",
+              "description": null,
+              "arguments": {
+                "params": [],
+                "version": "3.3.0",
+                "connector": "cyops_utilities",
+                "operation": "no_op",
+                "operationTitle": "Utils: No Operation",
+                "step_variables": []
+              },
+              "status": null,
+              "top": "475",
+              "left": "537",
+              "stepType": "/api/3/workflow_step_types/0109f35d-090b-4a2b-bd8a-94cbc3508562",
+              "group": null,
+              "uuid": "24a115e9-f642-43fe-8a35-44d209872aa9"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Create Alerts -> The End",
+              "targetStep": "/api/3/workflow_steps/24a115e9-f642-43fe-8a35-44d209872aa9",
+              "sourceStep": "/api/3/workflow_steps/655e7af5-79a9-4d93-a6c7-7ad5efa33eb1",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "b3542a44-1311-46a9-b03c-e6f5bf4a2203"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "myvars -> Create Alerts",
+              "targetStep": "/api/3/workflow_steps/655e7af5-79a9-4d93-a6c7-7ad5efa33eb1",
+              "sourceStep": "/api/3/workflow_steps/d84e2b08-6201-4008-9102-f02840f0af00",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "76b9834d-49bc-446a-80ec-5767682fbfb9"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> myvars",
+              "targetStep": "/api/3/workflow_steps/d84e2b08-6201-4008-9102-f02840f0af00",
+              "sourceStep": "/api/3/workflow_steps/7ff98297-f1c2-4aee-8a54-923ce3e0e9a0",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "b9661682-eb62-464e-95c2-e08674c3b872"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/2b563c61-ae2c-41c0-a85a-c9709585e3f2",
+          "playbookOrigin": "/api/3/picklists/15c1e8c9-22bf-4e66-8fbb-0a502d4a4a3f",
+          "isEditable": true,
+          "uuid": "f7c96ecf-ef84-4032-82fd-341ce7070dda",
+          "id": 354,
+          "owners": [],
+          "isPrivate": false,
+          "deletedAt": null,
+          "importedBy": [],
+          "recordTags": [
+            "create alerts",
+            "dictionary"
+          ]
+        }
+      ]
+    }
+  ],
+  "exported_tags": [
+    "poc",
+    "ipaddr",
+    "functions",
+    "if",
+    "dates",
+    "url",
+    "dictionaries",
+    "permutations",
+    "comments",
+    "correlation",
+    "create record",
+    "random function",
+    "loop",
+    "shuffle",
+    "array",
+    "for",
+    "join",
+    "arrays",
+    "create alerts",
+    "dictionary"
+  ]
+}

@@ -243,6 +243,22 @@ def _is_plausible_secret(inner: str) -> bool:
     return bool(_SECRET_CHARS.match(inner))
 
 
+#: Path prefixes where IPv4 literals are legitimate *content*, not lab
+#: provenance: the example / tutorial playbook corpus. Real FortiSOAR playbooks
+#: carry sample IPs in Jinja filter demos (``... | ipaddr('192.0.0.0/8')``),
+#: extract_artifacts inputs, and default field values -- editing them would
+#: corrupt the teaching examples. The IP check is skipped for these paths; the
+#: credential check still runs (a real secret in an example is never wanted),
+#: and the lab-IP guard stays fully active everywhere else (src/, scripts/,
+#: docs/, tests/) where a real lab host would actually leak.
+_IP_EXEMPT_PREFIXES = ("examples/",)
+
+
+def _ip_exempt(path: Path) -> bool:
+    """True if ``path`` is example/tutorial content where sample IPs belong."""
+    return path.as_posix().startswith(_IP_EXEMPT_PREFIXES)
+
+
 #: Suffixes where a bare (unquoted) assignment value is a *variable reference*
 #: (Python kwargs, type annotations, embedded code in docs) rather than a
 #: literal. In config files (.yaml/.toml/.ini/.sh/.env) a bare value IS a
@@ -257,17 +273,20 @@ def _scan(path: Path) -> list[tuple[int, str, str]]:
     except (OSError, UnicodeDecodeError):
         return []
     bare_is_var = path.suffix.lower() in _BARE_IS_VAR_SUFFIXES
+    ip_exempt = _ip_exempt(path)
     hits: list[tuple[int, str, str]] = []
     for i, line in enumerate(text.splitlines(), start=1):
-        # 1. private/lab IPs (minus placeholders)
-        ip_hit = False
-        for m in _PRIV_IP.finditer(line):
-            if not _is_placeholder_ip(m.group(0)):
-                hits.append((i, "private/lab IP", line))
-                ip_hit = True
-                break  # one IP violation per line is enough
-        if ip_hit:
-            continue
+        # 1. private/lab IPs (minus placeholders). Skipped for example/tutorial
+        #    playbook content, where sample IPs are intrinsic (see _ip_exempt).
+        if not ip_exempt:
+            ip_hit = False
+            for m in _PRIV_IP.finditer(line):
+                if not _is_placeholder_ip(m.group(0)):
+                    hits.append((i, "private/lab IP", line))
+                    ip_hit = True
+                    break  # one IP violation per line is enough
+            if ip_hit:
+                continue
         # 2. credential values -- value-agnostic. A literal is flagged unless
         #    it is a placeholder ($VAR / <...> / ...), implausible (too short /
         #    prose / punctuation), a known-safe example string (allowlisted),

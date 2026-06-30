@@ -1,9 +1,12 @@
 collection: PyFSR Archetype Pilot
 description: >
-  reconcile-and-report pilot, code-runner variant. Same asset->issues flow as
-  archetype_pilot_reconcile_and_report.yaml but the diff/CSV step uses the custom
-  unrestricted `code-runner` connector (run_python) instead of the stock sandboxed
-  `code_snippet`. This restores the archetype's NATURAL design:
+  reconcile-and-report pilot, code-runner + smtp_ng variant. Same asset->issues
+  flow as archetype_pilot_reconcile_and_report.yaml, but (a) the diff/CSV step uses
+  the custom unrestricted `code-runner` connector (run_python) instead of the stock
+  sandboxed `code_snippet`, and (b) the report is emailed via the next-gen
+  `smtp_ng`/`send_email_new` connector instead of stock `smtp`/`send_email` (see
+  archetype_pilot_reconcile_and_report_coderunner.yaml for the stock-smtp variant).
+  The code-runner swap restores the archetype's NATURAL design:
 
     * a top-level `return <dict>` sets code_output (no print(json.dumps(...)) hack), and
     * open() works, so the snippet writes a real CSV file to disk.
@@ -27,7 +30,7 @@ description: >
 visible: true
 
 playbooks:
-  - name: PyFSR Pilot Reconcile and Report (code-runner)
+  - name: PyFSR Pilot Reconcile and Report (code-runner + smtp_ng)
     is_active: true
     parameters: [recipients]
     steps:
@@ -84,10 +87,10 @@ playbooks:
               # MismatchType picklist IRIs (resolved at DEPLOY time; create_record
               # needs IRIs, not friendly values). RE-RESOLVE after module rebuild.
               MT = {
-                  "missing-in-A": "/api/3/picklists/26399476-3fbf-4443-8240-a374c988126e",
-                  "missing-in-B": "/api/3/picklists/2b7b652f-3e22-4f52-b76c-e4d12bf3e5f6",
-                  "license-expiring": "/api/3/picklists/c61d5134-e24f-448a-a2c0-d1e4d2352268",
-                  "field-mismatch": "/api/3/picklists/e42f12d5-ed5c-43ee-b8d2-f2a314a32a2f",
+                  "missing-in-A": "/api/3/picklists/c738aefc-6f1b-4ee6-a656-c6ea571a0bbe",
+                  "missing-in-B": "/api/3/picklists/01d63ade-6d34-47d1-a202-0fc1d70d4df0",
+                  "license-expiring": "/api/3/picklists/2189c2f4-c83c-4946-ae10-720edd9150a7",
+                  "field-mismatch": "/api/3/picklists/d57e47c9-f4b7-4272-a3a7-b8ee8eff7144",
               }
               mt_label = {v: k for k, v in MT.items()}
 
@@ -182,7 +185,7 @@ playbooks:
             mismatch_type: "{{ vars.item.mismatch_type }}"
             # ReconStatus picklist IRI for "Open" (resolved at deploy time; create_record
             # needs an IRI, not the friendly value "Open"). RE-RESOLVE after module rebuild.
-            status: "/api/3/picklists/58200b01-3cca-4b6b-a3c3-a83415def3e2"
+            status: "/api/3/picklists/bfe7109b-82ec-4941-b3e2-499ef610f3f3"
             source_system: "{{ vars.item.source_system }}"
             target_system: "{{ vars.item.target_system }}"
             source_id: "{{ vars.item.source_id }}"
@@ -192,13 +195,14 @@ playbooks:
       - name: Email report
         type: connector
         arguments:
-          connector: smtp
-          operation: send_email
+          connector: smtp_ng
+          operation: send_email_new
           config: localhost-postfix
           params:
-            to_recipients: "{{ vars.inputs.recipients }}"
+            type: "Manual Input"
+            to: "{{ vars.inputs.recipients }}"
             subject: "Reconciliation Report - {{ vars.steps.Reconcile.data.code_output.count }} findings"
-            body: "Reconciliation report ({{ vars.steps.Reconcile.data.code_output.count }} findings). CSV attached.\n\n{{ vars.steps.Reconcile.data.code_output.csv_content }}"
-            content_type: "text"
+            body_type: "Plain Text"
+            content: "Reconciliation report ({{ vars.steps.Reconcile.data.code_output.count }} findings). CSV attached.\n\n{{ vars.steps.Reconcile.data.code_output.csv_content }}"
             # Attach the Attachment record created by the utilities step.
             iri_list: "{{ vars.steps.Create_attachment.data['@id'] }}"
