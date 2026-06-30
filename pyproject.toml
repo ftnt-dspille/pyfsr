@@ -57,7 +57,7 @@ docs = [
     "myst-parser>=4.0.0",
 ]
 
-# Optional generic MCP server: `python -m pyfsr.mcp` over the tool registry.
+# Optional generic MCP server: `python -m pyfsr.agent.mcp` over the tool registry.
 # Pulls in the Model Context Protocol SDK; the core library never imports it.
 mcp = [
     "mcp>=1.0",
@@ -70,7 +70,7 @@ mcp = [
 # description hoist (F3) + the default-on reference lint, both first shipped in
 # 0.4.10 — older versions silently drop those inputs.
 playbooks = [
-    "fsr_playbooks>=0.4.10",
+    "fsr_playbooks>=0.4.11",
 ]
 
 [project.scripts]
