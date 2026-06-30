@@ -1,0 +1,102 @@
+{
+  "id": 433,
+  "record": "",
+  "input": {
+    "schema": {
+      "title": "E2E multi gate",
+      "description": "Provide details to resume the test playbook.",
+      "inputVariables": [
+        {
+          "name": "comment",
+          "type": "string",
+          "label": "Comment",
+          "title": "Text Area",
+          "usable": true,
+          "tooltip": "",
+          "dataType": "text",
+          "formType": "textarea",
+          "required": true,
+          "_expanded": true,
+          "templateUrl": "app/components/form/fields/textarea.html",
+          "defaultValue": null,
+          "_previousName": "",
+          "playbookField": true,
+          "jinjaExpressionView": true,
+          "useRecordFieldDefault": false
+        },
+        {
+          "name": "severity",
+          "type": "array",
+          "label": "Severity",
+          "title": "Dynamic List",
+          "usable": true,
+          "options": [
+            "Low",
+            "Medium",
+            "High"
+          ],
+          "tooltip": "",
+          "dataType": "dynamicList",
+          "formType": "dynamicList",
+          "required": true,
+          "_expanded": true,
+          "templateUrl": "app/components/form/fields/dynamicList.html",
+          "defaultValue": null,
+          "_previousName": "",
+          "playbookField": true,
+          "jinjaExpressionView": true,
+          "useRecordFieldDefault": false
+        },
+        {
+          "name": "ticket_id",
+          "type": "string",
+          "label": "Ticket ID",
+          "title": "Text",
+          "usable": true,
+          "tooltip": "",
+          "dataType": "text",
+          "formType": "text",
+          "required": false,
+          "_expanded": true,
+          "templateUrl": "app/components/form/fields/input.html",
+          "defaultValue": null,
+          "_previousName": "",
+          "playbookField": true,
+          "jinjaExpressionView": true,
+          "useRecordFieldDefault": false
+        }
+      ]
+    }
+  },
+  "type": "InputBased",
+  "external_channel_list": [],
+  "inline_channel_list": [],
+  "owners": [],
+  "assignment_type": "none",
+  "owner_details": {
+    "isAssigned": false
+  },
+  "response_mapping": {
+    "options": [
+      {
+        "option": "Continue",
+        "step_iri": "/api/3/workflow_steps/2cc690ef-c1f9-5df7-bd77-3827615f2a66"
+      }
+    ],
+    "duplicateOption": false,
+    "customSuccessMessage": "Awaiting Playbook resumed successfully."
+  },
+  "created": "2026-06-30T15:46:08.044019Z",
+  "timeout": null,
+  "timeout_details": null,
+  "step_id": 5742064,
+  "unauthenticated_input": false,
+  "agent_id": null,
+  "is_approval": false,
+  "custom_fields": {
+    "custom_email_body": null,
+    "custom_email_subject": null,
+    "custom_email_attachment_iris": null
+  },
+  "workflow": 687043
+}
