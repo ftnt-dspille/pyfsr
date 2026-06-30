@@ -29,8 +29,16 @@ class TreeClient:
                 "status": r["status"],
             }
             if "step_detail=true" in endpoint:
-                rec["env"] = {}
-                rec["steps"] = [{"name": n, "status": s} for n, s in (r.get("steps") or {}).items()]
+                rec["env"] = r.get("env") or {}
+                steps = []
+                for n, s in (r.get("steps") or {}).items():
+                    # a step value is either a bare status string or a
+                    # {"status": ..., "result": {...}} dict
+                    if isinstance(s, dict):
+                        steps.append({"name": n, **s})
+                    else:
+                        steps.append({"name": n, "status": s})
+                rec["steps"] = steps
             return rec
         # list fetch (children scope): ...?...&parent_wf=<pk>...
         pm = re.search(r"parent_wf=(\d+)", endpoint)
@@ -97,6 +105,24 @@ def test_run_tree_unresolvable_keeps_task_id():
     tree = PlaybooksAPI(TreeClient({})).run_tree(tid)
     assert tree.pk is None
     assert tree.task_id == tid
+
+
+def test_run_env_resolves_task_id():
+    # run_env must accept a task_id (not just a numeric pk) and resolve it the
+    # same way step_status does -- otherwise the uuid is sent as a pk and the
+    # detail URL 500s.
+    tid = "12345678-1234-1234-1234-123456789abc"
+    runs = {
+        "10": {
+            "name": "P",
+            "status": "finished",
+            "parent": None,
+            "steps": {"Capture": {"status": "finished", "result": {"got_severity": "High"}}},
+        }
+    }
+    env = PlaybooksAPI(TreeClient(runs, task_map={tid: "10"})).run_env(tid)
+    assert env.status == "finished"
+    assert env.steps["Capture"].result == {"got_severity": "High"}
 
 
 def test_step_status_returns_step_state():

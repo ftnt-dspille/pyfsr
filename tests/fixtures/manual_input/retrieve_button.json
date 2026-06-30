@@ -1,0 +1,43 @@
+{
+  "id": 437,
+  "record": "",
+  "input": {
+    "schema": {
+      "title": "E2E test gate",
+      "description": "Click Continue to resume the test playbook.",
+      "inputVariables": []
+    }
+  },
+  "type": "InputBased",
+  "external_channel_list": [],
+  "inline_channel_list": [],
+  "owners": [],
+  "assignment_type": "none",
+  "owner_details": {
+    "isAssigned": false
+  },
+  "response_mapping": {
+    "options": [
+      {
+        "option": "Continue",
+        "primary": true,
+        "step_iri": "/api/3/workflow_steps/e491edd4-7eb5-5ab3-a206-e99ef05933ec"
+      }
+    ],
+    "duplicateOption": false,
+    "customSuccessMessage": "Awaiting Playbook resumed successfully."
+  },
+  "created": "2026-06-30T15:51:52.115782Z",
+  "timeout": null,
+  "timeout_details": null,
+  "step_id": 5742076,
+  "unauthenticated_input": false,
+  "agent_id": null,
+  "is_approval": false,
+  "custom_fields": {
+    "custom_email_body": null,
+    "custom_email_subject": null,
+    "custom_email_attachment_iris": null
+  },
+  "workflow": 687047
+}

@@ -42,7 +42,7 @@ def _retrieve_doc(*, workflow=42, step_id=7, var="my_number", options=None):
         "workflow": workflow,
         "step_id": step_id,
         "input": {"schema": {"inputVariables": [{"name": var}]}},
-        "response_mapping": {"options": options or [{"label": "Submit", "step_iri": "/api/3/wf-steps/abc"}]},
+        "response_mapping": {"options": options or [{"option": "Submit", "step_iri": "/api/3/wf-steps/abc"}]},
     }
 
 
@@ -99,9 +99,11 @@ def test_answer_explicit_user_is_used_and_people_not_queried():
 
 
 def test_answer_option_by_label():
+    # The button label lives under the `option` key on the wire (live-verified),
+    # NOT `label` -- selecting by label must match that key.
     opts = [
-        {"label": "Reject", "step_iri": "/iri/reject"},
-        {"label": "Approve", "step_iri": "/iri/approve"},
+        {"option": "Reject", "step_iri": "/iri/reject"},
+        {"option": "Approve", "step_iri": "/iri/approve"},
     ]
     client = FakeClient(retrieve=_retrieve_doc(options=opts))
     ManualInputAPI(client).answer(input_id=5, option="Approve")

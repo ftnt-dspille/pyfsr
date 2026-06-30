@@ -312,6 +312,86 @@ class Notification(BaseRecord):
     teams: list[Any] | None = None
 
 
+class ManualInputVariable(ApiResult):
+    """One field in a Manual Input prompt's collected form (``inputVariables[]``).
+
+    Field set captured from a live ``retrieve_wfinput`` response: a friendly
+    ``inputs:`` field compiles to this canonical shape. ``name`` is the variable
+    referenced after resume as ``vars.steps.<step>.input.<name>``; ``formType`` /
+    ``dataType`` / ``type`` / ``templateUrl`` drive how FortiSOAR renders and
+    validates the widget (e.g. ``formType="dynamicList"`` with ``options`` is a
+    select; ``required`` gates submission). ``options`` is present only for the
+    list widgets. Unknown/internal keys (``_expanded``, ``_previousName``, …)
+    ride through via ``extra="allow"``.
+    """
+
+    name: str | None = None
+    type: str | None = None  # "string" | "array" | "integer" | "object" | <module> (lookup)
+    label: str | None = None
+    title: str | None = None
+    tooltip: str | None = None
+    dataType: str | None = None
+    formType: str | None = None
+    required: bool | None = None
+    options: list[Any] | None = None  # static enum values for select/dynamicList kinds
+    defaultValue: Any | None = None
+    templateUrl: str | None = None
+    playbookField: bool | None = None
+    jinjaExpressionView: bool | None = None
+    useRecordFieldDefault: bool | None = None
+    usable: bool | None = None
+
+
+class ManualInputSchema(ApiResult):
+    """The form schema of a Manual Input prompt (``input.schema``).
+
+    Live-verified: ``title`` / ``description`` are the prompt header, and
+    ``inputVariables`` the ordered list of fields the user fills in (empty for a
+    button-only / DecisionBased prompt).
+    """
+
+    title: str | None = None
+    description: str | None = None
+    inputVariables: list[ManualInputVariable] | None = None
+
+
+class ManualInputForm(ApiResult):
+    """The ``input`` object of a retrieved Manual Input: wraps the form schema.
+
+    The wire key is ``schema``; it is exposed as the ``schema_`` attribute
+    (``schema`` shadows ``BaseModel.schema``) but stays reachable by its wire name
+    through dict access -- ``form["schema"]`` returns the typed
+    :class:`ManualInputSchema`.
+    """
+
+    schema_: ManualInputSchema | None = Field(default=None, alias="schema")
+
+
+class ManualInputOption(ApiResult):
+    """One response button of a Manual Input (``response_mapping.options[]``).
+
+    ``option`` is the button label; ``step_iri`` the workflow step the run routes
+    to when chosen; ``primary`` marks the default/highlighted button (absent on
+    plain buttons). Live-verified from ``retrieve_wfinput``.
+    """
+
+    option: str | None = None
+    step_iri: str | None = None
+    primary: bool | None = None
+
+
+class ResponseMapping(ApiResult):
+    """A Manual Input's response options + post-resume messaging (``response_mapping``).
+
+    Live-verified: ``options`` are the buttons, ``duplicateOption`` the
+    allow-duplicate flag, ``customSuccessMessage`` the toast shown on resume.
+    """
+
+    options: list[ManualInputOption] | None = None
+    duplicateOption: bool | None = None
+    customSuccessMessage: str | None = None
+
+
 class ManualInput(BaseRecord):
     """A pending **manual workflow input** from ``/api/wf/api/manual-wf-input/``.
 
@@ -344,8 +424,8 @@ class ManualInput(BaseRecord):
     is_approval: bool | None = None
     workflow: str | int | None = None  # encrypted run token (list) or numeric run id (retrieve)
     # Present only on the single-item retrieve (``retrieve_wfinput``), not the list:
-    input: dict[str, Any] | None = None  # {"schema": {title, description, inputVariables}}
-    response_mapping: dict[str, Any] | None = None  # approval/input options + messages
+    input: ManualInputForm | None = None  # the form: {"schema": {title, description, inputVariables}}
+    response_mapping: ResponseMapping | None = None  # approval/input options + messages
     custom_fields: dict[str, Any] | None = None  # custom email subject/body/attachment IRIs
 
 

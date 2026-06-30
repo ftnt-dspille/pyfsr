@@ -1014,8 +1014,13 @@ class PlaybooksAPI(BaseAPI):
             pk=pk,
         )
 
-    def run_env(self, run_pk: str) -> RunEnv:
+    def run_env(self, run: str | int) -> RunEnv:
         """Return a run's execution environment + per-step results.
+
+        ``run`` may be a run pk, an ``@id`` path, or a ``task_id`` (what
+        :meth:`trigger`/:meth:`trigger_by_name` return) — it is resolved the
+        same way as :meth:`step_status`/:meth:`child_runs`, so you can pass a
+        ``task_id`` straight through without resolving the pk yourself.
 
         Fetches the run with ``step_detail=true`` and reshapes it into the
         Jinja-context view used when authoring/debugging a playbook::
@@ -1042,7 +1047,10 @@ class PlaybooksAPI(BaseAPI):
             ``status`` -- via :meth:`step_status` rather than a value that may not
             be recorded.
         """
-        full = self.get_execution(run_pk, step_detail=True)
+        pk = self._resolve_run_pk(run)
+        if pk is None:
+            raise ValueError(f"could not resolve a run pk from {run!r}")
+        full = self.get_execution(str(pk), step_detail=True)
         steps: dict[str, RunStep] = {}
         for s in full.get("steps") or []:
             if not isinstance(s, dict):

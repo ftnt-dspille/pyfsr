@@ -331,9 +331,9 @@ class ManualInputAPI(BaseAPI):
                 raise IndexError(f"option index {option} out of range (input has {len(options)} option(s))")
             return options[option]
         for opt in options:
-            if opt.get("label") == option:
+            if opt.get("option") == option:
                 return opt
-        labels = [opt.get("label") for opt in options]
+        labels = [opt.get("option") for opt in options]
         raise LookupError(f"no response option labelled {option!r}; available: {labels}")
 
     @staticmethod
