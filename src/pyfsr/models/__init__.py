@@ -52,6 +52,7 @@ from ._playbooks import (
     ResumeRequest,
     RunEnv,
     RunFailure,
+    RunNode,
     RunStep,
     RunSummary,
     TriggerActionRequest,
@@ -160,6 +161,7 @@ __all__ = [
     "RunSummary",
     "RunStep",
     "RunEnv",
+    "RunNode",
     "RunFailure",
     "TriggerResponse",
     # playbook write-request bodies

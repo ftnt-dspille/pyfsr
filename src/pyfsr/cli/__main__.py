@@ -363,7 +363,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_diag.set_defaults(func=cmd_diagnose)
 
     # --- playbook group (top-level; API-based, distinct from the SSH appliance group) ---
-    p_pb = sub.add_parser("playbook", help="author playbooks in YAML and deploy via the API")
+    p_pb = sub.add_parser(
+        "playbook",
+        help="author playbooks in YAML and deploy via the API",
+        description=(
+            "Author, validate, and deploy FortiSOAR playbooks from friendly YAML.\n\n"
+            "Start here when authoring:\n"
+            "  steps           list every step type you can write\n"
+            "  step-help TYPE  keys + a real compiling example for one step type\n"
+            "  compile FILE    YAML -> FSR import envelope (offline, no network)\n"
+            "  validate FILE   compile and report diagnostics (offline)\n"
+            "  lint FILE       live preflight: connector steps missing config\n"
+            "  deploy FILE     compile + create on the appliance\n"
+            "  check-fresh     compare the cached compile catalog vs a live SOAR\n\n"
+            "Runtime helpers (Python SDK): client.manual_input.answer() drives a\n"
+            "paused Manual Input in one call; see guides/playbook-authoring.md."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     pbsub = p_pb.add_subparsers(dest="pb_command", required=True)
     playbook_cmds.build_subparser(pbsub)
 

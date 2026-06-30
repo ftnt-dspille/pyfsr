@@ -5,14 +5,31 @@ FortiSOAR **API**, so they build a :class:`~pyfsr.client.FortiSOAR` from the
 ``FSR_*`` environment (see :class:`~pyfsr.config.EnvConfig`) with optional CLI
 overrides.
 
-Subcommands:
+Subcommands (this group is the authoring "start here" index):
 
+- ``steps`` — list every friendly ``type:`` keyword with its canonical FSR
+  name and one-line purpose (offline).
+- ``step-help <type> [--schema]`` — keys + a real compiling friendly-YAML
+  example for one step type (offline).
 - ``compile <file.yaml> [-o out.json]`` — compile only (no network); emit the
   ``workflow_collections`` envelope, diagnostics to stderr.
 - ``validate <file.yaml>`` — compile and report diagnostics; nonzero exit on
   blocking errors.
+- ``lint <file.yaml>`` — live preflight: warn about connector steps with no
+  config on the target.
 - ``deploy <file.yaml> [--replace] [--dry-run]`` — compile then import via the
   API client.
+- ``check-fresh`` — compare the cached compile catalog against a live SOAR.
+
+``compile``/``validate``/``deploy``/``lint`` accept ``--refresh-catalog``: warm
+the reference catalog from the live instance before compiling so connector and
+operation tokens (including custom connectors like ``code-runner``) resolve to
+real labels/versions. Without it the offline slim catalog carries no connector
+rows, so connector steps compile without a ``name``/``version`` and the playbook
+editor renders them as "undefined".
+
+Runtime helper (Python SDK, not a CLI command): ``client.manual_input.answer()``
+drives a paused Manual Input / Approval step in one call.
 
 The compiler is the optional ``pyfsr[playbooks]`` extra; handlers import it
 lazily so the rest of the CLI works without it.
@@ -74,12 +91,36 @@ def _make_client(args: argparse.Namespace) -> FortiSOAR:
     return EnvConfig.from_env().client(**overrides)
 
 
-def _compile(args: argparse.Namespace) -> CompiledPlaybook:
-    """Compile the YAML file, printing diagnostics to stderr. Returns the result."""
+def add_refresh_catalog_arg(p: argparse.ArgumentParser) -> None:
+    """Opt-in: warm the reference catalog live before compiling."""
+    p.add_argument(
+        "--refresh-catalog",
+        action="store_true",
+        help=(
+            "warm the reference catalog from the live instance before compiling "
+            "(needs a connection). Resolves connector/operation tokens — including "
+            "custom connectors like code-runner — to real labels/versions so the "
+            "playbook editor doesn't show 'undefined' for connector steps."
+        ),
+    )
+
+
+def _compile(args: argparse.Namespace, *, client: FortiSOAR | None = None) -> CompiledPlaybook:
+    """Compile the YAML file, printing diagnostics to stderr. Returns the result.
+
+    When ``--refresh-catalog`` is set (or a ``client`` is supplied by the caller),
+    the per-user reference catalog is warmed from the live instance first, so
+    connector/operation tokens resolve to real labels/versions. Without it the
+    compile is offline against the packaged slim catalog, which carries no
+    connector rows — connector steps then compile without a ``name``/``version``/
+    ``operationTitle`` and the editor canvas renders them as "undefined".
+    """
     from ..authoring import compile_playbook_yaml, format_diagnostic
 
     text = _read(args.file)
-    result = compile_playbook_yaml(text)
+    if client is None and getattr(args, "refresh_catalog", False):
+        client = _make_client(args)
+    result = compile_playbook_yaml(text, client=client)
     for diag in result.errors:
         print(format_diagnostic(diag), file=sys.stderr)
     return result
@@ -129,7 +170,11 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 
 def cmd_deploy(args: argparse.Namespace) -> int:
-    result = _compile(args)
+    # A non-dry-run deploy always needs a client to post; build it once up front
+    # so --refresh-catalog warms the catalog through the same connection instead
+    # of opening a second one.
+    client = _make_client(args) if (args.refresh_catalog or not args.dry_run) else None
+    result = _compile(args, client=client)
     if not result.ok:
         print("error: compilation failed (see diagnostics above)", file=sys.stderr)
         return 1
@@ -141,7 +186,7 @@ def cmd_deploy(args: argparse.Namespace) -> int:
             fmt="table",
         )
         return 0
-    client = _make_client(args)
+    assert client is not None  # built above for any non-dry-run deploy
     # result.ok was checked above, so fsr_json is populated.
     assert result.fsr_json is not None
     # Opt-in live preflight before posting; warn-only, never aborts the deploy.
@@ -249,6 +294,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
     Exit 0 = clean, 2 = warnings, 1 = compile/connection error — mirrors
     ``check-fresh``. Never blocks: a playbook may be deployed before its
     connector configs are created."""
+    # _compile() warms the catalog itself when --refresh-catalog is set; the
+    # preflight client is built only after a clean compile (so a compile failure
+    # exits 1 without needing a connection).
     result = _compile(args)
     if not result.ok:
         print("error: compilation failed (see diagnostics above)", file=sys.stderr)
@@ -257,6 +305,56 @@ def cmd_lint(args: argparse.Namespace) -> int:
     findings = _connector_findings(client, result)
     _print_findings(findings)
     return 2 if findings else 0
+
+
+def cmd_steps(args: argparse.Namespace) -> int:
+    """List every friendly ``type:`` keyword with its canonical name + purpose."""
+    from ..playbook_catalog import list_step_types
+
+    infos = list_step_types()
+    rows = [[i.short, i.canonical, "yes" if i.modeled else "", i.purpose] for i in infos]
+    _output.render(rows, ["type", "fsr step type", "typed", "purpose"], fmt="table")
+    print(
+        f"\n{len(infos)} step types. Run `pyfsr playbook step-help <type>` for keys + a compiling example.",
+        file=sys.stderr,
+    )
+    return 0
+
+
+def cmd_step_help(args: argparse.Namespace) -> int:
+    """Show authoring help + a real compiling example for one step type."""
+    from ..playbook_catalog import step_help
+
+    try:
+        h = step_help(args.type)
+    except KeyError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    _output.kv(
+        {
+            "type": h.short,
+            "fsr step type": h.canonical,
+            "label": h.label,
+            "purpose": h.purpose,
+            "offline-validated": "yes (typed-args schema)" if h.modeled else "no",
+        },
+        fmt="table",
+    )
+    if h.pitfalls:
+        print(f"\ncommon pitfalls:\n  {h.pitfalls}")
+    if args.schema and h.arg_schema:
+        print("\narguments JSON schema:")
+        print(json.dumps(h.arg_schema, indent=2))
+    if h.example_yaml:
+        print("\nexample (friendly YAML excerpt from a real playbook):\n")
+        print(h.example_yaml)
+    else:
+        print(
+            "\n(no bundled example for this type yet -- see guides/playbook-yaml-reference.md)",
+            file=sys.stderr,
+        )
+    return 0
 
 
 def _workflows_of(result: CompiledPlaybook, collection_name: str) -> list[str]:
@@ -268,10 +366,24 @@ def _workflows_of(result: CompiledPlaybook, collection_name: str) -> list[str]:
 
 def build_subparser(asub: argparse._SubParsersAction) -> None:
     """Wire the ``playbook`` subcommands onto an existing subparsers object."""
+    p_steps = asub.add_parser("steps", help="list every friendly step type with its purpose (offline)")
+    p_steps.set_defaults(func=cmd_steps)
+
+    p_step_help = asub.add_parser(
+        "step-help",
+        help="show keys + a real compiling example for one step type (offline)",
+    )
+    p_step_help.add_argument("type", help="friendly type (set_variable) or FSR name (SetVariable)")
+    p_step_help.add_argument(
+        "--schema", action="store_true", help="also print the arguments JSON schema (modeled types)"
+    )
+    p_step_help.set_defaults(func=cmd_step_help)
+
     p_compile = asub.add_parser("compile", help="compile YAML to the FSR import envelope (offline)")
     add_connection_args(p_compile)  # harmless here; keeps args uniform
     p_compile.add_argument("file", help="playbook YAML file")
     p_compile.add_argument("-o", "--out", help="write envelope JSON to this file (else stdout)")
+    add_refresh_catalog_arg(p_compile)
     p_compile.set_defaults(func=cmd_compile)
 
     p_validate = asub.add_parser("validate", help="compile and report diagnostics (offline)")
@@ -282,6 +394,7 @@ def build_subparser(asub: argparse._SubParsersAction) -> None:
         action="store_true",
         help="also warn about connector steps with no config on the target (needs a connection)",
     )
+    add_refresh_catalog_arg(p_validate)
     p_validate.set_defaults(func=cmd_validate)
 
     p_deploy = asub.add_parser("deploy", help="compile YAML and create the playbook on the appliance")
@@ -294,6 +407,7 @@ def build_subparser(asub: argparse._SubParsersAction) -> None:
         action="store_true",
         help="warn about connector steps with no config on the target before posting",
     )
+    add_refresh_catalog_arg(p_deploy)
     p_deploy.set_defaults(func=cmd_deploy)
 
     p_lint = asub.add_parser(
@@ -302,6 +416,7 @@ def build_subparser(asub: argparse._SubParsersAction) -> None:
     )
     add_connection_args(p_lint)
     p_lint.add_argument("file", help="playbook YAML file")
+    add_refresh_catalog_arg(p_lint)
     p_lint.set_defaults(func=cmd_lint)
 
     p_fresh = asub.add_parser(

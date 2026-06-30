@@ -9,11 +9,16 @@ with ``POST`` to ``list_wfinput/`` (the assignment scope travels in the request
 a hydra envelope, and each row is a :class:`~pyfsr.models.ManualInput`. Rows are
 removed with ``DELETE .../manual-wf-input/<id>/`` (204).
 
+To drive a paused prompt in one call (find + fill + resume), use
+:meth:`~ManualInputAPI.answer`; :meth:`~ManualInputAPI.list` /
+:meth:`~ManualInputAPI.retrieve` / :meth:`~ManualInputAPI.resume` are the
+low-level pieces it composes.
+
 Example:
     >>> pending = client.manual_input.list(assigned_to="me")
-    >>> pending[0].title
-    'Final Go Call'
-    >>> client.manual_input.delete(pending[0].id)
+    >>> pending[0].title          # NB: this is the STEP name, not the schema title
+    'AskNumber'
+    >>> client.manual_input.answer(654321, by_title="AskNumber")
 """
 
 from __future__ import annotations
@@ -32,6 +37,9 @@ AssignedTo = Literal["me", "myTeams", "all"]
 class ManualInputAPI(BaseAPI):
     """List and delete pending manual workflow inputs (Manual Input / Approval steps)."""
 
+    # Note: each row's ``.title`` is the *step name*, not the prompt's schema
+    # title. To select and answer a prompt by step name in one call, use
+    # :meth:`answer` (``by_title=``) rather than matching ``.title`` by hand.
     def list(
         self,
         *,
@@ -196,6 +204,10 @@ class ManualInputAPI(BaseAPI):
             ...     manual_input_id=mi.id, user="/api/3/people/<uuid>",
             ...     input={"test": "def"})
             {'task_id': '...', 'message': 'Awaiting Playbook resumed successfully.'}
+
+        See also:
+            :meth:`answer` -- finds the pending input, resolves the numeric run
+            id / ``step_iri`` / user IRI, and resumes in a single call.
         """
         body: dict[str, Any] = {
             "input": input or {},
@@ -206,6 +218,134 @@ class ManualInputAPI(BaseAPI):
         }
         resp = self.client.post(f"/api/wf/api/workflows/{workflow_id}/wfinput_resume/", data=body)
         return ManualInputResume.model_validate(resp)
+
+    def answer(
+        self,
+        value: Any = None,
+        *,
+        by_title: str | None = None,
+        input_id: int | str | None = None,
+        inputs: dict[str, Any] | None = None,
+        user: str | None = None,
+        option: int | str = 0,
+        assigned_to: AssignedTo = "all",
+    ) -> ManualInputResume:
+        """Find a pending manual input, fill it, and resume its playbook -- one call.
+
+        This is the high-level twin of :meth:`list` + :meth:`retrieve` +
+        :meth:`resume`. It hides the foot-guns those three expose when wired by
+        hand:
+
+        * a pending input's ``.title`` is the **step name**, not the schema
+          title -- so you select by step name with ``by_title=``;
+        * :meth:`list` returns an encrypted ``workflow`` token while
+          :meth:`resume` needs the **numeric** run id -- this pulls the numeric
+          id from :meth:`retrieve` for you;
+        * the submit button is a ``response_mapping`` option with a ``step_iri``
+          -- this resolves ``option`` (index or label) to that ``step_iri``;
+        * ``resume`` needs a submitting-user IRI -- if ``user`` is omitted this
+          resolves one from ``/api/3/people`` (preferring an admin).
+
+        Args:
+            value: a scalar answer for a **single**-variable input prompt; mapped
+                to the input's declared variable name automatically. For an
+                approval/button-only step, omit it. For a multi-variable prompt,
+                use ``inputs=`` instead.
+            by_title: select the pending input whose ``title`` (the step name)
+                matches; the newest match is used. Mutually exclusive with
+                ``input_id``.
+            input_id: select the pending input by its numeric ``id`` directly.
+            inputs: collected values keyed by variable name, e.g.
+                ``{"my_number": 654321}`` -- use instead of ``value`` when the
+                prompt declares more than one variable.
+            user: submitting user's IRI (``/api/3/people/<uuid>``); auto-resolved
+                when omitted.
+            option: which response option to submit -- an index (default ``0``,
+                the primary button) or the option's ``label``.
+            assigned_to: assignment scope to search for the pending input
+                (default ``"all"``).
+
+        Returns:
+            the :class:`~pyfsr.models.ManualInputResume` ack (``task_id`` +
+            ``message``); the resume is asynchronous.
+
+        Example:
+            >>> # re-prompt loop: answer the "AskNumber" step until it passes
+            >>> client.manual_input.answer(123, by_title="AskNumber")
+            {'task_id': '...', 'message': 'Awaiting Playbook resumed successfully.'}
+
+        See also:
+            :meth:`resume` for the low-level form when you already hold the
+            ``step_iri`` / numeric run id.
+        """
+        if (by_title is None) == (input_id is None):
+            raise ValueError("pass exactly one of by_title= or input_id=")
+
+        if input_id is None:
+            rows = self.list(assigned_to=assigned_to)
+            matches = [mi for mi in rows if (mi.title or "") == by_title]
+            if not matches:
+                raise LookupError(
+                    f"no pending manual input with title (step name) {by_title!r} "
+                    f"in scope assigned_to={assigned_to!r}; remember .title is the "
+                    f"step name, not the schema title"
+                )
+            input_id = matches[0].id
+
+        user_iri = user or self._resolve_user_iri()
+
+        full = self.retrieve(input_id, owners=user_iri)
+        options = (full.response_mapping or {}).get("options") or []
+        if not options:
+            raise LookupError(f"manual input {input_id} exposes no response options")
+        opt = self._pick_option(options, option)
+
+        if inputs is None and value is not None:
+            inputs = self._map_scalar(full, value)
+
+        return self.resume(
+            full.workflow,
+            step_iri=opt["step_iri"],
+            step_id=full.step_id,
+            manual_input_id=int(input_id),
+            user=user_iri,
+            input=inputs,
+        )
+
+    def _resolve_user_iri(self) -> str:
+        """A people IRI to submit a manual input as (prefer an admin)."""
+        resp = self.client.get("/api/3/people", params={"$limit": 50})
+        members = resp.get("hydra:member", []) if isinstance(resp, dict) else []
+        if not members:
+            raise LookupError("no people records found to submit the manual input as")
+        for m in members:
+            name = f"{m.get('firstname') or ''} {m.get('lastname') or ''}".lower()
+            if "admin" in name:
+                return m["@id"]
+        return members[0]["@id"]
+
+    @staticmethod
+    def _pick_option(options: list[dict[str, Any]], option: int | str) -> dict[str, Any]:
+        if isinstance(option, int):
+            if not -len(options) <= option < len(options):
+                raise IndexError(f"option index {option} out of range (input has {len(options)} option(s))")
+            return options[option]
+        for opt in options:
+            if opt.get("label") == option:
+                return opt
+        labels = [opt.get("label") for opt in options]
+        raise LookupError(f"no response option labelled {option!r}; available: {labels}")
+
+    @staticmethod
+    def _map_scalar(full: ManualInput, value: Any) -> dict[str, Any]:
+        variables = ((full.input or {}).get("schema") or {}).get("inputVariables") or []
+        names = [v.get("name") for v in variables if v.get("name")]
+        if len(names) != 1:
+            raise ValueError(
+                f"prompt declares {len(names)} input variable(s) ({names}); pass a full "
+                f"inputs={{name: value}} dict instead of a scalar value="
+            )
+        return {names[0]: value}
 
     def delete(self, input_id: int | str) -> None:
         """Delete a pending manual input by its ``id`` (``DELETE .../<id>/``, 204).
