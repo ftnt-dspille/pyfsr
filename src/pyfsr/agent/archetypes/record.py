@@ -6,10 +6,10 @@ and a playbook skeleton, plus the ``{{param}}`` slots a router fills to instanti
 
 This module holds only the record types -- pure stdlib dataclasses (no pydantic, no I/O),
 mirroring :class:`pyfsr.authoring.CompiledPlaybook`'s style so ``archetypes`` stays core-pyfsr
-with no new dependencies. Records are JSON-serializable so :class:`~pyfsr.archetypes.store.ArchetypeStore`
+with no new dependencies. Records are JSON-serializable so :class:`~pyfsr.agent.archetypes.store.ArchetypeStore`
 can persist them as a blob.
 
-A record produced by the harvester (:mod:`pyfsr.archetypes.harvest`) is a **draft**:
+A record produced by the harvester (:mod:`pyfsr.agent.archetypes.harvest`) is a **draft**:
 ``when_to_use`` is empty and ``parameters`` is unset -- an operator (or agent) curates those
 during step 3. The harvested ``module_schema`` / ``connector_manifest`` / ``playbook_skeletons``
 are honest extractions from a real solution pack, not guesses.

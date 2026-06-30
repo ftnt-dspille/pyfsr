@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from pyfsr import mcp as mcp_mod
-from pyfsr import tools
+from pyfsr.agent import mcp as mcp_mod
+from pyfsr.agent import tools
 
 
 # -- client_from_env (delegates to pyfsr.config.EnvConfig) ------------------

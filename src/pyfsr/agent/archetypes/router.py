@@ -5,7 +5,7 @@ plan, section C -- the "no use-case -> artifacts mapping" gap). Given a free-tex
 it:
 
 1. **Classifies** the use case to the best-scoring archetype in
-   :class:`~pyfsr.archetypes.store.ArchetypeStore` -- a bounded, deterministic
+   :class:`~pyfsr.agent.archetypes.store.ArchetypeStore` -- a bounded, deterministic
    keyword/intent match (NOT an LLM call), so the result is reproducible and unit-testable.
 2. **Fills** the matched archetype's ``{{param}}`` slots: infers what it can from the use
    case text plus the archetype's own connector manifest and module schema, applies shipped
@@ -16,7 +16,7 @@ store, including a ``tmp_path`` store in tests.
 
 Example::
 
-    from pyfsr.archetypes import map_use_case
+    from pyfsr.agent.archetypes import map_use_case
 
     result = map_use_case("compare FortiCloud assets vs ServiceNow CMDB, email a CSV")
     result["archetype"]                         # "reconcile-and-report"
@@ -167,7 +167,7 @@ def map_use_case(use_case: str, store: ArchetypeStore | None = None) -> dict[str
     """Classify a use case to an archetype and fill its parameter slots.
 
     Reads (never writes) the appliance: ``store`` defaults to the per-user
-    :class:`~pyfsr.archetypes.store.ArchetypeStore` (seeded from the shipped
+    :class:`~pyfsr.agent.archetypes.store.ArchetypeStore` (seeded from the shipped
     ``reconcile-and-report`` archetype on first use); pass ``store=ArchetypeStore(db_path=...)``
     for a hermetic test. The classifier is a bounded keyword match, not an LLM call, so the
     result is reproducible.
@@ -194,7 +194,7 @@ def map_use_case(use_case: str, store: ArchetypeStore | None = None) -> dict[str
 
     Example::
 
-        from pyfsr.archetypes import map_use_case
+        from pyfsr.agent.archetypes import map_use_case
 
         r = map_use_case("compare FortiCloud assets vs ServiceNow CMDB, email a CSV")
         r["archetype"]                              # "reconcile-and-report"

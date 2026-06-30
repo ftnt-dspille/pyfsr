@@ -7,13 +7,13 @@ pyfsr's runtime state is in one place. Pass an explicit ``db_path`` (e.g. a ``tm
 tests or to keep a separate archetype library.
 
 Seed archetypes ship as ``*.json`` under the package ``seed/`` dir and are loaded into a
-freshly-created (empty) store on first use via :meth:`~pyfsr.archetypes.store.ArchetypeStore.seed_if_empty`.
+freshly-created (empty) store on first use via :meth:`~pyfsr.agent.archetypes.store.ArchetypeStore.seed_if_empty`.
 The seed dir ships the curated ``reconcile-and-report`` archetype (step 3); more archetypes can be
 added by dropping further ``*.json`` files alongside it.
 
 Example::
 
-    from pyfsr.archetypes import ArchetypeStore, Archetype
+    from pyfsr.agent.archetypes import ArchetypeStore, Archetype
 
     store = ArchetypeStore()
     store.put(my_archetype)
@@ -56,7 +56,7 @@ class ArchetypeStore:
 
     Each method opens a short-lived connection (no lingering locks), so a store instance is
     cheap to hold and safe across sequential calls. Record bodies are stored as the JSON
-    produced by :meth:`~pyfsr.archetypes.record.Archetype.to_json`.
+    produced by :meth:`~pyfsr.agent.archetypes.record.Archetype.to_json`.
     """
 
     def __init__(self, db_path: str | os.PathLike[str] | None = None) -> None:

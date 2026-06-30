@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`pyfsr.publish_probe` — publish blast-radius probing.
+"""Unit tests for ``scripts/publish_probe.py`` — publish blast-radius probing.
 
 All tests run offline with a fake client whose ``request()`` returns canned
 status codes on a schedule, simulating a 503 outage window during a publish.
@@ -6,10 +6,14 @@ status codes on a schedule, simulating a 503 outage window during a publish.
 
 from __future__ import annotations
 
+import os
+import sys
 import threading
 import time
 
-from pyfsr.publish_probe import (
+sys.path.insert(0, os.path.dirname(__file__))
+
+from publish_probe import (  # noqa: E402 - scripts/ sibling module
     PublishProbe,
     PublishReport,
     SurfaceReport,
@@ -40,7 +44,7 @@ class TestSurfaceReport:
         r = SurfaceReport(name="x")
         from datetime import datetime, timezone
 
-        from pyfsr.publish_probe import Sample
+        from publish_probe import Sample
 
         def s(t, down):
             return Sample(
@@ -66,7 +70,7 @@ class TestSurfaceReport:
         r = SurfaceReport(name="query")
         from datetime import datetime, timezone
 
-        from pyfsr.publish_probe import Sample
+        from publish_probe import Sample
 
         def s(t, status):
             return Sample(t, datetime.now(timezone.utc), status, 0.0, down=False)
@@ -84,7 +88,7 @@ class TestSurfaceReport:
         r = SurfaceReport(name="bad_path")
         from datetime import datetime, timezone
 
-        from pyfsr.publish_probe import Sample
+        from publish_probe import Sample
 
         for t, status in [(0, 404), (1, 404), (2, 404)]:
             r._record(Sample(t, datetime.now(timezone.utc), status, 0.0, down=False))
@@ -95,7 +99,7 @@ class TestSurfaceReport:
         r = SurfaceReport(name="x")
         from datetime import datetime, timezone
 
-        from pyfsr.publish_probe import Sample
+        from publish_probe import Sample
 
         r._record(Sample(0, datetime.now(timezone.utc), 503, 0.0, True))
         assert r.first_down_monotonic == 0

@@ -2,7 +2,7 @@
 
 import pytest
 
-from pyfsr import tools
+from pyfsr.agent import tools
 from pyfsr.exceptions import ResourceNotFoundError
 from pyfsr.pagination import HydraPage
 

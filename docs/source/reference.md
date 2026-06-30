@@ -10,8 +10,8 @@ The complete, auto-generated reference for every pyfsr module and class.
 - **Pagination** — Hydra page helpers ({class}`pyfsr.pagination.HydraPage`, {func}`pyfsr.pagination.paginate`)
 - **Models** — typed Pydantic records (`Alert`, `Incident`, …)
 - **Config** — environment-driven setup ({class}`pyfsr.config.EnvConfig`)
-- **Tools** — agent tool registry ({mod}`pyfsr.tools`)
-- **MCP** — bundled Model Context Protocol server ({mod}`pyfsr.mcp`)
+- **Tools** — agent tool registry ({mod}`pyfsr.agent.tools`)
+- **MCP** — bundled Model Context Protocol server ({mod}`pyfsr.agent.mcp`)
 
 ## Full reference
 
