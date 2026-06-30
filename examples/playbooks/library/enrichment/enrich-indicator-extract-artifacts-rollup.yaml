@@ -1,0 +1,62 @@
+# Library playbook: Enrich indicator by extracting artifacts and rolling up threat verdicts
+# goal: Connector-light indicator enrichment: take an inbound alert/indicator, use extract_artifacts to pull observables (IPs/domains/hashes) out of a text field, loop them, look each up with a single pluggable connector step, and roll up a verdict + severity into set_variables.
+# trigger: (see the Start step below; original export's trigger re‑typed)
+# inputs: vars.input.records[0] (inbound record) unless noted
+# outputs: vars.finalVerdict, vars.finalSeverity (set on the playbook context)
+# connectors: see connector step (swap‑in: <your threat‑intel connector> (config: <uuid>))
+# adapts-to: indicator enrichment intent – retarget by changing the source field or connector.
+
+collection: Enrichment Library
+description: ''
+visible: true
+playbooks:
+- name: Enrich Indicator – Extract Artifacts → Lookup → Rollup
+  description: Pull observables from a text field, lookup each via a threat‑intel connector, and roll up a consolidated verdict and severity.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    next: Extract Artifacts from Indicator
+  - type: set_variable
+    name: Extract Artifacts from Indicator
+    vars:
+      # Attempt to extract artifacts from the primary text field of the inbound record.
+      artifactsAll: "{{ vars.input.records[0].value | default('') | extract_artifacts }}"
+    next: Lookup Artifacts
+  - type: connector
+    name: Lookup Artifacts
+    # swap‑in: <your threat���intel connector> (config: <uuid>)
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: Threat Intel Lookup
+      config: <YOUR_CONNECTOR_UUID>
+      params:
+        observable: "{{ item.value }}"
+        type: "{{ item.type }}"
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: "Lookup Observable"
+    for_each:
+      item: "{{ vars.artifactsAll.results }}"
+      parallel: false
+      condition: ""
+    next: Rollup Lookup Results
+  - type: set_variable
+    name: Rollup Lookup Results
+    vars:
+      # Simple roll‑up: if any result has verdict "malicious" set overall verdict to malicious, else benign.
+      finalVerdict: "{{ vars.steps.Lookup_Artifacts | map(attribute='data.verdict') | select('equalto', 'malicious') | list | length > 0 and 'malicious' or 'benign' }}"
+      # Choose highest severity among results (assume severity numeric 0‑10).
+      finalSeverity: "{{ vars.steps.Lookup_Artifacts | map(attribute='data.severity') | max(default=0) }}"
+    next: End
+  - type: CyopsUtilites
+    name: End
+    step_variables: []
+    arguments:
+      params: []
+      version: 3.3.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: "Utils: No Operation"

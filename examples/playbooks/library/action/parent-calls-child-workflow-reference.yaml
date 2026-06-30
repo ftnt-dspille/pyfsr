@@ -1,0 +1,60 @@
+# Library playbook: Parent playbook calls a child synchronously via workflow_reference and reads its output.
+#
+# source: tutorial-corpus: Change Incident Lead for Critical Incidents - first
+# cleaned: no_trigger:retype-start-nop, delete_mistype:0, branches:0
+#
+# goal: Parent playbook calls a child synchronously via workflow_reference and reads its output.
+# trigger: (see the Start step below; original export's trigger re-typed)
+# inputs:  vars.input.records[0] (inbound record) unless noted
+# outputs: a comment / record update on the source record
+# connectors: see connector steps (connector-pluggable; swap the config for your appliance)
+# adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+
+collection: 00. Playbook Learning SP
+description: ''
+visible: true
+playbooks:
+- name: Change Incident Lead for Critical Incidents - first
+  description: Linking Objects + Referece Playbook (part1)
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: workflow_reference
+    name: Call Specific playbook
+    apply_async: false
+    step_variables: []
+    arguments:
+      arguments:
+        IncidentIRI: '{{vars.item[''@id'']}}'
+      pass_parent_env: false
+      pass_input_record: false
+      workflowReference: /api/3/workflows/98088c22-2006-43c1-bf73-ef1c151c1cd6
+  - type: find_record
+    name: Find Incidents
+    step_variables: []
+    module: incidents?$limit=30
+    arguments:
+      query:
+        sort: []
+        limit: 30
+        logic: AND
+        filters:
+        - type: object
+          field: severity
+          value: '{{vars.sev2}}'
+          _value:
+            '@id': '{{vars.sev2}}'
+            display: Critical
+            itemValue: ''
+          operator: eq
+    next: call_specific_playbook
+  - type: set_variable
+    name: myVars
+    vars:
+      num: '0'
+      sev2: /api/3/picklists/7efa2220-39bb-44e4-961f-ac368776e3b0
+      mySeverity: '''Critical'''
+    next: find_incidents
+  - type: start
+    name: Start
+    next: myvars

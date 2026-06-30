@@ -1,0 +1,714 @@
+{
+  "library_dir": "examples/playbooks/library",
+  "count": 27,
+  "playbooks": [
+    {
+      "slug": "ai-enrichment-openai",
+      "stage": "action",
+      "path": "examples/playbooks/library/action/ai-enrichment-openai.yaml",
+      "name": "Simple OpenAI Query",
+      "goal": "AI enrichment: build a prompt from alert title/description, query OpenAI, write the response back as a comment + tags.",
+      "source": "tutorial-corpus: Simple OpenAI Query",
+      "step_types": [
+        "insert_record",
+        "update_record",
+        "CyopsUtilites",
+        "set_variable",
+        "start",
+        "connector"
+      ],
+      "connectors": [
+        "cyops_utilities",
+        "openai"
+      ],
+      "jinja_filters": [],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "change-incident-lead-critical",
+      "stage": "action",
+      "path": "examples/playbooks/library/action/change-incident-lead-critical.yaml",
+      "name": "Change Incident Lead for Critical Incidents - second",
+      "goal": "Change the incident lead for critical incidents (the child of the pair above).",
+      "source": "tutorial-corpus: Change Incident Lead for Critical Incidents - second",
+      "step_types": [
+        "CyopsUtilites",
+        "start",
+        "update_record"
+      ],
+      "connectors": [
+        "cyops_utilities"
+      ],
+      "jinja_filters": [],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": true
+    },
+    {
+      "slug": "close-fortisiem-incident",
+      "stage": "action",
+      "path": "examples/playbooks/library/action/close-fortisiem-incident.yaml",
+      "name": "FortiSIEM: Close Incidents with a Reason",
+      "goal": "Close a FortiSIEM incident with a reason, comment the alert, and update alert status.",
+      "source": "tutorial-corpus: FortiSIEM: Close Incidents with a Reason",
+      "step_types": [
+        "insert_record",
+        "connector",
+        "set_variable",
+        "CyopsUtilites",
+        "start",
+        "update_record"
+      ],
+      "connectors": [
+        "fortinet-fortisiem",
+        "cyops_utilities"
+      ],
+      "jinja_filters": [],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "connector-error-handling-branch",
+      "stage": "action",
+      "path": "examples/playbooks/library/action/connector-error-handling-branch.yaml",
+      "name": "Connector Error Handling Branch",
+      "goal": "Call a connector step with ignore_errors, then branch on the step's runtime status:",
+      "source": "authored",
+      "step_types": [
+        "start_on_create",
+        "set_variable",
+        "connector",
+        "decision",
+        "insert_record",
+        "stop"
+      ],
+      "connectors": [
+        "cyops_utilities"
+      ],
+      "jinja_filters": [
+        "default"
+      ],
+      "triggers": [
+        "start_on_create"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "create-incident-from-alert",
+      "stage": "action",
+      "path": "examples/playbooks/library/action/create-incident-from-alert.yaml",
+      "name": "Create Incident from Alert",
+      "goal": "Create incident from alert: on a critical/escalated alert, create_record an incident, link the alert to it (update_record the alert with the incident reference), and update the alert status to \"Linked\"/\"In Progress\".",
+      "source": "authored",
+      "step_types": [
+        "start_on_create",
+        "set_variable",
+        "create_record",
+        "update_record",
+        "CyopsUtilites"
+      ],
+      "connectors": [
+        "cyops_utilities"
+      ],
+      "jinja_filters": [],
+      "triggers": [
+        "start_on_create"
+      ],
+      "compiles_ok": true
+    },
+    {
+      "slug": "host-containment-isolate",
+      "stage": "action",
+      "path": "examples/playbooks/library/action/host-containment-isolate.yaml",
+      "name": "Host Containment: Isolate Compromised Host",
+      "goal": "Host containment: on a confirmed-compromised host alert, disable the associated AD account, tag the alert \"contained\", update the asset record status, and notify.",
+      "source": "authored",
+      "step_types": [
+        "start",
+        "set_variable",
+        "connector",
+        "update_record",
+        "SendMail",
+        "CyopsUtilites"
+      ],
+      "connectors": [
+        "activedirectory",
+        "smtp",
+        "cyops_utilities"
+      ],
+      "jinja_filters": [],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "parent-calls-child-workflow-reference",
+      "stage": "action",
+      "path": "examples/playbooks/library/action/parent-calls-child-workflow-reference.yaml",
+      "name": "Change Incident Lead for Critical Incidents - first",
+      "goal": "Parent playbook calls a child synchronously via workflow_reference and reads its output.",
+      "source": "tutorial-corpus: Change Incident Lead for Critical Incidents - first",
+      "step_types": [
+        "workflow_reference",
+        "find_record",
+        "set_variable",
+        "start"
+      ],
+      "connectors": [],
+      "jinja_filters": [],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": true
+    },
+    {
+      "slug": "quarantine-ip-fortigate",
+      "stage": "action",
+      "path": "examples/playbooks/library/action/quarantine-ip-fortigate.yaml",
+      "name": "Remediation on FortiGate - Complete",
+      "goal": "Quarantine a malicious IP on FortiGate behind an optional approval gate; comment the indicator.",
+      "source": "tutorial-corpus: Remediation on FortiGate - Complete",
+      "step_types": [
+        "insert_record",
+        "connector",
+        "ApprovalManualInput",
+        "CyopsUtilites",
+        "set_variable",
+        "SendMail",
+        "decision",
+        "start",
+        "update_record"
+      ],
+      "connectors": [
+        "fortigate-firewall",
+        "cyops_utilities",
+        "smtp"
+      ],
+      "jinja_filters": [],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "async-fanout-collect-child-runs",
+      "stage": "control",
+      "path": "examples/playbooks/library/control/async-fanout-collect-child-runs.yaml",
+      "name": "Async Fanout Parent",
+      "goal": "Async fan-out + collect: a parent that uses workflow_reference with apply_async:true to launch N child runs (e.g. one per indicator), then collects results. Demonstrates apply_async + the child_runs() pattern. Include a child playbook in the same file. Both must compile.",
+      "source": "authored",
+      "step_types": [
+        "start",
+        "set_variable",
+        "workflow_reference",
+        "code_snippet",
+        "end"
+      ],
+      "connectors": [],
+      "jinja_filters": [
+        "default"
+      ],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "loop-over-records-max-parallel",
+      "stage": "control",
+      "path": "examples/playbooks/library/control/loop-over-records-max-parallel.yaml",
+      "name": "Loop Over Records Parent",
+      "goal": "Loop with max-parallel: a playbook using for_each over a list of records with max_parallel set (the concurrency control). Show the for_each + max_parallel + per-item action pattern. Connector-light.",
+      "source": "authored",
+      "step_types": [
+        "start",
+        "set_variable",
+        "workflow_reference",
+        "code_snippet",
+        "end"
+      ],
+      "connectors": [],
+      "jinja_filters": [
+        "default"
+      ],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "multi-stage-approval-audit-trail",
+      "stage": "control",
+      "path": "examples/playbooks/library/control/multi-stage-approval-audit-trail.yaml",
+      "name": "Multi\u2011Stage Approval with Audit Trail",
+      "goal": "Multi-stage approval with audit trail: a first approval gate; if approved, execute (a no-op action) AND record the approver+timestamp via update_record/insert_record; then a second confirmation approval; then final action.",
+      "source": "authored",
+      "step_types": [
+        "start",
+        "ApprovalManualInput",
+        "set_variable",
+        "update_record",
+        "CyopsUtilites"
+      ],
+      "connectors": [
+        "cyops_utilities"
+      ],
+      "jinja_filters": [],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": true
+    },
+    {
+      "slug": "correlate-cve-to-alert",
+      "stage": "decision",
+      "path": "examples/playbooks/library/decision/correlate-cve-to-alert.yaml",
+      "name": "Link CVE to Alert",
+      "goal": "Correlate a CVE record with its associated alert by finding and cross-linking.",
+      "source": "tutorial-corpus: Link CVE to Alert",
+      "step_types": [
+        "start",
+        "update_record",
+        "CyopsUtilites",
+        "cybersponse.action",
+        "set_variable",
+        "find_record"
+      ],
+      "connectors": [
+        "cyops_utilities"
+      ],
+      "jinja_filters": [],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": true
+    },
+    {
+      "slug": "false-positive-suppression-autoclose",
+      "stage": "decision",
+      "path": "examples/playbooks/library/decision/false-positive-suppression-autoclose.yaml",
+      "name": "False Positive Suppression",
+      "goal": "Decide whether an alert matches a known false-positive signature; if so, tag it",
+      "source": "authored",
+      "step_types": [
+        "start_on_create",
+        "set_variable",
+        "decision",
+        "update_record",
+        "insert_record",
+        "stop"
+      ],
+      "connectors": [],
+      "jinja_filters": [
+        "default",
+        "unique"
+      ],
+      "triggers": [
+        "start_on_create"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "severity-scoring-from-enrichment",
+      "stage": "decision",
+      "path": "examples/playbooks/library/decision/severity-scoring-from-enrichment.yaml",
+      "name": "Severity Scoring from Enrichment",
+      "goal": "Weighted severity scoring from enrichment fields feeding a decision step that tags and escalates or monitors.",
+      "source": "authored",
+      "step_types": [
+        "start",
+        "set_variable",
+        "code_snippet",
+        "decision",
+        "update_record"
+      ],
+      "connectors": [],
+      "jinja_filters": [
+        "default",
+        "hits",
+        "int",
+        "trim"
+      ],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": true
+    },
+    {
+      "slug": "ad-lookup-by-email",
+      "stage": "enrichment",
+      "path": "examples/playbooks/library/enrichment/ad-lookup-by-email.yaml",
+      "name": "Active Directory Search by Email",
+      "goal": "Enrich a record with Active Directory attributes looked up by email; render as an HTML table comment.",
+      "source": "tutorial-corpus: Active Directory Search by Email",
+      "step_types": [
+        "set_variable",
+        "CyopsUtilites",
+        "connector",
+        "start"
+      ],
+      "connectors": [
+        "cyops_utilities",
+        "activedirectory"
+      ],
+      "jinja_filters": [
+        "length"
+      ],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "enrich-indicator-extract-artifacts-rollup",
+      "stage": "enrichment",
+      "path": "examples/playbooks/library/enrichment/enrich-indicator-extract-artifacts-rollup.yaml",
+      "name": "Enrich Indicator \u2013 Extract Artifacts \u2192 Lookup \u2192 Rollup",
+      "goal": "Connector-light indicator enrichment: take an inbound alert/indicator, use extract_artifacts to pull observables (IPs/domains/hashes) out of a text field, loop them, look each up with a single pluggable connector step, and roll up a verdict + severity into set_variables.",
+      "source": "authored",
+      "step_types": [
+        "start",
+        "set_variable",
+        "connector",
+        "CyopsUtilites"
+      ],
+      "connectors": [
+        "cyops_utilities"
+      ],
+      "jinja_filters": [
+        "default",
+        "extract_artifacts",
+        "length",
+        "list",
+        "map",
+        "max",
+        "select"
+      ],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "fortisiem-ip-context-enrichment",
+      "stage": "enrichment",
+      "path": "examples/playbooks/library/enrichment/fortisiem-ip-context-enrichment.yaml",
+      "name": "FrotiSIEM: Get Indicator IP Context",
+      "goal": "Enrich an indicator with FortiSIEM IP context, comment, optional email, and update the indicator.",
+      "source": "tutorial-corpus: FrotiSIEM: Get Indicator IP Context",
+      "step_types": [
+        "insert_record",
+        "connector",
+        "set_variable",
+        "CyopsUtilites",
+        "manual_input",
+        "start",
+        "update_record"
+      ],
+      "connectors": [
+        "fortinet-fortisiem",
+        "cyops_utilities",
+        "smtp"
+      ],
+      "jinja_filters": [
+        "to"
+      ],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "multi-source-ip-reputation-rollup",
+      "stage": "enrichment",
+      "path": "examples/playbooks/library/enrichment/multi-source-ip-reputation-rollup.yaml",
+      "name": "IP lookup on many sources + Basic Response and Approval",
+      "goal": "Multi-source IP reputation rollup (VirusTotal/IPStack/IPInfo/AbuseIPDB) + approval gate before blocking.",
+      "source": "tutorial-corpus: IP lookup on many sources + Basic Response and Approval",
+      "step_types": [
+        "ApprovalManualInput",
+        "manual_input",
+        "connector",
+        "CyopsUtilites",
+        "set_variable",
+        "start"
+      ],
+      "connectors": [
+        "fortigate-firewall",
+        "cyops_utilities",
+        "ipinfo",
+        "abuseipdb",
+        "ipstack",
+        "virustotal"
+      ],
+      "jinja_filters": [],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "audit-run-stamp-wrapper",
+      "stage": "notify",
+      "path": "examples/playbooks/library/notify/audit-run-stamp-wrapper.yaml",
+      "name": "Audit Run Stamp Wrapper",
+      "goal": "Audit run-stamp: a reusable sub-pattern that stamps a run-audit record (who/when/verdict/inputs-hash) on every playbook execution.",
+      "source": "authored",
+      "step_types": [
+        "start",
+        "set_variable",
+        "create_record",
+        "CyopsUtilites"
+      ],
+      "connectors": [
+        "cyops_utilities"
+      ],
+      "jinja_filters": [
+        "default",
+        "hash",
+        "tojson"
+      ],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": true
+    },
+    {
+      "slug": "incident-detail-comment",
+      "stage": "notify",
+      "path": "examples/playbooks/library/notify/incident-detail-comment.yaml",
+      "name": "FortiSIEM: Bring COUNT information from Incidents",
+      "goal": "Add a comment to an incident with its first/last seen timestamps and incident count.",
+      "source": "tutorial-corpus: FortiSIEM: Bring COUNT information from Incidents",
+      "step_types": [
+        "insert_record",
+        "connector",
+        "set_variable",
+        "CyopsUtilites",
+        "start_on_create"
+      ],
+      "connectors": [
+        "fortinet-fortisiem",
+        "cyops_utilities"
+      ],
+      "jinja_filters": [],
+      "triggers": [
+        "start_on_create"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "multi-system-provisioning",
+      "stage": "notify",
+      "path": "examples/playbooks/library/notify/multi-system-provisioning.yaml",
+      "name": "Process Employee Onboarding",
+      "goal": "Provision a new employee across AD, Linux, FortiGate and send a confirmation email.",
+      "source": "tutorial-corpus: Process Employee Onboarding",
+      "step_types": [
+        "start",
+        "insert_record",
+        "decision",
+        "connector",
+        "set_variable",
+        "CyopsUtilites",
+        "cybersponse.action",
+        "update_record"
+      ],
+      "connectors": [
+        "ssh",
+        "activedirectory",
+        "cyops_utilities",
+        "smtp",
+        "fortigate-firewall"
+      ],
+      "jinja_filters": [
+        "count",
+        "random_mac",
+        "regex_replace",
+        "regex_search",
+        "trim"
+      ],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "sla-escalation-timer",
+      "stage": "notify",
+      "path": "examples/playbooks/library/notify/sla-escalation-timer.yaml",
+      "name": "SLA Escalation Timer",
+      "goal": "SLA escalation: an alert that is unassigned after a delay gets escalated \u2014 decision checks assignment + age, if unassigned-and-old then update_record to reassign + bump severity + notify, else stop. Connector-light. Ties into the SLA-templates concept.",
+      "source": "authored",
+      "step_types": [
+        "start_on_create",
+        "set_variable",
+        "decision",
+        "update_record",
+        "manual_input"
+      ],
+      "connectors": [],
+      "jinja_filters": [
+        "default",
+        "int"
+      ],
+      "triggers": [
+        "start_on_create"
+      ],
+      "compiles_ok": true
+    },
+    {
+      "slug": "api-webhook-intake",
+      "stage": "triggers",
+      "path": "examples/playbooks/library/triggers/api-webhook-intake.yaml",
+      "name": "Webhook Record Creation (integration to CybrHawk EDR)",
+      "goal": "API/webhook intake: receive an external alert, map fields, create a FortiSOAR alert + comment.",
+      "source": "tutorial-corpus: Webhook Record Creation (integration to CybrHawk EDR)",
+      "step_types": [
+        "insert_record",
+        "set_variable",
+        "CyopsUtilites",
+        "decision",
+        "set_api_keys",
+        "api_endpoint"
+      ],
+      "connectors": [
+        "cyops_utilities"
+      ],
+      "jinja_filters": [
+        "length",
+        "picklist",
+        "string",
+        "to"
+      ],
+      "triggers": [
+        "api_endpoint"
+      ],
+      "compiles_ok": true
+    },
+    {
+      "slug": "on-create-count-bad-indicators",
+      "stage": "triggers",
+      "path": "examples/playbooks/library/triggers/on-create-count-bad-indicators.yaml",
+      "name": "Count Bad Indicators",
+      "goal": "On-create alert trigger: count malicious/suspicious indicators and post a verdict comment.",
+      "source": "tutorial-corpus: Count Bad Indicators",
+      "step_types": [
+        "decision",
+        "insert_record",
+        "set_variable",
+        "find_record",
+        "start",
+        "CyopsUtilites"
+      ],
+      "connectors": [
+        "cyops_utilities"
+      ],
+      "jinja_filters": [
+        "length"
+      ],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": true
+    },
+    {
+      "slug": "scheduled-daily-recon",
+      "stage": "triggers",
+      "path": "examples/playbooks/library/triggers/scheduled-daily-recon.yaml",
+      "name": "Daily Recon Automation Full",
+      "goal": "Scheduled daily recon: locate recon alerts, process, and report.",
+      "source": "tutorial-corpus: Daily Recon Automation Full",
+      "step_types": [
+        "insert_record",
+        "connector",
+        "set_variable",
+        "decision",
+        "find_record",
+        "update_record",
+        "start",
+        "CyopsUtilites"
+      ],
+      "connectors": [
+        "fortigate-firewall",
+        "ssh",
+        "file-content-extraction",
+        "cyops_utilities"
+      ],
+      "jinja_filters": [
+        "json_query",
+        "length",
+        "unique"
+      ],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": false
+    },
+    {
+      "slug": "scheduled-hunt-summarize-notify",
+      "stage": "triggers",
+      "path": "examples/playbooks/library/triggers/scheduled-hunt-summarize-notify.yaml",
+      "name": "Scheduled Hunt Summarize Notify",
+      "goal": "Scheduled hunt: a periodic (cron/schedule) trigger that runs find_record over recent alerts matching a filter, summarizes the count by severity into a set_variable, and posts a digest comment.",
+      "source": "authored",
+      "step_types": [
+        "start",
+        "set_variable",
+        "find_record",
+        "insert_record",
+        "CyopsUtilites"
+      ],
+      "connectors": [
+        "cyops_utilities"
+      ],
+      "jinja_filters": [
+        "json_query",
+        "length"
+      ],
+      "triggers": [
+        "start"
+      ],
+      "compiles_ok": true
+    },
+    {
+      "slug": "threat-feed-ingestion",
+      "stage": "triggers",
+      "path": "examples/playbooks/library/triggers/threat-feed-ingestion.yaml",
+      "name": "FortiRecon BP Domain Threats Ingestion",
+      "goal": "Threat-feed ingestion: parse a domain-threat JSON alert, map severity/tags, create an enriched alert.",
+      "source": "tutorial-corpus: FortiRecon BP Domain Threats Ingestion",
+      "step_types": [
+        "set_variable",
+        "insert_record",
+        "connector",
+        "decision",
+        "set_api_keys",
+        "api_endpoint"
+      ],
+      "connectors": [
+        "cyops_utilities"
+      ],
+      "jinja_filters": [
+        "extract_artifacts",
+        "join",
+        "length",
+        "lower",
+        "map",
+        "picklist",
+        "to"
+      ],
+      "triggers": [
+        "api_endpoint"
+      ],
+      "compiles_ok": false
+    }
+  ]
+}

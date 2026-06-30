@@ -1,0 +1,370 @@
+# Library playbook: Provision a new employee across AD, Linux, FortiGate and send a confirmation email.
+#
+# source: tutorial-corpus: Process Employee Onboarding
+# cleaned: no_trigger:insert-start, delete_mistype:4, branches:0
+#
+# goal: Provision a new employee across AD, Linux, FortiGate and send a confirmation email.
+# trigger: (see the Start step below; original export's trigger re-typed)
+# inputs:  vars.input.records[0] (inbound record) unless noted
+# outputs: a comment / record update on the source record
+# connectors: see connector steps (connector-pluggable; swap the config for your appliance)
+# adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+
+collection: 00. Playbook Learning SP - Specific Playbooks
+description: ''
+visible: true
+playbooks:
+- name: Process Employee Onboarding
+  description: FortiSOAR Webinar 2025
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - name: Start
+    type: start
+    next: Add Comment to Request
+  - type: insert_record
+    name: Add Comment to Request
+    step_variables: []
+    arguments:
+      resource:
+        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+        alerts: '{{vars.input.records[0][''@id'']}}'
+        people: []
+        content: <p>User PROVISIONED Sucessfully!</p>
+        __replace: ''
+        recordTags:
+        - /api/3/tags/Onboarding
+        isImportant: true
+        peopleUpdated: false
+      operation: Overwrite
+      collection: /api/3/comments
+      __recommend: []
+      fieldOperation:
+        recordTags: Overwrite
+    next: update_request_to_closed
+  - type: decision
+    name: AD Provisioning
+    step_variables: []
+    conditions:
+    - display: Continue
+      default: true
+      next: linux_provisioning
+    - display: 'Yes'
+      when: '{{ vars.ad_provisioning == 1 }}'
+      next: generate_ldap_entry
+  - type: connector
+    name: Apply Linux Commands
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: SSH
+      config: 2429fec1-ff14-40ac-bef4-3d72ba76fa83
+      params:
+        cmd: '{{vars.item}}'
+        allowed_exit: -1,0
+        is_super_user: false
+      connector: ssh
+      operation: run_remote_command
+      operationTitle: Execute remote command
+    next: add_comment_to_request
+  - type: connector
+    name: Create AD User Object
+    ignore_errors: true
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: Active Directory
+      config: 0243c862-a811-4285-914a-edafa17175fb
+      params:
+        mail: admin@example.com
+        title: CSE
+        object_dn: CN=Sample User,OU=CSEs,OU=Sample_Users,DC=example,DC=com
+        description: Onboarding Use Case
+        displayName: Rdorigo Silva
+        object_class: User
+        enable_account: true
+        sAMAccountName: sampleuser
+        custom_attributes: ''
+        userPrincipalName: sampleuser
+      connector: activedirectory
+      operation: add_object
+      operationTitle: Add Object
+    next: linux_provisioning
+  - type: decision
+    name: DKIM Signature and Email Source
+    step_variables: []
+    conditions:
+    - display: Finish
+      default: true
+      next: finish_provisioning
+    - display: Continue
+      when: '{{ vars.header["dkim-signature"] | count >= 1 and vars.input.records[0].emailFrom == "Rafael Righi <admin@example.com>" }}'
+      next: extract_employee_data
+  - type: set_variable
+    name: Extract Employee Data
+    vars:
+      employee_id: "{{ (vars.input.records[0].emailBody \n     | regex_search(\"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}\")) .split(\"@\")[0] | trim }}"
+      email_sender: '{{vars.input.records[0].emailFrom}}'
+      employee_name: '{{vars.input.records[0].emailSubject.split("-")[1] }}'
+      employee_email: '{{ vars.input.records[0].emailBody | regex_search("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}") }}'
+      employee_name2: "{{ vars.input.records[0].emailBody | regex_search(\"Name:\\s*([^\\(]+)\") | regex_replace(\"Name:\\s*\", \"\") \n   | trim }}"
+      employee_position: '{{ vars.input.records[0].emailBody  | regex_search("(?<=Position:\s).*") | regex_replace("<[^>]*>", "") | regex_replace("(&nbsp;)+", " ") | trim }}'
+    next: fgt_provisioning
+  - type: decision
+    name: FGT Provisioning
+    step_variables: []
+    conditions:
+    - display: 'Yes'
+      when: '{{ vars.fgt_provisioning == 1 }}'
+      next: prepare_fgt_address_object
+    - display: Continue
+      default: true
+      next: ad_provisioning
+  - type: CyopsUtilites
+    name: FINISH Provisioning
+    step_variables: []
+    arguments:
+      params: []
+      version: 3.6.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'
+  - type: set_variable
+    name: Generate LDAP Entry
+    vars:
+      employee_dn: '{{ "CN=" + vars.employee_name|trim + "," + vars.ldap_sufix }}'
+      employee_sam: '{{vars.employee_id}}'
+    next: create_ad_user_object
+  - type: decision
+    name: Linux Provisioning
+    step_variables: []
+    conditions:
+    - display: 'Yes'
+      when: '{{ vars.linux_provisioning == 1 }}'
+      next: prepare_linux_provisioning
+  - type: set_variable
+    name: Playbook Configuration
+    vars:
+      header: '{{vars.input.records[0].emailHeaders}}'
+      ldap_sufix: '"OU=CSEs,OU=Sample_Users,DC=example,DC=com"'
+      ad_provisioning: '1'
+      fgt_provisioning: '1'
+      linux_provisioning: '1'
+    next: dkim_signature_and_email_source
+  - type: set_variable
+    name: Prepare FGT Address Object
+    vars:
+      test_mac: '{{ "01:02:03" | random_mac }}'
+      employee_mac: "{{ vars.input.records[0].emailBody \n              | regex_search(\"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}\") }}"
+    next: update_fgt_address_object
+  - type: set_variable
+    name: Prepare Linux Provisioning
+    vars:
+      commands: "[ \n'{{ \"touch /tmp/\" ~ vars.employee_id }}', \n'{{ \"touch /tmp/\" ~ vars.employee_id }}2'\n]"
+    next: apply_linux_commands
+  - type: connector
+    name: Send Provisioning Report
+    ignore_errors: false
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: SMTP
+      config: 420864d3-364c-4ebb-a49f-87fa7ecc717e
+      params:
+        body: '<p>Hi {{vars.email_sender}},</p>
+
+          <p>&nbsp;</p>
+
+          <p>Your Onboarding request was processed. The new employee was provisioned correctly. Please, find below the provisioning details.</p>
+
+          <p>&nbsp;</p>
+
+          <table style="border-collapse: collapse; width: 100%;" border="1"><colgroup><col style="width: 49.8982%;"><col style="width: 49.8982%;"></colgroup>
+
+          <tbody>
+
+          <tr>
+
+          <td><span style="color: rgb(224, 62, 45);"><strong>Field</strong></span></td>
+
+          <td><span style="color: rgb(224, 62, 45);"><strong>Status</strong></span></td>
+
+          </tr>
+
+          <tr>
+
+          <td>Employee Provisioned</td>
+
+          <td>{{vars.employee_name}} - {{vars.employee_email}} - {{vars.employee_position}}</td>
+
+          </tr>
+
+          <tr>
+
+          <td>Employee Username used on AD and Linux</td>
+
+          <td>{{vars.employee_id}}</td>
+
+          </tr>
+
+          <tr>
+
+          <td>MAC address identified in the original email</td>
+
+          <td>{{vars.employee_mac}}</td>
+
+          </tr>
+
+          <tr>
+
+          <td>Systems Provisioned&nbsp;</td>
+
+          <td>
+
+          <p>{% if vars.ad_provisioning == 1 %}<br>&nbsp; AD - <strong>OK</strong><br>{% endif %}</p>
+
+          <p>{% if vars.fgt_provisioning == 1 %}<br>&nbsp; FGT - <strong>OK</strong><br>{% endif %}</p>
+
+          <p>{% if vars.linux_provisioning == 1 %}<br>&nbsp; Linux - <strong>OK</strong><br>{% endif %}</p>
+
+          </td>
+
+          </tr>
+
+          </tbody>
+
+          </table>
+
+          <p>Date: {{ arrow.utcnow().format(''YYYY-MM-DDTHH:mm:ss.ssss'')}}Z</p>
+
+          <p>&nbsp;</p>
+
+          <p>Count on FortiSOAR and IT teams for next Onboardings.</p>
+
+          <p>Best Regards,</p>
+
+          <p>{{vars.input.records[0].emailTo}}</p>'
+        subject: Reply - {{vars.input.records[0].emailSubject}}
+        iri_list: ''
+        cc_recipients: ''
+        to_recipients: admin@example.com
+        bcc_recipients: ''
+      connector: smtp
+      operation: send_email
+      operationTitle: Send Email
+    next: finish_provisioning
+  - type: cybersponse.action
+    name: START Provisioning
+    step_variables:
+      input:
+        params: []
+        records: '{{vars.input.records}}'
+    arguments:
+      route: 419cea19-d8e5-4195-96f3-ee27a51a73bf
+      title: 'Webinar: Employee-Onboarding'
+      resources:
+      - alerts
+      __triggerLimit: true
+      inputVariables: []
+      triggerOnSource: true
+      displayConditions:
+        alerts:
+          sort: []
+          limit: 30
+          logic: AND
+          filters:
+          - type: primitive
+            field: source
+            value: Email Server
+            operator: eq
+            _operator: eq
+      executeButtonText: Execute
+      noRecordExecution: false
+      showToasterMessage:
+        visible: false
+        messageVisible: true
+      triggerOnReplicate: false
+      singleRecordExecution: true
+    next: playbook_configuration
+  - type: connector
+    name: Update FGT Address Object
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: Fortinet FortiGate
+      config: c39ff169-25f7-4309-9e3e-434faec7ce91
+      params:
+        name: ONBOARDING
+        type: Device (MAC Address)
+        vdom: ''
+        scope: Single Address
+        comment: ''
+        new_name: ''
+        mac_addrs: '{{vars.employee_mac}}'
+        address_category: IPv4 Address
+      connector: fortigate-firewall
+      operation: update_address
+      operationTitle: Update Address
+    next: ad_provisioning
+  - type: update_record
+    name: Update Request to CLOSED
+    step_variables: []
+    arguments:
+      resource:
+        type: /api/3/picklists/0b3ef6f9-eb29-4ab9-ac98-98364bd1a3aa
+        status: /api/3/picklists/fac53e73-8d16-4189-98d5-95fbd1555232
+        severity: /api/3/picklists/7efa2220-39bb-44e4-961f-ac368776e3b0
+        userName: '{{vars.employee_name}}'
+        assignedTo: /api/3/people/2833b1dc-8173-4729-8343-21922c33f182
+      operation: Append
+      collection: '{{vars.input.records[0][''@id'']}}'
+      __recommend: []
+      collectionType: /api/3/alerts
+      fieldOperation: []
+    next: send_provisioning_report
+  annotations:
+  - id: fortisoar_orchestration
+    kind: block
+    title: FortiSOAR Orchestration
+    body: FortiSOAR Orchestrates FGT, AD, Linux
+    contains:
+    - ad_provisioning
+    - apply_linux_commands
+    - create_ad_user_object
+    - fgt_provisioning
+    - generate_ldap_entry
+    - linux_provisioning
+    - prepare_fgt_address_object
+    - prepare_linux_provisioning
+    - update_fgt_address_object
+    position:
+      top: 240
+      left: 480
+      height: 482
+      width: 1093
+  - id: post_provisioning_actions
+    kind: block
+    title: Post Provisioning Actions
+    body: Update Request and Send Report
+    contains:
+    - add_comment_to_request
+    - send_provisioning_report
+    - update_request_to_closed
+    position:
+      top: 780
+      left: 800
+      height: 130
+      width: 920
+  - id: security_controls
+    kind: block
+    title: Security Controls
+    body: + configurations
+    contains:
+    - dkim_signature_and_email_source
+    - extract_employee_data
+    - playbook_configuration
+    position:
+      top: 240
+      left: 100
+      height: 489
+      width: 310

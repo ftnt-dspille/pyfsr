@@ -209,6 +209,38 @@ pyfsr playbook step-help decision --schema
 The same data is available from Python via {func}`pyfsr.playbook_catalog.list_step_types`
 and {func}`pyfsr.playbook_catalog.step_help`.
 
+## Worked examples — the foundational library
+
+`step-help` shows one *atom* (one step type). The **foundational playbook library**
+shows whole *molecules*: complete, compiling, use-case-shaped playbooks you retrieve
+by intent and adapt — the layer an agent few-shots on when translating a goal to
+SOAR operations. It lives at `examples/playbooks/library/`, grouped by SOC stage
+(triggers / enrichment / decision / action / notify / control).
+
+```bash
+# List every library playbook with its stage, intent, step types, and compile status
+pyfsr playbook examples
+
+# Filter by intent or stage
+pyfsr playbook examples --intent incident
+pyfsr playbook examples --stage action
+
+# Print one playbook's metadata + the full friendly YAML to adapt
+pyfsr playbook show create-incident-from-alert
+
+# Emit the retrieval manifest (intent + facets per playbook) for NL->playbook tooling
+pyfsr playbook examples --manifest
+```
+
+Every library playbook compiles and carries a `goal` / `trigger` / `inputs` /
+`outputs` / `connectors` / `adapts-to` front-matter block. `cold*` in the compile
+column means it compiles but references connectors the offline slim catalog
+doesn't carry — run `pyfsr playbook deploy <file> --refresh-catalog` to resolve
+them against a live instance. The manifest and listing are available from Python
+via {func}`pyfsr.playbook_library.list_library`,
+{func}`pyfsr.playbook_library.library_manifest`, and
+{func}`pyfsr.playbook_library.library_show`.
+
 ## Testing interactive playbooks & inspecting runs
 
 A playbook that pauses on a **Manual Input** / **Approval** step can be driven

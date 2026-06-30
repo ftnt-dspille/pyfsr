@@ -1,0 +1,183 @@
+# Library playbook: Scheduled daily recon: locate recon alerts, process, and report.
+#
+# source: tutorial-corpus: Daily Recon Automation Full
+# cleaned: no_trigger:retype-start-nop, delete_mistype:3, branches:0
+#
+# goal: Scheduled daily recon: locate recon alerts, process, and report.
+# trigger: (see the Start step below; original export's trigger re-typed)
+# inputs:  vars.input.records[0] (inbound record) unless noted
+# outputs: a comment / record update on the source record
+# connectors: see connector steps (connector-pluggable; swap the config for your appliance)
+# adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+
+collection: 00. Playbook Learning SP - Specific Playbooks
+description: ''
+visible: true
+playbooks:
+- name: Daily Recon Automation Full
+  description: Xperts26 NOC Automation Playbook
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: insert_record
+    name: Add Comment to File
+    ignore_errors: true
+    step_variables: []
+    arguments:
+      resource:
+        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+        people: []
+        content: '<p>This file contains {{vars.excelDomains | length}} domains.&nbsp;</p>
+
+          <p>It was generated on {{arrow.utcnow().format("YYYY-MM-DD HH:mm:ss ZZ")}}.</p>'
+        __replace: ''
+        attachments: '{{vars.steps.Create_Excel_Attachment.data[''@id'']}}'
+        isImportant: true
+        peopleUpdated: false
+      operation: Overwrite
+      collection: /api/3/comments
+      __recommend: []
+      fieldOperation:
+        recordTags: Overwrite
+    next: this_is_the_end
+  - type: connector
+    name: Block Domains FGT
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: Fortinet FortiGate
+      config: a41931f5-f1de-4bc3-b069-4446d374a72b
+      params:
+        url: '[''{{vars.item.domain}}'']'
+        vdom: root
+      connector: fortigate-firewall
+      operation: block_url
+      operationTitle: Block URL
+    next: ssh_automation
+  - type: connector
+    name: Block Domains SSH
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: SSH
+      config: b0027dc0-7147-489e-a8ea-3b4ad70b7f9e
+      params:
+        cmd: echo "{{vars.item.domain}}" >>{{vars.ssh_filename}}
+        allowed_exit: -1,0
+        is_super_user: false
+      connector: ssh
+      operation: run_remote_command
+      operationTitle: Execute remote command
+    next: excel_automation
+  - type: connector
+    name: Create Excel Attachment
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: File Content Extraction
+      params:
+        fileName: '{{vars.excel_filename}}'
+        jsonData: "{\r\n  \"domain\":\r\n  {{vars.excelDomains}}\r\n}"
+        xLSXFields: domain
+      connector: file-content-extraction
+      operation: create_xslx_file_from_json_data
+      operationTitle: Create XLSX File as Attachment From JSON Data
+    next: link_alerts_to_file
+  - type: set_variable
+    name: Create Excel Content
+    vars:
+      excelDomains: '{{ vars.steps.Find_Recon_BP_Alert_Records | json_query(''[].domain'') | unique }}'
+    next: create_excel_attachment
+  - type: decision
+    name: Excel Automation
+    step_variables: []
+    conditions:
+    - display: End
+      default: true
+      next: this_is_the_end
+    - display: Excel
+      when: '{{ vars.excel_automation == 1 }}'
+      next: create_excel_content
+  - type: find_record
+    name: Find Recon BP Alert Records
+    step_variables: []
+    module: alerts?$limit=100
+    arguments:
+      query:
+        sort: []
+        limit: 30
+        logic: AND
+        filters:
+        - type: primitive
+          field: source
+          value: Webhook
+          operator: eq
+          _operator: eq
+        - type: datetime
+          logic: AND
+          _field: assigneddate
+          _value: '{{vars.daysAgo}}'
+          filters:
+          - type: datetime
+            field: assigneddate
+            value: '{{getRelativeDate(0,0,-1,"end","end","end")}}'
+            operator: gt
+          _operator: gt
+    next: fortigate_automation
+  - type: decision
+    name: FortiGate Automation
+    step_variables: []
+    conditions:
+    - display: Web Filter
+      when: '{{ vars.fgt_automation == 1 }}'
+      next: block_domains_fgt
+    - display: Continue
+      default: true
+      next: ssh_automation
+  - type: update_record
+    name: Link Alerts to File
+    step_variables: []
+    arguments:
+      resource:
+        __link:
+          alerts: '{{ vars.steps.Find_Recon_BP_Alert_Records | json_query(''[]."@id"'') }}'
+      operation: Append
+      collection: '{{vars.steps.Create_Excel_Attachment.data[''@id'']}}'
+      __recommend: []
+      collectionType: /api/3/attachments
+      fieldOperation:
+        recordTags: Append
+    next: add_comment_to_file
+  - type: set_variable
+    name: Playbook Config
+    vars:
+      daysAgo: '{{ arrow.utcnow().shift(days=-1) }}'
+      ssh_filename: /tmp/blocked_domains.dat
+      excel_filename: blocked_domains.xlsx
+      fgt_automation: '0'
+      ssh_automation: '0'
+      smtp_automation: '0'
+      excel_automation: '1'
+    next: find_recon_bp_alert_records
+  - type: decision
+    name: SSH Automation
+    step_variables: []
+    conditions:
+    - display: SSH
+      when: '{{ vars.ssh_automation == 1 }}'
+      next: block_domains_ssh
+    - display: Continue
+      default: true
+      next: excel_automation
+  - type: start
+    name: Start
+    next: playbook_config
+  - type: CyopsUtilites
+    name: This is the End
+    step_variables: []
+    arguments:
+      params: []
+      version: 3.7.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'

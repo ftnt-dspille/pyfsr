@@ -36,6 +36,9 @@ _HELPERS: dict[str, tuple[Path | None, Path | None, Path | None]] = {
     # described in the playbook CLI module, and shown in the guide.
     "steps": (_CLI_MAIN, _PB_CLI, _GUIDE),
     "step-help": (_CLI_MAIN, _PB_CLI, _GUIDE),
+    # library worked-examples layer: the whole-playbook discovery surface.
+    "examples": (_CLI_MAIN, _PB_CLI, _GUIDE),
+    "show": (_CLI_MAIN, _PB_CLI, _GUIDE),
     # manual_input.answer: pointed to from the group index epilog, cross-linked
     # from its siblings (list/resume) in the same module, and in the guide.
     "manual_input.answer": (_CLI_MAIN, None, _GUIDE),

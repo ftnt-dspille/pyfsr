@@ -1,0 +1,58 @@
+# Library playbook: Create an incident from a critical or escalated alert and link them.
+# goal: Create incident from alert: on a critical/escalated alert, create_record an incident, link the alert to it (update_record the alert with the incident reference), and update the alert status to "Linked"/"In Progress".
+# trigger: Alert created (critical or escalated) ��� start_on_create on alerts module.
+# inputs: vars.input.records[0] (the inbound alert record)
+# outputs: new incident record IRI and updated alert status.
+# connectors: cyops_utilities (swap-in: your connector for incidents if needed)
+# adapts-to: SOC intent to auto-create incidents from alerts.
+
+collection: 00. Playbook Learning SP - Specific Playbooks
+description: ''
+visible: true
+playbooks:
+- name: Create Incident from Alert
+  description: Auto-create incident for critical/escalated alerts and link them.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start_on_create
+    name: Start
+    module: alerts
+    next: Extract Alert Data
+
+  - type: set_variable
+    name: Extract Alert Data
+    vars:
+      alert_iri: "{{ vars.input.records[0]['@id'] }}"
+      alert_severity: "{{ vars.input.records[0].severity.itemValue }}"
+      alert_title: "{{ vars.input.records[0].title }}"
+    next: Create Incident
+
+  - type: create_record
+    name: Create Incident
+    # swap-in: <your incidents connector> (config: <uuid or name>)
+    arguments:
+      module: incidents
+      resource:
+        name: "Incident from alert {{ vars.alert_title }}"
+        severity: "{{ vars.alert_severity }}"
+        status: /api/3/picklists/incident-status-new   # placeholder picklist IRI for "New"
+    next: Link Alert to Incident
+
+  - type: update_record
+    name: Link Alert to Incident
+    arguments:
+      collection: "{{ vars.alert_iri }}"
+      resource:
+        incident: "{{ vars.steps.Create_Incident.record_iri }}"
+        status: /api/3/picklists/incident-status-linked   # placeholder for "Linked"/"In Progress"
+    next: End
+
+  - type: CyopsUtilites
+    name: End
+    arguments:
+      params: []
+      version: 3.5.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'

@@ -1,0 +1,111 @@
+# Library playbook: Multi-stage approval with audit trail: a first approval gate; if approved, execute (a no-op action) AND record the approver+timestamp via update_record/insert_record; then a second confirmation approval; then final action.
+# goal: Multi-stage approval with audit trail: a first approval gate; if approved, execute (a no-op action) AND record the approver+timestamp via update_record/insert_record; then a second confirmation approval; then final action.
+# trigger: Manual start (run from UI or API)
+# inputs: vars.input.records[0] (the target record)
+# outputs: record updated with approver info, timestamps; final no-op action execution.
+# connectors: cyops_utilities (swap-in: <your connector> if needed for no_op) ; approval connector via ApprovalManualInput (built‑in, no external connector needed)
+# adapts-to: SOC workflow requiring multi‑stage approval with audit trail.
+
+collection: Control Playbooks
+description: Demonstrates two sequential approval steps with audit logging.
+visible: true
+playbooks:
+  - name: Multi‑Stage Approval with Audit Trail
+    description: Two‑step approval workflow that records each approver and timestamp.
+    is_active: true
+    trigger_step_id: Start
+    steps:
+      - type: start
+        name: Start
+        next: First Approval Request
+
+      - type: ApprovalManualInput
+        name: First Approval Request
+        description: First approval gate before proceeding.
+        arguments:
+          type: InputBased
+          input:
+            schema:
+              title: First Approval Needed
+              description: Approve to continue the workflow.
+              inputVariables: []
+          record: "{{ vars.input.records[0]['@id'] }}"
+          resources: records
+          is_approval: true
+        next: Capture First Approver Info
+
+      - type: set_variable
+        name: Capture First Approver Info
+        vars:
+          first_approver: "{{ vars.steps.First_Approval_Request.username }}"
+          first_approval_time: "{{ vars.steps.First_Approval_Request.approvedAt }}"
+        next: Record First Approver
+
+      - type: update_record
+        name: Record First Approver
+        arguments:
+          collection: "{{ vars.input.records[0]['@id'] }}"
+          resource:
+            firstApprover: "{{ vars.first_approver }}"
+            firstApprovalTimestamp: "{{ vars.first_approval_time }}"
+        next: No Op After First Approval
+
+      - type: CyopsUtilites
+        name: No Op After First Approval
+        arguments:
+          params: []
+          version: 3.5.0
+          connector: cyops_utilities
+          operation: no_op
+          operationTitle: 'Utils: No Operation'
+        next: Second Approval Request
+
+      - type: ApprovalManualInput
+        name: Second Approval Request
+        description: Second confirmation approval before final action.
+        arguments:
+          type: InputBased
+          input:
+            schema:
+              title: Second Approval Needed
+              description: Approve to execute final action.
+              inputVariables: []
+          record: "{{ vars.input.records[0]['@id'] }}"
+          resources: records
+          is_approval: true
+        next: Capture Second Approver Info
+
+      - type: set_variable
+        name: Capture Second Approver Info
+        vars:
+          second_approver: "{{ vars.steps.Second_Approval_Request.username }}"
+          second_approval_time: "{{ vars.steps.Second_Approval_Request.approvedAt }}"
+        next: Record Second Approver
+
+      - type: update_record
+        name: Record Second Approver
+        arguments:
+          collection: "{{ vars.input.records[0]['@id'] }}"
+          resource:
+            secondApprover: "{{ vars.second_approver }}"
+            secondApprovalTimestamp: "{{ vars.second_approval_time }}"
+        next: Final No-Op Action
+
+      - type: CyopsUtilites
+        name: Final No-Op Action
+        arguments:
+          params: []
+          version: 3.5.0
+          connector: cyops_utilities
+          operation: no_op
+          operationTitle: 'Utils: Final No Operation'
+        next: End
+
+      - type: CyopsUtilites
+        name: End
+        arguments:
+          params: []
+          version: 3.5.0
+          connector: cyops_utilities
+          operation: no_op
+          operationTitle: 'Utils: End'

@@ -1,0 +1,81 @@
+# Library playbook: Async fan-out + collect child runs using apply_async and child_runs()
+# goal: Async fan-out + collect: a parent that uses workflow_reference with apply_async:true to launch N child runs (e.g. one per indicator), then collects results. Demonstrates apply_async + the child_runs() pattern. Include a child playbook in the same file. Both must compile.
+# trigger: manual start (run from UI or API)
+# inputs: vars.input.records[0].indicators (list of indicator IRI strings)
+# outputs: aggregated child results stored in vars.child_summary
+# connectors: none (connector-light), swap-in steps for real child workflow reference if needed
+# adapts-to: fan-out processing of multiple items, async child execution and result aggregation
+
+collection: Control Patterns
+description: Demonstrates async fan-out using workflow_reference apply_async and gathering child run results.
+visible: true
+
+playbooks:
+  - name: Async Fanout Parent
+    description: Parent playbook launches a child per indicator asynchronously and aggregates results.
+    is_active: true
+    trigger_step_id: Start
+    steps:
+      - type: start
+        name: Start
+        next: Load Indicators
+
+      - type: set_variable
+        name: Load Indicators
+        vars:
+          indicators: "{{ vars.input.records[0].indicators | default([]) }}"
+        next: Launch Child per Indicator
+
+      - type: workflow_reference
+        name: Launch Child per Indicator
+        for_each:
+          item: "{{ vars.indicators }}"
+          parallel: true
+        apply_async: true
+        step_variables:
+          - name: indicator
+            value: "{{ item }}"
+        arguments:
+          workflowReference: child_playbook_uuid  # swap-in: child playbook UUID
+          arguments:
+            Indicator: "{{ vars.indicator }}"
+          pass_parent_env: false
+          pass_input_record: false
+        next: Collect Child Results
+
+      - type: code_snippet
+        name: Collect Child Results
+        arguments:
+          code: |
+            # Placeholder: implement collection via pyfsr client child_runs API
+            # Example (pseudo):
+            # parent_pk = {{ run.pk }}
+            # children = client.playbooks.child_runs(parent_pk)
+            # summary = {c['name']: c['status'] for c in children}
+            # set_variable('child_summary', summary)
+            # Here we just set a dummy summary.
+            summary = {'dummy': 'collected'}
+            output = {'child_summary': summary}
+        next: End
+
+      - type: end
+        name: End
+
+  - name: Async Fanout Child
+    description: Child playbook that processes a single indicator.
+    is_active: true
+    trigger_step_id: Start Child
+    steps:
+      - type: start
+        name: Start Child
+        next: Process Indicator
+
+      - type: set_variable
+        name: Process Indicator
+        vars:
+          indicator: "{{ vars.input.indicator }}"
+          result: "Processed {{ vars.indicator }}"
+        next: End Child
+
+      - type: end
+        name: End Child

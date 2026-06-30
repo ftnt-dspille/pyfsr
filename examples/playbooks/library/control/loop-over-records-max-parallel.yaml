@@ -1,0 +1,79 @@
+# Library playbook: Loop over records with max_parallel concurrency
+# goal: Loop with max-parallel: a playbook using for_each over a list of records with max_parallel set (the concurrency control). Show the for_each + max_parallel + per-item action pattern. Connector-light.
+# trigger: manual start (run from UI or API)
+# inputs: vars.input.records (list of record dicts)
+# outputs: vars.processed_summary (summary of processing)
+# connectors: none (connector-light), swap-in steps if real connector needed
+# adapts-to: batch processing of multiple items with controlled concurrency
+
+collection: Control Patterns
+description: Demonstrates for_each with max_parallel to process records concurrently.
+visible: true
+
+playbooks:
+  - name: Loop Over Records Parent
+    description: Parent playbook loops over records using for_each with max_parallel and launches a child per record.
+    is_active: true
+    trigger_step_id: Start
+    steps:
+      - type: start
+        name: Start
+        next: Load Records
+
+      - type: set_variable
+        name: Load Records
+        vars:
+          records: "{{ vars.input.records | default([]) }}"
+        next: Launch Child per Record
+
+      - type: workflow_reference
+        name: Launch Child per Record
+        # for_each is a MAPPING: `item:` holds the list to iterate; the step body
+        # runs once per element with `{{ item }}` bound. `parallel: true` fans the
+        # iterations out concurrently (the loop-max-parallel control). The child
+        # playbook is the second playbook in this same file.
+        for_each:
+          item: "{{ vars.records }}"
+          parallel: true
+          condition: ""
+        step_variables:
+          - name: record
+            value: "{{ item }}"
+        next: Collect Child Results
+        arguments:
+          workflowReference: child_playbook_uuid  # swap-in: child playbook UUID (or name)
+          arguments:
+            Record: "{{ vars.record }}"
+          pass_parent_env: false
+          pass_input_record: false
+
+      - type: code_snippet
+        name: Collect Child Results
+        arguments:
+          code: |
+            # Placeholder: collect child run results via pyfsr client (pseudo)
+            summary = {'dummy': 'collected'}
+            output = {'processed_summary': summary}
+        next: End
+
+      - type: end
+        name: End
+
+  - name: Loop Over Records Child
+    description: Child playbook that processes a single record.
+    is_active: true
+    trigger_step_id: Start Child
+    steps:
+      - type: start
+        name: Start Child
+        next: Process Record
+
+      - type: set_variable
+        name: Process Record
+        vars:
+          record: "{{ vars.input.Record }}"
+          result: "Processed {{ vars.record.id | default('unknown') }}"
+        next: End Child
+
+      - type: end
+        name: End Child

@@ -1,0 +1,147 @@
+# Library playbook: Enrich an indicator with FortiSIEM IP context, comment, optional email, and update the indicator.
+#
+# source: tutorial-corpus: FrotiSIEM: Get Indicator IP Context
+# cleaned: no_trigger:retype-start-nop, delete_mistype:2, branches:0
+#
+# goal: Enrich an indicator with FortiSIEM IP context, comment, optional email, and update the indicator.
+# trigger: (see the Start step below; original export's trigger re-typed)
+# inputs:  vars.input.records[0] (inbound record) unless noted
+# outputs: a comment / record update on the source record
+# connectors: see connector steps (connector-pluggable; swap the config for your appliance)
+# adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+
+collection: 00. Playbook Learning SP - Specific Playbooks
+description: ''
+visible: true
+playbooks:
+- name: 'FrotiSIEM: Get Indicator IP Context'
+  description: FortiSIEM customizations
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: insert_record
+    name: Add Comment to the Indicator with the result
+    step_variables: []
+    arguments:
+      resource:
+        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+        people: []
+        content: <p>Indicator Context was inserted in the SOURCE DATA.</p>
+        __replace: ''
+        indicators: '{{vars.input.records[0][''@id'']}}'
+        isImportant: true
+        peopleUpdated: false
+      operation: Overwrite
+      collection: /api/3/comments
+      __recommend: []
+      fieldOperation:
+        recordTags: Overwrite
+    next: update_indicator
+  - type: connector
+    name: Bring IP Conext from FortiSIEM
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: Fortinet FortiSIEM
+      config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
+      params:
+        value: '{{vars.myIP}}'
+      connector: fortinet-fortisiem
+      operation: get_ip_context
+      operationTitle: Get IP Context
+    next: get_output
+  - type: set_variable
+    name: Configuration
+    vars:
+      myIP: '{{vars.input.records[0].value}}'
+      myIP4: 172.16.16.1
+      sendEmail: '1'
+    next: bring_ip_conext_from_fortisiem
+  - type: set_variable
+    name: Create table
+    vars:
+      myTable: "<table style=\\\"width:400px\\\">\n{% for key, value in vars.myDict.items() %}\n<tr>\n<td>\n    {{ key }}: {{ value }}\n </td>\n</tr>\n{% endfor %}\n</table>"
+    next: output
+  - type: CyopsUtilites
+    name: End
+    step_variables: []
+    arguments:
+      params: []
+      version: 3.5.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'
+  - type: set_variable
+    name: Get Output
+    vars:
+      myDict: '{{vars.steps.Bring_IP_Conext_from_FortiSIEM.data.contexts.0 | toDict}}'
+    next: create_table
+  - type: manual_input
+    name: Output
+    step_variables: []
+    options:
+    - display: Save JSON + Send via Email
+      next: add_comment_to_the_indicator_with_the_result
+    - display: Send Email
+      next: send_email
+    - display: Just End
+      primary: true
+      next: end
+    arguments:
+      type: InputBased
+      input:
+        schema:
+          title: The Context fir the IP {{vars.myIP}}
+          description: '{{vars.myTable}}'
+          inputVariables: []
+      record: ''
+      resources: indicators
+      is_approval: false
+      owner_detail:
+        isAssigned: false
+        emailRecipients: ''
+      isRecordLinked: false
+      email_notification:
+        enabled: false
+        smtpParameters: []
+      customEmailExternal: false
+      inline_channel_list: []
+      external_channel_list: []
+      unauthenticated_input: false
+      internal_email_subject: A FortiSOAR playbook is requesting your input
+  - type: connector
+    name: Send Email
+    when: '{{vars.sendEmail > 0}}'
+    ignore_errors: true
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: SMTP
+      config: 420864d3-364c-4ebb-a49f-87fa7ecc717e
+      params:
+        body: <p>{{vars.myTable}}</p>
+        subject: FortiSOAR Playbook for IP Conext on FortiSIEM -{{vars.myIP}}
+        iri_list: ''
+        cc_recipients: ''
+        to_recipients: admin@example.com
+        bcc_recipients: ''
+      connector: smtp
+      operation: send_email
+      operationTitle: Send Email
+    next: end
+  - type: start
+    name: Start
+    next: configuration
+  - type: update_record
+    name: Update Indicator
+    step_variables: []
+    arguments:
+      resource:
+        sourceData: '{{vars.steps.Bring_IP_Conext_from_FortiSIEM.data | toJSON }}'
+      operation: Append
+      collection: '{{vars.input.records[0][''@id'']}}'
+      __recommend: []
+      collectionType: /api/3/indicators
+      fieldOperation:
+        recordTags: Append
+    next: send_email

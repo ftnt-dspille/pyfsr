@@ -1,0 +1,56 @@
+# Library playbook: Change the incident lead for critical incidents (the child of the pair above).
+#
+# source: tutorial-corpus: Change Incident Lead for Critical Incidents - second
+# cleaned: no_trigger:None, delete_mistype:0, branches:0
+#
+# goal: Change the incident lead for critical incidents (the child of the pair above).
+# trigger: (see the Start step below; original export's trigger re-typed)
+# inputs:  vars.input.records[0] (inbound record) unless noted
+# outputs: a comment / record update on the source record
+# connectors: see connector steps (connector-pluggable; swap the config for your appliance)
+# adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+
+collection: 00. Playbook Learning SP
+description: ''
+visible: true
+playbooks:
+- name: Change Incident Lead for Critical Incidents - second
+  description: Linking Objects + Referece Playbook (part2)
+  is_active: true
+  trigger_step_id: start
+  parameters:
+  - IncidentIRI
+  steps:
+  - type: CyopsUtilites
+    name: End
+    step_variables: []
+    arguments:
+      params: []
+      version: 3.3.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'
+  - type: start
+    name: Start
+    step_variables:
+      input:
+        params: []
+    arguments:
+      __triggerLimit: true
+      triggerOnSource: true
+      triggerOnReplicate: false
+    next: update_lead
+  - type: update_record
+    name: Update Lead
+    step_variables: []
+    arguments:
+      resource:
+        phase: /api/3/picklists/bb740d30-f699-11e7-8c3f-9a214cf093ae
+        impactROI: 4
+        incidentLead: /api/3/people/1f7f125a-6a71-40ad-8813-da67de1d77aa
+      operation: Append
+      collection: '{{vars.input.params.IncidentIRI}}'
+      __recommend: []
+      collectionType: /api/3/incidents
+      fieldOperation: []
+    next: end

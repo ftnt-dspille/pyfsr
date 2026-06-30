@@ -1,0 +1,605 @@
+# Library playbook: API/webhook intake: receive an external alert, map fields, create a FortiSOAR alert + comment.
+#
+# source: tutorial-corpus: Webhook Record Creation (integration to CybrHawk EDR)
+# cleaned: no_trigger:None, delete_mistype:0, branches:0, api_body_param:True
+#
+# goal: API/webhook intake: receive an external alert, map fields, create a FortiSOAR alert + comment.
+# trigger: (see the Start step below; original export's trigger re-typed)
+# inputs:  vars.input.records[0] (inbound record) unless noted
+# outputs: a comment / record update on the source record
+# connectors: see connector steps (connector-pluggable; swap the config for your appliance)
+# adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+
+collection: 00. Playbook Learning SP - Specific Playbooks
+description: ''
+visible: true
+playbooks:
+- name: Webhook Record Creation (integration to CybrHawk EDR)
+  description: Complex Webhook and Alert Management
+  is_active: true
+  trigger_step_id: start
+  steps:
+  - type: insert_record
+    name: Add Comment on top of Just Created Alert
+    ignore_errors: true
+    step_variables: []
+    arguments:
+      resource:
+        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+        alerts: '{{vars.steps.Create_new_Cybr_Hawk_Alert[''@id'']}}'
+        people: []
+        content: '<p>Cyber Hawk<span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);"> Agent information</span> for this Alert:</p>
+
+          <table border="1" style="border-collapse: collapse; width: 98.5447%;"><colgroup><col style="width: 50%;"><col style="width: 50%;"></colgroup>
+
+          <tbody>
+
+          <tr>
+
+          <td style="text-align: center;"><span style="background-color: rgb(45, 194, 107); color: rgb(0, 0, 0);">Field</span></td>
+
+          <td style="text-align: center;"><span style="background-color: rgb(45, 194, 107); color: rgb(0, 0, 0);">Content</span></td>
+
+          </tr>
+
+          <tr>
+
+          <td><strong>Agent Name</strong></td>
+
+          <td>{{vars.cybr_alert_agent_name}}</td>
+
+          </tr>
+
+          <tr>
+
+          <td><strong>Agent IP</strong></td>
+
+          <td>{{vars.cybr_alert_agent_ip}}</td>
+
+          </tr>
+
+          <tr>
+
+          <td><strong>Agent OS</strong></td>
+
+          <td>{{vars.cybr_alert_agent_os}}</td>
+
+          </tr>
+
+          <tr>
+
+          <td><strong>Agent OS Ful</strong></td>
+
+          <td>{{vars.cybr_alert_agent_os_full}}</td>
+
+          </tr>
+
+          </tbody>
+
+          </table>
+
+          <p>&nbsp;</p>'
+        __replace: ''
+        recordTags: '{{vars.cybr_alert_tags_main}}'
+        isImportant: true
+        peopleUpdated: false
+      operation: Overwrite
+      collection: /api/3/comments
+      __recommend: []
+      fieldOperation:
+        recordTags: Overwrite
+    next: finish
+  - type: set_variable
+    name: Alert Agent Fields
+    vars:
+      cybr_alert_agent_ip: '{{vars.individual_alert._source.agent.ip or "No Data"}}'
+      cybr_alert_agent_os: '{{vars.individual_alert._source.agent.os or "No Data"}}'
+      cybr_alert_agent_name: '{{vars.individual_alert._source.agent.name}}'
+      cybr_alert_agent_os_full: '{{vars.individual_alert._source.agent.os_full or "No Data"}}'
+    next: alert_event_fields
+  - type: set_variable
+    name: Alert Event Fields
+    vars:
+      cybr_alert_event_code: '{{vars.individual_alert._source.event.code or "No Data"}}'
+      cybr_alert_event_action: '{{vars.individual_alert._source.event.action or "No Data"}}'
+      cybr_alert_event_module: '{{vars.individual_alert._source.event.module or "No Data"}}'
+      cybr_alert_event_provider: '{{vars.individual_alert._source.event.provider or "No Data"}}'
+    next: alert_rules_information
+  - type: set_variable
+    name: Alert Rules Information
+    description: Add Rule data
+    vars:
+      cybr_alert_rule: '{{vars.individual_alert._source.rule}}'
+      cybr_alert_rule_id: '{{ vars.individual_alert._source.rule.id }}'
+      cybr_alert_rule_level: '{{ vars.individual_alert._source.rule.level }}'
+      cybr_alert_rule_firedtimes: '{{ vars.individual_alert._source.rule.firedtimes }}'
+      cybr_alert_rule_description: '{{vars.individual_alert._source.rule.description}}'
+    next: process_entire_alert_description
+  - type: set_variable
+    name: Alert secondary Fields
+    vars:
+      cybr_alert_intent: '{{vars.individual_alert._source.td.alert.intent or "No Data"}}'
+      cybr_alert_message: '{{vars.individual_alert._source.td.alert.message or "No Data"}}'
+      cybr_alert_solution: '{{vars.individual_alert._source.td.alert.solution or "No Data"}}'
+      cybr_alert_indicator: '{{vars.individual_alert._source.td.alert.indicator or "No Data"}}'
+      cybr_alert_root_cause: '{{vars.individual_alert._source.td.alert.root_cause or "No Data"}}'
+      cybr_alert_description: '{{vars.individual_alert._source.td.alert.description or "No Data"}}'
+      cybr_alert_source_system: '{{vars.individual_alert._source.source_system or "No Data"}}'
+      cybr_alert_assigned_analyst: '{{vars.individual_alert._source.td.alert.assigned.analyst or "No Data"}}'
+    next: alert_agent_fields
+  - type: set_variable
+    name: Alert Severity Mapping
+    vars:
+      sev_low: '[ ''4'', ''5", ''6'' ]'
+      sev_high: '[ ''10'', ''11'', ''12'' ]'
+      sev_medium: '[ ''7'', ''8'', ''9'' ]'
+      sev_minimal: '[ ''1'', ''2'', ''3'' ]'
+      sev_critical: '[ ''13'', ''14'', ''15'' ]'
+    next: severity_calculation
+  - type: set_variable
+    name: API Parameter
+    vars:
+      myalert: '{{vars.input.params[''api_body'']}}'
+    next: getting_the_alert
+  - type: set_variable
+    name: Basic Fields for All Alert Types
+    vars:
+      cybr_id: '{{vars.individual_alert._id}}'
+      cybr_alert_time: '{{vars.individual_alert._source.alert_time}}'
+      cybr_alert_title: '{{vars.individual_alert._source.td.alert.name}}'
+      cybr_alert_severity: '{{vars.individual_alert._source.td.alert.severity}}'
+      cybr_alert_tags_main: '{{vars.individual_alert._source.tags}}'
+    next: alert_severity_mapping
+  - type: insert_record
+    name: Create new Cybr Hawk Alert
+    ignore_errors: true
+    step_variables: []
+    arguments:
+      resource:
+        name: Cybr Hawk - {{vars.cybr_alert_title}}
+        rule: '{{vars.cybr_alert_rule_id}}:{{vars.cybr_alert_rule_description}}'
+        type: /api/3/picklists/574a6ee2-7265-4701-815e-cff83b053bce
+        state: /api/3/picklists/8675a07f-2d0d-4e3a-89af-4822b8341df8
+        source: Cybr Hawk
+        status: /api/3/picklists/7de816ff-7140-4ee5-bd05-93ce22002146
+        severity: '{{vars.cyber_alert_severity_calc}}'
+        sourceId: '{{vars.cybr_id}}'
+        __replace: ''
+        eventTime: '{{vars.cybr_alert_time}}'
+        assignedTo: /api/3/people/3451141c-bac6-467c-8d72-85e0fab569ce
+        recordTags: '{{vars.cybr_alert_tags_main}}'
+        sourcedata: '{{vars.individual_alert | toJSON }}'
+        description: '<div class="font-size-16 ng-binding padding-bottom-sm">
+
+          <h4 style="background: #404142;padding: 5px;text-align: left;color: orange;background:black;">
+
+          {{vars.cybr_alert_title}} - {{vars.cybr_id}}
+
+          </h4></div>
+
+
+          <table style="border-color: #04080c;" border="1" class="font-normal">
+
+          <tbody>
+
+          <tr>
+
+          <td>
+
+
+          <div class="font-size-14 ng-binding">Alert Source System</div><div class="card-container-body" style="width: 100%;font-size:46px;">
+
+          <div class="card-number" style="font-size:20px;  border-left: 5px solid red;background:#141b23">{{vars.cybr_alert_source_system}}</div>
+
+          </div>
+
+
+          <div class="font-size-14 ng-binding">Alert Severity</div><div class="card-container-body" style="width: 100%;font-size:46px;">
+
+          <div class="card-number" style="font-size:20px;  border-left: 5px solid red;background:#141b23">{{vars.cybr_alert_severity}}</div>
+
+          </div>
+
+
+
+          <div class="font-size-14 ng-binding">Alert Intent</div><div class="card-container-body" style="width: 100%;font-size:46px;">
+
+          <div class="card-number" style="font-size:20px;  border-left: 5px solid red;background:#141b23">{{vars.cybr_alert_intent}}</div>
+
+          </div>
+
+
+          <div class="font-size-14 ng-binding">Alert Description + Message </div><div class="card-container-body" style="width: 100%;font-size:46px;">
+
+          <div class="card-number" style="font-size:20px;  border-left: 5px solid red;background:#141b23">{{vars.cybr_alert_description}} - {{vars.cybr_alert_message}}</div>
+
+          </div>
+
+
+          <div class="font-size-14 ng-binding">Alert Solution by CybrHawk</div><div class="card-container-body" style="width: 100%;font-size:46px;">
+
+          <div class="card-number" style="font-size:20px;  border-left: 5px solid red;background:#141b23">{{vars.cybr_alert_solution}}</div>
+
+          </div>
+
+
+          <div class="font-size-14 ng-binding">Alert Indicator</div><div class="card-container-body" style="width: 100%;font-size:46px;">
+
+          <div class="card-number" style="font-size:20px;  border-left: 5px solid red;background:#141b23">{{vars.cybr_alert_indicator}}</div>
+
+          </div>
+
+
+          <div class="font-size-14 ng-binding">Alert Root Cause Analysis</div><div class="card-container-body" style="width: 100%;font-size:46px;">
+
+          <div class="card-number" style="font-size:20px;  border-left: 5px solid red;background:#141b23">{{ vars.cybr_alert_root_cause}}</div>
+
+          </div>
+
+
+          <div class="font-size-14 ng-binding">Alert Event Code</div><div class="card-container-body" style="width: 100%;font-size:46px;">
+
+          <div class="card-number" style="font-size:20px;  border-left: 5px solid red;background:#141b23">{{vars.cybr_alert_event_code}}</div>
+
+          </div>
+
+
+          <div class="font-size-14 ng-binding">Alert Event Action</div><div class="card-container-body" style="width: 100%;font-size:46px;">
+
+          <div class="card-number" style="font-size:20px;  border-left: 5px solid red;background:#141b23">{{vars.cybr_alert_event_action}}</div>
+
+          </div>
+
+
+          <div class="font-size-14 ng-binding">Alert Event Module</div><div class="card-container-body" style="width: 100%;font-size:46px;">
+
+          <div class="card-number" style="font-size:20px;  border-left: 5px solid red;background:#141b23">{{vars.cybr_alert_event_module}}</div>
+
+          </div>
+
+
+          <div class="font-size-14 ng-binding">Alert Event Provider</div><div class="card-container-body" style="width: 100%;font-size:46px;">
+
+          <div class="card-number" style="font-size:20px;  border-left: 5px solid red;background:#141b23">{{vars.cybr_alert_event_provider}}</div>
+
+          </div>
+
+
+          </td>
+
+          </tr>
+
+          </tbody>
+
+          </table>
+
+          '
+        ackSlaStatus: /api/3/picklists/72979f64-e8b9-4888-a965-957e0ec24818
+        respSlaStatus: /api/3/picklists/72979f64-e8b9-4888-a965-957e0ec24818
+        priorityWeight: 1
+        escalatedtoincident: /api/3/picklists/2128a09c-153d-4db3-985d-de6be33deae5
+        resolvedAutomatedly: false
+        alertRemainingAckSLA: 0
+      operation: Overwrite
+      collection: /api/3/alerts
+      __recommend: []
+      fieldOperation:
+        recordTags: Overwrite
+    next: get_add_alert_status
+  - type: insert_record
+    name: Create Task with the Error JSON
+    step_variables: []
+    arguments:
+      resource:
+        name: Problem on Cybr Hawk JSON  - {{arrow.utcnow().format("YYYY-MM-DD HH:mm:ss ZZ")}}
+        type: /api/3/picklists/62322a54-a069-4f74-a917-3d864f24524a
+        status: /api/3/picklists/7669725a-28cc-4b19-98a3-9ca71e0f88f4
+        fsrQueue: /api/3/fsr_queues/4cf6073b-319d-4c30-887c-f642adfede82
+        priority: /api/3/picklists/539083a6-01f6-4ff9-a588-778cfdad4671
+        taskdata: '{{vars.individual_alert}}'
+        __replace: ''
+        recordTags:
+        - /api/3/tags/cybr hawk
+        - /api/3/tags/fortinet
+        - /api/3/tags/xml
+        description: 'Problem receiving a JSON from Cybr Hawk.````
+
+
+          **JSON:**
+
+          ```
+
+          {{vars.cybr_source_data2}}
+
+          ```
+
+          '
+        submittedBy: /api/3/people/3451141c-bac6-467c-8d72-85e0fab569ce
+        assignedToPerson: /api/3/people/3451141c-bac6-467c-8d72-85e0fab569ce
+      operation: Overwrite
+      collection: /api/3/tasks
+      __recommend: []
+      fieldOperation:
+        recordTags: Overwrite
+    next: finish
+  - type: CyopsUtilites
+    name: Finish
+    step_variables: []
+    arguments:
+      params: []
+      version: 3.4.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'
+  - type: set_variable
+    name: Get Add Alert Status
+    vars:
+      addAlertStatus: '{{vars.steps.Create_new_Cybr_Hawk_Alert.status}}'
+    next: add_comment_on_top_of_just_created_alert
+  - type: set_variable
+    name: Getting the Alert
+    vars:
+      individual_alert: '{{vars.myalert}}'
+      alert_description: '[{''Vendor'': ''Cybr Hawk''}]'
+    next: source_data_setting_and_controlling
+  - type: decision
+    name: Is JSON Correct
+    step_variables: []
+    conditions:
+    - display: It seems the Alert is GOOD
+      when: '{{ vars.control1 > 10 and vars.control2 > 10 }}'
+      next: basic_fields_for_all_alert_types
+    - display: Fail to understand the JSON structure
+      default: true
+      next: create_task_with_the_error_json
+  - type: set_api_keys
+    name: Playbook Authentication Keys
+    arguments:
+      public_key: '-----BEGIN PUBLIC KEY-----
+
+        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAyPzEwfxwU0r8iifidyNi
+
+        dtdAZaPxIxF5UeWrNupVSjIyquErvSF3f5WiRR6yPynBRbp9z6UZlJnfzqKMMqg2
+
+        9QgVktH+g+P4qJ30oV/Hl3Xgke4DNOaiYkY1HBvYizm1Ny5ybpaIwJjcIgB6zISG
+
+        lMiWOVpsaZeTZ4dwfj5cRvR4+0O/ZVX0KxnguHsTLXiUE2hkK8Y0bqj6b3T0JjYd
+
+        SsKa70fCj91vgGpDpyykh9iYfHP/1hJTnsoiR/LCnHAs1VYerxZPop4k2BkY5P1M
+
+        sZ0iFUs5KWoU2ekAJnyU9HTppY9Ca5A0NBM1QPVt0g6/54xx4bVGIP/8iPAjfnav
+
+        C9y0BYg0CHxd8JIYmjpgQqt2/2Y6E8zQJ0r5h83quyJhxkqgGbO5zTJ+v2WgCqKg
+
+        zk8OkALqD+VuL3orptSW4lK0gcZL/wsZAMiV2LKSNSRgDqt1ofzcMLaZkey748lq
+
+        0IppIHygmOPTDtR+jr3oGiQi8cZFV6kgKWcIU14iU/iFAgMBAAE=
+
+        -----END PUBLIC KEY-----'
+      private_key: '-----BEGIN RSA PRIVATE KEY-----
+
+        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
+
+        -----END RSA PRIVATE KEY-----'
+    next: api_parameter
+  - type: set_variable
+    name: Process Entire Alert Description
+    vars:
+      process: '{{vars.alert_description.append({ ''Alert Description'':vars.cybr_alert_description }) }}
+
+        {{vars.alert_description.append({ ''Alert Message'':vars.cybr_alert_message }) }}
+
+        {{vars.alert_description.append({ ''Alert Intent'':vars.cybr_alert_intent }) }}
+
+        {{vars.alert_description.append({ ''Alert Solution'':vars.cybr_alert_solution }) }}
+
+        {{vars.alert_description.append({ ''Alert Source System'':vars.cybr_alert_source_system }) }}
+
+        {{vars.alert_description.append({ ''Alert Indicator'':vars.cybr_alert_indicator }) }}
+
+        {{vars.alert_description.append({ ''Alert Root Cause Analysis'':vars.cybr_alert_root_cause }) }}
+
+        {{vars.alert_description.append({ ''Alert Assigned Analyst'':vars.cybr_alert_assigned_analyst }) }}
+
+        {{vars.alert_description.append({ ''Agent IP'':vars.cybr_alert_agent_ip }) }}
+
+        {{vars.alert_description.append({ ''Agent Full OS'':vars.cybr_alert_agent_os_full }) }}
+
+        {{vars.alert_description.append({ ''Agent_name'':vars.cybr_alert_agent_name }) }}'
+    next: create_new_cybr_hawk_alert
+  - type: set_variable
+    name: Severity Calculation
+    vars:
+      cyber_alert_severity_calc: "{% if vars.cybr_alert_severity|string in vars.sev_critical %}\n  {{\"Severity\" | picklist(\"Critical\", \"@id\") }}\n{% elif vars.cybr_alert_severity|string in vars.sev_high %}\n  {{\"Severity\" | picklist(\"High\", \"@id\") }}\n{% elif vars.cybr_alert_severity|string in vars.sev_medium %}\n  {{\"Severity\" | picklist(\"Medium\", \"@id\") }}\n{% else %}\n  {{\"Severity\" | picklist(\"Low\", \"@id\") }}\n{% endif %}"
+    next: alert_secondary_fields
+  - type: set_variable
+    name: Source Data Setting AND Controlling
+    vars:
+      control1: '{{vars.individual_alert._id | length }}'
+      control2: '{{vars.individual_alert._source.td.alert | length }}'
+      cybr_source_data2: '{{vars.individual_alert | toJSON }}'
+    next: is_json_correct
+  - type: api_endpoint
+    name: Start
+    step_variables:
+      input:
+        params:
+          api_body: '{{vars.request.data}}'
+          api_params: '{{vars.request.params}}'
+          Alert_Individual_data: '{{ vars.Alert_Individual_data }}'
+    arguments:
+      route: deferred/pcs
+      __triggerLimit: true
+      triggerOnSource: true
+      triggerOnReplicate: false
+      authentication_methods:
+      - anonymous
+    next: playbook_authentication_keys
+  annotations:
+  - id: add_alert_detail
+    title: Add Alert Detail
+    body: 'IGNORE ERROR = Yes
+
+      (the playbook will not stop with Red  flag)'
+    position:
+      top: 400
+      left: 1660
+      width: 300
+  - id: alert_main_fields
+    kind: block
+    title: Alert Main Fields
+    contains:
+    - alert_severity_mapping
+    - basic_fields_for_all_alert_types
+    - severity_calculation
+    position:
+      top: 180
+      left: 420
+      height: 461
+      width: 329
+  - id: attention
+    title: Attention
+    body: This is the first version of Cybr Hawk Alert integration. Much things would be done in the future, like processigng "Windows" information from the alerts, presenting Geo information for the correlated assets, etc
+    position:
+      top: 720
+      left: 1560
+      height: 142
+      width: 498
+  - id: attention_2
+    title: Attention
+    body: This Step (Alert Creation) is the most important in this Playbook
+    position:
+      top: 280
+      left: 1660
+      width: 300
+  - id: checking_json_structure
+    kind: block
+    title: Checking JSON Structure
+    contains:
+    - create_task_with_the_error_json
+    - is_json_correct
+    position:
+      top: 1040
+      left: 160
+      height: 373
+      width: 327
+  - id: first_step_details
+    title: First Step Details
+    body: Here you find the Webhook address and the authentication details.
+    position:
+      top: 20
+      left: 320
+      height: 96
+      width: 450
+  - id: initial_steps
+    kind: block
+    title: Initial Steps
+    contains:
+    - api_parameter
+    - getting_the_alert
+    - playbook_authentication_keys
+    - source_data_setting_and_controlling
+    position:
+      top: 100
+      left: 20
+      height: 557
+      width: 297
+  - id: json_verification_details
+    title: JSON Verification Details
+    body: 'By Now (November 14th), We are evaluating two steps:
+
+      * If the JSON contains an Alert ID
+
+      * If the JSON contains _source.td.alert structure'
+    position:
+      top: 740
+      left: 500
+      height: 152
+      width: 306
+  - id: secondary_alert_fields
+    kind: block
+    title: Secondary Alert Fields
+    contains:
+    - alert_agent_fields
+    - alert_event_fields
+    - alert_rules_information
+    - alert_secondary_fields
+    position:
+      top: 180
+      left: 840
+      height: 698
+      width: 379
+  parameters:
+  - api_body

@@ -1,0 +1,100 @@
+# Library playbook: Host containment: disable AD account, tag alert, update asset status, and notify.
+#
+# goal: Host containment: on a confirmed-compromised host alert, disable the associated AD account, tag the alert "contained", update the asset record status, and notify.
+# trigger: (see the Start step below; original export's trigger re-typed)
+# inputs: vars.input.records[0] (inbound alert record) unless noted
+# outputs: a tag on the alert, asset record updated, notification sent
+# connectors: activedirectory (swap-in connector step)
+# adapts-to: host containment remediation intent
+
+collection: 00. Playbook Learning SP - Specific Playbooks
+description: ''
+visible: true
+playbooks:
+- name: "Host Containment: Isolate Compromised Host"
+  description: Disable AD account, tag alert, update asset, notify.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    next: Gather Host Information
+
+  - type: set_variable
+    name: Gather Host Information
+    vars:
+      host_name: "{{ vars.input.records[0].hostName }}"
+      host_id: "{{ vars.input.records[0].hostId }}"
+      asset_iri: "{{ vars.input.records[0].sourceId }}"
+    next: Disable AD Account
+
+  - type: connector
+    name: Disable AD Account
+    # swap-in: activedirectory (config: <replace-with-your-config-uuid>)
+    pickFromTenant: false
+    step_variables: []
+    arguments:
+      name: Active Directory
+      config: <replace-with-your-config-uuid>
+      params:
+        account: "{{ vars.host_name }}"
+      connector: activedirectory
+      operation: disable_account
+      operationTitle: Disable AD Account
+    next: Add Containment Tag
+
+  - type: set_variable
+    name: Add Containment Tag
+    vars:
+      containmentTag: "contained"
+      tags: "[ '{{ vars.containmentTag }}' ]"
+    next: Tag Alert as Contained
+
+  - type: update_record
+    name: Tag Alert as Contained
+    step_variables: []
+    arguments:
+      resource:
+        recordTags: "{{ vars.tags }}"
+      operation: Append
+      collection: "{{ vars.input.records[0]['@id'] }}"
+      collectionType: /api/3/alerts
+      fieldOperation:
+        recordTags: Append
+    next: Update Asset Status to Contained
+
+  - type: update_record
+    name: Update Asset Status to Contained
+    step_variables: []
+    arguments:
+      module: assets
+      collection: "{{ vars.asset_iri }}"
+      resource:
+        status: "Contained"
+      operation: Overwrite
+    next: Send Containment Notification
+
+  - type: SendMail
+    name: Send Containment Notification
+    step_variables: []
+    arguments:
+      config: <replace-with-smtp-config-uuid>
+      params:
+        subject: "Host Containment Executed for {{ vars.host_name }}"
+        body: "The AD account for host {{ vars.host_name }} has been disabled, the alert tagged as contained, and the asset status updated."
+        to_recipients: "security@example.com"
+      version: 2.5.0
+      connector: smtp
+      operation: send_email
+      operationTitle: Send Email
+    next: End
+
+  - type: CyopsUtilites
+    name: End
+    step_variables: []
+    arguments:
+      params: []
+      version: 3.5.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'

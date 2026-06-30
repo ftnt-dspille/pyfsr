@@ -1,0 +1,101 @@
+# Library playbook: Connector error handling / retry-or-recover branch
+# goal: Call a connector step with ignore_errors, then branch on the step's runtime status:
+#       on success continue, on failure post an error comment and stop (or recover). Shows
+#       the ignore_errors + vars.steps.<name>.status recovery pattern.
+# trigger: on create of an alert (start_on_create)
+# inputs:  vars.input.records[0]  (the alert carrying the value to act on)
+# outputs: on success the action runs + a success comment; on failure an error comment is
+#          posted and the run stops cleanly instead of aborting.
+# connectors: cyops_utilities no_op stands in for the real call (connector-light). Swap the
+#             "Act On Indicator" step's connector/operation/config for your real connector
+#             (# swap-in below) — the error-handling pattern is identical.
+# adapts-to: "handle connector failure", "retry or recover on error", "ignore_errors branch",
+#            "post error comment and stop"
+
+collection: Connector Error Handling
+description: Call a step with ignore_errors, branch on its status, recover or report.
+visible: true
+
+playbooks:
+  - name: Connector Error Handling Branch
+    description: Demonstrate ignore_errors + step-status branching for graceful connector failure.
+    is_active: true
+    trigger_step_id: Start
+    steps:
+      - name: Start
+        type: start_on_create
+        module: alerts
+        next: Capture Target
+
+      - name: Capture Target
+        type: set_variable
+        vars:
+          target: "{{ vars.input.records[0].value | default('') }}"
+          record_iri: "{{ vars.input.records[0]['@id'] }}"
+        next: Act On Indicator
+
+      # The connector call. ignore_errors: true means a failure does NOT abort the run —
+      # control passes to `next:` and the outcome is readable at vars.steps.Act_On_Indicator.status.
+      # # swap-in: replace connector/operation/config with your real connector
+      # (e.g. fortigate-firewall / block_url / <config-uuid>).
+      - name: Act On Indicator
+        type: connector
+        ignore_errors: true
+        arguments:
+          connector: cyops_utilities
+          operation: no_op
+          operationTitle: 'CyOPs: No-Op'
+          config: default
+          params:
+            value: "{{ vars.target }}"
+        next: Did It Succeed
+
+      # Branch on the step's runtime status. status is one of
+      # success / failed / error / aborted / cancelled / etc. Anything other than
+      # 'success' routes to the recovery branch.
+      - name: Did It Succeed
+        type: decision
+        next: Recover From Failure         # else / fall-through = failure path
+        conditions:
+          - option: Succeeded
+            condition: "{{ vars.steps.Act_On_Indicator.status == 'success' }}"
+            next: Post Success Comment
+
+      # Success path: confirm and finish.
+      - name: Post Success Comment
+        type: insert_record
+        arguments:
+          collection: /api/3/comments
+          operation: Overwrite
+          resource:
+            content: >-
+              <p>Action on <code>{{ vars.target }}</code> succeeded
+              (status: <b>{{ vars.steps.Act_On_Indicator.status }}</b>).</p>
+            isImportant: false
+            people: []
+            peopleUpdated: false
+            attachments: '{{ vars.record_iri }}'
+        next: Stop
+
+      # Failure path: post an error comment carrying the status + the step's error data,
+      # then stop cleanly. In a real playbook this is where you'd retry, fall back to a
+      # manual_input approval, or open an incident ��� the pattern is the same: read
+      # vars.steps.<name>.status / .data, branch, act.
+      - name: Recover From Failure
+        type: insert_record
+        arguments:
+          collection: /api/3/comments
+          operation: Overwrite
+          resource:
+            content: >-
+              <p>Connector step <b>Act On Indicator</b> did not succeed
+              (status: <b>{{ vars.steps.Act_On_Indicator.status }}</b>).</p>
+              <p>Manual review required for <code>{{ vars.target }}</code>.</p>
+            isImportant: true
+            people: []
+            peopleUpdated: false
+            attachments: '{{ vars.record_iri }}'
+        next: Stop
+
+      - name: Stop
+        type: stop

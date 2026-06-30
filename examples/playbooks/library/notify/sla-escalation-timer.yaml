@@ -1,0 +1,59 @@
+# Library playbook: SLA escalation timer for unassigned alerts
+# goal: SLA escalation: an alert that is unassigned after a delay gets escalated — decision checks assignment + age, if unassigned-and-old then update_record to reassign + bump severity + notify, else stop. Connector-light. Ties into the SLA-templates concept.
+# trigger: start_on_create (alerts)
+# inputs: vars.input.records[0]
+# outputs: vars.escalated (bool)
+# connectors: update_record (swap-in: <your connector> (config: <uuid>))
+# adapts-to: sla_escalation_intent
+
+collection: SLA Templates
+description: Escalate unassigned alerts after a timer according to SLA.
+visible: true
+
+playbooks:
+  - name: SLA Escalation Timer
+    is_active: true
+    steps:
+      - name: Start
+        type: start_on_create
+        module: alerts
+        next: Capture Alert Info
+
+      - name: Capture Alert Info
+        type: set_variable
+        vars:
+          alert_id: "{{ vars.input.records[0]['@id'] }}"
+          assigned: "{{ vars.input.records[0].owner | default('') }}"
+          age_seconds: "{{ vars.input.records[0].age_seconds | default(0) }}"
+        next: Check Assignment & Age
+
+      - name: Check Assignment & Age
+        type: decision
+        next: Stop
+        conditions:
+          - option: Escalate
+            condition: "{{ (not vars.assigned) and (vars.age_seconds | int) > 3600 }}"
+            next: Escalate Alert
+
+      - name: Escalate Alert
+        type: update_record
+        arguments:
+          module: alerts
+          collection: "{{ vars.alert_id }}"
+          resource:
+            severity: "High"
+            owner: "escalation_group"
+            sla_escalated: true
+        # swap-in: <your connector> (config: <uuid>)
+        next: Notify Stakeholders
+
+      - name: Notify Stakeholders
+        type: manual_input
+        title: SLA Escalation Notification
+        description: "Alert {{ vars.alert_id }} has been escalated due to being unassigned for over an hour."
+        options:
+          - {option: "Acknowledge", primary: true}
+
+      - name: Stop
+        type: set_variable
+        vars: {}
