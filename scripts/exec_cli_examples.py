@@ -121,6 +121,20 @@ def main():
             dict(stdout_test=lambda o: "playbook" in o.lower() or len(o) > 0),
         ),
     ]
+    # Validate EVERY library playbook the manifest flags compiles_ok — proves the
+    # whole offline-compilable set works, not just the one fixture above. The
+    # 5 documented-residual playbooks (NOTE headers) are compiles_ok=False and so
+    # are skipped here; their nonzero exit is asserted by the broken-path check.
+    manifest = json.load(open(MANIFEST))
+    ok_fixtures = [p for p in manifest["playbooks"] if p.get("compiles_ok")]
+    for pb in ok_fixtures:
+        checks.append(
+            (
+                f"validate {pb['slug']}",
+                ["playbook", "validate", os.path.join(REPO_ROOT, pb["path"])],
+                dict(expect_exit=0),
+            )
+        )
     # run the success-path checks
     for label, args, kw in checks:
         try:

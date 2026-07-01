@@ -6,6 +6,10 @@
 # outputs: a tag on the alert, asset record updated, notification sent
 # connectors: activedirectory (swap-in connector step)
 # adapts-to: host containment remediation intent
+# NOTE: 1 non-connector blocking error(s) remain after cleaning:
+#   - unknown_operation: operation 'disable_account' on connector 'activedirectory'
+#     is not defined in the catalog (suggestion: 'disable_user_account'). Rename
+#     the operation to one present on your target appliance's AD connector.
 
 collection: 00. Playbook Learning SP - Specific Playbooks
 description: ''

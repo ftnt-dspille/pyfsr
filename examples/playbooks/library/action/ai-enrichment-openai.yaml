@@ -9,6 +9,10 @@
 # outputs: a comment / record update on the source record
 # connectors: see connector steps (connector-pluggable; swap the config for your appliance)
 # adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+# NOTE: 1 non-connector blocking error(s) remain after cleaning:
+#   - bad_value: param 'max_tokens' on openai.chat_completions is type 'integer'
+#     but got '' (str) which does not coerce to int (decompiler emitted an empty
+#     string for an unset integer param). Fix by dropping the field or passing an int.
 
 collection: 00. Playbook Learning SP - Specific Playbooks
 description: ''
