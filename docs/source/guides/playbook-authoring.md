@@ -206,8 +206,8 @@ pyfsr playbook step-help manual_input
 pyfsr playbook step-help decision --schema
 ```
 
-The same data is available from Python via {func}`pyfsr.playbook_catalog.list_step_types`
-and {func}`pyfsr.playbook_catalog.step_help`.
+The same data is available from Python via `pyfsr.playbook_catalog.list_step_types`
+and `pyfsr.playbook_catalog.step_help`.
 
 ## Worked examples — the foundational library
 

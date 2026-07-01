@@ -48,16 +48,13 @@ autoapi/pyfsr/auth/index
 :caption: Playbooks, tooling & CLI
 
 Playbooks (authoring) <autoapi/pyfsr/authoring/index>
-autoapi/pyfsr/archetypes/index
+autoapi/pyfsr/agent/index
 autoapi/pyfsr/playbook_catalog/index
 autoapi/pyfsr/playbook_freshness/index
 autoapi/pyfsr/playbook_lint/index
 autoapi/pyfsr/playbook_match/index
+autoapi/pyfsr/playbook_library/index
 autoapi/pyfsr/concurrency/index
-autoapi/pyfsr/loadtest/index
-autoapi/pyfsr/publish_probe/index
-autoapi/pyfsr/tools/index
-autoapi/pyfsr/mcp/index
 autoapi/pyfsr/cli/index
 autoapi/pyfsr/appliance/index
 autoapi/pyfsr/spec/index

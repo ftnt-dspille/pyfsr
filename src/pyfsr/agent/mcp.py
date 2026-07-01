@@ -4,11 +4,11 @@ Point an MCP-capable agent at *any* FortiSOAR with one command::
 
     FSR_BASE_URL=soar.example.com FSR_API_KEY=... python -m pyfsr.agent.mcp
 
-This is a deliberately thin, generic consumer of :mod:`pyfsr.tools`: it exposes
+This is a deliberately thin, generic consumer of :mod:`pyfsr.agent.tools`: it exposes
 the same 16 core operations (record CRUD, schema discovery, picklists,
 connectors, playbook runs) as MCP tools, listing them from
-:func:`pyfsr.tools.tool_schemas` and executing them through
-:func:`pyfsr.tools.dispatch`. It is intentionally distinct from fsrpb's
+:func:`pyfsr.agent.tools.tool_schemas` and executing them through
+:func:`pyfsr.agent.tools.dispatch`. It is intentionally distinct from fsrpb's
 authoring/domain MCP and the connector's on-platform MCP — no YAML compiler, no
 agent UX, just raw FortiSOAR access.
 
@@ -76,7 +76,7 @@ def build_server(client: FortiSOAR) -> Server:
     """Create an MCP :class:`~mcp.server.lowlevel.Server` bound to ``client``.
 
     Registers ``list_tools`` (from the registry) and ``call_tool`` (through
-    :func:`pyfsr.tools.dispatch`) handlers. Errors are surfaced as structured
+    :func:`pyfsr.agent.tools.dispatch`) handlers. Errors are surfaced as structured
     JSON content by ``dispatch``, so a tool call never crashes the session.
     """
     from mcp.server.lowlevel import Server
