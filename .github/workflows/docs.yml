@@ -81,6 +81,14 @@ jobs:
           cd docs
           PYTHONPATH=$PYTHONPATH:${{ github.workspace }}/src make doctest
 
+      - name: Validate doc code examples
+        # Checks that pyfsr symbols and CLI flags named in *plain* fenced code
+        # blocks (which `make doctest` skips) still resolve against the installed
+        # package/CLI -- catches drift after a namespace regroup or flag rename.
+        run: |
+          cd docs
+          PYTHONPATH=$PYTHONPATH:${{ github.workspace }}/src make check-examples
+
       - name: Check build output
         run: |
           if [ ! -f docs/build/html/index.html ]; then

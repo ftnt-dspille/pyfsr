@@ -271,21 +271,21 @@ if alerts.exists(Query().eq("sourceId", event_id)):
 Call `to_body()` to see the exact dict sent to the API — useful for debugging or
 passing to lower-level calls:
 
-```python
-q = Query().eq("status.itemValue", "Open").sort("createDate").limit(50)
-print(q.to_body())
-# {
-#   'logic': 'AND',
-#   'filters': [{'field': 'status.itemValue', 'operator': 'eq', 'value': 'Open'}],
-#   'sort': [{'field': 'createDate', 'direction': 'DESC'}],
-#   'limit': 50
-# }
+```{doctest}
+>>> q = Query().eq("status.itemValue", "Open").sort("createDate").limit(50)
+>>> q.to_body()
+{'logic': 'AND', 'filters': [{'field': 'status.itemValue', 'operator': 'eq', 'value': 'Open'}], 'sort': [{'field': 'createDate', 'direction': 'DESC'}], 'limit': 50}
 ```
 
 Pass `module=` to enable field-path validation against the shipped field
 knowledge base:
 
-```python
-Query(module="alerts").eq("severity.itemValue", "Critical")  # path checked at build time
-Query(module="alerts").eq("typo_field", "value")             # raises ValueError
+```{doctest}
+>>> Query(module="alerts").eq("severity.itemValue", "Critical").to_body()["filters"][0]
+{'field': 'severity.itemValue', 'operator': 'eq', 'value': 'Critical'}
+
+>>> Query(module="alerts").eq("typo_field", "value")  # doctest: +ELLIPSIS
+Traceback (most recent call last):
+    ...
+ValueError: 'alerts' has no field 'typo_field' (in path 'typo_field'); did you mean one of: ...
 ```
