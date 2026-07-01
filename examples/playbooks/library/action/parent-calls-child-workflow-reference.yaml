@@ -1,7 +1,7 @@
 # Library playbook: Parent playbook calls a child synchronously via workflow_reference and reads its output.
 #
 # source: tutorial-corpus: Change Incident Lead for Critical Incidents - first
-# cleaned: no_trigger:retype-start-nop, delete_mistype:0, branches:0
+# cleaned: no_trigger:None, delete_mistype:0, branches:0
 #
 # goal: Parent playbook calls a child synchronously via workflow_reference and reads its output.
 # trigger: (see the Start step below; original export's trigger re-typed)
@@ -17,7 +17,7 @@ playbooks:
 - name: Change Incident Lead for Critical Incidents - first
   description: Linking Objects + Referece Playbook (part1)
   is_active: true
-  trigger_step_id: Start
+  trigger_step_id: start
   steps:
   - type: workflow_reference
     name: Call Specific playbook
@@ -57,4 +57,20 @@ playbooks:
     next: find_incidents
   - type: start
     name: Start
+    module: incidents
+    arguments:
+      route: 53d35d8e-be2c-4116-aecf-a02fb3aa8460
+      requires_record: false
+      button_label: Set FortiSIEM User to Critical Incidents
+      displayConditions:
+        incidents:
+          sort: []
+          limit: 30
+          logic: AND
+          filters: []
+        attachments:
+          sort: []
+          limit: 30
+          logic: AND
+          filters: []
     next: myvars
