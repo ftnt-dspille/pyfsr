@@ -3,7 +3,7 @@
 Three cohesive pieces for driving a live FortiSOAR from an LLM agent:
 
 * :mod:`pyfsr.agent.tools` — a framework-agnostic registry of FortiSOAR
-  operations as JSON-Schema tool definitions, plus :func:`dispatch` to execute a
+  operations as JSON-Schema tool definitions, plus :func:`pyfsr.agent.tools.dispatch` to execute a
   tool call against a live :class:`~pyfsr.FortiSOAR` client and adapters for the
   Anthropic / OpenAI tool formats.
 * :mod:`pyfsr.agent.mcp` — a generic Model Context Protocol server over that

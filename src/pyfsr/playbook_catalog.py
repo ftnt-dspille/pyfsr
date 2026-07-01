@@ -1,7 +1,7 @@
 """Step-type catalog for playbook authoring -- the data behind ``pyfsr playbook
 steps`` / ``step-help``.
 
-The catalog itself lives in the compiler package (:mod:`fsr_playbooks.catalog`),
+The catalog itself lives in the compiler package (``fsr_playbooks.catalog``),
 which owns every data source it composes (the resolver's friendly->canonical
 table, the typed-arg schemas, the packaged ``fsr_reference.db``, and the
 decompiler). This module is a thin re-export so existing pyfsr callers and the
