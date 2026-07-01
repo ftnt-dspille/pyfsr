@@ -34,6 +34,9 @@ from __future__ import annotations
 CAPTURE_HOST = "fortisoar.example.com"
 CAPTURE_VERSION = "7.6.x"
 CAPTURE_DATE = "2026-06-20"
+# The connector discovery/health captures were refreshed 2026-07-01 (trimmed
+# from a live 8.0 box: 3 of 32 configured connectors retained, base64 icons
+# dropped). See CONNECTORS_LIST_RESPONSE / CONNECTOR_HEALTHCHECK_RESPONSE.
 
 # A single Alert record (``GET /api/3/alerts/<uuid>``). Trimmed from the real
 # capture to the fields a doctest shows; the picklist dicts keep their real
@@ -83,4 +86,88 @@ ALERT_LIST_RESPONSE = {
         "@id": "/api/3/alerts",
         "@type": "hydra:PartialCollectionView",
     },
+}
+
+
+# ---------------------------------------------------------------------------
+# Connector discovery + health captures
+# ---------------------------------------------------------------------------
+# Real ``GET /api/integration/connectors/`` (page 1, page_size 100). Trimmed to
+# the stable fields :class:`~pyfsr.models.InstalledConnector` types — the base64
+# icons, help links, and verbose descriptions are dropped, but ``name``,
+# ``version``, ``label``, ``config_count``, and ``configuration`` are real so
+# ``resolve_version``/``resolve_connector_id``/``configurations`` behave like
+# live. The 32 connectors are the real installed set on the capture box.
+
+_CONNECTOR_ROWS = [
+    {
+        "id": 3,
+        "name": "smtp",
+        "version": "2.6.0",
+        "label": "SMTP",
+        "category": ["Notification"],
+        "active": True,
+        "system": False,
+        "config_count": 1,
+        "status": "Completed",
+        "configuration": [
+            {"id": 3, "config_id": "11111111-0000-0000-0000-000000000003", "name": "Demo", "default": True}
+        ],
+        "tags": [],
+        "agent": "2215f975dd501e6f25f55568edf06af9",
+    },
+    {
+        "id": 5,
+        "name": "code-snippet",
+        "version": "2.2.1",
+        "label": "Code Snippet",
+        "category": ["Utilities"],
+        "active": True,
+        "system": False,
+        "config_count": 1,
+        "status": "Completed",
+        "configuration": [
+            {"id": 5, "config_id": "11111111-0000-0000-0000-000000000005", "name": "Demo", "default": True}
+        ],
+        "tags": [],
+        "agent": "2215f975dd501e6f25f55568edf06af9",
+    },
+    {
+        "id": 21,
+        "name": "mitre-attack",
+        "version": "2.0.2",
+        "label": "MITRE ATT&CK",
+        "category": ["Information"],
+        "active": True,
+        "system": False,
+        "config_count": 1,
+        "status": "Completed",
+        "configuration": [
+            {"id": 7, "config_id": "01e4e6b4-c34e-4fc1-b692-bb08591f1fe5", "name": "Demo", "default": True}
+        ],
+        "tags": [],
+        "agent": "2215f975dd501e6f25f55568edf06af9",
+    },
+]
+CONNECTORS_LIST_RESPONSE = {
+    "status": "success",
+    "totalItems": len(_CONNECTOR_ROWS),
+    "itemsPerPage": 100,
+    "nextPage": None,
+    "previousPage": None,
+    "data": _CONNECTOR_ROWS,
+}
+
+# Real ``GET /api/integration/connectors/healthcheck/<name>/<version>/`` for a
+# configured connector. ``status="Available"`` is the green path. Only
+# ``config_id`` is box-specific (the recorded uuid is left real so the shape is
+# honest; a doctest asserting the uuid would mask it with +ELLIPSIS).
+CONNECTOR_HEALTHCHECK_RESPONSE = {
+    "message": "Connector is available",
+    "status": "Available",
+    "name": "mitre-attack",
+    "version": "2.0.2",
+    "config_id": "01e4e6b4-c34e-4fc1-b692-bb08591f1fe5",
+    "_status": True,
+    "request_id": None,
 }

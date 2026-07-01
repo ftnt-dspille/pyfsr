@@ -19,6 +19,32 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .types import RecordIRI
 
 
+def _coerce_display_text(v: Any) -> Any:
+    """Tolerate non-string display values (``title``/``description``/``tooltip``/
+    ``placeholder``) from sloppy connector definitions.
+
+    Connector authors sometimes put a bare int (e.g. an example port ``34510``)
+    or a list in a free-text display field. FortiSOAR itself accepts these, so
+    the SDK must too, rather than failing the whole ``definition()`` parse (which
+    would silently drop the connector from a warmed catalog).
+
+    Live-grounded sweep of all 93 configured connectors on .205:
+      - ``int`` (e.g. listener_port ``10443``, placeholder ``365``) → stringify.
+      - ``list`` (e.g. activedirectory object_dn placeholder
+        ``['CN=user-name,...']``) → a 1-element list whose single element IS
+        the real string; take ``v[0]`` (NOT ``str(v)``, which yields the Python
+        repr ``"['CN=...']"``).
+      - empty ``dict``/``list`` (e.g. misp payload placeholder ``{}``) → ``None``.
+    """
+    if v is None or isinstance(v, str):
+        return v
+    if isinstance(v, list):
+        return v[0] if v else None
+    if isinstance(v, dict) and not v:
+        return None
+    return str(v)
+
+
 class ApiResult(BaseModel):
     """Dict-compatible base for typed API result shapes.
 
@@ -160,8 +186,11 @@ class OperationParam(ApiResult):
     The ``parameters[]`` of an operation in
     ``POST /api/integration/connectors/<name>/<version>/?format=json``. ``value``
     is the declared default (its type varies by field). ``visible``/``editable``
-    default to ``True`` when the wire omits them. Curated fields are typed; the
-    rest (``options``, ``onchange``, ``apiOperation``, …) stay in ``extra``.
+    default to ``True`` when the wire omits them. ``onchange`` is typed
+    recursively (``dict[str, list[OperationParam]]``) so conditional sub-params
+    validate too; ``options`` stays ``list[Any]`` (plain strings or
+    ``{value,title}`` dicts); uncurated fields (``apiOperation``, …) stay in
+    ``extra``.
     """
 
     name: str | None = None
@@ -177,24 +206,31 @@ class OperationParam(ApiResult):
     value: Any = None
     visible: bool = True
     editable: bool = True
+    # ``onchange``: a ``select`` param reveals further sub-params once a given
+    # option is chosen — ``{option_value: [sub-param, ...]}``. Live-grounded on
+    # .205 (smtp_ng.send_email_new type/body_type, fortigate-firewall
+    # block_ip.method, etc.): one level deep across 50 connectors (no nesting),
+    # but typed RECURSIVELY so each sub-param is itself a validated
+    # ``OperationParam`` — otherwise sub-params land in ``__pydantic_extra__``
+    # as raw dicts, BYPASSING this model's display-text coercion (the
+    # activedirectory.add_group_members.object_dn placeholder arrives as a
+    # 1-element list ``['CN=user-name,...']``; un-coerced it's a list a SQLite
+    # write can't bind, truncating the whole warm_catalog connector section).
+    onchange: dict[str, list[OperationParam]] = Field(default_factory=dict)
 
     @field_validator("title", "description", "tooltip", "placeholder", mode="before")
     @classmethod
     def _coerce_display_text(cls, v: Any) -> Any:
-        """Tolerate non-string display values from sloppy connector definitions.
+        """Delegate to the module-level :func:`_coerce_display_text` (shared with
+        :class:`ConfigSchemaField`). See that function's docstring for the
+        live-grounded coercion rules."""
+        return _coerce_display_text(v)
 
-        Connector authors sometimes put a bare int (e.g. an example port
-        ``34510``) or an empty ``{}`` in a free-text display field like
-        ``placeholder``. FortiSOAR itself accepts these, so the SDK must too,
-        rather than failing the whole ``definition()`` parse (which would
-        silently drop the connector from a warmed catalog). Empty containers
-        become ``None``; other non-strings are stringified.
-        """
-        if v is None or isinstance(v, str):
-            return v
-        if isinstance(v, (dict, list)) and not v:
-            return None
-        return str(v)
+
+# Self-recursive ``onchange`` (dict[str, list[OperationParam]]) needs the
+# class to exist in the module namespace before pydantic can resolve the
+# forward ref — rebuild now that ``OperationParam`` is defined.
+OperationParam.model_rebuild()
 
 
 class Operation(ApiResult):
@@ -240,8 +276,96 @@ class ConnectorDefinition(ApiResult):
     cs_approved: bool | None = None
     cs_compatible: bool | None = None
     operations: list[Operation] = Field(default_factory=list)
-    config_schema: dict[str, Any] = Field(default_factory=dict)
+    config_schema: ConfigSchema = Field(default_factory=lambda: ConfigSchema())
     configuration: Any = None
+
+
+# Self-recursive ``ConnectorDefinition.config_schema`` forward-ref — rebuild
+# after ``ConfigSchema``/``ConfigSchemaField`` are defined (end of this block).
+class ConfigSchemaField(ApiResult):
+    """One field of a connector's configuration schema, from a connector
+    definition's ``config_schema.fields[]``.
+
+    Live-grounded on .205 (40 connectors) and cross-checked against
+    ``fsr_connector_toolkit/CONNECTOR_BUILDING_GUIDE.md`` §"Configuration
+    Parameters" (universal-property survey of 711 connectors / 29,066 fields):
+    every field carries ``name``/``type``/``title``/``visible``/``editable``/
+    ``required``; ``description``/``value``/``tooltip``/``placeholder`` are
+    common; ``options``/``onchange`` appear on ``select``/conditional fields;
+    Pattern-B ``isOnChange``/``onChangeParam``/``onChangeOption`` and the
+    dynamic-options ``apiOperation``/``apiOnchange``/``renderer_type``/
+    ``validation`` are declared too. ``type`` is one of the documented types
+    (``text``/``password``/``checkbox``/``integer``/``select``/``json``/
+    ``multiselect``/``file`` + aliases) ��� left as ``str | None`` rather than an
+    enum because the guide documents undocumented/legacy aliases (§"Type
+    aliases") and typos in the wild that the loader drops. ``onchange`` reveals
+    sub-fields when a controlling selection is made (keyed by the parent's
+    option value, or ``"true"``/``"false"`` for checkboxes) — typed RECURSIVELY
+    so sub-fields validate too (microsoft-graph auth trees nest), mirroring
+    :class:`OperationParam`. Display fields use the same
+    :func:`_coerce_display_text` coercion. Note: the guide warns of real
+    field-name typos in published connectors (``tootltip``, ``Description``, …);
+    the FortiSOAR loader is key-strict and drops them, so they're deliberately
+    NOT modeled — they fall through to ``extra`` as the loader itself does.
+    """
+
+    name: str | None = None
+    type: str | None = None
+    title: str | None = None
+    description: str | None = None
+    tooltip: str | None = None
+    placeholder: str | None = None
+    required: bool = False
+    value: Any = None
+    visible: bool = True
+    editable: bool = True
+    # ``options`` elements are plain strings OR ``{"value"/"title": ...}`` dicts
+    # (see connectors._option_values), so stay ``list[Any]``.
+    options: list[Any] = Field(default_factory=list)
+    onchange: dict[str, list[ConfigSchemaField]] = Field(default_factory=dict)
+    # Pattern-B conditional fields (CONNECTOR_BUILDING_GUIDE §"Conditional
+    # Fields" Pattern B): a child declares which parent value makes it visible,
+    # instead of the parent carrying an ``onchange`` block. ``onChangeParam`` is
+    # the parent's ``title`` (not its ``name``); ``onChangeOption`` is the parent
+    # value that triggers visibility. Declared (not ``extra``) so the walker
+    # that resolves conditionals can read them as typed fields.
+    isOnChange: bool = False
+    onChangeParam: str | None = None
+    onChangeOption: str | None = None
+    # Dynamic dropdowns (§"Dynamic Options from an Operation"): ``apiOperation``
+    # names the connector operation whose result populates the choices;
+    # ``apiOnchange=True`` re-calls it whenever a sibling field changes. ``renderer_type``
+    # overrides the default render (e.g. ``richtext``+``"html"``); ``validation``
+    # is an integer-field constraint block.
+    apiOperation: str | None = None
+    apiOnchange: bool = False
+    renderer_type: str | None = None
+    validation: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("title", "description", "tooltip", "placeholder", mode="before")
+    @classmethod
+    def _coerce_display_text(cls, v: Any) -> Any:
+        return _coerce_display_text(v)
+
+
+class ConfigSchema(ApiResult):
+    """A connector's configuration schema — always ``{fields: [...]}`` on the
+    wire (live-verified: ``fields`` is the sole top-level key across 40
+    connectors). Typed so the config-field walkers
+    (``default_config``/``validate_config``/``required_config_fields``) read
+    validated :class:`ConfigSchemaField` objects instead of raw dicts — closing
+    the ``dict[str, Any]`` escape hatch ``ConnectorDefinition.config_schema``
+    used to be.
+    """
+
+    fields: list[ConfigSchemaField] = Field(default_factory=list)
+
+
+# Resolve the recursive/forward refs now that all config-schema classes exist:
+# ``ConfigSchemaField.onchange`` references itself, and ``ConnectorDefinition``
+# (defined above) references ``ConfigSchema`` (defined here) via a forward ref.
+ConfigSchemaField.model_rebuild()
+ConnectorDefinition.model_rebuild()
 
 
 # ---------------------------------------------------------------------------
@@ -439,6 +563,11 @@ class ImportJobResult(ApiResult):
     logMessages: list[LogMessage] = Field(default_factory=list)
     options: dict[str, Any] | list = Field(default_factory=dict)
     file: RecordIRI | dict[str, Any] | None = None
+    # Client-side cross-reference (NOT a wire field): the SDK records the job
+    # UUID the caller polled with, so callers using the dict-compat legacy path
+    # ``result["jobUuid"]`` still get it. Declared here (typed) instead of
+    # stashed into ``__pydantic_extra__`` so the field is visible on the model.
+    jobUuid: str | None = None
 
 
 class ExportJobResult(ApiResult):

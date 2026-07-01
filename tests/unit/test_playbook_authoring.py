@@ -291,12 +291,21 @@ class _FakeTags:
 class _FakeConnectors:
     """Returns one configured connector + a typed definition for warm_catalog."""
 
-    def __init__(self, definitions):
+    def __init__(self, definitions, configurations=None):
         from pyfsr.models import ConnectorDefinition, InstalledConnector
 
         self._defs = {name: ConnectorDefinition.model_validate(d) for name, d in (definitions or {}).items()}
+        # Optional per-connector configured instances: {name: [ConnectorConfigSummary, ...]}.
+        # Populates InstalledConnector.configurations so the warm writes the
+        # connector_configs table (the compiler's default-config fill seed).
+        cfgs = configurations or {}
         self._configured = [
-            InstalledConnector(name=name, version=d.version or "1.0.0") for name, d in self._defs.items()
+            InstalledConnector(
+                name=name,
+                version=d.version or "1.0.0",
+                configurations=cfgs.get(name, []),
+            )
+            for name, d in self._defs.items()
         ]
 
     def list_configured(self, *, refresh=False):
@@ -311,11 +320,11 @@ class _WarmFakeClient:
 
     base_url = "https://box.example.com:443"
 
-    def __init__(self, teams, picklists, tags_resp, definitions=None):
+    def __init__(self, teams, picklists, tags_resp, definitions=None, configurations=None):
         self.users = _FakeUsers(teams)
         self.picklists = _FakePicklists(picklists)
         self.tags = _FakeTags(tags_resp)
-        self.connectors = _FakeConnectors(definitions)
+        self.connectors = _FakeConnectors(definitions, configurations=configurations)
 
     def get(self, endpoint, params=None, **kw):
         return {"hydra:member": []}
@@ -537,6 +546,64 @@ def test_warm_catalog_writes_connector_ops_and_params(tmp_path):
     assert conn.execute("SELECT visible, enabled FROM operations WHERE op_name='run'").fetchone() == (1, 1)
     params = dict(conn.execute("SELECT param_name, required FROM operation_params WHERE op_name='run'").fetchall())
     assert params == {"code": 1, "timeout": 0}
+    conn.close()
+
+
+@requires_compiler
+def test_warm_catalog_writes_connector_configs(tmp_path):
+    """The connector path also writes per-appliance configured instances to the
+    ``connector_configs`` table, seeding the compiler's default-config fill
+    (``resolve_config_id``) offline. Each row carries the config UUID, name, and
+    a 0/1 default flag; a re-configured connector's stale UUIDs are replaced
+    (DELETE-then-INSERT), other connectors untouched."""
+    from pyfsr.authoring import warm_catalog
+    from pyfsr.models import ConnectorConfigSummary
+
+    client = _WarmFakeClient(
+        teams=[],
+        picklists={},
+        tags_resp={"hydra:member": []},
+        definitions={
+            "code-runner": {
+                "name": "code-runner",
+                "version": "1.0.0",
+                "label": "Code Runner",
+                "operations": [{"operation": "run", "parameters": []}],
+            },
+            "smtp": {
+                "name": "smtp",
+                "version": "2.6.0",
+                "label": "SMTP",
+                "operations": [{"operation": "send_email", "parameters": []}],
+            },
+        },
+        configurations={
+            # code-runner: a default-flagged config + a non-default one.
+            "code-runner": [
+                ConnectorConfigSummary(id=1, config_id="cfg-default", name="Default", default=True),
+                ConnectorConfigSummary(id=2, config_id="cfg-alt", name="Alt", default=False),
+            ],
+            # smtp: no configurations -> no rows written for it.
+            "smtp": [],
+        },
+    )
+    db = tmp_path / "warm_cfg.db"
+    summary = warm_catalog(client, db)
+    assert summary["connectors"] == 2
+    assert summary["configurations"] == 2
+
+    import sqlite3
+
+    conn = sqlite3.connect(db)
+    rows = conn.execute(
+        "SELECT connector, config_id, config_name, is_default FROM connector_configs ORDER BY config_id"
+    ).fetchall()
+    assert rows == [
+        ("code-runner", "cfg-alt", "Alt", 0),
+        ("code-runner", "cfg-default", "Default", 1),
+    ]
+    # smtp contributed no rows (configs dropped silently, not an error).
+    assert conn.execute("SELECT COUNT(*) FROM connector_configs WHERE connector='smtp'").fetchone()[0] == 0
     conn.close()
 
 

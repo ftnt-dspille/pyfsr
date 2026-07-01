@@ -48,6 +48,12 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("PUT", "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39", cap.ALERT_GET_RESPONSE),
         _entry("DELETE", "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39", {}, status=204),
         _entry("POST", "/api/query/alerts", cap.ALERT_LIST_RESPONSE),
+        # Connector discovery + health (the connectors guide's read-only calls).
+        # healthcheck resolves to one fixture regardless of <name>/<version>.
+        _entry("GET", "/api/integration/connectors/", cap.CONNECTORS_LIST_RESPONSE),
+        _entry(
+            "GET", "/api/integration/connectors/healthcheck/mitre-attack/2.0.2/", cap.CONNECTOR_HEALTHCHECK_RESPONSE
+        ),
     ]
 )
 
@@ -68,24 +74,31 @@ def _build_response(fixture: dict, url: str) -> Response:
 def _path_and_match(method: str, url: str) -> tuple[str, str]:
     """Return the (canonical-path, raw-path) used for fixture lookup.
 
-    ``canonical`` collapses any trailing ``/<uuid>`` on a single-record alerts
-    path to the recorded uuid, so a doctest can call ``.get("<any-uuid>")`` and
-    still resolve the one Alert capture. The bare collection path
-    (``/api/3/alerts``) is left alone so ``list()`` resolves to the collection
-    capture, not the single-record one. ``raw`` is the literal path for the
-    no-match error message.
+    ``canonical`` collapses volatile path segments to the recorded values so a
+    doctest can call with any plausible id and still hit the one capture:
+
+    - A single-record alerts path ``/api/3/alerts/<uuid>`` collapses the uuid
+      to the recorded one (so ``.get("<any-uuid>")`` resolves). The bare
+      collection ``/api/3/alerts`` is left alone so ``list()`` resolves to the
+      collection capture, not the single-record one.
+    - A connector healthcheck path
+      ``/api/integration/connectors/healthcheck/<name>/<version>/`` collapses to
+      the recorded ``mitre-attack/2.0.2`` (so ``healthcheck("mitre-attack")``
+      resolves regardless of which connector the doctest names).
+
+    ``raw`` is the literal path for the no-match error message.
     """
     parsed = urllib.parse.urlparse(url)
     path = parsed.path
-    # A single-record alerts path is /api/3/alerts/<uuid> — 5 slash-split
-    # segments: ['', 'api', '3', 'alerts', '<uuid>']. Collapse the uuid to the
-    # recorded one. The bare collection (/api/3/alerts, 4 segments) is untouched.
     segments = path.rstrip("/").split("/")
+    # /api/3/alerts/<uuid>  ->  collapse the uuid to the recorded one.
     if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "alerts":
-        canonical = "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39"
-    else:
-        canonical = path
-    return canonical, path
+        return "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39", path
+    # /api/integration/connectors/healthcheck/<name>/<version>/  ->  recorded.
+    # segments: ['', 'api', 'integration', 'connectors', 'healthcheck', name, version]
+    if len(segments) == 7 and segments[1] == "api" and segments[3] == "connectors" and segments[4] == "healthcheck":
+        return "/api/integration/connectors/healthcheck/mitre-attack/2.0.2/", path
+    return path, path
 
 
 class ReplaySession(Session):

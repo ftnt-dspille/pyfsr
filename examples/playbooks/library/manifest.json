@@ -1,5 +1,5 @@
 {
-  "library_dir": "examples/playbooks/library",
+  "library_dir": "/Users/dylanspille/PycharmProjects/pyfsr/examples/playbooks/library",
   "count": 27,
   "playbooks": [
     {
@@ -71,7 +71,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     },
     {
       "slug": "connector-error-handling-branch",
@@ -97,7 +97,7 @@
       "triggers": [
         "start_on_create"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     },
     {
       "slug": "create-incident-from-alert",
@@ -218,7 +218,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     },
     {
       "slug": "loop-over-records-max-parallel",
@@ -241,7 +241,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     },
     {
       "slug": "multi-stage-approval-audit-trail",
@@ -274,10 +274,9 @@
       "goal": "Correlate a CVE record with its associated alert by finding and cross-linking.",
       "source": "tutorial-corpus: Link CVE to Alert",
       "step_types": [
-        "start",
         "update_record",
         "CyopsUtilites",
-        "cybersponse.action",
+        "start",
         "set_variable",
         "find_record"
       ],
@@ -313,7 +312,7 @@
       "triggers": [
         "start_on_create"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     },
     {
       "slug": "severity-scoring-from-enrichment",
@@ -394,7 +393,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     },
     {
       "slug": "fortisiem-ip-context-enrichment",
@@ -423,7 +422,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     },
     {
       "slug": "multi-source-ip-reputation-rollup",
@@ -502,7 +501,7 @@
       "triggers": [
         "start_on_create"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     },
     {
       "slug": "multi-system-provisioning",
@@ -512,13 +511,12 @@
       "goal": "Provision a new employee across AD, Linux, FortiGate and send a confirmation email.",
       "source": "tutorial-corpus: Process Employee Onboarding",
       "step_types": [
-        "start",
         "insert_record",
         "decision",
         "connector",
         "set_variable",
         "CyopsUtilites",
-        "cybersponse.action",
+        "start",
         "update_record"
       ],
       "connectors": [
@@ -538,7 +536,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     },
     {
       "slug": "sla-escalation-timer",
@@ -650,7 +648,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     },
     {
       "slug": "scheduled-hunt-summarize-notify",
@@ -708,7 +706,7 @@
       "triggers": [
         "api_endpoint"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     }
   ]
 }

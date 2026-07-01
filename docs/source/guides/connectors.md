@@ -13,20 +13,21 @@ A complete, runnable walkthrough lives in
 
 ## Discovery & health
 
-```python
-conn = client.connectors
-
-conn.list_configured()                 # installed + configured connectors
-conn.resolve_version("cyops_utilities")  # -> "3.7.1" (or None if not installed)
-
-# The spec-canonical operations-discovery endpoint (POST by integer id):
-detail = conn.connector_detail("cyops_utilities")
-[op["operation"] for op in detail["operations"]]
-
-# The dedicated, filterable configuration listing:
-conn.list_configurations(name="cyops_utilities", active=True)
-
-conn.healthcheck("fortinet-fortisiem")   # {status: "Available", ...}
+```{doctest}
+>>> client = demo_client()
+>>> conn = client.connectors
+>>> installed = conn.list_configured()           # installed + configured connectors
+>>> [c.name for c in installed[:3]]             # doctest: +ELLIPSIS
+['smtp', 'code-snippet', ...]
+>>> conn.resolve_version("mitre-attack")         # the configured version (None if absent)
+'2.0.2'
+>>> conn.resolve_version("not-installed") is None
+True
+>>> conn.configurations("mitre-attack")          # [{config_id, name, default}]
+[ConnectorConfigSummary(id=7, config_id='01e4e6b4-c34e-4fc1-b692-bb08591f1fe5', name='Demo', default=True)]
+>>> hc = conn.healthcheck("mitre-attack")        # status="Available" is green
+>>> (hc.status, hc.name, hc.version)
+('Available', 'mitre-attack', '2.0.2')
 ```
 
 ## Executing an operation

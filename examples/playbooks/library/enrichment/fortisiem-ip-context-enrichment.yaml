@@ -1,7 +1,7 @@
 # Library playbook: Enrich an indicator with FortiSIEM IP context, comment, optional email, and update the indicator.
 #
 # source: tutorial-corpus: FrotiSIEM: Get Indicator IP Context
-# cleaned: no_trigger:retype-start-nop, delete_mistype:2, branches:0
+# cleaned: no_trigger:None, delete_mistype:2, branches:0
 #
 # goal: Enrich an indicator with FortiSIEM IP context, comment, optional email, and update the indicator.
 # trigger: (see the Start step below; original export's trigger re-typed)
@@ -17,7 +17,7 @@ playbooks:
 - name: 'FrotiSIEM: Get Indicator IP Context'
   description: FortiSIEM customizations
   is_active: true
-  trigger_step_id: Start
+  trigger_step_id: start
   steps:
   - type: insert_record
     name: Add Comment to the Indicator with the result
@@ -131,6 +131,24 @@ playbooks:
     next: end
   - type: start
     name: Start
+    module: indicators
+    arguments:
+      route: 266c9c3a-ab96-4a95-b19d-8852b05730e5
+      button_label: 'FortiSIEM: Get IP Context from SIEM'
+      displayConditions:
+        indicators:
+          sort: []
+          limit: 30
+          logic: AND
+          filters:
+          - type: object
+            field: typeofindicator
+            value: /api/3/picklists/c0beeda4-2c7a-4214-b7e5-53ba1649539c
+            _value:
+              '@id': /api/3/picklists/c0beeda4-2c7a-4214-b7e5-53ba1649539c
+              display: IP Address
+              itemValue: IP Address
+            operator: eq
     next: configuration
   - type: update_record
     name: Update Indicator

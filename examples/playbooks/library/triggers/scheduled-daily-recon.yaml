@@ -1,7 +1,7 @@
 # Library playbook: Scheduled daily recon: locate recon alerts, process, and report.
 #
 # source: tutorial-corpus: Daily Recon Automation Full
-# cleaned: no_trigger:retype-start-nop, delete_mistype:3, branches:0
+# cleaned: no_trigger:None, delete_mistype:3, branches:0
 #
 # goal: Scheduled daily recon: locate recon alerts, process, and report.
 # trigger: (see the Start step below; original export's trigger re-typed)
@@ -17,7 +17,7 @@ playbooks:
 - name: Daily Recon Automation Full
   description: Xperts26 NOC Automation Playbook
   is_active: true
-  trigger_step_id: Start
+  trigger_step_id: start
   steps:
   - type: insert_record
     name: Add Comment to File
@@ -171,6 +171,10 @@ playbooks:
       next: excel_automation
   - type: start
     name: Start
+    module: alerts
+    arguments:
+      route: e94851e1-1184-4abb-a2b2-1ce8a48048e7
+      requires_record: false
     next: playbook_config
   - type: CyopsUtilites
     name: This is the End

@@ -1,7 +1,7 @@
 # Library playbook: Close a FortiSIEM incident with a reason, comment the alert, and update alert status.
 #
 # source: tutorial-corpus: FortiSIEM: Close Incidents with a Reason
-# cleaned: no_trigger:retype-start-nop, delete_mistype:2, branches:0
+# cleaned: no_trigger:None, delete_mistype:2, branches:0
 #
 # goal: Close a FortiSIEM incident with a reason, comment the alert, and update alert status.
 # trigger: (see the Start step below; original export's trigger re-typed)
@@ -17,7 +17,7 @@ playbooks:
 - name: 'FortiSIEM: Close Incidents with a Reason'
   description: FortiSIEM customizations
   is_active: true
-  trigger_step_id: Start
+  trigger_step_id: start
   steps:
   - type: insert_record
     name: Add Comment to Alert
@@ -90,6 +90,21 @@ playbooks:
       operationTitle: 'Utils: No Operation'
   - type: start
     name: Start
+    module: alerts
+    arguments:
+      route: b836cc6c-02cd-466e-9287-014ce1c794cc
+      button_label: 'FortiSiem: Close Incidents with a Reason'
+      displayConditions:
+        alerts:
+          sort: []
+          limit: 30
+          logic: AND
+          filters:
+          - type: primitive
+            field: source
+            value: Fortinet FortiSIEM
+            operator: eq
+            _operator: eq
     next: configuration
   - type: update_record
     name: Update Alert Status

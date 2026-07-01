@@ -32,13 +32,6 @@ playbooks:
       operationTitle: 'Utils: No Operation'
   - type: start
     name: Start
-    step_variables:
-      input:
-        params: []
-    arguments:
-      __triggerLimit: true
-      triggerOnSource: true
-      triggerOnReplicate: false
     next: update_lead
   - type: update_record
     name: Update Lead

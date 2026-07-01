@@ -286,12 +286,31 @@ def warm_catalog(
             summary["connectors"] = _count("connectors")
             summary["operations"] = _count("operations")
             summary["operation_params"] = _count("operation_params")
+            summary["configurations"] = _count("connector_configs")
             summary["connectors_ms"] = 0
             summary["connectors_skipped"] = 1
         elif connectors:
             _t = time.perf_counter()
             try:
-                n_conn = n_ops = n_params = 0
+                n_conn = n_ops = n_params = n_cfg = 0
+                # Per-appliance configured connector instances (config UUIDs) —
+                # the `connector_configs` table the compiler's
+                # `resolve_config_id` (resolver/catalog.py) reads to fill a
+                # step's default config offline. Empty in the packaged slim
+                # catalog (config UUIDs are box-specific). Schema matches the
+                # framework's expected shape:
+                #   connector_configs(connector, config_id, config_name, is_default)
+                # so `resolve_config_id(connector, None)` (the default pick)
+                # resolves to the default-flagged config without a live round-trip.
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS connector_configs ("
+                    "  connector TEXT NOT NULL,"
+                    "  config_id TEXT NOT NULL,"
+                    "  config_name TEXT,"
+                    "  is_default INTEGER NOT NULL DEFAULT 0,"
+                    "  PRIMARY KEY (connector, config_id))"
+                )
+
                 # Provenance (P3): each row stamps source='live' + source_path so
                 # live-synced connectors are distinguishable from packaged ones;
                 # `source` is NOT NULL in the catalog schema, so this is required.
@@ -299,10 +318,22 @@ def warm_catalog(
                 # (network-bound), then write serially (one sqlite connection isn't
                 # shareable across threads). Cuts warm time from ~Nx one-RTT to
                 # ~one-RTT. Uses the public connectors API, not raw endpoints.
-                for name, ver, d in _fetch_connector_defs(client):
-                    cat = d.get("category")
-                    if isinstance(cat, list):
-                        cat = cat[0] if cat else None
+                # `_fetch_connector_defs` returns ``ConnectorDefinition`` models
+                # (validated at the API boundary), so display fields are already
+                # coerced to scalars by ``OperationParam._coerce_display_text``
+                # — including onchange sub-params, now that ``onchange`` is typed
+                # recursively (sub-params validate as ``OperationParam`` too, not
+                # raw ``__pydantic_extra__`` dicts). The earlier list-valued
+                # placeholder (activedirectory object_dn) and list description are
+                # caught at parse time, so no per-field coercion is needed here.
+                # ``category`` is the one exception: it's typed ``str | list[str]``
+                # (the wire genuinely sends either), so normalize it to a scalar.
+                def _first_if_list(v: Any) -> Any:
+                    if isinstance(v, list):
+                        return v[0] if v else None
+                    return v
+
+                for name, ver, d, configs in _fetch_connector_defs(client):
                     conn.execute(
                         "INSERT OR REPLACE INTO connectors "
                         "(name, version, label, category, description, publisher, active, "
@@ -312,7 +343,7 @@ def warm_catalog(
                             name,
                             str(ver or ""),
                             d.get("label"),
-                            cat,
+                            _first_if_list(d.get("category")),
                             d.get("description"),
                             d.get("publisher"),
                             1 if d.get("active") else 0,
@@ -323,6 +354,28 @@ def warm_catalog(
                         ),
                     )
                     n_conn += 1
+                    # Configured instances (per-appliance config UUIDs) — seeds
+                    # the compiler's default-config fill. Replaces this connector's
+                    # rows (a re-configured box drops stale UUIDs); other connectors
+                    # are untouched. `default` is stored as 0/1 so the fill can pick
+                    # the default-flagged config without a live round-trip.
+                    conn.execute("DELETE FROM connector_configs WHERE connector = ?", (name,))
+                    for cfg in configs:
+                        cid = cfg.config_id
+                        if not cid:
+                            continue
+                        conn.execute(
+                            "INSERT OR REPLACE INTO connector_configs "
+                            "(connector, config_id, config_name, is_default) "
+                            "VALUES (?, ?, ?, ?)",
+                            (
+                                name,
+                                cid,
+                                cfg.name,
+                                1 if cfg.default else 0,
+                            ),
+                        )
+                        n_cfg += 1
                     conn.execute("DELETE FROM operations WHERE connector_name = ?", (name,))
                     conn.execute("DELETE FROM operation_params WHERE connector_name = ?", (name,))
                     for op in d.get("operations") or []:
@@ -338,7 +391,7 @@ def warm_catalog(
                                 op_name,
                                 op.get("title"),
                                 op.get("annotation"),
-                                op.get("category"),
+                                _first_if_list(op.get("category")),
                                 op.get("description"),
                                 1 if op.get("visible", True) else 0,
                                 1 if op.get("enabled", True) else 0,
@@ -388,6 +441,7 @@ def warm_catalog(
                 summary["connectors"] = n_conn
                 summary["operations"] = n_ops
                 summary["operation_params"] = n_params
+                summary["configurations"] = n_cfg
             except Exception:
                 summary.setdefault("connectors", 0)
             _lap("connectors", _t)
@@ -431,7 +485,7 @@ def _flatten_op_params(params: Any):
     yield from _walk(params, None, None)
 
 
-def _fetch_connector_defs(client: Any, *, max_workers: int = 8) -> list[tuple[str, str, Any]]:
+def _fetch_connector_defs(client: Any, *, max_workers: int = 8) -> list[tuple[str, str, Any, list[Any]]]:
     """Fetch each installed connector's full definition concurrently.
 
     Enumerates the installed set via ``client.connectors.list_configured()`` and
@@ -439,8 +493,15 @@ def _fetch_connector_defs(client: Any, *, max_workers: int = 8) -> list[tuple[st
     typed API, no raw endpoints. Each definition fetch is an independent network
     call, so they run through the shared :func:`~pyfsr._concurrency.map_threaded`
     pool (requests sessions are safe for concurrent calls). Returns
-    ``(name, version, definition)`` tuples; connectors whose fetch fails or
-    returns a non-dict are dropped.
+    ``(name, version, definition, configurations)`` tuples; connectors whose
+    fetch fails or returns a non-dict are dropped.
+
+    ``configurations`` is the connector's configured-instance list
+    (``[{config_id, name, default}]``) carried straight off the
+    ``InstalledConnector`` that ``list_configured()`` already populated inline —
+    so recording them adds NO extra network call. They're per-appliance (a config
+    UUID is specific to one box), so the warm store seeds the compiler's
+    default-config fill (connector_args.py) — the packaged slim catalog has none.
     """
     from ._concurrency import map_threaded
 
@@ -448,12 +509,17 @@ def _fetch_connector_defs(client: Any, *, max_workers: int = 8) -> list[tuple[st
     if not installed:
         return []
 
-    def _one(ic: Any) -> tuple[str, str, Any] | None:
+    def _one(ic: Any) -> tuple[str, str, Any, list[Any]] | None:
         # definition() returns a typed ConnectorDefinition (dict-compatible —
         # the warm writer reads it via .get(...)).
         name, ver = ic.name, ic.version
         d = client.connectors.definition(name, version=ver)
-        return (name, str(ver or ""), d) if d is not None else None
+        if d is None:
+            return None
+        # ic.configurations is populated inline by list_configured() (each
+        # InstalledConnector carries its config summaries — no extra fetch).
+        configs = list(ic.configurations or [])
+        return (name, str(ver or ""), d, configs)
 
     results = map_threaded(_one, installed, max_workers=max_workers)
     return [r for r in results if r is not None]

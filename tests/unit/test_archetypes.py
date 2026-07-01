@@ -9,6 +9,7 @@ corpus packs runs when that machine-local path is present and skips otherwise.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -23,8 +24,9 @@ from pyfsr.agent.archetypes import (
 from pyfsr.agent.archetypes.harvest import _dedupe_manifest, _picklist_name, _uuid_tail
 from pyfsr.agent.archetypes.record import ConnectorUse
 
-# Machine-local corpus root (skipped when absent).
-_CORPUS = Path("/Users/dylanspille/PycharmProjects/Miscellaneous/fortisoar/corpus_builder/repos/fortisoar")
+# Machine-local corpus root (skipped when absent). Set PYFSR_CORPUS_ROOT to point
+# at a real FortiSOAR solution-pack checkout to run the ground-truth tests.
+_CORPUS = Path(os.environ.get("PYFSR_CORPUS_ROOT", "/nonexistent-corpus-root"))
 
 
 # --------------------------------------------------------------------- fixtures

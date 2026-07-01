@@ -1,7 +1,7 @@
 # Library playbook: Enrich a record with Active Directory attributes looked up by email; render as an HTML table comment.
 #
 # source: tutorial-corpus: Active Directory Search by Email
-# cleaned: no_trigger:retype-start-nop, delete_mistype:1, branches:0
+# cleaned: no_trigger:None, delete_mistype:1, branches:0
 #
 # goal: Enrich a record with Active Directory attributes looked up by email; render as an HTML table comment.
 # trigger: (see the Start step below; original export's trigger re-typed)
@@ -9,6 +9,10 @@
 # outputs: a comment / record update on the source record
 # connectors: see connector steps (connector-pluggable; swap the config for your appliance)
 # adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+# NOTE: 1 non-connector blocking error(s) remain after cleaning:
+#   - bad_value: param 'size_limit' on activedirectory.global_search is type 'integer'
+#     but got '' (str) which does not coerce to int (decompiler emitted an empty
+#     string for an unset integer param). Fix by dropping the field or passing an int.
 
 collection: 00. Playbook Learning SP - Specific Playbooks
 description: ''
@@ -18,7 +22,7 @@ playbooks:
   description: Search records or entities from Active Directory based on Email
   tag: '#Active Directory'
   is_active: true
-  trigger_step_id: Start
+  trigger_step_id: start
   steps:
   - type: set_variable
     name: Save Resource Details
@@ -58,4 +62,28 @@ playbooks:
     next: save_resource_details
   - type: start
     name: Start
+    module: indicators
+    arguments:
+      route: 6bdf590f-d11b-4d6a-bb7d-de68dbe1d020
+      run_mode: once_for_all
+      button_label: 'Lab Int: AD Search by Email (custom)'
+      displayConditions:
+        alerts:
+          sort: []
+          limit: 30
+          logic: AND
+          filters: []
+        indicators:
+          sort: []
+          limit: 30
+          logic: AND
+          filters:
+          - type: object
+            field: typeofindicator
+            value: /api/3/picklists/80bd55b0-6d88-4beb-bec3-97954f261c4d
+            _value:
+              '@id': /api/3/picklists/80bd55b0-6d88-4beb-bec3-97954f261c4d
+              display: Email Address
+              itemValue: Email Address
+            operator: eq
     next: search_by_email
