@@ -320,9 +320,11 @@ class ImportConfigAPI(BaseAPI):
         self.trigger(job_uuid)
         if not wait:
             job = self.get_job(job_uuid)
-            # stash job_uuid in extras for callers that still do result["jobUuid"]
-            if job.__pydantic_extra__ is not None:
-                job.__pydantic_extra__.setdefault("jobUuid", job_uuid)
+            # Record the polled job UUID on the typed model (the wire record
+            # carries its own @id/uuid, but legacy dict-compat callers read
+            # ``result["jobUuid"]`` — declared field, not __pydantic_extra__).
+            if job.jobUuid is None:
+                job.jobUuid = job_uuid
             return job
 
         final = self.wait_for_import(job_uuid, interval=interval, timeout=timeout)
@@ -337,8 +339,8 @@ class ImportConfigAPI(BaseAPI):
             # index wedge). Raise it with remediation guidance rather than handing
             # back a job the caller has to remember to inspect.
             raise FortiSOARException(describe_migrate_failure(final.status, final.errorMessage))
-        if final.__pydantic_extra__ is not None:
-            final.__pydantic_extra__.setdefault("jobUuid", job_uuid)
+        if final.jobUuid is None:
+            final.jobUuid = job_uuid
         return final
 
 
