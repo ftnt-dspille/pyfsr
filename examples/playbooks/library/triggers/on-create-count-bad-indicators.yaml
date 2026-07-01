@@ -1,7 +1,7 @@
 # Library playbook: On-create alert trigger: count malicious/suspicious indicators and post a verdict comment.
 #
 # source: tutorial-corpus: Count Bad Indicators
-# cleaned: no_trigger:retype-start-nop, delete_mistype:0, branches:0
+# cleaned: no_trigger:None, delete_mistype:0, branches:0
 #
 # goal: On-create alert trigger: count malicious/suspicious indicators and post a verdict comment.
 # trigger: (see the Start step below; original export's trigger re-typed)
@@ -17,7 +17,7 @@ playbooks:
 - name: Count Bad Indicators
   description: Number of Malicious or Suspicious indicators
   is_active: true
-  trigger_step_id: Start
+  trigger_step_id: start
   steps:
   - type: decision
     name: Amount of bad Indicators
@@ -105,6 +105,10 @@ playbooks:
     next: amount_of_bad_indicators
   - type: start
     name: Start
+    module: alerts
+    arguments:
+      route: 3e68095b-2d17-4a11-815b-24ab4088739a
+      button_label: 'MSSP: Count Bad Indicators'
     next: get_alert_id_iri
   - type: CyopsUtilites
     name: The End

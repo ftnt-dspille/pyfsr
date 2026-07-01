@@ -1,7 +1,7 @@
 # Library playbook: Quarantine a malicious IP on FortiGate behind an optional approval gate; comment the indicator.
 #
 # source: tutorial-corpus: Remediation on FortiGate - Complete
-# cleaned: no_trigger:retype-start-nop, delete_mistype:1, branches:1
+# cleaned: no_trigger:None, delete_mistype:1, branches:1
 #
 # goal: Quarantine a malicious IP on FortiGate behind an optional approval gate; comment the indicator.
 # trigger: (see the Start step below; original export's trigger re-typed)
@@ -9,6 +9,8 @@
 # outputs: a comment / record update on the source record
 # connectors: see connector steps (connector-pluggable; swap the config for your appliance)
 # adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+# NOTE: 1 non-connector blocking error(s) remain after cleaning:
+#   - bad_value: Jinja reference vars.steps.Approval_Request.username in step 'user_who_approved': step 'Ap
 
 collection: 00. Playbook Learning SP - Specific Playbooks
 description: ''
@@ -17,7 +19,7 @@ playbooks:
 - name: Remediation on FortiGate - Complete
   description: Quarantine IPs
   is_active: true
-  trigger_step_id: Start
+  trigger_step_id: start
   steps:
   - type: insert_record
     name: Add Comment to Indicator
@@ -161,6 +163,24 @@ playbooks:
       next: approval_request
   - type: start
     name: Start
+    module: indicators
+    arguments:
+      route: 906871fa-4bb4-4fe5-b0fc-495498c1604b
+      button_label: 'Agent1: Quanrantine an IP on FGT'
+      displayConditions:
+        indicators:
+          sort: []
+          limit: 30
+          logic: AND
+          filters:
+          - type: object
+            field: typeofindicator
+            value: /api/3/picklists/c0beeda4-2c7a-4214-b7e5-53ba1649539c
+            _value:
+              '@id': /api/3/picklists/c0beeda4-2c7a-4214-b7e5-53ba1649539c
+              display: IP Address
+              itemValue: IP Address
+            operator: eq
     next: plyabook_configuration
   - type: update_record
     name: Update Indicator

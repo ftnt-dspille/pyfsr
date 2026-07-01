@@ -1,7 +1,7 @@
 # Library playbook: AI enrichment: build a prompt from alert title/description, query OpenAI, write the response back as a comment + tags.
 #
 # source: tutorial-corpus: Simple OpenAI Query
-# cleaned: no_trigger:retype-start-nop, delete_mistype:1, branches:0
+# cleaned: no_trigger:None, delete_mistype:1, branches:0
 #
 # goal: AI enrichment: build a prompt from alert title/description, query OpenAI, write the response back as a comment + tags.
 # trigger: (see the Start step below; original export's trigger re-typed)
@@ -9,6 +9,10 @@
 # outputs: a comment / record update on the source record
 # connectors: see connector steps (connector-pluggable; swap the config for your appliance)
 # adapts-to: the SOC intent named above; retarget by changing the module + inputs.
+# NOTE: 1 non-connector blocking error(s) remain after cleaning:
+#   - bad_value: param 'max_tokens' on openai.chat_completions is type 'integer'
+#     but got '' (str) which does not coerce to int (decompiler emitted an empty
+#     string for an unset integer param). Fix by dropping the field or passing an int.
 
 collection: 00. Playbook Learning SP - Specific Playbooks
 description: ''
@@ -17,7 +21,7 @@ playbooks:
 - name: Simple OpenAI Query
   description: Dynamic Query sent to OpenAI
   is_active: true
-  trigger_step_id: Start
+  trigger_step_id: start
   steps:
   - type: insert_record
     name: Add Comment to Alert with OpenAI Output
@@ -79,6 +83,10 @@ playbooks:
     next: final_query_to_openai
   - type: start
     name: Start
+    module: alerts
+    arguments:
+      route: e2ec63a3-2e91-4f68-a8fa-7440875a1614
+      button_label: 'TT: OpenAI Query'
     next: gpt_model_and_other_vars
   - type: connector
     name: The Query

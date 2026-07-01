@@ -232,8 +232,8 @@ pyfsr appliance db exec --write --yes \
 pyfsr appliance db drop-module-tables widgets --yes
 
 # Service control
-pyfsr appliance service restart --name celeryd --yes
-pyfsr appliance service stop --name postgresql --yes
+pyfsr appliance service restart celeryd --yes
+pyfsr appliance service stop postgresql --yes
 pyfsr appliance service restart-all --yes        # whole stack, serial, can take minutes
 
 # RabbitMQ

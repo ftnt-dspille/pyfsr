@@ -1,7 +1,7 @@
 """``pyfsr appliance diagnose`` — passthrough to ``fsr_diagnose.sh``.
 
 The canonical diagnoser lives at
-``~/PycharmProjects/Miscellaneous/fortisoar/troubleshooting/fsr_diagnose.sh``
+``<fortisoar-docs>/troubleshooting/fsr_diagnose.sh``
 (and is also shipped to the appliance at ``/opt/cyops/scripts/fsr_diagnose.sh``
 on instrumented boxes). This verb is a thin front door that runs it via the
 transport and streams stdout, so you get the full triage report without having to
