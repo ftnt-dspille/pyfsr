@@ -9,7 +9,7 @@ that you can iterate, slice, or introspect.
 This guide covers the pyfsr `Query` **builder** (the Python ergonomics). For the underlying
 **wire protocol** — every filter/aggregation operator, OR/AND nesting, `$search`, Elasticsearch
 global search, pagination, and source-verified quirks — see the canonical FortiSOAR Query API
-reference: `~/PycharmProjects/Miscellaneous/fortisoar/FortiSOAR_Query_Aggregation_and_Filter_Options.md`.
+reference: the canonical FortiSOAR Query API doc (`<fortisoar-docs>/FortiSOAR_Query_Aggregation_and_Filter_Options.md`).
 ```
 
 ```{seealso}
