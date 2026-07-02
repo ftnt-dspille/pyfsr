@@ -54,6 +54,26 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry(
             "GET", "/api/integration/connectors/healthcheck/mitre-attack/2.0.2/", cap.CONNECTOR_HEALTHCHECK_RESPONSE
         ),
+        # Module-admin (staging/published schema) read-only envelopes. The two
+        # lists are hit by ``list_modules``/``describe_module``/``pending_changes``
+        # (query string ignored, so the with-relationships list serves all three);
+        # the single-record GETs back ``get_staging``/``get_published``/``get_field``.
+        _entry("GET", "/api/3/staging_model_metadatas", cap.STAGING_MODULES_LIST_RESPONSE),
+        _entry("GET", "/api/3/model_metadatas", cap.PUBLISHED_MODULES_LIST_RESPONSE),
+        _entry(
+            "GET",
+            "/api/3/staging_model_metadatas/7fdae59c-7de7-43d9-bf2a-dc2f00ed25b4",
+            cap.STAGING_ALERTS_RESPONSE,
+        ),
+        _entry(
+            "GET",
+            "/api/3/model_metadatas/7fdae59c-7de7-43d9-bf2a-dc2f00ed25b4",
+            cap.PUBLISHED_ALERTS_RESPONSE,
+        ),
+        _entry("GET", "/api/publish/error", cap.PUBLISH_ERROR_RESPONSE),
+        # Picklists — the two bulk calls ``_load_bulk`` makes (names + flat items).
+        _entry("GET", "/api/3/picklist_names", cap.PICKLIST_NAMES_RESPONSE),
+        _entry("GET", "/api/3/picklists", cap.PICKLISTS_RESPONSE),
     ]
 )
 
@@ -94,6 +114,17 @@ def _path_and_match(method: str, url: str) -> tuple[str, str]:
     # /api/3/alerts/<uuid>  ->  collapse the uuid to the recorded one.
     if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "alerts":
         return "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39", path
+    # /api/3/staging_model_metadatas/<uuid> or /api/3/model_metadatas/<uuid>  ->
+    # collapse to alerts' recorded uuid (so ``get_staging``/``get_published``/
+    # ``get_field`` resolve regardless of which module the doctest names). The
+    # bare collections (4 segments) are left alone so the list capture resolves.
+    if (
+        len(segments) == 5
+        and segments[1] == "api"
+        and segments[2] == "3"
+        and segments[3] in ("staging_model_metadatas", "model_metadatas")
+    ):
+        return f"/api/3/{segments[3]}/7fdae59c-7de7-43d9-bf2a-dc2f00ed25b4", path
     # /api/integration/connectors/healthcheck/<name>/<version>/  ->  recorded.
     # segments: ['', 'api', 'integration', 'connectors', 'healthcheck', name, version]
     if len(segments) == 7 and segments[1] == "api" and segments[3] == "connectors" and segments[4] == "healthcheck":

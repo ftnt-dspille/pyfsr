@@ -121,19 +121,31 @@ this guide is the reference behind each step.
 
 ## Inspecting existing schema (read-only)
 
-```python
-admin = client.modules_admin
+These read-only calls are doctested against captured appliance responses
+(`demo_client()`), so the outputs below are real:
 
-admin.is_published("alerts")          # -> True
-admin.is_published("nonexistentmod")  # -> False
-
-pub = admin.get_published("alerts")
-# {'uuid': 'f43192a7-d6ef-498c-8cd2-57521928e500', 'type': 'alerts',
-#  'module': 'alerts', 'tableName': 'alerts'}  (+ 126 fields under 'attributes')
-
-admin.get_field("alerts", "name")
-# {'name': 'name', 'type': 'string', 'formType': 'text', 'searchable': True}
+```{doctest}
+>>> client = demo_client()
+>>> admin = client.modules_admin
+>>> admin.is_published("alerts")
+True
+>>> admin.is_published("nonexistentmod")
+False
+>>> pub = admin.get_published("alerts", typed=True)
+>>> (pub.type, pub.module)            # PublishedModelMetadata
+('alerts', 'alerts')
+>>> sev = admin.get_field("alerts", "severity", typed=True)
+>>> (sev.name, sev.type)             # AttributeMetadata
+('severity', 'picklists')
+>>> admin.pending_changes()          # fully-published box: nothing staged
+[]
 ```
+
+`get_published` / `get_staging` return the raw record dict (with every field under
+`attributes`) when called without `typed=True`; pass `typed=True` for the matching
+{class}`~pyfsr.models.PublishedModelMetadata` /
+{class}`~pyfsr.models.StagingModelMetadata` /
+{class}`~pyfsr.models.AttributeMetadata` model shown above.
 
 ```{note}
 `is_published()` reports presence in `model_metadatas`. A freshly created module is

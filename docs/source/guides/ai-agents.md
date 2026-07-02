@@ -183,11 +183,28 @@ their return shapes are doctested here (write ops need a live appliance):
 >>> conns = dispatch(client, "list_connectors", {})
 >>> [c.name for c in conns["connectors"][:3]]
 ['smtp', 'code-snippet', 'mitre-attack']
+>>> mods = dispatch(client, "list_modules", {})
+>>> [m["type"] for m in mods["modules"][:3]]
+['agents', 'alerts', 'announcements']
+>>> desc = dispatch(client, "describe_module", {"module": "alerts"})
+>>> (desc["module"], desc["label"], desc["plural"])
+('alerts', 'Alert', 'alerts')
+>>> sev = next(f for f in desc["fields"] if f["name"] == "severity")
+>>> (sev["type"], sev["picklist_name"])
+('picklists', 'Severity')
+>>> pl = dispatch(client, "list_picklists", {})
+>>> pl["picklists"]
+['AlertStatus', 'Severity']
+>>> vals = dispatch(client, "get_picklist_values", {"name": "Severity"})
+>>> [v["itemValue"] for v in vals["values"]]
+['Minimal', 'Low', 'Medium', 'High', 'Critical']
 ```
 
-Discovery tools (`list_modules`, `describe_module`) and picklist tools
-(`list_picklists`, `get_picklist_values`) need captures not yet recorded, so
-they're shown in the table above and exercised once a lab box is reachable.
+The discovery tools (`list_modules`, `describe_module`) and picklist tools
+(`list_picklists`, `get_picklist_values`) are doctested above too — a model uses
+`list_modules` → `describe_module` to learn a module's fields (and which are
+picklist-backed) before it writes a record, and `list_picklists` /
+`get_picklist_values` to resolve the friendly strings a picklist accepts.
 
 ## Use case: triage an alert end-to-end
 
