@@ -30,8 +30,8 @@ from typing import Any
 from pydantic import ValidationError
 
 from ..models import (
-    ApprovalRequest,
     CreatePlaybookRequest,
+    ManualInputResume,
     ResumeRequest,
     RunEnv,
     RunFailure,
@@ -47,6 +47,37 @@ from ..pagination import HydraPage, extract_members
 from ..projection import project
 from ..query import Query
 from .base import BaseAPI
+
+
+def _pick_approval_option(options: list[dict[str, Any]], decision: str) -> dict[str, Any]:
+    """Map an approval ``decision`` to a ``response_mapping`` option dict.
+
+    ``"approve"`` selects the primary option (``primary: true``, else the first);
+    ``"reject"`` selects the first non-primary option. Any other string is
+    matched against an option's ``option`` label case-insensitively.
+    """
+    if not options:
+        raise LookupError("the pending input exposes no response options")
+    d = (decision or "approve").strip().lower()
+    for opt in options:
+        if (opt.get("option") or "").strip().lower() == d:
+            return opt
+    if d == "approve":
+        for opt in options:
+            if opt.get("primary"):
+                return opt
+        return options[0]
+    if d == "reject":
+        for opt in options:
+            if not opt.get("primary"):
+                return opt
+        raise LookupError(
+            f"no non-primary option to map 'reject' to; options: "
+            f"{[(o.get('option'), o.get('primary')) for o in options]}"
+        )
+    raise LookupError(
+        f"no response option matching decision {decision!r}; available: {[o.get('option') for o in options]}"
+    )
 
 
 def _build(model_cls, op: str, **kwargs):
@@ -1384,14 +1415,79 @@ class PlaybooksAPI(BaseAPI):
         """Retry a failed run from its failed step (``POST .../workflows/{pk}/retry/``)."""
         return self.client.post(f"/api/wf/api/workflows/{_pk(run_pk)}/retry/", data={})
 
-    def approval(self, run_pk: str, *, decision: str, comment: str | None = None) -> dict[str, Any]:
-        """Drive an approval step (``POST .../workflows/{pk}/approval/``).
+    def approval(
+        self,
+        run_pk: str,
+        *,
+        decision: str = "approve",
+        comment: str | None = None,
+        user: str | None = None,
+    ) -> ManualInputResume:
+        """Drive an approval / manual-input gate on a paused run to a decision.
 
-        ``decision`` is the approval choice (e.g. ``"approved"``/``"rejected"``);
-        ``comment`` is an optional note. For input-style resumes use :meth:`resume`.
+        Resolves the run's pending manual-wf-input (the modern, resumable
+        approval gate -- a ``manual_input`` step, optionally with
+        ``is_approval: true``), picks the response option matching ``decision``,
+        and resumes via ``wfinput_resume`` -- the canonical resume path the
+        FortiSOAR UI uses (per ``app.unmin.js`` + ``data/MANUAL_INPUT.md``).
+
+        ``decision`` maps to a response option: ``"approve"`` (default) selects
+        the primary option; ``"reject"`` selects the first non-primary option;
+        any other string is matched against an option label case-insensitively.
+
+        **Legacy ``type: approval`` (ApprovalManualInput) is NOT resumable here.**
+        That step creates an ``approvals``-module record but NO
+        ``manual-wf-input``, so ``wfinput_resume`` has no ``manual_input_id`` to
+        target (the old ``POST .../approval/`` endpoint only *lists* approvals,
+        it does not resume them). Author the gate as a ``manual_input`` step
+        (optionally ``is_approval: true``) instead. This raises :class:`ValueError`
+        with that guidance when the run has no pending manual-wf-input.
+
+        Args:
+            run_pk: the paused run's primary key (the trailing segment of its
+                ``@id`` -- what :meth:`get_execution` takes).
+            decision: ``"approve"`` (default), ``"reject"``, or an option label.
+            comment: advisory note (not currently sent on the wire for the modern
+                resume; reserved for approval-audit use).
+            user: submitting user IRI (``/api/3/people/<uuid>``); auto-resolved
+                to an admin when omitted.
+
+        Returns:
+            The :class:`~pyfsr.models.ManualInputResume` ack (``task_id`` +
+            ``message``); the resume is asynchronous.
+
+        Raises:
+            ValueError: the run has no pending manual-wf-input (it already
+                finished, or it is paused on a legacy ``type: approval`` step).
+            LookupError: ``decision`` does not match any response option.
         """
-        req = _build(ApprovalRequest, "approval", decision=decision, comment=comment)
-        return self.client.post(f"/api/wf/api/workflows/{_pk(run_pk)}/approval/", data=req.to_body())
+        mi_api = self.client.manual_input
+        resp = self.client.get(
+            "/api/wf/api/manual-wf-input/",
+            params={"workflow": _pk(run_pk), "format": "json", "ordering": "-id"},
+        )
+        rows = resp.get("hydra:member", []) if isinstance(resp, dict) else (resp if isinstance(resp, list) else [])
+        if not rows:
+            raise ValueError(
+                f"run {run_pk!r} has no pending manual-input/approval to resume. If it "
+                f"is paused on a legacy `type: approval` step, that step is NOT "
+                f"programmatically resumable (it creates an approvals-module record, "
+                f"not a manual-wf-input). Author the gate as a `manual_input` step "
+                f"(optionally `is_approval: true`) instead."
+            )
+        input_id = int(rows[0]["id"])
+        user_iri = user or mi_api._resolve_user_iri()
+        full = mi_api.retrieve(input_id, owners=user_iri)
+        options = (full.response_mapping or {}).get("options") or []
+        opt = _pick_approval_option(options, decision)
+        return mi_api.resume(
+            full.workflow,
+            step_iri=opt["step_iri"],
+            step_id=full.step_id,
+            manual_input_id=input_id,
+            user=user_iri,
+            input={},
+        )
 
     def count(self, *, logs: str = "all") -> dict[str, Any]:
         """Total run count (``GET .../workflows/count/``).

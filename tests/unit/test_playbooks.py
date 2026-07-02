@@ -461,13 +461,119 @@ def test_start_retry_post_empty_body():
 
 
 def test_approval_body():
-    c = _Rec()
-    PlaybooksAPI(c).approval("pk-1", decision="approved", comment="ok")
-    assert c.calls[-1][:3] == (
-        "POST",
-        "/api/wf/api/workflows/pk-1/approval/",
-        {"decision": "approved", "comment": "ok"},
-    )
+    # pb.approval now resolves the run's pending manual-wf-input and resumes via
+    # wfinput_resume (the canonical path), NOT the old /approval/ endpoint (which
+    # only lists approvals, never resumes). See MANUAL_INPUT.md + the
+    # manual-input-run-scoped-helper memory.
+    from pyfsr.api.manual_input import ManualInputAPI
+
+    class _ApprovalClient:
+        """Scripts the approval-resume sequence: GET ?workflow=, retrieve_wfinput,
+        wfinput_resume, + /api/3/people for user resolution."""
+
+        def __init__(self):
+            self.manual_input = ManualInputAPI(self)
+            self.posts = []
+            self.gets = []
+
+        def get(self, endpoint, params=None, **kw):
+            self.gets.append((endpoint, params))
+            if endpoint == "/api/3/people":
+                return {"hydra:member": [{"@id": "/api/3/people/admin", "firstname": "CS", "lastname": "Admin"}]}
+            if endpoint == "/api/wf/api/manual-wf-input/":
+                return {"hydra:member": [{"id": 5, "step_id": 77, "workflow": "gAAAA-token"}]}
+            return {}
+
+        def post(self, endpoint, data=None, params=None, **kw):
+            self.posts.append((endpoint, data, params))
+            if "retrieve_wfinput" in endpoint:
+                return {
+                    "id": 5,
+                    "workflow": 42,
+                    "step_id": 77,
+                    "response_mapping": {
+                        "options": [
+                            {"option": "Approve", "primary": True, "step_iri": "/api/3/workflow_steps/app"},
+                            {"option": "Reject", "step_iri": "/api/3/workflow_steps/rej"},
+                        ]
+                    },
+                }
+            if "wfinput_resume" in endpoint:
+                return {"task_id": "t-1", "message": "Awaiting Playbook resumed successfully."}
+            return {}
+
+    c = _ApprovalClient()
+    res = PlaybooksAPI(c).approval("149900", decision="approve")
+    # GET the run-scoped manual-wf-input queue
+    ep, params = c.gets[0]
+    assert ep == "/api/wf/api/manual-wf-input/"
+    assert params["workflow"] == "149900"
+    # resume POSTs to wfinput_resume (NOT /approval/)
+    resume = next(p for p in c.posts if "wfinput_resume" in p[0])
+    assert resume[0] == "/api/wf/api/workflows/42/wfinput_resume/"
+    assert resume[1]["manual_input_id"] == 5
+    assert resume[1]["step_iri"] == "/api/3/workflow_steps/app"  # primary option
+    assert resume[1]["step_id"] == 77
+    assert resume[1]["user"] == "/api/3/people/admin"
+    assert not any("/approval/" in p[0] for p in c.posts)  # old endpoint never hit
+    assert res.task_id == "t-1"
+
+
+def test_approval_reject_picks_non_primary_option():
+    from pyfsr.api.manual_input import ManualInputAPI
+
+    class _C:
+        def __init__(self):
+            self.manual_input = ManualInputAPI(self)
+            self.posts = []
+
+        def get(self, endpoint, params=None, **kw):
+            if endpoint == "/api/3/people":
+                return {"hydra:member": [{"@id": "/api/3/people/admin", "firstname": "Admin"}]}
+            if endpoint == "/api/wf/api/manual-wf-input/":
+                return {"hydra:member": [{"id": 5, "step_id": 77, "workflow": "tok"}]}
+            return {}
+
+        def post(self, endpoint, data=None, params=None, **kw):
+            self.posts.append((endpoint, data))
+            if "retrieve_wfinput" in endpoint:
+                return {
+                    "id": 5,
+                    "workflow": 42,
+                    "step_id": 77,
+                    "response_mapping": {
+                        "options": [
+                            {"option": "Approve", "primary": True, "step_iri": "/app"},
+                            {"option": "Reject", "step_iri": "/rej"},
+                        ]
+                    },
+                }
+            if "wfinput_resume" in endpoint:
+                return {"task_id": "t-1", "message": "ok"}
+            return {}
+
+    c = _C()
+    PlaybooksAPI(c).approval("149900", decision="reject")
+    resume = next(p for p in c.posts if "wfinput_resume" in p[0])
+    assert resume[1]["step_iri"] == "/rej"  # non-primary option
+
+
+def test_approval_raises_for_legacy_approval_step():
+    # A legacy `type: approval` step creates NO manual-wf-input -> the run-scoped
+    # GET returns empty -> pb.approval raises ValueError with remediation guidance.
+    class _EmptyClient:
+        manual_input = None  # never reached (raises before use)
+
+        def get(self, endpoint, params=None, **kw):
+            if endpoint == "/api/wf/api/manual-wf-input/":
+                return {"hydra:member": []}
+            return {}
+
+        def post(self, *a, **kw):
+            raise AssertionError("should not resume when there is no pending input")
+
+    with pytest.raises(ValueError, match="NOT.*programmatically resumable"):
+        PlaybooksAPI(_EmptyClient()).approval("149900", decision="approve")
 
 
 def test_count_passes_logs_param():

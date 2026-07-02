@@ -133,3 +133,100 @@ def test_answer_bad_option_index_raises():
     client = FakeClient(retrieve=_retrieve_doc())
     with pytest.raises(IndexError):
         ManualInputAPI(client).answer(1, input_id=5, option=9)
+
+
+# ---------------------------------------------------------------------------
+# pending_for_run(task_id) -- the run-scoped pending-input lookup
+# ---------------------------------------------------------------------------
+
+
+class _FakePlaybooks:
+    """Stand-in for client.playbooks.log_list(task_id=...) -> run @id."""
+
+    def __init__(self, run_pk=42):
+        self._run_pk = run_pk
+        self.log_calls = []
+
+    def log_list(self, *, task_id=None, limit=None, **kw):
+        self.log_calls.append({"task_id": task_id, "limit": limit})
+        return {"hydra:member": [{"@id": f"/wf/api/workflows/{self._run_pk}/"}]}
+
+
+class _RunScopedFakeClient(FakeClient):
+    """FakeClient whose .get scripts the manual-wf-input list_wfinput GET."""
+
+    def __init__(self, *, pending, run_pk=42):
+        super().__init__()
+        self.playbooks = _FakePlaybooks(run_pk=run_pk)
+        self._pending = pending
+        self.gets = []
+
+    def get(self, endpoint, params=None, **kwargs):
+        self.gets.append((endpoint, params))
+        if endpoint == "/api/wf/api/manual-wf-input/":
+            return {"hydra:member": self._pending, "hydra:nextPage": None}
+        return super().get(endpoint, params=params, **kwargs)
+
+
+def _pending_doc(*, mid=51, is_approval=False, title="Approve ingestion?"):
+    return {
+        "id": mid,
+        "is_approval": is_approval,
+        "step_id": 2159467,
+        "workflow": "gAAAAABqencryptedtoken",
+        "input": {"schema": {"title": title, "inputVariables": [{"name": "analyst_comment"}]}},
+        "response_mapping": {"options": [{"option": "approve", "primary": True}]},
+    }
+
+
+def test_pending_for_run_resolves_task_id_to_run_pk_and_filters():
+    client = _RunScopedFakeClient(pending=[_pending_doc()], run_pk=149763)
+    out = ManualInputAPI(client).pending_for_run("105189fa-task-id")
+    # task_id -> log_list -> run pk 149763
+    assert client.playbooks.log_calls == [{"task_id": "105189fa-task-id", "limit": 1}]
+    # GET manual-wf-input with the workflow=<run_pk> filter
+    ep, params = client.gets[-1]
+    assert ep == "/api/wf/api/manual-wf-input/"
+    assert params["workflow"] == "149763"
+    assert params["format"] == "json"
+    # typed return
+    assert len(out) == 1
+    from pyfsr.models._system import ManualInput
+
+    assert isinstance(out[0], ManualInput)
+    assert out[0].id == 51
+    assert out[0].step_id == 2159467
+    assert out[0].is_approval is False
+    # the full prompt survives (input.schema + response_mapping.options)
+    assert out[0].input.schema_.title == "Approve ingestion?"
+    assert out[0].input.schema_.inputVariables[0].name == "analyst_comment"
+    assert out[0].response_mapping.options[0].option == "approve"
+
+
+def test_pending_for_run_is_approval_filter_is_client_side():
+    docs = [_pending_doc(mid=51, is_approval=False), _pending_doc(mid=52, is_approval=True)]
+    client = _RunScopedFakeClient(pending=docs)
+    out = ManualInputAPI(client).pending_for_run("tid", is_approval=True)
+    assert [m.id for m in out] == [52]
+    out_false = ManualInputAPI(_RunScopedFakeClient(pending=docs)).pending_for_run("tid", is_approval=False)
+    assert [m.id for m in out_false] == [51]
+
+
+def test_pending_for_run_empty_when_no_run_matches_task_id():
+    class _NoRunPlaybooks:
+        def log_list(self, *, task_id=None, limit=None, **kw):
+            return {"hydra:member": []}
+
+    class _C(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.playbooks = _NoRunPlaybooks()
+            self.gets = []
+
+        def get(self, endpoint, params=None, **kwargs):
+            self.gets.append(endpoint)
+            return {}
+
+    client = _C()
+    assert ManualInputAPI(client).pending_for_run("nope") == []
+    assert client.gets == []  # never queried manual-wf-input
