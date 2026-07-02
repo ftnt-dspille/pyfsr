@@ -8,19 +8,21 @@ Covers discovery, healthcheck, operation execution, and writing a connector's
 Accessed as ``client.connectors``.
 
 Example:
-    >>> client.connectors.list_configured()           # what's installed + configured
-    >>> client.connectors.install("fortinet-fortisiem", "6.1.0", wait=True)
-    >>> client.connectors.create_configuration(        # write FortiSIEM creds
-    ...     "fortinet-fortisiem",
-    ...     {"fsm_type": "FortiSIEM", "server": "https://siem.example.com",
-    ...      "username": "admin", "password": "secret",
-    ...      "organization": "Super", "verify_ssl": True},
-    ...     name="prod", version="6.1.0", default=True)
-    {'config_id': 'a7c7df29-...', ...}
-    >>> client.connectors.healthcheck("fortinet-fortisiem")  # is the upstream reachable?
-    >>> client.connectors.execute(
-    ...     "virustotal", "get_reputation_ip", params={"ip": "8.8.8.8"})
-    {'operation': 'get_reputation_ip', 'status': 'Success', 'data': {...}}
+    >>> client = demo_client()
+    >>> conn = client.connectors
+    >>> [c.name for c in conn.list_configured()[:3]]   # installed + configured
+    ['smtp', 'code-snippet', 'mitre-attack']
+    >>> conn.resolve_version("mitre-attack")            # the configured version
+    '2.0.2'
+    >>> conn.healthcheck("mitre-attack").status         # "Available" is green
+    'Available'
+
+    Writes (install, create_configuration, execute) need a live appliance; see
+    the connectors guide for those::
+
+        conn.install("fortinet-fortisiem", "6.1.0", wait=True)
+        conn.create_configuration("fortinet-fortisiem", {...}, name="prod")
+        conn.execute("virustotal", "get_reputation_ip", params={"ip": "8.8.8.8"})
 
 .. note::
     Setting up **data ingestion** (the *Configure Data Ingestion* wizard) is not
@@ -810,7 +812,7 @@ class ConnectorsAPI(BaseAPI):
         :meth:`create_configuration` / :meth:`upsert_configuration`.
 
         Example:
-            >>> cfg = client.connectors.default_config("code-snippet")
+            >>> cfg = client.connectors.default_config("code-snippet")  # doctest: +SKIP
             >>> cfg                                   # doctest: +SKIP
             {'allow_imports': False, 'restrict_imports': ''}
 

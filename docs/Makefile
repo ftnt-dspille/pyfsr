@@ -35,17 +35,25 @@ doctest:
 	@echo "Testing of doctests in the sources finished, look at the " \
 	      "results in $(BUILDDIR)/doctest/output.txt."
 
-# Validate unenforced code examples in the guides. Two layers, both run here:
+# Validate unenforced code examples in the guides. Four checks run here:
 #   1. check_doc_examples.py -- static lint: pyfsr symbols + CLI flags named in
 #      plain fenced ```python / ```sh blocks still exist (catches namespace/flag
 #      drift that `make doctest` can't see, since it only runs {doctest}
 #      directives).
-#   2. exec_cli_examples.py -- really run the offline `pyfsr playbook` commands
+#   2. check_doc_examples.py --check-floor -- anti-regression gate: fails if any
+#      docs/source file's {doctest} block count drops below the baseline in
+#      doctest_counts.baseline.json, so a {doctest} can't quietly become a plain
+#      {code-block}. Bump the baseline with `--update-floor` when intentional.
+#   3. exec_cli_examples.py -- really run the offline `pyfsr playbook` commands
 #      the guides teach, against library fixtures, asserting exit codes + output
 #      (proves the commands actually work, not just that their flags exist).
+#   4. check_doc_examples.py --coverage -- advisory per-file block-count report
+#      (exit 0); shows where {doctest} coverage exists vs. plain-block gaps.
 check-examples:
 	PYTHONPATH=$(CURDIR)/../src:$$PYTHONPATH python $(CURDIR)/../scripts/check_doc_examples.py
+	PYTHONPATH=$(CURDIR)/../src:$$PYTHONPATH python $(CURDIR)/../scripts/check_doc_examples.py --check-floor
 	PYTHONPATH=$(CURDIR)/../src:$$PYTHONPATH python $(CURDIR)/../scripts/exec_cli_examples.py
+	PYTHONPATH=$(CURDIR)/../src:$$PYTHONPATH python $(CURDIR)/../scripts/check_doc_examples.py --coverage
 	@echo "Doc-example validation complete."
 
 # Generate coverage report

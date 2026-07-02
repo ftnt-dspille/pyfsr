@@ -287,11 +287,25 @@ client.workflow_collections.import_from_file("exported_playbooks.json", replace=
 
 The compiler validates against a cached reference catalog of FortiSOAR step
 types. `pyfsr playbook check-fresh` compares that catalog's provenance against a
-live appliance and flags drift (exit `0` fresh, `2` drift, `1` error/unstamped):
+live appliance and flags drift — exit `0` fresh, `2` drift, `1` error/unstamped:
 
 ```bash
 pyfsr playbook check-fresh --server fortisoar.example.com
 ```
 
-If it reports drift, re-run the compiler's `warmup` against the target to
-refresh the catalog before deploying.
+A fresh catalog prints a one-row summary and exits `0` (output is on stderr):
+
+```text
+catalog      .../fsr_reference.db
+instance     fortisoar.example.com
+fsr_version  8.0.0 -> 8.0.0
+result       FRESH
+catalog is up to date with the live instance.
+```
+
+On drift it exits `2` and lists each mismatch (`result STALE` + a
+`drift detected:` bullet list); an unstamped catalog exits `1` and tells you to
+run `warmup` first. That error path needs no `--server`, so it runs offline and
+is asserted in CI by `scripts/exec_cli_examples.py`. If it reports drift,
+re-run the compiler's `warmup` against the target to refresh the catalog before
+deploying.

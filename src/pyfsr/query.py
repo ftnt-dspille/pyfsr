@@ -67,6 +67,9 @@ class Query:
         logic: Top-level logical join for this group's filters (``"AND"`` or ``"OR"``).
         module: Optional module name; when set, field paths are validated against
             the shipped field/relationship knowledge base.
+
+    >>> Query().eq("severity", "High").to_body()
+    {'logic': 'AND', 'filters': [{'field': 'severity', 'operator': 'eq', 'value': 'High'}]}
     """
 
     def __init__(self, logic: str = "AND", *, module: str | None = None) -> None:

@@ -81,6 +81,37 @@ class ResponseCapture:
         )
         self.save_response("export_template_response.json", template.to_dict(by_alias=True))
 
+    def capture_module_admin_responses(self):
+        """Capture module-admin (staging/publish) read-only REST envelopes.
+
+        These back the doctested return examples for ``client.modules_admin``.
+        Write-op shapes (``create_module`` / ``add_field`` / ``publish``) are
+        appliance-wide or staging-mutating, so they stay illustrative in
+        ``module-admin.md``; only read-only shapes are captured here. Trim each
+        raw file into a ``*_RESPONSE`` constant in
+        ``src/pyfsr/_testing/client_captures.py`` and register it in ``_FIXTURES``
+        (``src/pyfsr/_testing/replay_http.py``); extend ``_path_and_match`` if a
+        path has a volatile segment (module IRI / uuid) to collapse.
+        """
+        # Raw collection envelopes (dicts — json.dump-friendly).
+        self.save_response(
+            "module_admin_staging_list.json",
+            self.client.get("/api/3/staging_model_metadatas"),
+        )
+        self.save_response(
+            "module_admin_published_list.json",
+            self.client.get("/api/3/model_metadatas"),
+        )
+        # /api/publish/error returns HTTP 400 + a usable body when there are
+        # pending changes; capture whatever the box returns (best-effort).
+        try:
+            self.save_response(
+                "module_admin_publish_error.json",
+                self.client.get("/api/publish/error"),
+            )
+        except Exception as e:  # noqa: BLE001 - capture is best-effort
+            print(f"  (skipped /api/publish/error: {e})")
+
     def capture_all(self):
         """Capture all response types"""
         print("Capturing picklist responses...")
@@ -91,6 +122,9 @@ class ResponseCapture:
 
         print("\nCapturing export responses...")
         self.capture_export_responses()
+
+        print("\nCapturing module-admin responses...")
+        self.capture_module_admin_responses()
 
 
 if __name__ == "__main__":
