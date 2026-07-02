@@ -4,35 +4,16 @@ from .base import BaseAPI
 
 
 class AlertsAPI(BaseAPI):
-    """
-    The Alerts API provides methods for managing FortiSOAR alerts including creating,
-    updating, and querying alerts.
+    """Typed shortcut for the alerts module.
 
-    Example:
-        Create a client and use the alerts API:
+    ``client.alerts`` is a thin wrapper over :class:`~pyfsr.records.RecordSet`
+    that returns raw dicts (Hydra envelopes) instead of typed models — see
+    :doc:`/guides/records` for the dict-vs-model distinction.
 
-        .. code-block:: python
-
-            from pyfsr import FortiSOAR
-
-            # Initialize client
-            client = FortiSOAR("your-server", token="your-token")
-
-            # Create new alert
-            new_alert = {
-                "name": "Suspicious Login",
-                "description": "Multiple failed login attempts detected"
-            }
-            result = client.alerts.create(**new_alert)
-
-            # Query alerts
-            all_alerts = client.alerts.list()
-
-            # Update alert
-            client.alerts.update(
-                alert_id="123",
-                data={"assignedTo": "analyst@example.com"}
-            )
+    >>> client = demo_client()
+    >>> alert = client.alerts.get("9f0eb603-ac1e-41c3-b47b-444589beed39")
+    >>> (alert["@type"], alert["name"])
+    ('Alert', 'Response Capture Test Alert')
     """
 
     def __init__(self, client):
@@ -167,6 +148,6 @@ class AlertsAPI(BaseAPI):
             alert_id: The unique identifier of the alert to delete
 
         Examples:
-            >>> client.alerts.delete("alert-123")
+            >>> client.alerts.delete("alert-123")  # doctest: +SKIP
         """
         self.client.delete(f"/api/3/{self.module}/{alert_id}")

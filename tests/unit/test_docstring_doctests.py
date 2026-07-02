@@ -38,11 +38,16 @@ _GLOBS = {"demo_client": demo_client, "demo_box": demo_box, "Query": Query}
 
 # Modules whose docstrings are executed + output-matched here. Each must be
 # doctest-clean: every `>>>` example runs green or is `# doctest: +SKIP`.
+# Box-gated modules (api.picklists, api.modules_admin) are intentionally NOT
+# here — their methods need live captures not yet recorded; add them once
+# captures land in src/pyfsr/_testing/client_captures.py.
 WHITELIST = [
     "pyfsr.config",
     "pyfsr.query",
     "pyfsr.records",
     "pyfsr.api.connectors",
+    "pyfsr.api.alerts",
+    "pyfsr.pagination",
 ]
 
 
