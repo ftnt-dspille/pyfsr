@@ -29,14 +29,15 @@ then re-trim here. Do **not** edit a capture by hand to "fix" a failing doctest
 
 from __future__ import annotations
 
-# Provenance — the lab box these were recorded from, so drift across FortiSOAR
-# releases is visible at a glance. Updated when the raw captures are refreshed.
+# Provenance — captured from a live FortiSOAR appliance, trimmed to a stable,
+# doctest-friendly slice. Drift across FortiSOAR releases is visible at a glance
+# via CAPTURE_VERSION. Re-capture the raw files from a live box (needs creds),
+# then re-trim here; never hand-edit a capture to "fix" a failing doctest.
 CAPTURE_HOST = "fortisoar.example.com"
-CAPTURE_VERSION = "7.6.x"
-CAPTURE_DATE = "2026-06-20"
-# The connector discovery/health captures were refreshed 2026-07-01 (trimmed
-# from a live 8.0 box: 3 of 32 configured connectors retained, base64 icons
-# dropped). See CONNECTORS_LIST_RESPONSE / CONNECTOR_HEALTHCHECK_RESPONSE.
+CAPTURE_VERSION = "8.0.x"
+# The connector, module-admin, and picklist captures below were trimmed from a
+# live 8.0 appliance: connectors (3 of 32 retained, base64 icons dropped) and
+# the schema/picklist read-only envelopes (5 of 48 modules, 2 of 90 picklists).
 
 # A single Alert record (``GET /api/3/alerts/<uuid>``). Trimmed from the real
 # capture to the fields a doctest shows; the picklist dicts keep their real
@@ -171,3 +172,263 @@ CONNECTOR_HEALTHCHECK_RESPONSE = {
     "_status": True,
     "request_id": None,
 }
+
+
+# ---------------------------------------------------------------------------
+# Module-admin (staging/published schema) + picklist captures
+# ---------------------------------------------------------------------------
+# Real read-only captures trimmed from a live 8.0 appliance — no write ops.
+# ``staging_model_metadatas`` is the editable draft; ``model_metadatas`` is the
+# committed/published schema. Both *list* envelopes are trimmed to 5 modules,
+# and only the ``alerts`` member carries ``attributes`` (the 3 fields the
+# doctests show) so ``describe_module`` / ``get_field`` resolve; the other 4 are
+# lite-only. The two lists are kept semantically identical (same modules, same
+# alerts attributes) so ``pending_changes()`` — which diffs staging vs published
+# after canonicalizing store-IRI segments and stripping ``@id``/``@type``/
+# ``@context`` — reports ``[]`` (an honest fully-published box). Single-record
+# captures back ``get_staging`` / ``get_published`` / ``get_field``.
+
+# The ``alerts`` fields the doctests exercise. ``severity`` and ``status`` are
+# kept full (``dataSource.query`` carries the picklist name ``describe_module``
+# extracts, and ``picklists.for_field``/``resolve`` read); ``name``/``description``
+# are lite (name/type/formType only). Real IRIs/uuids.
+_ALERTS_ATTRIBUTES = [
+    {
+        "@id": "/api/3/attribute_metadatas/f6ffe98e-f56b-4d5b-bc2c-90edbfa8e618",
+        "@type": "AttributeMetadata",
+        "name": "name",
+        "type": "string",
+        "formType": "text",
+        "orderIndex": 28,
+    },
+    {
+        "@id": "/api/3/attribute_metadatas/1e61a7a2-b60f-4d72-8d73-76967a9fa6ef",
+        "@type": "AttributeMetadata",
+        "name": "description",
+        "type": "string",
+        "formType": "richtext",
+        "orderIndex": 50,
+    },
+    {
+        "@id": "/api/3/attribute_metadatas/e646b7ed-e4bc-4820-ade0-c6464d0ea75f",
+        "@type": "AttributeMetadata",
+        "name": "severity",
+        "type": "picklists",
+        "formType": "picklist",
+        "orderIndex": 43,
+        "displayName": "{{ severity }}",
+        "descriptions": {"singular": "Severity"},
+        "validation": {"_enableRange": False, "required": False, "minlength": 0, "maxlength": 10485761},
+        "dataSource": {
+            "model": "picklists",
+            "query": {
+                "filters": [{"field": "listName__name", "operator": "eq", "value": "Severity"}],
+                "logic": "AND",
+                "sort": [{"direction": "ASC", "field": "orderIndex"}],
+            },
+        },
+        "uuid": "e646b7ed-e4bc-4820-ade0-c6464d0ea75f",
+    },
+    {
+        "@id": "/api/3/attribute_metadatas/79b104b1-b68a-46df-baa1-a9e99e6a75f8",
+        "@type": "AttributeMetadata",
+        "name": "status",
+        "type": "picklists",
+        "formType": "picklist",
+        "orderIndex": 40,
+        "displayName": "{{ status }}",
+        "descriptions": {"singular": "Status"},
+        "validation": {"_enableRange": False, "required": False, "minlength": 0, "maxlength": 10485761},
+        "dataSource": {
+            "model": "picklists",
+            "query": {
+                "filters": [{"field": "listName__name", "operator": "eq", "value": "AlertStatus"}],
+                "logic": "AND",
+                "sort": [{"direction": "ASC", "field": "orderIndex"}],
+            },
+        },
+        "uuid": "79b104b1-b68a-46df-baa1-a9e99e6a75f8",
+    },
+]
+
+# The 5 modules both list envelopes carry. ``alerts`` carries
+# ``_ALERTS_ATTRIBUTES``; the rest are lite-only (enough for ``list_modules`` and
+# the ``pending_changes`` module-set comparison). Real uuids.
+_MODULE_ROWS = [
+    {
+        "type": "agents",
+        "module": "agents",
+        "uuid": "266e4fbb-2bcd-47dd-9ba6-400b88d49a92",
+        "displayName": "{{ name }}",
+        "parentType": None,
+        "tableName": "agents",
+        "descriptions": {"singular": "Agent", "plural": "Agents"},
+    },
+    {
+        "type": "alerts",
+        "module": "alerts",
+        "uuid": "7fdae59c-7de7-43d9-bf2a-dc2f00ed25b4",
+        "displayName": "{{ name }}",
+        "parentType": None,
+        "tableName": "alerts",
+        "descriptions": {"plural": "Alerts", "singular": "Alert"},
+        "attributes": _ALERTS_ATTRIBUTES,
+    },
+    {
+        "type": "announcements",
+        "module": "announcements",
+        "uuid": "9f907344-827d-4d29-99b4-e2f9717009b2",
+        "displayName": "{{title}}",
+        "parentType": None,
+        "tableName": "announcements",
+        "descriptions": {"singular": "Announcement", "plural": "Announcements"},
+    },
+    {
+        "type": "incidents",
+        "module": "incidents",
+        "uuid": "ec515d53-dbfb-411a-89b5-e42bd17ad7c9",
+        "displayName": "{{ name }}",
+        "parentType": None,
+        "tableName": "incidents",
+        "descriptions": {"plural": "Incidents", "singular": "Incident"},
+    },
+    {
+        "type": "tasks",
+        "module": "tasks",
+        "uuid": "5cb5a987-52d6-4df2-87cd-86a193dee71f",
+        "displayName": "{{ name }}",
+        "parentType": None,
+        "tableName": "tasks",
+        "descriptions": {"plural": "Tasks", "singular": "Task"},
+    },
+]
+
+
+def _hydra_collection(path: str, context: str, members: list) -> dict:
+    """Build a ``hydra:Collection`` envelope matching the live list shape."""
+    return {
+        "@context": context,
+        "@id": path,
+        "@type": "hydra:Collection",
+        "hydra:member": members,
+        "hydra:totalItems": len(members),
+        "hydra:view": {"@id": path, "@type": "hydra:PartialCollectionView"},
+    }
+
+
+def _with_store(row: dict, store_path: str, store_type: str) -> dict:
+    """Return a copy of a ``_MODULE_ROWS`` entry stamped for one store.
+
+    ``staging_model_metadatas`` / ``StagingModelMetadata`` vs ``model_metadatas``
+    / ``ModelMetadata`` — the only fields ``_differs`` strips, so both lists are
+    semantically identical and ``pending_changes()`` stays empty.
+    """
+    out = dict(row)
+    out["@id"] = f"/api/3/{store_path}/{row['uuid']}"
+    out["@type"] = store_type
+    return out
+
+
+_STAGING_ROWS = [_with_store(r, "staging_model_metadatas", "StagingModelMetadata") for r in _MODULE_ROWS]
+_PUBLISHED_ROWS = [_with_store(r, "model_metadatas", "ModelMetadata") for r in _MODULE_ROWS]
+
+STAGING_MODULES_LIST_RESPONSE = _hydra_collection(
+    "/api/3/staging_model_metadatas", "/api/3/contexts/StagingModelMetadata", _STAGING_ROWS
+)
+PUBLISHED_MODULES_LIST_RESPONSE = _hydra_collection(
+    "/api/3/model_metadatas", "/api/3/contexts/ModelMetadata", _PUBLISHED_ROWS
+)
+
+# Single-record ``GET /api/3/{staging_,}model_metadatas/<alerts-uuid>`` — the full
+# metadata record (incl. ``attributes``) that ``get_staging``/``get_published``
+# return and ``get_field`` reads. Same 3 attributes as the list's alerts member.
+_ALERTS_TOP = {
+    "type": "alerts",
+    "module": "alerts",
+    "uuid": "7fdae59c-7de7-43d9-bf2a-dc2f00ed25b4",
+    "displayName": "{{ name }}",
+    "parentType": None,
+    "tableName": "alerts",
+    "descriptions": {"plural": "Alerts", "singular": "Alert"},
+    "attributes": _ALERTS_ATTRIBUTES,
+}
+STAGING_ALERTS_RESPONSE = _with_store(_ALERTS_TOP, "staging_model_metadatas", "StagingModelMetadata")
+STAGING_ALERTS_RESPONSE["@context"] = "/api/3/contexts/StagingModelMetadata"
+PUBLISHED_ALERTS_RESPONSE = _with_store(_ALERTS_TOP, "model_metadatas", "ModelMetadata")
+PUBLISHED_ALERTS_RESPONSE["@context"] = "/api/3/contexts/ModelMetadata"
+
+# ``GET /api/publish/error`` — the last publish's outcome. ``status="Success"`` +
+# a present body means nothing is mid-fail; ``pending_changes()`` is the cleaner
+# "what's uncommitted" view. ``last_publish_time`` is the appliance's own epoch.
+PUBLISH_ERROR_RESPONSE = {
+    "@type": "Publish",
+    "status": "Success",
+    "last_publish_time": 1782950402,
+}
+
+
+# ---------------------------------------------------------------------------
+# Picklist captures (back ``list_picklists`` / ``get_picklist_values``)
+# ---------------------------------------------------------------------------
+# ``_load_bulk`` makes two calls: ``GET /api/3/picklist_names`` (the name set +
+# the listName-IRI→name map) and ``GET /api/3/picklists`` (every item, each
+# carrying its own ``listName`` IRI). The nested ``picklists`` array on each
+# picklist_names member is NOT read by ``_load_bulk`` (it uses the flat call), so
+# it is dropped here. Two picklists are retained — Severity (5 items) and
+# AlertStatus (5) — with real IRIs/uuids/colors so ``values("Severity")`` returns
+# the real itemValue/uuid/iri/ordinal tuples.
+
+_PICKLIST_NAME_ROWS = [
+    {
+        "@id": "/api/3/picklist_names/4e80cba3-032f-48b4-ac03-17e3ec247aac",
+        "@type": "PicklistName",
+        "name": "Severity",
+        "system": False,
+        "uuid": "4e80cba3-032f-48b4-ac03-17e3ec247aac",
+        "id": 64,
+    },
+    {
+        "@id": "/api/3/picklist_names/33e964a9-d607-49f2-813c-7ce46141815a",
+        "@type": "PicklistName",
+        "name": "AlertStatus",
+        "system": False,
+        "uuid": "33e964a9-d607-49f2-813c-7ce46141815a",
+        "id": 60,
+    },
+]
+PICKLIST_NAMES_RESPONSE = _hydra_collection(
+    "/api/3/picklist_names", "/api/3/contexts/PicklistName", _PICKLIST_NAME_ROWS
+)
+
+_SEV = "/api/3/picklist_names/4e80cba3-032f-48b4-ac03-17e3ec247aac"
+_STAT = "/api/3/picklist_names/33e964a9-d607-49f2-813c-7ce46141815a"
+
+
+def _item(item_value, order_index, color, uuid, id_, list_name):
+    return {
+        "@id": f"/api/3/picklists/{uuid}",
+        "@type": "Picklist",
+        "itemValue": item_value,
+        "orderIndex": order_index,
+        "color": color,
+        "icon": None,
+        "listName": list_name,
+        "uuid": uuid,
+        "id": id_,
+        "importedBy": None,
+    }
+
+
+_PICKLIST_ITEM_ROWS = [
+    _item("Minimal", 0, "#42C5F3", "0d609b08-45e0-469f-8910-41145c0b7c03", 443, _SEV),
+    _item("Low", 1, "#16A34A", "58d0753f-f7e4-403b-953c-b0f521eab759", 445, _SEV),
+    _item("Medium", 2, "#D9BC00", "b3c20a3a-ecfd-4adc-a225-0205968e6793", 447, _SEV),
+    _item("High", 3, "#F06105", "40187287-89fc-4e9c-b717-e9443d57eedb", 444, _SEV),
+    _item("Critical", 4, "#B22222", "7efa2220-39bb-44e4-961f-ac368776e3b0", 446, _SEV),
+    _item("Open", 1, "#264EA1", "7de816ff-7140-4ee5-bd05-93ce22002146", 201, _STAT),
+    _item("Investigating", 2, "#25A5AE", "758925e7-629c-46d8-89db-fb36f5fbe88a", 200, _STAT),
+    _item("Pending", 3, "#D9BC00", "a53d5465-75a6-4b7a-8144-4eccc23cea4a", 203, _STAT),
+    _item("Closed", 4, "#596374", "fac53e73-8d16-4189-98d5-95fbd1555232", 204, _STAT),
+    _item("Re-Opened", 6, "#F19C3F", "891fb9d5-556c-44c6-9f7d-94a27dec732e", 202, _STAT),
+]
+PICKLISTS_RESPONSE = _hydra_collection("/api/3/picklists", "/api/3/contexts/Picklist", _PICKLIST_ITEM_ROWS)

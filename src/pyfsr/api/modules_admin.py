@@ -36,6 +36,15 @@ map.
 For the field-type catalogue and relationship/reverse-field semantics from an authoring
 perspective, see ``docs/source/guides/module-field-schema.md``.
 
+Read-only schema introspection is doctested against captured responses:
+
+    >>> client = demo_client()
+    >>> admin = client.modules_admin
+    >>> admin.is_published("alerts")
+    True
+    >>> admin.pending_changes()          # fully-published box: nothing staged
+    []
+
 Example::
 
     admin = client.modules_admin

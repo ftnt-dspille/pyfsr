@@ -10,9 +10,13 @@ This API resolves that, and can auto-discover which picklist a ``(module, field)
 pair binds to from the module's field metadata.
 
 Example:
+    >>> client = demo_client()
     >>> client.picklists.list()                       # all picklist names
-    >>> client.picklists.values("AlertStatus")        # its items
-    >>> client.picklists.for_field("alerts", "status") # -> "AlertStatus"
+    ['AlertStatus', 'Severity']
+    >>> [v["itemValue"] for v in client.picklists.values("AlertStatus")]
+    ['Open', 'Investigating', 'Pending', 'Closed', 'Re-Opened']
+    >>> client.picklists.for_field("alerts", "status")  # the bound picklist name
+    'AlertStatus'
     >>> client.picklists.resolve("High", picklist="Severity")
     '/api/3/picklists/...'
     >>> client.picklists.resolve_record_fields(
@@ -248,6 +252,7 @@ class PicklistsAPI(BaseAPI):
         committing any write.
 
         Example:
+            >>> client = demo_client()
             >>> misses = client.picklists.validate_record_fields(
             ...     "alerts", {"severity": "Critical", "status": "Bogus"})
             >>> [m["field"] for m in misses]
