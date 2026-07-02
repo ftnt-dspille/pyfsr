@@ -72,6 +72,15 @@ class EnvConfig:
     Build it with :meth:`from_env`, then call :meth:`client` for a
     :class:`~pyfsr.client.FortiSOAR`. ``auth`` is the value passed straight to
     the client: an API-key string, or a ``(username, password)`` tuple.
+
+    >>> cfg = EnvConfig.from_env({
+    ...     "FSR_BASE_URL": "https://soar.example.com",
+    ...     "FSR_API_KEY": "key-123",
+    ... })
+    >>> cfg.base_url, cfg.auth, cfg.verify_ssl, cfg.timeout
+    ('https://soar.example.com', 'key-123', True, 30)
+    >>> type(cfg.auth).__name__          # a lone key resolves to a str
+    'str'
     """
 
     base_url: str

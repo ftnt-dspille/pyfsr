@@ -10,6 +10,13 @@ and works for every module on the appliance::
     page = incidents.query(Query().eq("status.itemValue", "Open").limit(50))
     for rec in incidents.iterate(Query().gt("createDate", ts)):
         ...
+
+Run offline against a replay capture (``demo_client``) — a typed ``Alert``:
+
+>>> client = demo_client()
+>>> alert = client.records("alerts").get("9f0eb603-ac1e-41c3-b47b-444589beed39")
+>>> (alert.name, type(alert).__name__)
+('Response Capture Test Alert', 'Alert')
 """
 
 from __future__ import annotations
@@ -603,11 +610,11 @@ class RecordSet(Generic[T]):
             ValueError: if ``key`` field(s) are missing from ``data``.
 
         Example:
-            >>> alert, created = client.records("alerts").get_or_create(
+            >>> alert, created = client.records("alerts").get_or_create(  # doctest: +SKIP
             ...     {"name": "Malware Alert", "severity": "High"},
             ...     key="name"
             ... )
-            >>> if created:
+            >>> if created:  # doctest: +SKIP
             ...     print(f"Created new alert {alert.uuid}")
             ... else:
             ...     print(f"Alert already exists: {alert.uuid}")
@@ -987,14 +994,14 @@ class RecordSet(Generic[T]):
 
         Example:
             >>> # Create a record and wait for its on-create playbook to finish
-            >>> record, run = client.records("alerts").create_and_wait(
+            >>> record, run = client.records("alerts").create_and_wait(  # doctest: +SKIP
             ...     {"name": "Suspicious Activity", "severity": "High"},
             ...     playbook="Auto Investigate",
             ...     timeout=120
             ... )
-            >>> print(f"Alert created: {record.uuid}")
-            >>> print(f"Playbook run {run['pk']}: {run['status']}")
-            >>> if run["error_message"]:
+            >>> print(f"Alert created: {record.uuid}")  # doctest: +SKIP
+            >>> print(f"Playbook run {run['pk']}: {run['status']}")  # doctest: +SKIP
+            >>> if run["error_message"]:  # doctest: +SKIP
             ...     print(f"Error: {run['error_message']}")
         """
         # Create the record first

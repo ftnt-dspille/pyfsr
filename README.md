@@ -98,7 +98,7 @@ Anthropic tool-use, OpenAI function calling, your own agent loop, or the bundled
 MCP server.
 
 ```python
-from pyfsr.tools import to_anthropic_tools, to_openai_tools, dispatch
+from pyfsr.agent.tools import to_anthropic_tools, to_openai_tools, dispatch
 
 tools = to_anthropic_tools()             # or to_openai_tools(), or tool_schemas()
 

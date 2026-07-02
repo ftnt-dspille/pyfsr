@@ -13,6 +13,16 @@ from pyfsr import FortiSOAR
 client = FortiSOAR("soar.example.com", "your-api-token")
 ```
 
+Constructing a client resolves the host and an `APIKeyAuth` credential you can
+inspect — `demo_client()` builds the same shape offline (it skips the one live
+validation call construction would otherwise make):
+
+```{doctest}
+>>> client = demo_client()                       # token auth: the key as a string
+>>> client.base_url, type(client.auth).__name__, client.timeout
+('https://demo.fortisoar.example', 'APIKeyAuth', 30)
+```
+
 ## Username & password
 
 Pass a `(username, password)` tuple. pyfsr exchanges these for a session token:

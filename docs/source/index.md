@@ -126,3 +126,10 @@ guides/appliance-cli
 
 reference
 ```
+
+```{toctree}
+:hidden:
+:caption: Project
+
+contributing
+```
