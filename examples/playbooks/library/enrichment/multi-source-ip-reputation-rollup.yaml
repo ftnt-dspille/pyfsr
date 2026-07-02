@@ -10,7 +10,11 @@
 # connectors: see connector steps (connector-pluggable; swap the config for your appliance)
 # adapts-to: the SOC intent named above; retarget by changing the module + inputs.
 # NOTE: 1 non-connector blocking error(s) remain after cleaning:
-#   - bad_value: param 'relationships' on virustotal.query_ip: value '' not in enum. Allowed: 'Comments', '
+#   - bad_value: Jinja reference vars.steps.Enter_IP.input.iP in step 'fgt_block':
+#     step 'Enter_IP' cannot run before 'fgt_block' in any execution path. This
+#     decompiled playbook's step graph predates the current clean pipeline; the
+#     decision/approval branches need re-resolving. Not a decompiler bug
+#     (fresh decompile is faithful); needs a re-clean.
 
 collection: 00. Playbook Learning SP
 description: ''
@@ -285,7 +289,6 @@ playbooks:
       config: 2df52cf6-e4e2-4eee-bce1-7fc6d22d9fc1
       params:
         ip: '{{vars.steps.Enter_IP.input.iP}}'
-        relationships: ''
       connector: virustotal
       operation: query_ip
       operationTitle: Get IP Reputation
