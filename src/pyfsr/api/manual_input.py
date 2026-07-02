@@ -103,6 +103,98 @@ class ManualInputAPI(BaseAPI):
             return [ManualInput.model_validate(m) for m in members]
         return members
 
+    def pending_for_run(
+        self,
+        task_id: str,
+        *,
+        is_approval: bool | None = None,
+        ordering: str = "-id",
+        limit: int | None = None,
+        offset: int = 0,
+        typed: bool = True,
+    ) -> list[ManualInput] | list[dict[str, Any]]:
+        """Pending manual inputs for one playbook run, keyed by its ``task_id``.
+
+        Resolves ``task_id`` -> the run's primary key, then lists the
+        manual-wf-input queue scoped to that run via the ``workflow`` query
+        filter -- the same filter the FortiSOAR UI uses to show a run's pending
+        inputs in its execution history. This is the reliable run -> pending-
+        input join: :meth:`list` returns every pending input instance-wide and
+        each row's ``workflow`` field is an opaque Fernet token, so it cannot be
+        filtered by task_id client-side.
+
+        Each row carries the full prompt the UI renders (``input.schema`` --
+        title/description/``inputVariables`` -- plus ``response_mapping`` for the
+        approval/button options). An Approval step (``type: approval`` ->
+        ``ApprovalManualInput``) surfaces here with ``is_approval=True`` even
+        though it does NOT appear in the ``approvals`` module -- this is how you
+        find the ``manual_input_id`` to pass to :meth:`resume` (``approved=True``)
+        to drive an approval gate (the modern approval step resumes via
+        ``wfinput_resume``, not the ``/approval/`` endpoint).
+
+        Args:
+            task_id: the ``task_id`` returned by
+                :meth:`~pyfsr.api.playbooks.PlaybooksAPI.trigger`.
+            is_approval: client-side filter -- ``True`` for approval gates only,
+                ``False`` for plain data-input prompts only, ``None`` (default)
+                for both.
+            ordering: sort field (default ``"-id"``, newest first).
+            limit: page size. ``None`` (default) fetches every page (following
+                ``hydra:nextPage``); pass an int for a single page.
+            offset: starting offset for a single-page fetch.
+            typed: parse rows into :class:`~pyfsr.models.ManualInput` (default);
+                pass ``False`` for raw dicts.
+
+        Returns:
+            The run's pending inputs (empty if the run has none -- it has
+            already finished or is not paused on a manual input/approval step).
+
+        Example:
+            >>> run = client.playbooks.trigger("Triage Alert", follow=False)
+            >>> pending = client.manual_input.pending_for_run(run.task_id)
+            >>> pending[0].input["schema"]["title"]
+            'Approve ingestion of the fetched indicators?'
+            >>> client.manual_input.answer(input_id=pending[0].id, option="approve")
+        """
+        # task_id -> run pk (the @id path's trailing segment).
+        resp = self.client.playbooks.log_list(task_id=task_id, limit=1)
+        members = resp.get("hydra:member", []) if isinstance(resp, dict) else (resp if isinstance(resp, list) else [])
+        if not members or not isinstance(members[0], dict):
+            return []
+        rpk = (members[0].get("@id") or "").rstrip("/").rsplit("/", 1)[-1]
+        if not rpk:
+            return []
+
+        params: dict[str, Any] = {
+            "format": "json",
+            "workflow": rpk,
+            "ordering": ordering,
+        }
+        if limit is not None:
+            params["limit"] = limit
+            params["offset"] = offset
+            page = self._members(self.client.get(_BASE, params=params))
+        else:
+            page = []
+            page_offset = offset
+            while True:
+                page_params = dict(params, offset=page_offset)
+                resp = self.client.get(_BASE, params=page_params)
+                rows = self._members(resp)
+                page.extend(rows)
+                next_page = resp.get("hydra:nextPage") if isinstance(resp, dict) else None
+                per_page = resp.get("hydra:itemsPerPage") if isinstance(resp, dict) else None
+                if not next_page or not rows:
+                    break
+                page_offset += per_page or len(rows)
+
+        if is_approval is not None:
+            page = [m for m in page if bool(m.get("is_approval")) is is_approval]
+
+        if typed:
+            return [ManualInput.model_validate(m) for m in page]
+        return page
+
     def count(
         self,
         *,
