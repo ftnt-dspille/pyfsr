@@ -175,7 +175,7 @@ def warm_catalog(
         """True when ``section`` was warmed within ``max_age`` seconds (skip it)."""
         if max_age is None or not meta_ok[0]:
             return False
-        row = conn.execute("SELECT warmed_at FROM _catalog_meta WHERE section = ?", (section,)).fetchone()
+        row = conn.execute("SELECT warmed_at FROM _pyfsr_warm_meta WHERE section = ?", (section,)).fetchone()
         return bool(row and row[0] is not None and (now - row[0]) < max_age)
 
     def _stamp(section: str) -> None:
@@ -183,7 +183,7 @@ def warm_catalog(
         if not meta_ok[0]:
             return
         conn.execute(
-            "INSERT OR REPLACE INTO _catalog_meta (section, warmed_at, source) VALUES (?, ?, ?)",
+            "INSERT OR REPLACE INTO _pyfsr_warm_meta (section, warmed_at, source) VALUES (?, ?, ?)",
             (section, now, src_path or "live"),
         )
 
@@ -195,9 +195,15 @@ def warm_catalog(
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
         # Provenance + incremental-warm bookkeeping (P2/P3) — best-effort (see above).
+        # NOTE: pyfsr's warm-state table is `_pyfsr_warm_meta`, NOT `_catalog_meta`.
+        # The fsr_playbooks slim DB ships its own `_catalog_meta(key, value, updated_at)`
+        # for provenance; `CREATE TABLE IF NOT EXISTS _catalog_meta (...)` was a no-op
+        # against that existing table, so pyfsr's `SELECT warmed_at ... WHERE section`
+        # hit `no such column` (live-regressed the v0.7.10 release). A distinct,
+        # pyfsr-private name avoids the cross-package schema collision.
         try:
             conn.execute(
-                "CREATE TABLE IF NOT EXISTS _catalog_meta (  section TEXT PRIMARY KEY, warmed_at REAL, source TEXT)"
+                "CREATE TABLE IF NOT EXISTS _pyfsr_warm_meta (  section TEXT PRIMARY KEY, warmed_at REAL, source TEXT)"
             )
             meta_ok[0] = True
         except sqlite3.OperationalError:
