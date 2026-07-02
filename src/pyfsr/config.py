@@ -185,14 +185,23 @@ class EnvConfig:
 
         Any keyword in ``overrides`` is passed through to the client constructor,
         taking precedence over the resolved values.
+
+        The resolved ``auth`` union is translated into the client's
+        non-deprecated keyword form (``token`` for an API-key string,
+        ``username``/``password`` for a credential tuple) rather than the legacy
+        ``auth`` parameter, so the env/config-file convenience path doesn't trip
+        the ``auth`` deprecation warning.
         """
         kwargs = {
             "base_url": self.base_url,
-            "auth": self.auth,
             "verify_ssl": self.verify_ssl,
             "suppress_insecure_warnings": self.suppress_insecure_warnings,
             "port": self.port,
             "timeout": self.timeout,
         }
+        if isinstance(self.auth, str):
+            kwargs["token"] = self.auth
+        else:
+            kwargs["username"], kwargs["password"] = self.auth
         kwargs.update(overrides)
         return FortiSOAR(**kwargs)

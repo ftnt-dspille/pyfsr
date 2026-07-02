@@ -20,7 +20,7 @@ AI terms accepted) in System Settings before any of this works — see
 Accessed as ``client.ai``.
 
 Example:
-    >>> client = FortiSOAR("soar.example.com", api_key)
+    >>> client = FortiSOAR("soar.example.com", token=api_key)
     >>> client.ai.enable_features()                       # one-time, accepts AI T&C
     >>> report = client.ai.investigate_alert("alerts:740a751c-...", wait=True)
     >>> report["status"]

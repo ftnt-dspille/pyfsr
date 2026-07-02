@@ -59,7 +59,7 @@ def main() -> int:
         print(f"connector source not found: {CONNECTOR_DIR}", file=sys.stderr)
         return 2
 
-    client = FortiSOAR(base_url, auth=(username, password), verify_ssl=verify)
+    client = FortiSOAR(base_url, username=username, password=password, verify_ssl=verify)
     print(f"connected to {client.base_url} (version {client.version()})\n")
 
     # 1. custom-connector gate (allowCustomConnector) -----------------------

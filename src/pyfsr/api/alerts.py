@@ -16,7 +16,7 @@ class AlertsAPI(BaseAPI):
             from pyfsr import FortiSOAR
 
             # Initialize client
-            client = FortiSOAR("your-server", "your-token")
+            client = FortiSOAR("your-server", token="your-token")
 
             # Create new alert
             new_alert = {

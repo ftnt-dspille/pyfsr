@@ -166,7 +166,7 @@ class ExportConfigAPI(BaseAPI):
                 configuration export
 
         Example:
-            >>> client = FortiSOAR('fortisoar.company.com', '<your-api-token>')
+            >>> client = FortiSOAR('fortisoar.company.com', token='<your-api-token>')
             >>> output_file = client.export_config.export_by_template_uuid(
             ...     template_uuid="123e4567-e89b-12d3-a456-426655440000",
             ...     output_path="exports/config.zip"
@@ -196,7 +196,7 @@ class ExportConfigAPI(BaseAPI):
                 configuration export
 
         Example:
-            >>> client = FortiSOAR('fortisoar.company.com', '<your-api-token>')
+            >>> client = FortiSOAR('fortisoar.company.com', token='<your-api-token>')
             >>> output_file = client.export_config.export_by_template_name(
             ...     template_name="Alert Configuration",
             ...     output_path="exports/alert_config.zip"
@@ -240,7 +240,7 @@ class ExportConfigAPI(BaseAPI):
 
         Example:
             >>> from pyfsr import FortiSOAR
-            >>> client = FortiSOAR('fortisoar.company.com', '<your-api-token>')
+            >>> client = FortiSOAR('fortisoar.company.com', token='<your-api-token>')
 
             >>> # Simple configuration with automatic lookup
             >>> template = client.export_config.create_simplified_template(
