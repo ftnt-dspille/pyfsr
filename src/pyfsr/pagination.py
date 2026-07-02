@@ -55,6 +55,14 @@ class HydraPage(Generic[T]):
     :class:`~pyfsr.records.RecordSet`, ``dict[str, Any]`` when raw.
     ``from_response`` always produces ``HydraPage[Any]``; ``RecordSet``
     narrows the type after parsing members.
+
+    >>> page = HydraPage.from_response({
+    ...     "@type": "hydra:Collection",
+    ...     "hydra:member": [{"@id": "/api/3/alerts/x", "name": "A"}],
+    ...     "hydra:totalItems": 1,
+    ... })
+    >>> (page.total, len(page.members), page.members[0]["name"])
+    (1, 1, 'A')
     """
 
     #: The records on this page.

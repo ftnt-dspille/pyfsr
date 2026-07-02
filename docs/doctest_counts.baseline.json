@@ -3,7 +3,7 @@
   "files": {
     "contributing.md": 1,
     "getting-started.md": 0,
-    "guides/ai-agents.md": 0,
+    "guides/ai-agents.md": 1,
     "guides/appliance-cli.md": 7,
     "guides/authentication.md": 3,
     "guides/connectors.md": 1,

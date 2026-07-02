@@ -161,6 +161,34 @@ The registry ships these tools, grouped by what they do:
 Inspect any tool's full JSON-Schema (parameters, defaults, enums) at runtime
 with `get_tool("query_records").input_schema`.
 
+## Calling tools
+
+`dispatch(client, name, arguments)` runs one tool and returns a JSON-safe,
+token-trimmed result — never raises; a failure comes back as `{"error": {...}}`.
+The read tools resolve against the replay session `demo_client()` builds, so
+their return shapes are doctested here (write ops need a live appliance):
+
+```{doctest}
+>>> from pyfsr.agent.tools import dispatch
+>>> client = demo_client()
+>>> r = dispatch(client, "get_record", {"module": "alerts",
+...     "ref": "9f0eb603-ac1e-41c3-b47b-444589beed39"})
+>>> (r["@type"], r["name"])
+('Alert', 'Response Capture Test Alert')
+>>> hits = dispatch(client, "query_records", {"module": "alerts",
+...     "filters": [{"field": "name", "operator": "eq",
+...                  "value": "Response Capture Test Alert"}]})
+>>> len(hits["members"]), hits["members"][0]["@type"]
+(1, 'Alert')
+>>> conns = dispatch(client, "list_connectors", {})
+>>> [c.name for c in conns["connectors"][:3]]
+['smtp', 'code-snippet', 'mitre-attack']
+```
+
+Discovery tools (`list_modules`, `describe_module`) and picklist tools
+(`list_picklists`, `get_picklist_values`) need captures not yet recorded, so
+they're shown in the table above and exercised once a lab box is reachable.
+
 ## Use case: triage an alert end-to-end
 
 A SOC analyst asks an agent *"Triage the latest critical alert and tell me if
