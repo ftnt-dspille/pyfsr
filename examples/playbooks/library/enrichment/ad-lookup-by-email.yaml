@@ -9,10 +9,6 @@
 # outputs: a comment / record update on the source record
 # connectors: see connector steps (connector-pluggable; swap the config for your appliance)
 # adapts-to: the SOC intent named above; retarget by changing the module + inputs.
-# NOTE: 1 non-connector blocking error(s) remain after cleaning:
-#   - bad_value: param 'size_limit' on activedirectory.global_search is type 'integer'
-#     but got '' (str) which does not coerce to int (decompiler emitted an empty
-#     string for an unset integer param). Fix by dropping the field or passing an int.
 
 collection: 00. Playbook Learning SP - Specific Playbooks
 description: ''
@@ -51,8 +47,6 @@ playbooks:
       config: 65262d44-9202-4501-bc06-9e5b3ef5c9c5
       params:
         cookie: ''
-        page_size: ''
-        size_limit: ''
         search_object: User
         search_attr_name: Email
         search_attr_value: '{{vars.input.records[0].value}}'

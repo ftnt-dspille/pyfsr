@@ -10,7 +10,14 @@
 # connectors: see connector steps (connector-pluggable; swap the config for your appliance)
 # adapts-to: the SOC intent named above; retarget by changing the module + inputs.
 # NOTE: 1 non-connector blocking error(s) remain after cleaning:
-#   - bad_value: Jinja reference vars.steps.Approval_Request.username in step 'user_who_approved': step 'Ap
+#   - bad_value: Jinja reference vars.steps.Approval_Request.username in step
+#     'user_who_approved': step 'Approval_Request' cannot run before
+#     'user_who_approved' in any execution path. This decompiled playbook keeps
+#     the legacy ApprovalManualInput step type; its button→step branches live in
+#     arguments.response_mapping (step_iri), which the resolver does not promote
+#     to friendly edges (only the friendly manual_input type does, per
+#     normalizers.py L133). Re-clean with a decompiler that emits friendly
+#     manual_input, or convert the step by hand. Not a decompiler bug (faithful).
 
 collection: 00. Playbook Learning SP - Specific Playbooks
 description: ''
