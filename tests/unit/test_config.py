@@ -150,9 +150,17 @@ def test_from_env_file_override(tmp_path, monkeypatch):
 def test_client_passes_config_through(recorder):
     EnvConfig(base_url="h", auth="k", port=9000, timeout=12).client()
     assert recorder.last["base_url"] == "h"
-    assert recorder.last["auth"] == "k"
+    assert recorder.last["token"] == "k"  # str auth -> token keyword (not the legacy auth=)
+    assert "auth" not in recorder.last
     assert recorder.last["port"] == 9000
     assert recorder.last["timeout"] == 12
+
+
+def test_client_translates_userpass_tuple(recorder):
+    EnvConfig(base_url="h", auth=("u", "p")).client()
+    assert recorder.last["username"] == "u"
+    assert recorder.last["password"] == "p"
+    assert "auth" not in recorder.last
 
 
 def test_client_overrides_win(recorder):

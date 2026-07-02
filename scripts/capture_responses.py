@@ -16,7 +16,8 @@ class ResponseCapture:
         # Initialize FortiSOAR client
         self.client = FortiSOAR(
             base_url=config["fortisoar"]["base_url"],
-            auth=(config["fortisoar"]["username"], config["fortisoar"]["password"]),
+            username=config["fortisoar"]["username"],
+            password=config["fortisoar"]["password"],
             verify_ssl=config["fortisoar"].get("verify_ssl", True),
             suppress_insecure_warnings=True,
         )

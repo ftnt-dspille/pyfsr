@@ -180,7 +180,7 @@ def main() -> int:
     password = _env("FSR_PASSWORD")
     verify = _bool("FSR_VERIFY_SSL", False)
 
-    client = FortiSOAR(base_url, auth=(username, password), verify_ssl=verify)
+    client = FortiSOAR(base_url, username=username, password=password, verify_ssl=verify)
     print(f"connected to {client.base_url} (version {client.version()})\n")
     admin = client.modules_admin
 

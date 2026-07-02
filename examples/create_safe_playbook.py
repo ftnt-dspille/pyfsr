@@ -170,7 +170,8 @@ def main() -> None:
 
     client = FortiSOAR(
         args.host,
-        auth=(args.user, args.password),
+        username=args.user,
+        password=args.password,
         verify_ssl=False,
         suppress_insecure_warnings=True,
         port=args.port,

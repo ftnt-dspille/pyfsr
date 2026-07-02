@@ -18,7 +18,7 @@ Example::
     from pyfsr import FortiSOAR
     from pyfsr.agent.tools import to_anthropic_tools, dispatch
 
-    client = FortiSOAR("soar.example.com", api_key)
+    client = FortiSOAR("soar.example.com", token=api_key)
     tools = to_anthropic_tools()                       # feed to Claude
     # ... model decides to call a tool ...
     result = dispatch(client, "search_records",

@@ -24,7 +24,7 @@ class UsersAPI(BaseAPI):
 
         from pyfsr import FortiSOAR
 
-        client = FortiSOAR("https://your-fsr", ("csadmin", "password"), verify_ssl=False)
+        client = FortiSOAR("https://your-fsr", username="csadmin", password="password", verify_ssl=False)
 
         # Create a user using friendly role/team names
         person = client.users.create(

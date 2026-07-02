@@ -74,7 +74,8 @@ TARGET_AGENTS = [
 def connect() -> FortiSOAR:
     return FortiSOAR(
         base_url=FSR_BASE_URL,
-        auth=(FSR_USERNAME, FSR_PASSWORD),
+        username=FSR_USERNAME,
+        password=FSR_PASSWORD,
         verify_ssl=False,
         suppress_insecure_warnings=True,
     )

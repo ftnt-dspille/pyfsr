@@ -35,7 +35,7 @@ DO_WRITES = os.environ.get("DO_WRITES", "").lower() in ("1", "true", "yes")
 
 
 def main() -> None:
-    client = FortiSOAR(FSR_BASE_URL, auth=(FSR_USERNAME, FSR_PASSWORD), verify_ssl=False)
+    client = FortiSOAR(FSR_BASE_URL, username=FSR_USERNAME, password=FSR_PASSWORD, verify_ssl=False)
     conn = client.connectors
 
     # ---- discovery -----------------------------------------------------------
