@@ -833,3 +833,37 @@ class PicklistName(ApiResult):
         """The list's options (embedded under ``$relationships=true``); empty
         when not expanded or the list has none."""
         return self.picklists or []
+
+
+class DailyActionCount(ApiResult):
+    """Daily action-count license usage — ``client.system.daily_action_count()``.
+
+    From ``GET /api/wf/workflow/config/?section=license`` (the endpoint the UI's
+    ``getDailyActionCount`` calls). Counters are decrypted by the workflow engine.
+
+    ``daily_action_limit`` is the per-day cap enforced by the license (e.g. 10000
+    on FortiFlex Starter); ``-1`` means unlimited/unenforced (e.g. an Evaluation
+    or edition with no action cap). ``remaining_actions`` counts down as counted
+    steps run (Create/Update Record, Connector Action, Set Variable, …; Wait,
+    Approval, Loops, and Reference-a-Playbook are not counted). ``reset_time`` is
+    the epoch second at which ``remaining_actions`` resets to the limit.
+    """
+
+    daily_action_limit: int | None = None
+    remaining_actions: int | None = None
+    reset_time: int | None = None
+    last_update_time: float | None = None
+
+    @property
+    def enforced(self) -> bool:
+        """True when a positive daily cap is in force (``daily_action_limit > 0``);
+        ``-1``/0 mean unlimited or unenforced."""
+        return bool(self.daily_action_limit and self.daily_action_limit > 0)
+
+    @property
+    def used_today(self) -> int | None:
+        """Actions consumed so far today (``daily_action_limit - remaining_actions``),
+        or ``None`` when not enforced."""
+        if not self.enforced or self.remaining_actions is None:
+            return None
+        return self.daily_action_limit - self.remaining_actions
