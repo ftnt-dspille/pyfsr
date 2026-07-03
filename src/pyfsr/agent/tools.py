@@ -32,7 +32,7 @@ message and self-correct.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any
 
 from ..exceptions import FortiSOARException
@@ -444,6 +444,151 @@ def _h_map_use_case(client, *, use_case) -> Any:
     # The default store seeds itself from the shipped `reconcile-and-report` archetype on
     # first use; see map_use_case for the return shape.
     return map_use_case(use_case)
+
+
+# ------------------------------------------------------------------ appliance verbs
+#
+# Read-only `pyfsr appliance` verbs surfaced to an agent. These reach the box over
+# SSH (or locally when on-box), NOT the REST API, so `client` (the REST FortiSOAR
+# client passed by dispatch) is unused — each handler builds its own Transport via
+# transport_from_env() (PYFSR_APPLIANCE_* env vars). Mutating verbs (db write,
+# service restart/stop, mq purge, cert regenerate) are intentionally omitted from
+# this first cut.
+
+
+def _appliance_json(obj: Any) -> Any:
+    """Coerce an appliance-verb result (often a dataclass / list / tuple) to a
+    JSON-serializable value. ``asdict`` recurses into nested dataclasses."""
+    if is_dataclass(obj) and not isinstance(obj, type):
+        return asdict(obj)
+    if isinstance(obj, list):
+        return [_appliance_json(x) for x in obj]
+    return obj
+
+
+def _appliance_transport():
+    from ..cli.appliance.transport import transport_from_env
+
+    return transport_from_env()
+
+
+def _h_appliance_info_identity(client) -> Any:
+    from ..cli.appliance import info
+    from ..cli.appliance.facts import Facts
+
+    return info.identity(Facts(transport=_appliance_transport()))
+
+
+def _h_appliance_db_list_databases(client) -> Any:
+    from ..cli.appliance import db
+    from ..cli.appliance.facts import Facts
+
+    return _appliance_json(db.list_databases(Facts(transport=_appliance_transport())))
+
+
+def _h_appliance_db_tables(client, pattern=None, role=None, db_name=None) -> Any:
+    from ..cli.appliance import db
+    from ..cli.appliance.facts import Facts
+
+    target, headers, rows = db.tables(
+        Facts(transport=_appliance_transport()),
+        pattern,
+        role=role,
+        db=db_name,
+    )
+    return {"database": target, "headers": list(headers), "rows": [list(r) for r in rows]}
+
+
+def _h_appliance_db_query(client, sql, role=None, db_name=None) -> Any:
+    from ..cli.appliance import db
+    from ..cli.appliance.facts import Facts
+
+    target, headers, rows = db.query(
+        Facts(transport=_appliance_transport()),
+        sql,
+        role=role,
+        db=db_name,
+    )
+    return {"database": target, "headers": list(headers), "rows": [list(r) for r in rows]}
+
+
+def _h_appliance_db_getsize(client) -> Any:
+    from ..cli.appliance import db
+    from ..cli.appliance.facts import Facts
+
+    return _appliance_json(db.getsize(Facts(transport=_appliance_transport())))
+
+
+def _h_appliance_service_status(client, name=None) -> Any:
+    from ..cli.appliance import service
+
+    return service.status(_appliance_transport(), name)
+
+
+def _h_appliance_service_list(client, name=None) -> Any:
+    from ..cli.appliance import service
+
+    return _appliance_json(service.services(_appliance_transport(), name))
+
+
+def _h_appliance_mq_status(client) -> Any:
+    from ..cli.appliance import mq
+
+    return mq.status(_appliance_transport())
+
+
+def _h_appliance_mq_queues(client) -> Any:
+    from ..cli.appliance import mq
+
+    return _appliance_json(mq.queues(_appliance_transport()))
+
+
+def _h_appliance_license_show(client) -> Any:
+    from ..cli.appliance import license
+
+    return license.show(_appliance_transport())
+
+
+def _h_appliance_license_details(client) -> Any:
+    from ..cli.appliance import license
+
+    return _appliance_json(license.details(_appliance_transport()))
+
+
+def _h_appliance_logs_tail(client, service, lines=100) -> Any:
+    from ..cli.appliance import logs
+
+    return logs.tail(_appliance_transport(), service, lines=lines)
+
+
+def _h_appliance_ha_nodes(client) -> Any:
+    from ..cli.appliance import ha
+
+    return _appliance_json(ha.nodes(_appliance_transport()))
+
+
+def _h_appliance_ha_health(client) -> Any:
+    from ..cli.appliance import ha
+
+    return _appliance_json(ha.health(_appliance_transport()))
+
+
+def _h_appliance_host_snapshot(client) -> Any:
+    from ..cli.appliance import host
+
+    return _appliance_json(host.snapshot(_appliance_transport()))
+
+
+def _h_appliance_host_meminfo(client) -> Any:
+    from ..cli.appliance import host
+
+    return _appliance_json(host.meminfo(_appliance_transport()))
+
+
+def _h_appliance_diagnose_run(client, path=None, timeout=120.0) -> Any:
+    from ..cli.appliance import diagnose
+
+    return diagnose.run(_appliance_transport(), path=path, timeout=timeout)
 
 
 # --------------------------------------------------------------------------- registry
@@ -1057,6 +1202,128 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["use_case"],
         ),
         _h_map_use_case,
+    ),
+    # --- appliance verbs (read-only; SSH/local via PYFSR_APPLIANCE_* env) ---
+    ToolSpec(
+        "appliance_info_identity",
+        "Appliance identity: version, device UUID, content DB name. Read-only; "
+        "reaches the box over SSH (PYFSR_APPLIANCE_* env), not the REST API.",
+        _obj({}),
+        _h_appliance_info_identity,
+    ),
+    ToolSpec(
+        "appliance_db_list_databases",
+        "List Postgres databases on the appliance (csadm db). Read-only.",
+        _obj({}),
+        _h_appliance_db_list_databases,
+    ),
+    ToolSpec(
+        "appliance_db_tables",
+        "List tables in the content DB (optionally name-filtered). Read-only.",
+        _obj(
+            {
+                "pattern": {"type": "string", "description": "Optional LIKE pattern (e.g. 'alerts%')."},
+                "role": {"type": "string", "description": "DB role to connect as (default: the content DB role)."},
+                "db_name": {"type": "string", "description": "Target DB name (default: the content DB)."},
+            }
+        ),
+        _h_appliance_db_tables,
+    ),
+    ToolSpec(
+        "appliance_db_query",
+        "Run a read-only SQL query on the appliance content DB. Mutating SQL is "
+        "rejected (use the CLI for writes). Returns {database, headers, rows}.",
+        _obj({"sql": {"type": "string", "description": "SELECT query."}}, ["sql"]),
+        _h_appliance_db_query,
+    ),
+    ToolSpec(
+        "appliance_db_getsize",
+        "Per-data-class table sizes on the appliance (csadm db --getsize). Read-only.",
+        _obj({}),
+        _h_appliance_db_getsize,
+    ),
+    ToolSpec(
+        "appliance_service_status",
+        "Raw csadm services --status output (optionally filtered to one service name client-side). Read-only.",
+        _obj({"name": {"type": "string", "description": "Optional service name to filter lines to."}}),
+        _h_appliance_service_status,
+    ),
+    ToolSpec(
+        "appliance_service_list",
+        "Typed service states (name, running, status, since). Read-only.",
+        _obj({"name": {"type": "string", "description": "Optional service name to filter to."}}),
+        _h_appliance_service_list,
+    ),
+    ToolSpec(
+        "appliance_mq_status",
+        "Raw rabbitmqctl status output. Read-only.",
+        _obj({}),
+        _h_appliance_mq_status,
+    ),
+    ToolSpec(
+        "appliance_mq_queues",
+        "RabbitMQ queues (name, messages, consumers). Read-only.",
+        _obj({}),
+        _h_appliance_mq_queues,
+    ),
+    ToolSpec(
+        "appliance_license_show",
+        "Raw csadm license --show-details output. Read-only.",
+        _obj({}),
+        _h_appliance_license_show,
+    ),
+    ToolSpec(
+        "appliance_license_details",
+        "Parsed license details (serial, tier, entitlements, expiry). Read-only.",
+        _obj({}),
+        _h_appliance_license_details,
+    ),
+    ToolSpec(
+        "appliance_logs_tail",
+        "Tail a service log file. Read-only.",
+        _obj(
+            {
+                "service": {"type": "string", "description": "Service/log name to tail."},
+                "lines": {"type": "integer", "description": "Number of lines (default 100)."},
+            },
+            ["service"],
+        ),
+        _h_appliance_logs_tail,
+    ),
+    ToolSpec(
+        "appliance_ha_nodes",
+        "HA cluster node list. Read-only.",
+        _obj({}),
+        _h_appliance_ha_nodes,
+    ),
+    ToolSpec(
+        "appliance_ha_health",
+        "HA cluster health summary. Read-only.",
+        _obj({}),
+        _h_appliance_ha_health,
+    ),
+    ToolSpec(
+        "appliance_host_snapshot",
+        "One coherent sample of mem/swap/load/process RSS/disk. Read-only.",
+        _obj({}),
+        _h_appliance_host_snapshot,
+    ),
+    ToolSpec(
+        "appliance_host_meminfo",
+        "Memory usage (mem/swap). Read-only.",
+        _obj({}),
+        _h_appliance_host_meminfo,
+    ),
+    ToolSpec(
+        "appliance_diagnose_run",
+        "Run fsr_diagnose.sh on the appliance and return its output. Read-only diagnostic collection.",
+        _obj(
+            {
+                "path": {"type": "string", "description": "Override the diagnose script path."},
+                "timeout": {"type": "number", "description": "Timeout in seconds (default 120)."},
+            }
+        ),
+        _h_appliance_diagnose_run,
     ),
 )
 
