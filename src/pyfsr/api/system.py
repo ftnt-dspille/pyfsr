@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..models._system import DailyActionCount
 from .base import BaseAPI
 
 
@@ -62,6 +63,23 @@ class SystemAPI(BaseAPI):
         if param is not None:
             params["param"] = param
         return self.client.get("/api/auth/license", params=params or None)
+
+    def daily_action_count(self) -> DailyActionCount:
+        """Daily action-count license usage (``GET /api/wf/workflow/config/?section=license``).
+
+        Returns a typed :class:`~pyfsr.models.DailyActionCount` (dict-compatible)
+        with the workflow engine's decrypted license counters:
+        ``daily_action_limit``, ``remaining_actions``, ``reset_time``,
+        ``last_update_time``, plus ``.enforced`` and ``.used_today`` helpers.
+
+        ``daily_action_limit`` is the per-day cap (e.g. 10000 on FortiFlex Starter;
+        ``-1`` means unlimited/unenforced). Counted steps are Create/Update Record,
+        Connector Action, Set Variable, etc.; Wait/Approval/Loops/Reference-a-
+        Playbook are not counted. This is the endpoint the UI's
+        ``getDailyActionCount`` calls.
+        """
+        resp = self.client.get("/api/wf/workflow/config/", params={"section": "license"})
+        return DailyActionCount.model_validate(resp if isinstance(resp, dict) else {})
 
     def deploy_license(self, license_key: str) -> dict[str, Any]:
         """Deploy a license over an already-active one (``POST /api/auth/license``).
