@@ -21,6 +21,12 @@ Configuration is read from the environment (see :func:`client_from_env`):
 - ``FSR_PORT`` — optional port override.
 - ``FSR_VERIFY_SSL`` — ``false``/``0``/``no`` to disable TLS verification.
 - ``FSR_SUPPRESS_INSECURE_WARNINGS`` — silence urllib3 warnings when SSL is off.
+
+The ``appliance_*`` tools reach the box over SSH (not the REST API), so they
+read a separate set of vars via :func:`pyfsr.cli.appliance.transport.transport_from_env`:
+``PYFSR_APPLIANCE_HOST``/``USER``/``PASSWORD``/``PORT``/``KEY_PATH``/
+``SUDO_PASSWORD``/``INSECURE_SKIP_HOST_KEY_CHECK``. On-box (``/opt/cyops``
+present) the local transport is used and only the sudo password is needed.
 """
 
 from __future__ import annotations

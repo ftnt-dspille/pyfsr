@@ -277,3 +277,38 @@ def make_transport(
         "no appliance target: not running on a FortiSOAR box (/opt/cyops absent) and no "
         "--host / PYFSR_APPLIANCE_HOST given"
     )
+
+
+_TRUTHY = {"1", "true", "yes", "y", "on"}
+
+
+def _env_truthy(value: str | None) -> bool:
+    return value is not None and value.strip().lower() in _TRUTHY
+
+
+def transport_from_env(env: dict[str, str] | None = None) -> Transport:
+    """Build an appliance :class:`Transport` from ``PYFSR_APPLIANCE_*`` env vars.
+
+    Mirrors :func:`pyfsr.agent.mcp.client_from_env` but for the SSH/local
+    command transport the appliance verbs use (not the REST client). Recognized
+    vars: ``PYFSR_APPLIANCE_HOST`` (required for SSH; absent → local if on-box),
+    ``PYFSR_APPLIANCE_USER`` (default ``csadmin``), ``PYFSR_APPLIANCE_PASSWORD``,
+    ``PYFSR_APPLIANCE_PORT`` (default 22), ``PYFSR_APPLIANCE_KEY_PATH``,
+    ``PYFSR_APPLIANCE_SUDO_PASSWORD``, ``PYFSR_APPLIANCE_INSECURE_SKIP_HOST_KEY_CHECK``.
+
+    Pass an explicit ``env`` dict for tests; otherwise ``os.environ`` is used.
+    Raises :class:`TransportError` when no host is configured and this process
+    isn't running on a FortiSOAR appliance.
+    """
+    e = os.environ if env is None else env
+    host = (e.get("PYFSR_APPLIANCE_HOST") or "").strip()
+    port_raw = (e.get("PYFSR_APPLIANCE_PORT") or "").strip()
+    return make_transport(
+        host=host or None,
+        user=(e.get("PYFSR_APPLIANCE_USER") or "").strip() or "csadmin",
+        password=e.get("PYFSR_APPLIANCE_PASSWORD") or None,
+        port=int(port_raw) if port_raw.isdigit() else 22,
+        key_path=(e.get("PYFSR_APPLIANCE_KEY_PATH") or "").strip() or None,
+        sudo_password=e.get("PYFSR_APPLIANCE_SUDO_PASSWORD") or None,
+        insecure_skip_host_key_check=_env_truthy(e.get("PYFSR_APPLIANCE_INSECURE_SKIP_HOST_KEY_CHECK")),
+    )
