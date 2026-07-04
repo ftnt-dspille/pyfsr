@@ -200,6 +200,41 @@ their return shapes are doctested here (write ops need a live appliance):
 ['Minimal', 'Low', 'Medium', 'High', 'Critical']
 ```
 
+The write tools (`create_record` / `update_record` / `delete_record`) replay
+against the same captured alert, so their return shapes are doctested too — an
+agent learns the envelope each tool returns without a live box:
+
+```{doctest}
+>>> client = demo_client()
+>>> created = dispatch(client, "create_record", {"module": "alerts",
+...     "data": {"name": "New Alert"}})
+>>> (created["@type"], created["name"])
+('Alert', 'Response Capture Test Alert')
+>>> updated = dispatch(client, "update_record", {"module": "alerts",
+...     "ref": "9f0eb603-ac1e-41c3-b47b-444589beed39",
+...     "data": {"description": "revised"}})
+>>> updated["@type"]
+'Alert'
+>>> dispatch(client, "delete_record", {"module": "alerts",
+...     "ref": "9f0eb603-ac1e-41c3-b47b-444589beed39"})
+{'deleted': '9f0eb603-ac1e-41c3-b47b-444589beed39', 'module': 'alerts', 'hard': False}
+```
+
+A `create_record` whose `data` carries a friendly picklist value that doesn't
+resolve (typo, wrong casing) comes back as a structured, actionable error —
+field, bad value, and the valid options — instead of an opaque box 400, because
+the MCP write tools default `strict_picklists=True`:
+
+```{doctest}
+>>> client = demo_client()
+>>> out = dispatch(client, "create_record", {"module": "alerts",
+...     "data": {"severity": "Nope"}})
+>>> out["error"]["type"], out["error"]["field"], out["error"]["picklist"]
+('PicklistResolutionError', 'severity', 'Severity')
+>>> "High" in out["error"]["valid_values"]
+True
+```
+
 The discovery tools (`list_modules`, `describe_module`) and picklist tools
 (`list_picklists`, `get_picklist_values`) are doctested above too — a model uses
 `list_modules` → `describe_module` to learn a module's fields (and which are

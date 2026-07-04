@@ -30,6 +30,21 @@ True
 ('Available', 'mitre-attack', '2.0.2')
 ```
 
+`connector_detail` fetches a connector's full record — its operations (each with
+parameters + output_schema) and configurations. Captured live and trimmed to a
+doctest-friendly slice (the `config` dict on each configuration is dropped — it
+carries connection details):
+
+```{doctest}
+>>> detail = conn.connector_detail("smtp")
+>>> (detail["name"], detail["version"], detail["config_count"])
+('smtp', '2.6.0', 1)
+>>> [o["operation"] for o in detail["operations"][:3]]  # doctest: +ELLIPSIS
+['send_email_new', ...]
+>>> [c["name"] for c in detail["configuration"]]        # doctest: +ELLIPSIS
+['localhost-postfix']
+```
+
 ## Executing an operation
 
 ```python
