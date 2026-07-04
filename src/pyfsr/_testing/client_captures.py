@@ -174,6 +174,37 @@ CONNECTOR_HEALTHCHECK_RESPONSE = {
 }
 
 
+# Real ``POST /api/integration/connectors/<id>/`` (``connector_detail``) for the
+# smtp connector (id=3 in ``_CONNECTOR_ROWS``). Trimmed to a doctest-friendly
+# slice: the full ``operations[]`` (each carries ``parameters[]`` +
+# ``output_schema``) is reduced to ``operation``/``title`` for the first four,
+# and each ``configuration[]`` entry's ``config`` dict is dropped (it carries
+# connection details — host/port/credentials — that aren't doctest material and
+# must not ship). ``config_id`` is a box-specific uuid left real, matching the
+# healthcheck capture's convention.
+CONNECTOR_DETAIL_RESPONSE = {
+    "name": "smtp",
+    "version": "2.6.0",
+    "category": ["Notification"],
+    "config_count": 1,
+    "operations": [
+        {"operation": "send_email_new", "title": "Send Email (Advanced)"},
+        {"operation": "send_email", "title": "Send Email"},
+        {"operation": "send_richtext_email", "title": "Send Rich Text Email (Deprecated)"},
+        {"operation": "get_users", "title": "Get Users"},
+    ],
+    "configuration": [
+        {
+            "id": 1,
+            "config_id": "88c3d39c-2fa9-4731-b00d-29815008f17c",
+            "status": 1,
+            "name": "localhost-postfix",
+            "default": True,
+        },
+    ],
+}
+
+
 # ---------------------------------------------------------------------------
 # Module-admin (staging/published schema) + picklist captures
 # ---------------------------------------------------------------------------

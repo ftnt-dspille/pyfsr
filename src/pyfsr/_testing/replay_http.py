@@ -54,6 +54,9 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry(
             "GET", "/api/integration/connectors/healthcheck/mitre-attack/2.0.2/", cap.CONNECTOR_HEALTHCHECK_RESPONSE
         ),
+        # connector_detail: POST /api/integration/connectors/<id>/ — one fixture
+        # regardless of which connector id the doctest resolves (id collapsed below).
+        _entry("POST", "/api/integration/connectors/3/", cap.CONNECTOR_DETAIL_RESPONSE),
         # Module-admin (staging/published schema) read-only envelopes. The two
         # lists are hit by ``list_modules``/``describe_module``/``pending_changes``
         # (query string ignored, so the with-relationships list serves all three);
@@ -129,6 +132,10 @@ def _path_and_match(method: str, url: str) -> tuple[str, str]:
     # segments: ['', 'api', 'integration', 'connectors', 'healthcheck', name, version]
     if len(segments) == 7 and segments[1] == "api" and segments[3] == "connectors" and segments[4] == "healthcheck":
         return "/api/integration/connectors/healthcheck/mitre-attack/2.0.2/", path
+    # /api/integration/connectors/<id>/  (connector_detail POST)  ->  recorded.
+    # segments: ['', 'api', 'integration', 'connectors', id, '']
+    if len(segments) == 6 and segments[1] == "api" and segments[2] == "integration" and segments[3] == "connectors":
+        return "/api/integration/connectors/3/", path
     return path, path
 
 
