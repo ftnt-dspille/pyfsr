@@ -19,6 +19,7 @@ from pyfsr.api.auth_config import AuthConfigAPI, AuthConfigRow
 from pyfsr.api.roles import RolesAPI
 from pyfsr.api.teams import TeamsAPI
 from pyfsr.api.users import UsersAPI
+from pyfsr.exceptions import APIError
 from pyfsr.models import ApiKey, ApiKeyMaterial, ApiKeyUser, ModulePermission, Role, Team
 
 # Stable, well-formed uuids so the uuid-or-name resolvers accept them directly.
@@ -289,6 +290,55 @@ def test_api_users_create_and_lifecycle_typed():
     assert isinstance(api.create(api_key_validity=365), ApiKeyUser)
     out = api.regenerate(_U_UID)
     assert isinstance(out, ApiKeyUser) and out["api_key"]["key"] == "REGEN"
+
+
+class _Encrypt400Client:
+    """Fake client whose POST /api/auth/users raises the encrypt-regression 400.
+
+    Stands in for a 7.6.5 / 8.0.0 box with API-KEYS.retrievable_mode on, where
+    apikeys_helper.so calls PasswordModule.encrypt(preserve_compatibility=...)
+    but the shipped PasswordModule has no such param -> HTTP 400.
+    """
+
+    def __init__(self, *, message: str, error_type: str = ""):
+        self._message = message
+        self._error_type = error_type
+        self.calls: list = []
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("POST", endpoint, data))
+        raise APIError(self._message, response=type("R", (), {"status_code": 400})(), error_type=self._error_type)
+
+    def get(self, endpoint, params=None, **kw):
+        return {}
+
+    def put(self, endpoint, data=None, params=None, **kw):
+        return {}
+
+
+def test_api_users_create_encrypt_regression_raises_actionable_exception():
+    """The 7.6.5/8.0.0 encrypt(preserve_compatibility) 400 becomes a clear
+    ApikeyCreateUnavailable carrying the workaround, not a cryptic APIError."""
+    from pyfsr.exceptions import ApikeyCreateUnavailable
+
+    c = _Encrypt400Client(message="encrypt() got an unexpected keyword argument 'preserve_compatibility'")
+    with pytest.raises(ApikeyCreateUnavailable) as ei:
+        ApiKeyUsersAPI(c).create(api_key_validity=365)
+    assert "set_api_key_retrievable(False)" in str(ei.value)
+    assert "preserve_compatibility" in str(ei.value)  # the server error is preserved
+    assert ei.value.__cause__ is not None  # chained from the original APIError
+    assert ei.value.status_code == 400
+
+
+def test_api_users_create_unrelated_400_propagates_as_apierror():
+    """A different 400 (not the encrypt signature) still surfaces as a plain
+    APIError — the detection is signature-specific, not a blanket rewrite."""
+    c = _Encrypt400Client(message="api_key_validity is required")
+    with pytest.raises(APIError) as ei:
+        ApiKeyUsersAPI(c).create(api_key_validity=365)
+    # Not converted to ApikeyCreateUnavailable (no preserve_compatibility in it).
+    assert type(ei.value).__name__ == "APIError"
+    assert "set_api_key_retrievable" not in str(ei.value)
 
 
 def test_api_key_plaintext_helper_round_trip():

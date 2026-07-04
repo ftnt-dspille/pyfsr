@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..exceptions import APIError, ApikeyCreateUnavailable
 from ..models import ApiKeyUser
 from .base import BaseAPI
 
@@ -86,9 +87,22 @@ class ApiKeyUsersAPI(BaseAPI):
         feeds ``POST /api/3/api_keys`` to attach roles/teams. ``api_key_validity``
         is the key's validity in days. ``type=9`` (API-key user) and ``status=1``
         (active) are the defaults — all three fields are required by the endpoint.
+
+        Raises:
+            ApikeyCreateUnavailable: when the box has the 7.6.5/8.0.0
+                ``encrypt(preserve_compatibility)`` product bug (global
+                ``retrievable_mode`` on). The exception carries the workaround
+                (``client.auth_config.set_api_key_retrievable(False)``) instead
+                of surfacing the cryptic encrypt 400.
         """
         body = {"type": type, "status": status, "api_key_validity": api_key_validity}
-        return ApiKeyUser.model_validate(self.client.post(_BASE, data=body))
+        try:
+            return ApiKeyUser.model_validate(self.client.post(_BASE, data=body))
+        except APIError as exc:
+            sig = f"{exc.message or ''} {exc.error_type or ''}"
+            if "preserve_compatibility" in sig or "encrypt()" in sig:
+                raise ApikeyCreateUnavailable(response=exc.response, original_message=exc.message) from exc
+            raise
 
     def lifecycle(
         self,

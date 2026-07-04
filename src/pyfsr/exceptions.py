@@ -106,6 +106,33 @@ class APIError(FortiSOARException):
     pass
 
 
+class ApikeyCreateUnavailable(APIError):
+    """API-key creation is blocked by the FortiSOAR ``encrypt(preserve_compatibility)`` bug.
+
+    A 7.6.5 / 8.0.0 product bug: when the global ``API-KEYS.retrievable_mode``
+    flag is on, ``POST /api/auth/users`` hits a broken ``apikeys_helper.so``
+    branch that calls ``PasswordModule.encrypt(..., preserve_compatibility=...)``,
+    but the shipped ``PasswordModule.so`` has no such parameter → HTTP 400
+    ``encrypt() got an unexpected keyword argument 'preserve_compatibility'``.
+    pyfsr no longer toggles ``retrievable_mode`` on (the trigger), but it can
+    still be on for other reasons (manual toggle, another tool, a prior pyfsr
+    version) — so ``api_users.create()`` detects the signature and raises this
+    so the caller gets the workaround instead of a cryptic encrypt traceback.
+
+    Fix: ``client.auth_config.set_api_key_retrievable(False)``, then retry.
+    """
+
+    def __init__(self, response=None, original_message: str | None = None):
+        msg = (
+            "API-key creation is blocked by the FortiSOAR 'encrypt(preserve_compatibility)' "
+            "product bug (7.6.5 / 8.0.0 with API-KEYS.retrievable_mode on). "
+            "Fix: client.auth_config.set_api_key_retrievable(False), then retry."
+        )
+        if original_message:
+            msg = f"{msg}\nServer error: {original_message}"
+        super().__init__(msg, response)
+
+
 class UnsupportedAuthOperationError(FortiSOARException):
     """Operation not supported with current authentication method"""
 
