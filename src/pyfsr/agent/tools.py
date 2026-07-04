@@ -369,6 +369,10 @@ def _h_why_playbook_failed(client, *, playbook=None, playbook_uuid=None) -> Any:
     return to_jsonable(failure) if failure is not None else {"failure": None}
 
 
+def _h_diagnose_run(client, *, playbook=None, playbook_uuid=None, run=None) -> Any:
+    return to_jsonable(client.playbooks.diagnose_run(playbook=playbook, playbook_uuid=playbook_uuid, run=run))
+
+
 def _h_wait_for_playbook_run(
     client,
     *,
@@ -1075,6 +1079,26 @@ _TOOLS: tuple[ToolSpec, ...] = (
             }
         ),
         _h_why_playbook_failed,
+    ),
+    ToolSpec(
+        "diagnose_run",
+        "Diff a playbook's DEFINITION (step graph) against a RUN (executed step statuses): "
+        "which defined steps ran / didn't run / failed, the run's overall status + the first "
+        "failing step + its error, and a one-word verdict (completed/failed/running/no_run/"
+        "no_definition). Answers 'did my playbook run do what I defined?' without cross-"
+        "referencing get_definition/run_env/why_failed by hand. Uses the latest run, or pass "
+        "run (a pk/task_id) for a specific one.",
+        _obj(
+            {
+                "playbook": _PLAYBOOK,
+                "playbook_uuid": {"type": "string", "description": "Identify the playbook by UUID instead of name."},
+                "run": {
+                    "type": "string",
+                    "description": "A specific run pk / @id path / task_id. Defaults to the playbook's latest run.",
+                },
+            }
+        ),
+        _h_diagnose_run,
     ),
     ToolSpec(
         "wait_for_playbook_run",

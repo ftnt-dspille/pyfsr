@@ -1169,6 +1169,192 @@ class PlaybooksAPI(BaseAPI):
                     node.children.append(self.run_tree(child_pk, depth=depth - 1, limit=limit))
         return node
 
+    def diagnose_run(
+        self,
+        playbook: str | None = None,
+        *,
+        playbook_uuid: str | None = None,
+        run: str | int | None = None,
+    ) -> dict[str, Any]:
+        """Diff a playbook's **definition** (step graph) against a **run** (executed steps).
+
+        Answers the agent question "did my playbook run do what I defined?" without
+        making the agent cross-reference :meth:`get_definition`, :meth:`run_env`, and
+        :meth:`why_failed` by hand. Resolves the playbook, fetches its step graph,
+        resolves a run (the latest for the playbook, or the ``run`` pk/``@id``/
+        ``task_id`` you pass), and returns a structured comparison:
+
+          - each **defined step** with the status the run recorded for it (or
+            ``None`` if the engine never reached it),
+          - steps the run recorded that the current definition doesn't have
+            (drift, e.g. after a re-publish changed the graph),
+          - the run's overall status + the first failing step + its error,
+          - a one-word ``verdict`` (``completed``/``failed``/``running``/
+            ``no_run``/``no_definition``) and a one-line ``summary``.
+
+        Step names are matched by display name (how :meth:`run_env` keys them); a
+        step that appears in the definition but not in the run either was skipped
+        by a decision branch (normal) or never reached because the run stopped
+        early (the ``failing_step`` then names where it stopped). This method
+        reports the facts; the agent judges whether the reached/skipped set
+        matches intent.
+
+        Args:
+            playbook: the playbook name — resolved to uuid internally.
+            playbook_uuid: the playbook uuid (use instead of ``playbook`` when you
+                already have it).
+            run: a run pk / ``@id`` path / ``task_id`` (resolved like
+                :meth:`run_env`). When ``None`` (default), uses the most recent run
+                for the playbook.
+
+        Returns:
+            A structured dict (see above). ``verdict`` is ``"no_definition"`` if
+            the playbook can't be resolved, ``"no_run"`` if it has no executions.
+        """
+        # --- resolve the playbook definition --------------------------------
+        if not playbook_uuid and playbook:
+            playbook_uuid = self._resolve_uuid(playbook)
+        if not playbook_uuid:
+            return {
+                "verdict": "no_definition",
+                "summary": f"playbook {playbook!r} not found",
+                "playbook": {"name": playbook, "uuid": None},
+                "definition_steps": [],
+                "executed_not_defined": [],
+                "not_reached": [],
+                "run": None,
+                "failing_step": None,
+                "error_message": None,
+            }
+        try:
+            wf = self.get_definition(playbook_uuid, relationships=True)
+        except Exception as exc:  # noqa: BLE001 - surface a clean verdict, not a crash
+            return {
+                "verdict": "no_definition",
+                "summary": f"could not fetch definition for {playbook_uuid!r}: {exc}",
+                "playbook": {"name": playbook, "uuid": playbook_uuid},
+                "definition_steps": [],
+                "executed_not_defined": [],
+                "not_reached": [],
+                "run": None,
+                "failing_step": None,
+                "error_message": None,
+            }
+        # Imported lazily to avoid a circular import: playbook_match imports
+        # STEP_TYPE_NAMES/TRIGGER_TYPE_NAMES from this module.
+        from ..playbook_match import parse_playbook
+
+        parsed = parse_playbook(dict(wf))
+        defined: list[dict[str, Any]] = []
+        defined_names: set[str] = set()
+        for s in parsed.steps:
+            nm = s.name
+            if nm:
+                defined_names.add(nm)
+            defined.append({"name": nm, "step_type": s.step_type_raw})
+
+        # --- resolve the run -------------------------------------------------
+        run_meta: dict[str, Any] | None = None
+        run_pk: str | None
+        if run is not None:
+            run_pk = self._resolve_run_pk(run)
+        else:
+            latest = self.last_run(playbook=playbook, playbook_uuid=playbook_uuid)
+            run_pk = (latest.get("pk") if latest else None) or (
+                (latest.get("@id") or "").rstrip("/").rsplit("/", 1)[-1] if latest else None
+            )
+            if run_pk and latest:
+                # Carry the summary fields the latest-run fetch already gave us.
+                run_meta = {
+                    "pk": str(run_pk),
+                    "name": latest.get("name"),
+                    "status": latest.get("status"),
+                    "modified": latest.get("modified"),
+                }
+        if not run_pk:
+            return {
+                "verdict": "no_run",
+                "summary": f"no executions found for playbook {parsed.name!r}",
+                "playbook": {"name": parsed.name, "uuid": playbook_uuid},
+                "definition_steps": defined,
+                "executed_not_defined": [],
+                "not_reached": [d["name"] for d in defined if d["name"]],
+                "run": None,
+                "failing_step": None,
+                "error_message": None,
+            }
+
+        # --- fetch the run's executed steps + failure detail -----------------
+        env = self.run_env(str(run_pk))
+        executed = env.steps or {}
+        run_status = (env.status or "").lower() or None
+        if run_meta is None:
+            run_meta = {"pk": str(run_pk), "name": parsed.name, "status": run_status, "modified": None}
+        else:
+            # Prefer the authoritative status from the full execution record.
+            run_meta["status"] = run_status
+
+        # Per-defined-step: did the run record an outcome for it, and what?
+        not_reached: list[str] = []
+        for d in defined:
+            nm = d["name"]
+            st = executed[nm].status if nm and nm in executed else None
+            d["status"] = st
+            # A step that never got an outcome (None) or was left pending/incipient
+            # was not evaluated by the engine.
+            if st is None or (isinstance(st, str) and st.lower() in {"incipient", "pending"}):
+                if nm:
+                    not_reached.append(nm)
+
+        # Steps the run recorded that the current definition lacks (drift).
+        executed_not_defined = [
+            {"name": nm, "status": step.status} for nm, step in executed.items() if nm not in defined_names
+        ]
+
+        # First actual failing step + its error (reuse the why_failed selection).
+        failing_step: str | None = None
+        error_message: str | None = None
+        for nm, step in executed.items():
+            st = (step.status or "").lower()
+            if st in _STEP_FAILURE_STATUSES:
+                failing_step = nm
+                res = step.result
+                if isinstance(res, dict):
+                    error_message = (
+                        res.get("Error message") or res.get("errorMessage") or res.get("message") or res.get("error")
+                    )
+                elif res is not None:
+                    error_message = str(res)
+                break
+
+        # --- verdict ---------------------------------------------------------
+        if run_status in _STEP_FAILURE_STATUSES:
+            verdict = "failed"
+        elif run_status in {"running", "queued", "pending"}:
+            verdict = "running"
+        elif run_status in {"finished", "success"}:
+            verdict = "completed"
+        else:
+            verdict = run_status or "unknown"
+
+        reached = len(defined) - len(not_reached)
+        summary = f"{parsed.name}: run {run_pk} {verdict} ({reached}/{len(defined)} defined steps reached"
+        if failing_step:
+            summary += f"; failed at {failing_step!r}"
+        summary += ")"
+
+        return {
+            "verdict": verdict,
+            "summary": summary,
+            "playbook": {"name": parsed.name, "uuid": playbook_uuid},
+            "run": run_meta,
+            "definition_steps": defined,
+            "executed_not_defined": executed_not_defined,
+            "not_reached": not_reached,
+            "failing_step": failing_step,
+            "error_message": error_message,
+        }
+
     # --------------------------------------------------------------- trigger
     def trigger(
         self,
