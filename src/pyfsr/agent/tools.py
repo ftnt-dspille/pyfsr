@@ -31,6 +31,8 @@ message and self-correct.
 
 from __future__ import annotations
 
+import json
+import os
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any
@@ -1442,6 +1444,56 @@ def _agent_error(exc: Exception, *, tool: str) -> dict[str, Any]:
     return {"error": err}
 
 
+def _output_cap() -> int:
+    """Max serialized chars a tool result may reach before truncation.
+
+    Default 4000 (a single tool return should not flood an agent's context).
+    Override with ``FSR_MCP_OUTPUT_CAP`` (set to ``0`` to disable the cap).
+    """
+    try:
+        v = int(os.environ.get("FSR_MCP_OUTPUT_CAP", "4000"))
+    except ValueError:
+        return 4000
+    return v if v >= 0 else 4000
+
+
+def _cap_output(result: Any, *, tool: str, cap: int | None = None) -> Any:
+    """Bound a tool result's serialized size for the agent transport.
+
+    Returns ``result`` unchanged when it fits the cap (default 4000 chars of
+    JSON). When it exceeds the cap, returns a structured truncation envelope —
+    ``{_truncated, tool, original_chars, preview, hint}`` — so the agent learns
+    the result was cut, sees a preview, and is told how to narrow the next call
+    (``summary=True`` / ``fields=[...]`` / ``limit=N``) instead of acting on a
+    silent truncation. Errors (``{"error": ...}``) are passed through untouched.
+    """
+    if cap is None:
+        cap = _output_cap()
+    if cap == 0:
+        return result
+    if isinstance(result, dict) and "error" in result and len(result) <= 4:
+        # An error envelope — already small, never truncate.
+        return result
+    try:
+        text = json.dumps(result, default=str)
+    except (TypeError, ValueError):
+        return result
+    if len(text) <= cap:
+        return result
+    # Leave room for the envelope keys so the serialized result fits the cap.
+    preview = text[: max(cap - 320, 0)]
+    return {
+        "_truncated": True,
+        "tool": tool,
+        "original_chars": len(text),
+        "preview": preview,
+        "hint": (
+            f"Result exceeded {cap} chars and was truncated. Narrow it: pass "
+            "summary=True, fields=[...], or limit=N to reduce the payload."
+        ),
+    }
+
+
 def dispatch(client, name: str, arguments: dict[str, Any] | None = None) -> Any:
     """Execute a tool call against ``client`` and return a JSON-safe result.
 
@@ -1449,6 +1501,11 @@ def dispatch(client, name: str, arguments: dict[str, Any] | None = None) -> Any:
     ``**arguments``. Any failure — unknown tool, bad arguments, or an API error —
     is returned as a structured ``{"error": {...}}`` dict rather than raised, so
     an agent loop never has to wrap the call in a try/except.
+
+    Success results are size-capped (default 4000 chars of JSON, override with
+    ``FSR_MCP_OUTPUT_CAP``, ``0`` disables) so a single huge return can't flood
+    the agent's context — an over-budget result comes back as a structured
+    truncation envelope with a preview + a hint to narrow the call.
     """
     spec = REGISTRY.get(name)
     if spec is None:
@@ -1460,8 +1517,9 @@ def dispatch(client, name: str, arguments: dict[str, Any] | None = None) -> Any:
             }
         }
     try:
-        return spec.handler(client, **(arguments or {}))
+        result = spec.handler(client, **(arguments or {}))
     except TypeError as exc:  # bad/missing arguments for the handler
         return _agent_error(exc, tool=name)
     except Exception as exc:  # noqa: BLE001 - surface every failure as data to the agent
         return _agent_error(exc, tool=name)
+    return _cap_output(result, tool=name)
