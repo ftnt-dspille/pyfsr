@@ -137,3 +137,85 @@ def test_step_status_returns_step_state():
     api = PlaybooksAPI(TreeClient(runs))
     assert api.step_status(10, "StampResult") == "finished"
     assert api.step_status(10, "NoSuchStep") is None
+
+
+# --- run_tree(steps=True): per-step I/O snapshots on the root ---------------
+def test_run_tree_steps_true_enriches_root_with_snapshots():
+    """steps=True fetches the root with step_detail and attaches slim
+    RunStepSnapshots (name/status/result_preview) — enough to drill in without a
+    separate run_env call. Children stay slim (no steps)."""
+    runs = {
+        "10": {
+            "name": "Parent",
+            "status": "finished",
+            "parent": None,
+            "steps": {
+                "Fetch": {"status": "finished", "result": {"hits": 3}},
+                "Block": {"status": "finished", "result": {"blocked": True}},
+            },
+        },
+        "11": {"name": "Child", "status": "finished", "parent": "10"},
+    }
+    tree = PlaybooksAPI(TreeClient(runs)).run_tree(10, steps=True)
+    assert tree.pk == "10"
+    assert len(tree.steps) == 2
+    by_name = {s.name: s for s in tree.steps}
+    assert by_name["Fetch"].status == "finished"
+    assert '"hits": 3' in (by_name["Fetch"].result_preview or "")
+    assert by_name["Block"].result_preview == '{"blocked": true}'
+    # The child got fetched (depth>=1) but does NOT carry step snapshots.
+    assert tree.children
+    assert all(c.steps == [] for c in tree.children)
+
+
+def test_run_tree_steps_false_default_no_step_detail_fetch():
+    """Default (steps=False) does not request step_detail — the root carries no
+    snapshots, and the fetch URL omits step_detail=true."""
+    runs = {
+        "10": {
+            "name": "P",
+            "status": "finished",
+            "parent": None,
+            "steps": {"Fetch": {"status": "finished", "result": {"x": 1}}},
+        }
+    }
+    client = TreeClient(runs)
+    tree = PlaybooksAPI(client).run_tree(10)
+    assert tree.steps == []
+    # The default fetch URL has no step_detail=true (the run_env/step_status
+    # paths add it; run_tree(steps=False) must not).
+
+
+def test_run_tree_steps_trims_large_result_to_preview():
+    """A step with a huge result gets a capped result_preview (~500 chars + …),
+    not the full blob — keeps the tree lean for an agent context."""
+    big = {"rows": [{"k": i} for i in range(200)]}  # ~1.5KB JSON
+    runs = {
+        "10": {
+            "name": "P",
+            "status": "finished",
+            "parent": None,
+            "steps": {"Hunt": {"status": "finished", "result": big}},
+        }
+    }
+    tree = PlaybooksAPI(TreeClient(runs)).run_tree(10, steps=True)
+    preview = tree.steps[0].result_preview
+    assert preview is not None
+    assert len(preview) <= 600  # ~500 cap + ellipsis + slack
+    assert preview.endswith("…")
+
+
+def test_run_tree_steps_none_result_preview_is_none():
+    """A step whose result is None (e.g. an incipient/skipped step) yields a
+    None preview, not the string 'null'."""
+    runs = {
+        "10": {
+            "name": "P",
+            "status": "finished",
+            "parent": None,
+            "steps": {"Skipped": {"status": "incipient", "result": None}},
+        }
+    }
+    tree = PlaybooksAPI(TreeClient(runs)).run_tree(10, steps=True)
+    assert tree.steps[0].result_preview is None
+    assert tree.steps[0].status == "incipient"

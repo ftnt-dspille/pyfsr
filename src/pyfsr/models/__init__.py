@@ -54,6 +54,7 @@ from ._playbooks import (
     RunFailure,
     RunNode,
     RunStep,
+    RunStepSnapshot,
     RunSummary,
     TriggerActionRequest,
     TriggerRequest,
@@ -166,6 +167,7 @@ __all__ = [
     # playbook-run output shapes
     "RunSummary",
     "RunStep",
+    "RunStepSnapshot",
     "RunEnv",
     "RunNode",
     "RunFailure",

@@ -21,6 +21,7 @@ Example:
 
 from __future__ import annotations
 
+import json
 import re
 import time
 import urllib.parse
@@ -37,6 +38,7 @@ from ..models import (
     RunFailure,
     RunNode,
     RunStep,
+    RunStepSnapshot,
     RunSummary,
     TriggerActionRequest,
     TriggerRequest,
@@ -156,6 +158,53 @@ TRIGGER_TYPE_NAMES: dict[str, str] = {
 
 def _looks_like_uuid(s: str) -> bool:
     return bool(_UUID_RE.match(s.strip()))
+
+
+_STEP_PREVIEW_LIMIT = 500
+
+
+def _trim_result_preview(result: Any, *, limit: int = _STEP_PREVIEW_LIMIT) -> str | None:
+    """JSON-encode a step result and cap it to ``limit`` chars (a snapshot preview).
+
+    Returns ``None`` for a ``None`` result. The preview keeps enough of the shape
+    for an agent to decide whether to fetch the full result via :meth:`run_env`.
+    """
+    if result is None:
+        return None
+    try:
+        text = json.dumps(result, default=str)
+    except (TypeError, ValueError):
+        text = str(result)
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "…"
+
+
+def _step_snapshots(full: dict[str, Any]) -> list[RunStepSnapshot]:
+    """Build slim :class:`RunStepSnapshot`s from a ``step_detail=True`` run record.
+
+    Mirrors :meth:`run_env`'s step extraction (name resolution fallback to
+    ``metadata.metadata.name``), but trims each step's ``result`` to a preview
+    instead of carrying the full blob.
+    """
+    out: list[RunStepSnapshot] = []
+    for s in full.get("steps") or []:
+        if not isinstance(s, dict):
+            continue
+        name = s.get("name")
+        if not name:
+            md = s.get("metadata") or {}
+            name = (md.get("metadata") or {}).get("name") or md.get("name")
+        if not name:
+            continue
+        out.append(
+            RunStepSnapshot(
+                name=name,
+                status=s.get("status"),
+                result_preview=_trim_result_preview(s.get("result")),
+            )
+        )
+    return out
 
 
 def _require_uuid(uuid: str, op: str) -> str:
@@ -1127,12 +1176,13 @@ class PlaybooksAPI(BaseAPI):
         *,
         depth: int = 3,
         limit: int = 100,
+        steps: bool = False,
     ) -> RunNode:
         """Resolve a run to its execution tree: the run plus its child runs.
 
         Returns a :class:`~pyfsr.models.RunNode` (``pk``/``name``/``status`` +
         nested ``children``), walking ``parent_wf`` links down to ``depth``. This
-        encodes the trigger→run→child linkage so you don't have to locate a
+        encodes the trigger->run->child linkage so you don't have to locate a
         parent/child by name in the raw ``/api/wf/api/workflows`` listing.
 
         A ``task_id`` from :meth:`trigger` resolves to the run it directly started;
@@ -1147,6 +1197,14 @@ class PlaybooksAPI(BaseAPI):
             depth: how many generations to descend (default 3; ``1`` = the run and
                 its immediate children only, ``0`` = just the run).
             limit: max children fetched per node (default 100).
+            steps: when ``True``, enrich the root node with a slim per-step
+                snapshot (``RunStepSnapshot``: name/status/result_preview) so an
+                agent can drill into the root run's step outcomes without a
+                separate :meth:`run_env` call. Each step's ``result`` is
+                JSON-capped to ~500 chars (a preview, not the full blob). Children
+                stay slim regardless (call ``run_env(child_pk)`` for a child's
+                full detail). Default ``False`` (cheaper — no ``step_detail``
+                fetch).
 
         Returns:
             the root :class:`~pyfsr.models.RunNode`. ``pk`` is ``None`` if ``run``
@@ -1156,17 +1214,22 @@ class PlaybooksAPI(BaseAPI):
         task_id = str(run) if _looks_like_uuid(str(run)) else None
         if pk is None:
             return RunNode(pk=None, task_id=task_id)
+        step_snapshots: list[RunStepSnapshot] = []
         try:
-            summary = self.get_execution(str(pk))
-            name, status = summary.get("name"), summary.get("status")
+            full = self.get_execution(str(pk), step_detail=steps)
+            name, status = full.get("name"), full.get("status")
+            if steps:
+                step_snapshots = _step_snapshots(full)
         except Exception:  # noqa: BLE001 - a missing run still yields a node
             name = status = None
-        node = RunNode(pk=str(pk), name=name, status=status, task_id=task_id)
+        node = RunNode(pk=str(pk), name=name, status=status, task_id=task_id, steps=step_snapshots)
         if depth > 0:
             for child in self.child_runs(pk, limit=limit):
                 child_pk = child.get("pk")
                 if child_pk:
-                    node.children.append(self.run_tree(child_pk, depth=depth - 1, limit=limit))
+                    # Children never carry step snapshots (only the root does) —
+                    # keeps the tree cheap; call run_env(child_pk) for a child's detail.
+                    node.children.append(self.run_tree(child_pk, depth=depth - 1, limit=limit, steps=False))
         return node
 
     def diagnose_run(
