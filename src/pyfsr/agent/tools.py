@@ -35,7 +35,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any
 
-from ..exceptions import FortiSOARException
+from ..exceptions import FortiSOARException, PicklistResolutionError
 from ..projection import project, to_jsonable
 from .archetypes import map_use_case
 
@@ -148,13 +148,15 @@ def _h_query_records(
     return project(page, fields=fields, summary=summary)
 
 
-def _h_create_record(client, *, module, data, resolve_picklists=True) -> Any:
-    rec = client.records(module).create(data, resolve_picklists=resolve_picklists)
+def _h_create_record(client, *, module, data, resolve_picklists=True, strict_picklists=True) -> Any:
+    rec = client.records(module).create(data, resolve_picklists=resolve_picklists, strict_picklists=strict_picklists)
     return to_jsonable(rec)
 
 
-def _h_update_record(client, *, module, ref, data, resolve_picklists=True) -> Any:
-    rec = client.records(module).update(ref, data, resolve_picklists=resolve_picklists)
+def _h_update_record(client, *, module, ref, data, resolve_picklists=True, strict_picklists=True) -> Any:
+    rec = client.records(module).update(
+        ref, data, resolve_picklists=resolve_picklists, strict_picklists=strict_picklists
+    )
     return to_jsonable(rec)
 
 
@@ -387,13 +389,17 @@ def _h_wait_for_playbook_run(
 
 
 # -- record upsert ----------------------------------------------------------
-def _h_upsert_record(client, *, module, data, key=None, resolve_picklists=True) -> Any:
-    rec = client.records(module).upsert(data, key=key, resolve_picklists=resolve_picklists)
+def _h_upsert_record(client, *, module, data, key=None, resolve_picklists=True, strict_picklists=True) -> Any:
+    rec = client.records(module).upsert(
+        data, key=key, resolve_picklists=resolve_picklists, strict_picklists=strict_picklists
+    )
     return to_jsonable(rec)
 
 
-def _h_get_or_create_record(client, *, module, data, key="uuid", resolve_picklists=True) -> Any:
-    record, created = client.records(module).get_or_create(data, key=key, resolve_picklists=resolve_picklists)
+def _h_get_or_create_record(client, *, module, data, key="uuid", resolve_picklists=True, strict_picklists=True) -> Any:
+    record, created = client.records(module).get_or_create(
+        data, key=key, resolve_picklists=resolve_picklists, strict_picklists=strict_picklists
+    )
     return {"record": to_jsonable(record), "created": bool(created)}
 
 
@@ -687,6 +693,12 @@ _TOOLS: tuple[ToolSpec, ...] = (
                     "description": "Map friendly picklist values to IRIs before sending "
                     "(default true; set false to skip).",
                 },
+                "strict_picklists": {
+                    "type": "boolean",
+                    "description": "Raise pre-flight on a friendly value that doesn't resolve "
+                    "(typo, wrong casing) — returns field, bad value, and valid options instead "
+                    "of an opaque box 400. Default true.",
+                },
             },
             ["module", "data"],
         ),
@@ -704,6 +716,11 @@ _TOOLS: tuple[ToolSpec, ...] = (
                     "type": "boolean",
                     "description": "Map friendly picklist values to IRIs before sending "
                     "(default true; set false to skip).",
+                },
+                "strict_picklists": {
+                    "type": "boolean",
+                    "description": "Raise pre-flight on a friendly value that doesn't resolve "
+                    "(see create_record). Default true.",
                 },
             },
             ["module", "ref", "data"],
@@ -1094,6 +1111,11 @@ _TOOLS: tuple[ToolSpec, ...] = (
                     "type": "boolean",
                     "description": "Map friendly picklist values to IRIs before sending (default true).",
                 },
+                "strict_picklists": {
+                    "type": "boolean",
+                    "description": "Raise pre-flight on a friendly value that doesn't resolve "
+                    "(see create_record). Default true.",
+                },
             },
             ["module", "data"],
         ),
@@ -1114,6 +1136,11 @@ _TOOLS: tuple[ToolSpec, ...] = (
                 "resolve_picklists": {
                     "type": "boolean",
                     "description": "Map friendly picklist values to IRIs before sending (default true).",
+                },
+                "strict_picklists": {
+                    "type": "boolean",
+                    "description": "Raise pre-flight on a friendly value that doesn't resolve "
+                    "(see create_record). Default true.",
                 },
             },
             ["module", "data"],
@@ -1381,6 +1408,13 @@ def _agent_error(exc: Exception, *, tool: str) -> dict[str, Any]:
         status = getattr(resp, "status_code", None)
         if status is not None:
             err["status_code"] = status
+    # Surface the structured fields of a picklist miss so the agent can pick a
+    # valid value programmatically instead of parsing the message string.
+    if isinstance(exc, PicklistResolutionError):
+        err["field"] = exc.field
+        err["value"] = exc.value
+        err["picklist"] = exc.picklist
+        err["valid_values"] = exc.valid_values
     return {"error": err}
 
 

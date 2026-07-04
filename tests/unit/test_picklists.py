@@ -1,6 +1,9 @@
 """Unit tests for the PicklistsAPI (live discovery + value -> IRI resolution)."""
 
+import pytest
+
 from pyfsr.api.picklists import PicklistsAPI
+from pyfsr.exceptions import PicklistResolutionError
 from pyfsr.records import RecordSet
 
 # --- canned server payloads ------------------------------------------------
@@ -243,3 +246,98 @@ def test_recordset_update_resolves_picklists_opt_in():
     endpoint, data = client.put_calls[0]
     assert endpoint == "/api/3/alerts/u1"
     assert data["status"] == "/api/3/picklists/st-open"
+
+
+# --- strict picklist pre-flight on writes ----------------------------------
+# strict_picklists=True turns an unresolvable friendly value (typo, wrong
+# casing, stale picklist) into a clear pre-flight error naming the field, bad
+# value, and valid options — instead of letting the box return an opaque
+# FSR_CH_0000001 400. Default False leaves the value in place (back-compatible).
+def test_recordset_create_strict_raises_on_miss():
+    api, client = _api()
+    with pytest.raises(PicklistResolutionError) as ei:
+        RecordSet(client, "alerts").create({"severity": "Nope", "name": "x"}, strict_picklists=True)
+    err = ei.value
+    assert err.field == "severity"
+    assert err.value == "Nope"
+    assert err.picklist == "Severity"
+    assert "High" in err.valid_values
+    # No POST reached the wire — the error fired pre-flight.
+    assert client.post_calls == []
+
+
+def test_recordset_create_strict_default_passes_through():
+    """Default (strict_picklists=False) leaves an unresolvable value untouched
+    (back-compatible with the pre-strict behavior)."""
+    api, client = _api()
+    RecordSet(client, "alerts").create({"severity": "Nope", "name": "x"})
+    _, data = client.post_calls[0]
+    assert data["severity"] == "Nope"  # passed through unchanged
+
+
+def test_recordset_update_strict_raises_on_miss():
+    api, client = _api()
+    with pytest.raises(PicklistResolutionError) as ei:
+        RecordSet(client, "alerts").update("u1", {"status": "Nope"}, strict_picklists=True)
+    assert ei.value.field == "status"
+    assert ei.value.picklist == "AlertStatus"
+    assert client.put_calls == []
+
+
+def test_recordset_upsert_strict_raises_on_miss_natural_key():
+    """Natural-key upsert path (key=None) honors strict_picklists pre-flight."""
+    api, client = _api()
+    with pytest.raises(PicklistResolutionError):
+        RecordSet(client, "alerts").upsert({"severity": "Nope", "name": "x"}, strict_picklists=True)
+    assert client.post_calls == []
+
+
+def test_recordset_get_or_create_strict_raises_on_miss():
+    api, client = _api()
+    with pytest.raises(PicklistResolutionError):
+        RecordSet(client, "alerts").get_or_create(
+            {"severity": "Nope", "name": "x", "uuid": "u1"},
+            key="name",
+            strict_picklists=True,
+        )
+    # The lookup query ran (POST /api/query/alerts), but the create half never
+    # fired — strict raised before the POST /api/3/alerts.
+    create_posts = [c for c in client.post_calls if c[0] == "/api/3/alerts"]
+    assert create_posts == []
+
+
+def test_dispatch_create_record_strict_returns_structured_error():
+    """The MCP create_record tool surfaces a picklist miss as a structured error
+    dict (field/value/picklist/valid_values) so an agent can pick a valid value
+    programmatically — not as an opaque box 400."""
+    from pyfsr.agent import tools
+
+    api, base = _api()
+
+    class _Client:
+        """Wraps the _api() FakeClient so client.records(module) returns a real
+        RecordSet bound to the canned picklist payloads."""
+
+        def __init__(self, inner):
+            self._inner = inner
+            self.picklists = inner.picklists
+
+        def records(self, module, **kw):
+            return RecordSet(self._inner, module)
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    client = _Client(base)
+    out = tools.dispatch(
+        client,
+        "create_record",
+        {"module": "alerts", "data": {"severity": "Nope", "name": "x"}},
+    )
+    err = out["error"]
+    assert err["type"] == "PicklistResolutionError"
+    assert err["field"] == "severity"
+    assert err["value"] == "Nope"
+    assert err["picklist"] == "Severity"
+    assert "High" in err["valid_values"]
+    assert "valid" in err["message"].lower()
