@@ -488,6 +488,7 @@ class RecordSet(Generic[T]):
         *,
         raw: Literal[True],
         resolve_picklists: bool = ...,
+        strict_picklists: bool = ...,
     ) -> dict[str, Any]: ...
 
     @overload
@@ -497,6 +498,7 @@ class RecordSet(Generic[T]):
         *,
         raw: Literal[False] = ...,
         resolve_picklists: bool = ...,
+        strict_picklists: bool = ...,
     ) -> T: ...
 
     def create(
@@ -505,6 +507,7 @@ class RecordSet(Generic[T]):
         *,
         raw: bool = False,
         resolve_picklists: bool = True,
+        strict_picklists: bool = False,
     ) -> Any:
         """Create a record via ``POST /api/3/<module>``.
 
@@ -513,11 +516,18 @@ class RecordSet(Generic[T]):
         (e.g. ``"High"``) are mapped to their IRIs via ``client.picklists``
         before sending — pass ``resolve_picklists=False`` to skip that (and the
         metadata lookup it needs) when every value is already an IRI.
+
+        Pass ``strict_picklists=True`` to raise
+        :class:`~pyfsr.exceptions.PicklistResolutionError` *before* the POST when
+        a friendly value doesn't resolve (typo, wrong casing, stale picklist):
+        the error names the field, bad value, and valid options, instead of
+        letting the box return an opaque ``FSR_CH_0000001`` 400. Default
+        ``False`` leaves unresolvable values in place (back-compatible).
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
         if resolve_picklists:
-            data = self.client.picklists.resolve_record_fields(self.module, data)
+            data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
         return self._parse(self.client.post(f"/api/3/{self.module}", data=data), raw=raw)
 
     @overload
@@ -528,6 +538,7 @@ class RecordSet(Generic[T]):
         *,
         raw: Literal[True],
         resolve_picklists: bool = ...,
+        strict_picklists: bool = ...,
     ) -> dict[str, Any]: ...
 
     @overload
@@ -538,6 +549,7 @@ class RecordSet(Generic[T]):
         *,
         raw: Literal[False] = ...,
         resolve_picklists: bool = ...,
+        strict_picklists: bool = ...,
     ) -> T: ...
 
     def update(
@@ -547,16 +559,19 @@ class RecordSet(Generic[T]):
         *,
         raw: bool = False,
         resolve_picklists: bool = True,
+        strict_picklists: bool = False,
     ) -> Any:
         """Update a record via ``PUT /api/3/<module>/<uuid>``.
 
         Friendly picklist values are mapped to IRIs before sending; pass
-        ``resolve_picklists=False`` to skip that (see :meth:`create`).
+        ``resolve_picklists=False`` to skip that (see :meth:`create`). Pass
+        ``strict_picklists=True`` to raise pre-flight on an unresolvable value
+        (see :meth:`create`).
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
         if resolve_picklists:
-            data = self.client.picklists.resolve_record_fields(self.module, data)
+            data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
         path = resolve_record_path(self.module, ref)
         return self._parse(self.client.put(path, data=data), raw=raw)
 
@@ -568,6 +583,7 @@ class RecordSet(Generic[T]):
         key: str | list[str] = ...,
         raw: Literal[True],
         resolve_picklists: bool = ...,
+        strict_picklists: bool = ...,
     ) -> tuple[dict[str, Any], bool]: ...
 
     @overload
@@ -578,6 +594,7 @@ class RecordSet(Generic[T]):
         key: str | list[str] = ...,
         raw: Literal[False] = ...,
         resolve_picklists: bool = ...,
+        strict_picklists: bool = ...,
     ) -> tuple[T, bool]: ...
 
     def get_or_create(
@@ -587,6 +604,7 @@ class RecordSet(Generic[T]):
         key: str | list[str] = "uuid",
         raw: bool = False,
         resolve_picklists: bool = True,
+        strict_picklists: bool = False,
     ) -> tuple[Any, bool]:
         """Look up an existing record by key field(s), or create if absent.
 
@@ -601,6 +619,8 @@ class RecordSet(Generic[T]):
             raw: if ``True``, returns a plain dict; otherwise a typed model.
             resolve_picklists: if ``True``, friendly picklist values are mapped to
                 IRIs before posting (see :meth:`create`).
+            strict_picklists: if ``True``, raise pre-flight on an unresolvable
+                picklist value (see :meth:`create`).
 
         Returns:
             A tuple of ``(record, created)`` where ``created`` is ``True`` if the
@@ -643,7 +663,7 @@ class RecordSet(Generic[T]):
             return (existing, False)
 
         # Create if not found
-        created_rec = self.create(data, raw=raw, resolve_picklists=resolve_picklists)
+        created_rec = self.create(data, raw=raw, resolve_picklists=resolve_picklists, strict_picklists=strict_picklists)
         return (created_rec, True)
 
     @overload
@@ -654,6 +674,7 @@ class RecordSet(Generic[T]):
         key: str | list[str] | None = ...,
         raw: Literal[True],
         resolve_picklists: bool = ...,
+        strict_picklists: bool = ...,
     ) -> dict[str, Any]: ...
 
     @overload
@@ -664,6 +685,7 @@ class RecordSet(Generic[T]):
         key: str | list[str] | None = ...,
         raw: Literal[False] = ...,
         resolve_picklists: bool = ...,
+        strict_picklists: bool = ...,
     ) -> T: ...
 
     def upsert(
@@ -673,6 +695,7 @@ class RecordSet(Generic[T]):
         key: str | list[str] | None = None,
         raw: bool = False,
         resolve_picklists: bool = True,
+        strict_picklists: bool = False,
     ) -> Any:
         """Insert-or-update one record via ``POST /api/3/upsert/<module>``.
 
@@ -697,6 +720,8 @@ class RecordSet(Generic[T]):
             raw: if ``True``, returns a plain dict; otherwise a typed model.
             resolve_picklists: if ``True``, friendly picklist values are mapped to
                 IRIs before posting.
+            strict_picklists: if ``True``, raise pre-flight on an unresolvable
+                picklist value (see :meth:`create`).
 
         Returns:
             The upserted record (newly created or updated), parsed as the bound
@@ -708,7 +733,7 @@ class RecordSet(Generic[T]):
         # When no custom key is specified, use the FortiSOAR natural-key upsert endpoint
         if key is None:
             if resolve_picklists:
-                data = self.client.picklists.resolve_record_fields(self.module, data)
+                data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
             return self._parse(self.client.post(f"/api/3/upsert/{self.module}", data=data), raw=raw)
 
         # When a custom key is specified, use get_or_create + update pattern
@@ -717,6 +742,7 @@ class RecordSet(Generic[T]):
             key=key,
             raw=False,  # Always get the typed record internally
             resolve_picklists=resolve_picklists,
+            strict_picklists=strict_picklists,
         )
         if created:
             # Record was just created, return it
@@ -734,6 +760,7 @@ class RecordSet(Generic[T]):
         rows: list[dict[str, Any]],
         *,
         resolve_picklists: bool = True,
+        strict_picklists: bool = False,
     ) -> dict[str, Any]:
         """Insert-or-update many records via ``POST /api/3/bulkupsert/<module>``.
 
@@ -742,14 +769,16 @@ class RecordSet(Generic[T]):
         unparsed — bulk endpoints reply with a multi-status (``207``) envelope
         whose per-row results the caller usually wants to inspect directly.
         Friendly picklist values are resolved on every row; pass
-        ``resolve_picklists=False`` to skip that.
+        ``resolve_picklists=False`` to skip that. Pass ``strict_picklists=True``
+        to raise pre-flight on the first row with an unresolvable picklist value
+        (see :meth:`create`).
         """
         payload: list[dict[str, Any]] = []
         for row in rows:
             if isinstance(row, BaseRecord):
                 row = row.to_dict(exclude_none=True)
             if resolve_picklists:
-                row = self.client.picklists.resolve_record_fields(self.module, row)
+                row = self.client.picklists.resolve_record_fields(self.module, row, strict=strict_picklists)
             payload.append(row)
         return self.client.post(f"/api/3/bulkupsert/{self.module}", data=payload)
 
@@ -952,6 +981,7 @@ class RecordSet(Generic[T]):
         timeout: float = 120,
         poll_interval: float = 3,
         resolve_picklists: bool = True,
+        strict_picklists: bool = False,
     ) -> Any:
         """Create a record and wait for its on-create playbook to complete.
 
@@ -973,6 +1003,8 @@ class RecordSet(Generic[T]):
             poll_interval: seconds between polls (default 3).
             resolve_picklists: if ``True`` (default), friendly picklist values
                 are mapped to IRIs before posting (see :meth:`create`).
+            strict_picklists: if ``True``, raise pre-flight on an unresolvable
+                picklist value (see :meth:`create`).
 
         Returns:
             A tuple of ``(record, run)`` where:
@@ -1005,7 +1037,7 @@ class RecordSet(Generic[T]):
             ...     print(f"Error: {run['error_message']}")
         """
         # Create the record first
-        record = self.create(data, raw=False, resolve_picklists=resolve_picklists)
+        record = self.create(data, raw=False, resolve_picklists=resolve_picklists, strict_picklists=strict_picklists)
 
         # Wait for the on-create playbook
         # Use 'since' to only poll runs created after this record was posted

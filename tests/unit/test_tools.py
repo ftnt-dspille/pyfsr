@@ -22,22 +22,22 @@ class FakeRecordSet:
         self.store["query_body"] = body
         return HydraPage(members=[{"uuid": "b", "name": "y"}], total=1, page=1, limit=30, raw={})
 
-    def create(self, data, resolve_picklists=False):
+    def create(self, data, resolve_picklists=False, strict_picklists=False):
         self.store["created"] = (data, resolve_picklists)
         return {"uuid": "new", **data}
 
-    def update(self, ref, data, resolve_picklists=False):
+    def update(self, ref, data, resolve_picklists=False, strict_picklists=False):
         self.store["updated"] = (ref, data)
         return {"uuid": ref, **data}
 
     def delete(self, ref, hard=False):
         self.store["deleted"] = (ref, hard)
 
-    def upsert(self, data, key=None, resolve_picklists=False):
+    def upsert(self, data, key=None, resolve_picklists=False, strict_picklists=False):
         self.store["upserted"] = (data, key)
         return {"uuid": "ups", **data}
 
-    def get_or_create(self, data, key="uuid", resolve_picklists=False):
+    def get_or_create(self, data, key="uuid", resolve_picklists=False, strict_picklists=False):
         self.store["goc"] = (data, key)
         return ({"uuid": "goc", **data}, True)
 

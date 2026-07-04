@@ -28,6 +28,7 @@ class RecordModuleAPI(BaseAPI):
         self,
         *,
         resolve_picklists: bool = True,
+        strict_picklists: bool = False,
         validate: bool = False,
         record: str | list[str] | None = None,
         **data: Any,
@@ -37,6 +38,11 @@ class RecordModuleAPI(BaseAPI):
         Args:
             resolve_picklists: When True (default), friendly picklist values are
                 mapped to IRIs before sending.
+            strict_picklists: When True, raise
+                :class:`~pyfsr.exceptions.PicklistResolutionError` *before* the
+                POST when a friendly value doesn't resolve (names the field, bad
+                value, and valid options, instead of an opaque box 400). Default
+                False leaves unresolvable values in place.
             validate: When True, run client-side validation (required fields,
                 field types) before POST. Raises ValidationError on failure.
                 Default False for backward compatibility.
@@ -53,7 +59,7 @@ class RecordModuleAPI(BaseAPI):
         if validate:
             self._validate_record(data)
         if resolve_picklists:
-            data = self.client.picklists.resolve_record_fields(self.module, data)
+            data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
         return self.client.post(f"/api/3/{self.module}", data=data)
 
     def list(self, params: dict | None = None) -> dict[str, Any]:
@@ -79,6 +85,7 @@ class RecordModuleAPI(BaseAPI):
         data: dict[str, Any],
         *,
         resolve_picklists: bool = True,
+        strict_picklists: bool = False,
         validate: bool = False,
     ) -> dict[str, Any]:
         """Update a record; friendly picklist values are resolved unless disabled.
@@ -88,6 +95,8 @@ class RecordModuleAPI(BaseAPI):
             data: Fields to update (e.g. ``{"status": "Closed"}``).
             resolve_picklists: When True (default), friendly picklist values are
                 mapped to IRIs before sending.
+            strict_picklists: When True, raise pre-flight on an unresolvable
+                picklist value (see :meth:`create`).
             validate: When True, run client-side validation (field types, etc.)
                 before PUT. Raises ValidationError on failure.
                 Default False for backward compatibility.
@@ -95,7 +104,7 @@ class RecordModuleAPI(BaseAPI):
         if validate:
             self._validate_record(data)
         if resolve_picklists:
-            data = self.client.picklists.resolve_record_fields(self.module, data)
+            data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
         return self.client.put(f"/api/3/{self.module}/{record_id}", data=data)
 
     def delete(self, record_id: str) -> None:
