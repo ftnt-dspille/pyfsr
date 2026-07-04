@@ -390,6 +390,86 @@ def test_dispatch_unknown_tool_returns_error(client):
     assert "nope" in out["error"]["message"]
 
 
+def test_dispatch_caps_oversized_result(monkeypatch):
+    """A result whose JSON exceeds FSR_MCP_OUTPUT_CAP comes back as a structured
+    truncation envelope (preview + hint), so a huge return can't flood context."""
+    monkeypatch.setenv("FSR_MCP_OUTPUT_CAP", "200")
+
+    class _BigRS:
+        def create(self, data, **kw):
+            return {"name": "x" * 500}  # 500-char payload > 200 cap
+
+    class BigClient:
+        list_modules = staticmethod(lambda: [])
+
+        def records(self, module, **kw):
+            return _BigRS()
+
+    out = tools.dispatch(BigClient(), "create_record", {"module": "alerts", "data": {}})
+    assert out["_truncated"] is True
+    assert out["tool"] == "create_record"
+    assert out["original_chars"] > 500
+    assert "preview" in out and len(out["preview"]) <= 200
+    assert "summary=True" in out["hint"] or "limit=N" in out["hint"]
+
+
+def test_dispatch_passes_small_result_through(monkeypatch):
+    """A result under the cap is returned unchanged (no truncation envelope)."""
+    monkeypatch.setenv("FSR_MCP_OUTPUT_CAP", "4000")
+
+    class _SmallRS:
+        def create(self, data, **kw):
+            return {"uuid": "abc", "name": "small"}
+
+    class SmallClient:
+        list_modules = staticmethod(lambda: [])
+
+        def records(self, module, **kw):
+            return _SmallRS()
+
+    out = tools.dispatch(SmallClient(), "create_record", {"module": "alerts", "data": {}})
+    assert out == {"uuid": "abc", "name": "small"}
+    assert "_truncated" not in out
+
+
+def test_dispatch_cap_disable(monkeypatch):
+    """FSR_MCP_OUTPUT_CAP=0 disables the cap entirely."""
+    monkeypatch.setenv("FSR_MCP_OUTPUT_CAP", "0")
+
+    class _HugeRS:
+        def create(self, data, **kw):
+            return {"name": "x" * 10_000}
+
+    class BigClient:
+        list_modules = staticmethod(lambda: [])
+
+        def records(self, module, **kw):
+            return _HugeRS()
+
+    out = tools.dispatch(BigClient(), "create_record", {"module": "alerts", "data": {}})
+    assert out == {"name": "x" * 10_000}
+    assert "_truncated" not in out
+
+
+def test_dispatch_error_not_truncated(monkeypatch):
+    """An error envelope is never truncated, even when oversized."""
+    monkeypatch.setenv("FSR_MCP_OUTPUT_CAP", "50")
+
+    class _ErrRS:
+        def create(self, data, **kw):
+            raise ResourceNotFoundError("x" * 200, type("R", (), {"status_code": 404})())
+
+    class ErrClient:
+        list_modules = staticmethod(lambda: [])
+
+        def records(self, module, **kw):
+            return _ErrRS()
+
+    out = tools.dispatch(ErrClient(), "create_record", {"module": "alerts", "data": {}})
+    assert out["error"]["type"] == "ResourceNotFoundError"
+    assert out["error"]["status_code"] == 404
+
+
 def test_dispatch_api_error_is_structured(client):
     class Resp:
         status_code = 404
