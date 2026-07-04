@@ -65,6 +65,20 @@ class RunStep(ApiResult):
     result: Any | None = None
 
 
+class RunStepSnapshot(ApiResult):
+    """A slim per-step outcome snapshot for :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_tree` (``steps=True``).
+
+    A trimmed preview of a step's result -- enough for an agent to decide whether
+    to call :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_env` for the full detail,
+    without the full result bloating the tree. ``result_preview`` is the step's
+    ``result`` JSON-encoded and capped to ~500 chars.
+    """
+
+    name: str | None = None
+    status: str | None = None
+    result_preview: str | None = None
+
+
 class RunEnv(ApiResult):
     """A run's Jinja-context view, from :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_env`.
 
@@ -83,8 +97,13 @@ class RunNode(ApiResult):
 
     The run plus its referenced-child runs (linked by ``parent_wf``), recursively.
     ``pk`` is the numeric run id; ``children`` are the sub-playbook runs this run
-    spawned. Encodes the trigger→run→child linkage so callers don't have to find
+    spawned. Encodes the trigger->run->child linkage so callers don't have to find
     the parent by name in the raw ``/api/wf/api/workflows`` listing.
+
+    ``steps`` carries a slim per-step snapshot (name/status/result_preview) on
+    the root node when ``run_tree(steps=True)``; empty otherwise (and always
+    empty on child nodes). Call :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_env`
+    for a child's full step detail.
     """
 
     pk: str | None = None
@@ -92,6 +111,7 @@ class RunNode(ApiResult):
     status: str | None = None
     task_id: str | None = None
     children: list[RunNode] = Field(default_factory=list)
+    steps: list[RunStepSnapshot] = Field(default_factory=list)
 
 
 class RunFailure(ApiResult):
