@@ -594,6 +594,29 @@ class AIApi(BaseAPI):
         """Delete a registered MCP server by uuid."""
         self.client.delete(f"/api/3/mcp_configurations/{uuid}")
 
+    def register_and_verify(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate, register, and learn the tool list — the one-liner for
+        the "validate → check tools → upsert → print uuid" every MCP setup
+        script hand-rolls today (this repo's ``fortisiem_mcp_setup_and_test.py``
+        and ``register_and_call_public_mcp_server.py`` examples included).
+
+        Raises ``ValueError`` on a failed validation (same guarantee
+        :meth:`upsert_mcp_server`'s default ``validate=True`` already gives —
+        this just avoids the second round-trip callers were already making to
+        also learn the tool list, by reusing the one validation response for
+        both).
+
+        Returns the upserted record (with its ``uuid``) plus a ``tools`` key
+        — the tool list the validation probe reported, so callers don't need
+        a follow-up :meth:`list_mcp_tools` call just to print what they
+        registered.
+        """
+        validation = self.validate_mcp_server(config)
+        if not validation.get("valid"):
+            raise ValueError(f"MCP server did not validate, not saving: {validation.get('message') or validation}")
+        saved = self.upsert_mcp_server(config, validate=False)
+        return {**saved, "tools": validation.get("tools") or []}
+
     # ----------------------------------------------------------- agents
     def list_agents(self, **filters: Any) -> list[dict[str, Any]]:
         """List the installed AI agents (``GET /api/ai/agent/``).

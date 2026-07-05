@@ -415,6 +415,41 @@ def build_parser() -> argparse.ArgumentParser:
     p_records_delete.add_argument("--yes", action="store_true", help="skip confirmation")
     p_records_delete.set_defaults(func=cmd_records_delete)
 
+    # --- mcp group (top-level; the appliance's own native /mcp/* gateway) ---
+    p_mcp = sub.add_parser(
+        "mcp",
+        help="call FortiSOAR's own native MCP tool gateway (client.mcp) — "
+        "not client.ai's external-server registration, see pyfsr.api.native_mcp",
+    )
+    mcpsub = p_mcp.add_subparsers(dest="mcp_command", required=True)
+
+    p_mcp_list = mcpsub.add_parser("list-tools", help="list the tools a native MCP server advertises")
+    playbook_cmds.add_connection_args(p_mcp_list)
+    _add_fmt(p_mcp_list)
+    p_mcp_list.add_argument(
+        "--mcp-server",
+        dest="mcp_server",
+        default="soc",
+        help="'modules' / 'playbooks' / 'soc' / 'utility' / 'connector:<name>' (default: soc)",
+    )
+    p_mcp_list.set_defaults(func=cmd_mcp_list_tools)
+
+    p_mcp_call = mcpsub.add_parser("call", help="call one tool on a native MCP server")
+    playbook_cmds.add_connection_args(p_mcp_call)
+    p_mcp_call.add_argument(
+        "--mcp-server",
+        dest="mcp_server",
+        default="soc",
+        help="'modules' / 'playbooks' / 'soc' / 'utility' / 'connector:<name>' (default: soc)",
+    )
+    p_mcp_call.add_argument("tool", help="tool name, e.g. get_alert")
+    p_mcp_call.add_argument(
+        "--args",
+        default="{}",
+        help='tool arguments as a JSON object, e.g. \'{"uuid": ["<alert-uuid>"]}\'',
+    )
+    p_mcp_call.set_defaults(func=cmd_mcp_call)
+
     # Global HTTP trace flag (applies to all top-level commands)
     parser.add_argument(
         "--log-requests",
@@ -969,6 +1004,34 @@ def cmd_records_delete(args: argparse.Namespace) -> int:
         for rec_id, err in failed:
             print(f"  {rec_id}: {err}", file=sys.stderr)
         return 1
+    return 0
+
+
+def cmd_mcp_list_tools(args: argparse.Namespace) -> int:
+    """List the tools one of FortiSOAR's native MCP servers advertises."""
+    client = playbook_cmds._make_client(args)
+    tools = client.mcp.list_tools(args.mcp_server)
+    if args.fmt == "json":
+        print(json.dumps(tools, indent=2, default=str))
+    else:
+        rows = [[t["name"], (t.get("description") or "").splitlines()[0][:80]] for t in tools]
+        _output.render(rows, ["name", "description"], fmt=args.fmt)
+    return 0
+
+
+def cmd_mcp_call(args: argparse.Namespace) -> int:
+    """Call one tool on a native MCP server and print its result as JSON."""
+    client = playbook_cmds._make_client(args)
+    try:
+        arguments = json.loads(args.args)
+    except json.JSONDecodeError as exc:
+        print(f"--args must be a JSON object: {exc}", file=sys.stderr)
+        return 1
+    if not isinstance(arguments, dict):
+        print('--args must be a JSON object (e.g. \'{"uuid": ["..."]}\')', file=sys.stderr)
+        return 1
+    result = client.mcp.call_tool(args.mcp_server, args.tool, arguments)
+    print(json.dumps(result, indent=2, default=str))
     return 0
 
 

@@ -52,8 +52,9 @@ class APIKeyAuth(BaseAuth):
             APIError: If validation fails
         """
         headers = self.get_auth_headers()
+        url = f"{self.base_url}/api/3/people"
         try:
-            response = requests.get(f"{self.base_url}/api/3/people", headers=headers, verify=self.verify_ssl)
+            response = requests.get(url, headers=headers, verify=self.verify_ssl)
 
             # 401 is the only status that means the key itself is bad. A 403
             # (Access Denied) means the key authenticated successfully but its
@@ -62,9 +63,18 @@ class APIKeyAuth(BaseAuth):
             # as valid; surfacing it as a validation failure would make every
             # least-privilege key unusable.
             if response.status_code == 401:
-                raise APIError("Invalid API key - authentication failed")
+                raise APIError(f"Invalid API key - authentication failed at {url}")
             elif response.status_code not in (200, 403):
-                raise APIError(f"API key validation failed with status {response.status_code}: {response.text}")
+                hint = ""
+                if not response.text and response.status_code in (404, 405, 502, 503):
+                    hint = (
+                        " (empty response body — check the port (FSR_PORT / "
+                        "port=), scheme, and that base_url points at the "
+                        "appliance itself, not a proxy/load balancer)"
+                    )
+                raise APIError(
+                    f"API key validation failed with status {response.status_code} at {url}: {response.text}{hint}"
+                )
 
         except requests.exceptions.RequestException as e:
             raise APIError(f"API key validation request failed: {str(e)}") from e

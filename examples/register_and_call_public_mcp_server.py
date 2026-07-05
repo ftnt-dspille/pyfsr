@@ -72,22 +72,17 @@ def build_config() -> dict:
 
 def register(client: FortiSOAR) -> str:
     """Validate + register DeepWiki as an external MCP server."""
-    config = build_config()
-
-    # 1. Probe the live server through FortiSOAR itself — confirms FortiSOAR
-    #    can reach it and lists the tools it offers.
-    validation = client.ai.validate_mcp_server(config)
-    tools = validation.get("tools") or []
-    print(f"Validation: valid={validation.get('valid')} tools={[t.get('name') for t in tools]}")
-    if not validation.get("valid"):
-        sys.exit(f"DeepWiki did not validate: {validation.get('message')}")
-
-    # 2. Save it the way the UI does — validate-then-save. upsert keys on
-    #    name, so re-running updates the existing row instead of duplicating it.
-    saved = client.ai.upsert_mcp_server(config)
-    mcp_uuid = saved["uuid"]
-    print(f"Registered {MCP_NAME!r} in FortiSOAR as {mcp_uuid}")
-    return mcp_uuid
+    # register_and_verify does validate-then-save (validate-then-save is what
+    # the UI does too; upsert keys on name, so re-running updates the
+    # existing row instead of duplicating it) and hands back the tool list
+    # from that same validation call — no separate probe needed.
+    try:
+        saved = client.ai.register_and_verify(build_config())
+    except ValueError as exc:
+        sys.exit(str(exc))
+    print(f"Validation: tools={[t.get('name') for t in saved['tools']]}")
+    print(f"Registered {MCP_NAME!r} in FortiSOAR as {saved['uuid']}")
+    return saved["uuid"]
 
 
 async def _call_tools(repo: str) -> None:

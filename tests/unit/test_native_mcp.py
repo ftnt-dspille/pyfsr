@@ -7,7 +7,12 @@ from contextlib import asynccontextmanager
 
 import pytest
 
-from pyfsr.api.native_mcp import NativeMCPApi, _server_path
+from pyfsr.api.native_mcp import MCPSession, NativeMCPApi, _server_path
+
+try:
+    ExceptionGroup  # noqa: B018 - builtin on 3.11+
+except NameError:  # pragma: no cover - exercised only on Python 3.10
+    from exceptiongroup import ExceptionGroup  # type: ignore[no-redef]
 
 
 # -- server-path mapping ------------------------------------------------------
@@ -203,6 +208,39 @@ def test_retries_once_on_auth_error_when_auth_can_refresh(monkeypatch):
     assert auth.refresh_calls == 1
 
 
+def test_retries_on_exceptiongroup_wrapped_httpx_status_error(monkeypatch):
+    """The real shape observed live: anyio wraps the actual httpx.HTTPStatusError
+    (which carries the 401) in an ExceptionGroup whose own str() says nothing
+    about a status code at all — a naive top-level/string check misses it."""
+
+    class FakeResponse:
+        status_code = 401
+
+    class FakeHTTPStatusError(Exception):
+        def __init__(self):
+            super().__init__("Client error '401 Unauthorized' for url '...'")
+            self.response = FakeResponse()
+
+    wrapped = ExceptionGroup("unhandled errors in a TaskGroup", [FakeHTTPStatusError()])
+    good_session = FakeSession(call_result_text='{"ok": true}')
+    bad_session = FakeSession(raise_on={"call_tool": wrapped})
+
+    sessions = iter([bad_session, good_session])
+    import mcp
+    import mcp.client.streamable_http as streamable_http
+
+    monkeypatch.setattr(mcp, "ClientSession", lambda read, write: next(sessions))
+    monkeypatch.setattr(streamable_http, "streamablehttp_client", _fake_transport_factory(None))
+
+    auth = FakeAuth(can_refresh=True)
+    api = NativeMCPApi(FakeClient(auth=auth))
+
+    result = api.call_tool("soc", "get_alert")
+
+    assert result == {"ok": True}
+    assert auth.refresh_calls == 1
+
+
 def test_does_not_retry_when_auth_cannot_refresh(monkeypatch):
     session = FakeSession(raise_on={"call_tool": _AuthError(401)})
     _patch_mcp(monkeypatch, session)
@@ -234,3 +272,66 @@ def test_missing_mcp_dependency_raises_clear_error(monkeypatch):
 
     with pytest.raises(ImportError, match=r"pyfsr\[mcp\]"):
         api.list_tools("soc")
+
+
+# -- MCPSession (batched calls, one handshake) ---------------------------------
+def test_session_reuses_one_handshake_across_calls(monkeypatch):
+    session_obj = FakeSession(
+        tools=[FakeTool("get_alert")],
+        call_result_text='{"ok": true}',
+    )
+    transport_calls = {"n": 0}
+    import mcp
+    import mcp.client.streamable_http as streamable_http
+
+    @asynccontextmanager
+    async def counting_transport(url, headers=None, httpx_client_factory=None):
+        transport_calls["n"] += 1
+        yield (object(), object(), None)
+
+    monkeypatch.setattr(mcp, "ClientSession", lambda read, write: session_obj)
+    monkeypatch.setattr(streamable_http, "streamablehttp_client", counting_transport)
+
+    api = NativeMCPApi(FakeClient())
+    with api.session("soc") as s:
+        assert isinstance(s, MCPSession)
+        names = [t["name"] for t in s.list_tools()]
+        result = s.call_tool("get_alert", {"uuid": ["x"]})
+        result2 = s.call_tool("get_alert", {"uuid": ["y"]})
+
+    assert names == ["get_alert"]
+    assert result == {"ok": True}
+    assert result2 == {"ok": True}
+    assert session_obj.calls == [("get_alert", {"uuid": ["x"]}), ("get_alert", {"uuid": ["y"]})]
+    # One handshake for 3 calls (list_tools + 2x call_tool), not 3.
+    assert transport_calls["n"] == 1
+    assert session_obj.initialized
+
+
+def test_session_closes_transport_and_session_on_exit(monkeypatch):
+    closed = {"session": False, "transport": False}
+
+    class TrackedFakeSession(FakeSession):
+        async def __aexit__(self, *exc):
+            closed["session"] = True
+            return False
+
+    @asynccontextmanager
+    async def tracked_transport(url, headers=None, httpx_client_factory=None):
+        try:
+            yield (object(), object(), None)
+        finally:
+            closed["transport"] = True
+
+    import mcp
+    import mcp.client.streamable_http as streamable_http
+
+    session_obj = TrackedFakeSession()
+    monkeypatch.setattr(mcp, "ClientSession", lambda read, write: session_obj)
+    monkeypatch.setattr(streamable_http, "streamablehttp_client", tracked_transport)
+
+    api = NativeMCPApi(FakeClient())
+    with api.session("soc"):
+        pass
+
+    assert closed == {"session": True, "transport": True}

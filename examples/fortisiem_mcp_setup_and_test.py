@@ -120,16 +120,15 @@ def setup(client: FortiSOAR) -> str:
 
     config = build_config(mint_fortisiem_token())
 
-    # 1. Probe the live server — confirms auth + lists the tools it offers.
-    validation = client.ai.validate_mcp_server(config)
-    tools = validation.get("tools") or []
-    print(f"Validation: valid={validation.get('valid')} tools={len(tools)}")
+    # register_and_verify does validate-then-save (validate-then-save is what
+    # the UI does too; upsert keys on name, so re-running updates the
+    # existing row instead of duplicating it) and hands back the tool list
+    # from that same validation call — no separate probe needed.
+    saved = client.ai.register_and_verify(config)
+    tools = saved["tools"]
+    print(f"Validation: tools={len(tools)}")
     for t in tools:
         print(f"  - {t.get('name')}")
-
-    # 2. Save it the way the UI does — validate-then-save. upsert keys on name,
-    #    so re-running updates the existing row instead of duplicating it.
-    saved = client.ai.upsert_mcp_server(config)
     mcp_uuid = saved["uuid"]
     print(f"Saved MCP server {MCP_NAME} ({mcp_uuid})")
 
