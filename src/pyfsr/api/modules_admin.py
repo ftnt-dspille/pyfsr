@@ -69,6 +69,7 @@ import requests
 
 from ..exceptions import FortiSOARException, describe_migrate_failure, is_migrate_transient
 from ..models import AttributeMetadata, NavItem, NavRequire, NavState
+from ..pagination import extract_members
 from ..utils.validation import is_uuid
 from .base import BaseAPI
 
@@ -192,7 +193,7 @@ class ModulesAdminAPI(BaseAPI):
         """Return the lightweight staging row for ``module`` (by type), or None."""
         want = module.strip().lower()
         data = self.client.get(_STAGING, params=_ALL)
-        for m in (data or {}).get("hydra:member", []):
+        for m in extract_members(data):
             if str(m.get("type", "")).lower() == want or str(m.get("module", "")).lower() == want:
                 return m
         return None
@@ -225,7 +226,7 @@ class ModulesAdminAPI(BaseAPI):
         lite = next(
             (
                 m
-                for m in (data or {}).get("hydra:member", [])
+                for m in extract_members(data)
                 if str(m.get("type", "")).lower() == want or str(m.get("module", "")).lower() == want
             ),
             None,
@@ -835,7 +836,7 @@ class ModulesAdminAPI(BaseAPI):
         """Return the ``system_view_templates`` (list/detail/form layouts) for ``module``."""
         want = module.strip().lower()
         data = self.client.get(_VIEW_TEMPLATES, params=_ALL) or {}
-        return [m for m in data.get("hydra:member", []) if str(m.get("module", "")).lower() == want]
+        return [m for m in extract_members(data) if str(m.get("module", "")).lower() == want]
 
     def create_view_templates(self, module: str) -> dict[str, Any]:
         """Create the default list/detail/form layouts for ``module`` (idempotent upsert)."""
@@ -868,11 +869,11 @@ class ModulesAdminAPI(BaseAPI):
         # Only module create/delete would be caught. See _REL.
         stg = {
             str(m.get("type", "")).lower(): m
-            for m in (self.client.get(_STAGING, params={**_ALL, **_REL}) or {}).get("hydra:member", [])
+            for m in extract_members(self.client.get(_STAGING, params={**_ALL, **_REL}))
         }
         pub = {
             str(m.get("type", "")).lower(): m
-            for m in (self.client.get(_PUBLISHED, params={**_ALL, **_REL}) or {}).get("hydra:member", [])
+            for m in extract_members(self.client.get(_PUBLISHED, params={**_ALL, **_REL}))
         }
         from ..models import PendingChange
 
@@ -906,7 +907,7 @@ class ModulesAdminAPI(BaseAPI):
         from ..models import InvalidDraft
 
         problems: list[InvalidDraft] = []
-        members = (self.client.get(_STAGING, params=_ALL) or {}).get("hydra:member", [])
+        members = extract_members(self.client.get(_STAGING, params=_ALL))
         for m in members:
             t = m.get("type") or ""
             uuid = m.get("uuid")
@@ -1541,7 +1542,7 @@ class ModulesAdminAPI(BaseAPI):
         want = module.strip().lower()
         data = self.client.get(_STAGING, params={**_ALL, **_REL})
         out: list[tuple[str, list[str]]] = []
-        for m in (data or {}).get("hydra:member", []):
+        for m in extract_members(data):
             if str(m.get("type", "")).lower() == want:
                 continue  # the module's own fields are going away with it
             hits = [
