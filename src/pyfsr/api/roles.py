@@ -32,26 +32,20 @@ Typical use after creating a custom module::
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from ..models import ModulePermission, Role
 from ..pagination import extract_members
+from ..utils.validation import is_uuid as _is_uuid
 from .base import BaseAPI
 
 _BASE = "/api/3/roles"
 _MODULE_PERMS = "/api/3/module_permissions"
 _MODULES = "/api/3/modules"
 
-_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
-
 # Keys that FSR assigns server-side and rejects (or misroutes) on write.
 # Stripping these from existing perms before re-PUTting prevents accidental corruption.
 _PERM_STRIP = frozenset({"@context", "@id", "id", "createDate", "modifyDate", "deletedAt", "uuid"})
-
-
-def _is_uuid(s: str) -> bool:
-    return bool(_UUID_RE.match(s.strip()))
 
 
 def _clean_perm(perm: dict[str, Any]) -> dict[str, Any]:

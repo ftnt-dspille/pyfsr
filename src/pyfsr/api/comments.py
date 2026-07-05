@@ -2,16 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..utils.iri import module_from_iri as _module_from_iri
 from .base import BaseAPI
-
-
-def _module_from_iri(iri: str) -> str:
-    """Return the module segment of a record IRI (``/api/3/alerts/<uuid>`` -> ``alerts``)."""
-    parts = [p for p in iri.split("/") if p]
-    # .../api/3/<module>/<uuid>  ->  module is the second-to-last segment
-    if len(parts) >= 2:
-        return parts[-2]
-    raise ValueError(f"Cannot derive module from record IRI: {iri!r}")
 
 
 class CommentsAPI(BaseAPI):

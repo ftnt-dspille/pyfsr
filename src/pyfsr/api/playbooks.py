@@ -22,7 +22,6 @@ Example:
 from __future__ import annotations
 
 import json
-import re
 import time
 import urllib.parse
 from collections.abc import Callable
@@ -48,6 +47,8 @@ from ..models import (
 from ..pagination import HydraPage, extract_members
 from ..projection import project
 from ..query import Query
+from ..utils.iri import uuid_from_iri
+from ..utils.validation import is_uuid
 from .base import BaseAPI
 
 
@@ -108,8 +109,6 @@ _WORKFLOWS_BULKUPSERT = "/api/3/bulkupsert/workflows"
 # A hard delete must also reach already-recycled rows; together they skip the recycle bin.
 _HARD_DELETE = {"$hardDelete": "true", "$showDeleted": "true"}
 
-_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
-
 # Friendly step-type aliases -> the step-type *name the API filters on*
 # (``steps.stepType.name``). These are the names the server actually stores —
 # live-verified against /api/3/workflows, so a few differ from the names the
@@ -156,8 +155,7 @@ TRIGGER_TYPE_NAMES: dict[str, str] = {
 }
 
 
-def _looks_like_uuid(s: str) -> bool:
-    return bool(_UUID_RE.match(s.strip()))
+_looks_like_uuid = is_uuid
 
 
 _STEP_PREVIEW_LIMIT = 500
@@ -318,8 +316,7 @@ def _shape_run(m: dict[str, Any]) -> RunSummary:
     err = None
     if isinstance(res, dict):
         err = res.get("Error message") or res.get("error") or res.get("message")
-    pk_url = m.get("@id") or ""
-    pk = pk_url.rstrip("/").rsplit("/", 1)[-1] if pk_url else None
+    pk = uuid_from_iri(m.get("@id"))
     data = dict(m)
     data.update(error_message=err, pk=pk, source=m.get("_source"))  # "live"/"historical"
     return RunSummary(**data)
@@ -1055,7 +1052,7 @@ class PlaybooksAPI(BaseAPI):
         if not run:
             return None
 
-        pk = run.get("pk") or (run.get("@id") or "").rstrip("/").rsplit("/", 1)[-1]
+        pk = run.get("pk") or uuid_from_iri(run.get("@id"))
         if not pk:
             return None
 
@@ -1323,9 +1320,7 @@ class PlaybooksAPI(BaseAPI):
             run_pk = self._resolve_run_pk(run)
         else:
             latest = self.last_run(playbook=playbook, playbook_uuid=playbook_uuid)
-            run_pk = (latest.get("pk") if latest else None) or (
-                (latest.get("@id") or "").rstrip("/").rsplit("/", 1)[-1] if latest else None
-            )
+            run_pk = (latest.get("pk") if latest else None) or (uuid_from_iri(latest.get("@id")) if latest else None)
             if run_pk and latest:
                 # Carry the summary fields the latest-run fetch already gave us.
                 run_meta = {

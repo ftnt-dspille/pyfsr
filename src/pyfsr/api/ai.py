@@ -66,6 +66,7 @@ import json
 import time
 from typing import Any
 
+from ..utils.iri import uuid_from_iri
 from .base import BaseAPI
 
 #: Triage/agent statuses that mean the pipeline has stopped running. While running,
@@ -585,7 +586,7 @@ class AIApi(BaseAPI):
             config = {**config, "uuid": existing_uuid}
         saved = self.save_mcp_server(config, validate=validate)
         if isinstance(saved, dict) and not saved.get("uuid"):
-            uuid = existing_uuid or str(saved.get("@id", "")).rsplit("/", 1)[-1] or None
+            uuid = existing_uuid or uuid_from_iri(saved.get("@id"))
             if uuid:
                 saved = {**saved, "uuid": uuid}
         return saved

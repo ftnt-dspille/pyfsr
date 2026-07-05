@@ -27,6 +27,7 @@ from typing import Any, Literal
 
 from ..models._system import ManualInput, ManualInputResume
 from ..pagination import paginate_offset
+from ..utils.iri import uuid_from_iri
 from .base import BaseAPI
 
 _BASE = "/api/wf/api/manual-wf-input/"
@@ -154,7 +155,7 @@ class ManualInputAPI(BaseAPI):
         members = resp.get("hydra:member", []) if isinstance(resp, dict) else (resp if isinstance(resp, list) else [])
         if not members or not isinstance(members[0], dict):
             return []
-        rpk = (members[0].get("@id") or "").rstrip("/").rsplit("/", 1)[-1]
+        rpk = uuid_from_iri(members[0].get("@id"))
         if not rpk:
             return []
 

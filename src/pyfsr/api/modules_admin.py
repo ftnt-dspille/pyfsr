@@ -69,6 +69,7 @@ import requests
 
 from ..exceptions import FortiSOARException, describe_migrate_failure, is_migrate_transient
 from ..models import AttributeMetadata, NavItem, NavRequire, NavState
+from ..utils.validation import is_uuid
 from .base import BaseAPI
 
 if TYPE_CHECKING:
@@ -166,7 +167,6 @@ _BOGUS_DB_TYPES = {
 # on an older appliance rather than silently shipping a no-op attribute.
 _TEAM_SCOPE_MIN_VERSION = (8, 0, 0)
 _VERSION_RE = re.compile(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?")
-_UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 
 def _parse_version(raw: str | dict[str, Any]) -> tuple[int, int, int] | None:
@@ -1418,7 +1418,7 @@ class ModulesAdminAPI(BaseAPI):
         """Normalize a team identifier (IRI, bare uuid, or display name) to a ``/api/3/teams/..`` IRI."""
         if team.startswith("/api/"):
             return team
-        if _UUID_RE.fullmatch(team):
+        if is_uuid(team):
             return f"/api/3/teams/{team}"
         uuid = self.client.teams.team_uuid_by_name(team)
         if not uuid:

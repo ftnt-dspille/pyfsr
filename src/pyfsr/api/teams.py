@@ -18,20 +18,14 @@ Example:
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from ..models import Team
 from ..pagination import extract_members
+from ..utils.validation import is_uuid as _is_uuid
 from .base import BaseAPI
 
 _BASE = "/api/3/teams"
-
-_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
-
-
-def _is_uuid(s: str) -> bool:
-    return bool(_UUID_RE.match(s.strip()))
 
 
 class TeamsAPI(BaseAPI):
