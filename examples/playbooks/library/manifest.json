@@ -25,7 +25,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "change-incident-lead-critical",
@@ -71,7 +71,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "connector-error-handling-branch",
@@ -97,7 +97,7 @@
       "triggers": [
         "start_on_create"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "create-incident-from-alert",
@@ -146,7 +146,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "parent-calls-child-workflow-reference",
@@ -218,7 +218,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "loop-over-records-max-parallel",
@@ -241,7 +241,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "multi-stage-approval-audit-trail",
@@ -312,7 +312,7 @@
       "triggers": [
         "start_on_create"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "severity-scoring-from-enrichment",
@@ -363,7 +363,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "enrich-indicator-extract-artifacts-rollup",
@@ -393,7 +393,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "fortisiem-ip-context-enrichment",
@@ -422,7 +422,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "multi-source-ip-reputation-rollup",
@@ -501,7 +501,7 @@
       "triggers": [
         "start_on_create"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "multi-system-provisioning",
@@ -536,7 +536,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "sla-escalation-timer",
@@ -648,7 +648,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     },
     {
       "slug": "scheduled-hunt-summarize-notify",
@@ -706,7 +706,7 @@
       "triggers": [
         "api_endpoint"
       ],
-      "compiles_ok": true
+      "compiles_ok": false
     }
   ]
 }
