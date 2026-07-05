@@ -332,7 +332,7 @@ class PlaybooksAPI(BaseAPI):
     def _resolve_uuid(self, playbook: str) -> str | None:
         qs = urllib.parse.urlencode({"name": playbook, "$limit": 5})
         resp = self.client.get(f"{_WORKFLOWS}?{qs}")
-        members = (resp or {}).get("hydra:member") or []
+        members = extract_members(resp)
         return members[0].get("uuid") if members else None
 
     def resolve_iri(self, playbook: str) -> str | None:
@@ -777,7 +777,7 @@ class PlaybooksAPI(BaseAPI):
                 resp = self.client.get(path + qs)
             except Exception:  # noqa: BLE001 - one table being down shouldn't blank the other
                 continue
-            for m in (resp or {}).get("hydra:member") or []:
+            for m in extract_members(resp):
                 iri = m.get("@id") or ""
                 if iri and iri in seen:
                     continue
@@ -879,7 +879,7 @@ class PlaybooksAPI(BaseAPI):
             return tail if tail.isdigit() else None
         if _looks_like_uuid(s):  # a task_id — map to its pk via the live log
             resp = self.log_list(task_id=s, limit=1)
-            members = (resp or {}).get("hydra:member") or []
+            members = extract_members(resp)
             if members:
                 iri = members[0].get("@id") or ""
                 tail = iri.rstrip("/").rsplit("/", 1)[-1]
@@ -1503,7 +1503,7 @@ class PlaybooksAPI(BaseAPI):
         deadline = time.monotonic() + timeout
         while True:
             resp = self.log_list(task_id=task_id, limit=1)
-            members = (resp or {}).get("hydra:member") or []
+            members = extract_members(resp)
             if members:
                 run = members[0]
                 status = (run.get("status") or "").lower()
@@ -1710,7 +1710,7 @@ class PlaybooksAPI(BaseAPI):
             "/api/wf/api/manual-wf-input/",
             params={"workflow": _pk(run_pk), "format": "json", "ordering": "-id"},
         )
-        rows = resp.get("hydra:member", []) if isinstance(resp, dict) else (resp if isinstance(resp, list) else [])
+        rows = extract_members(resp)
         if not rows:
             raise ValueError(
                 f"run {run_pk!r} has no pending manual-input/approval to resume. If it "
