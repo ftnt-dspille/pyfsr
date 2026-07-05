@@ -36,6 +36,8 @@ import datetime as _dt
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from ..models import ScheduledTask
+from ..pagination import extract_members
 from .base import BaseAPI
 
 _ENDPOINT = "/api/wf/api/scheduled/"
@@ -85,22 +87,42 @@ def _utc_offset(timezone: str) -> str | None:
 class SchedulesAPI(BaseAPI):
     """List, enable/disable, create, and trigger workflow-engine periodic tasks."""
 
-    def list(self) -> list[dict[str, Any]]:
-        """Return all scheduled periodic tasks.
+    def _list_raw(self) -> list[dict[str, Any]]:
+        """Return all scheduled periodic tasks as raw dicts.
 
         A single ``limit``-unbounded fetch (the wf API ignores ``page`` but
-        honours ``offset``/``limit``).
+        honours ``offset``/``limit``). Internal -- write paths (``set_enabled``,
+        ``delete``, ``trigger_now``) mutate the raw dict, so they use this
+        rather than the public, optionally-typed :meth:`list`.
         """
         resp = self.client.get(_ENDPOINT, params={"format": "json", "offset": 0, "limit": 2147483647})
-        if isinstance(resp, dict):
-            return resp.get("hydra:member") or resp.get("results") or []
-        return resp or []
+        members = extract_members(resp)
+        if not members and isinstance(resp, dict) and isinstance(resp.get("results"), list):
+            members = resp["results"]
+        return members
 
-    def get(self, name: str) -> dict[str, Any] | None:
-        """Return one scheduled task by exact ``name`` (``None`` if absent)."""
-        for task in self.list():
+    def list(self, *, typed: bool = True) -> list[ScheduledTask] | list[dict[str, Any]]:
+        """Return all scheduled periodic tasks.
+
+        Args:
+            typed: parse rows into :class:`~pyfsr.models.ScheduledTask`
+                (default); pass ``False`` for raw dicts.
+        """
+        raw = self._list_raw()
+        if typed:
+            return [ScheduledTask.model_validate(t) for t in raw]
+        return raw
+
+    def get(self, name: str, *, typed: bool = True) -> ScheduledTask | dict[str, Any] | None:
+        """Return one scheduled task by exact ``name`` (``None`` if absent).
+
+        Args:
+            typed: parse the result into a :class:`~pyfsr.models.ScheduledTask`
+                (default); pass ``False`` for the raw dict.
+        """
+        for task in self._list_raw():
             if task.get("name") == name:
-                return task
+                return ScheduledTask.model_validate(task) if typed else task
         return None
 
     def set_enabled(self, name: str, enabled: bool) -> dict[str, Any]:
@@ -109,7 +131,7 @@ class SchedulesAPI(BaseAPI):
         The wf API only accepts a full-record ``PUT`` (no PATCH), so this reads
         the current row, flips ``enabled``, and PUTs it back.
         """
-        task = self.get(name)
+        task = self.get(name, typed=False)
         if task is None:
             raise ValueError(f"No scheduled task named {name!r}")
         body = copy.deepcopy(task)
@@ -138,7 +160,7 @@ class SchedulesAPI(BaseAPI):
         Example:
             >>> client.schedules.delete("nightly-recon")
         """
-        task = self.get(name)
+        task = self.get(name, typed=False)
         if task is None:
             raise ValueError(f"No scheduled task named {name!r}")
         self.client.delete(f"{_ENDPOINT}{task['id']}/", params={"format": "json"})
@@ -154,7 +176,8 @@ class SchedulesAPI(BaseAPI):
         exit_if_running: bool = True,
         create_user: str | None = None,
         priority: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        typed: bool = True,
+    ) -> ScheduledTask | dict[str, Any]:
         """Create a periodic task that runs ``workflow_iri`` on a cron schedule.
 
         Mirrors what FortiSOAR's scheduler UI sends to
@@ -181,6 +204,8 @@ class SchedulesAPI(BaseAPI):
             priority: optional task-priority picklist object; omitted by
                 default (the server applies its own default -- the UI's Medium
                 picklist is instance-specific and not assumed).
+            typed: parse the result into a :class:`~pyfsr.models.ScheduledTask`
+                (default); pass ``False`` for the raw dict.
 
         Returns:
             The created periodic-task record, with the server-generated
@@ -212,7 +237,8 @@ class SchedulesAPI(BaseAPI):
             "start_time": None,
             "enabled": enabled,
         }
-        return self.client.post(_ENDPOINT, data=body, params={"format": "json"})
+        resp = self.client.post(_ENDPOINT, data=body, params={"format": "json"})
+        return ScheduledTask.model_validate(resp) if typed else resp
 
     def trigger_now(self, *, name: str | None = None, task_id: str | None = None) -> dict[str, Any]:
         """Force-trigger a scheduled task immediately (``POST .../trigger-now/``).
@@ -242,7 +268,7 @@ class SchedulesAPI(BaseAPI):
         if task_id is None and name is None:
             raise ValueError("trigger_now requires name or task_id")
         if task_id is None:
-            task = self.get(name)
+            task = self.get(name, typed=False)
             if task is None:
                 raise ValueError(f"No scheduled task named {name!r}")
             task_id = task["id"]

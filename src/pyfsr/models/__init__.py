@@ -60,6 +60,7 @@ from ._playbooks import (
     TriggerRequest,
     TriggerResponse,
 )
+from ._schedules import CrontabScheduleModel, ScheduledTask
 from ._system import (
     AggregateRow,
     ApiKey,
@@ -230,4 +231,7 @@ __all__ = [
     "NavItem",
     "NavRequire",
     "NavState",
+    # scheduled (periodic) tasks
+    "ScheduledTask",
+    "CrontabScheduleModel",
 ]
