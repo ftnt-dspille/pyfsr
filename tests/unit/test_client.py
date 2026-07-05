@@ -449,6 +449,89 @@ def test_version_returns_dict_when_multiple_fields(mock_client, mock_response, m
     assert version == "7.4.2"
 
 
+def test_version_is_cached_across_calls(mock_client, mock_response, monkeypatch):
+    """version() only hits the network once; a second call reuses the cache."""
+    calls = {"n": 0}
+
+    def mock_request(*args, **kwargs):
+        calls["n"] += 1
+        return mock_response(json_data={"version": "8.0.0-6034"})
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    assert mock_client.version() == "8.0.0-6034"
+    assert mock_client.version() == "8.0.0-6034"
+    assert calls["n"] == 1
+
+
+def test_version_refresh_bypasses_cache(mock_client, mock_response, monkeypatch):
+    """version(refresh=True) re-probes even when a cached value is present."""
+    responses = iter(["8.0.0-6034", "8.1.0-7000"])
+
+    def mock_request(*args, **kwargs):
+        return mock_response(json_data={"version": next(responses)})
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    assert mock_client.version() == "8.0.0-6034"
+    assert mock_client.version(refresh=True) == "8.1.0-7000"
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("8.0.0-6034", (8, 0, 0)),
+        ("7.4.2", (7, 4, 2)),
+        ("8.0", (8, 0, 0)),
+        ({"version": "8.0.0-6034"}, (8, 0, 0)),
+        ({"@version": "7.4.2", "build": "123"}, (7, 4, 2)),
+        ("not-a-version", None),
+    ],
+)
+def test_version_tuple_parses_shapes(mock_client, mock_response, monkeypatch, raw, expected):
+    def mock_request(*args, **kwargs):
+        if isinstance(raw, dict):
+            return mock_response(json_data=raw)
+        return mock_response(json_data={"version": raw})
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    assert mock_client.version_tuple() == expected
+
+
+@pytest.mark.parametrize(
+    "version_str, expected",
+    [
+        ("8.0.0-6034", True),
+        ("8.1.0", True),
+        ("9.0.0", True),
+        ("7.6.5-5662", False),
+        ("7.4.2", False),
+    ],
+)
+def test_supports_native_mcp_gated_at_8_0_0(mock_client, mock_response, monkeypatch, version_str, expected):
+    """The native MCP gateway (/mcp/*, client.mcp) shipped starting 8.0.0."""
+
+    def mock_request(*args, **kwargs):
+        return mock_response(json_data={"version": version_str})
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    assert mock_client.supports_native_mcp() is expected
+
+
+def test_supports_native_mcp_returns_none_when_unparseable(mock_client, mock_response, monkeypatch):
+    """Unparseable/unavailable version -> None, not a guessed True/False."""
+
+    def mock_request(*args, **kwargs):
+        return mock_response(status_code=404)
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    assert mock_client.version_tuple() is None
+    assert mock_client.supports_native_mcp() is None
+
+
 def test_version_raises_when_all_endpoints_fail(mock_client, mock_response, monkeypatch):
     """version() raises FortiSOARException when all fallback endpoints fail."""
     from pyfsr.exceptions import FortiSOARException

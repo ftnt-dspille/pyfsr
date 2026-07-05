@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import sys
 import time
 import warnings
@@ -237,6 +238,7 @@ class FortiSOAR:
 
         self.timeout = timeout
         self.dry_run = dry_run
+        self._version_cache: str | dict[str, Any] | None = None
         self.session = requests.Session()
         self.session.verify = verify_ssl
         self.verify_ssl = verify_ssl
@@ -936,8 +938,14 @@ class FortiSOAR:
         """
         return self.modules.describe(module, refresh=refresh)
 
-    def version(self) -> str | dict[str, Any]:
-        """Get the FortiSOAR product version (tries multiple endpoints).
+    def version(self, *, refresh: bool = False) -> str | dict[str, Any]:
+        """Get the FortiSOAR product version (tries multiple endpoints), cached.
+
+        The result of the first successful probe is cached on the client, so
+        repeated calls (including internal ones from :meth:`version_tuple` /
+        :meth:`supports_native_mcp`) cost one network round-trip per client
+        lifetime, not one per call. Pass ``refresh=True`` to bypass the cache
+        (e.g. after an appliance upgrade you know happened mid-session).
 
         Attempts to retrieve the FortiSOAR build version via a fallback chain
         of endpoints, returning the first successful response as a version
@@ -966,6 +974,16 @@ class FortiSOAR:
             >>> print(v["version"] if isinstance(v, dict) else v)  # doctest: +SKIP
             7.4.2
         """
+        if not refresh and self._version_cache is not None:
+            return self._version_cache
+        result = self._version_uncached()
+        self._version_cache = result
+        return result
+
+    def _version_uncached(self) -> str | dict[str, Any]:
+        """The actual fallback-chain probe behind :meth:`version` — see there
+        for the endpoint order. Split out so :meth:`version` only has to
+        reason about the cache, not the probe chain."""
         errors = []
 
         # Primary: /cyops_version.json — canonical version file, served at the
@@ -1028,3 +1046,41 @@ class FortiSOAR:
         raise FortiSOARException(
             f"Could not retrieve FortiSOAR version from any fallback endpoint ({endpoint_list}): {error_detail}"
         )
+
+    def version_tuple(self, *, refresh: bool = False) -> tuple[int, int, int] | None:
+        """``(major, minor, patch)`` parsed from :meth:`version`, or ``None`` if
+        the version string/dict can't be parsed as a dotted version.
+
+        Handles the shapes :meth:`version` actually returns: a plain string
+        (``"8.0.0"``), a build-qualified string (``"8.0.0-6034"``), or a dict
+        with a ``version``/``@version``/``build`` key holding either. Missing
+        trailing components default to 0 (``"8.0"`` -> ``(8, 0, 0)``). ``None``
+        on a network failure too (:meth:`version` exhausting every fallback
+        endpoint) -- capability checks shouldn't raise, just report unknown.
+        """
+        try:
+            version_result = self.version(refresh=refresh)
+        except FortiSOARException:
+            return None
+        raw: Any = version_result
+        if isinstance(raw, dict):
+            raw = raw.get("version") or raw.get("@version") or raw.get("build")
+        if not isinstance(raw, str):
+            return None
+        match = re.match(r"(\d+)\.(\d+)(?:\.(\d+))?", raw.strip())
+        if not match:
+            return None
+        major, minor, patch = match.groups()
+        return (int(major), int(minor), int(patch or 0))
+
+    def supports_native_mcp(self, *, refresh: bool = False) -> bool | None:
+        """Whether this appliance's native MCP gateway (``/mcp/*``, ``client.mcp``)
+        is available — shipped starting FortiSOAR 8.0.0. Returns ``None`` if the
+        version can't be determined (network failure, unparseable string) rather
+        than guessing; check for ``None`` explicitly if that distinction matters
+        to the caller (vs. treating it as "unsupported").
+        """
+        v = self.version_tuple(refresh=refresh)
+        if v is None:
+            return None
+        return v >= (8, 0, 0)
