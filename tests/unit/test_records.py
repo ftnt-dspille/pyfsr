@@ -455,6 +455,63 @@ def test_bulk_upsert_posts_list_and_returns_raw():
     assert out == {"hydra:member": [1, 2]}
 
 
+def test_bulk_upsert_parse_true_splits_success_and_failure():
+    """Shape live-verified against FortiSOAR 8.0.0-6034: {"success": [<record>,
+    ...], "failure": [<raw error string>, ...]}."""
+    from pyfsr.records import BulkUpsertResult
+
+    raw_response = {
+        "success": [
+            {"@id": "/api/3/alerts/aaa", "name": "row 1"},
+            {"@id": "/api/3/alerts/bbb", "name": "row 2"},
+        ],
+        "failure": [
+            "POST method for object at index #2 in the request payload failed "
+            'with error: {"type":"UnexpectedValueException","message":"FSR_CH_0000001 : '
+            "The \\u0022severity\\u0022 field is required to have a value from the "
+            "\\u0022Severity\\u0022 picklist. However, the provided value does not match "
+            'any of the options listed in the specified picklist."}'
+        ],
+    }
+    client = FakeClient({"/api/3/bulkupsert/alerts": raw_response})
+    rows = [{"name": "row 1"}, {"name": "row 2"}, {"name": "row 3", "severity": "bogus"}]
+
+    result = RecordSet(client, "alerts").bulk_upsert(rows, parse=True)
+
+    assert isinstance(result, BulkUpsertResult)
+    assert result.ok is False
+    assert len(result) == 3
+    assert [s["name"] for s in result.succeeded] == ["row 1", "row 2"]
+    assert len(result.failed) == 1
+    assert result.failed[0].index == 2
+    assert "severity" in result.failed[0].message
+    assert result.raw == raw_response
+
+
+def test_bulk_upsert_parse_true_all_succeeded_is_ok():
+    from pyfsr.records import BulkUpsertResult
+
+    raw_response = {"success": [{"@id": "/api/3/alerts/aaa", "name": "row 1"}], "failure": []}
+    client = FakeClient({"/api/3/bulkupsert/alerts": raw_response})
+
+    result = RecordSet(client, "alerts").bulk_upsert([{"name": "row 1"}], parse=True)
+
+    assert isinstance(result, BulkUpsertResult)
+    assert result.ok is True
+    assert result.failed == []
+    assert len(result.succeeded) == 1
+
+
+def test_bulk_upsert_failure_from_raw_handles_unmatched_shape():
+    """A future FortiSOAR message format that doesn't carry 'index #N' degrades
+    to index=None rather than raising."""
+    from pyfsr.records import BulkUpsertFailure
+
+    failure = BulkUpsertFailure.from_raw("some unrelated error format")
+    assert failure.index is None
+    assert failure.message == "some unrelated error format"
+
+
 # -- comments ---------------------------------------------------------------
 def test_comments_scopes_to_record_path():
     c = FakeClient({"/api/3/alerts/abc-123/comments": {"hydra:member": [{"id": "c1"}]}})
