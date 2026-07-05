@@ -64,6 +64,7 @@ from ..models._integration import (
     IntegrationListEnvelope,
     Operation,
 )
+from ..pagination import extract_members
 from .base import BaseAPI
 
 
@@ -1237,9 +1238,9 @@ class ConnectorsAPI(BaseAPI):
         shown in the Studio's left-hand tree. Returns the ``data[]`` entries.
         """
         resp = self.client.get(f"{self._DEV_BASE}/") or {}
-        if isinstance(resp, dict):
-            return resp.get("data") or resp.get("hydra:member") or []
-        return resp if isinstance(resp, list) else []
+        if isinstance(resp, dict) and resp.get("data"):
+            return resp["data"]
+        return extract_members(resp)
 
     def dev_edit(self, entity_id: str) -> dict[str, Any]:
         """Open a dev-workspace connector for editing (Studio's *Edit* action).

@@ -4,6 +4,7 @@ from typing import Any
 
 from ..auth.base import BaseAuth
 from ..models._integration import ExportJobResult
+from ..pagination import extract_members
 from .base import BaseAPI
 from .content_hub import ContentHubSearch
 
@@ -23,8 +24,9 @@ class ExportConfigAPI(BaseAPI):
         """Look up picklist IRI by name"""
         # Query picklist by name
         response = self.client.get("/api/3/picklist_names", params={"name": picklist_name})
-        if response["hydra:member"]:
-            return response["hydra:member"][0]["@id"]
+        members = extract_members(response)
+        if members:
+            return members[0]["@id"]
         else:
             raise ValueError(f"Picklist not found: {picklist_name}")
 
@@ -55,8 +57,9 @@ class ExportConfigAPI(BaseAPI):
         """Look up playbook collection details by name"""
         # Query playbook collections
         response = self.client.get("/api/3/workflow_collections", params={"name": collection_name})
-        if response["hydra:member"]:
-            collection = response["hydra:member"][0]
+        members = extract_members(response)
+        if members:
+            collection = members[0]
             return {"label": collection["name"], "value": collection["@id"].split("/")[-1]}
         else:
             raise ValueError(f"Playbook collection not found: {collection_name}")
@@ -64,7 +67,7 @@ class ExportConfigAPI(BaseAPI):
     def _get_template_uuid(self, template_name: str) -> str:
         """Look up template UUID by name"""
         response = self.client.get("/api/3/export_templates", params={"name": template_name})
-        templates = response.get("hydra:member", [])
+        templates = extract_members(response)
         matching_templates = [t for t in templates if t["name"] == template_name]
 
         if not matching_templates:
