@@ -140,6 +140,11 @@ class FortiSOAR:
            suppress_insecure_warnings (bool, optional): Whether to suppress insecure request
                warnings. Defaults to False.
            port (int, optional): Port to connect to. Overrides any port in base_url.
+               Falls back to the ``FSR_PORT`` environment variable when omitted
+               (same var :meth:`pyfsr.config.EnvConfig.from_env` reads), so a
+               host-only ``base_url`` plus a separately-set ``FSR_PORT`` still
+               connects to the right port instead of silently using the
+               default.
                Defaults to None (uses 443 for HTTPS).
            timeout (int | float, optional): Per-request timeout in seconds applied
                to every call (individual requests may override via ``timeout=``).
@@ -193,7 +198,22 @@ class FortiSOAR:
             base_url = f"https://{base_url}"
         base_url = base_url.rstrip("/")
 
-        # Apply explicit port, overriding any port already in the URL
+        # Apply explicit port, overriding any port already in the URL. If no
+        # port was passed, fall back to FSR_PORT from the environment — the
+        # same var EnvConfig.from_env() reads. Without this, a script that
+        # builds FortiSOAR(base_url=os.environ["FSR_BASE_URL"], ...) by hand
+        # (rather than going through EnvConfig) silently drops FSR_PORT when
+        # it's set separately from the host, and gets a confusing auth
+        # failure against the wrong port instead of a hint. Matches
+        # EnvConfig's precedence: FSR_PORT wins over any port already in the
+        # URL, since that's what EnvConfig.from_env().client() already does.
+        if port is None:
+            port_env = (os.environ.get("FSR_PORT") or "").strip()
+            if port_env:
+                try:
+                    port = int(port_env)
+                except ValueError:
+                    port = None
         if port is not None:
             parsed = urlparse(base_url)
             netloc = f"{parsed.hostname}:{port}"

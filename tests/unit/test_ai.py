@@ -1,5 +1,7 @@
 """Unit tests for the FortiAI investigation / LLM / MCP API (``client.ai``)."""
 
+import pytest
+
 from pyfsr.api.ai import TERMINAL_STATUSES, AIApi
 
 
@@ -606,3 +608,31 @@ def test_upsert_mcp_server_backfills_uuid_from_atid():
     ai = AIApi(c)
     saved = ai.upsert_mcp_server({"name": "New"}, validate=False)
     assert saved["uuid"] == "m-x"
+
+
+# -- register_and_verify (validate + upsert + tools in one call) -----------
+def test_register_and_verify_merges_tools_from_validation():
+    c = RecordingClient(
+        responses={
+            ("POST", "/api/ai/mcp/validate"): {"valid": True, "tools": [{"name": "read_wiki_structure"}]},
+            ("GET", "/api/ai/mcp"): [],
+            ("POST", "/api/3/mcp_configurations"): {"uuid": "m-new"},
+        }
+    )
+    ai = AIApi(c)
+    result = ai.register_and_verify({"name": "DeepWiki", "url": "https://mcp.deepwiki.com/mcp"})
+
+    assert result["uuid"] == "m-new"
+    assert result["tools"] == [{"name": "read_wiki_structure"}]
+    # Only ONE validate call — upsert doesn't re-validate (already known-good).
+    assert [call for call in c.calls if call[:2] == ("POST", "/api/ai/mcp/validate")].__len__() == 1
+
+
+def test_register_and_verify_raises_without_saving_on_invalid_config():
+    c = RecordingClient(responses={("POST", "/api/ai/mcp/validate"): {"valid": False, "message": "connection refused"}})
+    ai = AIApi(c)
+
+    with pytest.raises(ValueError, match="connection refused"):
+        ai.register_and_verify({"name": "Bad", "url": "https://unreachable.example.com/mcp"})
+
+    assert not any(call[0] in ("POST", "PUT") and "mcp_configurations" in call[1] for call in c.calls)

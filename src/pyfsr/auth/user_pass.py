@@ -21,8 +21,22 @@ class UserPasswordAuth(BaseAuth):
                 detail = response.json()
             except Exception:
                 detail = response.text
+            hint = ""
+            if not detail and response.status_code in (404, 405, 502, 503):
+                # A blank body on one of these almost always means the request
+                # never reached FortiSOAR's auth endpoint at all — wrong port
+                # (FSR_PORT unset/ignored), wrong scheme, or a proxy/LB in the
+                # way — not bad credentials. Say so; "authentication failed"
+                # with nothing else sends people credential-debugging instead.
+                hint = (
+                    " (empty response body — this usually means the request "
+                    "didn't reach FortiSOAR's API at all: check the port "
+                    "(FSR_PORT / port=), scheme, and that base_url points at "
+                    "the appliance, not a proxy/load balancer in front of it)"
+                )
             raise requests.exceptions.HTTPError(
-                f"Authentication failed ({response.status_code}): {detail}", response=response
+                f"Authentication failed ({response.status_code}) at {auth_url}: {detail}{hint}",
+                response=response,
             )
         return response.json()["token"]
 
