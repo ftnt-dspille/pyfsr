@@ -14,11 +14,77 @@ prints it; :func:`library_manifest` serializes the NL->playbook retrieval payloa
 
 from __future__ import annotations
 
+import json as _json
 import re as _re
+import shutil as _shutil
+import sqlite3 as _sqlite3
+import tempfile as _tempfile
 from dataclasses import dataclass
 from pathlib import Path as _Path
 
 _LIBRARY_DEFAULT = _Path(__file__).resolve().parents[2] / "examples" / "playbooks" / "library"
+_FIXTURE_CONNECTORS_DEFAULT = _LIBRARY_DEFAULT / "fixture_connectors.json"
+
+
+def _build_fixture_catalog_db(fixture_spec: str | _Path | None = None) -> _Path | None:
+    """Build a throwaway reference catalog seeded with fake connectors/operations.
+
+    The packaged ``fsr_playbooks`` slim catalog ships with **0 connectors** by
+    design (per-install data, not shippable). Every library playbook that calls
+    a real connector (``openai``, ``fortigate-firewall``, ...) therefore fails
+    offline compilation with ``unknown_connector`` -- not a real defect, just
+    catalog data the library corpus doesn't have without a live box.
+
+    This copies the packaged slim catalog to a temp file and inserts
+    ``connector``/``operation`` rows from ``fixture_connectors.json`` (a
+    ``{connector: [operation, ...]}`` map, auto-derived from the connector
+    steps actually used across the library -- see that file's own comment).
+    Params are intentionally NOT seeded: an unmodeled param schema is only a
+    ``unknown_param`` *warning* (params pass through unvalidated), so
+    connector+operation identity is all offline compilation needs to go green.
+
+    Returns None if the compiler extra isn't installed or the packaged
+    catalog can't be found -- callers should fall back to the default
+    (uncatalogued, ``cold*``) compile path in that case.
+    """
+    try:
+        from fsr_playbooks._db import default_db_path
+    except ImportError:
+        return None
+
+    spec_path = _Path(fixture_spec) if fixture_spec else _FIXTURE_CONNECTORS_DEFAULT
+    try:
+        spec = _json.loads(spec_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+    packaged = default_db_path()
+    if not _Path(packaged).is_file():
+        return None
+
+    fd, tmp_name = _tempfile.mkstemp(prefix="pyfsr_library_fixture_", suffix=".db")
+    import os as _os
+
+    _os.close(fd)
+    tmp_path = _Path(tmp_name)
+    _shutil.copyfile(packaged, tmp_path)
+
+    con = _sqlite3.connect(tmp_path)
+    try:
+        for connector, operations in spec.items():
+            con.execute(
+                "INSERT OR IGNORE INTO connectors(name, version, label, source) VALUES (?, '1.0.0', ?, 'fixture')",
+                (connector, connector),
+            )
+            for op in operations:
+                con.execute(
+                    "INSERT OR IGNORE INTO operations(connector_name, op_name, title) VALUES (?, ?, ?)",
+                    (connector, op, op),
+                )
+        con.commit()
+    finally:
+        con.close()
+    return tmp_path
 
 
 @dataclass
@@ -81,7 +147,7 @@ def _facets(text: str) -> tuple[list[str], list[str], list[str], list[str], str]
     return step_types, connectors, filters, triggers, name
 
 
-def list_library(library_dir: str | _Path | None = None) -> list[LibraryEntry]:
+def list_library(library_dir: str | _Path | None = None, *, use_fixture_catalog: bool = True) -> list[LibraryEntry]:
     """Index every playbook in the foundational library.
 
     Walks ``library_dir`` (default: the repo's ``examples/playbooks/library/``),
@@ -90,6 +156,14 @@ def list_library(library_dir: str | _Path | None = None) -> list[LibraryEntry]:
     triggers, and compile status. The manifest generator
     (:func:`library_manifest`) serializes this; the ``pyfsr playbook examples`` CLI
     prints it.
+
+    With ``use_fixture_catalog=True`` (default), compilation runs against a
+    throwaway catalog seeded from ``fixture_connectors.json`` (see
+    :func:`_build_fixture_catalog_db`) so playbooks using real connectors
+    (``fortigate-firewall``, ``openai``, ...) compile clean offline instead of
+    failing ``unknown_connector`` against the packaged catalog's 0 connectors.
+    Pass ``False`` to compile against the packaged slim catalog as-is (the
+    honest "what ships in the wheel" count).
     """
     from .authoring import compile_playbook_yaml
 
@@ -97,46 +171,51 @@ def list_library(library_dir: str | _Path | None = None) -> list[LibraryEntry]:
     if not root.is_dir():
         return []
     repo_root = root.parents[2]
+    fixture_db = _build_fixture_catalog_db() if use_fixture_catalog else None
     entries: list[LibraryEntry] = []
-    for f in sorted(root.rglob("*.yaml")):
-        text = f.read_text(encoding="utf-8")
-        fm = _parse_front_matter(text)
-        step_types, connectors, filters, triggers, name = _facets(text)
-        try:
-            res = compile_playbook_yaml(text)
-            ok = res.ok
-        except Exception:
-            ok = False
-        stage = f.relative_to(root).parts[0] if len(f.relative_to(root).parts) > 1 else "misc"
-        slug = f.stem
-        src = fm.get("source", "authored")
-        entries.append(
-            LibraryEntry(
-                slug=slug,
-                stage=stage,
-                path=str(f.relative_to(repo_root)),
-                name=name or slug,
-                goal=fm.get("goal", "") or slug,
-                step_types=step_types,
-                connectors=connectors,
-                jinja_filters=filters,
-                triggers=triggers,
-                compiles_ok=ok,
-                source=src,
-                summary=fm.get("goal", "") or fm.get("summary", "") or slug,
+    try:
+        for f in sorted(root.rglob("*.yaml")):
+            text = f.read_text(encoding="utf-8")
+            fm = _parse_front_matter(text)
+            step_types, connectors, filters, triggers, name = _facets(text)
+            try:
+                res = compile_playbook_yaml(text, db_path=fixture_db)
+                ok = res.ok
+            except Exception:
+                ok = False
+            stage = f.relative_to(root).parts[0] if len(f.relative_to(root).parts) > 1 else "misc"
+            slug = f.stem
+            src = fm.get("source", "authored")
+            entries.append(
+                LibraryEntry(
+                    slug=slug,
+                    stage=stage,
+                    path=str(f.relative_to(repo_root)),
+                    name=name or slug,
+                    goal=fm.get("goal", "") or slug,
+                    step_types=step_types,
+                    connectors=connectors,
+                    jinja_filters=filters,
+                    triggers=triggers,
+                    compiles_ok=ok,
+                    source=src,
+                    summary=fm.get("goal", "") or fm.get("summary", "") or slug,
+                )
             )
-        )
+    finally:
+        if fixture_db is not None:
+            fixture_db.unlink(missing_ok=True)
     return entries
 
 
-def library_manifest(library_dir: str | _Path | None = None) -> dict:
+def library_manifest(library_dir: str | _Path | None = None, *, use_fixture_catalog: bool = True) -> dict:
     """Build the retrieval manifest for the library (the NL->playbook payload).
 
     Returns a JSON-serializable dict: ``{library_dir, count, playbooks: [<entry>]}``.
     Each entry carries the intent + facets an agent uses to find the closest worked
     example and adapt it. Generate it with ``pyfsr playbook examples --manifest``.
     """
-    entries = list_library(library_dir)
+    entries = list_library(library_dir, use_fixture_catalog=use_fixture_catalog)
     root = _Path(library_dir) if library_dir else _LIBRARY_DEFAULT
     return {
         "library_dir": str(root),
