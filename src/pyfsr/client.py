@@ -119,6 +119,8 @@ class FortiSOAR:
         port: int | None = None,
         timeout: int | float | None = 30,
         max_retries: int = 2,
+        retry_backoff_factor: float = 0.5,
+        retry_status_forcelist: tuple[int, ...] = (429, 500, 502, 503, 504),
         dry_run: bool = False,
         http_trace: bool = False,
     ):
@@ -152,6 +154,14 @@ class FortiSOAR:
            max_retries (int, optional): Automatic retries for transient failures
                (connection errors and 429/5xx) on idempotent methods, with
                exponential backoff. Defaults to 2; pass 0 to disable.
+           retry_backoff_factor (float, optional): urllib3 backoff factor between
+               retries (delay ~= backoff_factor * (2 ** (retry_number - 1))).
+               Defaults to 0.5 (0.5s, 1s, ...). Tune this for a chatty polling
+               loop (e.g. a lower factor) or a box known to need longer
+               recovery windows (a higher one) without hand-rolling your own
+               retry adapter.
+           retry_status_forcelist (tuple[int, ...], optional): HTTP status codes
+               that trigger a retry. Defaults to ``(429, 500, 502, 503, 504)``.
            dry_run (bool, optional): When True, mutating requests (POST/PUT/PATCH/
                DELETE) are **not** sent — they are logged and a synthetic success
                response is returned instead. Reads (GET/HEAD/OPTIONS) pass through
@@ -239,8 +249,8 @@ class FortiSOAR:
                 connect=max_retries,
                 read=max_retries,
                 status=max_retries,
-                backoff_factor=0.5,
-                status_forcelist=(429, 500, 502, 503, 504),
+                backoff_factor=retry_backoff_factor,
+                status_forcelist=retry_status_forcelist,
                 allowed_methods=frozenset({"GET", "HEAD", "OPTIONS"}),
                 raise_on_status=False,
             )

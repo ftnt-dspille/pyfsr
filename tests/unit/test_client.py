@@ -559,3 +559,28 @@ def test_version_exhausts_all_fallbacks_then_raises(mock_client, mock_response, 
     assert call_count["appliances"] >= 1
     assert call_count["license"] >= 1
     assert call_count["version"] >= 1
+
+
+def test_retry_backoff_and_status_forcelist_are_configurable(mock_client):
+    """retry_backoff_factor/retry_status_forcelist reach the mounted Retry adapter,
+    so a caller doesn't have to hand-roll their own HTTPAdapter to tune backoff
+    for a chatty polling loop or a box known to need a longer recovery window."""
+    from pyfsr import FortiSOAR
+
+    client = FortiSOAR(
+        base_url="https://test.fortisoar.com",
+        token="test-key",
+        retry_backoff_factor=2.5,
+        retry_status_forcelist=(429, 503),
+    )
+    adapter = client.session.get_adapter("https://test.fortisoar.com")
+    retry = adapter.max_retries
+    assert retry.backoff_factor == 2.5
+    assert retry.status_forcelist == (429, 503)
+
+
+def test_retry_defaults_unchanged(mock_client):
+    """Default construction keeps the existing backoff/status-forcelist behavior."""
+    retry = mock_client.session.get_adapter("https://test.fortisoar.com").max_retries
+    assert retry.backoff_factor == 0.5
+    assert retry.status_forcelist == (429, 500, 502, 503, 504)
