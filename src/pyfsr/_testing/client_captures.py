@@ -205,6 +205,92 @@ CONNECTOR_DETAIL_RESPONSE = {
 }
 
 
+# Real ``POST /api/integration/execute/`` for the ``cisa-advisory`` connector's
+# ``get_known_exploited_vulnerability_cves`` operation — a public, read-only,
+# parameter-less feed lookup (safe to demo against a real vendor connector; the
+# only side effect is CISA's public catalog serving one GET). Trimmed from
+# 1631 real entries to 2, keeping every field on both so the doctest shape is
+# honest (only the CVE list is shortened, not any single entry's fields).
+CONNECTOR_EXECUTE_CISA_ADVISORY_RESPONSE = {
+    "operation": "get_known_exploited_vulnerability_cves",
+    "status": "Success",
+    "message": "",
+    "data": {
+        "title": "CISA Catalog of Known Exploited Vulnerabilities",
+        "catalogVersion": "2026.07.01",
+        "dateReleased": "2026-07-01T19:00:06.9016Z",
+        "count": 1631,
+        "vulnerabilities": [
+            {
+                "cveID": "CVE-2026-45659",
+                "vendorProject": "Microsoft",
+                "product": "SharePoint Server",
+                "vulnerabilityName": "Microsoft SharePoint Server Deserialization of Untrusted Data Vulnerability",
+                "dateAdded": "2026-07-01",
+                "shortDescription": (
+                    "Microsoft SharePoint Server contains a deserialization of untrusted data "
+                    "vulnerability which allows an authorized attacker to execute code over a network."
+                ),
+                "requiredAction": (
+                    "Apply mitigations in accordance with vendor instructions, ensuring compliance "
+                    "with CISA’s BOD 26-04 Prioritizing Security Updates Based on Risk (see URL in "
+                    "Notes) guidance and CISA’s “Forensics Triage Requirements” (see URL in Notes). "
+                    "Follow applicable BOD 26-04 guidance for cloud services or discontinue use of the "
+                    "product if mitigations are unavailable. Stakeholders are responsible for evaluating "
+                    "each asset's internet exposure and ensuring adherence to BOD 26-04 patching guidelines."
+                ),
+                "dueDate": "2026-07-04",
+                "knownRansomwareCampaignUse": "Unknown",
+                "notes": (
+                    "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-45659 ; "
+                    "BOD 26-04: https://www.cisa.gov/news-events/directives/"
+                    "bod-26-04-prioritizing-security-updates-based-risk ; "
+                    "Forensics Triage Requirements: https://www.cisa.gov/news-events/directives/"
+                    "bod-26-04-implementation-guidance-prioritizing-security-updates-based-risk ; "
+                    "https://nvd.nist.gov/vuln/detail/CVE-2026-45659"
+                ),
+                "cwes": ["CWE-502"],
+            },
+            {
+                "cveID": "CVE-2026-48558",
+                "vendorProject": "SimpleHelp ",
+                "product": "SimpleHelp",
+                "vulnerabilityName": "SimpleHelp Authentication Bypass Vulnerability",
+                "dateAdded": "2026-06-29",
+                "shortDescription": (
+                    "SimpleHelp contains an authentication bypass vulnerability in the OIDC "
+                    "authentication flow. When OIDC authentication is configured, identity tokens "
+                    "submitted during login are accepted without verifying their cryptographic "
+                    "signature. In a vulnerable configuration, a remote, unauthenticated attacker "
+                    "can submit a forged token containing arbitrary identity claims to obtain a "
+                    "fully authenticated technician session. In some configurations, this may also "
+                    "allow bypass of multi-factor authentication."
+                ),
+                "requiredAction": (
+                    "Apply mitigations in accordance with vendor instructions, ensuring compliance "
+                    "with CISA’s BOD 26-04 Prioritizing Security Updates Based on Risk (see URL in "
+                    "Notes) guidance and CISA’s “Forensics Triage Requirements” (see URL in Notes). "
+                    "Follow applicable BOD 26-04 guidance for cloud services or discontinue use of the "
+                    "product if mitigations are unavailable. Stakeholders are responsible for evaluating "
+                    "each asset's internet exposure and ensuring adherence to BOD 26-04 patching guidelines."
+                ),
+                "dueDate": "2026-07-02",
+                "knownRansomwareCampaignUse": "Unknown",
+                "notes": (
+                    "https://simple-help.com/security/simplehelp-security-update-2026-05 ; "
+                    "BOD 26-04: https://www.cisa.gov/news-events/directives/"
+                    "bod-26-04-prioritizing-security-updates-based-risk ; "
+                    "Forensics Triage Requirements: https://www.cisa.gov/news-events/directives/"
+                    "bod-26-04-implementation-guidance-prioritizing-security-updates-based-risk ; "
+                    "https://nvd.nist.gov/vuln/detail/CVE-2026-48558"
+                ),
+                "cwes": ["CWE-347"],
+            },
+        ],
+    },
+}
+
+
 # ---------------------------------------------------------------------------
 # Module-admin (staging/published schema) + picklist captures
 # ---------------------------------------------------------------------------

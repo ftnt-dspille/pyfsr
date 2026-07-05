@@ -1530,16 +1530,33 @@ class ConnectorsAPI(BaseAPI):
         config: str | None = None,
         config_name: str | None = None,
         params: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> ExecuteResult:
         """Run a single connector operation via ``POST /api/integration/execute/``.
 
         ``version`` and ``config`` are resolved from the configured connector
         when omitted (``config_name`` selects a non-default configuration by
-        name). Returns the server payload, typically
-        ``{operation, status, message, data}``.
+        name). Returns a typed :class:`~pyfsr.models.ExecuteResult` — dict-compatible
+        (``result["data"]`` still works), with a ``.ok`` property for the
+        recurring ``status == "Success"`` check.
 
         See the module-level warning: for agent-bound connectors this call is
         fire-and-forget and ``data`` comes back empty — that is not a failure.
+
+        Live-verified on FortiSOAR 8.0.0-6034 against ``cisa-advisory``'s
+        ``get_known_exploited_vulnerability_cves`` (a public, read-only,
+        parameter-less feed lookup — safe to demo against a real connector,
+        no side effect beyond an outbound GET to CISA's public catalog):
+
+            >>> client = demo_client()
+            >>> result = client.connectors.execute(
+            ...     "cisa-advisory", "get_known_exploited_vulnerability_cves"
+            ... )
+            >>> result.ok
+            True
+            >>> result.data["title"]
+            'CISA Catalog of Known Exploited Vulnerabilities'
+            >>> result.data["vulnerabilities"][0]["cveID"]
+            'CVE-2026-45659'
         """
         version = version or self.resolve_version(connector)
         if config is None and (config_name is not None or self._configured is not None):

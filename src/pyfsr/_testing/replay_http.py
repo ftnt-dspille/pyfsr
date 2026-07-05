@@ -57,6 +57,10 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         # connector_detail: POST /api/integration/connectors/<id>/ — one fixture
         # regardless of which connector id the doctest resolves (id collapsed below).
         _entry("POST", "/api/integration/connectors/3/", cap.CONNECTOR_DETAIL_RESPONSE),
+        # execute(): POST /api/integration/execute/ — one fixture regardless of
+        # which connector/operation the doctest names (the body varies, the path
+        # doesn't; matching ignores the body, same as every other POST fixture here).
+        _entry("POST", "/api/integration/execute/", cap.CONNECTOR_EXECUTE_CISA_ADVISORY_RESPONSE),
         # Module-admin (staging/published schema) read-only envelopes. The two
         # lists are hit by ``list_modules``/``describe_module``/``pending_changes``
         # (query string ignored, so the with-relationships list serves all three);
