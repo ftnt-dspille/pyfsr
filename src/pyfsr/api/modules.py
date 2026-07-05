@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ..pagination import extract_members
 from .base import BaseAPI
 from .picklists import _picklist_name_from_attr
 
@@ -74,7 +75,7 @@ class ModulesAPI(BaseAPI):
         if self._modules is not None and not refresh:
             return self._modules
         data = self.client.get(_META_BASE)
-        members = (data or {}).get("hydra:member") or []
+        members = extract_members(data)
         mods = [
             {
                 "type": m.get("type"),
@@ -111,7 +112,7 @@ class ModulesAPI(BaseAPI):
             base = self._described[want]
             return self._with_picklist_values(base) if with_values else base
         data = self.client.get(_META_FULL)
-        members = (data or {}).get("hydra:member") or []
+        members = extract_members(data)
         hit = next(
             (m for m in members if str(m.get("type", "")).lower() == want or str(m.get("module", "")).lower() == want),
             None,
