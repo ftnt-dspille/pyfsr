@@ -946,6 +946,28 @@ class RecordSet(Generic[T]):
             return result
         return None
 
+    def delete_many(self, refs: list[str], *, hard: bool = False) -> dict[str, Any] | None:
+        """Delete many records by ref (uuid, ``module:uuid`` shorthand, or IRI) in one call.
+
+        A convenience over :meth:`delete_by_query` for the common case of
+        already having a list of refs (e.g. the uuids from a
+        :meth:`bulk_upsert` result you're cleaning up, or a prior
+        :meth:`query`/:meth:`search`) rather than a filter — resolves each ref
+        to its bare uuid the same way :meth:`delete` does (raising on an
+        empty/collection-wide ref) and issues one ``uuid in [...]`` bulk
+        delete instead of a caller hand-rolling a per-ref loop.
+
+        ``refs=[]`` is a no-op (returns ``None``) rather than an error, since
+        "nothing to delete" is a normal outcome of a filtered cleanup, not a
+        misuse the way an empty filter is for :meth:`delete_by_query`.
+
+        Soft-deletes by default; pass ``hard=True`` to purge permanently.
+        """
+        if not refs:
+            return None
+        uuids = [self._single_record_path(ref, action="delete_many").rsplit("/", 1)[-1] for ref in refs]
+        return self.delete_by_query(Query().in_("uuid", uuids), hard=hard)
+
     @overload
     def restore(self, ref: str, *, raw: Literal[True]) -> dict[str, Any]: ...
 

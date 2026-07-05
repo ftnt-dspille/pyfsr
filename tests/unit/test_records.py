@@ -249,6 +249,39 @@ def test_delete_by_query_rejects_empty_filters():
     assert client.calls == []  # never reaches the wire
 
 
+def test_delete_many_resolves_refs_to_uuid_in_filter():
+    client = FakeClient({"/api/3/delete-with-query/alerts": {"deleted": 3}})
+    out = RecordSet(client, "alerts").delete_many(
+        ["u1", "/api/3/alerts/u2", "alerts:u3"],
+    )
+    method, endpoint, params, data = client.calls[0]
+    assert method == "DELETE"
+    assert endpoint == "/api/3/delete-with-query/alerts"
+    assert params is None
+    assert data["filters"][0]["operator"] == "in"
+    assert data["filters"][0]["value"] == ["u1", "u2", "u3"]
+    assert out == {"deleted": 3}
+
+
+def test_delete_many_hard_sets_param():
+    client = FakeClient()
+    RecordSet(client, "alerts").delete_many(["u1"], hard=True)
+    assert client.calls[0][2] == {"$hardDelete": "true"}
+
+
+def test_delete_many_empty_refs_is_noop():
+    client = FakeClient()
+    assert RecordSet(client, "alerts").delete_many([]) is None
+    assert client.calls == []
+
+
+def test_delete_many_rejects_empty_ref_like_delete_does():
+    client = FakeClient()
+    with pytest.raises(ValueError, match="delete_many"):
+        RecordSet(client, "alerts").delete_many(["u1", ""])
+    assert client.calls == []
+
+
 def test_restore_clears_deleted_at_and_puts():
     deleted = {"@id": "/api/3/alerts/u1", "uuid": "u1", "name": "x", "deletedAt": 1234.5}
     client = FakeClient({"/api/3/alerts/u1": deleted})
