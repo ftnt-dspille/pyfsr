@@ -32,6 +32,7 @@ from .api.incidents import IncidentsAPI
 from .api.manual_input import ManualInputAPI
 from .api.modules import ModulesAPI
 from .api.modules_admin import ModulesAdminAPI
+from .api.native_mcp import NativeMCPApi
 from .api.notifications import NotificationsAPI
 from .api.picklists import PicklistsAPI
 from .api.playbooks import PlaybooksAPI
@@ -312,6 +313,7 @@ class FortiSOAR:
         self.manual_input: ManualInputAPI = ManualInputAPI(self)
         self.users: UsersAPI = UsersAPI(self)
         self.ai: AIApi = AIApi(self)
+        self.mcp: NativeMCPApi = NativeMCPApi(self)
 
         # Tag names + execution-agent lifecycle (agents need a router at create time)
         self.tags: TagsAPI = TagsAPI(self)
