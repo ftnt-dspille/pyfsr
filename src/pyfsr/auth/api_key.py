@@ -3,6 +3,7 @@
 import requests
 
 from ..exceptions import APIError
+from ._url import normalize_base_url
 from .base import BaseAuth
 
 
@@ -33,7 +34,7 @@ class APIKeyAuth(BaseAuth):
     def __init__(self, base_url: str, api_key: str, verify_ssl: bool = True):
         super().__init__()
         self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
+        self.base_url = normalize_base_url(base_url)
         self.verify_ssl = verify_ssl
 
         # Set unsupported operations

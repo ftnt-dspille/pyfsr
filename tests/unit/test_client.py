@@ -6,6 +6,7 @@ from pyfsr.exceptions import (
     AuthenticationError,
     PermissionError,
     ResourceNotFoundError,
+    ResponseParseError,
     ValidationError,
 )
 
@@ -188,8 +189,10 @@ def test_request_json_decode_error(mock_client, mock_response, monkeypatch):
 
     monkeypatch.setattr(requests.Session, "request", mock_request)
 
-    with pytest.raises(requests.exceptions.JSONDecodeError):
+    with pytest.raises(ResponseParseError) as exc_info:
         mock_client.get("/api/3/alerts")
+    assert "not valid JSON" in str(exc_info.value)
+    assert exc_info.value.status_code == 200
 
 
 def test_request_exception_logging(mock_client, mock_response, monkeypatch):
@@ -230,6 +233,30 @@ def test_request_reauths_and_retries_on_expired_token(mock_client, mock_response
     assert resp.json() == {"ok": True}
     assert state["data_calls"] == 2  # original + one replay
     assert state["auth_calls"] >= 1  # refreshed at least once
+
+
+def test_request_reauth_failure_is_logged_not_swallowed(mock_client, mock_response, monkeypatch, caplog):
+    """If auth.refresh() itself raises (network error, rotated creds, bug), the
+    failure must be logged, not silently discarded — otherwise only the
+    original 401/403 is ever visible and the real cause is invisible."""
+    import logging as _logging
+
+    import requests as _rq
+
+    def mock_request(self, method, url, **kwargs):
+        return mock_response(status_code=403, json_data={"message": "HMAC signature has expired"})
+
+    monkeypatch.setattr(_rq.sessions.Session, "request", mock_request)
+
+    def broken_refresh():
+        raise RuntimeError("refresh backend unreachable")
+
+    monkeypatch.setattr(mock_client.auth, "refresh", broken_refresh)
+
+    with caplog.at_level(_logging.WARNING, logger="pyfsr"):
+        mock_client.request("GET", "/api/3/alerts", raise_on_status=False)
+
+    assert any("refresh backend unreachable" in r.message for r in caplog.records)
 
 
 def test_request_reauth_fires_only_once(mock_client, mock_response, monkeypatch):

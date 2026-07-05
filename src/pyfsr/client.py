@@ -56,7 +56,7 @@ from .api.workflow_collections import WorkflowCollectionsAPI
 from .auth.api_key import APIKeyAuth
 from .auth.base import BaseAuth
 from .auth.user_pass import UserPasswordAuth
-from .exceptions import FortiSOARException, handle_api_error
+from .exceptions import FortiSOARException, ResponseParseError, handle_api_error
 
 if TYPE_CHECKING:
     from .appliance import Appliance
@@ -622,7 +622,12 @@ class FortiSOAR:
                 fresh = None
                 try:
                     fresh = self.auth.refresh()
-                except Exception:  # noqa: BLE001 — fall through to normal error handling
+                except Exception as exc:  # noqa: BLE001 — fall through to normal error handling
+                    # Log the actual refresh failure instead of discarding it: without
+                    # this, a broken refresh (network error, rotated creds, bug) was
+                    # invisible and only the original 401/403 ever surfaced, sending
+                    # callers debugging the wrong thing.
+                    logger.warning("auth refresh after %d failed: %s", response.status_code, exc)
                     fresh = None
                 if fresh:
                     self.session.headers.update(fresh)
@@ -652,6 +657,21 @@ class FortiSOAR:
             if self.verbose:
                 logger.error(f"Request failed: {str(e)}")  # pragma: no cover
             raise
+
+    @staticmethod
+    def _safe_json(response: requests.Response) -> Any:
+        """``response.json()`` that raises :class:`ResponseParseError` on a bad body.
+
+        A 2xx status with an unparseable body (HTML from a proxy/LB in front of
+        the appliance, a truncated stream, an unexpectedly empty body) used to
+        surface as a bare ``json.JSONDecodeError`` from deep inside this module.
+        That error looked like a client bug, not what it actually is — the
+        response never carried the JSON the caller expected.
+        """
+        try:
+            return response.json()
+        except ValueError:
+            raise ResponseParseError(response, preview=response.text) from None
 
     def _dry_run_response(self, method: str, url: str, params: dict | None, data: dict | None) -> requests.Response:
         """Build a synthetic 200 response for a suppressed dry-run write.
@@ -703,12 +723,12 @@ class FortiSOAR:
         content_type = response.headers.get("Content-Type", "")
 
         if "application/json" in content_type:
-            return response.json()
+            return self._safe_json(response)
         elif any(binary_type in content_type for binary_type in ["application/zip", "application/octet-stream"]):
             return response.content
         else:
             # Default to JSON if content type is not explicitly specified
-            return response.json()
+            return self._safe_json(response)
 
     def post(
         self,
@@ -734,7 +754,7 @@ class FortiSOAR:
             raise_on_status=raise_on_status,
             **kwargs,
         )
-        return response if not raise_on_status else response.json()
+        return response if not raise_on_status else self._safe_json(response)
 
     def put(
         self,
@@ -757,7 +777,7 @@ class FortiSOAR:
             raise_on_status=raise_on_status,
             **kwargs,
         )
-        return response if not raise_on_status else response.json()
+        return response if not raise_on_status else self._safe_json(response)
 
     def delete(
         self,

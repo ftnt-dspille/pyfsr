@@ -20,10 +20,13 @@ Example:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from .base import BaseAPI
 from .picklists import _picklist_name_from_attr
+
+logger = logging.getLogger("pyfsr")
 
 # No $relationships → small payload, enough for the module list.
 _META_BASE = "/api/3/staging_model_metadatas?$limit=2147483647&$orderby=type"
@@ -163,7 +166,12 @@ class ModulesAPI(BaseAPI):
             if name:
                 try:
                     f["picklist_values"] = self.client.picklists.options(name)
-                except Exception:
+                except Exception as exc:
+                    # Best-effort enrichment: a describe() call shouldn't fail just
+                    # because one field's picklist lookup errored. But swallowing
+                    # silently made "no values configured" indistinguishable from
+                    # "the picklists API is down" — log so the latter is visible.
+                    logger.warning("picklist lookup failed for %r (field %r): %s", name, f.get("name"), exc)
                     f["picklist_values"] = []
             enriched.append(f)
         out = dict(described)
