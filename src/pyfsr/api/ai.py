@@ -66,6 +66,7 @@ import json
 import time
 from typing import Any
 
+from ..pagination import extract_members
 from ..utils.iri import uuid_from_iri
 from .base import BaseAPI
 
@@ -807,7 +808,7 @@ class AIApi(BaseAPI):
         if correlation_id:
             params["correlationID"] = correlation_id
         resp = self.client.get("/api/3/llm_activity_logs", params=params)
-        records = resp.get("hydra:member") if isinstance(resp, dict) else (resp or [])
+        records = extract_members(resp)
         calls: list[dict[str, Any]] = []
         for rec in records or []:
             response = rec.get("response")
@@ -856,7 +857,7 @@ class AIApi(BaseAPI):
         """
         uuid = _uuid_from_ref(alert)
         resp = self.client.get("/api/3/llm_activity_logs", params={"$search": uuid, "$limit": limit})
-        records = resp.get("hydra:member") if isinstance(resp, dict) else (resp or [])
+        records = extract_members(resp)
         counts: dict[str, int] = {}
         for rec in records or []:
             cid = rec.get("correlationID")
