@@ -42,15 +42,21 @@ autoapi/pyfsr/auth/index
 
 ```{toctree}
 :maxdepth: 2
-:caption: Playbooks & agent
+:caption: Playbooks
 
 Playbooks (authoring) <autoapi/pyfsr/authoring/index>
-autoapi/pyfsr/agent/index
 autoapi/pyfsr/playbook_catalog/index
 autoapi/pyfsr/playbook_freshness/index
 autoapi/pyfsr/playbook_lint/index
 autoapi/pyfsr/playbook_match/index
 autoapi/pyfsr/playbook_library/index
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Agent & MCP
+
+autoapi/pyfsr/agent/index
 ```
 
 ```{toctree}
