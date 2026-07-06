@@ -1,3 +1,11 @@
+"""Shared CRUD surface for first-class record modules (tasks, incidents, …).
+
+Factors out the pattern behind the record-module shortcuts: friendly picklist
+values resolved to IRIs on create/update, and a ``record=`` link to attach a new
+record to a parent. Subclasses (:class:`~pyfsr.api.tasks.TasksAPI`,
+:class:`~pyfsr.api.incidents.IncidentsAPI`) just set :attr:`~RecordModuleAPI.module`.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Iterable

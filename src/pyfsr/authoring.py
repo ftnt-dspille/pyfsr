@@ -685,18 +685,22 @@ class CompiledPlaybook:
 
     @property
     def warnings(self) -> list[dict[str, Any]]:
+        """The non-blocking diagnostics (``severity == "warning"``)."""
         return [e for e in self.errors if e.get("severity") == "warning"]
 
     @property
     def blocking(self) -> list[dict[str, Any]]:
+        """The diagnostics that block deployment (everything not a warning)."""
         return [e for e in self.errors if e.get("severity") != "warning"]
 
     @property
     def collection_names(self) -> list[str]:
+        """Names of the workflow collections in the compiled output."""
         return [c.get("name", "") for c in (self.fsr_json or {}).get("data", [])]
 
     @property
     def playbook_names(self) -> list[str]:
+        """Names of every playbook across all compiled collections."""
         names: list[str] = []
         for col in (self.fsr_json or {}).get("data", []):
             for wf in col.get("workflows", []) or []:
@@ -837,12 +841,14 @@ class VerifiedPlaybook:
 
     @property
     def ok(self) -> bool:
+        """Alias for :attr:`ready` — ``True`` when the playbook has no blocking issues."""
         return self.ready
 
     def __bool__(self) -> bool:
         return self.ready
 
     def summary(self) -> str:
+        """A one-line human summary: readiness plus blocking/warning/suppressed counts."""
         head = "READY" if self.ready else "NOT READY"
         bits = [f"{len(self.required_fixes)} blocking", f"{len(self.warnings)} warning(s)"]
         if self.suppressed:
@@ -906,6 +912,7 @@ class DeployedPlaybook:
 
     @property
     def ok(self) -> bool:
+        """``True`` when the playbook made it all the way through and was deployed."""
         return self.deployed
 
     def __bool__(self) -> bool:

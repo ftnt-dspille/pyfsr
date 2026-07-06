@@ -1,3 +1,12 @@
+"""The comments module — ``client.comments``.
+
+Comments are the analyst notes attached to records. A comment is its own record
+(``/api/3/comments``) linked to one or more parent records (alerts, incidents,
+tasks, …) through the parent module's relationship field. ``create`` derives
+that relationship field from the record IRI, so a comment attaches to any module
+without per-module wiring.
+"""
+
 from __future__ import annotations
 
 from typing import Any

@@ -1,3 +1,12 @@
+"""The users module — ``client.users``.
+
+Manage FortiSOAR users (People records + auth credentials) via ``/api/3/people``.
+Each user is two linked records — a **People** profile and an internal **auth
+user** — which ``/api/3/people`` creates atomically when the ``user`` and
+``roles`` keys are supplied. Roles and teams may be given as UUIDs or friendly
+names; names are resolved via a per-instance cache populated on first use.
+"""
+
 from __future__ import annotations
 
 from typing import Any

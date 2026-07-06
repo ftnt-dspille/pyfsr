@@ -1,3 +1,11 @@
+"""Configuration export/import — ``client.export_config``.
+
+Export a FortiSOAR configuration (modules, playbooks, picklists, roles, and other
+content) to a portable archive and import it into another instance — the basis
+for backup/restore and multi-environment provisioning. Some operations depend on
+the active auth method; the API checks support before running.
+"""
+
 import os
 import time
 from typing import Any

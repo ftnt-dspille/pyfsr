@@ -1,3 +1,11 @@
+"""File upload/download helpers — ``client.files``.
+
+Wraps FortiSOAR's ``/api/3/files`` endpoint to upload a local file (mimicking a
+browser upload) and download an attachment back to disk, returning typed
+:class:`~pyfsr.models.FileRecord` results. Attachment records that link a file to
+a parent module are handled by ``client.attachments``.
+"""
+
 import logging
 import mimetypes
 from pathlib import Path

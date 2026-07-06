@@ -1,3 +1,12 @@
+"""Username/password authentication for the FortiSOAR client.
+
+Exchanges a login id + password for a bearer session token at construction, then
+supplies that token on every request. Session tokens expire, so this strategy
+supports refresh: the client re-authenticates and retries on an expired-token
+response. Selected by passing ``username``/``password`` to
+:class:`~pyfsr.client.FortiSOAR`.
+"""
+
 import requests
 
 from ._url import normalize_base_url
@@ -5,6 +14,14 @@ from .base import BaseAuth
 
 
 class UserPasswordAuth(BaseAuth):
+    """Authenticate with a username and password, holding a refreshable token.
+
+    Fetches a bearer token from ``/auth/authenticate`` on construction. A blank
+    error body on a ``404``/``405``/``502``/``503`` is reported as a connectivity
+    problem (wrong port/scheme or a proxy in the way) rather than bad
+    credentials, since the request likely never reached the auth endpoint.
+    """
+
     def __init__(self, base_url: str, username: str, password: str, verify_ssl: bool = True):
         super().__init__()
         self.base_url = normalize_base_url(base_url)
@@ -42,6 +59,7 @@ class UserPasswordAuth(BaseAuth):
         return response.json()["token"]
 
     def get_auth_headers(self) -> dict:
+        """Return the request headers carrying the current bearer token."""
         return {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
 
     def refresh(self) -> dict:
@@ -56,4 +74,5 @@ class UserPasswordAuth(BaseAuth):
 
     @property
     def can_refresh(self) -> bool:
+        """``True`` — this strategy can re-authenticate, so the client retries expired tokens."""
         return True
