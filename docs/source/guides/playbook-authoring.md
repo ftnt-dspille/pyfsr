@@ -274,6 +274,112 @@ which is always recorded.
 
 A complete worked example lives in `examples/do_until_validation_loop.py`.
 
+## Code-snippet sandbox: writing Python that runs
+
+The `code_snippet` step runs a Python snippet through the `code-snippet`
+connector. The source goes under `arguments.code:` (a friendly shorthand the
+compiler maps to the canonical `arguments.params.python_function`). Two sandbox
+constraints shape every snippet you write — both confirmed against a live box —
+so they're worth knowing up front:
+
+1. **The connector execs the snippet at module level.** A top-level `return` is a
+   `SyntaxError`. Put logic inside `def` functions and call them, or run
+   statements inline — but never `return` from the top level of the snippet.
+2. **`open` (and the other filesystem builtins) are restricted.** A snippet
+   cannot read or write files. To produce a document a later step emails, embed
+   the content inline in that step's `body:` rather than writing a file the
+   snippet can't open.
+
+### Surfacing output: `print(json.dumps(...))` → `code_output`
+
+There's no `return` to receive a result. Instead, `print` a JSON document: the
+connector captures stdout and auto-deserializes the JSON into a structured
+`code_output` dict. Downstream steps read it at
+`vars.steps.<name>.data.code_output.*` — note `data.code_output`, not
+`output.data`, and it's already a dict, so **no `| from_json` filter** is needed.
+
+```yaml
+- name: Reconcile
+  type: code_snippet
+  arguments:
+    code: |
+      import json
+      take = int("{{ vars.take }}" or 0)
+      crew = int("{{ vars.crew_count }}" or 1)
+      print(json.dumps({
+          "cut_per_member": take // max(crew, 1),
+          "risk": "high" if take > 1000000 else "low",
+      }))
+  next: Decide
+
+- name: Decide
+  type: decision
+  conditions:
+    - condition: "{{ vars.steps.Reconcile.data.code_output.risk == 'high' }}"
+      label: big
+      next: Alert
+    - label: default
+      next: Log
+```
+
+### Reading upstream step output
+
+A connector step's result lives at `vars.steps.<name>.data` — that IS the
+step-result dict (`{data, status, ...}`); there is no separate `.output` level.
+For a `code_snippet`, `.data.code_output` is the deserialized dict; for a
+`connector` step, `.data` holds the operation's response (e.g.
+`vars.steps.FetchServiceNow.data.result`). You can render these inline in the
+snippet as Python literals, which is how a code_snippet consumes upstream
+connector data without an API call:
+
+```yaml
+- name: Diff
+  type: code_snippet
+  arguments:
+    code: |
+      import json
+      a = {{ vars.steps.FetchFortiCloud.data.assets }}
+      b = {{ vars.steps.FetchServiceNow.data.result }}
+      # ...diff a vs b by join key...
+      print(json.dumps({"findings": findings, "matched": matched}))
+```
+
+```{note}
+A step's display name with spaces is referenced in Jinja with the spaces
+replaced by underscores: a step named `Apply Quarantine on FGT` is
+`vars.steps.Apply_Quarantine_on_FGT.status`. Use a single-word step name (as
+above) to avoid the rewrite entirely.
+```
+
+### Imports and the connector config
+
+By default the sandbox restricts imports. To `import` from a package, the
+`code-snippet` connector's configuration must allow it — set `allow_imports` on
+the config (true, or a restrictive list):
+
+```python
+client.connectors.upsert_configuration(
+    "code-snippet",
+    {"allow_imports": True},
+    name="default", default=True, validate=False,
+)
+```
+
+{meth}`~pyfsr.api.connectors.ConnectorsAPI.default_config` shows the config
+schema for any connector (for `code-snippet` it surfaces `allow_imports` /
+`restrict_imports`). The whole step is also gated by the appliance's *Custom Code
+Execution* system setting
+({meth}`~pyfsr.api.system_settings.SystemSettingsAPI.set_custom_code_execution`)
+— with it off, a `code_snippet` step won't run at all.
+
+```{tip}
+If a snippet genuinely needs a top-level `return`, unrestricted file access, or
+imports the sandbox forbids, **escape the sandbox**: run the Python through a
+custom unrestricted-python connector (a `connector` step pointing at, e.g., a
+`code-runner` connector) instead of the stock `code_snippet` step. The trade-off
+is a connector you must install and configure separately.
+```
+
 ## Importing an existing export
 
 If you already have a `*.json` export from the UI's **Export** button (no

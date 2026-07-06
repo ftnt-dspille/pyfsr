@@ -161,6 +161,45 @@ def paginate(
         page += 1
 
 
+def paginate_offset(
+    fetch_page: Callable[[int], Any],
+    *,
+    offset: int = 0,
+) -> list[Any]:
+    """Collect every member across an offset-paged Hydra endpoint.
+
+    For endpoints that page via ``offset``/``hydra:nextPage``/``hydra:itemsPerPage``
+    (the ``wf``/``rule`` API entities -- manual inputs, notifications -- rather
+    than the ``/api/3`` ``page``-based ones :func:`paginate` targets). Both
+    :mod:`~pyfsr.api.manual_input` and :mod:`~pyfsr.api.notifications` hand-rolled
+    this same loop; this is the single copy.
+
+    Args:
+        fetch_page: Callable taking the current ``offset`` and returning the raw
+            envelope for that page (the caller binds any other params/body).
+        offset: Starting offset.
+
+    Returns:
+        All members collected across every page, in order.
+    """
+    members: list[Any] = []
+    page_offset = offset
+    while True:
+        resp = fetch_page(page_offset)
+        page = extract_members(resp)
+        if not page and isinstance(resp, dict) and isinstance(resp.get("results"), list):
+            # A couple of ``wf``/``rule`` endpoints echo DRF's ``results`` key
+            # instead of (or alongside) ``hydra:member``.
+            page = resp["results"]
+        members.extend(page)
+        next_page = resp.get("hydra:nextPage") if isinstance(resp, dict) else None
+        per_page = resp.get("hydra:itemsPerPage") if isinstance(resp, dict) else None
+        if not next_page or not page:
+            break
+        page_offset += per_page or len(page)
+    return members
+
+
 def _paginate_prefetch(
     fetch_page: Callable[[int], Any],
     *,

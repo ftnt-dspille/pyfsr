@@ -3,7 +3,28 @@ import requests
 
 from pyfsr.auth.api_key import APIKeyAuth
 from pyfsr.auth.base import BaseAuth
-from pyfsr.exceptions import APIError, UnsupportedAuthOperationError
+from pyfsr.auth.user_pass import UserPasswordAuth
+from pyfsr.exceptions import APIError, UnsupportedAuthOperationError, ValidationError
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    ["", "   ", "not-a-url", "ftp://test.fortisoar.com", "test.fortisoar.com"],
+)
+def test_api_key_rejects_malformed_base_url(bad_url):
+    """A malformed base_url must fail fast with a clear ValidationError instead
+    of surfacing later as a cryptic connection error deep inside requests."""
+    with pytest.raises(ValidationError):
+        APIKeyAuth(base_url=bad_url, api_key="test-key-123")
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    ["", "   ", "not-a-url", "ftp://test.fortisoar.com", "test.fortisoar.com"],
+)
+def test_user_pass_rejects_malformed_base_url(bad_url):
+    with pytest.raises(ValidationError):
+        UserPasswordAuth(base_url=bad_url, username="test_user", password="test_pass")
 
 
 def test_api_key_initialization_success(mocker):

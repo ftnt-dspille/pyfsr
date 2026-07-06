@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..pagination import extract_members
 from .base import BaseAPI
 
 
@@ -57,7 +58,7 @@ class WfToolsAPI(BaseAPI):
         ``{{ globalVars.<name> }}``).
         """
         resp = self.client.get("/api/wf/api/dynamic-variable/", params={"offset": 0, "limit": 2147483647})
-        return (resp or {}).get("hydra:member") or []
+        return extract_members(resp)
 
     def dynamic_variable(self, name: str) -> str | None:
         """Return the value of one global variable by ``name`` (``None`` if absent)."""

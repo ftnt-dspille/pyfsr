@@ -64,6 +64,7 @@ from ..models._integration import (
     IntegrationListEnvelope,
     Operation,
 )
+from ..pagination import extract_members
 from .base import BaseAPI
 
 
@@ -1237,9 +1238,9 @@ class ConnectorsAPI(BaseAPI):
         shown in the Studio's left-hand tree. Returns the ``data[]`` entries.
         """
         resp = self.client.get(f"{self._DEV_BASE}/") or {}
-        if isinstance(resp, dict):
-            return resp.get("data") or resp.get("hydra:member") or []
-        return resp if isinstance(resp, list) else []
+        if isinstance(resp, dict) and resp.get("data"):
+            return resp["data"]
+        return extract_members(resp)
 
     def dev_edit(self, entity_id: str) -> dict[str, Any]:
         """Open a dev-workspace connector for editing (Studio's *Edit* action).
@@ -1529,16 +1530,33 @@ class ConnectorsAPI(BaseAPI):
         config: str | None = None,
         config_name: str | None = None,
         params: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> ExecuteResult:
         """Run a single connector operation via ``POST /api/integration/execute/``.
 
         ``version`` and ``config`` are resolved from the configured connector
         when omitted (``config_name`` selects a non-default configuration by
-        name). Returns the server payload, typically
-        ``{operation, status, message, data}``.
+        name). Returns a typed :class:`~pyfsr.models.ExecuteResult` — dict-compatible
+        (``result["data"]`` still works), with a ``.ok`` property for the
+        recurring ``status == "Success"`` check.
 
         See the module-level warning: for agent-bound connectors this call is
         fire-and-forget and ``data`` comes back empty — that is not a failure.
+
+        Live-verified on FortiSOAR 8.0.0-6034 against ``cisa-advisory``'s
+        ``get_known_exploited_vulnerability_cves`` (a public, read-only,
+        parameter-less feed lookup — safe to demo against a real connector,
+        no side effect beyond an outbound GET to CISA's public catalog):
+
+            >>> client = demo_client()
+            >>> result = client.connectors.execute(
+            ...     "cisa-advisory", "get_known_exploited_vulnerability_cves"
+            ... )
+            >>> result.ok
+            True
+            >>> result.data["title"]
+            'CISA Catalog of Known Exploited Vulnerabilities'
+            >>> result.data["vulnerabilities"][0]["cveID"]
+            'CVE-2026-45659'
         """
         version = version or self.resolve_version(connector)
         if config is None and (config_name is not None or self._configured is not None):

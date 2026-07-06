@@ -26,6 +26,8 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from ..models._system import ManualInput, ManualInputResume
+from ..pagination import paginate_offset
+from ..utils.iri import uuid_from_iri
 from .base import BaseAPI
 
 _BASE = "/api/wf/api/manual-wf-input/"
@@ -86,18 +88,10 @@ class ManualInputAPI(BaseAPI):
             params["offset"] = offset
             members = self._members(self.client.post(_LIST, data=body, params=params))
         else:
-            members = []
-            page_offset = offset
-            while True:
-                page_params = dict(params, offset=page_offset)
-                resp = self.client.post(_LIST, data=body, params=page_params)
-                page = self._members(resp)
-                members.extend(page)
-                next_page = resp.get("hydra:nextPage") if isinstance(resp, dict) else None
-                per_page = resp.get("hydra:itemsPerPage") if isinstance(resp, dict) else None
-                if not next_page or not page:
-                    break
-                page_offset += per_page or len(page)
+            members = paginate_offset(
+                lambda page_offset: self.client.post(_LIST, data=body, params=dict(params, offset=page_offset)),
+                offset=offset,
+            )
 
         if typed:
             return [ManualInput.model_validate(m) for m in members]
@@ -161,7 +155,7 @@ class ManualInputAPI(BaseAPI):
         members = resp.get("hydra:member", []) if isinstance(resp, dict) else (resp if isinstance(resp, list) else [])
         if not members or not isinstance(members[0], dict):
             return []
-        rpk = (members[0].get("@id") or "").rstrip("/").rsplit("/", 1)[-1]
+        rpk = uuid_from_iri(members[0].get("@id"))
         if not rpk:
             return []
 
@@ -175,18 +169,10 @@ class ManualInputAPI(BaseAPI):
             params["offset"] = offset
             page = self._members(self.client.get(_BASE, params=params))
         else:
-            page = []
-            page_offset = offset
-            while True:
-                page_params = dict(params, offset=page_offset)
-                resp = self.client.get(_BASE, params=page_params)
-                rows = self._members(resp)
-                page.extend(rows)
-                next_page = resp.get("hydra:nextPage") if isinstance(resp, dict) else None
-                per_page = resp.get("hydra:itemsPerPage") if isinstance(resp, dict) else None
-                if not next_page or not rows:
-                    break
-                page_offset += per_page or len(rows)
+            page = paginate_offset(
+                lambda page_offset: self.client.get(_BASE, params=dict(params, offset=page_offset)),
+                offset=offset,
+            )
 
         if is_approval is not None:
             page = [m for m in page if bool(m.get("is_approval")) is is_approval]

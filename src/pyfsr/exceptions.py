@@ -106,6 +106,28 @@ class APIError(FortiSOARException):
     pass
 
 
+class ResponseParseError(FortiSOARException):
+    """Raised when a 2xx response body isn't valid JSON.
+
+    A success status code with an unparseable body (HTML from a proxy/load
+    balancer, a truncated stream, an empty body where JSON was expected) used
+    to surface as a raw ``json.JSONDecodeError`` pointing at ``client.py``, not
+    at the caller's actual problem. This carries the status code and a text
+    preview so the real cause — usually "the request never reached FortiSOAR
+    at all" — is visible without re-running with a debugger.
+    """
+
+    def __init__(self, response=None, *, preview: str | None = None):
+        status = getattr(response, "status_code", None)
+        content_type = ""
+        if response is not None:
+            content_type = response.headers.get("Content-Type", "") if hasattr(response, "headers") else ""
+        msg = f"response body is not valid JSON (status={status}, content-type={content_type!r})"
+        if preview:
+            msg += f"\nbody preview: {preview[:500]!r}"
+        super().__init__(msg, response)
+
+
 class ApikeyCreateUnavailable(APIError):
     """API-key creation is blocked by the FortiSOAR ``encrypt(preserve_compatibility)`` bug.
 

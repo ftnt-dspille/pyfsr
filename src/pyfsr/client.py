@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import sys
 import time
 import warnings
@@ -56,7 +57,7 @@ from .api.workflow_collections import WorkflowCollectionsAPI
 from .auth.api_key import APIKeyAuth
 from .auth.base import BaseAuth
 from .auth.user_pass import UserPasswordAuth
-from .exceptions import FortiSOARException, handle_api_error
+from .exceptions import FortiSOARException, ResponseParseError, handle_api_error
 
 if TYPE_CHECKING:
     from .appliance import Appliance
@@ -119,6 +120,8 @@ class FortiSOAR:
         port: int | None = None,
         timeout: int | float | None = 30,
         max_retries: int = 2,
+        retry_backoff_factor: float = 0.5,
+        retry_status_forcelist: tuple[int, ...] = (429, 500, 502, 503, 504),
         dry_run: bool = False,
         http_trace: bool = False,
     ):
@@ -152,6 +155,14 @@ class FortiSOAR:
            max_retries (int, optional): Automatic retries for transient failures
                (connection errors and 429/5xx) on idempotent methods, with
                exponential backoff. Defaults to 2; pass 0 to disable.
+           retry_backoff_factor (float, optional): urllib3 backoff factor between
+               retries (delay ~= backoff_factor * (2 ** (retry_number - 1))).
+               Defaults to 0.5 (0.5s, 1s, ...). Tune this for a chatty polling
+               loop (e.g. a lower factor) or a box known to need longer
+               recovery windows (a higher one) without hand-rolling your own
+               retry adapter.
+           retry_status_forcelist (tuple[int, ...], optional): HTTP status codes
+               that trigger a retry. Defaults to ``(429, 500, 502, 503, 504)``.
            dry_run (bool, optional): When True, mutating requests (POST/PUT/PATCH/
                DELETE) are **not** sent — they are logged and a synthetic success
                response is returned instead. Reads (GET/HEAD/OPTIONS) pass through
@@ -227,6 +238,7 @@ class FortiSOAR:
 
         self.timeout = timeout
         self.dry_run = dry_run
+        self._version_cache: str | dict[str, Any] | None = None
         self.session = requests.Session()
         self.session.verify = verify_ssl
         self.verify_ssl = verify_ssl
@@ -239,8 +251,8 @@ class FortiSOAR:
                 connect=max_retries,
                 read=max_retries,
                 status=max_retries,
-                backoff_factor=0.5,
-                status_forcelist=(429, 500, 502, 503, 504),
+                backoff_factor=retry_backoff_factor,
+                status_forcelist=retry_status_forcelist,
                 allowed_methods=frozenset({"GET", "HEAD", "OPTIONS"}),
                 raise_on_status=False,
             )
@@ -622,7 +634,12 @@ class FortiSOAR:
                 fresh = None
                 try:
                     fresh = self.auth.refresh()
-                except Exception:  # noqa: BLE001 — fall through to normal error handling
+                except Exception as exc:  # noqa: BLE001 — fall through to normal error handling
+                    # Log the actual refresh failure instead of discarding it: without
+                    # this, a broken refresh (network error, rotated creds, bug) was
+                    # invisible and only the original 401/403 ever surfaced, sending
+                    # callers debugging the wrong thing.
+                    logger.warning("auth refresh after %d failed: %s", response.status_code, exc)
                     fresh = None
                 if fresh:
                     self.session.headers.update(fresh)
@@ -652,6 +669,21 @@ class FortiSOAR:
             if self.verbose:
                 logger.error(f"Request failed: {str(e)}")  # pragma: no cover
             raise
+
+    @staticmethod
+    def _safe_json(response: requests.Response) -> Any:
+        """``response.json()`` that raises :class:`ResponseParseError` on a bad body.
+
+        A 2xx status with an unparseable body (HTML from a proxy/LB in front of
+        the appliance, a truncated stream, an unexpectedly empty body) used to
+        surface as a bare ``json.JSONDecodeError`` from deep inside this module.
+        That error looked like a client bug, not what it actually is — the
+        response never carried the JSON the caller expected.
+        """
+        try:
+            return response.json()
+        except ValueError:
+            raise ResponseParseError(response, preview=response.text) from None
 
     def _dry_run_response(self, method: str, url: str, params: dict | None, data: dict | None) -> requests.Response:
         """Build a synthetic 200 response for a suppressed dry-run write.
@@ -703,12 +735,12 @@ class FortiSOAR:
         content_type = response.headers.get("Content-Type", "")
 
         if "application/json" in content_type:
-            return response.json()
+            return self._safe_json(response)
         elif any(binary_type in content_type for binary_type in ["application/zip", "application/octet-stream"]):
             return response.content
         else:
             # Default to JSON if content type is not explicitly specified
-            return response.json()
+            return self._safe_json(response)
 
     def post(
         self,
@@ -734,7 +766,7 @@ class FortiSOAR:
             raise_on_status=raise_on_status,
             **kwargs,
         )
-        return response if not raise_on_status else response.json()
+        return response if not raise_on_status else self._safe_json(response)
 
     def put(
         self,
@@ -757,7 +789,7 @@ class FortiSOAR:
             raise_on_status=raise_on_status,
             **kwargs,
         )
-        return response if not raise_on_status else response.json()
+        return response if not raise_on_status else self._safe_json(response)
 
     def delete(
         self,
@@ -906,8 +938,14 @@ class FortiSOAR:
         """
         return self.modules.describe(module, refresh=refresh)
 
-    def version(self) -> str | dict[str, Any]:
-        """Get the FortiSOAR product version (tries multiple endpoints).
+    def version(self, *, refresh: bool = False) -> str | dict[str, Any]:
+        """Get the FortiSOAR product version (tries multiple endpoints), cached.
+
+        The result of the first successful probe is cached on the client, so
+        repeated calls (including internal ones from :meth:`version_tuple` /
+        :meth:`supports_native_mcp`) cost one network round-trip per client
+        lifetime, not one per call. Pass ``refresh=True`` to bypass the cache
+        (e.g. after an appliance upgrade you know happened mid-session).
 
         Attempts to retrieve the FortiSOAR build version via a fallback chain
         of endpoints, returning the first successful response as a version
@@ -936,6 +974,16 @@ class FortiSOAR:
             >>> print(v["version"] if isinstance(v, dict) else v)  # doctest: +SKIP
             7.4.2
         """
+        if not refresh and self._version_cache is not None:
+            return self._version_cache
+        result = self._version_uncached()
+        self._version_cache = result
+        return result
+
+    def _version_uncached(self) -> str | dict[str, Any]:
+        """The actual fallback-chain probe behind :meth:`version` — see there
+        for the endpoint order. Split out so :meth:`version` only has to
+        reason about the cache, not the probe chain."""
         errors = []
 
         # Primary: /cyops_version.json — canonical version file, served at the
@@ -998,3 +1046,41 @@ class FortiSOAR:
         raise FortiSOARException(
             f"Could not retrieve FortiSOAR version from any fallback endpoint ({endpoint_list}): {error_detail}"
         )
+
+    def version_tuple(self, *, refresh: bool = False) -> tuple[int, int, int] | None:
+        """``(major, minor, patch)`` parsed from :meth:`version`, or ``None`` if
+        the version string/dict can't be parsed as a dotted version.
+
+        Handles the shapes :meth:`version` actually returns: a plain string
+        (``"8.0.0"``), a build-qualified string (``"8.0.0-6034"``), or a dict
+        with a ``version``/``@version``/``build`` key holding either. Missing
+        trailing components default to 0 (``"8.0"`` -> ``(8, 0, 0)``). ``None``
+        on a network failure too (:meth:`version` exhausting every fallback
+        endpoint) -- capability checks shouldn't raise, just report unknown.
+        """
+        try:
+            version_result = self.version(refresh=refresh)
+        except FortiSOARException:
+            return None
+        raw: Any = version_result
+        if isinstance(raw, dict):
+            raw = raw.get("version") or raw.get("@version") or raw.get("build")
+        if not isinstance(raw, str):
+            return None
+        match = re.match(r"(\d+)\.(\d+)(?:\.(\d+))?", raw.strip())
+        if not match:
+            return None
+        major, minor, patch = match.groups()
+        return (int(major), int(minor), int(patch or 0))
+
+    def supports_native_mcp(self, *, refresh: bool = False) -> bool | None:
+        """Whether this appliance's native MCP gateway (``/mcp/*``, ``client.mcp``)
+        is available — shipped starting FortiSOAR 8.0.0. Returns ``None`` if the
+        version can't be determined (network failure, unparseable string) rather
+        than guessing; check for ``None`` explicitly if that distinction matters
+        to the caller (vs. treating it as "unsupported").
+        """
+        v = self.version_tuple(refresh=refresh)
+        if v is None:
+            return None
+        return v >= (8, 0, 0)

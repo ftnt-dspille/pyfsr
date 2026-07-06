@@ -9,12 +9,6 @@
 # outputs: a comment / record update on the source record
 # connectors: see connector steps (connector-pluggable; swap the config for your appliance)
 # adapts-to: the SOC intent named above; retarget by changing the module + inputs.
-# NOTE: 1 non-connector blocking error(s) remain after cleaning:
-#   - bad_value: Jinja reference vars.steps.Enter_IP.input.iP in step 'fgt_block':
-#     step 'Enter_IP' cannot run before 'fgt_block' in any execution path. This
-#     decompiled playbook's step graph predates the current clean pipeline; the
-#     decision/approval branches need re-resolving. Not a decompiler bug
-#     (fresh decompile is faithful); needs a re-clean.
 
 collection: 00. Playbook Learning SP
 description: ''
@@ -25,16 +19,18 @@ playbooks:
   is_active: false
   trigger_step_id: start
   steps:
-  - type: ApprovalManualInput
+  - type: manual_input
     name: Approve Blocking
     step_variables: []
+    options:
+    - option: Approve
+      primary: true
+      next: fgt_block
+    - option: Reject
+      next: the_end
     arguments:
-      type: InputBased
-      input:
-        schema:
-          title: Do you approve blocking? the IP{{vars.steps.Enter_IP.input.iP}} on FW
-          description: 'IP: {{vars.steps.Enter_IP.input.iP}} '
-          inputVariables: []
+      title: Do you approve blocking? the IP{{vars.steps.Enter_IP.input.iP}} on FW
+      description: 'IP: {{vars.steps.Enter_IP.input.iP}} '
       record: ''
       resources: indicators
       is_approval: true
@@ -47,16 +43,6 @@ playbooks:
         assignedToPerson: []
         assignedToRecord: false
       isRecordLinked: false
-      response_mapping:
-        options:
-        - option: Approve
-          primary: true
-          step_iri: /api/3/workflow_steps/8a676a56-ad4f-4828-8f59-37f6126ff457
-        - option: Reject
-          primary: false
-          step_iri: /api/3/workflow_steps/4981f1cd-88f6-4718-951a-75deb145381e
-        connecteStepsLength: 2
-        customSuccessMessage: Awaiting Playbook resumed successfully.
       email_notification:
         enabled: false
         smtpParameters: []

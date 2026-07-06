@@ -154,6 +154,12 @@ nitpick_ignore = [
     # Private shared base for the tasks/incidents CRUD shortcuts; autoapi skips
     # the underscore-prefixed module so the "Bases:" xref has no target.
     ("py:obj", "pyfsr.api._record_module.RecordModuleAPI"),
+    # Private Protocol used as a client-typing annotation across authoring.py;
+    # autoapi skips underscore-prefixed members so the signature xref has no page.
+    ("py:class", "_AuthoringClient"),
+    # Private helper referenced from a public function's docstring in
+    # playbook_library.py; autoapi skips it (underscore prefix), no target page.
+    ("py:func", "_build_fixture_catalog_db"),
 ]
 
 # Type annotations autoapi renders as xrefs that resolve at runtime but not

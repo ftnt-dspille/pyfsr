@@ -21,8 +21,11 @@ Run offline against a replay capture (``demo_client``) — a typed ``Alert``:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, overload
+
+from pydantic import BaseModel, ConfigDict
 
 from .models import AggregateRow, BaseRecord, model_for
 from .pagination import HydraPage, paginate
@@ -33,6 +36,64 @@ if TYPE_CHECKING:
     from .client import FortiSOAR
 
 T = TypeVar("T", bound=BaseRecord)
+
+_BULK_FAILURE_INDEX_RE = re.compile(r"index #(\d+)")
+
+
+class BulkUpsertFailure(BaseModel):
+    """One failed row from a :meth:`RecordSet.bulk_upsert` call.
+
+    FortiSOAR's ``/api/3/bulkupsert/<module>`` reports failures as bare
+    strings (not structured objects), e.g.::
+
+        'POST method for object at index #2 in the request payload failed
+         with error: {"type":"UnexpectedValueException","message":"..."}'
+
+    ``index`` is parsed out of that string (0-based, matching the input
+    ``rows`` list) when the message follows this shape; ``None`` if a future
+    FortiSOAR version's message doesn't match, so a format change degrades to
+    "no index" rather than raising. ``message`` is always the untouched raw
+    string — the caller doing precise error handling still has everything
+    FortiSOAR returned. Live-verified against a real ``severity`` picklist
+    rejection on FortiSOAR 8.0.0-6034.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    index: int | None
+    message: str
+
+    @classmethod
+    def from_raw(cls, raw: str) -> BulkUpsertFailure:
+        m = _BULK_FAILURE_INDEX_RE.search(raw)
+        return cls(index=int(m.group(1)) if m else None, message=raw)
+
+
+class BulkUpsertResult(BaseModel, Generic[T]):
+    """Parsed result of a :meth:`RecordSet.bulk_upsert` call.
+
+    Splits FortiSOAR's raw ``{"success": [...], "failure": [...]}`` 207-style
+    envelope into typed, indexable pieces instead of leaving every caller to
+    reach into that dict by hand. ``succeeded`` holds each created/updated
+    record (parsed into the module's bound model unless the call used
+    ``raw=True``); ``failed`` holds a :class:`BulkUpsertFailure` per rejected
+    row. ``raw`` is the untouched server response, in case a caller needs a
+    field this class doesn't surface.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    succeeded: list[Any]
+    failed: list[BulkUpsertFailure]
+    raw: dict[str, Any]
+
+    @property
+    def ok(self) -> bool:
+        """True if every row succeeded (``failed`` is empty)."""
+        return not self.failed
+
+    def __len__(self) -> int:
+        return len(self.succeeded) + len(self.failed)
 
 
 def resolve_record_path(module: str, ref: str) -> str:
@@ -755,19 +816,51 @@ class RecordSet(Generic[T]):
         updated = self.update(ref, data, raw=False, resolve_picklists=False)
         return self._parse(updated, raw=raw)
 
+    @overload
     def bulk_upsert(
         self,
         rows: list[dict[str, Any]],
         *,
+        parse: Literal[False] = ...,
+        resolve_picklists: bool = ...,
+        strict_picklists: bool = ...,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    def bulk_upsert(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        parse: Literal[True],
+        resolve_picklists: bool = ...,
+        strict_picklists: bool = ...,
+    ) -> BulkUpsertResult[T]: ...
+
+    def bulk_upsert(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        parse: bool = False,
         resolve_picklists: bool = True,
         strict_picklists: bool = False,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | BulkUpsertResult[T]:
         """Insert-or-update many records via ``POST /api/3/bulkupsert/<module>``.
 
         ``rows`` is a list of dicts or model instances. Each row is matched the
-        same way as :meth:`upsert`. The raw server response is returned
-        unparsed — bulk endpoints reply with a multi-status (``207``) envelope
-        whose per-row results the caller usually wants to inspect directly.
+        same way as :meth:`upsert`. By default the raw server response is
+        returned unparsed (back-compatible) — bulk endpoints reply with a
+        multi-status envelope shaped ``{"success": [<created/updated record>,
+        ...], "failure": [<raw error string>, ...]}`` (live-verified on
+        FortiSOAR 8.0.0-6034) whose per-row results a caller previously had to
+        unwrap by hand.
+
+        Pass ``parse=True`` to get a :class:`BulkUpsertResult` instead:
+        ``.succeeded`` (each row parsed into the module's bound model),
+        ``.failed`` (one :class:`BulkUpsertFailure` per rejected row, with
+        ``index`` parsed out of FortiSOAR's raw error string where possible),
+        and ``.ok`` (``True`` iff nothing failed) — so a caller checks
+        ``result.ok`` instead of hand-parsing ``"failure" in raw and raw["failure"]``.
+
         Friendly picklist values are resolved on every row; pass
         ``resolve_picklists=False`` to skip that. Pass ``strict_picklists=True``
         to raise pre-flight on the first row with an unresolvable picklist value
@@ -780,7 +873,13 @@ class RecordSet(Generic[T]):
             if resolve_picklists:
                 row = self.client.picklists.resolve_record_fields(self.module, row, strict=strict_picklists)
             payload.append(row)
-        return self.client.post(f"/api/3/bulkupsert/{self.module}", data=payload)
+        resp = self.client.post(f"/api/3/bulkupsert/{self.module}", data=payload)
+        if not parse:
+            return resp
+        raw_resp = resp if isinstance(resp, dict) else {}
+        succeeded = [self._parse(row, raw=False) for row in raw_resp.get("success", []) if isinstance(row, dict)]
+        failed = [BulkUpsertFailure.from_raw(msg) for msg in raw_resp.get("failure", []) if isinstance(msg, str)]
+        return BulkUpsertResult(succeeded=succeeded, failed=failed, raw=raw_resp)
 
     def _single_record_path(self, ref: str, *, action: str) -> str:
         """Resolve ``ref`` to a single-record path, refusing collection-wide refs.
@@ -846,6 +945,28 @@ class RecordSet(Generic[T]):
             assert isinstance(result, dict)
             return result
         return None
+
+    def delete_many(self, refs: list[str], *, hard: bool = False) -> dict[str, Any] | None:
+        """Delete many records by ref (uuid, ``module:uuid`` shorthand, or IRI) in one call.
+
+        A convenience over :meth:`delete_by_query` for the common case of
+        already having a list of refs (e.g. the uuids from a
+        :meth:`bulk_upsert` result you're cleaning up, or a prior
+        :meth:`query`/:meth:`search`) rather than a filter — resolves each ref
+        to its bare uuid the same way :meth:`delete` does (raising on an
+        empty/collection-wide ref) and issues one ``uuid in [...]`` bulk
+        delete instead of a caller hand-rolling a per-ref loop.
+
+        ``refs=[]`` is a no-op (returns ``None``) rather than an error, since
+        "nothing to delete" is a normal outcome of a filtered cleanup, not a
+        misuse the way an empty filter is for :meth:`delete_by_query`.
+
+        Soft-deletes by default; pass ``hard=True`` to purge permanently.
+        """
+        if not refs:
+            return None
+        uuids = [self._single_record_path(ref, action="delete_many").rsplit("/", 1)[-1] for ref in refs]
+        return self.delete_by_query(Query().in_("uuid", uuids), hard=hard)
 
     @overload
     def restore(self, ref: str, *, raw: Literal[True]) -> dict[str, Any]: ...

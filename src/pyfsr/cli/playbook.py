@@ -400,8 +400,9 @@ def cmd_examples(args: argparse.Namespace) -> int:
     ]
     _output.render(rows, ["stage", "slug", "goal", "step types", "compiles"], fmt="table")
     print(
-        f"\n{len(entries)} playbooks. cold* = compiles but needs --refresh-catalog to "
-        f"resolve connector names. Run `pyfsr playbook show <slug>` for one in full.",
+        f"\n{len(entries)} playbooks. cold* = still fails to compile against the fixture "
+        f"connector catalog -- a real content bug in the example, not just a missing "
+        f"connector. Run `pyfsr playbook show <slug>` for one in full.",
         file=sys.stderr,
     )
     return 0

@@ -178,7 +178,7 @@
       "step_types": [
         "insert_record",
         "connector",
-        "ApprovalManualInput",
+        "manual_input",
         "CyopsUtilites",
         "set_variable",
         "SendMail",
@@ -195,7 +195,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     },
     {
       "slug": "async-fanout-collect-child-runs",
@@ -432,7 +432,6 @@
       "goal": "Multi-source IP reputation rollup (VirusTotal/IPStack/IPInfo/AbuseIPDB) + approval gate before blocking.",
       "source": "tutorial-corpus: IP lookup on many sources + Basic Response and Approval",
       "step_types": [
-        "ApprovalManualInput",
         "manual_input",
         "connector",
         "CyopsUtilites",
@@ -451,7 +450,7 @@
       "triggers": [
         "start"
       ],
-      "compiles_ok": false
+      "compiles_ok": true
     },
     {
       "slug": "audit-run-stamp-wrapper",
