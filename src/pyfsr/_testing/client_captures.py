@@ -549,3 +549,93 @@ _PICKLIST_ITEM_ROWS = [
     _item("Re-Opened", 6, "#F19C3F", "891fb9d5-556c-44c6-9f7d-94a27dec732e", 202, _STAT),
 ]
 PICKLISTS_RESPONSE = _hydra_collection("/api/3/picklists", "/api/3/contexts/Picklist", _PICKLIST_ITEM_ROWS)
+
+
+# FortiAI agentic investigation — captured from a live appliance (8.0). The
+# pipeline is ``POST /api/ai/triage/alert`` (start) ��� poll
+# ``GET /api/ai/agents/<task_id>/status`` → ``GET /api/ai/agents/<task_id>/result``.
+# The result is the full 9-phase verdict payload (normalization → context_enrichment
+# → hypothesis → investigation_plan → investigation_execution → key_finding →
+# hypothesis_evaluation → verdict → next_action). Trimmed from a 30 KB real
+# capture: every structural key + the per-phase state/status/message is kept
+# honest; the verbose analysis text (key_findings body, hypothesis reasoning,
+# log params/result, IOC lists) is shortened to one representative entry and
+# trimmed prose. Alert IOCs are generalized; no appliance details leak.
+FORTIAI_TASK_ID = "a2afba58-9dbe-44dd-a6e6-7227e33990db"
+
+FORTIAI_START_RESPONSE = {"task_id": FORTIAI_TASK_ID, "status": "pending"}
+
+FORTIAI_STATUS_RESPONSE = {"task_id": FORTIAI_TASK_ID, "status": "completed"}
+
+FORTIAI_RESULT_RESPONSE = {
+    "data": {
+        "event_count": 1,
+        "incident_id": "FEDR-01850936",
+        "severity": {"label": "Critical", "score": None},
+        "status": "Open",
+        "hostname": "dc-86",
+        "name": "Ransomware Precursor: vssadmin Delete Shadows on dc-86",
+        "uuid": "82cb8b3d-0130-4e41-8999-076e121b0dc1",
+    },
+    "summary": {
+        "highlighted_summary": (
+            "Inconclusive with mixed benign, false-positive, suspicious, and "
+            "malicious interpretations because the investigation data is too "
+            "limited to confirm why the shadow copy deletion activity occurred."
+        ),
+        "classification": "Inconclusive",
+        "key_findings": [
+            {
+                "id": "F1",
+                "name": "Organizational records contain no approval information for vssadmin.exe activity on dc-86",
+                "details": 'Organizational context records state "No Information Available".',
+            }
+        ],
+        "next_action_steps": ["Preserve forensic evidence from host dc-86 related to process vssadmin.exe"],
+    },
+    "hypotheses": [
+        {
+            "id": 1,
+            "name": "Administrative shadow copy removal on dc-86",
+            "intent": "benign",
+            "explanatory_focus": "routine administration",
+            "description": "An administrator legitimately deleted shadow copies.",
+            "reasoning": "Shadow copy deletion is a known admin task.",
+            "tactics": [],
+            "techniques": [],
+            "intentStatus": "INCONCLUSIVE",
+            "attentionNeeded": "No",
+        }
+    ],
+    "playbook": {
+        "immediate_next_actions": ["Preserve forensic evidence from host dc-86 related to process vssadmin.exe"]
+    },
+    "logs": [
+        {
+            "id": 10101,
+            "uuid": "c2308c24-afc6-4ff7-9f20-964fb6d3e1c6",
+            "index": 1,
+            "question": (
+                "Is process 'vssadmin.exe' executing 'delete shadows /all /quiet' "
+                "on host 'dc-86' under user 'ssmith' associated with approved activity?"
+            ),
+            "result": "No information available",
+            "status": "success",
+        }
+    ],
+    "phases": [
+        {"data": {"message": "Normalizing Alert"}, "state": "normalization", "status": "completed"},
+        {"data": {"message": "Enriching Alert Context"}, "state": "context_enrichment", "status": "completed"},
+        {"data": {"message": "Generating Initial Hypothesis"}, "state": "hypothesis", "status": "completed"},
+        {"data": {"message": "Preparing Investigation Plan"}, "state": "investigation_plan", "status": "completed"},
+        {
+            "data": {"message": "Executing Investigation Plan"},
+            "state": "investigation_execution",
+            "status": "completed",
+        },
+        {"data": {"message": "Summarizing Key Findings"}, "state": "key_finding", "status": "completed"},
+        {"data": {"message": "Evaluating Hypotheses"}, "state": "hypothesis_evaluation", "status": "completed"},
+        {"data": {"message": "Generating Investigation Verdict"}, "state": "verdict", "status": "completed"},
+        {"data": {"message": "Recommending Next Step"}, "state": "next_action", "status": "completed"},
+    ],
+}

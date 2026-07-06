@@ -61,6 +61,14 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         # which connector/operation the doctest names (the body varies, the path
         # doesn't; matching ignores the body, same as every other POST fixture here).
         _entry("POST", "/api/integration/execute/", cap.CONNECTOR_EXECUTE_CISA_ADVISORY_RESPONSE),
+        # FortiAI agentic investigation — start (POST /api/ai/triage/alert), then
+        # poll status + result by task_id. The task_id in the start response is
+        # the recorded one, so a doctest that passes ``started["task_id"]`` through
+        # to get_investigation_result resolves directly; the canonicalization below
+        # also collapses any task_id so a doctest with a different id still hits.
+        _entry("POST", "/api/ai/triage/alert", cap.FORTIAI_START_RESPONSE),
+        _entry("GET", f"/api/ai/agents/{cap.FORTIAI_TASK_ID}/status", cap.FORTIAI_STATUS_RESPONSE),
+        _entry("GET", f"/api/ai/agents/{cap.FORTIAI_TASK_ID}/result", cap.FORTIAI_RESULT_RESPONSE),
         # Module-admin (staging/published schema) read-only envelopes. The two
         # lists are hit by ``list_modules``/``describe_module``/``pending_changes``
         # (query string ignored, so the with-relationships list serves all three);
@@ -140,6 +148,17 @@ def _path_and_match(method: str, url: str) -> tuple[str, str]:
     # segments: ['', 'api', 'integration', 'connectors', id, '']
     if len(segments) == 6 and segments[1] == "api" and segments[2] == "integration" and segments[3] == "connectors":
         return "/api/integration/connectors/3/", path
+    # /api/ai/agents/<task_id>/{status,result}  ->  collapse the task_id to the
+    # recorded one (so get_investigation_result resolves regardless of which
+    # task_id the start response returned). segments: ['', 'api', 'ai', 'agents', task_id, ep]
+    if (
+        len(segments) == 6
+        and segments[1] == "api"
+        and segments[2] == "ai"
+        and segments[3] == "agents"
+        and segments[5] in ("status", "result")
+    ):
+        return f"/api/ai/agents/{cap.FORTIAI_TASK_ID}/{segments[5]}", path
     return path, path
 
 
