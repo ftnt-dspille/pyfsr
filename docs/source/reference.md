@@ -25,12 +25,9 @@ nested under the `pyfsr` package) so every module is one click from here.
 autoapi/pyfsr/client/index
 autoapi/pyfsr/records/index
 autoapi/pyfsr/query/index
-autoapi/pyfsr/query_models/index
 autoapi/pyfsr/pagination/index
-autoapi/pyfsr/projection/index
 autoapi/pyfsr/fields/index
 autoapi/pyfsr/config/index
-autoapi/pyfsr/repo/index
 autoapi/pyfsr/exceptions/index
 ```
 
@@ -45,7 +42,7 @@ autoapi/pyfsr/auth/index
 
 ```{toctree}
 :maxdepth: 2
-:caption: Playbooks, tooling & CLI
+:caption: Playbooks & agent
 
 Playbooks (authoring) <autoapi/pyfsr/authoring/index>
 autoapi/pyfsr/agent/index
@@ -54,9 +51,24 @@ autoapi/pyfsr/playbook_freshness/index
 autoapi/pyfsr/playbook_lint/index
 autoapi/pyfsr/playbook_match/index
 autoapi/pyfsr/playbook_library/index
-autoapi/pyfsr/concurrency/index
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: CLI, appliance & content
+
 autoapi/pyfsr/cli/index
 autoapi/pyfsr/appliance/index
+autoapi/pyfsr/repo/index
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Utilities & internals
+
+autoapi/pyfsr/projection/index
+autoapi/pyfsr/query_models/index
+autoapi/pyfsr/concurrency/index
 autoapi/pyfsr/spec/index
 autoapi/pyfsr/utils/index
 ```
