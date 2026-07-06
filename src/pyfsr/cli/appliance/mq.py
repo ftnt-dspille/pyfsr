@@ -201,6 +201,7 @@ class WorkflowPurgeReport:
 
     @property
     def total_purged(self) -> int:
+        """Total messages purged across every queue in this report."""
         return sum(p.purged for p in self.purges)
 
     @property

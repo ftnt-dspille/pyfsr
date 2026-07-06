@@ -1,3 +1,11 @@
+"""The incidents module — ``client.incidents``.
+
+Create and manage FortiSOAR incidents. Friendly picklist values (``severity``,
+``status``, ``type``) are resolved to IRIs on create/update, and ``record=``
+links an incident to its source alert. Mirrors the alerts shortcut; see
+:doc:`/guides/records` for the underlying record semantics.
+"""
+
 from ._record_module import RecordModuleAPI
 
 

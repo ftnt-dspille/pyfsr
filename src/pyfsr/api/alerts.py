@@ -1,3 +1,12 @@
+"""The alerts module — ``client.alerts``.
+
+A typed shortcut over :class:`~pyfsr.records.RecordSet` for the alerts module:
+create/read/update alerts with friendly picklist values (``severity``,
+``status``, ``type``) resolved to IRIs automatically. Reads return raw Hydra
+dicts rather than typed models — see :doc:`/guides/records` for the
+dict-vs-model distinction and when to reach for each.
+"""
+
 from typing import Any
 
 from .base import BaseAPI

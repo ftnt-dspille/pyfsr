@@ -1,3 +1,13 @@
+"""The views module — ``client.views``.
+
+Resolve a module's **active** system view template (SVT) — the ``list``,
+``detail``, or ``form`` layout the platform actually renders. A module can carry
+several SVT rows for the same layout (duplicates both flagged ``isDefault``), so
+the active layout must never be picked by name or flag; these methods resolve the
+single live template. To enumerate or write the raw SVT rows instead, use
+``client.modules_admin.get_view_templates(module)``.
+"""
+
 from __future__ import annotations
 
 from typing import Any

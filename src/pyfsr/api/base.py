@@ -1,3 +1,11 @@
+"""Shared base for the module-specific API shortcuts.
+
+Every ``client.<module>`` shortcut (alerts, incidents, tasks, …) subclasses
+:class:`BaseAPI`, which holds the :class:`~pyfsr.client.FortiSOAR` client and
+routes requests through its canonical ``request``/``get``/``post``/``put``/
+``delete`` methods.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

@@ -1,3 +1,11 @@
+"""The tasks module — ``client.tasks``.
+
+Create and manage FortiSOAR tasks, typically attached to a parent record (an
+alert or incident) via ``record=`` on create. Friendly picklist values (e.g.
+``status="Open"``) are resolved to IRIs automatically. See :doc:`/guides/records`
+for the underlying record semantics.
+"""
+
 from ._record_module import RecordModuleAPI
 
 

@@ -179,6 +179,7 @@ class TriggerRequest(_RequestModel):
         return v
 
     def to_body(self) -> dict[str, Any]:
+        """Render the request as the JSON body FortiSOAR's trigger route expects."""
         body: dict[str, Any] = dict(self.env)
         if self.records:
             body["records"] = [_alert_iri(r) for r in self.records]
@@ -204,6 +205,7 @@ class TriggerActionRequest(_RequestModel):
         return v.strip()
 
     def to_body(self) -> dict[str, Any]:
+        """Render the single-record action-trigger JSON body."""
         body: dict[str, Any] = dict(self.env)
         body["singleRecordExecution"] = True
         body["__resource"] = self.module
@@ -224,6 +226,7 @@ class ResumeRequest(_RequestModel):
     approved: bool | None = None
 
     def to_body(self) -> dict[str, Any]:
+        """Render the manual-input/approval resume JSON body."""
         body: dict[str, Any] = {
             "input": self.input,
             "step_iri": self.step_iri,
@@ -249,6 +252,7 @@ class ApprovalRequest(_RequestModel):
         return v
 
     def to_body(self) -> dict[str, Any]:
+        """Render the approval-decision JSON body."""
         body: dict[str, Any] = {"decision": self.decision}
         if self.comment is not None:
             body["comment"] = self.comment
@@ -288,6 +292,7 @@ class CreatePlaybookRequest(_RequestModel):
         return v.strip()
 
     def to_body(self) -> dict[str, Any]:
+        """Render the playbook-definition JSON body, expanding the collection to an IRI."""
         coll = self.collection
         coll_iri = coll if coll.startswith("/api/") else f"/api/3/workflow_collections/{coll}"
         body: dict[str, Any] = {

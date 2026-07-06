@@ -1,3 +1,12 @@
+"""Solution packs — ``client.solution_packs``.
+
+Install, export, and manage FortiSOAR solution packs (bundled modules,
+playbooks, connectors, and views shipped as one unit). Packs can be resolved by
+name, label, or search term; install polls to completion and export writes the
+pack archive to disk. Content discovery is delegated to
+:class:`~pyfsr.api.content_hub.ContentHubSearch`.
+"""
+
 import time
 
 from ..models._integration import InstallJobStatus

@@ -68,6 +68,7 @@ class FreshnessReport(ApiResult):
 
     @property
     def is_fresh(self) -> bool:
+        """``True`` when the catalog is fully stamped and shows no drift."""
         return not self.unstamped and not self.drift
 
 

@@ -1,3 +1,11 @@
+"""Content Hub discovery — ``client.content_hub``.
+
+Search and discover installable content (connectors, solution packs, widgets)
+from Fortinet's Content Hub at ``repo.fortisoar.fortinet.com``. Use this to find
+what is *available* to install on an appliance. For no-appliance discovery and
+direct artifact download, see :mod:`pyfsr.repo`.
+"""
+
 from __future__ import annotations
 
 from enum import Enum
