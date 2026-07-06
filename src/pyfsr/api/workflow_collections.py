@@ -40,7 +40,6 @@ from YAML: it compiles the YAML to the same export envelope and replays it throu
 from __future__ import annotations
 
 import json
-import re
 import uuid as _uuid
 from pathlib import Path
 from typing import Any
@@ -49,9 +48,8 @@ from ..exceptions import ResourceNotFoundError
 from ..models import WorkflowCollection
 from ..pagination import extract_members
 from ..records import RecordSet
+from ..utils.validation import is_uuid
 from .base import BaseAPI
-
-_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
 _BASE = "/api/3/workflow_collections"
 # A hard delete must also reach already-recycled rows; together these skip the recycle bin.
@@ -114,7 +112,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         if not isinstance(collection, str) or not collection.strip():
             raise ValueError("export_to_yaml() requires a collection uuid or name")
         ident = collection.strip()
-        if _UUID_RE.match(ident):
+        if is_uuid(ident):
             return self.get(ident, relationships=True)
         matches = [c for c in self.list(relationships=True) if (c.get("name") or "") == ident]
         if not matches:
@@ -368,7 +366,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         Useful as a pre-flight check before :meth:`import_from_file` to avoid
         re-importing a collection that is already present.
         """
-        if not isinstance(uuid, str) or not _UUID_RE.match(uuid.strip()):
+        if not isinstance(uuid, str) or not is_uuid(uuid.strip()):
             raise ValueError(f"exists() requires a valid uuid, got {uuid!r}")
         try:
             self.get(uuid.strip(), relationships=False)

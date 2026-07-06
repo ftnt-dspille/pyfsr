@@ -47,10 +47,26 @@ carries connection details):
 
 ## Executing an operation
 
-```python
-conn.execute("virustotal", "get_reputation_ip", params={"ip": "8.8.8.8"})
-# {'operation': 'get_reputation_ip', 'status': 'Success', 'data': {...}}
+`execute()` returns a typed {class}`~pyfsr.models.ExecuteResult` — `.ok` is the
+`status == "Success"` check, `.data` is the connector's own output (shape varies
+by connector/operation). Live-verified against `cisa-advisory`'s
+`get_known_exploited_vulnerability_cves` — a public, read-only, parameter-less
+feed lookup safe to demo against a real vendor connector (the only side effect
+is CISA's public catalog serving one GET):
+
+```{doctest}
+>>> result = conn.execute("cisa-advisory", "get_known_exploited_vulnerability_cves")
+>>> result.ok
+True
+>>> result.data["title"]
+'CISA Catalog of Known Exploited Vulnerabilities'
+>>> result.data["vulnerabilities"][0]["cveID"]
+'CVE-2026-45659'
 ```
+
+⚠️ For an **agent-bound** connector (see the module warning), `execute()` is
+fire-and-forget — it returns immediately with an in-progress status and empty
+`data`; the real result is pushed over a websocket, not pollable here.
 
 ## Connector Studio dev workspace
 

@@ -64,6 +64,30 @@ def test_describe_module_not_found_lists_available():
     assert out["available"] == ["alerts", "incidents"]
 
 
+class _BrokenPicklists:
+    def options(self, name):
+        raise RuntimeError("picklists API is down")
+
+
+class FakeClientWithBrokenPicklists(FakeClient):
+    def __init__(self):
+        super().__init__()
+        self.picklists = _BrokenPicklists()
+
+
+def test_describe_with_values_logs_picklist_failure_instead_of_silent_empty(caplog):
+    """A failed picklist lookup must still be visible in logs — silently
+    returning [] made it indistinguishable from "no values configured"."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="pyfsr"):
+        out = ModulesAPI(FakeClientWithBrokenPicklists()).describe("incidents", with_values=True)
+
+    sev_field = next(f for f in out["fields"] if f["name"] == "severity")
+    assert sev_field["picklist_values"] == []
+    assert any("picklists API is down" in r.message for r in caplog.records)
+
+
 def test_clear_cache_refetches():
     client = FakeClient()
     api = ModulesAPI(client)

@@ -23,6 +23,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from ..models._system import Notification, NotificationPurge
+from ..pagination import paginate_offset
 from .base import BaseAPI
 
 _ENDPOINT = "/api/rule/api/system-notification/notifications/"
@@ -86,18 +87,10 @@ class NotificationsAPI(BaseAPI):
             params["offset"] = offset
             members = self._members(self.client.post(_ENDPOINT, params=params))
         else:
-            members = []
-            page_offset = offset
-            while True:
-                page_params = dict(params, offset=page_offset)
-                resp = self.client.post(_ENDPOINT, params=page_params)
-                page = self._members(resp)
-                members.extend(page)
-                next_page = resp.get("hydra:nextPage") if isinstance(resp, dict) else None
-                per_page = resp.get("hydra:itemsPerPage") if isinstance(resp, dict) else None
-                if not next_page or not page:
-                    break
-                page_offset += per_page or len(page)
+            members = paginate_offset(
+                lambda page_offset: self.client.post(_ENDPOINT, params=dict(params, offset=page_offset)),
+                offset=offset,
+            )
 
         if typed:
             return [Notification.model_validate(m) for m in members]

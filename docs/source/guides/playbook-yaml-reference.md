@@ -270,10 +270,36 @@ exact `connector` / `operation` / param names with the discovery tools
 `collection:` stays the *record* IRI you're updating). Bare picklist labels
 (e.g. `status: Briefed`) are auto-resolved to picklist IRIs.
 
-### `delay`, `code_snippet`, `approval`
+### `delay`, `approval`
 
 These accept their canonical `arguments:` (see `pyfsr playbook validate` /
 `pyfsr playbook step-help <type>`).
+
+### `code_snippet` — run a Python snippet
+
+The Python source goes under `arguments.code:` (a friendly shorthand the
+compiler maps to the canonical `arguments.params.python_function`). The snippet
+runs through the `code-snippet` connector, so a configured connector is
+required (set `allow_imports` on it to `import` anything):
+
+```yaml
+- name: Reconcile
+  type: code_snippet
+  arguments:
+    code: |
+      import json
+      print(json.dumps({"risk": "high" if ... else "low"}))
+  next: Decide
+```
+
+```{important}
+The `code-snippet` sandbox execs the snippet at **module level** (a top-level
+`return` is a `SyntaxError`) and restricts `open`. Surface a result with
+`print(json.dumps(...))` — the connector auto-deserializes it into a
+`code_output` dict read downstream at `vars.steps.<name>.data.code_output.*`.
+See {doc}`playbook-authoring` for the full sandbox-compatible pattern, the
+upstream-output jinja paths, and the unrestricted-python escape hatch.
+```
 
 ### `manual_input` — pause for human input
 

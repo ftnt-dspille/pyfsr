@@ -29,6 +29,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..models._system import PicklistItem, PicklistName
+from ..pagination import extract_members
 from .base import BaseAPI
 
 # staging_model_metadatas needs $relationships=true to expose each attribute's
@@ -97,7 +98,7 @@ class PicklistsAPI(BaseAPI):
         names_resp = self.client.get("/api/3/picklist_names", params={"$limit": 2147483647})
         iri_to_name: dict[str, str] = {}
         names: set[str] = set()
-        for m in (names_resp or {}).get("hydra:member") or []:
+        for m in extract_members(names_resp):
             nm, iri = m.get("name"), m.get("@id")
             if nm:
                 names.add(nm)
@@ -105,7 +106,7 @@ class PicklistsAPI(BaseAPI):
                     iri_to_name[iri] = nm
         items_resp = self.client.get("/api/3/picklists", params={"$limit": 2147483647})
         grouped: dict[str, list[PicklistItem]] = {}
-        for m in (items_resp or {}).get("hydra:member") or []:
+        for m in extract_members(items_resp):
             item = PicklistItem.model_validate(m)
             ln_iri = item.list_name_iri
             name = iri_to_name.get(ln_iri) if ln_iri else None
@@ -145,7 +146,7 @@ class PicklistsAPI(BaseAPI):
         if want in self._module_fields:
             return self._module_fields[want]
         data = self.client.get(_META_PATH)
-        members = (data or {}).get("hydra:member") or []
+        members = extract_members(data)
         hit = next(
             (m for m in members if str(m.get("type", "")).lower() == want or str(m.get("module", "")).lower() == want),
             None,
@@ -464,7 +465,7 @@ class PicklistsAPI(BaseAPI):
         # The bulk load groups items by name but drops the listName IRI→name inverse
         # mapping after use; fetch names once to build it.
         names_resp = self.client.get(_PICKLIST_NAMES, params={"$limit": 2147483647})
-        for m in (names_resp or {}).get("hydra:member") or []:
+        for m in extract_members(names_resp):
             if m.get("name") == name:
                 return m.get("@id")
         return None

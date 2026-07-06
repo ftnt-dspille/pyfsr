@@ -26,13 +26,75 @@ Example::
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import sqlite3
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from .models._integration import ConnectorConfigSummary, ConnectorDefinition, InstalledConnector
+
+logger = logging.getLogger(__name__)
+
+
+class _AuthoringClient(Protocol):
+    """The slice of :class:`~pyfsr.FortiSOAR` this module actually calls.
+
+    A ``Protocol`` instead of a concrete ``FortiSOAR`` import: this module is
+    also driven by lightweight structural test doubles (see
+    ``tests/unit/test_playbook_authoring.py``'s ``_WarmFakeClient``) that don't
+    subclass the real client. A ``Protocol`` type-checks either — the real
+    client via structural match, a test fake the same way — without a runtime
+    import of :mod:`pyfsr.client` (and without callers needing ``# type:
+    ignore`` just to pass a fake into a test). Prefer this over the ``Any``
+    that used to sit here: ``Any`` disables type-checking on every attribute
+    access, so a call like ``client.connecters.list_configured()`` (typo) or
+    passing the wrong object entirely would only surface at runtime, deep
+    inside a warm/compile call.
+    """
+
+    base_url: str
+
+    @property
+    def users(self) -> _UsersLike: ...
+
+    @property
+    def picklists(self) -> _PicklistsLike: ...
+
+    @property
+    def tags(self) -> _TagsLike: ...
+
+    @property
+    def connectors(self) -> _ConnectorsLike: ...
+
+    @property
+    def workflow_collections(self) -> _WorkflowCollectionsLike: ...
+
+
+class _UsersLike(Protocol):
+    def list_teams(self, params: dict[str, Any] | None = None) -> list[Any]: ...
+
+
+class _PicklistsLike(Protocol):
+    def all(self, *, refresh: bool = False) -> dict[str, list[Any]]: ...
+
+
+class _TagsLike(Protocol):
+    def map_names(self, *, limit: int = ...) -> dict[str, str]: ...
+
+
+class _ConnectorsLike(Protocol):
+    def list_configured(self, *, refresh: bool = False) -> list[InstalledConnector]: ...
+
+    def definition(self, connector: str, *, version: str | None = None) -> ConnectorDefinition | None: ...
+
+
+class _WorkflowCollectionsLike(Protocol):
+    def import_export(self, data: Any, *, replace: bool = False) -> Any: ...
 
 
 class PlaybooksExtraNotInstalled(ImportError):
@@ -65,7 +127,7 @@ def _load_decompiler():
 def decompile_playbook_yaml(
     fsr_json: dict[str, Any],
     *,
-    client: Any = None,
+    client: _AuthoringClient | None = None,
     db_path: str | Path | None = None,
 ) -> str:
     """Decompile a FortiSOAR WorkflowCollection export envelope into authored YAML.
@@ -94,7 +156,7 @@ def decompile_playbook_yaml(
 
 # --------------------------------------------------------------------- warmup
 def warm_catalog(
-    client: Any,
+    client: _AuthoringClient,
     db_path: str | Path,
     *,
     connectors: bool = True,
@@ -225,10 +287,14 @@ def warm_catalog(
                 conn.execute("DELETE FROM teams")
                 conn.executemany("INSERT OR REPLACE INTO teams (name, iri) VALUES (?, ?)", team_rows)
                 summary["teams"] = len(team_rows)
-            except Exception:
+            except Exception as exc:
+                # Don't stamp a failed/partial warm as fresh: a caller retrying within
+                # `max_age` must actually retry, not skip forever on cached bad data.
                 summary["teams"] = 0
+                logger.warning("warm_catalog: teams section failed, not marking fresh: %s", exc)
+            else:
+                _stamp("teams")
             _lap("teams", _t)
-            _stamp("teams")
 
         # `picklists` — record-field picklist values (list, value -> item IRI).
         conn.execute(
@@ -259,10 +325,12 @@ def warm_catalog(
                     item_rows,
                 )
                 summary["picklist_items"] = len(item_rows)
-            except Exception:
+            except Exception as exc:
                 summary["picklist_items"] = 0
+                logger.warning("warm_catalog: picklists section failed, not marking fresh: %s", exc)
+            else:
+                _stamp("picklists")
             _lap("picklists", _t)
-            _stamp("picklists")
 
         # `tags` — set_variable.message.tags (name -> /api/3/tags/<uuid>).
         conn.execute("CREATE TABLE IF NOT EXISTS tags (name TEXT PRIMARY KEY, iri TEXT NOT NULL)")
@@ -277,10 +345,12 @@ def warm_catalog(
                 conn.execute("DELETE FROM tags")
                 conn.executemany("INSERT OR REPLACE INTO tags (name, iri) VALUES (?, ?)", tag_rows)
                 summary["tags"] = len(tag_rows)
-            except Exception:
+            except Exception as exc:
                 summary["tags"] = 0
+                logger.warning("warm_catalog: tags section failed, not marking fresh: %s", exc)
+            else:
+                _stamp("tags")
             _lap("tags", _t)
-            _stamp("tags")
 
         # `connectors`/`operations`/`operation_params` — the INSTALLED connector
         # catalog, so the compiler validates connector/operation/param tokens
@@ -339,7 +409,10 @@ def warm_catalog(
                         return v[0] if v else None
                     return v
 
-                for name, ver, d, configs in _fetch_connector_defs(client):
+                fetch_result = _fetch_connector_defs(client)
+                n_fetch_failed = fetch_result.failed
+                for fc in fetch_result.fetched:
+                    name, ver, d, configs = fc.name, fc.version, fc.definition, fc.configurations
                     conn.execute(
                         "INSERT OR REPLACE INTO connectors "
                         "(name, version, label, category, description, publisher, active, "
@@ -448,10 +521,32 @@ def warm_catalog(
                 summary["operations"] = n_ops
                 summary["operation_params"] = n_params
                 summary["configurations"] = n_cfg
-            except Exception:
+                summary["connectors_failed"] = n_fetch_failed
+            except Exception as exc:
+                # A mid-fanout failure still leaves whatever was upserted before
+                # it raised -- but don't stamp the section fresh: a real
+                # matrix-run bug traced to exactly this (a partial 12/32-connector
+                # warmup got cached as "warmed" and a caller's max_age skip left
+                # it stuck that way until a forced re-warm). Let the next call
+                # retry for real.
                 summary.setdefault("connectors", 0)
+                logger.warning("warm_catalog: connectors section failed, not marking fresh: %s", exc)
+            else:
+                if n_fetch_failed:
+                    # Some installed connectors' definition fetches failed
+                    # (map_threaded's default policy swallows per-item errors —
+                    # see _fetch_connector_defs) even though nothing raised here.
+                    # Don't cache this as a complete warm or a retry within
+                    # max_age would skip forever on a silently-partial catalog.
+                    logger.warning(
+                        "warm_catalog: %d/%d installed connector definition(s) failed to fetch; "
+                        "not marking connectors fresh",
+                        n_fetch_failed,
+                        n_fetch_failed + n_conn,
+                    )
+                else:
+                    _stamp("connectors")
             _lap("connectors", _t)
-            _stamp("connectors")
 
         conn.commit()
         summary["total_ms"] = int((time.perf_counter() - t_start) * 1000)
@@ -491,44 +586,85 @@ def _flatten_op_params(params: Any):
     yield from _walk(params, None, None)
 
 
-def _fetch_connector_defs(client: Any, *, max_workers: int = 8) -> list[tuple[str, str, Any, list[Any]]]:
+@dataclass(frozen=True)
+class _FetchedConnector:
+    """One installed connector's definition + per-appliance config instances,
+    as fetched by :func:`_fetch_connector_defs` for :func:`warm_catalog` to write."""
+
+    name: str
+    version: str
+    definition: ConnectorDefinition
+    configurations: list[ConnectorConfigSummary]
+
+
+@dataclass(frozen=True)
+class _ConnectorFetchResult:
+    """Outcome of a :func:`_fetch_connector_defs` fan-out.
+
+    ``failed`` is what makes a silent partial warm visible to the caller (see
+    the function docstring) instead of an opaque ``int`` the caller has to
+    remember what it means.
+    """
+
+    fetched: list[_FetchedConnector]
+    failed: int
+
+    @property
+    def n_installed(self) -> int:
+        return len(self.fetched) + self.failed
+
+
+def _fetch_connector_defs(client: _AuthoringClient, *, max_workers: int = 8) -> _ConnectorFetchResult:
     """Fetch each installed connector's full definition concurrently.
 
     Enumerates the installed set via ``client.connectors.list_configured()`` and
     pulls each definition via ``client.connectors.definition()`` — the public,
     typed API, no raw endpoints. Each definition fetch is an independent network
     call, so they run through the shared :func:`~pyfsr._concurrency.map_threaded`
-    pool (requests sessions are safe for concurrent calls). Returns
-    ``(name, version, definition, configurations)`` tuples; connectors whose
-    fetch fails or returns a non-dict are dropped.
+    pool (requests sessions are safe for concurrent calls).
 
-    ``configurations`` is the connector's configured-instance list
-    (``[{config_id, name, default}]``) carried straight off the
-    ``InstalledConnector`` that ``list_configured()`` already populated inline —
-    so recording them adds NO extra network call. They're per-appliance (a config
-    UUID is specific to one box), so the warm store seeds the compiler's
-    default-config fill (connector_args.py) — the packaged slim catalog has none.
+    ``map_threaded``'s default error policy swallows a per-item failure to
+    ``None`` rather than aborting the whole fan-out — good for resilience, but
+    it means a transient blip on a handful of connectors previously produced a
+    silently-partial warm that the caller (:func:`warm_catalog`) could not tell
+    apart from "every installed connector was fetched." That let a partial warm
+    get stamped fresh and stay stuck incomplete until a caller noticed and
+    forced a re-warm (the exact failure mode a matrix-run investigation traced
+    to a *caller-side* staleness heuristic — see MASTER_TRACKER.md). Returning
+    ``.failed`` here lets ``warm_catalog`` refuse to stamp a partial fetch as
+    fresh, fixing it at the source instead of in every caller.
+
+    ``configurations`` is the connector's configured-instance list carried
+    straight off the ``InstalledConnector`` that ``list_configured()`` already
+    populated inline — so recording it adds NO extra network call. They're
+    per-appliance (a config UUID is specific to one box), so the warm store
+    seeds the compiler's default-config fill (connector_args.py) — the
+    packaged slim catalog has none.
     """
     from ._concurrency import map_threaded
 
     installed = [c for c in client.connectors.list_configured() if c.name]
     if not installed:
-        return []
+        return _ConnectorFetchResult(fetched=[], failed=0)
 
-    def _one(ic: Any) -> tuple[str, str, Any, list[Any]] | None:
-        # definition() returns a typed ConnectorDefinition (dict-compatible —
-        # the warm writer reads it via .get(...)).
+    def _one(ic: InstalledConnector) -> _FetchedConnector | None:
+        # `installed` above is pre-filtered to `c.name` truthy, but that
+        # narrowing doesn't survive across the closure for mypy.
+        assert ic.name is not None
         name, ver = ic.name, ic.version
         d = client.connectors.definition(name, version=ver)
         if d is None:
             return None
-        # ic.configurations is populated inline by list_configured() (each
-        # InstalledConnector carries its config summaries — no extra fetch).
-        configs = list(ic.configurations or [])
-        return (name, str(ver or ""), d, configs)
+        return _FetchedConnector(
+            name=name,
+            version=str(ver or ""),
+            definition=d,
+            configurations=list(ic.configurations or []),
+        )
 
     results = map_threaded(_one, installed, max_workers=max_workers)
-    return [r for r in results if r is not None]
+    fetched = [r for r in results if r is not None]
+    return _ConnectorFetchResult(fetched=fetched, failed=len(results) - len(fetched))
 
 
 @dataclass
@@ -608,7 +744,7 @@ def _default_cache_db() -> Path:
 def compile_playbook_yaml(
     text: str,
     *,
-    client: Any = None,
+    client: _AuthoringClient | None = None,
     db_path: str | Path | None = None,
     lax_codes: set[str] | None = None,
 ) -> CompiledPlaybook:
@@ -660,7 +796,7 @@ def compile_playbook_yaml(
     return CompiledPlaybook(fsr_json=result.fsr_json, errors=errors, ok=result.ok)
 
 
-def _resolve_catalog(client: Any, db_path: str | Path | None) -> Path:
+def _resolve_catalog(client: _AuthoringClient | None, db_path: str | Path | None) -> Path:
     """Resolve which reference catalog to use, warming a per-user cache from a
     live client when one is given (same rule as :func:`compile_playbook_yaml`):
     explicit ``db_path`` > warm-from-``client`` > packaged slim catalog."""
@@ -717,7 +853,7 @@ class VerifiedPlaybook:
 def verify_playbook_yaml(
     text: str,
     *,
-    client: Any = None,
+    client: _AuthoringClient | None = None,
     db_path: str | Path | None = None,
     live_probe: bool = False,
     skip: list[str] | None = None,
@@ -779,7 +915,7 @@ class DeployedPlaybook:
 def build_and_deploy(
     text: str,
     *,
-    client: Any,
+    client: _AuthoringClient,
     db_path: str | Path | None = None,
     skip: list[str] | None = None,
     live_probe: bool = False,
@@ -810,7 +946,7 @@ def find_operation(
     connector: str,
     query: str = "",
     *,
-    client: Any = None,
+    client: _AuthoringClient | None = None,
     db_path: str | Path | None = None,
     limit: int = 10,
 ) -> dict[str, Any]:

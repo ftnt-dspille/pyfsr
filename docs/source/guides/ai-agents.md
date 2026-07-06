@@ -241,6 +241,34 @@ The discovery tools (`list_modules`, `describe_module`) and picklist tools
 picklist-backed) before it writes a record, and `list_picklists` /
 `get_picklist_values` to resolve the friendly strings a picklist accepts.
 
+### FortiAI investigation
+
+`investigate_alert` kicks off a FortiAI agentic investigation (normalize →
+hypothesize → plan → gather evidence over MCP → verdict). With `wait=false`
+(default) it returns a `{"task_id", "status"}` handle immediately; poll it with
+`get_investigation_result`, which returns the status plus the full verdict payload
+(per-phase progress, summary with classification and key findings, hypotheses,
+recommended next actions). Captured from a live 8.0 appliance; the verdict is
+trimmed (one representative finding/hypothesis/log; all nine phase states kept):
+
+```{doctest}
+>>> client = demo_client()
+>>> started = dispatch(client, "investigate_alert", {
+...     "ref": "alerts:9f0eb603-ac1e-41c3-b47b-444589beed39"})
+>>> started["status"]
+'pending'
+>>> result = dispatch(client, "get_investigation_result",
+...                    {"task_id": started["task_id"]})
+>>> result["status"]
+'completed'
+>>> result["result"]["summary"]["classification"]
+'Inconclusive'
+>>> [p["state"] for p in result["result"]["phases"]][:3]
+['normalization', 'context_enrichment', 'hypothesis']
+>>> result["result"]["playbook"]["immediate_next_actions"][0]  # doctest: +ELLIPSIS
+'Preserve forensic evidence...'
+```
+
 ## Use case: triage an alert end-to-end
 
 A SOC analyst asks an agent *"Triage the latest critical alert and tell me if

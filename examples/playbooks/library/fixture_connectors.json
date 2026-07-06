@@ -1,0 +1,46 @@
+{
+  "abuseipdb": [
+    "ip_lookup"
+  ],
+  "activedirectory": [
+    "add_object",
+    "disable_user_account",
+    "global_search"
+  ],
+  "cyops_utilities": [
+    "no_op"
+  ],
+  "file-content-extraction": [
+    "create_xslx_file_from_json_data"
+  ],
+  "fortigate-firewall": [
+    "block_ip",
+    "block_ip_new",
+    "block_url",
+    "update_address"
+  ],
+  "fortinet-fortisiem": [
+    "clear_incident",
+    "get_incident_details",
+    "get_ip_context",
+    "update_incident"
+  ],
+  "ipinfo": [
+    "lookup_ip"
+  ],
+  "ipstack": [
+    "ip_locate"
+  ],
+  "openai": [
+    "chat_completions"
+  ],
+  "smtp": [
+    "send_email"
+  ],
+  "ssh": [
+    "run_remote_command"
+  ],
+  "virustotal": [
+    "query_ip"
+  ]
+}

@@ -46,6 +46,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ..pagination import extract_members
 from .base import BaseAPI
 
 if TYPE_CHECKING:
@@ -131,7 +132,7 @@ class ViewTemplatesAPI(BaseAPI):
             ``type``, ``viewOptions``, ``isDefault``, ``config``).
         """
         data = self.client.get(_SYSTEM_TEMPLATES, params=_ALL) or {}
-        templates = data.get("hydra:member", [])
+        templates = extract_members(data)
 
         if module:
             want = module.strip().lower()

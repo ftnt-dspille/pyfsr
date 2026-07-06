@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import requests
 
+from ..pagination import extract_members
 from .base import BaseAPI
 
 if TYPE_CHECKING:
@@ -122,7 +123,7 @@ class ContentHubSearch(BaseAPI):
         response = self.client.post(
             f"/api/query/solutionpacks?$limit={limit}&$page=1&$search={search_term}", data=query
         )
-        members = response.get("hydra:member", [])
+        members = extract_members(response)
         model = _model_for_type(content_type)
         return [model(**m) for m in members]
 

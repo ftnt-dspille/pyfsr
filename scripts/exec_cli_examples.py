@@ -32,6 +32,7 @@ Exit code 1 if any command misbehaves, 0 otherwise.
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import subprocess
@@ -41,11 +42,39 @@ import tempfile
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST = os.path.join(REPO_ROOT, "examples", "playbooks", "library", "manifest.json")
 
+# A reference catalog seeded with fake connectors/operations (via
+# ``pyfsr.playbook_library._build_fixture_catalog_db``), so library playbooks
+# that call real connectors (``openai``/``fortigate-firewall``/...) compile
+# offline the same way the manifest generator does. Without this, ``validate``
+# falls back to the packaged slim catalog (0 connectors by design) and every
+# connector-using playbook fails ``unknown_connector`` -- a dev/CI mismatch,
+# since the manifest marks them ``compiles_ok=True`` against this fixture.
+# Built once in ``main``; the temp file is removed in the ``finally`` there.
+_FIXTURE_DB = {"path": None}
+
+
+def _cleanup_fixture_db():
+    """Remove the temp fixture catalog built in :func:`main` (atexit handler)."""
+    p = _FIXTURE_DB["path"]
+    if p and os.path.exists(p):
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+
 
 def _run(args, timeout=60):
-    """Run `python -m pyfsr.cli.__main__ <args>`; return (returncode, stdout, stderr)."""
+    """Run `python -m pyfsr.cli.__main__ <args>`; return (returncode, stdout, stderr).
+
+    When a fixture catalog is built, ``FSRPB_DB`` points the subprocess at it so
+    ``validate``/``compile`` resolve connectors against the same fakes the
+    manifest used (not the 0-connector slim catalog).
+    """
     cmd = [sys.executable, "-m", "pyfsr.cli.__main__"] + args
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    env = dict(os.environ)
+    if _FIXTURE_DB["path"]:
+        env["FSRPB_DB"] = _FIXTURE_DB["path"]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
     return r.returncode, r.stdout, r.stderr
 
 
@@ -85,6 +114,20 @@ def main():
             file=sys.stderr,
         )
         return 0
+
+    # Build the fixture catalog (fake connectors/operations) so validate/compile
+    # resolve connectors against the same catalog the manifest generator used.
+    # Best-effort: if it can't be built, fall back to the slim catalog (cold
+    # playbooks will then fail unknown_connector, as before this change).
+    try:
+        from pyfsr.playbook_library import _build_fixture_catalog_db
+
+        fdb = _build_fixture_catalog_db()
+        if fdb:
+            _FIXTURE_DB["path"] = str(fdb)
+            atexit.register(_cleanup_fixture_db)
+    except Exception:
+        pass
 
     fixture, slug = _pick_fixture()
     print(f"fixture: {os.path.relpath(fixture, REPO_ROOT)}  slug: {slug}")

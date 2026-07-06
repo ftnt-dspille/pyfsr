@@ -4,6 +4,7 @@ import pytest
 
 from pyfsr.agent.tools import dispatch
 from pyfsr.api.schedules import SchedulesAPI, _parse_cron, _utc_offset
+from pyfsr.models import ScheduledTask
 
 _ENDPOINT = "/api/wf/api/scheduled/"
 _TRIGGER_NOW = "/api/wf/api/scheduled/trigger-now/"
@@ -57,7 +58,7 @@ def test_utc_offset_returns_none_for_unknown_timezone():
 # -- create() body construction -------------------------------------------------
 def _create(cron="7 2 * * *", **kw):
     rec = _Rec(post_response={"id": "fernet-new", "name": "nightly-recon", "enabled": True})
-    out = SchedulesAPI(rec).create("nightly-recon", "/api/3/workflows/abc", cron, **kw)
+    out = SchedulesAPI(rec).create("nightly-recon", "/api/3/workflows/abc", cron, typed=False, **kw)
     assert out == {"id": "fernet-new", "name": "nightly-recon", "enabled": True}
     assert len(rec.calls) == 1
     return rec.calls[0]
@@ -107,6 +108,44 @@ def test_create_omits_create_user_and_priority_by_default():
     _, _, body, _ = _create()
     assert "createUser" not in body["kwargs"]
     assert "priority" not in body["kwargs"]
+
+
+# -- typed (Pydantic ScheduledTask) return values -------------------------------
+
+_TASK = {
+    "id": "fernet-token-1",
+    "name": "Purge System Notifications",
+    "crontab": {"id": 1, "minute": "0", "hour": "0", "day_of_month": "*", "month_of_year": "*", "day_of_week": "*"},
+    "task": "workflow.tasks.purge_system_notifications",
+    "enabled": True,
+    "total_run_count": 14,
+}
+
+
+def test_create_returns_typed_scheduled_task_by_default():
+    rec = _Rec(post_response=_TASK)
+    out = SchedulesAPI(rec).create("Purge System Notifications", "/api/3/workflows/abc", "0 0 * * *")
+    assert isinstance(out, ScheduledTask)
+    assert out.name == "Purge System Notifications"
+    assert out.crontab.hour == "0"
+    assert out["task"] == "workflow.tasks.purge_system_notifications"  # dict-compat still works
+
+
+def test_list_and_get_return_typed_scheduled_tasks():
+    rec = _Rec(get_response={"hydra:member": [_TASK]})
+    tasks = SchedulesAPI(rec).list()
+    assert len(tasks) == 1
+    assert isinstance(tasks[0], ScheduledTask)
+
+    task = SchedulesAPI(rec).get("Purge System Notifications")
+    assert isinstance(task, ScheduledTask)
+    assert task.enabled is True
+
+
+def test_list_and_get_typed_false_return_raw_dicts():
+    rec = _Rec(get_response={"hydra:member": [_TASK]})
+    assert SchedulesAPI(rec).list(typed=False) == [_TASK]
+    assert SchedulesAPI(rec).get("Purge System Notifications", typed=False) == _TASK
 
 
 def test_create_includes_create_user_and_priority_when_given():

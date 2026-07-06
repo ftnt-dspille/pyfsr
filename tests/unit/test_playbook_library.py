@@ -78,6 +78,34 @@ def test_library_playbook_compiles_clean(path):
 
 
 @_SKIP_NO_EXTRA
+@pytest.mark.parametrize("path", _FILES, ids=lambda p: str(p.relative_to(_LIBRARY)))
+def test_library_playbook_compiles_clean_against_fixture_catalog(path):
+    """With the fixture connector catalog, ``unknown_connector`` should never
+    fire -- every connector/operation pair a library playbook uses is either
+    in the packaged catalog or in ``fixture_connectors.json``. This is a
+    stricter check than :func:`test_library_playbook_compiles_clean`: it
+    catches a library playbook drifting to reference a connector/operation
+    the fixture spec doesn't know about yet (fix: add it to
+    ``fixture_connectors.json``), which the catalog-cold allowance above
+    would otherwise silently swallow.
+    """
+    from pyfsr.authoring import compile_playbook_yaml
+    from pyfsr.playbook_library import _build_fixture_catalog_db
+
+    fixture_db = _build_fixture_catalog_db()
+    assert fixture_db is not None, "fixture catalog build failed -- packaged catalog or fixture_connectors.json missing"
+    try:
+        result = compile_playbook_yaml(path.read_text(encoding="utf-8"), db_path=fixture_db)
+        unknown = [e for e in result.blocking if e.get("code") == "unknown_connector"]
+        assert not unknown, (
+            f"{path.relative_to(_ROOT)} references a connector/operation missing from "
+            f"fixture_connectors.json:\n" + "\n".join(f"  - {e.get('message', '')}" for e in unknown)
+        )
+    finally:
+        fixture_db.unlink(missing_ok=True)
+
+
+@_SKIP_NO_EXTRA
 def test_library_has_front_matter():
     """Every library playbook carries a goal/trigger/inputs/outputs front-matter block."""
     for path in _FILES:

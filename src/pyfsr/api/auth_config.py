@@ -25,6 +25,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from ..pagination import extract_members
 from .base import BaseAPI
 
 _ENDPOINT = "/api/auth/config"
@@ -56,7 +57,7 @@ class AuthConfigAPI(BaseAPI):
         (``{id, section, key, dataType, value}``).
         """
         resp = self.client.get(_ENDPOINT, params={"section": section})
-        return [AuthConfigRow.model_validate(r) for r in (resp or {}).get("hydra:member") or []]
+        return [AuthConfigRow.model_validate(r) for r in extract_members(resp)]
 
     def get(self, section: str) -> dict[str, Any]:
         """Return a ``{key: value}`` dict for one config ``section``."""

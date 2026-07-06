@@ -21,6 +21,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from ..pagination import extract_members
 from .base import BaseAPI
 
 _RELATIONSHIPS = {"$relationships": "true"}
@@ -53,7 +54,7 @@ class SystemSettingsAPI(BaseAPI):
         its ``sections`` (TAXII, iframe, …); this picks out the root object.
         """
         resp = self.client.get(self._ENDPOINT, params=_RELATIONSHIPS)
-        members = (resp or {}).get("hydra:member") or []
+        members = extract_members(resp)
         for record in members:
             if record.get("parent") is None:
                 return record
@@ -73,7 +74,7 @@ class SystemSettingsAPI(BaseAPI):
         record with that name is returned.
         """
         resp = self.client.get(self._ENDPOINT, params=_RELATIONSHIPS)
-        for record in (resp or {}).get("hydra:member") or []:
+        for record in extract_members(resp):
             if record.get("name") == name:
                 return record
         raise ValueError(f"No system_settings record named {name!r}")

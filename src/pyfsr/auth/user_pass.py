@@ -1,12 +1,13 @@
 import requests
 
+from ._url import normalize_base_url
 from .base import BaseAuth
 
 
 class UserPasswordAuth(BaseAuth):
     def __init__(self, base_url: str, username: str, password: str, verify_ssl: bool = True):
         super().__init__()
-        self.base_url = base_url
+        self.base_url = normalize_base_url(base_url)
         self.username = username
         self.password = password
         self.verify_ssl = verify_ssl

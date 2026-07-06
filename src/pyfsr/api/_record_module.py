@@ -3,14 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+from ..utils.iri import module_from_iri as _module_from_iri
 from .base import BaseAPI
-
-
-def _module_from_iri(iri: str) -> str:
-    parts = [p for p in iri.split("/") if p]
-    if len(parts) >= 2:
-        return parts[-2]
-    raise ValueError(f"Cannot derive module from record IRI: {iri!r}")
 
 
 class RecordModuleAPI(BaseAPI):

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..models import Role, Team
+from ..models import Role, Team, User
+from ..pagination import extract_members
 from .base import BaseAPI
 
 
@@ -72,7 +73,8 @@ class UsersAPI(BaseAPI):
         # legacy parameter names kept for backwards compatibility
         role_uuids: list[str] | None = None,
         team_uuids: list[str] | None = None,
-    ) -> dict[str, Any]:
+        typed: bool = True,
+    ) -> User | dict[str, Any]:
         """
         Create a FortiSOAR user (People record + auth credentials).
 
@@ -92,9 +94,11 @@ class UsersAPI(BaseAPI):
             teams: Optional team UUIDs **or** friendly names (e.g. ``["Tier 1 SOC"]``).
             role_uuids: Deprecated alias for ``roles``.
             team_uuids: Deprecated alias for ``teams``.
+            typed: parse the result into a :class:`~pyfsr.models.User` (default);
+                pass ``False`` for the raw dict.
 
         Returns:
-            The created People record (dict).
+            The created People record.
 
         Raises:
             ValueError: If a role or team name cannot be resolved.
@@ -126,56 +130,72 @@ class UsersAPI(BaseAPI):
         if effective_teams:
             payload["teams"] = self._resolve_teams(effective_teams)
 
-        return self.client.post("/api/3/people", data=payload)
+        resp = self.client.post("/api/3/people", data=payload)
+        return User.model_validate(resp) if typed else resp
 
-    def list(self, params: dict | None = None) -> dict[str, Any]:
+    def list(self, params: dict | None = None, *, typed: bool = True) -> list[User] | dict[str, Any]:
         """
         List People records.
 
         Args:
             params: Optional query parameters (e.g. ``{"csActive": True}``).
+            typed: parse rows into :class:`~pyfsr.models.User` (default); pass
+                ``False`` for the raw Hydra collection dict.
 
         Returns:
-            Hydra collection dict with ``hydra:member`` list of People records.
+            Typed :class:`~pyfsr.models.User` records, or the raw Hydra
+            collection dict (``hydra:member`` list of People records) when
+            ``typed=False``.
         """
-        return self.client.get("/api/3/people", params=params)
+        resp = self.client.get("/api/3/people", params=params)
+        if typed:
+            return [User.model_validate(m) for m in extract_members(resp)]
+        return resp
 
-    def get(self, person_uuid: str) -> dict[str, Any]:
+    def get(self, person_uuid: str, *, typed: bool = True) -> User | dict[str, Any]:
         """
         Get a single People record by UUID.
 
         Args:
             person_uuid: The UUID of the person.
+            typed: parse the result into a :class:`~pyfsr.models.User` (default);
+                pass ``False`` for the raw dict.
 
         Returns:
-            The People record dict.
+            The People record.
         """
-        return self.client.get(f"/api/3/people/{person_uuid}")
+        resp = self.client.get(f"/api/3/people/{person_uuid}")
+        return User.model_validate(resp) if typed else resp
 
-    def update(self, person_uuid: str, **data: Any) -> dict[str, Any]:
+    def update(self, person_uuid: str, *, typed: bool = True, **data: Any) -> User | dict[str, Any]:
         """
         Update a People record.
 
         Args:
             person_uuid: UUID of the person to update.
+            typed: parse the result into a :class:`~pyfsr.models.User` (default);
+                pass ``False`` for the raw dict.
             **data: Fields to update (e.g. ``department="SOC"``, ``csActive=False``).
 
         Returns:
-            The updated People record dict.
+            The updated People record.
         """
-        return self.client.put(f"/api/3/people/{person_uuid}", data=data)
+        resp = self.client.put(f"/api/3/people/{person_uuid}", data=data)
+        return User.model_validate(resp) if typed else resp
 
-    def deactivate(self, person_uuid: str) -> dict[str, Any]:
+    def deactivate(self, person_uuid: str, *, typed: bool = True) -> User | dict[str, Any]:
         """
         Deactivate a user account (sets ``csActive=False``).
 
         Args:
             person_uuid: UUID of the person to deactivate.
+            typed: parse the result into a :class:`~pyfsr.models.User` (default);
+                pass ``False`` for the raw dict.
 
         Returns:
-            The updated People record dict.
+            The updated People record.
         """
-        return self.update(person_uuid, csActive=False)
+        return self.update(person_uuid, csActive=False, typed=typed)
 
     def list_roles(self, params: dict | None = None) -> list[Role]:
         """List all roles available for assignment (delegates to :class:`~pyfsr.api.roles.RolesAPI`).
