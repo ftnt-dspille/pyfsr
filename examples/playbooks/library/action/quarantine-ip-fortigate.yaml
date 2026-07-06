@@ -73,7 +73,6 @@ playbooks:
   - type: manual_input
     name: Approval Request
     step_variables: []
-    description: Approval Specs
     options:
     - option: Approve
       primary: true
