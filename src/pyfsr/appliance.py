@@ -45,10 +45,21 @@ from .cli.appliance.mq import Consumer, Permission, PurgeResult, QueueInfo, Work
 from .cli.appliance.service import Listener, ProbeResult, ServiceActionResult
 from .cli.appliance.transport import Transport, make_transport
 
-__all__ = ["Appliance"]
+__all__ = [
+    "Appliance",
+    "DbNamespace",
+    "ServiceNamespace",
+    "MqNamespace",
+    "HostNamespace",
+    "LicenseNamespace",
+    "LogsNamespace",
+    "EsNamespace",
+    "HaNamespace",
+    "CertsNamespace",
+]
 
 
-class _DbNamespace:
+class DbNamespace:
     """Postgres verbs (``appliance.db``). Reads are open; writes need ``yes=True``."""
 
     def __init__(self, facts: Facts) -> None:
@@ -102,7 +113,7 @@ class _DbNamespace:
         return db.find_orphan_module_tables(self._facts)
 
 
-class _ServiceNamespace:
+class ServiceNamespace:
     """systemd / cyops service verbs (``appliance.service``)."""
 
     def __init__(self, t: Transport) -> None:
@@ -149,7 +160,7 @@ class _ServiceNamespace:
         return service.listeners(self._t)
 
 
-class _MqNamespace:
+class MqNamespace:
     """RabbitMQ verbs (``appliance.mq``)."""
 
     def __init__(self, t: Transport) -> None:
@@ -186,7 +197,7 @@ class _MqNamespace:
         return mq.purge_workflows(self._t, graceful=graceful, sweep_data_queues=sweep_data_queues, yes=yes)
 
 
-class _HostNamespace:
+class HostNamespace:
     """OS resource metrics (``appliance.host``). All read-only, no sudo."""
 
     def __init__(self, t: Transport) -> None:
@@ -213,7 +224,7 @@ class _HostNamespace:
         return host.snapshot(self._t, disk_path=disk_path)
 
 
-class _LicenseNamespace:
+class LicenseNamespace:
     """Licensing / identity (``appliance.license``)."""
 
     def __init__(self, t: Transport) -> None:
@@ -236,7 +247,7 @@ class _LicenseNamespace:
         return license_mod.drift(self._t)
 
 
-class _LogsNamespace:
+class LogsNamespace:
     """Log tail / error scan (``appliance.logs``)."""
 
     def __init__(self, t: Transport) -> None:
@@ -255,7 +266,7 @@ class _LogsNamespace:
         return logs.bundle(self._t, timeout=timeout)
 
 
-class _EsNamespace:
+class EsNamespace:
     """Elasticsearch health / shards (``appliance.es``)."""
 
     def __init__(self, facts: Facts) -> None:
@@ -270,7 +281,7 @@ class _EsNamespace:
         return es_mod.shards(self._facts)
 
 
-class _HaNamespace:
+class HaNamespace:
     """HA cluster verbs (``appliance.ha``)."""
 
     def __init__(self, t: Transport) -> None:
@@ -289,7 +300,7 @@ class _HaNamespace:
         return ha_mod.replication(self._t)
 
 
-class _CertsNamespace:
+class CertsNamespace:
     """Appliance TLS certificate verbs (``appliance.certs``)."""
 
     def __init__(self, t: Transport) -> None:
@@ -321,7 +332,59 @@ class Appliance:
 
     Connection args fall back to ``PYFSR_APPLIANCE_HOST`` / ``_USER`` / ``_PASSWORD``
     when omitted. Pass an existing ``transport`` or ``facts`` to reuse a connection.
+
+    .. note::
+
+       Each grouped verb returns a typed result defined in the corresponding
+       ``pyfsr.cli.appliance`` submodule rather than here, so those dataclasses
+       are documented on their own pages, not under this module's contents:
+
+       - :mod:`pyfsr.cli.appliance.db` — :class:`~pyfsr.cli.appliance.db.DatabaseInfo`,
+         :class:`~pyfsr.cli.appliance.db.DataClassSize`, :class:`~pyfsr.cli.appliance.db.OrphanTable`
+       - :mod:`pyfsr.cli.appliance.service` — :class:`~pyfsr.cli.appliance.service.ServiceState`,
+         :class:`~pyfsr.cli.appliance.service.Listener`, :class:`~pyfsr.cli.appliance.service.ProbeResult`,
+         :class:`~pyfsr.cli.appliance.service.ServiceActionResult`
+       - :mod:`pyfsr.cli.appliance.mq` — :class:`~pyfsr.cli.appliance.mq.QueueInfo`,
+         :class:`~pyfsr.cli.appliance.mq.Consumer`, :class:`~pyfsr.cli.appliance.mq.Permission`,
+         :class:`~pyfsr.cli.appliance.mq.PurgeResult`, :class:`~pyfsr.cli.appliance.mq.WorkflowPurgeReport`
+       - :mod:`pyfsr.cli.appliance.host` — :class:`~pyfsr.cli.appliance.host.MemInfo`,
+         :class:`~pyfsr.cli.appliance.host.LoadAvg`, :class:`~pyfsr.cli.appliance.host.ProcRss`,
+         :class:`~pyfsr.cli.appliance.host.DiskUsage`, :class:`~pyfsr.cli.appliance.host.HostSnapshot`
+       - :mod:`pyfsr.cli.appliance.license` — :class:`~pyfsr.cli.appliance.license.LicenseDetails`,
+         :class:`~pyfsr.cli.appliance.license.DriftReport`
+       - :mod:`pyfsr.cli.appliance.es` — :class:`~pyfsr.cli.appliance.es.ESHealth`
+       - :mod:`pyfsr.cli.appliance.ha` — :class:`~pyfsr.cli.appliance.ha.HaNode`,
+         :class:`~pyfsr.cli.appliance.ha.HaHealth`
+       - :mod:`pyfsr.cli.appliance.facts` — :class:`~pyfsr.cli.appliance.facts.Facts`
+       - :mod:`pyfsr.cli.appliance.transport` — :class:`~pyfsr.cli.appliance.transport.Transport`
     """
+
+    db: DbNamespace
+    """Postgres verbs — queries, table listings, orphan-table cleanup. See :class:`DbNamespace`."""
+
+    service: ServiceNamespace
+    """systemd / cyops service verbs — status, liveness, start/stop/restart. See :class:`ServiceNamespace`."""
+
+    mq: MqNamespace
+    """RabbitMQ verbs — queues, consumers, permissions, purges. See :class:`MqNamespace`."""
+
+    host: HostNamespace
+    """OS resource metrics — memory, load, disk, process RSS. See :class:`HostNamespace`."""
+
+    license: LicenseNamespace
+    """Licensing / identity — device UUID, license details, entitlement drift. See :class:`LicenseNamespace`."""
+
+    logs: LogsNamespace
+    """Log verbs — tail a service log, scan recent errors, collect a bundle. See :class:`LogsNamespace`."""
+
+    es: EsNamespace
+    """Elasticsearch verbs — cluster health, unassigned-shard explain. See :class:`EsNamespace`."""
+
+    ha: HaNamespace
+    """HA cluster verbs — nodes, health, replication status. See :class:`HaNamespace`."""
+
+    certs: CertsNamespace
+    """Appliance TLS certificate verbs — regenerate the self-signed cert. See :class:`CertsNamespace`."""
 
     def __init__(
         self,
@@ -352,15 +415,15 @@ class Appliance:
             self._facts = Facts(transport)
 
         t = self._facts.transport
-        self.db = _DbNamespace(self._facts)
-        self.service = _ServiceNamespace(t)
-        self.mq = _MqNamespace(t)
-        self.host = _HostNamespace(t)
-        self.license = _LicenseNamespace(t)
-        self.logs = _LogsNamespace(t)
-        self.es = _EsNamespace(self._facts)
-        self.ha = _HaNamespace(t)
-        self.certs = _CertsNamespace(t)
+        self.db = DbNamespace(self._facts)
+        self.service = ServiceNamespace(t)
+        self.mq = MqNamespace(t)
+        self.host = HostNamespace(t)
+        self.license = LicenseNamespace(t)
+        self.logs = LogsNamespace(t)
+        self.es = EsNamespace(self._facts)
+        self.ha = HaNamespace(t)
+        self.certs = CertsNamespace(t)
 
     @property
     def facts(self) -> Facts:
