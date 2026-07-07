@@ -81,7 +81,10 @@ def kv(pairs: dict[str, Any], *, fmt: str = "table", file: TextIO = sys.stdout) 
         return
     width = max((len(k) for k in pairs), default=0)
     for k, v in pairs.items():
-        file.write(f"{k.ljust(width)}  {v}\n")
+        # Redact inline at the write site too (belt-and-suspenders over _scrub):
+        # a value under a secret-looking key never reaches the stream in clear.
+        safe = _REDACTED if _redact_key(k) else v
+        file.write(f"{k.ljust(width)}  {safe}\n")
 
 
 def parse_psql_columns(stdout: str) -> tuple[list[str], list[list[str]]]:

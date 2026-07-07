@@ -147,8 +147,11 @@ def validate_ensure_usable(client: FortiSOAR) -> None:
             return
         raise
     user_uuid = binding["userId"]
+    # Never echo any part of the recovered key material — only that it's present
+    # and its length (enough to confirm the recover path worked).
     line(
-        f"  created: binding={binding.get('uuid')} user={user_uuid} plaintext={plaintext2[:6]}… (len {len(plaintext2)})"
+        f"  created: binding={binding.get('uuid')} user={user_uuid} "
+        f"plaintext={'present' if plaintext2 else 'MISSING'} (len {len(plaintext2)})"
     )
 
     # The recovered plaintext must authenticate a second client.
