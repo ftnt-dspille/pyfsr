@@ -1,0 +1,99 @@
+"""Typed models for Configuration Export template ``options`` entries.
+
+Each model is one entry in an ``options.<category>[]`` list. The field sets and
+their required/optional status were established empirically against a live 8.0.0
+appliance by creating stripped-down templates and observing which entries the
+export engine actually emitted (see :class:`~pyfsr.api.export_config.ExportTemplate`).
+
+Highlights from that probing:
+
+- **RecordSet** — only ``type`` and a ``query`` carrying a ``limit`` are needed to
+  emit records. ``limit`` is the *trigger*: a record set whose query has no
+  ``limit`` exports **zero** records. ``label`` / ``include`` /
+  ``includeCorrelations`` are optional (the engine even ignores ``include: false``
+  and exports anyway).
+- **ModuleSelection** — only ``value`` (the module api name) is required;
+  ``includedAttributes`` is optional (omit to export the whole schema).
+- **ConnectorSelection** — only ``value`` (the ``cyops-connector-<name>-<ver>``
+  string) is required; the engine ignores a bare ``name``.
+- **PlaybookCollectionSelection** — only ``value`` (the collection uuid) is required.
+
+Field names are the exact camelCase wire keys (these models *are* the wire form,
+not a re-cased view of it), so :meth:`_ExportEntry.wire` is a plain dump.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict
+
+
+class _ExportEntry(BaseModel):
+    """Base for an ``options.<category>[]`` entry. Fields are the wire keys."""
+
+    model_config = ConfigDict(extra="allow")
+
+    def wire(self) -> dict[str, Any]:
+        """Render the entry as its wire dict, dropping unset optional keys."""
+        return self.model_dump(exclude_none=True)
+
+
+class ModuleSelection(_ExportEntry):
+    """A module **schema** selection (``options.modules[]``).
+
+    ``value`` is the module api name (e.g. ``"alerts"``). ``includedAttributes``
+    limits the exported fields; leave empty to export the whole schema.
+    """
+
+    value: str
+    includedAttributes: list[str] = []
+
+
+class RecordSet(_ExportEntry):
+    """A filtered **record-data** export (``options.recordSets[]``).
+
+    ``query`` must carry a ``limit`` (the record-export trigger — absent means the
+    engine emits no records). The rest of ``query`` is a standard
+    :meth:`pyfsr.query.Query.to_body` dict, so filtering works as elsewhere.
+    """
+
+    type: str
+    query: dict[str, Any]
+    label: str | None = None
+    include: bool = True
+    includeCorrelations: bool = False
+
+
+class ConnectorSelection(_ExportEntry):
+    """A connector selection (``options.connectors[]``).
+
+    ``value`` (the ``cyops-connector-<name>-<version>`` string) is the only field
+    the engine keys on; a bare ``name`` is ignored. ``configurations`` toggles
+    whether the connector's saved configs (secrets) ride along.
+    """
+
+    value: str
+    label: str | None = None
+    version: str | None = None
+    include: bool = True
+    rpm: bool = True
+    configurations: bool = True
+    configCount: int = 0
+    recordCount: int = 0
+
+
+class PlaybookCollectionSelection(_ExportEntry):
+    """A playbook-collection selection (``options.playbooks.collections[]``).
+
+    ``value`` is the collection uuid. The ``include*`` flags mirror the wizard's
+    Playbooks-step toggles for pulling the collection's dependent content.
+    """
+
+    value: str
+    label: str | None = None
+    include: bool = True
+    recordCount: int = 0
+    includeVersions: bool = True
+    includeSchedules: bool = True
+    includeGlobalVariables: bool = True
