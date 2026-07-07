@@ -258,30 +258,42 @@ def test_export_template_add_module_shape():
 
 def test_export_template_add_record_set_with_query():
     q = Query(module="alerts").eq("status", "Open")
-    tmpl = ExportTemplate("T").add_record_set("alerts", query=q, include_correlations=True)
+    tmpl = ExportTemplate("T").add_record_set("alerts", query=q, limit=5000, include_correlations=True)
     rs = tmpl.build()["recordSets"][0]
-    # bundle-verified wire shape: label/type/includeCorrelations/include/query
+    # live-verified wire shape: type/label/includeCorrelations/include/query
     assert rs["type"] == "alerts"
     assert rs["label"] == "alerts"
     assert rs["includeCorrelations"] is True
     assert rs["include"] is True
-    # the query is exactly Query.to_body()
-    assert rs["query"] == q.to_body()
+    # the query is Query.to_body() with the live-required limit injected
     assert rs["query"]["logic"] == "AND"
+    assert rs["query"]["filters"] == q.to_body()["filters"]
+    assert rs["query"]["limit"] == 5000  # export trigger
+
+
+def test_export_template_record_set_injects_default_limit():
+    # limit is the record-export trigger; a default is always present
+    rs = ExportTemplate("T").add_record_set("alerts").build()["recordSets"][0]
+    assert rs["query"]["limit"] == 1000
 
 
 def test_export_template_record_set_no_query_matches_all():
-    tmpl = ExportTemplate("T").add_record_set("incidents", label="All incidents")
+    tmpl = ExportTemplate("T").add_record_set("incidents", label="All incidents", limit=50)
     rs = tmpl.build()["recordSets"][0]
     assert rs["label"] == "All incidents"
-    assert rs["query"] == {"logic": "AND", "filters": []}
+    assert rs["query"] == {"logic": "AND", "filters": [], "limit": 50}
     assert rs["includeCorrelations"] is False
 
 
 def test_export_template_accepts_raw_query_dict():
     raw = {"logic": "OR", "filters": [{"field": "severity", "operator": "eq", "value": "High"}]}
-    tmpl = ExportTemplate("T").add_record_set("alerts", query=raw)
-    assert tmpl.build()["recordSets"][0]["query"] == raw
+    tmpl = ExportTemplate("T").add_record_set("alerts", query=raw, limit=10)
+    q = tmpl.build()["recordSets"][0]["query"]
+    assert q["logic"] == "OR"
+    assert q["filters"] == raw["filters"]
+    assert q["limit"] == 10
+    # the caller's dict is not mutated in place
+    assert "limit" not in raw
 
 
 def test_export_template_build_omits_empty_categories():
@@ -334,6 +346,7 @@ def test_export_record_data_builds_recordset_and_cleans_up(monkeypatch):
     assert rs["type"] == "alerts"
     assert rs["includeCorrelations"] is True
     assert rs["query"]["filters"][0]["value"] == "Open"
+    assert rs["query"]["limit"] == 1000  # default export trigger present
     # throwaway template deleted afterwards
     assert ("DELETE", "/api/3/export_templates/rs-1", None) in c.calls
 
@@ -343,3 +356,76 @@ def test_export_record_data_keeps_template_when_cleanup_disabled(monkeypatch):
     monkeypatch.setattr(api, "_export_with_template", lambda **kw: "out.zip")
     api.export_record_data("alerts", output_path="a.zip", cleanup_template=False)
     assert not any(m == "DELETE" for m, _, _ in c.calls)
+
+
+# --------------------------------------------------- name-based categories (view/picklist/connector/collection)
+
+
+def test_export_template_view_template_is_offline():
+    tmpl = ExportTemplate("T").add_view_template("modules-alerts-list")
+    assert tmpl.build()["viewTemplates"] == ["modules-alerts-list"]
+    assert tmpl.needs_resolution is False
+
+
+def test_export_template_needs_resolution_flag():
+    assert ExportTemplate("T").add_picklist("AlertStatus").needs_resolution is True
+    assert ExportTemplate("T").add_connector("OpenAI").needs_resolution is True
+    assert ExportTemplate("T").add_playbook_collection("IR").needs_resolution is True
+    # offline-only categories never need a lookup
+    assert ExportTemplate("T").add_module("alerts").add_view_template("v").needs_resolution is False
+
+
+def test_create_template_resolves_picklist_names():
+    def handler(m, u, **k):
+        if m == "GET" and u == "/api/3/picklist_names":
+            return {"hydra:member": [{"@id": f"/api/3/picklists/{k['params']['name']}"}]}
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    tmpl = ExportTemplate("PL").add_picklist("AlertStatus").add_picklist("AlertSeverity")
+    api.create_template(tmpl)
+    opts = c.calls[-1][2]["options"]
+    assert opts["picklistNames"] == ["/api/3/picklists/AlertStatus", "/api/3/picklists/AlertSeverity"]
+
+
+def test_create_template_resolves_connector_entry(monkeypatch):
+    api, c = _api(lambda m, u, **k: {"@id": "/api/3/export_templates/t1"})
+    monkeypatch.setattr(
+        api,
+        "_get_connector_info",
+        lambda name: {"label": "OpenAI", "value": "cyops-connector-openai-1.0.0", "version": "1.0.0"},
+    )
+    tmpl = ExportTemplate("C").add_connector("OpenAI", include_configurations=False)
+    api.create_template(tmpl)
+    entry = c.calls[-1][2]["options"]["connectors"][0]
+    assert entry["value"] == "cyops-connector-openai-1.0.0"
+    assert entry["version"] == "1.0.0"
+    assert entry["configurations"] is False  # flag honored
+    assert entry["include"] is True
+
+
+def test_create_template_resolves_playbook_collection(monkeypatch):
+    api, c = _api(lambda m, u, **k: {"@id": "/api/3/export_templates/t1"})
+    monkeypatch.setattr(
+        api,
+        "_get_playbook_collection_info",
+        lambda name: {"label": "Incident Response", "value": "coll-uuid"},
+    )
+    tmpl = ExportTemplate("PB").add_playbook_collection("Incident Response", include_versions=False)
+    api.create_template(tmpl)
+    pb = c.calls[-1][2]["options"]["playbooks"]
+    coll = pb["collections"][0]
+    assert coll["value"] == "coll-uuid"
+    assert coll["includeVersions"] is False
+    assert coll["includeGlobalVariables"] is True
+    assert pb["globalVariables"] == []
+
+
+def test_create_template_offline_only_skips_lookups():
+    # no GET lookups fire when nothing name-based was added
+    api, c = _api(lambda m, u, **k: {"@id": "/api/3/export_templates/t1"})
+    tmpl = ExportTemplate("M").add_module("alerts").add_record_set("alerts")
+    api.create_template(tmpl)
+    assert not any(m == "GET" for m, _, _ in c.calls)
+    opts = c.calls[-1][2]["options"]
+    assert set(opts) == {"modules", "recordSets"}  # no empty picklistNames/connectors scaffolding
