@@ -750,6 +750,88 @@ class ConnectorVersionInfo(ApiResult):
     availableVersions: list[str] | None = None
 
 
+class RepoConnectorEntry(ContentHubItem):
+    """One entry from the public ``connectors.json`` manifest
+    (``repo.fortisoar.fortinet.com/connectors/info/connectors.json``).
+
+    Returned by :func:`pyfsr.repo.list_connectors` /
+    :func:`pyfsr.repo.search_connectors` — the no-appliance catalog, distinct
+    from the on-box :class:`ContentHubConnector` (which needs an appliance).
+    The manifest is **latest-version-only** per connector and carries the RPM
+    packaging fields the catalog entry doesn't; those are typed here. The
+    catalog-shaped fields (``name``/``label``/``version``/``description``/
+    ``category``) come from :class:`ContentHubItem`. Dict-compatible.
+    """
+
+    path: str | None = None
+    rpm_name: str | None = None
+    rpm_full_name: str | None = None
+    icon: str | None = None
+
+    # The manifest sends ``category`` as a plain string ("Digital assistant")
+    # for most entries but as a list (``["Ticket Management"]``) for ~19 of 721
+    # — a real shape difference from the on-box catalog (:class:`ContentHubItem`),
+    # which always types it as a list. Accept both; normalize via the property.
+    category: str | list[Any] | None = None
+
+    @property
+    def category_str(self) -> str | None:
+        """``category`` flattened to a string (``", "-join`` of a list entry)."""
+        c = self.category
+        if isinstance(c, list):
+            return ", ".join(str(x) for x in c) if c else None
+        return c
+
+
+class WidgetInfo(ApiResult):
+    """A widget's published ``info.json`` from Fortinet's public content repo.
+
+    Returned by :func:`pyfsr.repo.widget_info`. Different shape from the
+    connector ``info.json`` ��� the widget payload nests human fields under a
+    ``metadata`` wrapper (which rides through in ``extra``) and carries a
+    ``compatibility`` list instead of ``availableVersions`` (a widget
+    ``info.json`` is per-version only; there is no public version-history
+    manifest for widgets). Curated fields are typed; the rest stays in
+    ``extra``. Dict-compatible.
+    """
+
+    name: str | None = None
+    title: str | None = None
+    subTitle: str | None = None
+    version: str | None = None
+    description: str | None = None
+    compatibility: list[str] | None = None
+    publisher: str | None = None
+    certified: str | None = None
+
+
+class SolutionPackInfo(ApiResult):
+    """A solution-pack's published ``info.json`` from Fortinet's public content repo.
+
+    Returned by :func:`pyfsr.repo.solution_pack_info`. Carries
+    :attr:`availableVersions` (full publish history) plus ``dependencies`` and
+    ``fsrMinCompatibility``. Note there is **no public manifest** for solution
+    packs and slug resolution is unreliable, so *discovery* (name -> slug)
+    still needs :meth:`pyfsr.api.content_hub.ContentHubSearch.search_available_packs`
+    on an appliance; this function is the per-version detail lookup once you
+    know the slug. Curated fields are typed; the rest (``contents``,
+    ``prerequisite``, ``recordTags``, ``featuredTags``, …) stays in ``extra``.
+    Dict-compatible.
+    """
+
+    name: str | None = None
+    label: str | None = None
+    version: str | None = None
+    description: str | None = None
+    availableVersions: list[str] | None = None
+    dependencies: list[Any] | None = None
+    fsrMinCompatibility: str | None = None
+    # Same str-or-list polymorphism as :class:`RepoConnectorEntry.category`.
+    category: str | list[Any] | None = None
+    publisher: str | None = None
+    certified: bool | None = None
+
+
 class PicklistItem(ApiResult):
     """One item (option) of a picklist, from ``GET /api/3/picklists`` or a create.
 
