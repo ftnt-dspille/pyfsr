@@ -16,6 +16,99 @@ from ..pagination import extract_members
 from .base import BaseAPI
 from .content_hub import ContentHubSearch
 
+__all__ = ["ExportConfigAPI", "ExportTemplate"]
+
+
+class ExportTemplate:
+    """Typed builder for a Configuration Export template's ``options`` payload.
+
+    Composes the same content the export wizard's steps do, then hands the
+    result to :meth:`ExportConfigAPI.create_template`. Start with the module
+    schema + record-data pieces; each ``add_*`` returns ``self`` so calls chain::
+
+        from pyfsr import Query
+        from pyfsr.api.export_config import ExportTemplate
+
+        tmpl = (
+            ExportTemplate("Open alerts backup")
+            .add_module("alerts", fields=["name", "status", "severity"])
+            .add_record_set(
+                "alerts",
+                query=Query(module="alerts").eq("status", "Open"),
+                include_correlations=True,
+            )
+        )
+        client.export_config.create_template(tmpl)
+
+    ``add_module`` exports a module's **schema** (optionally limited to specific
+    fields); ``add_record_set`` exports the module's **records** (data),
+    optionally filtered by a query — the wizard's Modules-step record set. The
+    ``recordSets`` entry shape (``label`` / ``type`` / ``includeCorrelations`` /
+    ``include`` / ``query``) and its query structure are verified against the
+    8.0.0 editor bundle; the ``query`` is the same dict :meth:`pyfsr.query.Query.to_body`
+    produces, so a :class:`~pyfsr.query.Query` drops straight in.
+    """
+
+    def __init__(self, name: str, *, auto_select_picklists: bool = True) -> None:
+        self.name = name
+        self._auto_select_picklists = auto_select_picklists
+        self._modules: list[dict[str, Any]] = []
+        self._record_sets: list[dict[str, Any]] = []
+
+    def add_module(self, module: str, *, fields: list[str] | None = None) -> "ExportTemplate":
+        """Export a module's schema, optionally limited to ``fields`` (all fields if omitted)."""
+        self._modules.append({"value": module, "includedAttributes": list(fields or [])})
+        return self
+
+    def add_record_set(
+        self,
+        module: str,
+        *,
+        query: Any = None,
+        include_correlations: bool = False,
+        label: str | None = None,
+    ) -> "ExportTemplate":
+        """Export a module's records (data), optionally filtered.
+
+        Args:
+            module: the module whose records to export (e.g. ``"alerts"``).
+            query: a :class:`~pyfsr.query.Query`, a raw ``Query.to_body()`` dict,
+                or ``None`` to export every record.
+            include_correlations: also pull records correlated/linked to the
+                matched records (the wizard's *Include Correlations* toggle).
+            label: friendly name for the record set (defaults to ``module``).
+        """
+        if hasattr(query, "to_body"):
+            q = query.to_body()
+        elif query is None:
+            q = {"logic": "AND", "filters": []}
+        else:
+            q = query
+        self._record_sets.append(
+            {
+                "label": label or module,
+                "type": module,
+                "includeCorrelations": bool(include_correlations),
+                "include": True,
+                "query": q,
+            }
+        )
+        return self
+
+    def build(self) -> dict[str, Any]:
+        """Return the template ``options`` dict — only the categories that were added."""
+        options: dict[str, Any] = {}
+        if self._modules:
+            options["modules"] = self._modules
+        if self._record_sets:
+            options["recordSets"] = self._record_sets
+        return options
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """The template ``metadata`` (currently the ``autoSelectPicklists`` flag)."""
+        return {"autoSelectPicklists": self._auto_select_picklists}
+
 
 class ExportConfigAPI(BaseAPI):
     """Class to handle FortiSOAR export configuration operations"""
@@ -353,6 +446,83 @@ class ExportConfigAPI(BaseAPI):
             "metadata": metadata or {"autoSelectPicklists": True},
         }
         return self.client.post("/api/3/export_templates", data=template_data)
+
+    def create_template(self, template: ExportTemplate) -> dict[str, Any]:
+        """Create an export template from a typed :class:`ExportTemplate` builder.
+
+        Example:
+            >>> from pyfsr import Query
+            >>> from pyfsr.api.export_config import ExportTemplate
+            >>> tmpl = ExportTemplate("Open alerts").add_record_set(
+            ...     "alerts", query=Query(module="alerts").eq("status", "Open")
+            ... )
+            >>> created = client.export_config.create_template(tmpl)  # doctest: +SKIP
+        """
+        return self.create_export_template(name=template.name, options=template.build(), metadata=template.metadata)
+
+    def export_record_data(
+        self,
+        module: str,
+        *,
+        query: Any = None,
+        include_correlations: bool = False,
+        output_path: str | None = None,
+        label: str | None = None,
+        cleanup_template: bool = True,
+        poll_interval: int = 3,
+    ) -> str:
+        """Export a module's **records** (optionally filtered) to a ``.zip`` in one call.
+
+        The SDK equivalent of the export wizard's record-set export: build a
+        throwaway template with one filtered record set, run the export,
+        download the archive, and — unless ``cleanup_template=False`` — delete the
+        temporary template.
+
+        Args:
+            module: the module whose records to export (e.g. ``"alerts"``).
+            query: a :class:`~pyfsr.query.Query`, a raw ``Query.to_body()`` dict,
+                or ``None`` to export every record.
+            include_correlations: also pull correlated/linked records.
+            output_path: where to write the ``.zip`` (default: cwd, derived name).
+            label: friendly record-set name (defaults to ``module``).
+            cleanup_template: delete the temporary export template afterwards.
+            poll_interval: seconds between export-status polls.
+
+        Returns:
+            Path to the downloaded ``.zip``.
+
+        Example:
+            >>> from pyfsr import Query
+            >>> path = client.export_config.export_record_data(  # doctest: +SKIP
+            ...     "alerts",
+            ...     query=Query(module="alerts").eq("status", "Open"),
+            ...     include_correlations=True,
+            ...     output_path="open_alerts.zip",
+            ... )
+        """
+        self._check_auth_support(operation=BaseAuth.OPERATION_CONFIG_EXPORT)
+
+        template = ExportTemplate(f"pyfsr_records_{module}").add_record_set(
+            module, query=query, include_correlations=include_correlations, label=label
+        )
+        created = self.create_template(template)
+        template_uuid = created["@id"].split("/")[-1]
+
+        try:
+            if not output_path:
+                output_path = os.path.join(os.getcwd(), f"{module}_records.zip".replace("/", "_"))
+            return self._export_with_template(
+                template_uuid=template_uuid,
+                output_path=output_path,
+                filename=f"{template.name}.zip",
+                poll_interval=poll_interval,
+            )
+        finally:
+            if cleanup_template:
+                try:
+                    self.delete_template(template_uuid)
+                except Exception:  # pragma: no cover - cleanup is best-effort
+                    pass
 
     def delete_template(self, template_uuid: str) -> None:
         """Delete an export template by uuid (``DELETE /api/3/export_templates/<uuid>``)."""
