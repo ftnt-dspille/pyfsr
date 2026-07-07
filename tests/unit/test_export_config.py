@@ -10,7 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from pyfsr.api.export_config import ExportConfigAPI
+from pyfsr import Query
+from pyfsr.api.export_config import ExportConfigAPI, ExportTemplate
 
 
 class FakeClient:
@@ -245,3 +246,100 @@ def test_export_with_template_polls_then_downloads(tmp_path):
     result = api._export_with_template("tmpl-1", output_path=str(out), poll_interval=0)
     assert result == str(out)
     assert out.read_bytes() == b"ZIPBYTES"
+
+
+# --------------------------------------------------------------- ExportTemplate builder
+
+
+def test_export_template_add_module_shape():
+    tmpl = ExportTemplate("T").add_module("alerts", fields=["name", "status"])
+    assert tmpl.build() == {"modules": [{"value": "alerts", "includedAttributes": ["name", "status"]}]}
+
+
+def test_export_template_add_record_set_with_query():
+    q = Query(module="alerts").eq("status", "Open")
+    tmpl = ExportTemplate("T").add_record_set("alerts", query=q, include_correlations=True)
+    rs = tmpl.build()["recordSets"][0]
+    # bundle-verified wire shape: label/type/includeCorrelations/include/query
+    assert rs["type"] == "alerts"
+    assert rs["label"] == "alerts"
+    assert rs["includeCorrelations"] is True
+    assert rs["include"] is True
+    # the query is exactly Query.to_body()
+    assert rs["query"] == q.to_body()
+    assert rs["query"]["logic"] == "AND"
+
+
+def test_export_template_record_set_no_query_matches_all():
+    tmpl = ExportTemplate("T").add_record_set("incidents", label="All incidents")
+    rs = tmpl.build()["recordSets"][0]
+    assert rs["label"] == "All incidents"
+    assert rs["query"] == {"logic": "AND", "filters": []}
+    assert rs["includeCorrelations"] is False
+
+
+def test_export_template_accepts_raw_query_dict():
+    raw = {"logic": "OR", "filters": [{"field": "severity", "operator": "eq", "value": "High"}]}
+    tmpl = ExportTemplate("T").add_record_set("alerts", query=raw)
+    assert tmpl.build()["recordSets"][0]["query"] == raw
+
+
+def test_export_template_build_omits_empty_categories():
+    # a freshly-built template with nothing added yields an empty options dict
+    assert ExportTemplate("T").build() == {}
+    # metadata carries the autoSelectPicklists flag
+    assert ExportTemplate("T").metadata == {"autoSelectPicklists": True}
+    assert ExportTemplate("T", auto_select_picklists=False).metadata == {"autoSelectPicklists": False}
+
+
+def test_export_template_chaining_returns_self():
+    tmpl = ExportTemplate("T")
+    assert tmpl.add_module("alerts") is tmpl
+    assert tmpl.add_record_set("alerts") is tmpl
+
+
+# --------------------------------------------------------------- create_template / export_record_data
+
+
+def test_create_template_posts_builder_payload():
+    api, c = _api(lambda m, u, **k: {"@id": "/api/3/export_templates/t1"})
+    tmpl = ExportTemplate("Open alerts").add_record_set("alerts", query=Query(module="alerts").eq("status", "Open"))
+    api.create_template(tmpl)
+    method, url, data = c.calls[-1]
+    assert (method, url) == ("POST", "/api/3/export_templates")
+    assert data["name"] == "Open alerts"
+    assert data["options"]["recordSets"][0]["type"] == "alerts"
+    assert data["metadata"] == {"autoSelectPicklists": True}
+
+
+def test_export_record_data_builds_recordset_and_cleans_up(monkeypatch):
+    captured = {}
+
+    def handler(m, u, **k):
+        if m == "POST":
+            captured["template"] = k.get("data")
+            return {"@id": "/api/3/export_templates/rs-1"}
+        return {}
+
+    api, c = _api(handler)
+    monkeypatch.setattr(api, "_export_with_template", lambda **kw: kw.get("output_path") or "out.zip")
+    api.export_record_data(
+        "alerts",
+        query=Query(module="alerts").eq("status", "Open"),
+        include_correlations=True,
+        output_path="alerts.zip",
+    )
+
+    rs = captured["template"]["options"]["recordSets"][0]
+    assert rs["type"] == "alerts"
+    assert rs["includeCorrelations"] is True
+    assert rs["query"]["filters"][0]["value"] == "Open"
+    # throwaway template deleted afterwards
+    assert ("DELETE", "/api/3/export_templates/rs-1", None) in c.calls
+
+
+def test_export_record_data_keeps_template_when_cleanup_disabled(monkeypatch):
+    api, c = _api(lambda m, u, **k: {"@id": "/api/3/export_templates/rs-1"})
+    monkeypatch.setattr(api, "_export_with_template", lambda **kw: "out.zip")
+    api.export_record_data("alerts", output_path="a.zip", cleanup_template=False)
+    assert not any(m == "DELETE" for m, _, _ in c.calls)
