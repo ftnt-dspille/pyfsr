@@ -60,6 +60,12 @@ from ._playbooks import (
     TriggerRequest,
     TriggerResponse,
 )
+from ._export import (
+    ConnectorSelection,
+    ModuleSelection,
+    PlaybookCollectionSelection,
+    RecordSet,
+)
 from ._schedules import CrontabScheduleModel, ScheduledTask
 from ._system import (
     AggregateRow,
@@ -139,6 +145,11 @@ __all__ = [
     # IRI NewTypes
     "PicklistIRI",
     "RecordIRI",
+    # config-export option entries
+    "ModuleSelection",
+    "RecordSet",
+    "ConnectorSelection",
+    "PlaybookCollectionSelection",
     # agent records
     "Agent",
     "AgentConnectorStatus",

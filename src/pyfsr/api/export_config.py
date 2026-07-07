@@ -11,6 +11,12 @@ import time
 from typing import Any
 
 from ..auth.base import BaseAuth
+from ..models._export import (
+    ConnectorSelection,
+    ModuleSelection,
+    PlaybookCollectionSelection,
+    RecordSet,
+)
 from ..models._integration import ExportJobResult
 from ..pagination import extract_members
 from .base import BaseAPI
@@ -18,13 +24,19 @@ from .content_hub import ContentHubSearch
 
 __all__ = ["ExportConfigAPI", "ExportTemplate"]
 
+# Default cap on records emitted per record set. The export engine treats the
+# query's ``limit`` as a *required trigger*: a record set whose query has no
+# ``limit`` exports zero records (live-verified on 8.0.0). There is no
+# "unlimited"; callers raise this via ``add_record_set(limit=...)`` when needed.
+_DEFAULT_RECORD_LIMIT = 1000
+
 
 class ExportTemplate:
     """Typed builder for a Configuration Export template's ``options`` payload.
 
     Composes the same content the export wizard's steps do, then hands the
-    result to :meth:`ExportConfigAPI.create_template`. Start with the module
-    schema + record-data pieces; each ``add_*`` returns ``self`` so calls chain::
+    result to :meth:`ExportConfigAPI.create_template`. Each ``add_*`` returns
+    ``self`` so calls chain::
 
         from pyfsr import Query
         from pyfsr.api.export_config import ExportTemplate
@@ -35,29 +47,86 @@ class ExportTemplate:
             .add_record_set(
                 "alerts",
                 query=Query(module="alerts").eq("status", "Open"),
+                limit=5000,
                 include_correlations=True,
             )
         )
         client.export_config.create_template(tmpl)
 
-    ``add_module`` exports a module's **schema** (optionally limited to specific
-    fields); ``add_record_set`` exports the module's **records** (data),
-    optionally filtered by a query — the wizard's Modules-step record set. The
-    ``recordSets`` entry shape (``label`` / ``type`` / ``includeCorrelations`` /
-    ``include`` / ``query``) and its query structure are verified against the
-    8.0.0 editor bundle; the ``query`` is the same dict :meth:`pyfsr.query.Query.to_body`
-    produces, so a :class:`~pyfsr.query.Query` drops straight in.
+    ``add_module`` exports a module's **schema**; ``add_record_set`` exports its
+    **records** (data), optionally filtered. Entry shapes and their
+    required/optional fields are backed by typed models in
+    :mod:`pyfsr.models._export`, established against a live 8.0.0 appliance — in
+    particular a record set only emits records when its query carries a ``limit``.
+
+    The name-based categories (``add_picklist`` / ``add_connector`` /
+    ``add_playbook_collection``) take a friendly **name** and are resolved to
+    their IRI/``value`` at :meth:`ExportConfigAPI.create_template` time; view
+    templates are exported by id verbatim.
     """
 
     def __init__(self, name: str, *, auto_select_picklists: bool = True) -> None:
         self.name = name
         self._auto_select_picklists = auto_select_picklists
-        self._modules: list[dict[str, Any]] = []
-        self._record_sets: list[dict[str, Any]] = []
+        self._modules: list[ModuleSelection] = []
+        self._record_sets: list[RecordSet] = []
+        self._view_templates: list[str] = []
+        # Name-based categories that need a live IRI/detail lookup: they are
+        # resolved by ExportConfigAPI.create_template (which has the client),
+        # not by build() (offline). Each holds the caller's declarative spec.
+        self._picklists: list[str] = []
+        self._connectors: list[dict[str, Any]] = []
+        self._collections: list[dict[str, Any]] = []
 
     def add_module(self, module: str, *, fields: list[str] | None = None) -> "ExportTemplate":
         """Export a module's schema, optionally limited to ``fields`` (all fields if omitted)."""
-        self._modules.append({"value": module, "includedAttributes": list(fields or [])})
+        self._modules.append(ModuleSelection(value=module, includedAttributes=list(fields or [])))
+        return self
+
+    def add_view_template(self, view_template: str) -> "ExportTemplate":
+        """Export a view template by id (e.g. ``"modules-alerts-list"``); resolved offline."""
+        self._view_templates.append(view_template)
+        return self
+
+    def add_picklist(self, name: str) -> "ExportTemplate":
+        """Export a picklist by **name** (resolved to its IRI at ``create_template`` time)."""
+        self._picklists.append(name)
+        return self
+
+    def add_connector(self, name: str, *, include_configurations: bool = True) -> "ExportTemplate":
+        """Export a connector by **name**, optionally with its saved configurations.
+
+        The connector's ``value``/``version``/``label`` are looked up at
+        :meth:`ExportConfigAPI.create_template` time. Set
+        ``include_configurations=False`` to ship the connector without its saved
+        configs (secrets).
+        """
+        self._connectors.append({"name": name, "include_configurations": bool(include_configurations)})
+        return self
+
+    def add_playbook_collection(
+        self,
+        name: str,
+        *,
+        include_global_variables: bool = True,
+        include_schedules: bool = True,
+        include_versions: bool = True,
+    ) -> "ExportTemplate":
+        """Export a playbook collection by **name**, with its dependent content.
+
+        The collection's ``value`` is resolved at
+        :meth:`ExportConfigAPI.create_template` time. The three flags mirror the
+        wizard's Playbooks-step toggles for pulling the collection's global
+        variables, schedules, and version history.
+        """
+        self._collections.append(
+            {
+                "name": name,
+                "includeGlobalVariables": bool(include_global_variables),
+                "includeSchedules": bool(include_schedules),
+                "includeVersions": bool(include_versions),
+            }
+        )
         return self
 
     def add_record_set(
@@ -65,6 +134,7 @@ class ExportTemplate:
         module: str,
         *,
         query: Any = None,
+        limit: int = _DEFAULT_RECORD_LIMIT,
         include_correlations: bool = False,
         label: str | None = None,
     ) -> "ExportTemplate":
@@ -73,36 +143,48 @@ class ExportTemplate:
         Args:
             module: the module whose records to export (e.g. ``"alerts"``).
             query: a :class:`~pyfsr.query.Query`, a raw ``Query.to_body()`` dict,
-                or ``None`` to export every record.
+                or ``None`` to export every record (up to ``limit``).
+            limit: max records to emit. **Required trigger** — the export engine
+                emits records only when the query carries a ``limit`` (live-verified
+                on 8.0.0); a record set without one exports nothing. There is no
+                "unlimited", so raise this for large sets.
             include_correlations: also pull records correlated/linked to the
                 matched records (the wizard's *Include Correlations* toggle).
             label: friendly name for the record set (defaults to ``module``).
         """
         if hasattr(query, "to_body"):
-            q = query.to_body()
+            q = dict(query.to_body())
         elif query is None:
             q = {"logic": "AND", "filters": []}
         else:
-            q = query
+            q = dict(query)
+        q["limit"] = int(limit)
         self._record_sets.append(
-            {
-                "label": label or module,
-                "type": module,
-                "includeCorrelations": bool(include_correlations),
-                "include": True,
-                "query": q,
-            }
+            RecordSet(type=module, query=q, label=label or module, includeCorrelations=include_correlations)
         )
         return self
 
     def build(self) -> dict[str, Any]:
-        """Return the template ``options`` dict — only the categories that were added."""
+        """Return the **offline** template ``options`` — the categories needing no lookup.
+
+        Covers modules, record sets, and view templates. Name-based categories
+        (picklists / connectors / playbook collections) require a live lookup and
+        are merged in by :meth:`ExportConfigAPI.create_template`; see
+        :attr:`needs_resolution`.
+        """
         options: dict[str, Any] = {}
         if self._modules:
-            options["modules"] = self._modules
+            options["modules"] = [m.wire() for m in self._modules]
         if self._record_sets:
-            options["recordSets"] = self._record_sets
+            options["recordSets"] = [r.wire() for r in self._record_sets]
+        if self._view_templates:
+            options["viewTemplates"] = list(self._view_templates)
         return options
+
+    @property
+    def needs_resolution(self) -> bool:
+        """True if this template has name-based categories awaiting a live lookup."""
+        return bool(self._picklists or self._connectors or self._collections)
 
     @property
     def metadata(self) -> dict[str, Any]:
@@ -450,21 +532,75 @@ class ExportConfigAPI(BaseAPI):
     def create_template(self, template: ExportTemplate) -> dict[str, Any]:
         """Create an export template from a typed :class:`ExportTemplate` builder.
 
+        Resolves any name-based categories (picklists / connectors / playbook
+        collections) to their IRIs/details before posting, so callers work in
+        friendly names rather than IRIs.
+
         Example:
             >>> from pyfsr import Query
             >>> from pyfsr.api.export_config import ExportTemplate
-            >>> tmpl = ExportTemplate("Open alerts").add_record_set(
-            ...     "alerts", query=Query(module="alerts").eq("status", "Open")
+            >>> tmpl = (
+            ...     ExportTemplate("Alert backup")
+            ...     .add_record_set("alerts", query=Query(module="alerts").eq("status", "Open"))
+            ...     .add_picklist("AlertStatus")
+            ...     .add_connector("OpenAI")
+            ...     .add_playbook_collection("Incident Response")
             ... )
             >>> created = client.export_config.create_template(tmpl)  # doctest: +SKIP
         """
-        return self.create_export_template(name=template.name, options=template.build(), metadata=template.metadata)
+        options = self._resolve_template_options(template)
+        return self.create_export_template(name=template.name, options=options, metadata=template.metadata)
+
+    def _resolve_template_options(self, template: ExportTemplate) -> dict[str, Any]:
+        """Build the full ``options`` dict, resolving name-based categories to IRIs/details.
+
+        Starts from the offline :meth:`ExportTemplate.build` output and merges in
+        ``picklistNames`` / ``connectors`` / ``playbooks`` resolved via the same
+        lookups :meth:`create_simplified_template` uses (so the wire shapes match).
+        """
+        options = template.build()
+
+        if template._picklists:
+            options["picklistNames"] = [self._get_picklist_iri(name) for name in template._picklists]
+
+        if template._connectors:
+            connectors: list[dict[str, Any]] = []
+            for spec in template._connectors:
+                info = self._get_connector_info(spec["name"])
+                connectors.append(
+                    ConnectorSelection(
+                        value=info["value"],
+                        label=info["label"],
+                        version=info["version"],
+                        configurations=spec["include_configurations"],
+                        configCount=1,
+                    ).wire()
+                )
+            options["connectors"] = connectors
+
+        if template._collections:
+            collections: list[dict[str, Any]] = []
+            for spec in template._collections:
+                info = self._get_playbook_collection_info(spec["name"])
+                collections.append(
+                    PlaybookCollectionSelection(
+                        value=info["value"],
+                        label=info["label"],
+                        includeGlobalVariables=spec["includeGlobalVariables"],
+                        includeSchedules=spec["includeSchedules"],
+                        includeVersions=spec["includeVersions"],
+                    ).wire()
+                )
+            options["playbooks"] = {"collections": collections, "globalVariables": []}
+
+        return options
 
     def export_record_data(
         self,
         module: str,
         *,
         query: Any = None,
+        limit: int = _DEFAULT_RECORD_LIMIT,
         include_correlations: bool = False,
         output_path: str | None = None,
         label: str | None = None,
@@ -481,7 +617,9 @@ class ExportConfigAPI(BaseAPI):
         Args:
             module: the module whose records to export (e.g. ``"alerts"``).
             query: a :class:`~pyfsr.query.Query`, a raw ``Query.to_body()`` dict,
-                or ``None`` to export every record.
+                or ``None`` to export every record (up to ``limit``).
+            limit: max records to emit (the required export trigger — see
+                :meth:`ExportTemplate.add_record_set`). Raise for large sets.
             include_correlations: also pull correlated/linked records.
             output_path: where to write the ``.zip`` (default: cwd, derived name).
             label: friendly record-set name (defaults to ``module``).
@@ -496,6 +634,7 @@ class ExportConfigAPI(BaseAPI):
             >>> path = client.export_config.export_record_data(  # doctest: +SKIP
             ...     "alerts",
             ...     query=Query(module="alerts").eq("status", "Open"),
+            ...     limit=5000,
             ...     include_correlations=True,
             ...     output_path="open_alerts.zip",
             ... )
@@ -503,7 +642,7 @@ class ExportConfigAPI(BaseAPI):
         self._check_auth_support(operation=BaseAuth.OPERATION_CONFIG_EXPORT)
 
         template = ExportTemplate(f"pyfsr_records_{module}").add_record_set(
-            module, query=query, include_correlations=include_correlations, label=label
+            module, query=query, limit=limit, include_correlations=include_correlations, label=label
         )
         created = self.create_template(template)
         template_uuid = created["@id"].split("/")[-1]
