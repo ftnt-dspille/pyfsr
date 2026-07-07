@@ -94,6 +94,14 @@ Expose FortiSOAR as tools to Claude, OpenAI, or the bundled MCP server.
 Administer the appliance over SSH: services, DB, queues, logs, HA, certs.
 :::
 
+:::{grid-item-card} Content Repository CLI
+:link: guides/repo-cli
+:link-type: doc
+
+Discover and download connectors, widgets, and solution packs from Fortinet's
+public content repo — no appliance needed.
+:::
+
 :::{grid-item-card} API Reference
 :link: reference
 :link-type: doc
@@ -118,6 +126,7 @@ guides/playbook-authoring
 guides/playbook-yaml-reference
 guides/ai-agents
 guides/appliance-cli
+guides/repo-cli
 ```
 
 ```{toctree}

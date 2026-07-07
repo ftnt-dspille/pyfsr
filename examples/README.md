@@ -41,6 +41,7 @@ docstring states which it expects.
 |---|---|---|
 | [`manage_connectors.py`](manage_connectors.py) | Full connector lifecycle via `client.connectors` / `client.agents` | 🔌 |
 | [`ensure_connector_version.py`](ensure_connector_version.py) | Pin a connector version, preserving its configurations | 🔌 |
+| [`repo_discover_and_download.py`](repo_discover_and_download.py) | Discover + download a connector from the public repo (no appliance) | 📦 |
 | [`export_solution_pack.py`](export_solution_pack.py) | Export a solution pack to a file | 🔌 |
 | [`solution_pack_lifecycle.py`](solution_pack_lifecycle.py) | Solution-pack install → status → uninstall | 🔌 |
 
