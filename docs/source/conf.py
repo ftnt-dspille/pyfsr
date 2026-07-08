@@ -151,6 +151,10 @@ nitpick_ignore = [
     ("py:meth", "runs"),
     ("py:meth", "get"),
     ("py:meth", "pyfsr.api.modules_admin.ModulesAdminAPI._wait_for_publish"),
+    # AgentPackage lives in the private _ai_agent_package module; autoapi's
+    # per-page context for pack_agent()'s docstring doesn't resolve the
+    # cross-module method xref, though it's valid (and resolves) at runtime.
+    ("py:meth", "pyfsr.models.AgentPackage.validate_consistency"),
     # Private shared base for the tasks/incidents CRUD shortcuts; autoapi skips
     # the underscore-prefixed module so the "Bases:" xref has no target.
     ("py:obj", "pyfsr.api._record_module.RecordModuleAPI"),

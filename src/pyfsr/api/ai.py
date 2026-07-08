@@ -130,7 +130,7 @@ def pack_agent(source_dir: str, output: str | None = None, *, validate: bool = T
     :meth:`AIApi.import_agent` expects.
 
     With ``validate=True`` (default) the package is parsed and consistency-checked
-    (:meth:`AgentPackage.validate_consistency`) before packing, so an
+    (:meth:`~pyfsr.models.AgentPackage.validate_consistency`) before packing, so an
     ``agentclass`` that doesn't exist in ``agent.py`` or a prompt uuid the code
     references but ``prompt.yaml`` omits fails *here*, not silently on the box.
 
@@ -746,7 +746,7 @@ class AIApi(BaseAPI):
         Check :meth:`mcp_connector_candidates` first — some connectors
         (internal/system ones) can never be hosted this way.
 
-        Returns the created :class:`MCPServerConfig`. Use
+        Returns the created :class:`~pyfsr.models.MCPServerConfig`. Use
         :meth:`update_connector_mcp_server_tools` to change the exposed
         operations later, or :meth:`delete_mcp_server` to remove it entirely.
         """
