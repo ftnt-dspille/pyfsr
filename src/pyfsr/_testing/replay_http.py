@@ -48,6 +48,9 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("PUT", "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39", cap.ALERT_GET_RESPONSE),
         _entry("DELETE", "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39", {}, status=204),
         _entry("POST", "/api/query/alerts", cap.ALERT_LIST_RESPONSE),
+        # Incidents — the generic-record-path example in getting-started.md.
+        _entry("GET", "/api/3/incidents/0740411d-e852-4eee-b33b-596210d09a9b", cap.INCIDENT_GET_RESPONSE),
+        _entry("POST", "/api/3/incidents", cap.INCIDENT_CREATE_RESPONSE),
         # Connector discovery + health (the connectors guide's read-only calls).
         # healthcheck resolves to one fixture regardless of <name>/<version>.
         _entry("GET", "/api/integration/connectors/", cap.CONNECTORS_LIST_RESPONSE),
@@ -61,6 +64,16 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         # which connector/operation the doctest names (the body varies, the path
         # doesn't; matching ignores the body, same as every other POST fixture here).
         _entry("POST", "/api/integration/execute/", cap.CONNECTOR_EXECUTE_CISA_ADVISORY_RESPONSE),
+        # create_configuration / update_configuration / delete_configuration —
+        # one fixture regardless of config_id (the body varies, the path shape
+        # doesn't, matching this module's convention for other POST/PUT fixtures).
+        _entry("POST", "/api/integration/configuration/", cap.CONNECTOR_CREATE_CONFIG_RESPONSE),
+        _entry(
+            "PUT",
+            "/api/integration/configuration/0e75640a-ba4a-4bc2-be41-524a9e47fa3f/",
+            cap.CONNECTOR_UPDATE_CONFIG_RESPONSE,
+        ),
+        _entry("DELETE", "/api/integration/configuration/0e75640a-ba4a-4bc2-be41-524a9e47fa3f/", {}, status=204),
         # FortiAI agentic investigation — start (POST /api/ai/triage/alert), then
         # poll status + result by task_id. The task_id in the start response is
         # the recorded one, so a doctest that passes ``started["task_id"]`` through

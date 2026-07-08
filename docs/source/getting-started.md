@@ -44,18 +44,24 @@ See {doc}`guides/authentication` for environment-based config.
 
 ## First calls
 
-```{code-block} python
-# Typed, module-specific API
-alerts = client.alerts.list()
-alert = client.alerts.get("alert-uuid")
+```{doctest}
+>>> client = demo_client()
 
-# Generic CRUD against any module
-incidents = client.records("incidents")
-incident = incidents.get("incident-uuid")
+>>> # Generic CRUD against any module
+>>> incidents = client.records("incidents")
+>>> incident = incidents.get("0740411d-e852-4eee-b33b-596210d09a9b")
+>>> incident["name"]
+'pyfsr doctest incident'
 
-# Raw REST escape hatch
-data = client.get("/api/3/alerts")
+>>> # Raw REST escape hatch
+>>> data = client.get("/api/3/alerts")
+>>> data["hydra:totalItems"]
+1
 ```
+
+`client.alerts.list()`/`.get(uuid)` work the same way as the generic path above,
+via the typed, module-specific {class}`~pyfsr.api.alerts.AlertsAPI` — see
+{doc}`guides/records` for the typed-model walkthrough.
 
 ## Creating records & picklists
 
@@ -69,14 +75,26 @@ alert = client.alerts.create(
     description="This is a test alert",
     severity="High",        # resolved to its IRI automatically
 )
+```
 
-# Same on the generic record path:
-client.records("incidents").create({"name": "Breach", "severity": "Critical"})
+Same on the generic record path — captured live (created, fetched, deleted in
+the same session; box left with no extra incidents):
+
+```{doctest}
+>>> created = client.records("incidents").create(
+...     {"name": "pyfsr doctest incident", "description": "temporary, will be deleted",
+...      "severity": "Critical"},
+...     resolve_picklists=False,   # already an IRI-resolved doctest fixture; see note below
+... )
+>>> created["name"]
+'pyfsr doctest incident'
 ```
 
 ```{note}
-Resolution is on by default. Pass `resolve_picklists=False` to skip it (and the
-metadata lookup it needs) when every value is already an IRI.
+Resolution is on by default (the example above passes `resolve_picklists=False`
+only because this doctest replays a captured response rather than a live
+metadata lookup). Pass it yourself to skip resolution — and the metadata lookup
+it needs — when every value you send is already an IRI.
 ```
 
 ## Next steps

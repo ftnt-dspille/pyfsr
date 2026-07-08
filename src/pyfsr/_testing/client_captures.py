@@ -90,6 +90,40 @@ ALERT_LIST_RESPONSE = {
 }
 
 
+# A single Incident record (``GET``/``POST /api/3/incidents``), captured live
+# from a throwaway record (created, fetched, deleted in the same session —
+# box left with no extra incidents). Trimmed the same way as the Alert
+# captures: real ``@id``/``uuid``/picklist shapes, volatile SLA/state/phase
+# picklist blocks reduced to one representative each.
+INCIDENT_GET_RESPONSE = {
+    "@context": "/api/3/contexts/Incident",
+    "@id": "/api/3/incidents/0740411d-e852-4eee-b33b-596210d09a9b",
+    "@type": "Incident",
+    "name": "pyfsr doctest incident",
+    "description": "temporary, will be deleted",
+    "severity": {
+        "@id": "/api/3/picklists/7efa2220-39bb-44e4-961f-ac368776e3b0",
+        "@type": "Picklist",
+        "itemValue": "Critical",
+        "orderIndex": 4,
+        "color": "#B22222",
+        "uuid": "7efa2220-39bb-44e4-961f-ac368776e3b0",
+        "id": 446,
+    },
+    "state": {
+        "@id": "/api/3/picklists/a1bac09b-1441-45aa-ad1b-c88744e48e72",
+        "@type": "Picklist",
+        "itemValue": "New",
+        "orderIndex": 0,
+        "uuid": "a1bac09b-1441-45aa-ad1b-c88744e48e72",
+        "id": 198,
+    },
+    "uuid": "0740411d-e852-4eee-b33b-596210d09a9b",
+}
+
+INCIDENT_CREATE_RESPONSE = dict(INCIDENT_GET_RESPONSE)
+
+
 # ---------------------------------------------------------------------------
 # Connector discovery + health captures
 # ---------------------------------------------------------------------------
@@ -146,6 +180,20 @@ _CONNECTOR_ROWS = [
         "configuration": [
             {"id": 7, "config_id": "01e4e6b4-c34e-4fc1-b692-bb08591f1fe5", "name": "Demo", "default": True}
         ],
+        "tags": [],
+        "agent": "2215f975dd501e6f25f55568edf06af9",
+    },
+    {
+        "id": 16,
+        "name": "virustotal",
+        "version": "3.2.1",
+        "label": "VirusTotal",
+        "category": ["Threat Intelligence"],
+        "active": True,
+        "system": False,
+        "config_count": 0,
+        "status": "Completed",
+        "configuration": [],
         "tags": [],
         "agent": "2215f975dd501e6f25f55568edf06af9",
     },
@@ -288,6 +336,51 @@ CONNECTOR_EXECUTE_CISA_ADVISORY_RESPONSE = {
             },
         ],
     },
+}
+
+
+# Real ``POST /api/integration/configuration/`` (``create_configuration``) then
+# ``PUT /api/integration/configuration/<id>/`` (``update_configuration``) for a
+# throwaway ``virustotal`` config, created/rotated/deleted live on a real
+# appliance and left with 0 configs afterwards (round-trip verified via
+# ``list_configured``). ``api_key`` was a placeholder value, never a real
+# credential, so it's safe to keep verbatim; the server always echoes secrets
+# back as the literal string ``"NULL"`` regardless of what was sent, which is
+# itself the notable wire behavior this capture documents. ``config_id``/
+# ``agent`` are real box-specific uuids left in place, matching this module's
+# convention for other connector captures.
+CONNECTOR_CREATE_CONFIG_RESPONSE = {
+    "id": 269,
+    "config_id": "0e75640a-ba4a-4bc2-be41-524a9e47fa3f",
+    "name": "pyfsr-doctest-config",
+    "default": False,
+    "status": None,
+    "config": {"server": "www.virustotal.com", "api_key": "NULL", "verify_ssl": True},
+    "connector": 16,
+    "agent": "2215f975dd501e6f25f55568edf06af9",
+    "teams": [],
+    "remote_status": {},
+    "health_status": {},
+    "connector_name": "virustotal",
+    "connector_version": "3.2.1",
+}
+
+# Same config after ``update_configuration`` rotates its ``api_key``. Note the
+# PUT response omits ``connector_name``/``connector_version`` — present on
+# create, absent on update — an asymmetry callers should not rely on either
+# field being there.
+CONNECTOR_UPDATE_CONFIG_RESPONSE = {
+    "id": 269,
+    "config_id": "0e75640a-ba4a-4bc2-be41-524a9e47fa3f",
+    "name": "pyfsr-doctest-config",
+    "default": False,
+    "status": None,
+    "config": {"server": "www.virustotal.com", "api_key": "NULL", "verify_ssl": True},
+    "connector": 16,
+    "agent": "2215f975dd501e6f25f55568edf06af9",
+    "teams": [],
+    "remote_status": {},
+    "health_status": {},
 }
 
 

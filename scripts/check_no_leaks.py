@@ -150,6 +150,7 @@ _SAFE_LITERALS = {
     "mock-token-123",
     "mock-jwt-token-123",
     "string",  # mock-response fixtures
+    "null",  # FortiSOAR's own sentinel for a secret it never echoes back (not a value)
 }
 
 #: Credential values that are placeholders, not real secrets. Matched

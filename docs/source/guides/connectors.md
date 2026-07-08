@@ -68,6 +68,60 @@ True
 fire-and-forget — it returns immediately with an in-progress status and empty
 `data`; the real result is pushed over a websocket, not pollable here.
 
+## Creating, rotating, and deleting a configuration
+
+`create_configuration`/`update_configuration`/`delete_configuration` write
+credentials via `POST`/`PUT`/`DELETE /api/integration/configuration/`. Captured
+live against a throwaway `virustotal` config (`api_key` is a placeholder value,
+never a real credential) — created, rotated, then deleted, leaving the box with
+0 `virustotal` configs afterwards, same as before:
+
+```{doctest}
+>>> created = conn.create_configuration(
+...     "virustotal",
+...     {"server": "www.virustotal.com", "api_key": "test-doctest-key", "verify_ssl": True},
+...     name="pyfsr-doctest-config",
+...     validate=False,   # skip the schema fetch (config_schema) for this offline demo
+...     autofill=False,
+... )
+>>> (created.name, created.config["server"])
+('pyfsr-doctest-config', 'www.virustotal.com')
+```
+
+Note `config["api_key"]` comes back as the literal string `"NULL"` regardless of
+what was sent — the server never echoes a stored secret, only this sentinel:
+
+```{doctest}
+>>> created.config["api_key"]
+'NULL'
+```
+
+`update_configuration` sends the config whole — include every field, not just
+the one you're rotating:
+
+```{doctest}
+>>> updated = conn.update_configuration(
+...     "virustotal", created.config_id,
+...     {"server": "www.virustotal.com", "api_key": "test-rotated-key", "verify_ssl": True},
+...     name="pyfsr-doctest-config",
+...     validate=False,
+...     autofill=False,
+... )
+>>> updated.name
+'pyfsr-doctest-config'
+```
+
+```{note}
+The `PUT` response omits `connector_name`/`connector_version` — present on
+`create_configuration`'s response, absent on `update_configuration`'s. Don't
+rely on either field being there after an update.
+```
+
+```{doctest}
+>>> conn.delete_configuration(created.config_id) is None
+True
+```
+
 ## Connector Studio dev workspace
 
 Edit a checked-out connector's source, then publish it onto the running
