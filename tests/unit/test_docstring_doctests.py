@@ -49,6 +49,7 @@ WHITELIST = [
     "pyfsr.api.alerts",
     "pyfsr.api.picklists",
     "pyfsr.api.modules_admin",
+    "pyfsr.api.widgets",
     "pyfsr.pagination",
 ]
 
