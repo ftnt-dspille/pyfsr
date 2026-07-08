@@ -55,7 +55,7 @@ def test_feeds_stix_bundle_posts_dict_unwrapped():
 def test_feeds_insert_generic_record_type_wraps_data_envelope():
     c = FakeClient(post_resp={"status": "success", "uuids": []})
     result = IngestFeedsAPI(c).insert("events", [{"a": 1}])
-    assert c.calls[-1][:3] == ("POST", "/api/insert-feeds/events", {"data": [{"a": 1}]})
+    assert c.calls[-1][:3] == ("POST", "/api/ingest-feeds/events", {"data": [{"a": 1}]})
     assert isinstance(result, FeedIngestResult)
 
 

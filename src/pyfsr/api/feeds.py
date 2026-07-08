@@ -9,7 +9,7 @@ module's unique-constraint criterion (only changed fields are touched — unlike
 Example:
     >>> client.feeds.indicators([{"value": "8.8.8.8", "typeofindicator": "IP Address"}])
     >>> client.feeds.stix_bundle(bundle)          # a STIX 2.x bundle dict
-    >>> client.feeds.insert("events", [{...}])    # any record type
+    >>> client.feeds.insert("alerts", [{...}])    # any record type
 """
 
 from __future__ import annotations
@@ -100,22 +100,25 @@ class IngestFeedsAPI(BaseAPI):
     def insert(self, record_type: str, records: list[dict[str, Any] | BaseRecord]) -> FeedIngestResult:
         """Generic trigger-bypassing bulk insert for any record type.
 
-        ``POST /api/insert-feeds/{record_type}`` — the generalization of
-        :meth:`indicators` for an arbitrary ``record_type`` (the module's plural
-        api name, e.g. ``"events"``, ``"alerts"``). Same trigger-skipping behavior.
+        ``POST /api/ingest-feeds/{record_type}`` — the generalization of
+        :meth:`indicators` for an arbitrary ``record_type`` (the module's
+        short/type name from ``ModelMetadata``, e.g. ``"alerts"``, ``"events"``).
+        Same trigger-skipping behavior.
+
+        Backed by ``TypeAgnosticResourceController::createSqlRecords`` (a raw
+        ``INSERT ... ON CONFLICT (<module>_unique or uuid) DO UPDATE``), so it
+        works for any module registered in ``ModelMetadata``, not just the
+        dedicated threat-intel types. Live-verified on a real FortiSOAR
+        8.0.0-6034 appliance with ``record_type="alerts"``.
 
         Note:
-            Live-verified against a real FortiSOAR 8.0.0-6034 appliance: this
-            route returns a router-level 404 (``NotFoundHttpException: No
-            route found for "POST ...``) for every ``record_type`` tried
-            (``alerts``, ``indicators``, ``events``), while the dedicated
-            ``/api/ingest-feeds/indicators`` endpoint works fine on the same
-            box. That's a genuine "route not registered" 404, not a
-            bad-request 400 — this generic form may simply not exist on that
-            build/version. The wire shape here matches the FortiSOAR docs;
-            re-verify against your target appliance before relying on it.
+            ``/api/insert-feeds/{record_type}`` (no "g") is a different,
+            similarly-named path that does **not** exist in that build's
+            routing config — it 404s at the router level for every
+            ``record_type``, not because of a permissions/module restriction.
+            Do not confuse the two.
         """
         if not isinstance(record_type, str) or not record_type.strip():
             raise ValueError("insert() requires a non-empty record_type")
-        resp = self.client.post(f"/api/insert-feeds/{record_type.strip('/ ')}", data={"data": _to_rows(records)})
+        resp = self.client.post(f"/api/ingest-feeds/{record_type.strip('/ ')}", data={"data": _to_rows(records)})
         return FeedIngestResult.model_validate(resp)
