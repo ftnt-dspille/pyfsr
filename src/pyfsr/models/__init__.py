@@ -111,6 +111,7 @@ from ._system import (
     WorkflowCollection,
     WorkflowRun,
 )
+from ._widgets import WidgetRecord
 from .base import BaseRecord
 from .types import PicklistIRI, RecordIRI
 
@@ -225,6 +226,7 @@ __all__ = [
     "ContentHubConnector",
     "Widget",
     "WidgetInfo",
+    "WidgetRecord",
     "RepoConnectorEntry",
     "ConnectorOperation",
     "ConnectorVersionInfo",

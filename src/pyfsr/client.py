@@ -53,6 +53,7 @@ from .api.users import UsersAPI
 from .api.view_templates import ViewTemplatesAPI
 from .api.views import ViewsAPI
 from .api.wf_tools import WfToolsAPI
+from .api.widgets import WidgetsAPI
 from .api.workflow_collections import WorkflowCollectionsAPI
 from .auth.api_key import APIKeyAuth
 from .auth.base import BaseAuth
@@ -324,6 +325,9 @@ class FortiSOAR:
 
         # Connector discovery / health / operation execution
         self.connectors: ConnectorsAPI = ConnectorsAPI(self)
+
+        # Widget upload + publish
+        self.widgets: WidgetsAPI = WidgetsAPI(self)
 
         # Playbook run history + manual-input resume
         self.playbooks: PlaybooksAPI = PlaybooksAPI(self)
