@@ -13,6 +13,13 @@ falling back to ``BaseRecord`` for modules without a curated model.
 from __future__ import annotations
 
 from ._agents import Agent, AgentConnectorStatus
+from ._ai_agent_package import (
+    AgentInfo,
+    AgentMemory,
+    AgentPackage,
+    AgentPrompt,
+    AgentPromptFile,
+)
 from ._app_config import NavItem, NavRequire, NavState
 from ._export import (
     ConnectorSelection,
@@ -154,6 +161,11 @@ __all__ = [
     # agent records
     "Agent",
     "AgentConnectorStatus",
+    "AgentInfo",
+    "AgentMemory",
+    "AgentPackage",
+    "AgentPrompt",
+    "AgentPromptFile",
     # integration API result shapes
     "InstalledConnector",
     "ConnectorConfigSummary",

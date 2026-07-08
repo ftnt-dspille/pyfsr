@@ -45,6 +45,8 @@ register an MCP server                            ``POST /api/3/mcp_configuratio
 update a registered MCP server                    ``PUT  /api/3/mcp_configurations/{uuid}``
 list AI agents                                    ``GET  /api/ai/agent/``
 get one AI agent                                  ``GET  /api/ai/agent/{name}/{version}``
+install an agent package (zip)                     ``POST /api/ai/agent/import``
+export an installed agent as a zip                 ``POST /api/ai/agent/export/{agent_id}``
 get an agent's configuration                      ``GET  /api/ai/agent/config/{name}/{version}``
 update an agent's configuration                   ``POST /api/ai/agent/config``
 get/update the default agent configuration        ``GET/POST /api/ai/agent/config/default``
@@ -64,8 +66,25 @@ from __future__ import annotations
 
 import json
 import time
+import zipfile
+from pathlib import Path
 from typing import Any
 
+from ..models._ai import (
+    AgentConfig,
+    AgentConfigDTO,
+    AgentRecord,
+    InvestigationHandle,
+    InvestigationQuestion,
+    InvestigationResult,
+    LLMConfig,
+    LLMProvider,
+    MCPServerConfig,
+    MCPServerRef,
+    MCPValidateResult,
+    ToolCall,
+)
+from ..models._ai_agent_package import AgentPackage
 from ..pagination import extract_members
 from ..utils.iri import uuid_from_iri
 from .base import BaseAPI
@@ -82,6 +101,46 @@ AGENT_CONFIG_MCP_KEY = "mcp_server"
 #: direct alert→investigation link. Ships with the AI solution pack, so it may be
 #: absent on appliances without FortiAI installed (treat a missing value as None).
 ALERT_TRIAGE_TASK_KEY = "triagetaskid"
+
+
+def pack_agent(source_dir: str, output: str | None = None, *, validate: bool = True) -> str:
+    """Bundle an AI agent source folder into a FortiSOAR-importable ``.zip``.
+
+    ``source_dir`` is the package root — the folder that *is* the agent (holds
+    ``info.json``, ``agent.py``, ``prompt.yaml``, ``config/memory.yaml``,
+    ``images/``). The archive is written with that folder as its single
+    top-level entry (``<name>/info.json`` …), which is the layout
+    :meth:`AIApi.import_agent` expects.
+
+    With ``validate=True`` (default) the package is parsed and consistency-checked
+    (:meth:`AgentPackage.validate_consistency`) before packing, so an
+    ``agentclass`` that doesn't exist in ``agent.py`` or a prompt uuid the code
+    references but ``prompt.yaml`` omits fails *here*, not silently on the box.
+
+    Returns the path to the written ``.zip`` (defaults to ``<source_dir>.zip``
+    beside the source folder).
+
+    Compiled artifacts (``__pycache__``, ``*.pyc``) and VCS/OS cruft are excluded.
+    """
+    root = Path(source_dir).resolve()
+    if not root.is_dir():
+        raise NotADirectoryError(f"agent source dir not found: {source_dir}")
+    if validate:
+        AgentPackage.from_dir(str(root))  # raises on a bad manifest/consistency
+
+    out_path = Path(output) if output else root.with_suffix(".zip")
+    _excluded = {"__pycache__", ".git", ".DS_Store", ".idea", ".vscode"}
+    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in sorted(root.rglob("*")):
+            if path.is_dir():
+                continue
+            if any(part in _excluded for part in path.relative_to(root).parts):
+                continue
+            if path.suffix == ".pyc":
+                continue
+            # arcname keeps <name>/ as the top-level folder inside the zip
+            zf.write(path, arcname=str(Path(root.name) / path.relative_to(root)))
+    return str(out_path)
 
 
 class AIApi(BaseAPI):
@@ -118,7 +177,7 @@ class AIApi(BaseAPI):
         return self.client.system_settings.update(patch)
 
     # ----------------------------------------------------------- investigation
-    def start_alert_investigation(self, alert: dict[str, Any] | str, *, link: bool = True) -> dict[str, Any]:
+    def start_alert_investigation(self, alert: dict[str, Any] | str, *, link: bool = True) -> InvestigationHandle:
         """Kick off an asynchronous AI investigation of one alert.
 
         ``alert`` may be the full alert record (a dict, as returned by
@@ -140,12 +199,12 @@ class AIApi(BaseAPI):
         """
         if isinstance(alert, str):
             alert = self._fetch_alert(alert)
-        started = self.client.post("/api/ai/triage/alert", data=alert)
+        resp = self.client.post("/api/ai/triage/alert", data=alert)
+        started = InvestigationHandle.model_validate(resp if isinstance(resp, dict) else {})
         if link:
-            task_id = (started or {}).get("task_id") if isinstance(started, dict) else None
             uuid = self._alert_uuid(alert)
-            if task_id and uuid:
-                self.client.alerts.update(uuid, {ALERT_TRIAGE_TASK_KEY: task_id})
+            if started.task_id and uuid:
+                self.client.alerts.update(uuid, {ALERT_TRIAGE_TASK_KEY: started.task_id})
         return started
 
     def get_investigation_for_alert(self, alert: dict[str, Any] | str) -> str | None:
@@ -165,7 +224,7 @@ class AIApi(BaseAPI):
         task_id = (rec or {}).get(ALERT_TRIAGE_TASK_KEY)
         return task_id or None
 
-    def get_alert_investigation_status(self, alert: dict[str, Any] | str) -> dict[str, Any] | None:
+    def get_alert_investigation_status(self, alert: dict[str, Any] | str) -> InvestigationHandle | None:
         """Return ``{"task_id", "status"}`` for an alert's current investigation.
 
         Convenience over :meth:`get_investigation_for_alert` +
@@ -177,7 +236,7 @@ class AIApi(BaseAPI):
         task_id = self.get_investigation_for_alert(alert)
         if not task_id:
             return None
-        return {"task_id": task_id, "status": self.get_status(task_id)}
+        return InvestigationHandle(task_id=task_id, status=self.get_status(task_id))
 
     def get_status(self, task_id: str) -> str:
         """Return the current pipeline status for a triage task.
@@ -189,7 +248,7 @@ class AIApi(BaseAPI):
         resp = self.client.get(f"/api/ai/agents/{task_id}/status")
         return (resp or {}).get("status", "") if isinstance(resp, dict) else ""
 
-    def get_result(self, task_id: str) -> dict[str, Any]:
+    def get_result(self, task_id: str) -> InvestigationResult:
         """Fetch the full investigation result/verdict for a triage task.
 
         The payload carries the per-stage ``phases`` (normalization →
@@ -198,9 +257,9 @@ class AIApi(BaseAPI):
         pipeline is still running this returns the partial progress so far.
         """
         resp = self.client.get(f"/api/ai/agents/{task_id}/result")
-        return resp if isinstance(resp, dict) else {"result": resp}
+        return InvestigationResult.model_validate(resp if isinstance(resp, dict) else {"result": resp})
 
-    def investigation_questions(self, task_id: str) -> list[dict[str, Any]]:
+    def investigation_questions(self, task_id: str) -> list[InvestigationQuestion]:
         """Return the investigation's question-by-question evidence.
 
         This is the data behind the UI's *Investigation Questions* panel — one
@@ -219,24 +278,24 @@ class AIApi(BaseAPI):
         which MCP tool that agent called is recoverable via
         :meth:`attribute_tool_calls` (joined on the shared IOC value in ``input``).
         """
-        logs = self.get_result(task_id).get("logs") or []
-        out: list[dict[str, Any]] = []
+        logs = self.get_result(task_id).logs or []
+        out: list[InvestigationQuestion] = []
         for log in logs:
             if not isinstance(log, dict):
                 continue
             out.append(
-                {
-                    "index": log.get("index"),
-                    "question": log.get("question"),
-                    "agent": log.get("agent_label") or log.get("agent_hint"),
-                    "input": log.get("params"),
-                    "response": log.get("result"),
-                    "evidence": log.get("evidence"),
-                    "supports": [str(h) for h in (log.get("supports") or [])],
-                    "weakens": [str(h) for h in (log.get("weakens") or [])],
-                    "information_type": log.get("primary_information_type"),
-                    "status": log.get("status"),
-                }
+                InvestigationQuestion(
+                    index=log.get("index"),
+                    question=log.get("question"),
+                    agent=log.get("agent_label") or log.get("agent_hint"),
+                    input=log.get("params"),
+                    response=log.get("result"),
+                    evidence=log.get("evidence"),
+                    supports=[str(h) for h in (log.get("supports") or [])],
+                    weakens=[str(h) for h in (log.get("weakens") or [])],
+                    information_type=log.get("primary_information_type"),
+                    status=log.get("status"),
+                )
             )
         return out
 
@@ -264,17 +323,21 @@ class AIApi(BaseAPI):
         """
         result = self.get_result(task_id)
         questions = self.investigation_questions(task_id)
-        summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
+        summary = result.summary if isinstance(result.summary, dict) else {}
         hyps: list[dict[str, Any]] = []
-        for hyp in result.get("hypotheses") or []:
+        for hyp in result.hypotheses or []:
             if not isinstance(hyp, dict):
                 continue
             hid = str(hyp.get("id"))
             supported = [
-                {k: q[k] for k in ("index", "question", "agent", "evidence")} for q in questions if hid in q["supports"]
+                {k: getattr(q, k) for k in ("index", "question", "agent", "evidence")}
+                for q in questions
+                if hid in q.supports
             ]
             weakened = [
-                {k: q[k] for k in ("index", "question", "agent", "evidence")} for q in questions if hid in q["weakens"]
+                {k: getattr(q, k) for k in ("index", "question", "agent", "evidence")}
+                for q in questions
+                if hid in q.weakens
             ]
             hyps.append(
                 {
@@ -294,7 +357,7 @@ class AIApi(BaseAPI):
             "hypotheses": hyps,
         }
 
-    def wait_for_result(self, task_id: str, *, interval: float = 5.0, timeout: float = 600.0) -> dict[str, Any]:
+    def wait_for_result(self, task_id: str, *, interval: float = 5.0, timeout: float = 600.0) -> InvestigationResult:
         """Poll a triage task until it reaches a terminal status, then return it.
 
         Args:
@@ -313,7 +376,8 @@ class AIApi(BaseAPI):
             time.sleep(interval)
             status = self.get_status(task_id)
         result = self.get_result(task_id)
-        result.setdefault("status", status)
+        if not result.status:
+            result.status = status
         return result
 
     def investigate_alert(
@@ -323,7 +387,7 @@ class AIApi(BaseAPI):
         wait: bool = False,
         interval: float = 5.0,
         timeout: float = 600.0,
-    ) -> dict[str, Any]:
+    ) -> InvestigationHandle | InvestigationResult:
         """Start an investigation and (optionally) block until it finishes.
 
         Convenience over :meth:`start_alert_investigation` +
@@ -332,38 +396,40 @@ class AIApi(BaseAPI):
         and returns the final result payload (including its ``task_id``).
         """
         started = self.start_alert_investigation(alert)
-        task_id = started.get("task_id")
+        task_id = started.task_id
         if not wait or not task_id:
             return started
         result = self.wait_for_result(task_id, interval=interval, timeout=timeout)
-        result.setdefault("task_id", task_id)
+        if not result.task_id:
+            result.task_id = task_id
         return result
 
-    def run_agent(self, agent_name: str, data: dict[str, Any]) -> dict[str, Any]:
+    def run_agent(self, agent_name: str, data: dict[str, Any]) -> InvestigationHandle:
         """Trigger a single named agent (e.g. ``"ioc-enrichment"``) directly.
 
         Returns the ``{"task_id", "status"}`` handle; poll with
         :meth:`get_status` / :meth:`get_result` exactly like an investigation.
         """
-        return self.client.post(f"/api/ai/triage/{agent_name}/trigger", data=data)
+        resp = self.client.post(f"/api/ai/triage/{agent_name}/trigger", data=data)
+        return InvestigationHandle.model_validate(resp if isinstance(resp, dict) else {})
 
     def submit_feedback(self, task_id: str, feedback: dict[str, Any]) -> dict[str, Any]:
         """Submit analyst feedback / acceptance on a triage verdict."""
         return self.client.post(f"/api/ai/agents/{task_id}/acceptance", data=feedback)
 
     # ----------------------------------------------------------- LLM providers
-    def list_providers(self) -> list[dict[str, Any]]:
+    def list_providers(self) -> list[LLMProvider]:
         """List the allowed LLM providers (the installed AI solution packs)."""
-        return _as_list(self.client.get("/api/ai/llm/allowed-providers"))
+        return [LLMProvider.model_validate(p) for p in _as_list(self.client.get("/api/ai/llm/allowed-providers"))]
 
-    def list_llm_configs(self) -> list[dict[str, Any]]:
+    def list_llm_configs(self) -> list[LLMConfig]:
         """List the configured reasoning profiles (e.g. *Low* / *High Reasoning*)."""
-        return _as_list(self.client.get("/api/ai/llm/config"))
+        return [LLMConfig.model_validate(c) for c in _as_list(self.client.get("/api/ai/llm/config"))]
 
-    def get_llm_config(self, uuid: str) -> dict[str, Any]:
+    def get_llm_config(self, uuid: str) -> LLMConfig:
         """Fetch one reasoning-profile config by uuid."""
         resp = self.client.get(f"/api/ai/llm/config/{uuid}")
-        return resp if isinstance(resp, dict) else {"config": resp}
+        return LLMConfig.model_validate(resp if isinstance(resp, dict) else {})
 
     def list_models(self) -> list[dict[str, Any]]:
         """List every model exposed across the configured providers."""
@@ -388,11 +454,11 @@ class AIApi(BaseAPI):
         self.client.delete(f"/api/ai/llm/config/{uuid}")
 
     # ----------------------------------------------------------- MCP servers
-    def list_mcp_servers(self) -> list[dict[str, Any]]:
+    def list_mcp_servers(self) -> list[MCPServerRef]:
         """List registered MCP servers (id + name) the AI agents can be granted."""
-        return _as_list(self.client.get("/api/ai/mcp"))
+        return [MCPServerRef.model_validate(m) for m in _as_list(self.client.get("/api/ai/mcp"))]
 
-    def validate_mcp_server(self, config: dict[str, Any]) -> dict[str, Any]:
+    def validate_mcp_server(self, config: dict[str, Any]) -> MCPValidateResult:
         """Probe an MCP-server config *before* persisting it.
 
         Opens a connection to the server's ``url`` and runs ``tools/list``,
@@ -401,7 +467,7 @@ class AIApi(BaseAPI):
         this before :meth:`register_mcp_server` and do not persist on failure.
         """
         resp = self.client.post("/api/ai/mcp/validate", data=config)
-        return resp if isinstance(resp, dict) else {"result": resp}
+        return MCPValidateResult.model_validate(resp if isinstance(resp, dict) else {})
 
     def list_mcp_tools(self, config: dict[str, Any]) -> list[str]:
         """Return the tool *names* an MCP server advertises (its ``tools/list``).
@@ -417,22 +483,16 @@ class AIApi(BaseAPI):
         credential write-only and won't re-probe with it).
         """
         result = self.validate_mcp_server(config)
-        tools = result.get("tools") or []
-        names = []
-        for t in tools:
-            name = t.get("name") if isinstance(t, dict) else t
-            if name:
-                names.append(name)
-        return names
+        return [t.name for t in result.tools if t.name]
 
-    def mcp_configs(self) -> list[dict[str, Any]]:
+    def mcp_configs(self) -> list[MCPServerConfig]:
         """Return the full registered MCP-server records (``/api/3/mcp_configurations``).
 
         Unlike :meth:`list_mcp_servers` (id + name only) these carry ``url``,
         ``transport``, ``type`` and the stored ``authentication`` (a JSON
         *string*). Used by :meth:`mcp_tool_catalog` to re-probe each server.
         """
-        return _as_list(self.client.get("/api/3/mcp_configurations"))
+        return [MCPServerConfig.model_validate(m) for m in _as_list(self.client.get("/api/3/mcp_configurations"))]
 
     def mcp_tool_catalog(self) -> dict[str, dict[str, Any]]:
         """Map every advertised tool to the MCP server that owns it.
@@ -454,9 +514,9 @@ class AIApi(BaseAPI):
         """
         catalog: dict[str, dict[str, Any]] = {}
         for cfg in self.mcp_configs():
-            uuid = cfg.get("uuid") or cfg.get("id")
-            name = cfg.get("name") or uuid
-            probe = dict(cfg)
+            uuid = cfg.uuid or cfg.get("id")
+            name = cfg.name or uuid
+            probe = cfg.to_dict(by_alias=False, exclude_none=True)
             auth = probe.get("authentication")
             if isinstance(auth, str):
                 try:
@@ -467,19 +527,16 @@ class AIApi(BaseAPI):
                 result = self.validate_mcp_server(probe)
             except Exception:  # noqa: BLE001 - one unreachable server shouldn't blank the rest
                 continue
-            for t in result.get("tools") or []:
-                tname = t.get("name") if isinstance(t, dict) else t
-                if tname and tname not in catalog:
-                    catalog[tname] = {
+            for t in result.tools:
+                if t.name and t.name not in catalog:
+                    catalog[t.name] = {
                         "server": name,
                         "server_uuid": uuid,
-                        "description": t.get("description") if isinstance(t, dict) else None,
+                        "description": t.description,
                     }
         return catalog
 
-    def attribute_tool_calls(
-        self, task_id: str, *, catalog: dict[str, dict[str, Any]] | None = None
-    ) -> list[dict[str, Any]]:
+    def attribute_tool_calls(self, task_id: str, *, catalog: dict[str, dict[str, Any]] | None = None) -> list[ToolCall]:
         """Tool calls of one investigation, each tagged with its owning MCP server.
 
         Combines :meth:`investigation_tool_calls` (what the agents called, with
@@ -494,13 +551,17 @@ class AIApi(BaseAPI):
         """
         if catalog is None:
             catalog = self.mcp_tool_catalog()
-        out: list[dict[str, Any]] = []
+        out: list[ToolCall] = []
         for call in self.investigation_tool_calls(task_id):
-            owner = catalog.get(call.get("tool_name")) or {}
-            out.append({**call, "server": owner.get("server"), "server_uuid": owner.get("server_uuid")})
+            owner = catalog.get(call.tool_name) or {}
+            out.append(
+                ToolCall.model_validate(
+                    {**call.model_dump(), "server": owner.get("server"), "server_uuid": owner.get("server_uuid")}
+                )
+            )
         return out
 
-    def register_mcp_server(self, config: dict[str, Any]) -> dict[str, Any]:
+    def register_mcp_server(self, config: dict[str, Any]) -> MCPServerConfig:
         """Persist a validated MCP-server config (``POST /api/3/mcp_configurations``).
 
         The ``authentication`` block is encrypted server-side, so always create
@@ -517,9 +578,10 @@ class AIApi(BaseAPI):
         auth = config.get("authentication")
         if isinstance(auth, dict):
             config["authentication"] = json.dumps(auth)
-        return self.client.post("/api/3/mcp_configurations", data=config)
+        resp = self.client.post("/api/3/mcp_configurations", data=config)
+        return MCPServerConfig.model_validate(resp if isinstance(resp, dict) else {})
 
-    def update_mcp_server(self, uuid: str, config: dict[str, Any]) -> dict[str, Any]:
+    def update_mcp_server(self, uuid: str, config: dict[str, Any]) -> MCPServerConfig:
         """Update a registered MCP server (``PUT /api/3/mcp_configurations/{uuid}``).
 
         Use this to rotate a credential whose token expires — e.g. re-stamping a
@@ -537,9 +599,10 @@ class AIApi(BaseAPI):
         auth = config.get("authentication")
         if isinstance(auth, dict):
             config["authentication"] = json.dumps(auth)
-        return self.client.put(f"/api/3/mcp_configurations/{uuid}", data=config)
+        resp = self.client.put(f"/api/3/mcp_configurations/{uuid}", data=config)
+        return MCPServerConfig.model_validate(resp if isinstance(resp, dict) else {})
 
-    def save_mcp_server(self, config: dict[str, Any], *, validate: bool = True) -> dict[str, Any]:
+    def save_mcp_server(self, config: dict[str, Any], *, validate: bool = True) -> MCPServerConfig:
         """Validate then persist an MCP server — the exact flow the FortiSOAR UI uses.
 
         The UI gates *Save* on a successful *Test*, so this mirrors it: it first
@@ -555,14 +618,14 @@ class AIApi(BaseAPI):
         """
         if validate:
             result = self.validate_mcp_server(config)
-            if not result.get("valid"):
-                raise ValueError(f"MCP server did not validate, not saving: {result.get('message') or result}")
+            if not result.valid:
+                raise ValueError(f"MCP server did not validate, not saving: {result.message or result}")
         uuid = config.get("uuid")
         if uuid:
             return self.update_mcp_server(uuid, config)
         return self.register_mcp_server(config)
 
-    def upsert_mcp_server(self, config: dict[str, Any], *, validate: bool = True) -> dict[str, Any]:
+    def upsert_mcp_server(self, config: dict[str, Any], *, validate: bool = True) -> MCPServerConfig:
         """Create or update an MCP server **keyed by name** — re-runnable setup.
 
         :meth:`save_mcp_server` routes on ``uuid`` (present → update, absent →
@@ -586,10 +649,10 @@ class AIApi(BaseAPI):
         if existing_uuid:
             config = {**config, "uuid": existing_uuid}
         saved = self.save_mcp_server(config, validate=validate)
-        if isinstance(saved, dict) and not saved.get("uuid"):
+        if not saved.uuid:
             uuid = existing_uuid or uuid_from_iri(saved.get("@id"))
             if uuid:
-                saved = {**saved, "uuid": uuid}
+                saved.uuid = uuid
         return saved
 
     def delete_mcp_server(self, uuid: str) -> None:
@@ -614,13 +677,13 @@ class AIApi(BaseAPI):
         registered.
         """
         validation = self.validate_mcp_server(config)
-        if not validation.get("valid"):
-            raise ValueError(f"MCP server did not validate, not saving: {validation.get('message') or validation}")
+        if not validation.valid:
+            raise ValueError(f"MCP server did not validate, not saving: {validation.message or validation}")
         saved = self.upsert_mcp_server(config, validate=False)
-        return {**saved, "tools": validation.get("tools") or []}
+        return {**saved.to_dict(by_alias=False), "tools": [t.name for t in validation.tools if t.name]}
 
     # ----------------------------------------------------------- agents
-    def list_agents(self, **filters: Any) -> list[dict[str, Any]]:
+    def list_agents(self, **filters: Any) -> list[AgentRecord]:
         """List the installed AI agents (``GET /api/ai/agent/``).
 
         Optional keyword filters are passed straight through as query params —
@@ -629,14 +692,107 @@ class AIApi(BaseAPI):
         record with ``name``, ``version``, ``label``, ``uuid``, ``active`` etc.
         """
         params = {k: v for k, v in filters.items() if v is not None}
-        return _as_list(self.client.get("/api/ai/agent/", params=params or None))
+        return [
+            AgentRecord.model_validate(a) for a in _as_list(self.client.get("/api/ai/agent/", params=params or None))
+        ]
 
-    def get_agent(self, name: str, version: str) -> dict[str, Any]:
+    def get_agent(self, name: str, version: str) -> AgentRecord:
         """Fetch one AI agent's details (``GET /api/ai/agent/{name}/{version}``)."""
         resp = self.client.get(f"/api/ai/agent/{name}/{version}")
-        return resp if isinstance(resp, dict) else {"agent": resp}
+        return AgentRecord.model_validate(resp if isinstance(resp, dict) else {})
 
-    def get_agent_config(self, name: str, version: str) -> dict[str, Any]:
+    # ----------------------------------------------------- import / export
+    @staticmethod
+    def validate_agent_package(source_dir: str) -> AgentPackage:
+        """Parse + consistency-check an agent source folder without uploading.
+
+        Returns the typed :class:`~pyfsr.models.AgentPackage` (manifest, prompts,
+        MCP allowlist, file list) so you can inspect it, or raises with the exact
+        defect. Run this before :meth:`import_agent` when authoring — it catches
+        the failures that would otherwise only surface when the agent runs on the
+        appliance (a bad ``agentclass``, a prompt uuid the code references but
+        ``prompt.yaml`` omits, a manifest icon that isn't in the bundle).
+        """
+        return AgentPackage.from_dir(source_dir)
+
+    def import_agent(
+        self,
+        path: str,
+        *,
+        replace: bool = False,
+        validate: bool = True,
+    ) -> dict[str, Any]:
+        """Install an AI agent package onto the appliance.
+
+        ``POST /api/ai/agent/import`` (multipart ``file``). ``path`` may be either
+        an already-built ``.zip`` or an agent **source directory** — a directory
+        is packed on the fly with :func:`pack_agent` (which validates it first).
+        Pass ``replace=True`` to overwrite an already-installed agent of the same
+        name+version (``?replace=true``); without it, re-importing an existing
+        name+version is rejected by the service.
+
+        The uploaded agent lands **inactive** — call :meth:`activate_agent` with
+        its uuid (from the response or :meth:`list_agents`) to make the
+        orchestrator eligible to route to it, and give it an LLM/MCP config via
+        :meth:`update_agent_config` if it isn't using the default.
+
+        Set ``validate=False`` to skip local package validation (e.g. to upload a
+        vendor ``.zip`` you don't want re-inspected). Ignored when ``path`` is a
+        ``.zip`` — only source directories are validated/packed.
+
+        Returns the service's import response (the created/updated agent record).
+        """
+        src = Path(path)
+        if not src.exists():
+            raise FileNotFoundError(f"agent package path not found: {path}")
+
+        cleanup: Path | None = None
+        if src.is_dir():
+            zip_path = Path(pack_agent(str(src), validate=validate))
+            cleanup = zip_path if zip_path.with_suffix("").name == src.name else None
+        elif src.suffix == ".zip":
+            zip_path = src
+        else:
+            raise ValueError(f"import_agent expects an agent source directory or a .zip, got: {path}")
+
+        params = {"replace": "true"} if replace else None
+        try:
+            with open(zip_path, "rb") as fh:
+                resp = self.client.request(
+                    "POST",
+                    "/api/ai/agent/import",
+                    files={"file": (zip_path.name, fh, "application/zip")},
+                    params=params,
+                )
+        finally:
+            # only remove a zip we created next to a source dir, never a caller's file
+            if cleanup is not None and cleanup.exists() and src.is_dir():
+                cleanup.unlink()
+        try:
+            return resp.json()
+        except ValueError:
+            return {}
+
+    def export_agent(self, agent_id: str, dest: str) -> str:
+        """Download an installed agent as a ``.zip`` (``POST /api/ai/agent/export/{agent_id}``).
+
+        ``agent_id`` is the agent's uuid (from :meth:`list_agents`). Writes the
+        archive bytes to ``dest`` and returns ``dest`` — handy for cloning a
+        published agent as the starting point for a custom one, or for backing up
+        an edited agent before re-importing.
+        """
+        if not isinstance(agent_id, str) or not agent_id.strip():
+            raise ValueError("export_agent() requires a non-empty agent uuid")
+        resp = self.client.request(
+            "POST",
+            f"/api/ai/agent/export/{agent_id.strip()}",
+            headers={"Accept": "application/octet-stream"},
+        )
+        dest_path = Path(dest)
+        dest_path.write_bytes(resp.content)
+        return str(dest_path)
+
+    def get_agent_config(self, name: str, version: str) -> AgentConfigDTO:
         """Fetch an agent's configuration (``GET /api/ai/agent/config/{name}/{version}``).
 
         Returns the ``AiAgentConfigurationDTO`` shape::
@@ -651,17 +807,17 @@ class AIApi(BaseAPI):
         ``config["config_type"] == "default"``.
         """
         resp = self.client.get(f"/api/ai/agent/config/{name}/{version}")
-        return resp if isinstance(resp, dict) else {"config": resp}
+        return AgentConfigDTO.model_validate(resp if isinstance(resp, dict) else {})
 
     def update_agent_config(
         self,
         agent_name: str,
         agent_version: str,
-        config: dict[str, Any],
+        config: dict[str, Any] | AgentConfig,
         *,
         name: str | None = None,
         config_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> AgentConfigDTO:
         """Persist an agent's configuration (``POST /api/ai/agent/config``).
 
         ``config`` is the inner config dict (``llm_provider``, ``mcp_server``,
@@ -674,6 +830,8 @@ class AIApi(BaseAPI):
         only authorizes ``POST ^agent/config$`` against ``update.ai_agents``; a
         ``PUT`` matches no ACL rule and is rejected with ``Access Denied``.
         """
+        if isinstance(config, AgentConfig):
+            config = config.model_dump(exclude_none=True)
         body: dict[str, Any] = {
             "agent_name": agent_name,
             "agent_version": agent_version,
@@ -683,25 +841,30 @@ class AIApi(BaseAPI):
             body["name"] = name
         if config_id is not None:
             body["config_id"] = config_id
-        return self.client.post("/api/ai/agent/config", data=body)
+        resp = self.client.post("/api/ai/agent/config", data=body)
+        return AgentConfigDTO.model_validate(resp if isinstance(resp, dict) else {})
 
-    def get_default_agent_config(self) -> dict[str, Any]:
+    def get_default_agent_config(self) -> AgentConfigDTO:
         """Fetch the default agent configuration (``GET /api/ai/agent/config/default``)."""
         resp = self.client.get("/api/ai/agent/config/default")
-        return resp if isinstance(resp, dict) else {"config": resp}
+        return AgentConfigDTO.model_validate(resp if isinstance(resp, dict) else {})
 
-    def update_default_agent_config(self, config: dict[str, Any], *, name: str | None = None) -> dict[str, Any]:
+    def update_default_agent_config(
+        self, config: dict[str, Any] | AgentConfig, *, name: str | None = None
+    ) -> AgentConfigDTO:
         """Update the default agent configuration (``POST /api/ai/agent/config/default``).
 
         Agents left on the default config inherit this ``mcp_server`` list, so
         appending a uuid here grants the server to *every* such agent at once.
         """
+        if isinstance(config, AgentConfig):
+            config = config.model_dump(exclude_none=True)
         body: dict[str, Any] = {"config": config, "default": True}
         if name is not None:
             body["name"] = name
         return self.client.post("/api/ai/agent/config/default", data=body)
 
-    def activate_agent(self, uuids: list[str], *, active: bool = True) -> dict[str, Any]:
+    def activate_agent(self, uuids: list[str], *, active: bool = True) -> Any:
         """Activate or deactivate agents by uuid (``POST /api/ai/agent/activate``)."""
         return self.client.post("/api/ai/agent/activate", data={"uuids": uuids}, params={"active": active})
 
@@ -726,8 +889,8 @@ class AIApi(BaseAPI):
         Pass ``friendly=True`` to get the registered server *names* instead
         (unknown/unregistered UUIDs are returned unchanged).
         """
-        config = self.get_agent_config(name, version).get("config") or {}
-        uuids = list(config.get(AGENT_CONFIG_MCP_KEY) or [])
+        config = self.get_agent_config(name, version).config
+        uuids = list(config.mcp_server or [])
         if not friendly:
             return uuids
         names = self.mcp_server_names()
@@ -739,12 +902,12 @@ class AIApi(BaseAPI):
         Pairs each allowlisted UUID with its registered name (``name`` falls
         back to the UUID for anything not currently registered).
         """
-        config = self.get_agent_config(name, version).get("config") or {}
-        uuids = list(config.get(AGENT_CONFIG_MCP_KEY) or [])
+        config = self.get_agent_config(name, version).config
+        uuids = list(config.mcp_server or [])
         names = self.mcp_server_names()
         return [{"uuid": u, "name": names.get(u, u)} for u in uuids]
 
-    def allow_mcp_server_for_agent(self, name: str, version: str, mcp_uuid: str) -> dict[str, Any]:
+    def allow_mcp_server_for_agent(self, name: str, version: str, mcp_uuid: str) -> AgentConfigDTO:
         """Grant one agent access to an MCP server (read-modify-write of its config).
 
         Appends ``mcp_uuid`` to the agent's ``config["mcp_server"]`` allowlist
@@ -755,27 +918,26 @@ class AIApi(BaseAPI):
         Returns the updated ``AiAgentConfigurationDTO``. Takes effect on the next
         investigation — no service restart required.
         """
-        dto = self.get_agent_config(name, version) or {}
-        config = dict(dto.get("config") or {})
+        dto = self.get_agent_config(name, version)
+        config = dto.config
         # An agent reported as "default" has no row of its own yet — seed from
         # the default config so the write creates a dedicated, non-shared row.
-        if config.get("config_type") == "default" or not config:
-            config = dict((self.get_default_agent_config().get("config")) or {})
-            config.pop("config_type", None)
-        allowed = list(config.get(AGENT_CONFIG_MCP_KEY) or [])
+        if config.config_type == "default" or config is None:
+            config = self.get_default_agent_config().config
+            config.config_type = None
+        allowed = list(config.mcp_server or [])
         if mcp_uuid not in allowed:
             allowed.append(mcp_uuid)
-        config[AGENT_CONFIG_MCP_KEY] = allowed
-        return self.update_agent_config(name, version, config, name=dto.get("name"), config_id=dto.get("config_id"))
+        config.mcp_server = allowed
+        return self.update_agent_config(name, version, config, name=dto.name, config_id=dto.config_id)
 
-    def disallow_mcp_server_for_agent(self, name: str, version: str, mcp_uuid: str) -> dict[str, Any]:
+    def disallow_mcp_server_for_agent(self, name: str, version: str, mcp_uuid: str) -> AgentConfigDTO:
         """Revoke an agent's access to an MCP server (inverse of
         :meth:`allow_mcp_server_for_agent`)."""
-        dto = self.get_agent_config(name, version) or {}
-        config = dict(dto.get("config") or {})
-        allowed = [u for u in (config.get(AGENT_CONFIG_MCP_KEY) or []) if u != mcp_uuid]
-        config[AGENT_CONFIG_MCP_KEY] = allowed
-        return self.update_agent_config(name, version, config, name=dto.get("name"), config_id=dto.get("config_id"))
+        dto = self.get_agent_config(name, version)
+        config = dto.config
+        config.mcp_server = [u for u in (config.mcp_server or []) if u != mcp_uuid]
+        return self.update_agent_config(name, version, config, name=dto.name, config_id=dto.config_id)
 
     # -------------------------------------------------- tool-usage evidence
     def tool_usage(
@@ -783,7 +945,7 @@ class AIApi(BaseAPI):
         *,
         correlation_id: str | None = None,
         limit: int = 500,
-    ) -> list[dict[str, Any]]:
+    ) -> list[ToolCall]:
         """Return the tool calls the LLM made, from the ``llm_activity_logs``.
 
         Every reasoning step is logged to the ``llm_activity_logs`` module with a
@@ -809,7 +971,7 @@ class AIApi(BaseAPI):
             params["correlationID"] = correlation_id
         resp = self.client.get("/api/3/llm_activity_logs", params=params)
         records = extract_members(resp)
-        calls: list[dict[str, Any]] = []
+        calls: list[ToolCall] = []
         for rec in records or []:
             response = rec.get("response")
             if isinstance(response, str):
@@ -823,14 +985,14 @@ class AIApi(BaseAPI):
             if not tool_name:
                 continue
             calls.append(
-                {
-                    "tool_name": tool_name,
-                    "tool_args": response.get("tool_args"),
-                    "correlation_id": rec.get("correlationID"),
-                    "title": rec.get("title"),
-                    "model": rec.get("modelName"),
-                    "latency_ms": rec.get("latencyMs"),
-                }
+                ToolCall(
+                    tool_name=tool_name,
+                    tool_args=response.get("tool_args"),
+                    correlation_id=rec.get("correlationID"),
+                    title=rec.get("title"),
+                    model=rec.get("modelName"),
+                    latency_ms=rec.get("latencyMs"),
+                )
             )
         return calls
 

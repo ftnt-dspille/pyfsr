@@ -5,7 +5,7 @@ import pytest
 from pyfsr.api.api_keys import ApiKeysAPI, _api_key_plaintext
 from pyfsr.api.api_users import ApiKeyUsersAPI
 from pyfsr.api.audit import AuditAPI
-from pyfsr.api.feeds import IngestFeedsAPI
+from pyfsr.api.feeds import FeedIngestResult, IngestFeedsAPI
 from pyfsr.api.search import SearchAPI
 from pyfsr.api.system import SystemAPI
 from pyfsr.api.taxii import TaxiiAPI
@@ -36,22 +36,27 @@ class FakeClient:
 
 
 # --------------------------------------------------------------------- feeds
-def test_feeds_indicators_posts_list():
-    c = FakeClient()
-    IngestFeedsAPI(c).indicators([{"value": "8.8.8.8"}])
-    assert c.calls[-1][:3] == ("POST", "/api/ingest-feeds/indicators", [{"value": "8.8.8.8"}])
+def test_feeds_indicators_wraps_rows_in_data_envelope():
+    c = FakeClient(post_resp={"status": "success", "uuids": ["u1"]})
+    result = IngestFeedsAPI(c).indicators([{"value": "8.8.8.8"}])
+    assert c.calls[-1][:3] == ("POST", "/api/ingest-feeds/indicators", {"data": [{"value": "8.8.8.8"}]})
+    assert isinstance(result, FeedIngestResult)
+    assert result.ok is True
+    assert result.uuids == ["u1"]
 
 
-def test_feeds_stix_bundle_posts_dict():
-    c = FakeClient()
+def test_feeds_stix_bundle_posts_dict_unwrapped():
+    c = FakeClient(post_resp={"status": "success"})
     IngestFeedsAPI(c).stix_bundle({"type": "bundle", "objects": []})
     assert c.calls[-1][1] == "/api/ingest-feeds/stix-bundle"
+    assert c.calls[-1][2] == {"type": "bundle", "objects": []}
 
 
-def test_feeds_insert_generic_record_type():
-    c = FakeClient()
-    IngestFeedsAPI(c).insert("events", [{"a": 1}])
-    assert c.calls[-1][1] == "/api/insert-feeds/events"
+def test_feeds_insert_generic_record_type_wraps_data_envelope():
+    c = FakeClient(post_resp={"status": "success", "uuids": []})
+    result = IngestFeedsAPI(c).insert("events", [{"a": 1}])
+    assert c.calls[-1][:3] == ("POST", "/api/insert-feeds/events", {"data": [{"a": 1}]})
+    assert isinstance(result, FeedIngestResult)
 
 
 def test_feeds_insert_rejects_blank():

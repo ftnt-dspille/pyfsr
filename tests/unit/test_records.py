@@ -301,6 +301,42 @@ def test_restore_rejects_blank_ref():
         RecordSet(client, "alerts").restore("")
 
 
+# -- link / unlink -----------------------------------------------------------
+def test_link_puts_link_body_with_resolved_iri():
+    client = FakeClient({"/api/3/alerts/a1": {"uuid": "a1"}})
+    RecordSet(client, "alerts").link("a1", "assets", "assets:x1")
+    method, endpoint, params, data = client.calls[0]
+    assert (method, endpoint, params) == ("PUT", "/api/3/alerts/a1", None)
+    assert data == {"__link": {"assets": ["/api/3/assets/x1"]}}
+
+
+def test_link_accepts_list_of_related_and_full_iri():
+    client = FakeClient({"/api/3/alerts/a1": {"uuid": "a1"}})
+    RecordSet(client, "alerts").link("a1", "assets", ["assets:x1", "/api/3/assets/x2"])
+    _, _, _, data = client.calls[0]
+    assert data == {"__link": {"assets": ["/api/3/assets/x1", "/api/3/assets/x2"]}}
+
+
+def test_unlink_puts_unlink_body():
+    client = FakeClient({"/api/3/alerts/a1": {"uuid": "a1"}})
+    RecordSet(client, "alerts").unlink("a1", "assets", "assets:x1")
+    method, endpoint, params, data = client.calls[0]
+    assert (method, endpoint, params) == ("PUT", "/api/3/alerts/a1", None)
+    assert data == {"__unlink": {"assets": ["/api/3/assets/x1"]}}
+
+
+def test_link_rejects_bare_uuid_for_related():
+    client = FakeClient({"/api/3/alerts/a1": {"uuid": "a1"}})
+    with pytest.raises(ValueError):
+        RecordSet(client, "alerts").link("a1", "assets", "x1")
+
+
+def test_link_rejects_blank_ref():
+    client = FakeClient()
+    with pytest.raises(ValueError):
+        RecordSet(client, "alerts").link("", "assets", "assets:x1")
+
+
 # -- P4: show_deleted plumbing ----------------------------------------------
 def test_get_show_deleted_param():
     client = FakeClient({"/api/3/alerts/u1": {"uuid": "u1"}})
@@ -533,6 +569,62 @@ def test_bulk_upsert_parse_true_all_succeeded_is_ok():
     assert result.ok is True
     assert result.failed == []
     assert len(result.succeeded) == 1
+
+
+# -- bulk_insert --------------------------------------------------------------
+def test_bulk_insert_posts_list_and_returns_raw():
+    client = FakeClient({"/api/3/insert/workflow_collections": {"hydra:member": [1, 2]}})
+    rows = [{"name": "a"}, {"name": "b"}]
+    out = RecordSet(client, "workflow_collections").bulk_insert(rows)
+    method, endpoint, _params, data = client.calls[0]
+    assert (method, endpoint) == ("POST", "/api/3/insert/workflow_collections")
+    assert data == {"data": rows}
+    assert out == {"hydra:member": [1, 2]}
+
+
+def test_bulk_insert_parse_true_splits_success_and_failure():
+    from pyfsr.records import BulkUpsertResult
+
+    raw_response = {
+        "success": [{"@id": "/api/3/alerts/aaa", "name": "row 1"}],
+        "failure": [
+            "POST method for object at index #1 in the request payload failed "
+            'with error: {"type":"UniqueConstraintViolationException","message":"duplicate key"}'
+        ],
+    }
+    client = FakeClient({"/api/3/insert/alerts": raw_response})
+    rows = [{"name": "row 1"}, {"name": "row 1 (dup)"}]
+
+    result = RecordSet(client, "alerts").bulk_insert(rows, parse=True)
+
+    assert isinstance(result, BulkUpsertResult)
+    assert result.ok is False
+    assert [s["name"] for s in result.succeeded] == ["row 1"]
+    assert len(result.failed) == 1
+    assert result.failed[0].index == 1
+
+
+def test_bulk_insert_parse_true_normalizes_all_succeeded_hydra_collection():
+    """All-succeeded responses come back as a bare hydra:Collection (live-verified
+    on FortiSOAR 8.0.0-6034), unlike the {"success": [...], "failure": [...]}
+    envelope a partial failure gets — both must parse to the same result shape."""
+    from pyfsr.records import BulkUpsertResult
+
+    raw_response = {
+        "@type": "hydra:Collection",
+        "hydra:member": [
+            {"@id": "/api/3/alerts/aaa", "name": "row 1"},
+            {"@id": "/api/3/alerts/bbb", "name": "row 2"},
+        ],
+    }
+    client = FakeClient({"/api/3/insert/alerts": raw_response})
+
+    result = RecordSet(client, "alerts").bulk_insert([{"name": "row 1"}, {"name": "row 2"}], parse=True)
+
+    assert isinstance(result, BulkUpsertResult)
+    assert result.ok is True
+    assert result.failed == []
+    assert [s["name"] for s in result.succeeded] == ["row 1", "row 2"]
 
 
 def test_bulk_upsert_failure_from_raw_handles_unmatched_shape():

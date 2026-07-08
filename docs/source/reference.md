@@ -44,7 +44,7 @@ autoapi/pyfsr/auth/index
 :maxdepth: 1
 :caption: Playbook authoring
 
-Compile & decompile YAML <autoapi/pyfsr/authoring/index>
+autoapi/pyfsr/authoring/index
 ```
 
 ```{toctree}
@@ -66,32 +66,6 @@ autoapi/pyfsr/repo/index
 ```{toctree}
 :maxdepth: 1
 :caption: Advanced & internal
-:hidden:
 
-autoapi/pyfsr/playbook_catalog/index
-autoapi/pyfsr/playbook_freshness/index
-autoapi/pyfsr/playbook_lint/index
-autoapi/pyfsr/playbook_match/index
-autoapi/pyfsr/concurrency/index
-autoapi/pyfsr/projection/index
-autoapi/pyfsr/query_models/index
-autoapi/pyfsr/spec/index
-autoapi/pyfsr/utils/index
+Advanced & internal <reference-advanced>
 ```
-
-## Advanced & internal
-
-These back specific workflows (the playbook compiler's live-target preflight,
-loop-concurrency analysis, token-efficient record projection, ...) rather than
-everyday client usage, so they're left out of the sidebar. Linked here for
-when you need them:
-
-- {doc}`Playbook catalog <autoapi/pyfsr/playbook_catalog/index>` — step-type reference data behind `pyfsr playbook steps`
-- {doc}`Playbook freshness <autoapi/pyfsr/playbook_freshness/index>` — catalog staleness probe
-- {doc}`Playbook lint <autoapi/pyfsr/playbook_lint/index>` — live-target preflight for compiled playbooks
-- {doc}`Playbook match <autoapi/pyfsr/playbook_match/index>` — client-side structural matching over playbook definitions
-- {doc}`Concurrency <autoapi/pyfsr/concurrency/index>` — max-concurrent-execution analysis
-- {doc}`Projection <autoapi/pyfsr/projection/index>` — token-efficient record summarization
-- {doc}`Query models <autoapi/pyfsr/query_models/index>` — typed backing for the query DSL
-- {doc}`Spec <autoapi/pyfsr/spec/index>` — bundled OpenAPI spec access
-- {doc}`Utils <autoapi/pyfsr/utils/index>` — IRI/validation/file-operation helpers
