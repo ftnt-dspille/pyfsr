@@ -33,14 +33,29 @@ class FakeAlerts:
         return {"uuid": uuid, **data}
 
 
+class FakeConnectors:
+    """Minimal stand-in for ``client.connectors`` used by the connector->MCP flow."""
+
+    def __init__(self, definition=None, configurations=None):
+        self._definition = definition
+        self._configurations = configurations or []
+
+    def definition(self, name, *, version=None):
+        return self._definition
+
+    def configurations(self, name):
+        return self._configurations
+
+
 class RecordingClient:
     """Records HTTP calls and returns scripted responses keyed by endpoint."""
 
-    def __init__(self, responses=None, alerts=None):
+    def __init__(self, responses=None, alerts=None, connectors=None):
         self.calls = []
         self.responses = responses or {}
         self.system_settings = FakeSystemSettings()
         self.alerts = alerts or FakeAlerts()
+        self.connectors = connectors
 
     def get(self, endpoint, params=None, **kw):
         self.calls.append(("GET", endpoint))
@@ -56,6 +71,10 @@ class RecordingClient:
 
     def delete(self, endpoint, params=None, **kw):
         self.calls.append(("DELETE", endpoint))
+
+    def request(self, method, endpoint, data=None, **kw):
+        self.calls.append((method, endpoint, data))
+        return self.responses.get((method, endpoint), {})
 
 
 def test_enable_features_writes_ai_feature_flag():
@@ -125,10 +144,9 @@ def test_get_alert_investigation_status_combines_field_and_status():
         alerts=alerts,
     )
     ai = AIApi(c)
-    assert ai.get_alert_investigation_status("abc-123") == {
-        "task_id": "t-9",
-        "status": "inprogress",
-    }
+    status = ai.get_alert_investigation_status("abc-123")
+    assert status.task_id == "t-9"
+    assert status.status == "inprogress"
 
 
 def test_get_alert_investigation_status_none_when_no_investigation():
@@ -623,7 +641,7 @@ def test_register_and_verify_merges_tools_from_validation():
     result = ai.register_and_verify({"name": "DeepWiki", "url": "https://mcp.deepwiki.com/mcp"})
 
     assert result["uuid"] == "m-new"
-    assert result["tools"] == [{"name": "read_wiki_structure"}]
+    assert result["tools"] == ["read_wiki_structure"]
     # Only ONE validate call — upsert doesn't re-validate (already known-good).
     assert [call for call in c.calls if call[:2] == ("POST", "/api/ai/mcp/validate")].__len__() == 1
 
@@ -636,3 +654,77 @@ def test_register_and_verify_raises_without_saving_on_invalid_config():
         ai.register_and_verify({"name": "Bad", "url": "https://unreachable.example.com/mcp"})
 
     assert not any(call[0] in ("POST", "PUT") and "mcp_configurations" in call[1] for call in c.calls)
+
+
+# -- connector -> MCP server -------------------------------------------------
+def test_mcp_connector_candidates_hits_root_level_endpoint():
+    c = RecordingClient(
+        responses={("GET", "/mcp/servers/connector"): {"available": ["imap"], "restricted": ["code-snippet"]}}
+    )
+    ai = AIApi(c)
+    cands = ai.mcp_connector_candidates()
+    assert cands.available == ["imap"]
+    assert cands.restricted == ["code-snippet"]
+
+
+def _fake_imap_definition():
+    from pyfsr.models._integration import ConnectorDefinition, Operation
+
+    return ConnectorDefinition.model_validate(
+        {
+            "name": "imap",
+            "label": "IMAP",
+            "version": "3.5.8",
+            "description": "Steps related to fetching and parsing email",
+            "config_count": 0,
+            "operations": [
+                Operation.model_validate({"operation": "fetch_email_new", "title": "Fetch Email(s)"}),
+                Operation.model_validate({"operation": "fetch_email", "title": "Fetch Email(s) Deprecated"}),
+            ],
+        }
+    )
+
+
+def test_host_connector_as_mcp_server_registers_and_wires_tools():
+    from pyfsr.models._integration import ConnectorConfigSummary
+
+    cfg = ConnectorConfigSummary.model_validate({"config_id": "cfg-1", "name": "Default", "default": True})
+    connectors = FakeConnectors(definition=_fake_imap_definition(), configurations=[cfg])
+    c = RecordingClient(
+        responses={("POST", "/api/3/mcp_configurations"): {"uuid": "m-imap", "name": "IMAP"}},
+        connectors=connectors,
+    )
+    ai = AIApi(c)
+    saved = ai.host_connector_as_mcp_server("imap", operations=["fetch_email_new"])
+
+    assert saved.uuid == "m-imap"
+    register_call = next(call for call in c.calls if call[:2] == ("POST", "/api/3/mcp_configurations"))
+    assert register_call[2]["type"] == "connector"
+    assert register_call[2]["metadata"]["configId"] == "cfg-1"
+
+    add_tools_call = next(call for call in c.calls if call[:2] == ("POST", "/mcp/add/tools"))
+    assert add_tools_call[2]["mcp_configuration"] == {"name": "IMAP", "uuid": "m-imap"}
+    assert [t["operation"] for t in add_tools_call[2]["tools"]] == ["fetch_email_new"]
+
+
+def test_update_connector_mcp_server_tools_computes_removals():
+    connectors = FakeConnectors(definition=_fake_imap_definition(), configurations=[])
+    c = RecordingClient(
+        responses={
+            ("POST", "/mcp/config/export"): [{"uuid": "m-imap", "name": "imap", "tools": [{"name": "fetch_email"}]}],
+        },
+        connectors=connectors,
+    )
+    ai = AIApi(c)
+    ai.update_connector_mcp_server_tools("m-imap", connector_name="imap", operations=["fetch_email_new"])
+
+    put_call = next(call for call in c.calls if call[:2] == ("PUT", "/mcp/tools/m-imap"))
+    assert put_call[2]["remove_tools"] == ["fetch_email"]
+    assert [t["operation"] for t in put_call[2]["tools"]] == ["fetch_email_new"]
+
+
+def test_delete_mcp_tools_sends_delete_request():
+    c = RecordingClient()
+    ai = AIApi(c)
+    ai.delete_mcp_tools([{"uuid": "m-imap", "name": "fetch_email"}])
+    assert ("DELETE", "/mcp/tools/delete", [{"uuid": "m-imap", "name": "fetch_email"}]) in c.calls
