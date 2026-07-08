@@ -917,6 +917,44 @@ class PicklistName(ApiResult):
         return self.picklists or []
 
 
+class SystemViewTemplate(ApiResult):
+    """A ``system_view_templates`` row — a module/layout's view configuration.
+
+    From ``GET /api/3/system_view_templates`` (bulk list) or
+    ``GET /api/views/1/{name}`` (single named template), used by
+    :class:`~pyfsr.api.view_templates.ViewTemplatesAPI`. A "default" is not a
+    separate resource — it's this row's ``isDefault`` flag, exactly one of
+    which is ``True`` per ``(module, viewOptions)`` pair (verified live, 8.0).
+
+    Template **names are not unique across layouts**: a module ships one
+    "Default Layout" row per ``viewOptions`` (``list``/``detail``/``form``),
+    so resolving a template by name alone must also scope by ``viewOptions``
+    (see ``UserSettingsAPI.resolve_view_template``, which learned this the
+    hard way). ``config`` (the layout body — rows/columns/widgets) is typed
+    loosely since its shape varies by ``type``; the JSON-LD envelope
+    (``@context``/``@type``) rides through ``extra``. Dict-compatible.
+    """
+
+    id_iri: str | None = Field(default=None, alias="@id")
+    uuid: str | None = None
+    name: str | None = None
+    module: str | None = None
+    #: Layout kind: ``"list"``, ``"detail"``, or ``"form"``.
+    viewOptions: str | None = None
+    #: Storage type, e.g. ``"rows"`` or ``"form"``.
+    type: str | None = None
+    isDefault: bool | None = None
+    #: The layout body (rows/columns/widgets); shape varies by ``type``.
+    config: dict[str, Any] | None = None
+
+    @property
+    def iri(self) -> str | None:
+        """The row's IRI (``/api/3/system_view_templates/<uuid>``)."""
+        if self.id_iri:
+            return self.id_iri
+        return f"/api/3/system_view_templates/{self.uuid}" if self.uuid else None
+
+
 class DailyActionCount(ApiResult):
     """Daily action-count license usage — ``client.system.daily_action_count()``.
 

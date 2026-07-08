@@ -50,6 +50,8 @@ WHITELIST = [
     "pyfsr.api.picklists",
     "pyfsr.api.modules_admin",
     "pyfsr.api.widgets",
+    "pyfsr.api.user_settings",
+    "pyfsr.api.view_templates",
     "pyfsr.pagination",
 ]
 

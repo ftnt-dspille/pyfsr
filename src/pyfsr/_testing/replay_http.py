@@ -112,6 +112,29 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             cap.WIDGET_DEV_MANIFEST_RESPONSE,
         ),
         _entry("PUT", "/api/3/widgets/5fef77ad-8917-40c6-82a2-fdd753bdf41c", cap.WIDGET_PUBLISH_RESPONSE),
+        # User settings — actors/current backs all()/get(); the /current/<key>
+        # path backs get_direct()/set()/delete() (and the view-template
+        # convenience wrappers built on top of them).
+        _entry("GET", "/api/3/actors/current", cap.ACTOR_CURRENT_RESPONSE),
+        _entry(
+            "PUT",
+            "/api/3/user_settings/current/user/view/details/alerts/viewTemplate",
+            cap.USER_SETTINGS_PUT_RESPONSE,
+        ),
+        _entry(
+            "GET",
+            "/api/3/user_settings/current/user/view/details/alerts/viewTemplate",
+            cap.USER_SETTINGS_GET_VIEW_TEMPLATE_RESPONSE,
+        ),
+        _entry(
+            "DELETE",
+            "/api/3/user_settings/current/user/view/details/alerts/viewTemplate",
+            None,
+            status=204,
+        ),
+        # ViewTemplatesAPI.list_templates — backs resolve_view_template() /
+        # get_view_template_name() / set_view_template(module, <name>).
+        _entry("GET", "/api/3/system_view_templates", cap.SYSTEM_VIEW_TEMPLATES_RESPONSE),
     ]
 )
 
