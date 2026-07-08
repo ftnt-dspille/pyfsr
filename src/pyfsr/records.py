@@ -881,6 +881,83 @@ class RecordSet(Generic[T]):
         failed = [BulkUpsertFailure.from_raw(msg) for msg in raw_resp.get("failure", []) if isinstance(msg, str)]
         return BulkUpsertResult(succeeded=succeeded, failed=failed, raw=raw_resp)
 
+    @overload
+    def bulk_insert(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        parse: Literal[False] = ...,
+        resolve_picklists: bool = ...,
+        strict_picklists: bool = ...,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    def bulk_insert(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        parse: Literal[True],
+        resolve_picklists: bool = ...,
+        strict_picklists: bool = ...,
+    ) -> BulkUpsertResult[T]: ...
+
+    def bulk_insert(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        parse: bool = False,
+        resolve_picklists: bool = True,
+        strict_picklists: bool = False,
+    ) -> dict[str, Any] | BulkUpsertResult[T]:
+        """Create many records via ``POST /api/3/insert/<module>``.
+
+        Unlike :meth:`bulk_upsert`, this is a pure create: a row that collides
+        with an existing natural key fails instead of silently overwriting it.
+        Use this for bulk-loading data where an accidental overwrite of an
+        existing record would be a bug rather than the intended outcome; use
+        :meth:`bulk_upsert` when "create or update" is what you actually want.
+
+        ``rows``, ``parse``, ``resolve_picklists``, and ``strict_picklists``
+        behave exactly as in :meth:`bulk_upsert` — same multi-status
+        ``{"success": [...], "failure": [...]}`` envelope, same
+        :class:`BulkUpsertResult` / :class:`BulkUpsertFailure` shapes when
+        ``parse=True``.
+
+        Note:
+            Unlike ``bulkupsert`` (which takes a bare list), this endpoint
+            expects the rows wrapped as ``{"data": [...]}`` — passing a bare
+            list 500s. Also note picklist values/attributes are **not**
+            server-side validated on this "bulk feed" ingest path the way
+            they are on single-record ``create()``; ``resolve_picklists``
+            still resolves friendly picklist labels to IRIs client-side, but
+            an invalid picklist value won't be rejected by the server.
+
+            Live-verified on 8.0.0-6034: when every row succeeds, the server
+            replies ``201`` with a bare ``hydra:Collection`` (no
+            ``success``/``failure`` keys) instead of the multi-status
+            envelope; this method normalizes that case so ``parse=True``
+            always yields a consistent :class:`BulkUpsertResult` either way.
+        """
+        payload: list[dict[str, Any]] = []
+        for row in rows:
+            if isinstance(row, BaseRecord):
+                row = row.to_dict(exclude_none=True)
+            if resolve_picklists:
+                row = self.client.picklists.resolve_record_fields(self.module, row, strict=strict_picklists)
+            payload.append(row)
+        resp = self.client.post(f"/api/3/insert/{self.module}", data={"data": payload})
+        if not parse:
+            return resp
+        raw_resp = resp if isinstance(resp, dict) else {}
+        # All-succeeded responses come back as a bare hydra:Collection (no
+        # "success"/"failure" keys) instead of the multi-status envelope a
+        # partial failure gets — normalize both to the same shape.
+        if "success" not in raw_resp and "failure" not in raw_resp:
+            raw_resp = {"success": raw_resp.get("hydra:member", []), "failure": []}
+        succeeded = [self._parse(row, raw=False) for row in raw_resp.get("success", []) if isinstance(row, dict)]
+        failed = [BulkUpsertFailure.from_raw(msg) for msg in raw_resp.get("failure", []) if isinstance(msg, str)]
+        return BulkUpsertResult(succeeded=succeeded, failed=failed, raw=raw_resp)
+
     def _single_record_path(self, ref: str, *, action: str) -> str:
         """Resolve ``ref`` to a single-record path, refusing collection-wide refs.
 
@@ -990,6 +1067,60 @@ class RecordSet(Generic[T]):
         body["deletedAt"] = None
         restored = self.client.put(path, data=body, params={"$showDeleted": "true"})
         return self._parse(restored, raw=raw)
+
+    @staticmethod
+    def _resolve_related_iri(related: str) -> str:
+        """Resolve one related-record reference to a full ``/api/3/...`` IRI.
+
+        Unlike :meth:`_single_record_path`, there's no ``self.module`` to fall
+        back on here — the related record is (usually) a *different* module
+        than the one this ``RecordSet`` is scoped to. A bare uuid is
+        therefore ambiguous and rejected; pass a full IRI or ``module:uuid``.
+        """
+        if not isinstance(related, str) or not related.strip():
+            raise ValueError("relationship refs must be non-empty")
+        ref = related.strip()
+        if ref.startswith("/api/"):
+            return ref
+        if ":" in ref:
+            mod, _, uuid = ref.partition(":")
+            return f"/api/3/{mod}/{uuid}"
+        raise ValueError(f"relationship ref {related!r} must be a full IRI or 'module:uuid' shorthand, not a bare uuid")
+
+    def link(self, ref: str, field: str, related: str | list[str]) -> dict[str, Any]:
+        """Add one or more related records to a relationship field.
+
+        Sends ``PUT /api/3/<module>/<uuid>`` with ``{"__link": {field:
+        [<iri>, ...]}}`` — the wire shape FortiSOAR uses to add objects to a
+        relationship without resending the whole parent record. ``related``
+        entries must each be a full IRI (``/api/3/assets/<uuid>``) or a
+        ``module:uuid`` shorthand — a bare uuid is ambiguous since the related
+        module usually differs from this ``RecordSet``'s own module.
+
+        Example::
+
+            client.records("alerts").link("alert-uuid", "assets", "assets:asset-uuid")
+
+        Live-verified on FortiSOAR 8.0.0-6034: linking an ``Asset`` onto an
+        ``Alert``'s ``assets`` field, confirmed via a follow-up
+        ``GET /api/3/alerts/<uuid>/assets`` read.
+        """
+        path = self._single_record_path(ref, action="link")
+        refs = [related] if isinstance(related, str) else list(related)
+        iris = [self._resolve_related_iri(r) for r in refs]
+        return self.client.put(path, data={"__link": {field: iris}})
+
+    def unlink(self, ref: str, field: str, related: str | list[str]) -> dict[str, Any]:
+        """Remove one or more related records from a relationship field.
+
+        Sends ``PUT /api/3/<module>/<uuid>`` with ``{"__unlink": {field:
+        [<iri>, ...]}}`` — the inverse of :meth:`link`. Same ``related``
+        formats accepted (full IRI or ``module:uuid``).
+        """
+        path = self._single_record_path(ref, action="unlink")
+        refs = [related] if isinstance(related, str) else list(related)
+        iris = [self._resolve_related_iri(r) for r in refs]
+        return self.client.put(path, data={"__unlink": {field: iris}})
 
     # -- convenience shortcuts ---------------------------------------------
 

@@ -413,3 +413,135 @@ agent the full create-configure-run-build loop with no gaps.
 The {mod}`pyfsr.agent.tools` and {mod}`pyfsr.agent.mcp` modules in the {doc}`../reference`
 for the complete tool list and dispatch signatures.
 ```
+
+## Authoring your own AI agent
+
+Everything above drives the agents FortiSOAR *already ships*. FortiSOAR 8.0 also
+lets you install **your own** agentic-AI agent — a reusable "skill" the
+investigation orchestrator can route work to (compute a metric, retrieve records,
+enrich an indicator, summarize a case). You'd author one when the built-in agents
+don't cover a step your SOC repeats: a bespoke scoring formula, an in-house
+enrichment source, a house-style report format. `pyfsr` packages, validates,
+uploads, and exports these agents so you don't hand-build the zip or curl the
+multipart endpoint.
+
+### The package model
+
+An AI agent ships as a zip whose **single top-level folder is the agent's
+`name`**. Both the Fortinet-published agents and yours share this layout:
+
+```text
+metric-computation/
+  info.json            # manifest: name, agentclass, version, config form, I/O
+  agent.py             # the class named by info.json "agentclass"; implements act()
+  __init__.py
+  prompt.yaml          # prompt registry keyed by uuid
+  config/
+    memory.yaml        # allowed_tools: {<mcp_config_uuid>: [tool, ...]}
+  images/
+    small.png
+    large.png
+  constants.py         # optional helper modules
+```
+
+What each file does:
+
+- **`info.json`** — the manifest. `name` must equal the folder name; `agentclass`
+  must name a class defined in `agent.py`; `configuration.fields` is the config
+  form the UI renders (config-type toggle, LLM-provider picker, MCP-server
+  multiselect, masking agent); `inputformat`/`outputformat` document the JSON the
+  agent consumes and returns.
+- **`agent.py`** — subclasses the platform's `BaseAgent` and implements
+  `act(input_data)`. It pulls a prompt by uuid
+  (`self.get_prompt_by_uuid("<uuid>")`), `.format(**inputs)`s the templates, and
+  calls the LLM. The uuid it references **must** exist in `prompt.yaml`.
+- **`prompt.yaml`** — the prompts, keyed by uuid. Each entry is exactly what the
+  UI's *Edit Prompt* screen edits: `name`, `description`, `system_instruction`
+  (System Prompt Template), `user_instruction` (User Prompt Template),
+  `response_format` (the JSON schema the model must return), and
+  `validation_instruction`. Any `{placeholder}` in a template — `{query}`,
+  `{data}`, `{verdict}`, `{key_findings}` — is filled by `act()` at call time.
+- **`config/memory.yaml`** — the agent's MCP-tool allowlist: a map of registered
+  **MCP-configuration uuid** → the list of tool names on that server the agent may
+  call. This is the safety boundary — an agent can only reach tools it's explicitly
+  granted here. An empty list binds the server without (yet) allowing any tool.
+
+### Validate, pack, and upload
+
+`pyfsr` models the whole package ({class}`~pyfsr.models.AgentPackage`) and checks
+the mistakes that otherwise fail *silently on the appliance* — an `agentclass`
+that isn't in `agent.py`, a prompt uuid the code references but the yaml omits, a
+manifest icon that isn't in the bundle:
+
+```{code-block} python
+from pyfsr import FortiSOAR, pack_agent
+from pyfsr.models import AgentPackage
+
+# Inspect + validate a source folder before uploading (raises on any defect):
+pkg = AgentPackage.from_dir("./my-agents/incident-scorer")
+print(pkg.info.agentclass, pkg.info.version)
+print(pkg.memory.mcp_configuration_uuids())   # which MCP servers it's wired to
+
+client = FortiSOAR("soar.example.com", token="<api-key>")
+
+# Import straight from a source directory — pyfsr validates + packs it on the fly:
+result = client.ai.import_agent("./my-agents/incident-scorer", replace=True)
+agent_uuid = result["uuid"]
+
+# ...or pack once and upload the zip yourself:
+zip_path = pack_agent("./my-agents/incident-scorer")   # -> ./my-agents/incident-scorer.zip
+client.ai.import_agent(zip_path, replace=True)
+```
+
+`import_agent` accepts either a directory (validated and packed for you) or a
+prebuilt `.zip`. `replace=True` overwrites an already-installed agent of the same
+name+version; without it, re-importing an existing version is rejected.
+
+The quickest way to author a new agent is to **clone a shipped one** as a
+starting point:
+
+```{code-block} python
+client.ai.export_agent(agent_uuid, "./incident-scorer-backup.zip")
+```
+
+Unzip it, rename the folder + `info.json` `name`, edit `agent.py`/`prompt.yaml`,
+then `import_agent` the folder back.
+
+### Ensuring your agent is actually used
+
+An imported agent lands **inactive** and on the default config. Three things make
+the orchestrator route to it:
+
+1. **Activate it** — an inactive agent is never selected:
+
+   ```{code-block} python
+   client.ai.activate_agent([agent_uuid])          # active=True by default
+   ```
+
+2. **Give it an LLM + MCP config** — if it shouldn't inherit the default, set its
+   config so it has a reasoning profile and can reach the MCP tools its
+   `memory.yaml` allowlist names:
+
+   ```{code-block} python
+   # grant one MCP server to the agent (read-modify-write of its config):
+   client.ai.allow_mcp_server_for_agent("incident-scorer", "1.0.0", mcp_uuid)
+   # or set the whole inner config (llm_provider, mcp_server, masking_agent):
+   client.ai.update_agent_config("incident-scorer", "1.0.0",
+                                 {"llm_provider": llm_uuid, "mcp_server": [mcp_uuid]})
+   ```
+
+   Confirm what's live with `client.ai.get_agent_config("incident-scorer", "1.0.0")`
+   and `client.ai.describe_agent_mcp_servers(...)`.
+
+3. **Verify it's eligible** — it should now appear active in the agent list, and
+   the investigation pipeline (or a direct `run_agent`) can invoke it:
+
+   ```{code-block} python
+   [a["name"] for a in client.ai.list_agents(active=True)]
+   client.ai.run_agent("incident-scorer", {"natural_language_task": "...", "data": {...}})
+   ```
+
+```{note}
+Custom agents require FortiAI to be enabled (`client.ai.enable_features()`) and an
+appliance at `fsrMinCompatibility` or newer — the shipped agents target 8.0.0.
+```

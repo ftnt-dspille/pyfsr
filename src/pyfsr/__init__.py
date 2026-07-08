@@ -5,6 +5,7 @@ For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
 """
 
 from . import repo
+from .api.ai import pack_agent
 from .api.connectors import pack_connector
 from .appliance import Appliance
 from .client import FortiSOAR
@@ -70,6 +71,7 @@ __all__ = [
     "FortiSOAR",
     "Appliance",
     "EnvConfig",
+    "pack_agent",
     "pack_connector",
     "Query",
     "QueryBody",
