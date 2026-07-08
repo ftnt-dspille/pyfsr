@@ -65,6 +65,7 @@ from ..models._integration import (
     Operation,
 )
 from ..pagination import extract_members
+from ._solutionpacks import upload_solutionpack
 from .base import BaseAPI
 
 
@@ -299,21 +300,12 @@ class ConnectorsAPI(BaseAPI):
         Raises:
             FileNotFoundError: if ``path`` doesn't exist.
         """
-        file_path = Path(path)
-        if not file_path.exists():
-            raise FileNotFoundError(f"connector bundle not found: {file_path}")
-        params = {"$type": "connector"}
-        if replace:
-            params["$replace"] = "true"
-        mime_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-        with open(file_path, "rb") as f:
-            resp = self.client.post(
-                "/api/3/solutionpacks/install",
-                files={"file": (file_path.name, f, mime_type)},
-                params=params,
-                headers={"Content-Type": None},
-            )
-        resp = resp if isinstance(resp, dict) else {"result": resp}
+        mime_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
+        # NOTE: kept on the mimetypes-guessed content-type (unlike widgets, which
+        # default to the live-verified "application/gzip") to avoid changing this
+        # long-working path's wire behavior without re-verifying live against a
+        # real connector bundle — see upload_solutionpack's docstring.
+        resp = upload_solutionpack(self.client, path, type_="connector", replace=replace, content_type=mime_type)
         self.clear_cache()
         if not wait:
             return resp

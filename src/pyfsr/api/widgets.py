@@ -44,11 +44,11 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any
 
 from ..exceptions import APIError, WidgetPublishError, WidgetUploadConflict
 from ..models._widgets import WidgetRecord
 from ..pagination import extract_members
+from ._solutionpacks import upload_solutionpack
 from .base import BaseAPI
 
 _UPLOAD_CONFLICT_MARKER = "already exists in widget workspace"
@@ -116,25 +116,13 @@ class WidgetsAPI(BaseAPI):
             WidgetUploadConflict: that name+version is already staged and
                 ``replace=False``.
         """
-        file_path = Path(path)
-        if not file_path.exists():
-            raise FileNotFoundError(f"widget bundle not found: {file_path}")
-        params: dict[str, Any] = {"$type": "widget"}
-        if replace:
-            params["$replace"] = "true"
         try:
-            with open(file_path, "rb") as f:
-                resp = self.client.post(
-                    "/api/3/solutionpacks/install",
-                    files={"file": (file_path.name, f, "application/gzip")},
-                    params=params,
-                    headers={"Content-Type": None},
-                )
+            resp = upload_solutionpack(self.client, path, type_="widget", replace=replace)
         except APIError as exc:
             if _UPLOAD_CONFLICT_MARKER in (exc.message or ""):
                 raise WidgetUploadConflict(exc.message) from exc
             raise
-        return WidgetRecord.model_validate(resp if isinstance(resp, dict) else {})
+        return WidgetRecord.model_validate(resp)
 
     # --------------------------------------------------------------- publish
     def publish(self, uuid: str, *, replace: bool = True, go_live: bool = True) -> WidgetRecord:
