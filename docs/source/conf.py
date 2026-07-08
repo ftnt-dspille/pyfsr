@@ -179,7 +179,10 @@ autoapi_dirs = ["../../src/pyfsr"]
 # `pyfsr._testing` is the doctest/test harness (replay transport + fixtures), not
 # a feature of the appliance API — it backs the doctested return examples but
 # shouldn't surface as a top-level API page.
-autoapi_ignore = ["*/resources/*", "*/_testing/*"]
+# `pyfsr/playbook_library.py` indexes the in-repo `examples/playbooks/library/`
+# corpus for the `pyfsr playbook examples` CLI; it's repo-only (never packaged),
+# so it has no public API surface for installed-package users to reference.
+autoapi_ignore = ["*/resources/*", "*/_testing/*", "*/playbook_library.py"]
 autoapi_keep_files = True
 # Drop AutoAPI's own top-level toctree entry; we surface it under our
 # "API Reference" section instead, so there's a single, unambiguous nav path.
@@ -222,7 +225,7 @@ html_theme_options = {
             "html": (
                 '<svg stroke="currentColor" fill="currentColor" '
                 'stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" '
-                'd="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38'
+                'd="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 '
                 "0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13"
                 "-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66"
                 ".07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15"

@@ -237,9 +237,10 @@ Every library playbook compiles and carries a `goal` / `trigger` / `inputs` /
 column means it compiles but references connectors the offline slim catalog
 doesn't carry — run `pyfsr playbook deploy <file> --refresh-catalog` to resolve
 them against a live instance. The manifest and listing are available from Python
-via {func}`pyfsr.playbook_library.list_library`,
-{func}`pyfsr.playbook_library.library_manifest`, and
-{func}`pyfsr.playbook_library.library_show`.
+via `pyfsr.playbook_library.list_library`,
+`pyfsr.playbook_library.library_manifest`, and
+`pyfsr.playbook_library.library_show` (repo-internal, not part of the
+installed-package API).
 
 ## Testing interactive playbooks & inspecting runs
 

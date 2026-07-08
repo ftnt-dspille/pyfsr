@@ -11,7 +11,8 @@ missing-dependency error surfaces with a pyfsr-flavored message.
 
 The foundational playbook library index (``list_library`` / ``library_manifest``
 / ``library_show``) is a separate, pyfsr-repo-specific concern -- see
-:mod:`pyfsr.playbook_library`.
+``pyfsr.playbook_library`` (repo-internal, not part of the installed-package
+API).
 """
 
 from __future__ import annotations
