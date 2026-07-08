@@ -65,7 +65,7 @@ class WidgetsAPI(BaseAPI):
             installed: filter to ``installed==True``/``False`` client-side.
             name: filter to this widget name client-side.
 
-        Returns one :class:`WidgetRecord` per widget *version* on the box.
+        Returns one :class:`~pyfsr.models.WidgetRecord` per widget *version* on the box.
         """
         resp = self.client.get("/api/3/widgets")
         records = [WidgetRecord.model_validate(m) for m in extract_members(resp)]
@@ -109,7 +109,7 @@ class WidgetsAPI(BaseAPI):
                 two calls rather than leaving a caller to run them separately.
 
         Returns:
-            The created :class:`WidgetRecord` (``draft=True, installed=False``).
+            The created :class:`~pyfsr.models.WidgetRecord` (``draft=True, installed=False``).
 
         Raises:
             FileNotFoundError: if ``path`` doesn't exist.
@@ -160,7 +160,7 @@ class WidgetsAPI(BaseAPI):
                 ``False`` publishes-as-draft (rarely wanted).
 
         Returns:
-            The published :class:`WidgetRecord`.
+            The published :class:`~pyfsr.models.WidgetRecord`.
         """
         dev_resp = self.client.get(f"/api/3/widgets/development/{uuid}")
         manifest = extract_members(dev_resp)
@@ -207,7 +207,7 @@ class WidgetsAPI(BaseAPI):
             timeout: give up waiting after this many seconds.
 
         Returns:
-            The settled :class:`WidgetRecord`.
+            The settled :class:`~pyfsr.models.WidgetRecord`.
 
         Raises:
             WidgetUploadConflict: upload collided with an existing staged version.
