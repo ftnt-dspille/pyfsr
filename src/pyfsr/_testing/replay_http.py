@@ -89,6 +89,16 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         # Picklists — the two bulk calls ``_load_bulk`` makes (names + flat items).
         _entry("GET", "/api/3/picklist_names", cap.PICKLIST_NAMES_RESPONSE),
         _entry("GET", "/api/3/picklists", cap.PICKLISTS_RESPONSE),
+        # Widgets — list, upload (solutionpacks/install with $type=widget), the
+        # dev-manifest GET publish() reads, and the publish PUT response.
+        _entry("GET", "/api/3/widgets", cap.WIDGET_LIST_RESPONSE),
+        _entry("POST", "/api/3/solutionpacks/install", cap.WIDGET_UPLOAD_RESPONSE),
+        _entry(
+            "GET",
+            "/api/3/widgets/development/5fef77ad-8917-40c6-82a2-fdd753bdf41c",
+            cap.WIDGET_DEV_MANIFEST_RESPONSE,
+        ),
+        _entry("PUT", "/api/3/widgets/5fef77ad-8917-40c6-82a2-fdd753bdf41c", cap.WIDGET_PUBLISH_RESPONSE),
     ]
 )
 
@@ -140,6 +150,15 @@ def _path_and_match(method: str, url: str) -> tuple[str, str]:
         and segments[3] in ("staging_model_metadatas", "model_metadatas")
     ):
         return f"/api/3/{segments[3]}/7fdae59c-7de7-43d9-bf2a-dc2f00ed25b4", path
+    # /api/3/widgets/development/<uuid>  ->  collapse to the recorded uuid (so
+    # publish() resolves regardless of which uuid upload() returned).
+    if len(segments) == 6 and segments[1] == "api" and segments[3] == "widgets" and segments[4] == "development":
+        return "/api/3/widgets/development/5fef77ad-8917-40c6-82a2-fdd753bdf41c", path
+    # /api/3/widgets/<uuid>  (publish PUT / remove DELETE)  ->  collapse to the
+    # recorded uuid. The bare collection (4 segments) is left alone so list()
+    # resolves to the list capture, not this one.
+    if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "widgets":
+        return "/api/3/widgets/5fef77ad-8917-40c6-82a2-fdd753bdf41c", path
     # /api/integration/connectors/healthcheck/<name>/<version>/  ->  recorded.
     # segments: ['', 'api', 'integration', 'connectors', 'healthcheck', name, version]
     if len(segments) == 7 and segments[1] == "api" and segments[3] == "connectors" and segments[4] == "healthcheck":

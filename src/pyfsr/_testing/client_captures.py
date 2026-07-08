@@ -639,3 +639,228 @@ FORTIAI_RESULT_RESPONSE = {
         {"data": {"message": "Recommending Next Step"}, "state": "next_action", "status": "completed"},
     ],
 }
+
+# ---------------------------------------------------------------------------
+# Widgets — client.widgets (upload / publish / list)
+# ---------------------------------------------------------------------------
+# Captured live against fsr-ga (8.0.0-6034) 2026-07-08 exercising the real
+# upload -> dev-manifest -> publish round trip with a genuine widget package
+# (jinjaEditorWidget 1.1.3, sourced from an internal widget dev kit — not a
+# FortiSOAR-shipped widget), then removed; the box's 44-widget catalog was
+# unaffected. createUser/modifyUser (full Person records) and the upload
+# response's full asset ``tree`` are dropped per this module's trim
+# convention; WIDGET_DEV_MANIFEST_RESPONSE keeps a 2-file slice of ``tree``
+# so a doctest can show the shape without the real ~30-entry asset tree.
+
+# GET /api/3/widgets — 3 of the real 44 installed/published widgets.
+WIDGET_LIST_RESPONSE = {
+    "@context": "/api/3/contexts/Widget",
+    "@id": "/api/3/widgets",
+    "@type": "hydra:Collection",
+    "hydra:totalItems": 44,
+    "hydra:member": [
+        {
+            "@id": "/api/3/widgets/af505f28-31be-4528-9b7d-c579d8de43f5",
+            "@type": "Widget",
+            "publishedDate": 1617038619,
+            "subTitle": "Mobile Settings",
+            "installed": True,
+            "name": "mobileSettings",
+            "label": "Mobile Settings",
+            "title": "Mobile Settings",
+            "version": "2.0.1",
+            "metadata": {
+                "pages": ["Widget Library"],
+                "certified": "Yes",
+                "publisher": "Fortinet",
+                "compatibility": ["7.0.2"],
+                "mobileCompatibleVersion": "1.8.0",
+            },
+            "draft": False,
+            "enablePublish": None,
+            "uuid": "af505f28-31be-4528-9b7d-c579d8de43f5",
+        },
+        {
+            "@id": "/api/3/widgets/3aa1e7ab-f9fc-4365-a137-5808aad6d9c6",
+            "@type": "Widget",
+            "publishedDate": 1618084800,
+            "subTitle": (
+                "Primarily designed to showcase a particular record's highlights/summary, "
+                "this widget houses multiple utility widgets within it to allow for "
+                "customized uses."
+            ),
+            "installed": True,
+            "name": "recordSummary",
+            "label": "Record Summary",
+            "title": "Record Summary",
+            "version": "2.0.0",
+            "metadata": {
+                "pages": ["View Panel"],
+                "certified": "Yes",
+                "publisher": "Fortinet",
+                "compatibility": ["7.0.2"],
+            },
+            "draft": False,
+            "enablePublish": None,
+            "uuid": "3aa1e7ab-f9fc-4365-a137-5808aad6d9c6",
+        },
+        {
+            "@id": "/api/3/widgets/087a730d-67ae-41f2-8d49-3c22f6eaef30",
+            "@type": "Widget",
+            "publishedDate": 1647979200,
+            "subTitle": "Change which teams/users have access to records",
+            "installed": True,
+            "name": "accessControl",
+            "label": "Access Control",
+            "title": "Access Control",
+            "version": "2.1.0",
+            "metadata": {
+                "pages": ["View Panel"],
+                "certified": "Yes",
+                "publisher": "Fortinet",
+                "compatibility": ["7.0.2", "7.2.0"],
+            },
+            "draft": False,
+            "enablePublish": None,
+            "uuid": "087a730d-67ae-41f2-8d49-3c22f6eaef30",
+        },
+    ],
+}
+
+# POST /api/3/solutionpacks/install?$type=widget&$replace=true — the widget
+# record right after upload: staged in the dev workspace, NOT live yet
+# (draft:true, installed:false). Real values from uploading jinjaEditorWidget
+# 1.1.3 for the first time on the capture box.
+WIDGET_UPLOAD_RESPONSE = {
+    "@context": "/api/3/contexts/Widget",
+    "@id": "/api/3/widgets/5fef77ad-8917-40c6-82a2-fdd753bdf41c",
+    "@type": "Widget",
+    "publishedDate": 1745280000,
+    "subTitle": "Write, evaluate, and debug Jinja templates from any dashboard or record detail page.",
+    "installed": False,
+    "name": "jinjaEditorWidget",
+    "label": "Jinja Editor",
+    "title": "Jinja Editor",
+    "version": "1.1.3",
+    "metadata": {
+        "description": (
+            "Embeds the FortiSOAR Jinja editor as a widget. Provide an input JSON payload, "
+            "write a Jinja template against it, and render the result. On the View Panel, "
+            "optionally seed the input with the current record so you can debug templates "
+            "against real data."
+        ),
+        "publisher": "Dylan Spille",
+        "certified": "No",
+        "compatibility": ["7.4.0", "7.4.1", "7.6.0", "7.6.5"],
+        "snapshots": [],
+        "category": ["Utilities", "Playbooks"],
+        "pages": ["Dashboard", "View Panel"],
+        "standalone": False,
+        "windowClass": "Full Width",
+        "size": "lg",
+    },
+    "draft": True,
+    "enablePublish": None,
+    "uuid": "5fef77ad-8917-40c6-82a2-fdd753bdf41c",
+}
+
+# GET /api/3/widgets/development/<uuid> — the dev-workspace manifest publish()
+# reads, then strips ``tree`` from before PUTting it back. ``tree`` here is a
+# 2-file slice (real capture has ~30 entries covering every asset) — enough to
+# show the shape a doctest needs without the noise.
+WIDGET_DEV_MANIFEST_RESPONSE = {
+    "@type": "hydra:Collection",
+    "hydra:member": [
+        {
+            "@id": "/api/3/widgets/5fef77ad-8917-40c6-82a2-fdd753bdf41c",
+            "subTitle": "Write, evaluate, and debug Jinja templates from any dashboard or record detail page.",
+            "installed": False,
+            "name": "jinjaEditorWidget",
+            "title": "Jinja Editor",
+            "version": "1.1.3",
+            "metadata": {
+                "description": (
+                    "Embeds the FortiSOAR Jinja editor as a widget. Provide an input JSON "
+                    "payload, write a Jinja template against it, and render the result. On the "
+                    "View Panel, optionally seed the input with the current record so you can "
+                    "debug templates against real data."
+                ),
+                "publisher": "Dylan Spille",
+                "certified": "No",
+                "compatibility": ["7.4.0", "7.4.1", "7.6.0", "7.6.5"],
+                "snapshots": [],
+                "category": ["Utilities", "Playbooks"],
+                "pages": ["Dashboard", "View Panel"],
+                "standalone": False,
+                "windowClass": "Full Width",
+                "size": "lg",
+            },
+            "draft": True,
+            "enablePublish": None,
+            "systemWidget": False,
+            "tree": {
+                "jinjaEditorWidget-1.1.3": {
+                    "name": "jinjaEditorWidget-1.1.3",
+                    "primaryFolder": True,
+                    "type": "folder",
+                    "files": {
+                        "info.json": {
+                            "name": "info.json",
+                            "type": "json",
+                            "xpath": "/jinjaEditorWidget-1.1.3/info.json",
+                        },
+                        "view.controller.js": {
+                            "name": "view.controller.js",
+                            "type": "js",
+                            "xpath": "/jinjaEditorWidget-1.1.3/view.controller.js",
+                        },
+                    },
+                }
+            },
+        }
+    ],
+}
+
+# PUT /api/3/widgets/<uuid> — the published widget: draft:false, installed:true.
+# Real response from publishing the uploaded jinjaEditorWidget above.
+WIDGET_PUBLISH_RESPONSE = {
+    "@context": "/api/3/contexts/Widget",
+    "@id": "/api/3/widgets/5fef77ad-8917-40c6-82a2-fdd753bdf41c",
+    "@type": "Widget",
+    "publishedDate": 1783520302,
+    "subTitle": "Write, evaluate, and debug Jinja templates from any dashboard or record detail page.",
+    "installed": True,
+    "name": "jinjaEditorWidget",
+    "label": "Jinja Editor",
+    "title": "Jinja Editor",
+    "version": "1.1.3",
+    "metadata": {
+        "size": "lg",
+        "pages": ["Dashboard", "View Panel"],
+        "category": ["Utilities", "Playbooks"],
+        "certified": "No",
+        "publisher": "Dylan Spille",
+        "snapshots": [],
+        "standalone": False,
+        "description": (
+            "Embeds the FortiSOAR Jinja editor as a widget. Provide an input JSON payload, "
+            "write a Jinja template against it, and render the result. On the View Panel, "
+            "optionally seed the input with the current record so you can debug templates "
+            "against real data."
+        ),
+        "windowClass": "Full Width",
+        "compatibility": ["7.4.0", "7.4.1", "7.6.0", "7.6.5"],
+    },
+    "draft": False,
+    "enablePublish": False,
+    "uuid": "5fef77ad-8917-40c6-82a2-fdd753bdf41c",
+}
+
+# 400 body from POST .../solutionpacks/install?$type=widget&$replace=false when
+# that exact name+version is already staged in the dev workspace — the real
+# text WidgetsAPI.upload matches to raise WidgetUploadConflict. Captured live
+# by re-uploading jinjaEditorWidget 1.1.3 with replace=False right after the
+# upload above.
+WIDGET_UPLOAD_CONFLICT_MESSAGE = (
+    "Widget with Name - jinjaEditorWidget Version - 1.1.3 already exists in widget workspace."
+)

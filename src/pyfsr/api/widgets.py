@@ -22,10 +22,19 @@ provenance.
 
 Example:
     >>> client = demo_client()
-    >>> [w.name for w in client.widgets.list()[:1]]  # doctest: +SKIP
-    ['my-widget']
+    >>> [w.name for w in client.widgets.list()]
+    ['mobileSettings', 'recordSummary', 'accessControl']
+    >>> client.widgets.get("accessControl").version
+    '2.1.0'
 
-    Writes (upload, publish, deploy) need a live appliance::
+    ``publish`` needs only a uuid (no file), so it replays from the fixture too —
+    this is the real response from publishing a genuine widget package live::
+
+        >>> record = client.widgets.publish("5fef77ad-8917-40c6-82a2-fdd753bdf41c")
+        >>> record.draft, record.installed, record.published
+        (False, True, True)
+
+    ``upload``/``deploy`` need a real ``.tgz`` on disk plus a live appliance::
 
         record = client.widgets.deploy("my-widget-1.2.0.tgz")
         assert record.published
@@ -89,6 +98,16 @@ class WidgetsAPI(BaseAPI):
                 name+version (``$replace=true``). ``False`` + an existing
                 name+version raises :class:`~pyfsr.exceptions.WidgetUploadConflict`.
 
+                **Live-verified effect of ``replace=True``:** it does not just
+                clear a *staging* collision — re-uploading an exact name+version
+                that is currently **installed and published** replaces that
+                installed record too, resetting it to a fresh
+                ``draft=True, installed=False`` (a new uuid; the old uuid's
+                record is gone). In other words, ``upload(replace=True)`` on a
+                live widget immediately un-publishes it until :meth:`publish`
+                runs again — this is exactly why :meth:`deploy` always pairs the
+                two calls rather than leaving a caller to run them separately.
+
         Returns:
             The created :class:`WidgetRecord` (``draft=True, installed=False``).
 
@@ -134,6 +153,21 @@ class WidgetsAPI(BaseAPI):
                 installed (``replace`` body field, paired with
                 ``replaceVersions``). Independent of upload's ``$replace`` —
                 see the plan doc's "two replace flags" table.
+
+                **Live-verified:** ``True`` and ``False`` produced an
+                *identical* observable outcome in every case tested — a single
+                fresh ``draft=False, installed=True`` record, no stacked
+                versions. That's expected: by the time ``publish`` runs, the
+                prior installed record for this name+version has typically
+                already been collapsed by :meth:`upload`'s own ``replace``
+                (see its docstring), so there was nothing left for this flag to
+                visibly supersede in testing. It's kept ``True`` by default to
+                match "replace existing version" (the UI's implied intent) and
+                because the wire shape is what the real Publish button sends —
+                but its effect when two *different* versions of a name
+                genuinely coexist is unconfirmed (that scenario is currently
+                blocked by a live-verified appliance bug on version bumps; see
+                the module docstring's warning).
             go_live: ``True`` (default) publishes for real (``draft=False``).
                 ``False`` publishes-as-draft (rarely wanted).
 
