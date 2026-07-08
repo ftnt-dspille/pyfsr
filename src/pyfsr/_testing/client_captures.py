@@ -957,3 +957,85 @@ WIDGET_PUBLISH_RESPONSE = {
 WIDGET_UPLOAD_CONFLICT_MESSAGE = (
     "Widget with Name - jinjaEditorWidget Version - 1.1.3 already exists in widget workspace."
 )
+
+
+# ---------------------------------------------------------------------------
+# User settings — client.user_settings (GET/PUT/DELETE /api/3/user_settings)
+# ---------------------------------------------------------------------------
+# Live-verified on 8.0.0 against a real user's ``@settings`` blob: read via
+# ``GET /api/3/actors/current``, write/delete via ``/api/3/user_settings/current/<key>``.
+# Trimmed to the keys the doctests exercise (``grid/alerts`` and the alerts
+# detail-page ``viewTemplate``); the real blob also carries theme/notification/
+# playbook-autosave settings, dropped here as noise. The ``viewTemplate`` value
+# is a real ``system_view_templates`` uuid captured from the same box.
+USER_SETTINGS_VIEW_TEMPLATE_UUID = "d77cd7b5-3e0b-43b5-8c9b-54651dacdebe"
+
+ACTOR_CURRENT_RESPONSE = {
+    "@id": "/api/3/people/86f36794-26e8-4049-8e4a-c55388974495",
+    "@type": "Person",
+    "name": "demo-user",
+    "@settings": {
+        "grid": {"alerts": {"columns": ["name", "severity"]}},
+        "user": {"view": {"details": {"alerts": {"viewTemplate": USER_SETTINGS_VIEW_TEMPLATE_UUID}}}},
+    },
+}
+
+# PUT /api/3/user_settings/current/<key> echoes the whole, newly-merged
+# ``@settings`` blob (not just the written key) — real wire behavior captured
+# setting the alerts viewTemplate back to its already-current value.
+USER_SETTINGS_PUT_RESPONSE = ACTOR_CURRENT_RESPONSE["@settings"]
+
+# GET /api/3/user_settings/current/<key> returns the value at that key
+# directly, unwrapped (a bare string here, not a dict).
+USER_SETTINGS_GET_VIEW_TEMPLATE_RESPONSE = USER_SETTINGS_VIEW_TEMPLATE_UUID
+
+# DELETE /api/3/user_settings/current/<key> — 204, empty body, matching the
+# live capture (the SDK's ``client.delete`` returns ``None`` for this).
+
+# GET /api/3/system_view_templates — live-verified on 8.0.0: the alerts module's
+# real template rows (name/uuid/viewOptions/isDefault/type only; ``config`` —
+# the layout body — is dropped, it's not doctest material and can be large).
+# ``d77cd7b5-...`` ("CrowdStrike") is the same uuid USER_SETTINGS_VIEW_TEMPLATE_UUID
+# points at, so resolve_view_template()/get_view_template_name() round-trip it.
+_ALERTS_VIEW_TEMPLATE_ROWS = [
+    {
+        "uuid": "00e011c1-d777-4313-a21a-0fc24684d710",
+        "name": "Default Layout",
+        "module": "alerts",
+        "viewOptions": "form",
+        "isDefault": True,
+        "type": "form",
+    },
+    {
+        "uuid": "5aa4bb8b-5580-45c5-b6e8-3cccc8a163ee",
+        "name": "Default Layout",
+        "module": "alerts",
+        "viewOptions": "list",
+        "isDefault": True,
+        "type": "rows",
+    },
+    {
+        "uuid": "bcfe8c15-5fd5-4d73-af64-ba0cb6c89d73",
+        "name": "Default Layout",
+        "module": "alerts",
+        "viewOptions": "detail",
+        "isDefault": True,
+        "type": "rows",
+    },
+    {
+        "uuid": USER_SETTINGS_VIEW_TEMPLATE_UUID,
+        "name": "CrowdStrike",
+        "module": "alerts",
+        "viewOptions": "detail",
+        "isDefault": False,
+        "type": "rows",
+    },
+]
+SYSTEM_VIEW_TEMPLATES_RESPONSE = {
+    "@context": "/api/3/contexts/SystemViewTemplate",
+    "@id": "/api/3/system_view_templates",
+    "@type": "hydra:Collection",
+    "hydra:member": _ALERTS_VIEW_TEMPLATE_ROWS,
+    "hydra:totalItems": len(_ALERTS_VIEW_TEMPLATE_ROWS),
+    "hydra:view": {"@id": "/api/3/system_view_templates", "@type": "hydra:PartialCollectionView"},
+}

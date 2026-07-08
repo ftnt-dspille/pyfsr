@@ -50,7 +50,8 @@ def test_get_template():
     api = ViewTemplatesAPI(mock_client)
     result = api.get_template("Custom Detail")
 
-    assert result == expected
+    assert result.model_dump(exclude_none=True) == expected
+    assert result.name == "Custom Detail"  # typed attribute access works too
 
 
 def test_list_templates_all():
