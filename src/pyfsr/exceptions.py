@@ -199,6 +199,56 @@ class RepoArtifactNotFoundError(RepoError):
         super().__init__(message or f"no artifact at {url}" if url else (message or "artifact not found"))
 
 
+class WidgetError(FortiSOARException):
+    """Base for ``client.widgets`` upload/publish errors."""
+
+    pass
+
+
+class WidgetUploadConflict(WidgetError):
+    """Upload rejected because that exact name+version is already staged.
+
+    Raised when ``POST /api/3/solutionpacks/install?$type=widget`` 400s with
+    ``"Widget with Name - <n> Version - <v> already exists in widget
+    workspace."`` — i.e. ``upload(..., replace=False)`` against a version
+    that's already sitting in the development workspace. Retry with
+    ``replace=True`` to overwrite it.
+    """
+
+    def __init__(self, message: str | None = None, *, name: str | None = None, version: str | None = None):
+        self.name = name
+        self.version = version
+        super().__init__(message or f"widget {name!r} version {version!r} already exists in the workspace")
+
+
+class WidgetPublishError(WidgetError):
+    """A widget publish did not settle live (``draft:false, installed:true``).
+
+    Raised by :meth:`~pyfsr.api.widgets.WidgetsAPI.deploy` when the post-publish
+    settle-poll times out without observing the target version live — either
+    the publish silently reverted or the asset extraction lagged past
+    ``timeout``. Includes the target host and the last-observed record so
+    callers can tell "never went live" from "stuck on an old version".
+    """
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        host: str | None = None,
+        name: str | None = None,
+        version: str | None = None,
+    ):
+        self.host = host
+        self.name = name
+        self.version = version
+        super().__init__(
+            message
+            or f"widget {name!r} version {version!r} did not settle live on {host!r} "
+            "(still draft/uninstalled after publish)"
+        )
+
+
 # Substrings the appliance returns (as 5xx bodies / error messages) while it is
 # mid-migrate — a publish *or* a module-bearing import runs a full backup + DB
 # migrate + cache-rebuild cycle, during which the API is briefly unavailable and

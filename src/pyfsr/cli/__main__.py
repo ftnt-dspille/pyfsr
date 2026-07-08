@@ -13,6 +13,7 @@ import sys
 from . import _output
 from . import playbook as playbook_cmds
 from . import repo as repo_cmds
+from . import widget as widget_cmds
 from .appliance import certs as certs_cmds
 from .appliance import db as db_cmds
 from .appliance import diagnose as diagnose_cmds
@@ -395,6 +396,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     repo_sub = p_repo.add_subparsers(dest="repo_command", required=True)
     repo_cmds.build_subparser(repo_sub)
+
+    # --- widget group (top-level; upload + publish on a live appliance) ---
+    p_widget = sub.add_parser("widget", help="upload + publish widgets on a live appliance")
+    widget_sub = p_widget.add_subparsers(dest="widget_command", required=True)
+    widget_cmds.build_subparser(widget_sub)
 
     # --- records group (top-level; API-based record CRUD) ---
     p_rec = sub.add_parser("records", help="query and manage FortiSOAR records (alerts, incidents, etc.)")
