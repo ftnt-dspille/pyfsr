@@ -325,6 +325,11 @@ def _shape_run(m: dict[str, Any]) -> RunSummary:
 class PlaybooksAPI(BaseAPI):
     """Live playbook-run history and resume."""
 
+    #: The run statuses that count as terminal (a run in one of these will not
+    #: change again). Handy for polling with :meth:`status`:
+    #: ``pb.status(tid) in pb.TERMINAL_STATUSES``.
+    TERMINAL_STATUSES = _TERMINAL_STATUSES
+
     def __init__(self, client):
         super().__init__(client)
 
@@ -1424,6 +1429,7 @@ class PlaybooksAPI(BaseAPI):
         follow: bool = False,
         timeout: float = 300,
         interval: float = 3,
+        request_timeout: float | None = None,
     ) -> TriggerResponse | RunSummary:
         """Manually trigger a playbook and return its run handle.
 
@@ -1457,6 +1463,14 @@ class PlaybooksAPI(BaseAPI):
             ``{"task_id": "<run-uuid>"}``. When ``follow=True``: the shaped run
             dict after completion (same shape as :meth:`wait`).
 
+        Args (timeouts):
+            request_timeout: seconds to bound the trigger **POST itself** (default
+                ``None`` = the client's configured timeout). Distinct from
+                ``timeout``, which only bounds the completion poll when
+                ``follow=True``. Set this when firing triggers against an
+                appliance that may stall mid-request (e.g. during a schema
+                publish) so a hung submit is raised quickly instead of blocking.
+
         See also:
             :meth:`run_tree` resolves the returned ``task_id`` to the run **plus
             its child runs** (so you don't find a referenced child by name);
@@ -1467,7 +1481,8 @@ class PlaybooksAPI(BaseAPI):
         if not uuid:
             raise ValueError(f"playbook {playbook!r} not found")
         req = _build(TriggerRequest, "trigger", records=records, inputs=inputs, env=env or {})
-        resp = self.client.post(f"/api/triggers/1/notrigger/{uuid}", data=req.to_body())
+        post_kwargs = {} if request_timeout is None else {"timeout": request_timeout}
+        resp = self.client.post(f"/api/triggers/1/notrigger/{uuid}", data=req.to_body(), **post_kwargs)
         if follow:
             task_id = resp.get("task_id") if isinstance(resp, dict) else None
             if not task_id:
@@ -1512,6 +1527,33 @@ class PlaybooksAPI(BaseAPI):
             if time.monotonic() >= deadline:
                 raise TimeoutError(f"playbook run {task_id!r} did not finish within {timeout}s")
             time.sleep(interval)
+
+    def status(self, task_id: str) -> str | None:
+        """Return a run's current status by ``task_id``, without blocking.
+
+        The cheap, non-raising counterpart to :meth:`wait`: one
+        :meth:`log_list` read keyed by ``task_id`` (what :meth:`trigger`
+        returns), returning the lowercased status string — ``"running"``,
+        ``"finished"``, ``"failed"``, ``"error"``, ``"cancelled"``,
+        ``"aborted"`` — or ``None`` if no run has appeared for this ``task_id``
+        yet (just triggered, or unknown id). Use it to poll many runs on your
+        own cadence, or to read a last-known status after :meth:`wait` times
+        out. Compare against :attr:`TERMINAL_STATUSES` to test for completion.
+
+        Args:
+            task_id: the ``task_id`` returned by :meth:`trigger` /
+                :meth:`trigger_by_name`.
+
+        Returns:
+            The current status (lowercased), or ``None`` if the run is not yet
+            queryable.
+        """
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise ValueError("status() requires a non-empty task_id")
+        members = extract_members(self.log_list(task_id=task_id, limit=1))
+        if not members:
+            return None
+        return (members[0].get("status") or "").lower() or None
 
     def wait_for_run(
         self,
@@ -1827,6 +1869,7 @@ class PlaybooksAPI(BaseAPI):
         body: dict[str, Any] | None = None,
         deferred: bool = False,
         raise_on_status: bool = True,
+        request_timeout: float | None = None,
     ) -> TriggerResponse | Any:
         """Fire a playbook by its trigger's endpoint name.
 
@@ -1840,14 +1883,19 @@ class PlaybooksAPI(BaseAPI):
         :class:`requests.Response` (``.status_code`` / ``.json()``) instead of a
         :class:`~pyfsr.models.TriggerResponse` — for access-control probes that need to
         distinguish a permit (200) from a denial (401/403) without catching.
+
+        ``request_timeout`` bounds the POST itself (default ``None`` = the client's
+        configured timeout) — set it to fail fast on a stalled submit.
         """
         if not isinstance(name, str) or not name.strip():
             raise ValueError("trigger_by_name() requires a non-empty name")
         prefix = "/api/triggers/1/deferred/" if deferred else "/api/triggers/1/"
+        post_kwargs = {} if request_timeout is None else {"timeout": request_timeout}
         resp = self.client.post(
             f"{prefix}{name.strip('/ ')}",
             data=body or {},
             raise_on_status=raise_on_status,
+            **post_kwargs,
         )
         if not raise_on_status:
             return resp
@@ -1861,6 +1909,7 @@ class PlaybooksAPI(BaseAPI):
         record_uuid: str,
         playbook_uuid: str | None = None,
         env: dict[str, Any] | None = None,
+        request_timeout: float | None = None,
     ) -> TriggerResponse | Any:
         """Fire a record-context action trigger (``POST /api/triggers/1/action/{route_uuid}``).
 
@@ -1892,7 +1941,8 @@ class PlaybooksAPI(BaseAPI):
             playbook_uuid=playbook_uuid,
             env=env or {},
         )
-        resp = self.client.post(f"/api/triggers/1/action/{route_uuid.strip()}", data=req.to_body())
+        post_kwargs = {} if request_timeout is None else {"timeout": request_timeout}
+        resp = self.client.post(f"/api/triggers/1/action/{route_uuid.strip()}", data=req.to_body(), **post_kwargs)
         return TriggerResponse(**resp) if isinstance(resp, dict) else resp
 
     # --------------------------------------------------------- step diagnostics
