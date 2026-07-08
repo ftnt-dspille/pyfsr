@@ -206,8 +206,21 @@ class InvestigationQuestion(_Lenient):
     evidence: str | None = None
     supports: list[str] = Field(default_factory=list)
     weakens: list[str] = Field(default_factory=list)
-    information_type: str | None = None
+    information_type: Any | None = None
     status: str | None = None
+
+
+class ConnectorMcpCandidates(_Lenient):
+    """Which installed connectors can be hosted as an MCP server (``GET /mcp/servers/connector``).
+
+    ``restricted`` connectors (internal/system ones, e.g. the agent-communication
+    bridge) can never be hosted. ``available`` connectors aren't yet hosted —
+    once one is, it drops off this list (find it instead via :meth:`~pyfsr.api.ai.AIApi.mcp_configs`,
+    filtering on ``type == "connector"``).
+    """
+
+    available: list[str] = Field(default_factory=list)
+    restricted: list[str] = Field(default_factory=list)
 
 
 class ToolCall(_Lenient):

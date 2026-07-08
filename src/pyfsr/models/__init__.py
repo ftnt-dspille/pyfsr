@@ -13,6 +13,22 @@ falling back to ``BaseRecord`` for modules without a curated model.
 from __future__ import annotations
 
 from ._agents import Agent, AgentConnectorStatus
+from ._ai import (
+    AgentConfig,
+    AgentConfigDTO,
+    AgentRecord,
+    ConnectorMcpCandidates,
+    InvestigationHandle,
+    InvestigationQuestion,
+    InvestigationResult,
+    LLMConfig,
+    LLMProvider,
+    MCPServerConfig,
+    MCPServerRef,
+    MCPTool,
+    MCPValidateResult,
+    ToolCall,
+)
 from ._ai_agent_package import (
     AgentInfo,
     AgentMemory,
@@ -166,6 +182,21 @@ __all__ = [
     "AgentPackage",
     "AgentPrompt",
     "AgentPromptFile",
+    # FortiAI agentic-service shapes (client.ai)
+    "AgentConfig",
+    "AgentConfigDTO",
+    "AgentRecord",
+    "ConnectorMcpCandidates",
+    "InvestigationHandle",
+    "InvestigationQuestion",
+    "InvestigationResult",
+    "LLMConfig",
+    "LLMProvider",
+    "MCPServerConfig",
+    "MCPServerRef",
+    "MCPTool",
+    "MCPValidateResult",
+    "ToolCall",
     # integration API result shapes
     "InstalledConnector",
     "ConnectorConfigSummary",

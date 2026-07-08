@@ -51,7 +51,23 @@ get an agent's configuration                      ``GET  /api/ai/agent/config/{n
 update an agent's configuration                   ``POST /api/ai/agent/config``
 get/update the default agent configuration        ``GET/POST /api/ai/agent/config/default``
 activate/deactivate agents                        ``POST /api/ai/agent/activate``
+which connectors can be hosted as an MCP server    ``GET  /mcp/servers/connector``
+host a connector as an MCP server                  ``POST /mcp/add/tools`` (+ ``mcp_configurations``)
+change a hosted connector server's exposed tools   ``PUT  /mcp/tools/{uuid}``
+list a hosted server's current tools               ``POST /mcp/config/export``
+remove specific tools from a hosted server         ``DELETE /mcp/tools/delete``
 ================================================  ==================================================
+
+Connector → MCP server
+-----------------------
+Any installed connector can be *hosted* as an MCP server — each operation
+becomes a tool — via :meth:`AIApi.host_connector_as_mcp_server`. This is
+distinct from :meth:`AIApi.register_mcp_server` (connecting to an *external*
+MCP server); both land in the same ``mcp_configurations`` collection,
+distinguished by ``type`` (``"connector"`` vs ``"internal"``/``"external"``).
+Check :meth:`AIApi.mcp_connector_candidates` first — some connectors can't be
+hosted this way. These ``/mcp/...`` routes (unlike everything else here) live
+at the appliance root rather than under ``/api/3``.
 
 Agent ↔ MCP binding
 -------------------
@@ -74,6 +90,7 @@ from ..models._ai import (
     AgentConfig,
     AgentConfigDTO,
     AgentRecord,
+    ConnectorMcpCandidates,
     InvestigationHandle,
     InvestigationQuestion,
     InvestigationResult,
@@ -682,6 +699,171 @@ class AIApi(BaseAPI):
         saved = self.upsert_mcp_server(config, validate=False)
         return {**saved.to_dict(by_alias=False), "tools": [t.name for t in validation.tools if t.name]}
 
+    # ------------------------------------------- connector -> MCP server
+    def mcp_connector_candidates(self) -> ConnectorMcpCandidates:
+        """Which installed connectors can be hosted as an MCP server (``GET /mcp/servers/connector``).
+
+        This is the *Connector* option in the FortiSOAR UI's "Add MCP Server"
+        wizard, distinct from the connect-to-an-external-server flow
+        (:meth:`register_mcp_server`). Feed an ``available`` name to
+        :meth:`host_connector_as_mcp_server`.
+        """
+        resp = self.client.get("/mcp/servers/connector", params={"restricted": "true"})
+        return ConnectorMcpCandidates.model_validate(resp if isinstance(resp, dict) else {})
+
+    def export_mcp_server_tools(self, servers: list[dict[str, str]]) -> list[dict[str, Any]]:
+        """Fetch the currently-registered tool list of one or more hosted MCP
+        servers (``POST /mcp/config/export``). ``servers`` is
+        ``[{"uuid", "name"}, ...]`` (see :meth:`mcp_configs`).
+        """
+        resp = self.client.post("/mcp/config/export", data=servers)
+        return resp if isinstance(resp, list) else []
+
+    def host_connector_as_mcp_server(
+        self,
+        connector_name: str,
+        *,
+        version: str | None = None,
+        operations: list[str] | None = None,
+        config_id: str | None = None,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> MCPServerConfig:
+        """Convert an installed connector into a hosted MCP server — the exact
+        flow the FortiSOAR UI's "Add MCP Server → Connector" wizard runs.
+
+        Each of the connector's operations becomes an MCP tool. By default all
+        (enabled) operations are exposed; pass ``operations`` (a list of
+        operation names, e.g. ``["fetch_email_new"]``) to expose a subset —
+        see :meth:`~pyfsr.api.connectors.ConnectorsAPI.operations` to list them.
+
+        If the connector requires configuration (most do), the connector's
+        default configuration is used unless ``config_id`` names a specific one
+        (see :meth:`~pyfsr.api.connectors.ConnectorsAPI.configurations`). A
+        connector with no configured instance yet is still hosted (mirroring
+        the UI), but its tools won't work until one is configured.
+
+        Check :meth:`mcp_connector_candidates` first — some connectors
+        (internal/system ones) can never be hosted this way.
+
+        Returns the created :class:`MCPServerConfig`. Use
+        :meth:`update_connector_mcp_server_tools` to change the exposed
+        operations later, or :meth:`delete_mcp_server` to remove it entirely.
+        """
+        definition = self.client.connectors.definition(connector_name, version=version)
+        require_configuration = definition.config_count != -1
+
+        chosen_config = None
+        if require_configuration:
+            configs = self.client.connectors.configurations(connector_name)
+            if config_id:
+                chosen_config = next((c for c in configs if c.config_id == config_id), None)
+            else:
+                chosen_config = next((c for c in configs if c.default), None) or (configs[0] if configs else None)
+
+        server_config: dict[str, Any] = {
+            "name": name or definition.label or connector_name,
+            "description": description if description is not None else definition.description,
+            "active": True,
+            "url": f"https://localhost/mcp/connector/{connector_name}/",
+            "type": "connector",
+            "transport": "http",
+            "authentication": {"type": "FSR"},
+            "metadata": {
+                "connectorName": connector_name,
+                "connectorLabel": definition.label,
+                "configId": chosen_config.config_id if chosen_config else None,
+                "configLabel": chosen_config.name if chosen_config else None,
+                "requireConfiguration": require_configuration,
+            },
+        }
+        saved = self.register_mcp_server(server_config)
+
+        selected_ops = (
+            definition.operations
+            if operations is None
+            else [op for op in definition.operations if op.operation in operations]
+        )
+        tools = [
+            {
+                **op.to_dict(by_alias=False, exclude_none=True),
+                "addTool": True,
+            }
+            for op in selected_ops
+        ]
+        self.client.post(
+            "/mcp/add/tools",
+            data={
+                "mcp_configuration": {"name": saved.name, "uuid": saved.uuid},
+                "config": chosen_config.to_dict(by_alias=False, exclude_none=True) if chosen_config else {},
+                "metadata": {
+                    "name": definition.name,
+                    "label": definition.label,
+                    "version": definition.version,
+                },
+                "tools": tools,
+            },
+        )
+        return saved
+
+    def update_connector_mcp_server_tools(
+        self,
+        mcp_uuid: str,
+        *,
+        connector_name: str,
+        version: str | None = None,
+        operations: list[str],
+        config_id: str | None = None,
+    ) -> None:
+        """Replace the tool set of an already-hosted connector MCP server
+        (``PUT /mcp/tools/{uuid}``).
+
+        ``operations`` is the *full* desired set of exposed operation names —
+        any currently-exposed operation not in the list is removed
+        (``remove_tools``), mirroring the UI's tool checklist. Re-resolves the
+        connector definition/config the same way :meth:`host_connector_as_mcp_server`
+        does; pass ``config_id`` to switch which configuration backs the server.
+        """
+        definition = self.client.connectors.definition(connector_name, version=version)
+        require_configuration = definition.config_count != -1
+        chosen_config = None
+        if require_configuration:
+            configs = self.client.connectors.configurations(connector_name)
+            if config_id:
+                chosen_config = next((c for c in configs if c.config_id == config_id), None)
+            else:
+                chosen_config = next((c for c in configs if c.default), None) or (configs[0] if configs else None)
+
+        existing = self.export_mcp_server_tools([{"uuid": mcp_uuid, "name": connector_name}])
+        existing_ops = {t.get("name") for t in (existing[0].get("tools") or [])} if existing else set()
+        remove_tools = [op for op in existing_ops if op not in operations]
+
+        selected_ops = [op for op in definition.operations if op.operation in operations]
+        tools = [{**op.to_dict(by_alias=False, exclude_none=True), "addTool": True} for op in selected_ops]
+        self.client.put(
+            f"/mcp/tools/{mcp_uuid}",
+            data={
+                "uuid": mcp_uuid,
+                "remove_tools": remove_tools,
+                "config": chosen_config.to_dict(by_alias=False, exclude_none=True) if chosen_config else {},
+                "metadata": {
+                    "name": definition.name,
+                    "label": definition.label,
+                    "version": definition.version,
+                },
+                "tools": tools,
+            },
+        )
+
+    def delete_mcp_tools(self, tools: list[dict[str, str]]) -> None:
+        """Remove specific tools from a hosted MCP server (``DELETE /mcp/tools/delete``).
+
+        ``tools`` is ``[{"uuid": <server_uuid>, "name": <operation_name>}, ...]``.
+        Prefer :meth:`update_connector_mcp_server_tools` for a full tool-set
+        replacement; use this for a targeted removal.
+        """
+        self.client.request("DELETE", "/mcp/tools/delete", data=tools)
+
     # ----------------------------------------------------------- agents
     def list_agents(self, **filters: Any) -> list[AgentRecord]:
         """List the installed AI agents (``GET /api/ai/agent/``).
@@ -1027,7 +1209,7 @@ class AIApi(BaseAPI):
                 counts[cid] = counts.get(cid, 0) + 1
         return [{"task_id": cid, "log_count": n} for cid, n in counts.items()]
 
-    def investigation_tool_calls(self, task_id: str) -> list[dict[str, Any]]:
+    def investigation_tool_calls(self, task_id: str) -> list[ToolCall]:
         """The tool calls made during one investigation (by its ``task_id``).
 
         Shorthand for ``tool_usage(correlation_id=task_id)`` — the triage
