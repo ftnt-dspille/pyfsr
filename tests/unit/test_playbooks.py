@@ -1508,3 +1508,66 @@ def test_has_async_children_reads_tag():
     )
     client = FakeClient(workflows=[parent])
     assert PlaybooksAPI(client).has_async_children(210) is True
+
+
+# -- trigger request_timeout + status() (operational helpers) -----------------
+class _KwRec:
+    """Records post() keyword args so timeout forwarding can be asserted."""
+
+    def __init__(self, resp=None):
+        self.post_kwargs = []
+        self._resp = resp if resp is not None else {"task_id": "t1"}
+
+    def get(self, endpoint, params=None, **kw):
+        return {"hydra:member": [{"uuid": "pb-uuid"}]}
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        self.post_kwargs.append(kw)
+        return self._resp
+
+
+def test_trigger_forwards_request_timeout():
+    c = _KwRec()
+    PlaybooksAPI(c).trigger("aabbccdd-0000-0000-0000-000000000000", request_timeout=8)
+    assert c.post_kwargs[0].get("timeout") == 8
+
+
+def test_trigger_omits_timeout_by_default():
+    c = _KwRec()
+    PlaybooksAPI(c).trigger("aabbccdd-0000-0000-0000-000000000000")
+    assert "timeout" not in c.post_kwargs[0]
+
+
+def test_trigger_by_name_forwards_request_timeout():
+    c = _KwRec()
+    PlaybooksAPI(c).trigger_by_name("my_webhook", request_timeout=5)
+    assert c.post_kwargs[0].get("timeout") == 5
+
+
+def test_trigger_action_forwards_request_timeout():
+    c = _KwRec()
+    PlaybooksAPI(c).trigger_action("route-1", module="alerts", record_uuid="r1", request_timeout=3)
+    assert c.post_kwargs[0].get("timeout") == 3
+
+
+def test_status_returns_lowercased_status():
+    c = _PollClient(["Running"])
+    assert PlaybooksAPI(c).status("run-uuid") == "running"
+
+
+def test_status_none_when_no_run_yet():
+    class _Empty:
+        def post(self, endpoint, data=None, params=None, **kw):
+            return {"hydra:member": []}
+
+    assert PlaybooksAPI(_Empty()).status("run-uuid") is None
+
+
+def test_status_rejects_blank_task_id():
+    with pytest.raises(ValueError):
+        PlaybooksAPI(_Rec()).status("  ")
+
+
+def test_terminal_statuses_exposed():
+    assert "finished" in PlaybooksAPI.TERMINAL_STATUSES
+    assert "running" not in PlaybooksAPI.TERMINAL_STATUSES
