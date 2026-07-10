@@ -377,3 +377,15 @@ publish on the appliance), the live module and its Postgres table remain, with n
 remove them — that needs backend CLI/SQL. For a clean throwaway, **never publish it**;
 then discarding the draft removes it entirely.
 ```
+
+```{note}
+**Auto-mirror appliances are the exception to "discarding removes it entirely."** On a
+box that re-syncs staging into `model_metadatas` on every write (see the settings note
+above), even a *never-explicitly-published* module has already been mirrored into
+`model_metadatas` by its create/edit writes. There, `discard_staging_draft` removes the
+staging draft but leaves a stale published **stub** (a `model_metadatas` row with no
+physical table). Clearing that stub needs one `publish()` — which reconciles the mirror
+and drops the orphaned row. So on auto-mirror boxes the throwaway recipe is
+create → `discard_staging_draft` → one `publish()`, after which `is_published()` reads
+`False` and `pending_changes()` is empty.
+```
