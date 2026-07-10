@@ -168,6 +168,17 @@ omit = [
     "src/pyfsr/_version.py",
 ]
 
+[tool.coverage.report]
+# Lines matching these patterns are excluded from coverage: defensive branches
+# and non-runtime code that aren't worth exercising in tests.
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "@(abc\\.)?abstractmethod",
+    "class .*\\(Protocol\\):",
+]
+
 [project.urls]
 "Homepage" = "https://github.com/ftnt-dspille/pyfsr"
 "Bug Tracker" = "https://github.com/ftnt-dspille/pyfsr/issues"
