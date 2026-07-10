@@ -225,12 +225,25 @@ class ReplaySession(Session):
     doctest author immediately sees which capture to add. Query-string params are
     ignored for matching (the captures are representative, not per-filter), so a
     list with a filter and a plain list both resolve to the collection capture.
+
+    ``overrides`` scopes extra (or replacement) fixtures to **this session only**:
+    a ``{(METHOD, path): fixture}`` mapping consulted before the module-global
+    ``_FIXTURES`` table. It lets one doctest demonstrate a stateful flow (e.g. a
+    module staged but not yet published, so ``pending_changes()`` reports it)
+    without editing the shared table and perturbing every other doctest that
+    reads the same collection. The global table is never mutated.
     """
+
+    def __init__(self, overrides: dict[tuple[str, str], dict] | None = None) -> None:
+        super().__init__()
+        self._overrides: dict[tuple[str, str], dict] = dict(overrides or {})
 
     def request(self, method: str, url: str, *args: Any, **kwargs: Any) -> Response:  # type: ignore[override]
         canonical, raw = _path_and_match(method, url)
         key = (str(method).upper(), canonical.lstrip("/"))
-        fixture = _FIXTURES.get(key)
+        fixture = self._overrides.get(key)
+        if fixture is None:
+            fixture = _FIXTURES.get(key)
         if fixture is None:
             raise RuntimeError(
                 f"[demo_client] no replay fixture for {method.upper()} {raw!r} "
@@ -241,12 +254,22 @@ class ReplaySession(Session):
         return _build_response(fixture, url)
 
 
-def demo_client(*, base_url: str = "https://demo.fortisoar.example", token: str = "demo-token") -> FortiSOAR:
+def demo_client(
+    *,
+    base_url: str = "https://demo.fortisoar.example",
+    token: str = "demo-token",
+    overrides: dict[tuple[str, str], dict] | None = None,
+) -> FortiSOAR:
     """Return a :class:`pyfsr.FortiSOAR` wired to a replay REST session.
 
     The doctest entry point: guides and docstrings call ``client = demo_client()``
     and get real return shapes with zero network. The session is a
     :class:`ReplaySession` seeded from :mod:`pyfsr._testing.client_captures`.
+
+    ``overrides`` is passed through to :class:`ReplaySession` — a per-call
+    ``{(METHOD, path): fixture}`` overlay for doctests that need a scoped,
+    stateful view (a staged-but-unpublished module, say) without touching the
+    shared fixture table.
 
     Construction uses **token auth**: ``APIKeyAuth.__init__`` validates the key
     with a live ``GET /api/3/people``, so ``demo_client`` briefly neutralises
@@ -267,7 +290,7 @@ def demo_client(*, base_url: str = "https://demo.fortisoar.example", token: str 
 
     # Swap the live session for the replay session and re-apply auth headers so
     # the client's request path (self.session.request + .headers) is coherent.
-    replay = ReplaySession()
+    replay = ReplaySession(overrides=overrides)
     replay.verify = False
     replay.headers.update(client.auth.get_auth_headers())
     client.session = replay

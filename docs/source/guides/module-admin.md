@@ -80,12 +80,19 @@ you touching the `crew` module again:
 ```
 
 Nothing is live yet — both modules are staging-only drafts. Check what a publish
-would commit, then commit it (remember: **publish is appliance-wide**):
+would commit, then commit it (remember: **publish is appliance-wide**). The
+`pending_changes()` call below is doctested against a scoped overlay
+(`pending_create_overlay`) that stages `crew` + `heists` without publishing — the
+exact post-`create_module`, pre-`publish` state:
+
+```{doctest}
+>>> from pyfsr._testing.client_captures import pending_create_overlay
+>>> admin = demo_client(overrides=pending_create_overlay(["crew", "heists"])).modules_admin
+>>> admin.pending_changes()
+[PendingChange(module='crew', change='created'), PendingChange(module='heists', change='created')]
+```
 
 ```python
-admin.pending_changes()
-# [{'module': 'crew', 'change': 'created'}, {'module': 'heists', 'change': 'created'}]
-
 admin.publish()   # backup + migrate; blocks ~30–60s while /api/3 is down
 ```
 
