@@ -45,10 +45,8 @@ playbooks:
         recordTags: '{{vars.commentTags}}'
         isImportant: true
         peopleUpdated: false
-      _showJson: false
       operation: Overwrite
       collection: /api/3/comments
-      __recommend: []
       fieldOperation:
         recordTags: Overwrite
     next: update_indicator
@@ -180,7 +178,6 @@ playbooks:
         indicatorStatus: /api/3/picklists/fa29fe48-f01e-476f-bb33-c910f5795b57
       operation: Append
       collection: '{{vars.input.records[0][''@id'']}}'
-      __recommend: []
       collectionType: /api/3/indicators
       fieldOperation:
         recordTags: Append

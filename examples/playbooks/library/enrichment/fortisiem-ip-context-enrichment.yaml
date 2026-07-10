@@ -33,7 +33,6 @@ playbooks:
         peopleUpdated: false
       operation: Overwrite
       collection: /api/3/comments
-      __recommend: []
       fieldOperation:
         recordTags: Overwrite
     next: update_indicator
@@ -158,7 +157,6 @@ playbooks:
         sourceData: '{{vars.steps.Bring_IP_Conext_from_FortiSIEM.data | toJSON }}'
       operation: Append
       collection: '{{vars.input.records[0][''@id'']}}'
-      __recommend: []
       collectionType: /api/3/indicators
       fieldOperation:
         recordTags: Append
