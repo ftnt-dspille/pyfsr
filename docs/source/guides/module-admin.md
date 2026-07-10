@@ -69,6 +69,28 @@ admin.create_module(
 )
 ```
 
+`create_module` returns the created **staging** record — the draft, not yet live
+(`@type` is `StagingModelMetadata`). The call below is doctested against a real
+capture of a throwaway module, so the return shape is exactly what the appliance
+sends: the module identity plus its seeded `name` field. `create_view_templates`
+and `add_to_nav` are turned off here to keep the example to the one write:
+
+```{doctest}
+>>> admin = demo_client().modules_admin
+>>> mod = admin.create_module(
+...     "doctestmod", label="Doctest Module", plural="Doctest Modules",
+...     create_view_templates=False, add_to_nav=False,
+... )
+>>> mod["@type"]                       # the staging (draft) store, not model_metadatas
+'StagingModelMetadata'
+>>> mod["type"], mod["displayName"]
+('doctestmod', '{{ name }}')
+>>> mod["descriptions"]
+{'singular': 'Doctest Module', 'plural': 'Doctest Modules'}
+>>> [a["name"] for a in mod["attributes"]]   # the auto-seeded required field
+['name']
+```
+
 That single `relationship_field` is the whole trick. Because the SDK keeps both
 sides of a relationship valid, it auto-stages the **reverse field on `crew`** —
 so each crew member gets a `heists` field listing every job they're on, without

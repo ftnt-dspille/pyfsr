@@ -111,6 +111,37 @@ BULK_UPSERT_ALERTS_MIXED_RESPONSE = {
     ],
 }
 
+# The staging record echoed by ``create_module`` (``POST /api/3/staging_model_metadatas``),
+# captured live on 8.0.0-6034 from a throwaway ``doctestmod`` module that was created,
+# then discarded + published-to-reconcile (box left with is_published()==False,
+# pending_changes()==[]). Trimmed to the doctest-relevant surface: the module
+# identity (``type``/``displayName``/``descriptions``) + its single seeded ``name``
+# field under ``attributes`` (itself trimmed to the shape a reader inspects). The
+# ``@type`` is ``StagingModelMetadata`` — the draft store, not yet ``model_metadatas``.
+MODULE_CREATE_STAGING_RESPONSE = {
+    "@context": "/api/3/contexts/StagingModelMetadata",
+    "@id": "/api/3/staging_model_metadatas/5f8ba8e9-10e6-4acc-8b6a-9860f373e1c1",
+    "@type": "StagingModelMetadata",
+    "type": "doctestmod",
+    "module": "doctestmod",
+    "tableName": "doctestmod",
+    "displayName": "{{ name }}",
+    "descriptions": {"singular": "Doctest Module", "plural": "Doctest Modules"},
+    "taggable": False,
+    "trackable": True,
+    "ownable": True,
+    "attributes": [
+        {
+            "@id": "/api/3/attribute_metadatas/c5fdf26f-1d1b-40f3-8a2c-1513f4de410e",
+            "@type": "AttributeMetadata",
+            "name": "name",
+            "type": "string",
+            "formType": "text",
+        }
+    ],
+    "uuid": "5f8ba8e9-10e6-4acc-8b6a-9860f373e1c1",
+}
+
 # A collection page (``GET /api/3/alerts`` and ``POST /api/query/alerts``) — the
 # Hydra envelope: ``hydra:member`` list + ``hydra:totalItems`` + ``hydra:view``.
 ALERT_LIST_RESPONSE = {
