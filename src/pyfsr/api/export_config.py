@@ -16,6 +16,7 @@ from ..models._export import (
     ModuleSelection,
     PlaybookCollectionSelection,
     RecordSet,
+    RoleSelection,
 )
 from ..models._integration import ExportJobResult
 from ..pagination import extract_members
@@ -60,9 +61,10 @@ class ExportTemplate:
     particular a record set only emits records when its query carries a ``limit``.
 
     The name-based categories (``add_picklist`` / ``add_connector`` /
-    ``add_playbook_collection``) take a friendly **name** and are resolved to
-    their IRI/``value`` at :meth:`ExportConfigAPI.create_template` time; view
-    templates are exported by id verbatim.
+    ``add_playbook_collection`` / ``add_role``) take a friendly **name** and are
+    resolved to their IRI/``value`` at :meth:`ExportConfigAPI.create_template`
+    time; the id-based categories (``add_view_template`` / ``add_dashboard`` /
+    ``add_widget``) are exported by id/name verbatim.
     """
 
     def __init__(self, name: str, *, auto_select_picklists: bool = True) -> None:
@@ -77,6 +79,11 @@ class ExportTemplate:
         self._picklists: list[str] = []
         self._connectors: list[dict[str, Any]] = []
         self._collections: list[dict[str, Any]] = []
+        self._roles: list[str] = []
+        # Id-based UI categories the engine takes verbatim (no lookup): dashboards
+        # by uuid, widgets by name. Live-observed on 8.0.0 as bare string lists.
+        self._dashboards: list[str] = []
+        self._widgets: list[str] = []
 
     def add_module(self, module: str, *, fields: list[str] | None = None) -> "ExportTemplate":
         """Export a module's schema, optionally limited to ``fields`` (all fields if omitted)."""
@@ -129,6 +136,27 @@ class ExportTemplate:
         )
         return self
 
+    def add_role(self, name: str) -> "ExportTemplate":
+        """Export an RBAC role by **name** (resolved to its IRI at ``create_template`` time).
+
+        The role's IRI/label/uuid are looked up at
+        :meth:`ExportConfigAPI.create_template` time, mirroring
+        :meth:`add_connector`. Use this to carry role definitions into another
+        appliance alongside the modules/playbooks that reference them.
+        """
+        self._roles.append(name)
+        return self
+
+    def add_dashboard(self, uuid: str) -> "ExportTemplate":
+        """Export a dashboard by **uuid** (taken verbatim; ``options.dashboards`` is a uuid list)."""
+        self._dashboards.append(uuid)
+        return self
+
+    def add_widget(self, name: str) -> "ExportTemplate":
+        """Export a widget by **name** (taken verbatim; ``options.widgets`` is a name list)."""
+        self._widgets.append(name)
+        return self
+
     def add_record_set(
         self,
         module: str,
@@ -179,12 +207,16 @@ class ExportTemplate:
             options["recordSets"] = [r.wire() for r in self._record_sets]
         if self._view_templates:
             options["viewTemplates"] = list(self._view_templates)
+        if self._dashboards:
+            options["dashboards"] = list(self._dashboards)
+        if self._widgets:
+            options["widgets"] = list(self._widgets)
         return options
 
     @property
     def needs_resolution(self) -> bool:
         """True if this template has name-based categories awaiting a live lookup."""
-        return bool(self._picklists or self._connectors or self._collections)
+        return bool(self._picklists or self._connectors or self._collections or self._roles)
 
     @property
     def metadata(self) -> dict[str, Any]:
@@ -593,7 +625,28 @@ class ExportConfigAPI(BaseAPI):
                 )
             options["playbooks"] = {"collections": collections, "globalVariables": []}
 
+        if template._roles:
+            roles: list[dict[str, Any]] = []
+            for name in template._roles:
+                info = self._get_role_info(name)
+                roles.append(
+                    RoleSelection(
+                        value=info["@id"],
+                        label=info.get("label") or info.get("name"),
+                        name=info.get("name"),
+                        uuid=info.get("uuid"),
+                    ).wire()
+                )
+            options["roles"] = roles
+
         return options
+
+    def _get_role_info(self, name: str) -> dict[str, Any]:
+        """Resolve an RBAC role by name to its record (``@id``/``label``/``uuid``)."""
+        members = extract_members(self.client.get("/api/3/roles", params={"name": name}))
+        if not members:
+            raise ValueError(f"role {name!r} not found")
+        return members[0]
 
     def export_record_data(
         self,
