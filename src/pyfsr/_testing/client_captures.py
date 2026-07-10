@@ -549,6 +549,51 @@ PUBLISHED_MODULES_LIST_RESPONSE = _hydra_collection(
     "/api/3/model_metadatas", "/api/3/contexts/ModelMetadata", _PUBLISHED_ROWS
 )
 
+
+def pending_create_overlay(modules: str | list[str] = "crew") -> dict:
+    """A ``demo_client(overrides=...)`` overlay staging brand-new module(s).
+
+    Adds each name in ``modules`` (a single string or a list) to the **staging**
+    list only — published is left as the shared fixture — so
+    :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.pending_changes` reports each
+    as ``change="created"``: the exact state right after ``create_module()`` and
+    before ``publish()``. The overlay is scoped to the one session it's passed to;
+    the module-global staging fixture (and every ``pending_changes() == []``
+    doctest that reads it) is untouched.
+
+    Each new row reuses the live staging-list envelope shape (``_with_store`` +
+    ``_hydra_collection``) — the same fields the appliance returns — with a
+    synthetic demo uuid, so nothing about the wire shape is invented.
+    """
+    names = [modules] if isinstance(modules, str) else list(modules)
+    new_rows = []
+    for i, module in enumerate(names):
+        new_rows.append(
+            _with_store(
+                {
+                    "type": module,
+                    "module": module,
+                    "uuid": f"00000000-0000-4000-8000-0000000000{i:02x}",
+                    "displayName": "{{ name }}",
+                    "parentType": None,
+                    "tableName": module,
+                    "descriptions": {"plural": module.capitalize() + "s", "singular": module.capitalize()},
+                },
+                "staging_model_metadatas",
+                "StagingModelMetadata",
+            )
+        )
+    staging_list = _hydra_collection(
+        "/api/3/staging_model_metadatas",
+        "/api/3/contexts/StagingModelMetadata",
+        _STAGING_ROWS + new_rows,
+    )
+    # Key format mirrors replay_http._entry: (METHOD, path with the leading slash
+    # stripped). Query params are ignored by the matcher, so this catches the
+    # ``$relationships=true`` list GET pending_changes() issues.
+    return {("GET", "api/3/staging_model_metadatas"): {"status": 200, "body": staging_list}}
+
+
 # Single-record ``GET /api/3/{staging_,}model_metadatas/<alerts-uuid>`` — the full
 # metadata record (incl. ``attributes``) that ``get_staging``/``get_published``
 # return and ``get_field`` reads. Same 3 attributes as the list's alerts member.
