@@ -83,6 +83,23 @@ class ConnectorSelection(_ExportEntry):
     recordCount: int = 0
 
 
+class RoleSelection(_ExportEntry):
+    """An RBAC role selection (``options.roles[]``).
+
+    ``value`` is the role IRI (``/api/3/roles/<uuid>``) — the field the engine
+    keys on, mirroring connectors/collections. ``label``/``name``/``uuid`` are the
+    identity fields the wizard echoes from the resolved role (kept so a
+    round-tripped template reads friendly); they are optional. Live-observed shape
+    on 8.0.0: ``{value, label, name, uuid, include}``.
+    """
+
+    value: str
+    label: str | None = None
+    name: str | None = None
+    uuid: str | None = None
+    include: bool = True
+
+
 class PlaybookCollectionSelection(_ExportEntry):
     """A playbook-collection selection (``options.playbooks.collections[]``).
 

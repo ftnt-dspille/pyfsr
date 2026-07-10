@@ -421,6 +421,52 @@ def test_create_template_resolves_playbook_collection(monkeypatch):
     assert pb["globalVariables"] == []
 
 
+def test_export_template_dashboards_and_widgets_are_offline():
+    # id/name-based UI categories the engine takes verbatim — no lookup.
+    tmpl = ExportTemplate("T").add_dashboard("dash-uuid").add_widget("myWidget")
+    built = tmpl.build()
+    assert built["dashboards"] == ["dash-uuid"]
+    assert built["widgets"] == ["myWidget"]
+    assert tmpl.needs_resolution is False
+
+
+def test_export_template_role_needs_resolution():
+    assert ExportTemplate("T").add_role("Full App Permissions").needs_resolution is True
+
+
+def test_create_template_resolves_role_entry():
+    def handler(m, u, **k):
+        if m == "GET" and u == "/api/3/roles":
+            return {
+                "hydra:member": [
+                    {
+                        "@id": "/api/3/roles/role-uuid",
+                        "name": k["params"]["name"],
+                        "uuid": "role-uuid",
+                        "label": "Full App Permissions",
+                    }
+                ]
+            }
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    tmpl = ExportTemplate("R").add_role("Full App Permissions")
+    api.create_template(tmpl)
+    entry = c.calls[-1][2]["options"]["roles"][0]
+    # live-verified wire shape: value is the role IRI the engine keys on.
+    assert entry["value"] == "/api/3/roles/role-uuid"
+    assert entry["name"] == "Full App Permissions"
+    assert entry["uuid"] == "role-uuid"
+    assert entry["label"] == "Full App Permissions"
+    assert entry["include"] is True
+
+
+def test_create_template_role_not_found_raises():
+    api, _ = _api(lambda m, u, **k: {"hydra:member": []} if m == "GET" else {"@id": "/x"})
+    with pytest.raises(ValueError, match="role 'Nope' not found"):
+        api.create_template(ExportTemplate("R").add_role("Nope"))
+
+
 def test_create_template_offline_only_skips_lookups():
     # no GET lookups fire when nothing name-based was added
     api, c = _api(lambda m, u, **k: {"@id": "/api/3/export_templates/t1"})
