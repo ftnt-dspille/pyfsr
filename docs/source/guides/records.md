@@ -158,3 +158,36 @@ Need to resolve a value yourself? `client.picklists` exposes the lower-level
 {func}`~pyfsr.api.picklists.PicklistsAPI.resolve` and
 `resolve_record_fields` helpers (including a `strict=True` mode that raises with
 the valid options on a bad value).
+
+## Bulk writes with per-row results
+
+{meth}`~pyfsr.records.RecordSet.bulk_upsert` and
+{meth}`~pyfsr.records.RecordSet.bulk_insert` write many rows in one request.
+FortiSOAR answers with a multi-status envelope where a *partial* batch can
+half-succeed: some rows land, others are rejected with a bare error string.
+Pass `parse=True` to get a {class}`~pyfsr.records.BulkUpsertResult` instead of
+that raw dict — `.ok`, `.succeeded` (typed records), and `.failed` (one
+{class}`~pyfsr.records.BulkUpsertFailure` per rejected row, with the input
+`index` parsed out of FortiSOAR's raw message):
+
+```{doctest}
+>>> client = demo_client()
+>>> result = client.records("alerts").bulk_upsert(
+...     [{"name": "good alert", "severity": "Low"},
+...      {"name": "bad alert", "severity": "not-a-real-severity"}],
+...     parse=True,
+... )
+>>> result.ok                       # False — at least one row was rejected
+False
+>>> len(result.succeeded), len(result.failed)
+(1, 1)
+>>> result.failed[0].index          # 0-based index into the input rows
+1
+>>> "does not match any of the options" in result.failed[0].message
+True
+```
+
+`.raw` keeps the untouched server response if you need a field the result
+class doesn't surface. To delete a known set of records, the mirror of a bulk
+write is {meth}`~pyfsr.records.RecordSet.delete_many` (by IRI/ref list) or
+{meth}`~pyfsr.records.RecordSet.delete_by_query` (by filter).

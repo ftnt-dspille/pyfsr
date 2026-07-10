@@ -75,6 +75,42 @@ ALERT_GET_RESPONSE = {
 # echoes the created record with its new ``@id`` / ``uuid`` / ``id``.
 ALERT_CREATE_RESPONSE = dict(ALERT_GET_RESPONSE)
 
+# A mixed-outcome bulk upsert (``POST /api/3/bulkupsert/alerts``), captured live
+# on 8.0.0-6034 from a two-row batch: one valid alert + one whose ``severity`` is
+# not a real picklist value. FortiSOAR replies with a multi-status envelope —
+# ``success`` holds each created/updated record, ``failure`` holds a bare error
+# STRING per rejected row (not a structured object) with the 0-based input index
+# embedded as ``index #<n>``. This backs the ``bulk_upsert(parse=True)`` ->
+# ``BulkUpsertResult`` doctest (``.ok`` / ``.succeeded`` / ``.failed[].index``).
+# The success record is trimmed to the doctest-relevant fields (same trim as the
+# other alert captures); the failure string is the untouched server text.
+BULK_UPSERT_ALERTS_MIXED_RESPONSE = {
+    "success": [
+        {
+            "@id": "/api/3/alerts/95413fd0-164b-4ea9-bfd6-90718ccdd5d3",
+            "@type": "Alert",
+            "name": "pyfsr-bulk-doctest-ok",
+            "uuid": "95413fd0-164b-4ea9-bfd6-90718ccdd5d3",
+            "severity": {
+                "@id": "/api/3/picklists/58d0753f-f7e4-403b-953c-b0f521eab759",
+                "@type": "Picklist",
+                "itemValue": "Low",
+                "orderIndex": 1,
+                "color": "#16A34A",
+                "uuid": "58d0753f-f7e4-403b-953c-b0f521eab759",
+                "id": 445,
+            },
+        }
+    ],
+    "failure": [
+        "POST method for object at index #1 in the request payload failed with "
+        'error: {"type":"UnexpectedValueException","message":"FSR_CH_0000001 : '
+        "The \\u0022severity\\u0022 field is required to have a value from the "
+        "\\u0022Severity\\u0022 picklist. However, the provided value does not "
+        'match any of the options listed in the specified picklist."}'
+    ],
+}
+
 # A collection page (``GET /api/3/alerts`` and ``POST /api/query/alerts``) — the
 # Hydra envelope: ``hydra:member`` list + ``hydra:totalItems`` + ``hydra:view``.
 ALERT_LIST_RESPONSE = {

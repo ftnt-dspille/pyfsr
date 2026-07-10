@@ -48,6 +48,7 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("PUT", "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39", cap.ALERT_GET_RESPONSE),
         _entry("DELETE", "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39", {}, status=204),
         _entry("POST", "/api/query/alerts", cap.ALERT_LIST_RESPONSE),
+        _entry("POST", "/api/3/bulkupsert/alerts", cap.BULK_UPSERT_ALERTS_MIXED_RESPONSE),
         # Incidents — the generic-record-path example in getting-started.md.
         _entry("GET", "/api/3/incidents/0740411d-e852-4eee-b33b-596210d09a9b", cap.INCIDENT_GET_RESPONSE),
         _entry("POST", "/api/3/incidents", cap.INCIDENT_CREATE_RESPONSE),
