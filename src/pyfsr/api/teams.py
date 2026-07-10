@@ -81,4 +81,31 @@ class TeamsAPI(BaseAPI):
         body: dict[str, Any] = {"name": name}
         if description is not None:
             body["description"] = description
-        return Team.model_validate(self.client.post(_BASE, data=body))
+        team = Team.model_validate(self.client.post(_BASE, data=body))
+        self._team_cache = None  # name→record cache is now stale
+        return team
+
+    def update(self, team: str, *, name: str | None = None, description: str | None = None) -> Team:
+        """Update a team's ``name`` and/or ``description`` (``PUT /api/3/teams/<uuid>``).
+
+        ``team`` is a uuid or current name. Pass at least one of ``name`` /
+        ``description``; only the given fields are sent (a partial update), and
+        the full updated :class:`~pyfsr.models.Team` is returned.
+        """
+        uuid = self._resolve_team_uuid(team)
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        if not body:
+            raise ValueError("update() needs at least one of name= or description=")
+        updated = Team.model_validate(self.client.put(f"{_BASE}/{uuid}", data=body))
+        self._team_cache = None  # a renamed team invalidates the name→record cache
+        return updated
+
+    def delete(self, team: str) -> None:
+        """Delete a team (``DELETE /api/3/teams/<uuid>``). ``team`` is a uuid or name."""
+        uuid = self._resolve_team_uuid(team)
+        self.client.delete(f"{_BASE}/{uuid}")
+        self._team_cache = None

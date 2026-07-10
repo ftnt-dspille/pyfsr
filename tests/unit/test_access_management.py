@@ -207,7 +207,42 @@ def _teams_client() -> _FakeClient:
             "siblings": [],
         },
     )
+    c.route(
+        "PUT",
+        f"/api/3/teams/{_T_UID}",
+        {"@id": f"/api/3/teams/{_T_UID}", "@type": "Team", "name": "Tier 1", "uuid": _T_UID, "description": "updated"},
+    )
+    c.route("DELETE", f"/api/3/teams/{_T_UID}", None)
     return c
+
+
+def test_teams_update_sends_partial_body_and_returns_typed():
+    api = TeamsAPI(_teams_client())
+    updated = api.update("Tier 1", description="updated")  # resolve by name
+    assert isinstance(updated, Team) and updated.description == "updated"
+    method, url, data = api.client.calls[-1]
+    assert (method, url) == ("PUT", f"/api/3/teams/{_T_UID}")
+    assert data == {"description": "updated"}  # only the given field is sent
+
+
+def test_teams_update_requires_a_field():
+    api = TeamsAPI(_teams_client())
+    with pytest.raises(ValueError, match="at least one of name= or description="):
+        api.update("Tier 1")
+
+
+def test_teams_delete_by_name_resolves_and_deletes():
+    api = TeamsAPI(_teams_client())
+    assert api.delete("Tier 1") is None
+    assert api.client.calls[-1][:2] == ("DELETE", f"/api/3/teams/{_T_UID}")
+
+
+def test_teams_write_invalidates_name_cache():
+    api = TeamsAPI(_teams_client())
+    api.team_map()  # populate the cache
+    assert api._team_cache is not None
+    api.update("Tier 1", name="Renamed")
+    assert api._team_cache is None  # rename invalidated it
 
 
 def test_teams_list_get_create_typed():
