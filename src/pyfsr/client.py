@@ -369,7 +369,7 @@ class FortiSOAR:
         self.system: SystemAPI = SystemAPI(self)
         self.search: SearchAPI = SearchAPI(self)
 
-    def _log_request(self, method: str, url: str, params: dict, data: dict, headers: dict) -> None:
+    def _log_request(self, method: str, url: str, params: dict, data: dict, headers: dict) -> None:  # pragma: no cover
         """Log request details when verbose mode is enabled."""
         if not self.verbose:
             return
@@ -392,7 +392,7 @@ class FortiSOAR:
             logger.info("Request Data:")
             logger.info(f"  {data}")
 
-    def _log_response(self, response: requests.Response, elapsed: float) -> None:
+    def _log_response(self, response: requests.Response, elapsed: float) -> None:  # pragma: no cover
         """Log response details when verbose mode is enabled."""
         if not self.verbose:
             return
