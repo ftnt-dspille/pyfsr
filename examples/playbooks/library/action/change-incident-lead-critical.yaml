@@ -43,7 +43,6 @@ playbooks:
         incidentLead: /api/3/people/1f7f125a-6a71-40ad-8813-da67de1d77aa
       operation: Append
       collection: '{{vars.input.params.IncidentIRI}}'
-      __recommend: []
       collectionType: /api/3/incidents
       fieldOperation: []
     next: end

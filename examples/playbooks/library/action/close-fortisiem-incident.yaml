@@ -37,7 +37,6 @@ playbooks:
         peopleUpdated: false
       operation: Overwrite
       collection: /api/3/comments
-      __recommend: []
       fieldOperation:
         recordTags: Overwrite
     next: update_alert_status
@@ -115,7 +114,6 @@ playbooks:
         assignedTo: /api/3/people/3451141c-bac6-467c-8d72-85e0fab569ce
       operation: Append
       collection: '{{vars.input.records[0][''@id'']}}'
-      __recommend: []
       collectionType: /api/3/alerts
       fieldOperation:
         recordTags: Append

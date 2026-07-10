@@ -43,7 +43,6 @@ playbooks:
         peopleUpdated: false
       operation: Overwrite
       collection: /api/3/comments
-      __recommend: []
       fieldOperation:
         recordTags: Overwrite
     next: the_end
@@ -61,7 +60,6 @@ playbooks:
         peopleUpdated: false
       operation: Overwrite
       collection: /api/3/comments
-      __recommend: []
       fieldOperation:
         recordTags: Overwrite
     next: the_end

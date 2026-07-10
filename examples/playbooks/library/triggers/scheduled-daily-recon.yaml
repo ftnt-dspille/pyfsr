@@ -36,7 +36,6 @@ playbooks:
         peopleUpdated: false
       operation: Overwrite
       collection: /api/3/comments
-      __recommend: []
       fieldOperation:
         recordTags: Overwrite
     next: this_is_the_end
@@ -143,7 +142,6 @@ playbooks:
           alerts: '{{ vars.steps.Find_Recon_BP_Alert_Records | json_query(''[]."@id"'') }}'
       operation: Append
       collection: '{{vars.steps.Create_Excel_Attachment.data[''@id'']}}'
-      __recommend: []
       collectionType: /api/3/attachments
       fieldOperation:
         recordTags: Append

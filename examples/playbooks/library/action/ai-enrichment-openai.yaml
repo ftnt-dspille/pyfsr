@@ -33,7 +33,6 @@ playbooks:
         peopleUpdated: false
       operation: Overwrite
       collection: /api/3/comments
-      __recommend: []
       fieldOperation:
         recordTags: Overwrite
     next: add_tags_to_alert
@@ -46,7 +45,6 @@ playbooks:
           recordTags: '{{vars.myTags}}'
       operation: Append
       collection: '{{vars.input.records[0][''@id'']}}'
-      __recommend: []
       collectionType: /api/3/alerts
       fieldOperation:
         recordTags: Append

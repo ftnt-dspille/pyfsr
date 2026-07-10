@@ -46,7 +46,6 @@ playbooks:
         peopleUpdated: false
       operation: Overwrite
       collection: /api/3/comments
-      __recommend: []
       fieldOperation:
         recordTags: Overwrite
     next: end
@@ -79,10 +78,8 @@ playbooks:
         escalatedtoincident: /api/3/picklists/2128a09c-153d-4db3-985d-de6be33deae5
         resolvedAutomatedly: false
         alertRemainingAckSLA: 0
-      _showJson: false
       operation: Overwrite
       collection: /api/3/alerts
-      __recommend: []
       fieldOperation:
         recordTags: Overwrite
     next: create_comment
