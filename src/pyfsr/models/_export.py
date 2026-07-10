@@ -100,6 +100,33 @@ class RoleSelection(_ExportEntry):
     include: bool = True
 
 
+class TeamSelection(_ExportEntry):
+    """A team selection (``options.teams[]``).
+
+    ``value`` is the team IRI (``/api/3/teams/<uuid>``). Live-observed shape on
+    8.0.0: ``{value, name, uuid, include}``.
+    """
+
+    value: str
+    name: str | None = None
+    uuid: str | None = None
+    include: bool = True
+
+
+class ActorSelection(_ExportEntry):
+    """An actor (person) selection (``options.actors[]``).
+
+    Actors resolve to people, so ``value`` is a ``/api/3/people/<uuid>`` IRI and
+    the identity field is ``title`` (not ``name``). Live-observed shape on 8.0.0:
+    ``{value, title, uuid, include}``.
+    """
+
+    value: str
+    title: str | None = None
+    uuid: str | None = None
+    include: bool = True
+
+
 class PlaybookCollectionSelection(_ExportEntry):
     """A playbook-collection selection (``options.playbooks.collections[]``).
 

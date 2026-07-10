@@ -12,11 +12,13 @@ from typing import Any
 
 from ..auth.base import BaseAuth
 from ..models._export import (
+    ActorSelection,
     ConnectorSelection,
     ModuleSelection,
     PlaybookCollectionSelection,
     RecordSet,
     RoleSelection,
+    TeamSelection,
 )
 from ..models._integration import ExportJobResult
 from ..pagination import extract_members
@@ -61,10 +63,11 @@ class ExportTemplate:
     particular a record set only emits records when its query carries a ``limit``.
 
     The name-based categories (``add_picklist`` / ``add_connector`` /
-    ``add_playbook_collection`` / ``add_role``) take a friendly **name** and are
-    resolved to their IRI/``value`` at :meth:`ExportConfigAPI.create_template`
-    time; the id-based categories (``add_view_template`` / ``add_dashboard`` /
-    ``add_widget``) are exported by id/name verbatim.
+    ``add_playbook_collection`` / ``add_role`` / ``add_team`` / ``add_actor``)
+    take a friendly **name** (an actor's ``title``) and are resolved to their
+    IRI/``value`` at :meth:`ExportConfigAPI.create_template` time; the id-based
+    categories (``add_view_template`` / ``add_dashboard`` / ``add_widget``) are
+    exported by id/name verbatim.
     """
 
     def __init__(self, name: str, *, auto_select_picklists: bool = True) -> None:
@@ -80,6 +83,8 @@ class ExportTemplate:
         self._connectors: list[dict[str, Any]] = []
         self._collections: list[dict[str, Any]] = []
         self._roles: list[str] = []
+        self._teams: list[str] = []
+        self._actors: list[str] = []
         # Id-based UI categories the engine takes verbatim (no lookup): dashboards
         # by uuid, widgets by name. Live-observed on 8.0.0 as bare string lists.
         self._dashboards: list[str] = []
@@ -145,6 +150,20 @@ class ExportTemplate:
         appliance alongside the modules/playbooks that reference them.
         """
         self._roles.append(name)
+        return self
+
+    def add_team(self, name: str) -> "ExportTemplate":
+        """Export a team by **name** (resolved to its ``/api/3/teams/<uuid>`` IRI)."""
+        self._teams.append(name)
+        return self
+
+    def add_actor(self, title: str) -> "ExportTemplate":
+        """Export an actor (person) by **title** (resolved to its ``/api/3/people/<uuid>`` IRI).
+
+        Actors are people, so the identity field is ``title`` and the resolved
+        ``value`` is a people IRI.
+        """
+        self._actors.append(title)
         return self
 
     def add_dashboard(self, uuid: str) -> "ExportTemplate":
@@ -216,7 +235,9 @@ class ExportTemplate:
     @property
     def needs_resolution(self) -> bool:
         """True if this template has name-based categories awaiting a live lookup."""
-        return bool(self._picklists or self._connectors or self._collections or self._roles)
+        return bool(
+            self._picklists or self._connectors or self._collections or self._roles or self._teams or self._actors
+        )
 
     @property
     def metadata(self) -> dict[str, Any]:
@@ -639,14 +660,44 @@ class ExportConfigAPI(BaseAPI):
                 )
             options["roles"] = roles
 
+        if template._teams:
+            teams: list[dict[str, Any]] = []
+            for name in template._teams:
+                info = self._get_named_record("/api/3/teams", "name", name, "team")
+                teams.append(TeamSelection(value=info["@id"], name=info.get("name"), uuid=info.get("uuid")).wire())
+            options["teams"] = teams
+
+        if template._actors:
+            actors: list[dict[str, Any]] = []
+            for title in template._actors:
+                info = self._get_actor_info(title)
+                actors.append(ActorSelection(value=info["@id"], title=info.get("title"), uuid=info.get("uuid")).wire())
+            options["actors"] = actors
+
         return options
+
+    def _get_actor_info(self, title: str) -> dict[str, Any]:
+        """Resolve an actor by ``title`` via a client-side match.
+
+        The ``/api/3/actors`` endpoint is an aggregate that does not accept a
+        ``title`` server filter, so fetch the (small) actor list and match the
+        title exactly.
+        """
+        for actor in extract_members(self.client.get("/api/3/actors")):
+            if isinstance(actor, dict) and actor.get("title") == title:
+                return actor
+        raise ValueError(f"actor {title!r} not found")
+
+    def _get_named_record(self, endpoint: str, key: str, value: str, kind: str) -> dict[str, Any]:
+        """Resolve a record by a name-like field (``name``/``title``) to its full record."""
+        members = extract_members(self.client.get(endpoint, params={key: value}))
+        if not members:
+            raise ValueError(f"{kind} {value!r} not found")
+        return members[0]
 
     def _get_role_info(self, name: str) -> dict[str, Any]:
         """Resolve an RBAC role by name to its record (``@id``/``label``/``uuid``)."""
-        members = extract_members(self.client.get("/api/3/roles", params={"name": name}))
-        if not members:
-            raise ValueError(f"role {name!r} not found")
-        return members[0]
+        return self._get_named_record("/api/3/roles", "name", name, "role")
 
     def export_record_data(
         self,

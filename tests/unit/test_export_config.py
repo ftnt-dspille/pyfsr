@@ -467,6 +467,49 @@ def test_create_template_role_not_found_raises():
         api.create_template(ExportTemplate("R").add_role("Nope"))
 
 
+def test_create_template_resolves_team_entry():
+    def handler(m, u, **k):
+        if m == "GET" and u == "/api/3/teams":
+            return {
+                "hydra:member": [{"@id": "/api/3/teams/team-uuid", "name": k["params"]["name"], "uuid": "team-uuid"}]
+            }
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    api.create_template(ExportTemplate("T").add_team("SOC Team"))
+    entry = c.calls[-1][2]["options"]["teams"][0]
+    assert entry["value"] == "/api/3/teams/team-uuid"
+    assert entry["name"] == "SOC Team"
+    assert entry["include"] is True
+
+
+def test_create_template_resolves_actor_by_title_client_side():
+    # /api/3/actors takes no title filter; resolution matches the list client-side.
+    def handler(m, u, **k):
+        if m == "GET" and u == "/api/3/actors":
+            return {
+                "hydra:member": [
+                    {"@id": "/api/3/people/other", "title": "Someone Else", "uuid": "other"},
+                    {"@id": "/api/3/people/admin-uuid", "title": "Admin", "uuid": "admin-uuid"},
+                ]
+            }
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    api.create_template(ExportTemplate("A").add_actor("Admin"))
+    entry = c.calls[-1][2]["options"]["actors"][0]
+    # actors are people: value is a /api/3/people IRI, keyed on title.
+    assert entry["value"] == "/api/3/people/admin-uuid"
+    assert entry["title"] == "Admin"
+    assert entry["uuid"] == "admin-uuid"
+
+
+def test_create_template_actor_not_found_raises():
+    api, _ = _api(lambda m, u, **k: {"hydra:member": []} if m == "GET" else {"@id": "/x"})
+    with pytest.raises(ValueError, match="actor 'Ghost' not found"):
+        api.create_template(ExportTemplate("A").add_actor("Ghost"))
+
+
 def test_create_template_offline_only_skips_lookups():
     # no GET lookups fire when nothing name-based was added
     api, c = _api(lambda m, u, **k: {"@id": "/api/3/export_templates/t1"})
