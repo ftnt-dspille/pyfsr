@@ -88,6 +88,7 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         # (query string ignored, so the with-relationships list serves all three);
         # the single-record GETs back ``get_staging``/``get_published``/``get_field``.
         _entry("GET", "/api/3/staging_model_metadatas", cap.STAGING_MODULES_LIST_RESPONSE),
+        _entry("POST", "/api/3/staging_model_metadatas", cap.MODULE_CREATE_STAGING_RESPONSE, status=201),
         _entry("GET", "/api/3/model_metadatas", cap.PUBLISHED_MODULES_LIST_RESPONSE),
         _entry(
             "GET",
