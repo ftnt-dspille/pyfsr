@@ -110,11 +110,20 @@ client.export_config.export_by_template_uuid(uuid, output_path="alert_backup.zip
 ```
 
 Available `add_*` categories on the builder include: `add_module`,
-`add_record_set`, `add_view_template`, `add_picklist`, `add_connector`,
-`add_playbook_collection`, `add_role`, `add_team`, `add_actor`,
-`add_navigation`, `add_report`, `add_rule`, `add_rule_channel`,
-`add_preprocessing_rule`, `add_dashboard`, `add_widget`, `add_ai_agent`, and
-`add_mcp_configuration`.
+`add_record_set`, `add_view_templates`, `add_picklist`, `add_connector`,
+`add_playbook_collection`, `add_global_variable`, `add_playbook_block`,
+`add_app_setting`, `add_role`, `add_team`, `add_actor`, `add_navigation`,
+`add_report`, `add_rule`, `add_rule_channel`, `add_preprocessing_rule`,
+`add_dashboard`, `add_widget`, `add_ai_agent`, and `add_mcp_configuration`.
+
+```{note}
+`add_view_templates(module, *, list_view=, detail=, form=)` takes a **module and
+which layouts** — not a template id. The export engine resolves the real
+`system_view_template` rows for that module/layout combination. `add_global_variable`
+and `add_playbook_block` validate their name/uuid against the live appliance;
+`add_app_setting` accepts the fixed set `systemSettings`, `LDAP`, `RADIUS`,
+`TOKEN`, `HA`, `sso`, `syslog`, `proxy`.
+```
 
 ```{note}
 `add_ai_agent` and `add_mcp_configuration` are **8.0.0+** categories and are

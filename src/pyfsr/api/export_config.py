@@ -39,6 +39,10 @@ __all__ = ["ExportConfigAPI", "ExportTemplate"]
 # "unlimited"; callers raise this via ``add_record_set(limit=...)`` when needed.
 _DEFAULT_RECORD_LIMIT = 1000
 
+# The export wizard's fixed set of application-setting sections (APP_SETTINGS in
+# the 8.0 editor bundle); options.appSettings is a bare list of these names.
+_APP_SETTING_NAMES = frozenset({"systemSettings", "LDAP", "RADIUS", "TOKEN", "HA", "sso", "syslog", "proxy"})
+
 
 class ExportTemplate:
     """Typed builder for a Configuration Export template's ``options`` payload.
@@ -71,9 +75,10 @@ class ExportTemplate:
     The name-based categories (``add_picklist`` / ``add_connector`` /
     ``add_playbook_collection`` / ``add_role`` / ``add_team`` / ``add_actor``)
     take a friendly **name** (an actor's ``title``) and are resolved to their
-    IRI/``value`` at :meth:`ExportConfigAPI.create_template` time; the id-based
-    categories (``add_view_template`` / ``add_dashboard`` / ``add_widget``) are
-    exported by id/name verbatim.
+    IRI/``value`` at :meth:`ExportConfigAPI.create_template` time, as are the
+    live-lookup categories (``add_view_templates`` / ``add_global_variable`` /
+    ``add_playbook_block`` / ``add_app_setting``). The id-based categories
+    (``add_dashboard`` / ``add_widget``) are exported by id/name verbatim.
     """
 
     def __init__(self, name: str, *, auto_select_picklists: bool = True) -> None:
@@ -81,7 +86,10 @@ class ExportTemplate:
         self._auto_select_picklists = auto_select_picklists
         self._modules: list[ModuleSelection] = []
         self._record_sets: list[RecordSet] = []
-        self._view_templates: list[str] = []
+        # View templates are resolved live: the wizard picks a (module, layouts)
+        # pair and looks up the real system_view_template rows to embed, rather
+        # than taking a bare id. Each spec is {module, view_options}.
+        self._view_templates: list[dict[str, Any]] = []
         # Name-based categories that need a live IRI/detail lookup: they are
         # resolved by ExportConfigAPI.create_template (which has the client),
         # not by build() (offline). Each holds the caller's declarative spec.
@@ -106,15 +114,47 @@ class ExportTemplate:
         # MCP server configs (options.mcp_configurations[]): a bare uuid list on
         # the wire, but callers may pass a config name (resolved live to its uuid).
         self._mcp_configs: list[str] = []
+        # Playbook global variables (folded into options.playbooks.globalVariables
+        # as a bare name list) and reusable playbook blocks (options.playbookBlocks
+        # = {blocks: [uuid], includeGlobalVariables: bool}). App settings are a bare
+        # list of setting names (options.appSettings).
+        self._global_variables: list[str] = []
+        self._playbook_blocks: list[str] = []
+        self._playbook_blocks_include_globals: bool = True
+        self._app_settings: list[str] = []
 
     def add_module(self, module: str, *, fields: list[str] | None = None) -> "ExportTemplate":
         """Export a module's schema, optionally limited to ``fields`` (all fields if omitted)."""
         self._modules.append(ModuleSelection(value=module, includedAttributes=list(fields or [])))
         return self
 
-    def add_view_template(self, view_template: str) -> "ExportTemplate":
-        """Export a view template by id (e.g. ``"modules-alerts-list"``); resolved offline."""
-        self._view_templates.append(view_template)
+    def add_view_templates(
+        self,
+        module: str,
+        *,
+        list_view: bool = True,
+        detail: bool = True,
+        form: bool = True,
+    ) -> "ExportTemplate":
+        """Export a module's **view templates** (its list / detail / form layouts).
+
+        The export wizard does not take a view-template id; it takes a module plus
+        which layouts to include, then resolves the real ``system_view_templates``
+        rows to embed. This mirrors that: pick the ``module`` and toggle the three
+        layout kinds. The matching rows (``{uuid, module, viewOptions, filters}``)
+        are looked up at :meth:`ExportConfigAPI.create_template` time via
+        ``POST /api/query/system_view_templates`` (live-verified on 8.0.0).
+
+        Args:
+            module: the module whose view templates to export (e.g. ``"alerts"``).
+            list_view: include the grid/list layout (``viewOptions="list"``).
+            detail: include the detail layout (``viewOptions="detail"``).
+            form: include the create/edit form layout (``viewOptions="form"``).
+        """
+        view_options = [kind for kind, on in (("list", list_view), ("detail", detail), ("form", form)) if on]
+        if not view_options:
+            raise ValueError("select at least one of list_view / detail / form")
+        self._view_templates.append({"module": module, "view_options": view_options})
         return self
 
     def add_picklist(self, name: str) -> "ExportTemplate":
@@ -156,6 +196,43 @@ class ExportTemplate:
                 "includeVersions": bool(include_versions),
             }
         )
+        return self
+
+    def add_global_variable(self, name: str) -> "ExportTemplate":
+        """Export a playbook **global variable** by name.
+
+        Global variables ride under the Playbooks category on the wire
+        (``options.playbooks.globalVariables`` — a bare name list), matching the
+        wizard, which sources them from ``GET /api/wf/api/dynamic-variable/``. The
+        name is validated against the live list at
+        :meth:`ExportConfigAPI.create_template` time.
+        """
+        self._global_variables.append(name)
+        return self
+
+    def add_playbook_block(self, uuid: str, *, include_global_variables: bool = True) -> "ExportTemplate":
+        """Export a **reusable playbook block** by uuid.
+
+        Reusable blocks are ``workflow_groups`` with ``reusable=true``; the wizard
+        emits them as ``options.playbookBlocks = {blocks: [uuid,...],
+        includeGlobalVariables: bool}``. ``include_global_variables`` is a single
+        template-wide toggle (the last call wins), mirroring the wizard's one
+        checkbox for the whole block set. The uuid is validated against the live
+        list at :meth:`ExportConfigAPI.create_template` time.
+        """
+        self._playbook_blocks.append(uuid)
+        self._playbook_blocks_include_globals = bool(include_global_variables)
+        return self
+
+    def add_app_setting(self, name: str) -> "ExportTemplate":
+        """Export an **application setting** section by name.
+
+        Emitted as a bare name list (``options.appSettings``). Valid names are the
+        wizard's fixed set: ``systemSettings``, ``LDAP``, ``RADIUS``, ``TOKEN``,
+        ``HA``, ``sso``, ``syslog``, ``proxy`` — validated at
+        :meth:`ExportConfigAPI.create_template` time.
+        """
+        self._app_settings.append(name)
         return self
 
     def add_role(self, name: str) -> "ExportTemplate":
@@ -331,8 +408,6 @@ class ExportTemplate:
             options["modules"] = [m.wire() for m in self._modules]
         if self._record_sets:
             options["recordSets"] = [r.wire() for r in self._record_sets]
-        if self._view_templates:
-            options["viewTemplates"] = list(self._view_templates)
         if self._dashboards:
             options["dashboards"] = list(self._dashboards)
         if self._widgets:
@@ -356,6 +431,10 @@ class ExportTemplate:
             or self._ai_agents
             or self._navigation
             or self._mcp_configs
+            or self._view_templates
+            or self._global_variables
+            or self._playbook_blocks
+            or self._app_settings
         )
 
     @property
@@ -873,7 +952,80 @@ class ExportConfigAPI(BaseAPI):
         if template._mcp_configs:
             options["mcp_configurations"] = [self._resolve_mcp_config_uuid(x) for x in template._mcp_configs]
 
+        if template._view_templates:
+            view_templates: list[dict[str, Any]] = []
+            for spec in template._view_templates:
+                view_templates.extend(self._resolve_view_templates(spec["module"], spec["view_options"]))
+            options["viewTemplates"] = view_templates
+
+        if template._global_variables:
+            available = {gv["name"] for gv in self._global_variable_index()}
+            unknown = [n for n in template._global_variables if n not in available]
+            if unknown:
+                raise ValueError(f"global variable(s) {unknown} not found")
+            # Global variables ride under playbooks; preserve any collections set above.
+            playbooks = options.get("playbooks") or {"collections": [], "globalVariables": []}
+            playbooks["globalVariables"] = list(template._global_variables)
+            options["playbooks"] = playbooks
+
+        if template._playbook_blocks:
+            available = {b["uuid"] for b in self._reusable_block_index()}
+            unknown = [u for u in template._playbook_blocks if u not in available]
+            if unknown:
+                raise ValueError(f"reusable playbook block(s) {unknown} not found")
+            options["playbookBlocks"] = {
+                "blocks": list(template._playbook_blocks),
+                "includeGlobalVariables": template._playbook_blocks_include_globals,
+            }
+
+        if template._app_settings:
+            unknown = [n for n in template._app_settings if n not in _APP_SETTING_NAMES]
+            if unknown:
+                raise ValueError(f"app setting(s) {unknown} not valid; choose from {sorted(_APP_SETTING_NAMES)}")
+            options["appSettings"] = list(template._app_settings)
+
         return options
+
+    def _resolve_view_templates(self, module: str, view_options: list[str]) -> list[dict[str, Any]]:
+        """Resolve a module's view-template rows via ``POST /api/query/system_view_templates``.
+
+        Returns the ``{uuid, module, viewOptions, filters}`` objects the export
+        engine embeds (live-verified on 8.0.0), filtered to ``view_options``.
+        """
+        body = {
+            "sort": [],
+            "logic": "AND",
+            "filters": [
+                {
+                    "sort": [],
+                    "logic": "AND",
+                    "filters": [
+                        {"field": "module", "operator": "eq", "value": module},
+                        {"field": "viewOptions", "operator": "in", "value": list(view_options)},
+                    ],
+                }
+            ],
+            "__selectFields": ["uuid", "module", "viewOptions", "filters"],
+        }
+        resp = self.client.post("/api/query/system_view_templates", data=body)
+        rows = extract_members(resp)
+        return [
+            {
+                "uuid": r["uuid"],
+                "module": r.get("module", module),
+                "viewOptions": r.get("viewOptions"),
+                "filters": r.get("filters") or [],
+            }
+            for r in rows
+        ]
+
+    def _global_variable_index(self) -> list[dict[str, Any]]:
+        """List playbook global variables (``GET /api/wf/api/dynamic-variable/``)."""
+        return extract_members(self.client.get("/api/wf/api/dynamic-variable/", params={"offset": 0, "limit": 1000}))
+
+    def _reusable_block_index(self) -> list[dict[str, Any]]:
+        """List reusable playbook blocks (``GET /api/3/workflow_groups?reusable=true``)."""
+        return extract_members(self.client.get("/api/3/workflow_groups", params={"reusable": "true", "$limit": 1000}))
 
     def _resolve_mcp_config_uuid(self, name_or_uuid: str) -> str:
         """Resolve an MCP config name to its uuid (``GET /api/3/mcp_configurations``); uuid passes through."""

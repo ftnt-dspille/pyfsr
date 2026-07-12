@@ -365,18 +365,30 @@ def test_export_record_data_keeps_template_when_cleanup_disabled(monkeypatch):
 # --------------------------------------------------- name-based categories (view/picklist/connector/collection)
 
 
-def test_export_template_view_template_is_offline():
-    tmpl = ExportTemplate("T").add_view_template("modules-alerts-list")
-    assert tmpl.build()["viewTemplates"] == ["modules-alerts-list"]
-    assert tmpl.needs_resolution is False
+def test_export_template_view_templates_are_resolved():
+    # View templates now record a (module, layouts) spec resolved live, not a bare id.
+    tmpl = ExportTemplate("T").add_view_templates("alerts", form=False)
+    assert "viewTemplates" not in tmpl.build()  # not offline anymore
+    assert tmpl._view_templates == [{"module": "alerts", "view_options": ["list", "detail"]}]
+    assert tmpl.needs_resolution is True
+
+
+def test_add_view_templates_requires_a_layout():
+    import pytest
+
+    with pytest.raises(ValueError):
+        ExportTemplate("T").add_view_templates("alerts", list_view=False, detail=False, form=False)
 
 
 def test_export_template_needs_resolution_flag():
     assert ExportTemplate("T").add_picklist("AlertStatus").needs_resolution is True
     assert ExportTemplate("T").add_connector("OpenAI").needs_resolution is True
     assert ExportTemplate("T").add_playbook_collection("IR").needs_resolution is True
-    # offline-only categories never need a lookup
-    assert ExportTemplate("T").add_module("alerts").add_view_template("v").needs_resolution is False
+    assert ExportTemplate("T").add_global_variable("Current_User").needs_resolution is True
+    assert ExportTemplate("T").add_playbook_block("uuid-1").needs_resolution is True
+    assert ExportTemplate("T").add_app_setting("LDAP").needs_resolution is True
+    # a bare module schema still needs no lookup
+    assert ExportTemplate("T").add_module("alerts").needs_resolution is False
 
 
 def test_create_template_resolves_picklist_names():
@@ -390,6 +402,71 @@ def test_create_template_resolves_picklist_names():
     api.create_template(tmpl)
     opts = c.calls[-1][2]["options"]
     assert opts["picklistNames"] == ["/api/3/picklists/AlertStatus", "/api/3/picklists/AlertSeverity"]
+
+
+def test_create_template_resolves_view_templates():
+    rows = [
+        {"uuid": "u-list", "module": "alerts", "viewOptions": "list", "filters": []},
+        {"uuid": "u-detail", "module": "alerts", "viewOptions": "detail", "filters": [{"x": 1}]},
+    ]
+
+    def handler(m, u, **k):
+        if m == "POST" and u == "/api/query/system_view_templates":
+            # the query must scope to module + requested layouts
+            filt = k["data"]["filters"][0]["filters"]
+            assert {"field": "module", "operator": "eq", "value": "alerts"} in filt
+            return {"hydra:member": rows}
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    tmpl = ExportTemplate("VT").add_view_templates("alerts", form=False)
+    api.create_template(tmpl)
+    vts = c.calls[-1][2]["options"]["viewTemplates"]
+    assert vts == [
+        {"uuid": "u-list", "module": "alerts", "viewOptions": "list", "filters": []},
+        {"uuid": "u-detail", "module": "alerts", "viewOptions": "detail", "filters": [{"x": 1}]},
+    ]
+
+
+def test_create_template_folds_global_variables_under_playbooks():
+    def handler(m, u, **k):
+        if m == "GET" and u == "/api/wf/api/dynamic-variable/":
+            return {"hydra:member": [{"name": "Current_User"}, {"name": "Default_Email"}]}
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    tmpl = ExportTemplate("GV").add_global_variable("Current_User")
+    api.create_template(tmpl)
+    assert c.calls[-1][2]["options"]["playbooks"]["globalVariables"] == ["Current_User"]
+
+
+def test_create_template_rejects_unknown_global_variable():
+    api, _ = _api(lambda m, u, **k: {"hydra:member": [{"name": "Current_User"}]})
+    with pytest.raises(ValueError, match="global variable"):
+        _api(lambda m, u, **k: {"hydra:member": [{"name": "Current_User"}]})[0].create_template(
+            ExportTemplate("GV").add_global_variable("Nope")
+        )
+
+
+def test_create_template_resolves_playbook_blocks():
+    def handler(m, u, **k):
+        if m == "GET" and u == "/api/3/workflow_groups":
+            return {"hydra:member": [{"uuid": "blk-1"}, {"uuid": "blk-2"}]}
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    tmpl = ExportTemplate("PB").add_playbook_block("blk-1", include_global_variables=False)
+    api.create_template(tmpl)
+    pb = c.calls[-1][2]["options"]["playbookBlocks"]
+    assert pb == {"blocks": ["blk-1"], "includeGlobalVariables": False}
+
+
+def test_create_template_validates_app_settings():
+    api, c = _api(lambda m, u, **k: {"@id": "/api/3/export_templates/t1"})
+    api.create_template(ExportTemplate("AS").add_app_setting("LDAP").add_app_setting("proxy"))
+    assert c.calls[-1][2]["options"]["appSettings"] == ["LDAP", "proxy"]
+    with pytest.raises(ValueError, match="app setting"):
+        api.create_template(ExportTemplate("AS").add_app_setting("bogus"))
 
 
 def test_create_template_resolves_connector_entry(monkeypatch):
