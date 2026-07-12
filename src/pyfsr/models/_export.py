@@ -231,3 +231,20 @@ class PlaybookCollectionSelection(_ExportEntry):
     includeVersions: bool = True
     includeSchedules: bool = True
     includeGlobalVariables: bool = True
+
+
+class ViewTemplateSelection(_ExportEntry):
+    """A view-template selection (``options.viewTemplates[]``).
+
+    Not a bare id: the export engine embeds the resolved ``system_view_templates``
+    row for a module/layout, keyed by ``uuid`` and carrying ``module``,
+    ``viewOptions`` (``"list"``/``"detail"``/``"form"``), and any record
+    ``filters``. Resolved live from the module's templates at
+    :meth:`~pyfsr.api.export_config.ExportConfigAPI.create_template` time
+    (live-verified 8.0.0).
+    """
+
+    uuid: str
+    module: str
+    viewOptions: str | None = None
+    filters: list[Any] = []

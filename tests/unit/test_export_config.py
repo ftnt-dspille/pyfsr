@@ -48,6 +48,16 @@ def _no_sleep(monkeypatch):
 
 def _api(handler=None):
     c = FakeClient(handler)
+    # The resolution path reaches sibling SDK surfaces (view_templates / wf_tools /
+    # workflow_collections) rather than raw HTTP — attach real instances backed by
+    # the same fake client so the handler still drives every underlying request.
+    from pyfsr.api.view_templates import ViewTemplatesAPI
+    from pyfsr.api.wf_tools import WfToolsAPI
+    from pyfsr.api.workflow_collections import WorkflowCollectionsAPI
+
+    c.view_templates = ViewTemplatesAPI(c)
+    c.wf_tools = WfToolsAPI(c)
+    c.workflow_collections = WorkflowCollectionsAPI(c)
     return ExportConfigAPI(c), c
 
 
@@ -410,11 +420,15 @@ def test_create_template_resolves_view_templates():
         {"uuid": "u-detail", "module": "alerts", "viewOptions": "detail", "filters": [{"x": 1}]},
     ]
 
+    # extra rows the (module, layouts) selection must filter out: wrong module, and
+    # the "form" layout we did not ask for.
+    rows = rows + [
+        {"uuid": "u-form", "module": "alerts", "viewOptions": "form", "filters": []},
+        {"uuid": "u-other", "module": "incidents", "viewOptions": "list", "filters": []},
+    ]
+
     def handler(m, u, **k):
-        if m == "POST" and u == "/api/query/system_view_templates":
-            # the query must scope to module + requested layouts
-            filt = k["data"]["filters"][0]["filters"]
-            assert {"field": "module", "operator": "eq", "value": "alerts"} in filt
+        if m == "GET" and u == "/api/3/system_view_templates":
             return {"hydra:member": rows}
         return {"@id": "/api/3/export_templates/t1"}
 
@@ -459,6 +473,27 @@ def test_create_template_resolves_playbook_blocks():
     api.create_template(tmpl)
     pb = c.calls[-1][2]["options"]["playbookBlocks"]
     assert pb == {"blocks": ["blk-1"], "includeGlobalVariables": False}
+
+
+def test_create_template_resolves_export_template_by_name():
+    from pyfsr.api.export_templates import ExportTemplatesAPI
+
+    def handler(m, u, **k):
+        if m == "GET" and u == "/api/3/export_templates":
+            return {
+                "hydra:member": [
+                    {"name": "Nightly backup", "uuid": "et-1", "type": "Config Export"},
+                    {"name": "Pack", "uuid": "et-2", "type": "SolutionPack Export"},
+                ]
+            }
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    c.export_templates = ExportTemplatesAPI(c)
+    api.create_template(ExportTemplate("ET").add_export_template("Nightly backup"))
+    assert c.calls[-1][2]["options"]["exportTemplates"] == ["et-1"]
+    with pytest.raises(ValueError, match="export template"):
+        api.create_template(ExportTemplate("ET").add_export_template("Pack"))  # SP export excluded
 
 
 def test_create_template_validates_app_settings():

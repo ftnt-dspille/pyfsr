@@ -114,7 +114,8 @@ Available `add_*` categories on the builder include: `add_module`,
 `add_playbook_collection`, `add_global_variable`, `add_playbook_block`,
 `add_app_setting`, `add_role`, `add_team`, `add_actor`, `add_navigation`,
 `add_report`, `add_rule`, `add_rule_channel`, `add_preprocessing_rule`,
-`add_dashboard`, `add_widget`, `add_ai_agent`, and `add_mcp_configuration`.
+`add_dashboard`, `add_widget`, `add_ai_agent`, `add_mcp_configuration`, and
+`add_export_template`. That is the complete set of export-wizard categories.
 
 ```{note}
 `add_view_templates(module, *, list_view=, detail=, form=)` takes a **module and

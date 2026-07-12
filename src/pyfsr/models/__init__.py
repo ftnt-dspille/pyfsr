@@ -42,6 +42,7 @@ from ._export import (
     ModuleSelection,
     PlaybookCollectionSelection,
     RecordSet,
+    ViewTemplateSelection,
 )
 from ._generated import Alert, Comment, Incident, Task
 from ._integration import (
@@ -122,6 +123,7 @@ from ._system import (
     PicklistName,
     RepoConnectorEntry,
     ResponseMapping,
+    ReusableBlock,
     Role,
     SolutionPack,
     SolutionPackInfo,
@@ -175,6 +177,7 @@ __all__ = [
     "RecordSet",
     "ConnectorSelection",
     "PlaybookCollectionSelection",
+    "ViewTemplateSelection",
     # agent records
     "Agent",
     "AgentConnectorStatus",
@@ -223,6 +226,7 @@ __all__ = [
     "Comment",
     "Workflow",
     "WorkflowCollection",
+    "ReusableBlock",
     "WorkflowRun",
     # playbook-run output shapes
     "RunSummary",
