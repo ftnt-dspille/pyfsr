@@ -620,6 +620,48 @@ def test_create_template_rule_not_found_raises():
         api.create_template(ExportTemplate("R").add_rule("Ghost"))
 
 
+def test_create_template_rule_resolver_falls_back_to_alt_route(monkeypatch):
+    # rule engine is proxied at /rule/api/ on some builds, /api/rule/api/ on others;
+    # the wrong route falls through to the SPA (JSON parse error). Resolver tries both.
+    from pyfsr.exceptions import ResponseParseError
+
+    calls = []
+
+    def handler(m, u, **k):
+        calls.append(u)
+        if u == "/rule/api/rules/":
+            raise ResponseParseError(None, preview="<!doctype html>")
+        if u == "/api/rule/api/rules/":
+            return {"hydra:member": [{"uuid": "r", "name": "R"}]}
+        return {"@id": "/x"}
+
+    api, c = _api(handler)
+    api.create_template(ExportTemplate("R").add_rule("R"))
+    assert "/rule/api/rules/" in calls and "/api/rule/api/rules/" in calls  # both tried
+    assert c.calls[-1][2]["options"]["rules"][0]["uuid"] == "r"
+
+
+def test_create_template_resolves_rule_channel_by_name():
+    def handler(m, u, **k):
+        if u == "/rule/api/channel/":
+            return {"hydra:member": [{"uuid": "chan-uuid", "name": "Email Notification"}]}
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    api.create_template(ExportTemplate("C").add_rule_channel("Email Notification"))
+    entry = c.calls[-1][2]["options"]["ruleChannels"][0]
+    assert entry["name"] == "Email Notification"
+    assert entry["uuid"] == "chan-uuid"
+    assert entry["value"] == "chan-uuid"
+    assert entry["exists"] is False
+
+
+def test_create_template_rule_channel_not_found_raises():
+    api, _ = _api(lambda m, u, **k: {"hydra:member": []} if m == "GET" else {"@id": "/x"})
+    with pytest.raises(ValueError, match="rule channel 'Ghost' not found"):
+        api.create_template(ExportTemplate("C").add_rule_channel("Ghost"))
+
+
 def test_export_template_preprocessing_rule_needs_resolution():
     assert ExportTemplate("T").add_preprocessing_rule("Enforce Files").needs_resolution is True
 

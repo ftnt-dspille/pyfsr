@@ -92,6 +92,7 @@ class ExportTemplate:
         self._reports: list[dict[str, Any]] = []
         self._preprocessing_rules: list[str] = []
         self._rules: list[str] = []
+        self._rule_channels: list[str] = []
         # Navigation slices (options.views[]). Each spec is {sections, merge};
         # the "app" view uuid is resolved live at create_template time.
         self._navigation: list[dict[str, Any]] = []
@@ -218,6 +219,21 @@ class ExportTemplate:
         self._rules.append(name)
         return self
 
+    def add_rule_channel(self, name: str) -> "ExportTemplate":
+        """Export a delivery-rule **channel** by name (``options.ruleChannels[]``).
+
+        Channels (email / in-app / playbook-failure notifications) live alongside
+        delivery rules in the rule-engine app at ``.../api/channel/``. The name is
+        resolved to its uuid at :meth:`ExportConfigAPI.create_template` time.
+
+        Note: no shipped solution pack populates ``ruleChannels``, so the entry
+        wire shape follows its live-verified siblings :meth:`add_rule` /
+        :meth:`add_preprocessing_rule` (``{name, uuid, value, exists, include}``);
+        the name→uuid resolution is live-verified against the channel endpoint.
+        """
+        self._rule_channels.append(name)
+        return self
+
     def add_preprocessing_rule(self, name: str) -> "ExportTemplate":
         """Export a preprocessing rule by **name** (``options.preprocessingRules[]``).
 
@@ -316,6 +332,7 @@ class ExportTemplate:
             or self._reports
             or self._preprocessing_rules
             or self._rules
+            or self._rule_channels
             or self._navigation
             or self._mcp_configs
         )
@@ -784,6 +801,16 @@ class ExportConfigAPI(BaseAPI):
                 rules_out.append(RuleSelection(name=rec["name"], uuid=rec["uuid"], value=rec["uuid"]).wire())
             options["rules"] = rules_out
 
+        if template._rule_channels:
+            chan_index = self._rule_channel_index()
+            channels_out: list[dict[str, Any]] = []
+            for name in template._rule_channels:
+                rec = chan_index.get(name)
+                if not rec:
+                    raise ValueError(f"rule channel {name!r} not found")
+                channels_out.append(RuleSelection(name=rec["name"], uuid=rec["uuid"], value=rec["uuid"]).wire())
+            options["ruleChannels"] = channels_out
+
         if template._navigation:
             nav_view = self._get_navigation_view()
             available = self._navigation_section_titles(nav_view)
@@ -844,14 +871,34 @@ class ExportConfigAPI(BaseAPI):
         """Resolve a report by ``displayName`` to its ``Reporting`` record (``/api/3/reporting``)."""
         return self._get_named_record("/api/3/reporting", "displayName", name, "report")
 
-    def _delivery_rule_index(self) -> dict[str, dict[str, Any]]:
-        """``{name: record}`` for all delivery rules (``GET /rule/api/rules/``).
+    def _rule_engine_get(self, subpath: str) -> dict[str, Any]:
+        """GET a rule-engine collection, tolerating both front-door route styles.
 
-        The rule-engine app is served from its own ``/rule/api/`` root (outside
-        ``/api/3``) and doesn't take a ``name`` server filter, so the (small)
+        The rule engine is proxied at ``/rule/api/...`` on some builds and
+        ``/api/rule/api/...`` on others; the unmatched style falls through to the
+        SPA (an HTML body that fails JSON parsing). Try each and return the first
+        that yields JSON.
+        """
+        last_exc: Exception | None = None
+        for root in ("/rule/api/", "/api/rule/api/"):
+            try:
+                return self.client.get(root + subpath, params={"limit": 2147483647})
+            except Exception as exc:  # SPA fallthrough / 404 on the wrong route
+                last_exc = exc
+        raise RuntimeError(f"rule-engine app not reachable at /rule/api/ or /api/rule/api/ ({last_exc})")
+
+    def _delivery_rule_index(self) -> dict[str, dict[str, Any]]:
+        """``{name: record}`` for all delivery rules (``GET .../api/rules/``).
+
+        The rule-engine app doesn't take a ``name`` server filter, so the (small)
         list is fetched once and matched client-side by ``name``.
         """
-        members = extract_members(self.client.get("/rule/api/rules/", params={"limit": 2147483647}))
+        members = extract_members(self._rule_engine_get("rules/"))
+        return {r["name"]: r for r in members if isinstance(r, dict) and r.get("name")}
+
+    def _rule_channel_index(self) -> dict[str, dict[str, Any]]:
+        """``{name: record}`` for all rule channels (``GET .../api/channel/``)."""
+        members = extract_members(self._rule_engine_get("channel/"))
         return {r["name"]: r for r in members if isinstance(r, dict) and r.get("name")}
 
     def _rule_entry(self, endpoint: str, name: str, kind: str) -> dict[str, Any]:
