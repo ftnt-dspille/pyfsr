@@ -588,6 +588,38 @@ def test_create_template_report_not_found_raises():
         api.create_template(ExportTemplate("R").add_report("Ghost"))
 
 
+def test_export_template_rule_needs_resolution():
+    assert ExportTemplate("T").add_rule("Alert - Notify Creation").needs_resolution is True
+
+
+def test_create_template_resolves_rule_by_name_client_side():
+    # /rule/api/rules/ (rule-engine app root) takes no name filter; matched client-side.
+    def handler(m, u, **k):
+        if m == "GET" and u == "/rule/api/rules/":
+            return {
+                "hydra:member": [
+                    {"uuid": "other-uuid", "name": "Incident - Notify Updates"},
+                    {"uuid": "rule-uuid", "name": "Alert - Notify Creation"},
+                ]
+            }
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    api.create_template(ExportTemplate("R").add_rule("Alert - Notify Creation"))
+    entry = c.calls[-1][2]["options"]["rules"][0]
+    assert entry["name"] == "Alert - Notify Creation"
+    assert entry["uuid"] == "rule-uuid"
+    assert entry["value"] == "rule-uuid"
+    assert entry["exists"] is False
+    assert entry["include"] is True
+
+
+def test_create_template_rule_not_found_raises():
+    api, _ = _api(lambda m, u, **k: {"hydra:member": []} if m == "GET" else {"@id": "/x"})
+    with pytest.raises(ValueError, match="delivery rule 'Ghost' not found"):
+        api.create_template(ExportTemplate("R").add_rule("Ghost"))
+
+
 def test_export_template_preprocessing_rule_needs_resolution():
     assert ExportTemplate("T").add_preprocessing_rule("Enforce Files").needs_resolution is True
 
