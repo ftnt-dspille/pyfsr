@@ -23,6 +23,7 @@ from ..models._export import (
 )
 from ..models._integration import ExportJobResult
 from ..pagination import extract_members
+from ..utils.validation import is_uuid as _is_uuid
 from .base import BaseAPI
 from .content_hub import ContentHubSearch
 
@@ -93,6 +94,9 @@ class ExportTemplate:
         # by uuid, widgets by name. Live-observed on 8.0.0 as bare string lists.
         self._dashboards: list[str] = []
         self._widgets: list[str] = []
+        # MCP server configs (options.mcp_configurations[]): a bare uuid list on
+        # the wire, but callers may pass a config name (resolved live to its uuid).
+        self._mcp_configs: list[str] = []
 
     def add_module(self, module: str, *, fields: list[str] | None = None) -> "ExportTemplate":
         """Export a module's schema, optionally limited to ``fields`` (all fields if omitted)."""
@@ -193,6 +197,16 @@ class ExportTemplate:
         self._dashboards.append(uuid)
         return self
 
+    def add_mcp_configuration(self, name_or_uuid: str) -> "ExportTemplate":
+        """Export an MCP server configuration by **name** or **uuid**.
+
+        ``options.mcp_configurations`` is a bare uuid list on the wire. A name is
+        resolved to its uuid via ``/api/3/mcp_configurations`` at
+        :meth:`ExportConfigAPI.create_template` time; a uuid is used verbatim.
+        """
+        self._mcp_configs.append(name_or_uuid)
+        return self
+
     def add_widget(self, name: str) -> "ExportTemplate":
         """Export a widget by **name** (taken verbatim; ``options.widgets`` is a name list)."""
         self._widgets.append(name)
@@ -265,6 +279,7 @@ class ExportTemplate:
             or self._teams
             or self._actors
             or self._navigation
+            or self._mcp_configs
         )
 
     @property
@@ -722,7 +737,19 @@ class ExportConfigAPI(BaseAPI):
                 )
             options["views"] = views
 
+        if template._mcp_configs:
+            options["mcp_configurations"] = [self._resolve_mcp_config_uuid(x) for x in template._mcp_configs]
+
         return options
+
+    def _resolve_mcp_config_uuid(self, name_or_uuid: str) -> str:
+        """Resolve an MCP config name to its uuid (``GET /api/3/mcp_configurations``); uuid passes through."""
+        if _is_uuid(name_or_uuid):
+            return name_or_uuid
+        members = extract_members(self.client.get("/api/3/mcp_configurations", params={"name": name_or_uuid}))
+        if not members:
+            raise ValueError(f"MCP configuration {name_or_uuid!r} not found")
+        return members[0]["uuid"]
 
     def _get_navigation_view(self) -> dict[str, Any]:
         """Fetch the "app" navigation view record (``GET /api/views/1/app``)."""
