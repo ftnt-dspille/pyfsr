@@ -510,6 +510,58 @@ def test_create_template_actor_not_found_raises():
         api.create_template(ExportTemplate("A").add_actor("Ghost"))
 
 
+_APP_NAV = {
+    "uuid": "d9aa6772-62c3-4f5f-a945-031780202225",
+    "name": "app",
+    "config": {"navigation": [{"title": "Resources"}, {"title": "Reports"}, {"title": "Help"}]},
+}
+
+
+def test_export_template_navigation_needs_resolution():
+    assert ExportTemplate("T").add_navigation("Resources").needs_resolution is True
+
+
+def test_create_template_resolves_navigation_entry():
+    def handler(m, u, **k):
+        if m == "GET" and u == "/api/views/1/app":
+            return _APP_NAV
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    api.create_template(ExportTemplate("N").add_navigation("Resources", "Reports"))
+    entry = c.calls[-1][2]["options"]["views"][0]
+    # live-verified wire shape: always the "app" view, sections mirrored in both keys.
+    assert entry["value"] == "app"
+    assert entry["uuid"] == "d9aa6772-62c3-4f5f-a945-031780202225"
+    assert entry["mergeType"] == "merge"
+    assert entry["appendNavigation"] == ["Resources", "Reports"]
+    assert entry["navigationOptions"] == [
+        {"title": "Resources", "mergeType": "merge"},
+        {"title": "Reports", "mergeType": "merge"},
+    ]
+
+
+def test_create_template_navigation_replace_sets_merge_type():
+    api, c = _api(lambda m, u, **k: _APP_NAV if m == "GET" else {"@id": "/x"})
+    api.create_template(ExportTemplate("N").add_navigation("Help", replace=True))
+    entry = c.calls[-1][2]["options"]["views"][0]
+    assert entry["mergeType"] == "replace"
+    assert entry["navigationOptions"] == [{"title": "Help", "mergeType": "replace"}]
+
+
+def test_create_template_navigation_no_sections_exports_all():
+    api, c = _api(lambda m, u, **k: _APP_NAV if m == "GET" else {"@id": "/x"})
+    api.create_template(ExportTemplate("N").add_navigation())
+    entry = c.calls[-1][2]["options"]["views"][0]
+    assert entry["appendNavigation"] == ["Resources", "Reports", "Help"]
+
+
+def test_create_template_navigation_unknown_section_raises():
+    api, _ = _api(lambda m, u, **k: _APP_NAV if m == "GET" else {"@id": "/x"})
+    with pytest.raises(ValueError, match=r"navigation section\(s\) \['Ghost'\] not found"):
+        api.create_template(ExportTemplate("N").add_navigation("Ghost"))
+
+
 def test_create_template_offline_only_skips_lookups():
     # no GET lookups fire when nothing name-based was added
     api, c = _api(lambda m, u, **k: {"@id": "/api/3/export_templates/t1"})
