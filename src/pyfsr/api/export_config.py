@@ -20,6 +20,7 @@ from ..models._export import (
     RecordSet,
     ReportSelection,
     RoleSelection,
+    RuleSelection,
     TeamSelection,
 )
 from ..models._integration import ExportJobResult
@@ -89,6 +90,7 @@ class ExportTemplate:
         self._teams: list[str] = []
         self._actors: list[str] = []
         self._reports: list[dict[str, Any]] = []
+        self._preprocessing_rules: list[str] = []
         # Navigation slices (options.views[]). Each spec is {sections, merge};
         # the "app" view uuid is resolved live at create_template time.
         self._navigation: list[dict[str, Any]] = []
@@ -204,6 +206,15 @@ class ExportTemplate:
         self._reports.append({"name": name, "includeSchedules": bool(include_schedules)})
         return self
 
+    def add_preprocessing_rule(self, name: str) -> "ExportTemplate":
+        """Export a preprocessing rule by **name** (``options.preprocessingRules[]``).
+
+        The rule's uuid is resolved from ``/api/3/preprocessing_rules`` (matched on
+        ``name``) at :meth:`ExportConfigAPI.create_template` time.
+        """
+        self._preprocessing_rules.append(name)
+        return self
+
     def add_dashboard(self, uuid: str) -> "ExportTemplate":
         """Export a dashboard by **uuid** (taken verbatim; ``options.dashboards`` is a uuid list)."""
         self._dashboards.append(uuid)
@@ -291,6 +302,7 @@ class ExportTemplate:
             or self._teams
             or self._actors
             or self._reports
+            or self._preprocessing_rules
             or self._navigation
             or self._mcp_configs
         )
@@ -743,6 +755,12 @@ class ExportConfigAPI(BaseAPI):
                 )
             options["reports"] = reports
 
+        if template._preprocessing_rules:
+            options["preprocessingRules"] = [
+                self._rule_entry("/api/3/preprocessing_rules", name, "preprocessing rule")
+                for name in template._preprocessing_rules
+            ]
+
         if template._navigation:
             nav_view = self._get_navigation_view()
             available = self._navigation_section_titles(nav_view)
@@ -802,6 +820,16 @@ class ExportConfigAPI(BaseAPI):
     def _get_report_info(self, name: str) -> dict[str, Any]:
         """Resolve a report by ``displayName`` to its ``Reporting`` record (``/api/3/reporting``)."""
         return self._get_named_record("/api/3/reporting", "displayName", name, "report")
+
+    def _rule_entry(self, endpoint: str, name: str, kind: str) -> dict[str, Any]:
+        """Resolve a rule by ``name`` and render its ``{name, uuid, value, exists, include}`` entry.
+
+        Shared by the ``rules`` and ``preprocessingRules`` categories (identical
+        wire shape). ``endpoint`` is the source collection (e.g.
+        ``/api/3/preprocessing_rules``).
+        """
+        info = self._get_named_record(endpoint, "name", name, kind)
+        return RuleSelection(name=info["name"], uuid=info["uuid"], value=info["uuid"]).wire()
 
     def _get_named_record(self, endpoint: str, key: str, value: str, kind: str) -> dict[str, Any]:
         """Resolve a record by a name-like field (``name``/``title``) to its full record."""
