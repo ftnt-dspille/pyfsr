@@ -240,7 +240,8 @@ class ImportConfigAPI(BaseAPI):
             modify_options: callback given the generated ``options`` dict; return
                 the (mutated) dict to ``PUT`` back before triggering. Full control;
                 takes precedence over ``resolve``. See :func:`connectors_only`,
-                :func:`overwrite_all`, :func:`keep_existing`, :func:`skip_schema_changes`.
+                :func:`connector_flags`, :func:`overwrite_all`, :func:`keep_existing`,
+                :func:`skip_schema_changes`.
             resolve: one-shot conflict strategy instead of a callback — one of
                 ``"overwrite"`` (apply all field changes), ``"keep_existing"``
                 (keep every existing field, add only new ones), or ``"skip_schema"``
@@ -364,6 +365,48 @@ def connectors_only(options: dict[str, Any]) -> dict[str, Any]:
             continue
         if isinstance(val, dict) and "include" in val:
             val["include"] = False
+    return options
+
+
+def connector_flags(
+    options: dict[str, Any],
+    *,
+    include_install: bool | None = None,
+    include_configurations: bool | None = None,
+) -> dict[str, Any]:
+    """``modify_options`` helper: set the two per-connector import toggles.
+
+    Each connector in a bundle carries two independent levers, matching the
+    import wizard's connector row:
+
+    - ``includeInstall`` — (re)install the connector RPM/package itself.
+    - ``includeConfigurations`` — restore the connector's saved configurations
+      (upserted by ``config_id``, secrets and all).
+
+    Pass either as a bool to force it on/off across every connector in the
+    bundle; leave it ``None`` to keep whatever the generated options already
+    have. Unlike :func:`connectors_only`, this does **not** touch the other
+    top-level sections — use it when you want, say, "import everything, but do
+    not reinstall connectors, only restore their configs"::
+
+        client.import_config.import_file(
+            "bundle.zip",
+            modify_options=lambda o: connector_flags(
+                o, include_install=False, include_configurations=True
+            ),
+        )
+    """
+    conn = options.get("connectors")
+    if isinstance(conn, dict):
+        for entry in conn.get("values") or []:
+            if not isinstance(entry, dict):
+                continue
+            if include_install is not None:
+                entry["includeInstall"] = include_install
+            if include_configurations is not None:
+                entry["includeConfigurations"] = include_configurations
+        if include_install is not None or include_configurations is not None:
+            conn["include"] = True
     return options
 
 

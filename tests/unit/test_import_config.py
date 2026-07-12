@@ -12,6 +12,7 @@ import pytest
 from pyfsr.api.import_config import (
     ImportConfigAPI,
     _job_uuid,
+    connector_flags,
     connectors_only,
     inspect_changes,
     keep_existing,
@@ -215,6 +216,50 @@ def test_connectors_only_forces_config_restore_and_disables_others():
     assert entry["includeInstall"] is False
     assert out["modules"]["include"] is False
     assert out["playbooks"]["include"] is False
+
+
+# --------------------------------------------------------------------------- connector_flags
+
+
+def test_connector_flags_sets_both_toggles_and_leaves_others():
+    options = {
+        "connectors": {
+            "include": False,
+            "values": [
+                {"includeConfigurations": False, "includeInstall": True},
+                {"includeConfigurations": False, "includeInstall": True},
+            ],
+        },
+        "modules": {"include": True},
+    }
+    out = connector_flags(options, include_install=False, include_configurations=True)
+    assert out["connectors"]["include"] is True
+    for entry in out["connectors"]["values"]:
+        assert entry["includeInstall"] is False
+        assert entry["includeConfigurations"] is True
+    # unlike connectors_only, other sections are untouched
+    assert out["modules"]["include"] is True
+
+
+def test_connector_flags_none_leaves_toggle_untouched():
+    options = {
+        "connectors": {
+            "include": False,
+            "values": [{"includeConfigurations": False, "includeInstall": True}],
+        }
+    }
+    out = connector_flags(options, include_install=False)  # only install specified
+    entry = out["connectors"]["values"][0]
+    assert entry["includeInstall"] is False
+    assert entry["includeConfigurations"] is False  # left as-is
+    assert out["connectors"]["include"] is True
+
+
+def test_connector_flags_noop_when_nothing_specified():
+    options = {"connectors": {"include": False, "values": [{"includeInstall": True}]}}
+    out = connector_flags(options)
+    # no toggles given -> include flag not forced on
+    assert out["connectors"]["include"] is False
 
 
 # --------------------------------------------------------------------------- import_file
