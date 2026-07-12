@@ -588,6 +588,33 @@ def test_create_template_report_not_found_raises():
         api.create_template(ExportTemplate("R").add_report("Ghost"))
 
 
+def test_export_template_preprocessing_rule_needs_resolution():
+    assert ExportTemplate("T").add_preprocessing_rule("Enforce Files").needs_resolution is True
+
+
+def test_create_template_resolves_preprocessing_rule_by_name():
+    def handler(m, u, **k):
+        if m == "GET" and u == "/api/3/preprocessing_rules":
+            return {"hydra:member": [{"uuid": "pre-uuid", "name": k["params"]["name"]}]}
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    api.create_template(ExportTemplate("P").add_preprocessing_rule("Enforce Files"))
+    entry = c.calls[-1][2]["options"]["preprocessingRules"][0]
+    # live-verified wire shape: uuid and value both the rule uuid, exists always False.
+    assert entry["name"] == "Enforce Files"
+    assert entry["uuid"] == "pre-uuid"
+    assert entry["value"] == "pre-uuid"
+    assert entry["exists"] is False
+    assert entry["include"] is True
+
+
+def test_create_template_preprocessing_rule_not_found_raises():
+    api, _ = _api(lambda m, u, **k: {"hydra:member": []} if m == "GET" else {"@id": "/x"})
+    with pytest.raises(ValueError, match="preprocessing rule 'Ghost' not found"):
+        api.create_template(ExportTemplate("P").add_preprocessing_rule("Ghost"))
+
+
 def test_export_template_mcp_needs_resolution():
     assert ExportTemplate("T").add_mcp_configuration("SOC Framework").needs_resolution is True
 

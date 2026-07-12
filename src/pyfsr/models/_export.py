@@ -127,6 +127,23 @@ class ActorSelection(_ExportEntry):
     include: bool = True
 
 
+class RuleSelection(_ExportEntry):
+    """A rule selection for the ``options.rules[]`` / ``options.preprocessingRules[]``
+    categories (both share this shape).
+
+    ``value`` and ``uuid`` are both the rule uuid; ``name`` is its display name.
+    ``exists`` is the engine's target-side presence flag (always ``False`` on
+    export — the target fills it in). Live-observed shape on 8.0.0:
+    ``{name, uuid, value, exists, include}``.
+    """
+
+    name: str
+    uuid: str
+    value: str
+    exists: bool = False
+    include: bool = True
+
+
 class ReportSelection(_ExportEntry):
     """A report selection (``options.reports[]``).
 
