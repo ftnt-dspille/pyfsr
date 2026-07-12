@@ -50,6 +50,7 @@ docstring states which it expects.
 | Script | What it shows | |
 |---|---|---|
 | [`all_field_types_module.py`](all_field_types_module.py) | Create a module exercising every supported field type | 🔌 |
+| [`export_import_records.py`](export_import_records.py) | Round-trip a record through config **export → import**: filtered `export_record_data` → delete → `import_file` restores it (same uuid) | 🔌 |
 
 ## Playbooks
 
