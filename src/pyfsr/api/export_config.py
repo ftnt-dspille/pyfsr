@@ -14,6 +14,7 @@ from ..auth.base import BaseAuth
 from ..models._export import (
     ActorSelection,
     ConnectorSelection,
+    DeliveryRuleSelection,
     ModuleSelection,
     NavigationSelection,
     PlaybookCollectionSelection,
@@ -212,9 +213,11 @@ class ExportTemplate:
         """Export a delivery rule by **name** (``options.rules[]``).
 
         Delivery rules (the SOAR UI's *Rules* / notification rules) live in the
-        rule-engine app at ``/rule/api/rules/``. The name is resolved to its uuid
-        at :meth:`ExportConfigAPI.create_template` time; the wire shape matches
-        :meth:`add_preprocessing_rule`.
+        rule-engine app. The name is resolved to its uuid at
+        :meth:`ExportConfigAPI.create_template` time and emitted as the Export
+        Wizard's ``{type: "rule", value, label, include}`` entry — the shape the
+        export engine requires to actually write the rule into the archive
+        (live-verified: emits ``rules/<name>.json``).
         """
         self._rules.append(name)
         return self
@@ -224,12 +227,9 @@ class ExportTemplate:
 
         Channels (email / in-app / playbook-failure notifications) live alongside
         delivery rules in the rule-engine app at ``.../api/channel/``. The name is
-        resolved to its uuid at :meth:`ExportConfigAPI.create_template` time.
-
-        Note: no shipped solution pack populates ``ruleChannels``, so the entry
-        wire shape follows its live-verified siblings :meth:`add_rule` /
-        :meth:`add_preprocessing_rule` (``{name, uuid, value, exists, include}``);
-        the name→uuid resolution is live-verified against the channel endpoint.
+        resolved to its uuid and emitted as the Export Wizard's
+        ``{type: "channel", value, label, include}`` entry (live-verified: emits
+        ``ruleChannels/<name>.json`` into the archive).
         """
         self._rule_channels.append(name)
         return self
@@ -798,7 +798,7 @@ class ExportConfigAPI(BaseAPI):
                 rec = rule_index.get(name)
                 if not rec:
                     raise ValueError(f"delivery rule {name!r} not found")
-                rules_out.append(RuleSelection(name=rec["name"], uuid=rec["uuid"], value=rec["uuid"]).wire())
+                rules_out.append(DeliveryRuleSelection(type="rule", value=rec["uuid"], label=rec["name"]).wire())
             options["rules"] = rules_out
 
         if template._rule_channels:
@@ -808,7 +808,7 @@ class ExportConfigAPI(BaseAPI):
                 rec = chan_index.get(name)
                 if not rec:
                     raise ValueError(f"rule channel {name!r} not found")
-                channels_out.append(RuleSelection(name=rec["name"], uuid=rec["uuid"], value=rec["uuid"]).wire())
+                channels_out.append(DeliveryRuleSelection(type="channel", value=rec["uuid"], label=rec["name"]).wire())
             options["ruleChannels"] = channels_out
 
         if template._navigation:
