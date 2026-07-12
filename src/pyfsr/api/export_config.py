@@ -232,6 +232,9 @@ class ExportTemplate:
         :meth:`ExportConfigAPI.create_template` time. ``install`` toggles
         install-on-import; ``include_configurations`` ships the agent's saved
         configs.
+
+        Requires FortiSOAR 8.0.0+ (AI agents don't exist on earlier releases);
+        raises ``ValueError`` at ``create_template`` time on an older appliance.
         """
         self._ai_agents.append({"name": name, "install": bool(install), "configurations": bool(include_configurations)})
         return self
@@ -268,6 +271,9 @@ class ExportTemplate:
         ``options.mcp_configurations`` is a bare uuid list on the wire. A name is
         resolved to its uuid via ``/api/3/mcp_configurations`` at
         :meth:`ExportConfigAPI.create_template` time; a uuid is used verbatim.
+
+        Requires FortiSOAR 8.0.0+ (MCP configs are an 8.0 feature); raises
+        ``ValueError`` at ``create_template`` time on an older appliance.
         """
         self._mcp_configs.append(name_or_uuid)
         return self
@@ -871,6 +877,7 @@ class ExportConfigAPI(BaseAPI):
 
     def _resolve_mcp_config_uuid(self, name_or_uuid: str) -> str:
         """Resolve an MCP config name to its uuid (``GET /api/3/mcp_configurations``); uuid passes through."""
+        self._require_8_0("MCP configuration")
         if _is_uuid(name_or_uuid):
             return name_or_uuid
         members = extract_members(self.client.get("/api/3/mcp_configurations", params={"name": name_or_uuid}))
@@ -934,6 +941,19 @@ class ExportConfigAPI(BaseAPI):
         members = extract_members(self._rule_engine_get("channel/"))
         return {r["name"]: r for r in members if isinstance(r, dict) and r.get("name")}
 
+    def _require_8_0(self, feature: str) -> None:
+        """Raise if the appliance predates 8.0.0, where ``feature`` first shipped.
+
+        A permissive no-op when the version can't be determined (``version_tuple``
+        returns ``None``) — we don't block on an unknown rather than guessing.
+        """
+        v = self.client.version_tuple()
+        if v is not None and v < (8, 0, 0):
+            raise ValueError(
+                f"{feature} export requires FortiSOAR 8.0.0+ (this appliance is "
+                f"{'.'.join(map(str, v))}); the category exists only on 8.0.0 and later."
+            )
+
     def _ai_agent_index(self) -> dict[str, dict[str, Any]]:
         """``{name/label: record}`` for installed AI agents (Content Hub ``type: ai_agent``).
 
@@ -942,6 +962,7 @@ class ExportConfigAPI(BaseAPI):
         ``ai_agent`` type. Indexed by both ``name`` (id) and ``label`` so callers
         can pass either.
         """
+        self._require_8_0("AI agent")
         query = {
             "limit": 2147483647,
             "logic": "AND",

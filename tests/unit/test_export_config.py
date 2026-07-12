@@ -15,10 +15,14 @@ from pyfsr.api.export_config import ExportConfigAPI, ExportTemplate
 
 
 class FakeClient:
-    def __init__(self, handler=None):
+    def __init__(self, handler=None, version=(8, 0, 0)):
         self.calls = []
         self._handler = handler or (lambda *a, **k: {})
         self.auth = SimpleNamespace(check_operation_supported=lambda operation=None: None)
+        self._version = version
+
+    def version_tuple(self, *, refresh=False):
+        return self._version
 
     def get(self, url, params=None, headers=None, **kw):
         self.calls.append(("GET", url, params))
@@ -691,6 +695,33 @@ def test_create_template_resolves_ai_agent_by_label():
     entry = c.calls[-1][2]["options"]["ai_agents"][0]
     assert entry["name"] == "ioc-masking"  # label resolved back to the id
     assert entry["install"] is False
+
+
+def test_create_template_ai_agent_rejected_below_8_0():
+    c = FakeClient(_ai_agent_handler, version=(7, 6, 5))
+    api = ExportConfigAPI(c)
+    with pytest.raises(ValueError, match="AI agent export requires FortiSOAR 8.0.0"):
+        api.create_template(ExportTemplate("A").add_ai_agent("ioc-masking"))
+
+
+def test_create_template_mcp_config_rejected_below_8_0():
+    def handler(m, u, **k):
+        if m == "GET" and u == "/api/3/mcp_configurations":
+            return {"hydra:member": [{"uuid": "mcp-uuid", "name": "X"}]}
+        return {"@id": "/x"}
+
+    c = FakeClient(handler, version=(7, 6, 5))
+    api = ExportConfigAPI(c)
+    with pytest.raises(ValueError, match="MCP configuration export requires FortiSOAR 8.0.0"):
+        api.create_template(ExportTemplate("M").add_mcp_configuration("X"))
+
+
+def test_create_template_ai_agent_allowed_when_version_unknown():
+    # permissive: unknown version (None) must not block.
+    c = FakeClient(_ai_agent_handler, version=None)
+    api = ExportConfigAPI(c)
+    api.create_template(ExportTemplate("A").add_ai_agent("ioc-masking"))
+    assert c.calls[-1][2]["options"]["ai_agents"][0]["name"] == "ioc-masking"
 
 
 def test_create_template_ai_agent_not_found_raises():
