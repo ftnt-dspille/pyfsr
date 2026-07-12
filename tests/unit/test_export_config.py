@@ -562,6 +562,36 @@ def test_create_template_navigation_unknown_section_raises():
         api.create_template(ExportTemplate("N").add_navigation("Ghost"))
 
 
+def test_export_template_mcp_needs_resolution():
+    assert ExportTemplate("T").add_mcp_configuration("SOC Framework").needs_resolution is True
+
+
+def test_create_template_resolves_mcp_config_by_name():
+    def handler(m, u, **k):
+        if m == "GET" and u == "/api/3/mcp_configurations":
+            return {"hydra:member": [{"uuid": "mcp-uuid", "name": k["params"]["name"]}]}
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    api.create_template(ExportTemplate("M").add_mcp_configuration("SOC Framework"))
+    # live-verified wire shape: a bare uuid list.
+    assert c.calls[-1][2]["options"]["mcp_configurations"] == ["mcp-uuid"]
+
+
+def test_create_template_mcp_config_uuid_passes_through_without_lookup():
+    api, c = _api(lambda m, u, **k: {"@id": "/x"})
+    uid = "2e541107-0b55-4623-b297-dfac495a863e"
+    api.create_template(ExportTemplate("M").add_mcp_configuration(uid))
+    assert c.calls[-1][2]["options"]["mcp_configurations"] == [uid]
+    assert not any(m == "GET" for m, _, _ in c.calls)  # uuid needs no resolution
+
+
+def test_create_template_mcp_config_not_found_raises():
+    api, _ = _api(lambda m, u, **k: {"hydra:member": []} if m == "GET" else {"@id": "/x"})
+    with pytest.raises(ValueError, match="MCP configuration 'Ghost' not found"):
+        api.create_template(ExportTemplate("M").add_mcp_configuration("Ghost"))
+
+
 def test_create_template_offline_only_skips_lookups():
     # no GET lookups fire when nothing name-based was added
     api, c = _api(lambda m, u, **k: {"@id": "/api/3/export_templates/t1"})
