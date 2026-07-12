@@ -18,6 +18,7 @@ from ..models._export import (
     NavigationSelection,
     PlaybookCollectionSelection,
     RecordSet,
+    ReportSelection,
     RoleSelection,
     TeamSelection,
 )
@@ -87,6 +88,7 @@ class ExportTemplate:
         self._roles: list[str] = []
         self._teams: list[str] = []
         self._actors: list[str] = []
+        self._reports: list[dict[str, Any]] = []
         # Navigation slices (options.views[]). Each spec is {sections, merge};
         # the "app" view uuid is resolved live at create_template time.
         self._navigation: list[dict[str, Any]] = []
@@ -192,6 +194,16 @@ class ExportTemplate:
         self._navigation.append({"sections": list(sections), "merge": not replace})
         return self
 
+    def add_report(self, name: str, *, include_schedules: bool = True) -> "ExportTemplate":
+        """Export a report by **display name** (``options.reports[]``).
+
+        The report's uuid/label are resolved from ``/api/3/reporting`` (matched on
+        ``displayName``) at :meth:`ExportConfigAPI.create_template` time. Set
+        ``include_schedules=False`` to ship the report without its schedules.
+        """
+        self._reports.append({"name": name, "includeSchedules": bool(include_schedules)})
+        return self
+
     def add_dashboard(self, uuid: str) -> "ExportTemplate":
         """Export a dashboard by **uuid** (taken verbatim; ``options.dashboards`` is a uuid list)."""
         self._dashboards.append(uuid)
@@ -278,6 +290,7 @@ class ExportTemplate:
             or self._roles
             or self._teams
             or self._actors
+            or self._reports
             or self._navigation
             or self._mcp_configs
         )
@@ -717,6 +730,19 @@ class ExportConfigAPI(BaseAPI):
                 actors.append(ActorSelection(value=info["@id"], title=info.get("title"), uuid=info.get("uuid")).wire())
             options["actors"] = actors
 
+        if template._reports:
+            reports: list[dict[str, Any]] = []
+            for spec in template._reports:
+                info = self._get_report_info(spec["name"])
+                reports.append(
+                    ReportSelection(
+                        value=info["uuid"],
+                        label=info.get("displayName"),
+                        includeSchedules=spec["includeSchedules"],
+                    ).wire()
+                )
+            options["reports"] = reports
+
         if template._navigation:
             nav_view = self._get_navigation_view()
             available = self._navigation_section_titles(nav_view)
@@ -772,6 +798,10 @@ class ExportConfigAPI(BaseAPI):
             if isinstance(actor, dict) and actor.get("title") == title:
                 return actor
         raise ValueError(f"actor {title!r} not found")
+
+    def _get_report_info(self, name: str) -> dict[str, Any]:
+        """Resolve a report by ``displayName`` to its ``Reporting`` record (``/api/3/reporting``)."""
+        return self._get_named_record("/api/3/reporting", "displayName", name, "report")
 
     def _get_named_record(self, endpoint: str, key: str, value: str, kind: str) -> dict[str, Any]:
         """Resolve a record by a name-like field (``name``/``title``) to its full record."""

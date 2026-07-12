@@ -562,6 +562,32 @@ def test_create_template_navigation_unknown_section_raises():
         api.create_template(ExportTemplate("N").add_navigation("Ghost"))
 
 
+def test_export_template_report_needs_resolution():
+    assert ExportTemplate("T").add_report("Case Summary Report").needs_resolution is True
+
+
+def test_create_template_resolves_report_by_display_name():
+    def handler(m, u, **k):
+        if m == "GET" and u == "/api/3/reporting":
+            return {"hydra:member": [{"uuid": "rep-uuid", "displayName": k["params"]["displayName"]}]}
+        return {"@id": "/api/3/export_templates/t1"}
+
+    api, c = _api(handler)
+    api.create_template(ExportTemplate("R").add_report("Case Summary Report", include_schedules=False))
+    entry = c.calls[-1][2]["options"]["reports"][0]
+    # live-verified wire shape: value is the report uuid, label its displayName.
+    assert entry["value"] == "rep-uuid"
+    assert entry["label"] == "Case Summary Report"
+    assert entry["include"] is True
+    assert entry["includeSchedules"] is False
+
+
+def test_create_template_report_not_found_raises():
+    api, _ = _api(lambda m, u, **k: {"hydra:member": []} if m == "GET" else {"@id": "/x"})
+    with pytest.raises(ValueError, match="report 'Ghost' not found"):
+        api.create_template(ExportTemplate("R").add_report("Ghost"))
+
+
 def test_export_template_mcp_needs_resolution():
     assert ExportTemplate("T").add_mcp_configuration("SOC Framework").needs_resolution is True
 
