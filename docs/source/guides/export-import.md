@@ -187,6 +187,21 @@ the mutated dict; the module-level helpers
 {func}`~pyfsr.api.import_config.keep_existing`, and
 {func}`~pyfsr.api.import_config.skip_schema_changes` are ready-made callbacks.
 
+For connector bundles specifically, {func}`~pyfsr.api.import_config.connector_flags`
+sets the two per-connector toggles — `includeInstall` (reinstall the connector)
+and `includeConfigurations` (restore its saved configs) — without disturbing the
+rest of the bundle:
+
+```python
+from pyfsr.api.import_config import connector_flags
+
+# Restore connector configs but do not reinstall the connectors themselves.
+client.import_config.import_file(
+    "bundle.zip",
+    modify_options=lambda o: connector_flags(o, include_install=False, include_configurations=True),
+)
+```
+
 ```{warning}
 `allow_schema_changes=True` bypasses the precheck entirely and triggers with the
 server-default options even when risky changes are present. Reach for a `resolve=`
