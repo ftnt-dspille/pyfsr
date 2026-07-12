@@ -176,7 +176,36 @@ class RolesAPI(BaseAPI):
         body: dict[str, Any] = {"name": name}
         if description is not None:
             body["description"] = description
-        return Role.model_validate(self.client.post(_BASE, data=body))
+        role_rec = Role.model_validate(self.client.post(_BASE, data=body))
+        self._role_cache = None  # name→record cache is now stale
+        return role_rec
+
+    def update(self, role: str, *, name: str | None = None, description: str | None = None) -> Role:
+        """Update a role's ``name`` and/or ``description`` (``PUT /api/3/roles/<uuid>``).
+
+        ``role`` is a uuid or current name. Pass at least one of ``name`` /
+        ``description``; only the given fields are sent (a partial update that
+        leaves ``modulePermissions`` untouched), and the full updated
+        :class:`~pyfsr.models.Role` is returned. To change module grants use
+        :meth:`grant_module_permissions` instead.
+        """
+        uuid = self._resolve_role_uuid(role)
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        if not body:
+            raise ValueError("update() needs at least one of name= or description=")
+        updated = Role.model_validate(self.client.put(f"{_BASE}/{uuid}", data=body))
+        self._role_cache = None  # a renamed role invalidates the name→record cache
+        return updated
+
+    def delete(self, role: str) -> None:
+        """Delete a role (``DELETE /api/3/roles/<uuid>``). ``role`` is a uuid or name."""
+        uuid = self._resolve_role_uuid(role)
+        self.client.delete(f"{_BASE}/{uuid}")
+        self._role_cache = None
 
     def grant_module_permissions(
         self,

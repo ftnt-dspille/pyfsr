@@ -112,6 +112,7 @@ def _roles_client() -> _FakeClient:
         f"/api/3/roles/{_R_UID}",
         {"@id": f"/api/3/roles/{_R_UID}", "@type": "Role", "name": "Analyst", "uuid": _R_UID},
     )
+    c.route("DELETE", f"/api/3/roles/{_R_UID}", None)
     return c
 
 
@@ -147,6 +148,36 @@ def test_roles_create_omits_description_when_absent():
     c = _roles_client()
     RolesAPI(c).create("New")
     assert c.calls[-1][2] == {"name": "New"}
+
+
+def test_roles_update_sends_partial_body_and_returns_typed():
+    c = _roles_client()
+    api = RolesAPI(c)
+    updated = api.update("Analyst", description="updated")  # resolve by name
+    assert isinstance(updated, Role)
+    method, endpoint, data = c.calls[-1]
+    assert (method, endpoint) == ("PUT", f"/api/3/roles/{_R_UID}")
+    assert data == {"description": "updated"}  # only the given field is sent
+
+
+def test_roles_update_requires_a_field():
+    api = RolesAPI(_roles_client())
+    with pytest.raises(ValueError, match="at least one of name= or description="):
+        api.update("Analyst")
+
+
+def test_roles_delete_by_name_resolves_and_deletes():
+    c = _roles_client()
+    assert RolesAPI(c).delete("Analyst") is None
+    assert c.calls[-1][:2] == ("DELETE", f"/api/3/roles/{_R_UID}")
+
+
+def test_roles_write_invalidates_name_cache():
+    api = RolesAPI(_roles_client())
+    api.role_map()  # populate the cache
+    assert api._role_cache is not None
+    api.update("Analyst", name="Renamed")
+    assert api._role_cache is None  # rename invalidated it
 
 
 def test_roles_grant_returns_role_and_merges_permissions():
