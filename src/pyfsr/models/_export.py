@@ -127,6 +127,22 @@ class ActorSelection(_ExportEntry):
     include: bool = True
 
 
+class ReportSelection(_ExportEntry):
+    """A report selection (``options.reports[]``).
+
+    Reports are ``Reporting`` records (``/api/3/reporting/<uuid>``); ``value`` is
+    the report uuid and ``label`` its ``displayName``. ``includeSchedules`` mirrors
+    the wizard toggle for carrying the report's schedules. Live-observed shape on
+    8.0.0: ``{label, value, include, recordCount, includeSchedules}``.
+    """
+
+    value: str
+    label: str | None = None
+    include: bool = True
+    recordCount: int = 0
+    includeSchedules: bool = True
+
+
 class NavigationSelection(_ExportEntry):
     """A navigation-menu selection (``options.views[]``).
 
