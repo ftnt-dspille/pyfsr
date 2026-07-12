@@ -128,12 +128,12 @@ class ActorSelection(_ExportEntry):
 
 
 class RuleSelection(_ExportEntry):
-    """A rule selection for the ``options.rules[]`` / ``options.preprocessingRules[]``
-    categories (both share this shape).
+    """A preprocessing-rule selection (``options.preprocessingRules[]``).
 
     ``value`` and ``uuid`` are both the rule uuid; ``name`` is its display name.
     ``exists`` is the engine's target-side presence flag (always ``False`` on
-    export — the target fills it in). Live-observed shape on 8.0.0:
+    export — the target fills it in). Live-verified shape on 8.0.0
+    (``preprocessingRules`` emits a file into the export archive with this shape):
     ``{name, uuid, value, exists, include}``.
     """
 
@@ -141,6 +141,24 @@ class RuleSelection(_ExportEntry):
     uuid: str
     value: str
     exists: bool = False
+    include: bool = True
+
+
+class DeliveryRuleSelection(_ExportEntry):
+    """A delivery-rule / channel selection (``options.rules[]`` / ``options.ruleChannels[]``).
+
+    The Export Wizard writes these as ``{type, value, label, include}`` where
+    ``type`` is ``"rule"`` or ``"channel"`` and ``value`` is the uuid. **This exact
+    shape is required for the export engine to emit the content** — the verbose
+    ``{name, uuid, value, exists, include}`` shape (used by solution-pack
+    templates) stores fine but produces an empty archive. Live-verified on 8.0.0:
+    a template with this shape emits ``rules/<name>.json`` /
+    ``ruleChannels/<name>.json`` into the zip.
+    """
+
+    type: str
+    value: str
+    label: str | None = None
     include: bool = True
 
 

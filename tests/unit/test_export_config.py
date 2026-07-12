@@ -607,11 +607,12 @@ def test_create_template_resolves_rule_by_name_client_side():
     api, c = _api(handler)
     api.create_template(ExportTemplate("R").add_rule("Alert - Notify Creation"))
     entry = c.calls[-1][2]["options"]["rules"][0]
-    assert entry["name"] == "Alert - Notify Creation"
-    assert entry["uuid"] == "rule-uuid"
+    # live-verified Export Wizard shape (required for the engine to emit the rule).
+    assert entry["type"] == "rule"
     assert entry["value"] == "rule-uuid"
-    assert entry["exists"] is False
+    assert entry["label"] == "Alert - Notify Creation"
     assert entry["include"] is True
+    assert "name" not in entry and "exists" not in entry
 
 
 def test_create_template_rule_not_found_raises():
@@ -638,7 +639,7 @@ def test_create_template_rule_resolver_falls_back_to_alt_route(monkeypatch):
     api, c = _api(handler)
     api.create_template(ExportTemplate("R").add_rule("R"))
     assert "/rule/api/rules/" in calls and "/api/rule/api/rules/" in calls  # both tried
-    assert c.calls[-1][2]["options"]["rules"][0]["uuid"] == "r"
+    assert c.calls[-1][2]["options"]["rules"][0]["value"] == "r"
 
 
 def test_create_template_resolves_rule_channel_by_name():
@@ -650,10 +651,11 @@ def test_create_template_resolves_rule_channel_by_name():
     api, c = _api(handler)
     api.create_template(ExportTemplate("C").add_rule_channel("Email Notification"))
     entry = c.calls[-1][2]["options"]["ruleChannels"][0]
-    assert entry["name"] == "Email Notification"
-    assert entry["uuid"] == "chan-uuid"
+    # live-verified Export Wizard shape.
+    assert entry["type"] == "channel"
     assert entry["value"] == "chan-uuid"
-    assert entry["exists"] is False
+    assert entry["label"] == "Email Notification"
+    assert entry["include"] is True
 
 
 def test_create_template_rule_channel_not_found_raises():
