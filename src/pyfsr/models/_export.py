@@ -162,6 +162,26 @@ class DeliveryRuleSelection(_ExportEntry):
     include: bool = True
 
 
+class AiAgentSelection(_ExportEntry):
+    """An AI-agent selection (``options.ai_agents[]``).
+
+    AI agents are Content Hub items (``type: "ai_agent"``); ``name`` is the agent
+    id (e.g. ``"ioc-masking"``) and ``label`` its display name. ``install`` mirrors
+    the wizard's install-on-import toggle and ``configurations`` whether saved
+    configs ride along. Live-observed shape on 8.0.0: ``{name, label, include,
+    install, version, configCount, recordCount, configurations}``.
+    """
+
+    name: str
+    label: str | None = None
+    version: str | None = None
+    include: bool = True
+    install: bool = True
+    configurations: bool = True
+    configCount: int = 0
+    recordCount: int = 0
+
+
 class ReportSelection(_ExportEntry):
     """A report selection (``options.reports[]``).
 

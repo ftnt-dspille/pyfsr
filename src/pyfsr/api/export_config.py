@@ -13,6 +13,7 @@ from typing import Any
 from ..auth.base import BaseAuth
 from ..models._export import (
     ActorSelection,
+    AiAgentSelection,
     ConnectorSelection,
     DeliveryRuleSelection,
     ModuleSelection,
@@ -94,6 +95,7 @@ class ExportTemplate:
         self._preprocessing_rules: list[str] = []
         self._rules: list[str] = []
         self._rule_channels: list[str] = []
+        self._ai_agents: list[dict[str, Any]] = []
         # Navigation slices (options.views[]). Each spec is {sections, merge};
         # the "app" view uuid is resolved live at create_template time.
         self._navigation: list[dict[str, Any]] = []
@@ -222,6 +224,18 @@ class ExportTemplate:
         self._rules.append(name)
         return self
 
+    def add_ai_agent(self, name: str, *, install: bool = True, include_configurations: bool = True) -> "ExportTemplate":
+        """Export an AI agent by **name** or **label** (``options.ai_agents[]``).
+
+        AI agents are Content Hub items (``type: "ai_agent"``); the agent's
+        id/label/version are resolved from the hub at
+        :meth:`ExportConfigAPI.create_template` time. ``install`` toggles
+        install-on-import; ``include_configurations`` ships the agent's saved
+        configs.
+        """
+        self._ai_agents.append({"name": name, "install": bool(install), "configurations": bool(include_configurations)})
+        return self
+
     def add_rule_channel(self, name: str) -> "ExportTemplate":
         """Export a delivery-rule **channel** by name (``options.ruleChannels[]``).
 
@@ -333,6 +347,7 @@ class ExportTemplate:
             or self._preprocessing_rules
             or self._rules
             or self._rule_channels
+            or self._ai_agents
             or self._navigation
             or self._mcp_configs
         )
@@ -811,6 +826,24 @@ class ExportConfigAPI(BaseAPI):
                 channels_out.append(DeliveryRuleSelection(type="channel", value=rec["uuid"], label=rec["name"]).wire())
             options["ruleChannels"] = channels_out
 
+        if template._ai_agents:
+            agent_index = self._ai_agent_index()
+            agents_out: list[dict[str, Any]] = []
+            for spec in template._ai_agents:
+                rec = agent_index.get(spec["name"])
+                if not rec:
+                    raise ValueError(f"AI agent {spec['name']!r} not found in Content Hub")
+                agents_out.append(
+                    AiAgentSelection(
+                        name=rec["name"],
+                        label=rec.get("label"),
+                        version=rec.get("version"),
+                        install=spec["install"],
+                        configurations=spec["configurations"],
+                    ).wire()
+                )
+            options["ai_agents"] = agents_out
+
         if template._navigation:
             nav_view = self._get_navigation_view()
             available = self._navigation_section_titles(nav_view)
@@ -900,6 +933,35 @@ class ExportConfigAPI(BaseAPI):
         """``{name: record}`` for all rule channels (``GET .../api/channel/``)."""
         members = extract_members(self._rule_engine_get("channel/"))
         return {r["name"]: r for r in members if isinstance(r, dict) and r.get("name")}
+
+    def _ai_agent_index(self) -> dict[str, dict[str, Any]]:
+        """``{name/label: record}`` for installed AI agents (Content Hub ``type: ai_agent``).
+
+        AI agents are Content Hub items; the same ``/api/query/solutionpacks``
+        endpoint the connector/pack search uses serves them under the
+        ``ai_agent`` type. Indexed by both ``name`` (id) and ``label`` so callers
+        can pass either.
+        """
+        query = {
+            "limit": 2147483647,
+            "logic": "AND",
+            "filters": [
+                {"field": "type", "operator": "in", "value": ["ai_agent"]},
+                {"field": "installed", "operator": "eq", "value": True},
+            ],
+            "search": "",
+            "__selectFields": ["uuid", "name", "label", "version", "installed", "type"],
+        }
+        members = extract_members(self.client.post("/api/query/solutionpacks?$limit=2147483647&$page=1", data=query))
+        index: dict[str, dict[str, Any]] = {}
+        for rec in members:
+            if not isinstance(rec, dict):
+                continue
+            if rec.get("name"):
+                index[rec["name"]] = rec
+            if rec.get("label"):
+                index.setdefault(rec["label"], rec)
+        return index
 
     def _rule_entry(self, endpoint: str, name: str, kind: str) -> dict[str, Any]:
         """Resolve a rule by ``name`` and render its ``{name, uuid, value, exists, include}`` entry.
