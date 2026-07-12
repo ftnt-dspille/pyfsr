@@ -127,6 +127,25 @@ class ActorSelection(_ExportEntry):
     include: bool = True
 
 
+class NavigationSelection(_ExportEntry):
+    """A navigation-menu selection (``options.views[]``).
+
+    The ``views`` export category ships slices of the left-hand navigation. Every
+    entry targets the single "app" navigation view — ``value`` is always ``"app"``
+    and ``uuid`` is that view's record uuid (resolved live from
+    ``/api/views/1/app``). ``appendNavigation`` lists the top-level section titles
+    to carry, and ``navigationOptions`` repeats each title with its own
+    ``mergeType`` (``"merge"`` layers onto the target's nav, ``"replace"``
+    overwrites it). Live-observed shape on 8.0.0.
+    """
+
+    value: str = "app"
+    uuid: str
+    mergeType: str = "merge"
+    appendNavigation: list[str] = []
+    navigationOptions: list[dict[str, Any]] = []
+
+
 class PlaybookCollectionSelection(_ExportEntry):
     """A playbook-collection selection (``options.playbooks.collections[]``).
 

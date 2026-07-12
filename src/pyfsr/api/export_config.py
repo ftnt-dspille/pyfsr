@@ -15,6 +15,7 @@ from ..models._export import (
     ActorSelection,
     ConnectorSelection,
     ModuleSelection,
+    NavigationSelection,
     PlaybookCollectionSelection,
     RecordSet,
     RoleSelection,
@@ -85,6 +86,9 @@ class ExportTemplate:
         self._roles: list[str] = []
         self._teams: list[str] = []
         self._actors: list[str] = []
+        # Navigation slices (options.views[]). Each spec is {sections, merge};
+        # the "app" view uuid is resolved live at create_template time.
+        self._navigation: list[dict[str, Any]] = []
         # Id-based UI categories the engine takes verbatim (no lookup): dashboards
         # by uuid, widgets by name. Live-observed on 8.0.0 as bare string lists.
         self._dashboards: list[str] = []
@@ -166,6 +170,24 @@ class ExportTemplate:
         self._actors.append(title)
         return self
 
+    def add_navigation(self, *sections: str, replace: bool = False) -> "ExportTemplate":
+        """Export navigation-menu sections (``options.views[]``).
+
+        Ships the named top-level navigation sections (e.g. ``"Threat
+        Intelligence"``, ``"Resources"``) so the target appliance's left-hand nav
+        gains them on import. Section titles are validated against the live "app"
+        navigation at :meth:`ExportConfigAPI.create_template` time; the view's
+        uuid is resolved there too.
+
+        Args:
+            *sections: top-level navigation section titles to export. Passing none
+                exports every section of the live navigation.
+            replace: ``mergeType`` for the export — ``False`` (default) layers the
+                sections onto the target's existing nav, ``True`` overwrites it.
+        """
+        self._navigation.append({"sections": list(sections), "merge": not replace})
+        return self
+
     def add_dashboard(self, uuid: str) -> "ExportTemplate":
         """Export a dashboard by **uuid** (taken verbatim; ``options.dashboards`` is a uuid list)."""
         self._dashboards.append(uuid)
@@ -236,7 +258,13 @@ class ExportTemplate:
     def needs_resolution(self) -> bool:
         """True if this template has name-based categories awaiting a live lookup."""
         return bool(
-            self._picklists or self._connectors or self._collections or self._roles or self._teams or self._actors
+            self._picklists
+            or self._connectors
+            or self._collections
+            or self._roles
+            or self._teams
+            or self._actors
+            or self._navigation
         )
 
     @property
@@ -674,7 +702,37 @@ class ExportConfigAPI(BaseAPI):
                 actors.append(ActorSelection(value=info["@id"], title=info.get("title"), uuid=info.get("uuid")).wire())
             options["actors"] = actors
 
+        if template._navigation:
+            nav_view = self._get_navigation_view()
+            available = self._navigation_section_titles(nav_view)
+            views: list[dict[str, Any]] = []
+            for spec in template._navigation:
+                sections = spec["sections"] or available
+                merge_type = "merge" if spec["merge"] else "replace"
+                unknown = [s for s in sections if s not in available]
+                if unknown:
+                    raise ValueError(f"navigation section(s) {unknown} not found; available: {available}")
+                views.append(
+                    NavigationSelection(
+                        uuid=nav_view["uuid"],
+                        mergeType=merge_type,
+                        appendNavigation=list(sections),
+                        navigationOptions=[{"title": s, "mergeType": merge_type} for s in sections],
+                    ).wire()
+                )
+            options["views"] = views
+
         return options
+
+    def _get_navigation_view(self) -> dict[str, Any]:
+        """Fetch the "app" navigation view record (``GET /api/views/1/app``)."""
+        return self.client.get("/api/views/1/app")
+
+    @staticmethod
+    def _navigation_section_titles(nav_view: dict[str, Any]) -> list[str]:
+        """Top-level navigation section titles from an "app" view record."""
+        nav = (nav_view.get("config") or {}).get("navigation") or []
+        return [n["title"] for n in nav if isinstance(n, dict) and n.get("title")]
 
     def _get_actor_info(self, title: str) -> dict[str, Any]:
         """Resolve an actor by ``title`` via a client-side match.
