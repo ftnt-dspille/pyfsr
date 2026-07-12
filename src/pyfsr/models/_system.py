@@ -94,6 +94,24 @@ class WorkflowCollection(BaseRecord):
     id: int | None = None
 
 
+class ReusableBlock(BaseRecord):
+    """A **reusable playbook block** — a ``workflow_groups`` row with ``reusable=true``.
+
+    The saved, re-droppable step group surfaced in the playbook editor and the
+    Configuration Export wizard's *Playbook Blocks* category. From
+    ``GET /api/3/workflow_groups?reusable=true`` (live-verified 8.0).
+    """
+
+    name: str | None = None
+    description: str | None = None
+    type: str | None = None
+    reusable: bool | None = None
+    hasTriggerStep: bool | None = None
+    hideInLogs: bool | None = None
+    #: Editor canvas metadata; a bare ``[]`` when unset (live-verified 8.0).
+    metadata: dict[str, Any] | list[Any] | None = None
+
+
 class WorkflowRun(BaseRecord):
     """A playbook *run* record from ``/api/wf/api/(historical-)workflows/``.
 
@@ -944,8 +962,12 @@ class SystemViewTemplate(ApiResult):
     #: Storage type, e.g. ``"rows"`` or ``"form"``.
     type: str | None = None
     isDefault: bool | None = None
-    #: The layout body (rows/columns/widgets); shape varies by ``type``.
-    config: dict[str, Any] | None = None
+    #: The layout body (rows/columns/widgets); shape varies by ``type`` and is a
+    #: bare ``[]`` for some modules' empty layouts (live-verified 8.0).
+    config: dict[str, Any] | list[Any] | None = None
+    #: Record filters scoping this view (the export wizard selects these); usually
+    #: ``[]`` for a system default layout.
+    filters: list[Any] | None = None
 
     @property
     def iri(self) -> str | None:

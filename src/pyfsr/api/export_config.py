@@ -24,6 +24,7 @@ from ..models._export import (
     RoleSelection,
     RuleSelection,
     TeamSelection,
+    ViewTemplateSelection,
 )
 from ..models._integration import ExportJobResult
 from ..pagination import extract_members
@@ -122,6 +123,9 @@ class ExportTemplate:
         self._playbook_blocks: list[str] = []
         self._playbook_blocks_include_globals: bool = True
         self._app_settings: list[str] = []
+        # Other export templates to bundle (options.exportTemplates = bare uuid list);
+        # callers may pass a template name (resolved live to its uuid).
+        self._export_templates: list[str] = []
 
     def add_module(self, module: str, *, fields: list[str] | None = None) -> "ExportTemplate":
         """Export a module's schema, optionally limited to ``fields`` (all fields if omitted)."""
@@ -143,7 +147,8 @@ class ExportTemplate:
         rows to embed. This mirrors that: pick the ``module`` and toggle the three
         layout kinds. The matching rows (``{uuid, module, viewOptions, filters}``)
         are looked up at :meth:`ExportConfigAPI.create_template` time via
-        ``POST /api/query/system_view_templates`` (live-verified on 8.0.0).
+        :meth:`~pyfsr.api.view_templates.ViewTemplatesAPI.list_templates`
+        (live-verified on 8.0.0).
 
         Args:
             module: the module whose view templates to export (e.g. ``"alerts"``).
@@ -233,6 +238,17 @@ class ExportTemplate:
         :meth:`ExportConfigAPI.create_template` time.
         """
         self._app_settings.append(name)
+        return self
+
+    def add_export_template(self, name_or_uuid: str) -> "ExportTemplate":
+        """Bundle **another export template** definition by name or uuid.
+
+        The wizard's *Export Template* category ships other templates' definitions
+        (excluding solution-pack exports). Emitted as a bare uuid list
+        (``options.exportTemplates``); a name is resolved to its uuid at
+        :meth:`ExportConfigAPI.create_template` time.
+        """
+        self._export_templates.append(name_or_uuid)
         return self
 
     def add_role(self, name: str) -> "ExportTemplate":
@@ -435,6 +451,7 @@ class ExportTemplate:
             or self._global_variables
             or self._playbook_blocks
             or self._app_settings
+            or self._export_templates
         )
 
     @property
@@ -959,7 +976,7 @@ class ExportConfigAPI(BaseAPI):
             options["viewTemplates"] = view_templates
 
         if template._global_variables:
-            available = {gv["name"] for gv in self._global_variable_index()}
+            available = {gv.get("name") for gv in self.client.wf_tools.dynamic_variables()}
             unknown = [n for n in template._global_variables if n not in available]
             if unknown:
                 raise ValueError(f"global variable(s) {unknown} not found")
@@ -969,7 +986,7 @@ class ExportConfigAPI(BaseAPI):
             options["playbooks"] = playbooks
 
         if template._playbook_blocks:
-            available = {b["uuid"] for b in self._reusable_block_index()}
+            available = {b.uuid for b in self.client.workflow_collections.list_reusable_blocks()}
             unknown = [u for u in template._playbook_blocks if u not in available]
             if unknown:
                 raise ValueError(f"reusable playbook block(s) {unknown} not found")
@@ -984,48 +1001,46 @@ class ExportConfigAPI(BaseAPI):
                 raise ValueError(f"app setting(s) {unknown} not valid; choose from {sorted(_APP_SETTING_NAMES)}")
             options["appSettings"] = list(template._app_settings)
 
+        if template._export_templates:
+            options["exportTemplates"] = [self._resolve_export_template_uuid(x) for x in template._export_templates]
+
         return options
 
-    def _resolve_view_templates(self, module: str, view_options: list[str]) -> list[dict[str, Any]]:
-        """Resolve a module's view-template rows via ``POST /api/query/system_view_templates``.
+    def _resolve_export_template_uuid(self, name_or_uuid: str) -> str:
+        """Resolve an export-template name to its uuid; a uuid passes through.
 
-        Returns the ``{uuid, module, viewOptions, filters}`` objects the export
-        engine embeds (live-verified on 8.0.0), filtered to ``view_options``.
+        Matches by ``name`` against the live export-template list
+        (:meth:`~pyfsr.api.export_templates.ExportTemplatesAPI.list`), excluding
+        solution-pack exports (the wizard hides those from this category).
         """
-        body = {
-            "sort": [],
-            "logic": "AND",
-            "filters": [
-                {
-                    "sort": [],
-                    "logic": "AND",
-                    "filters": [
-                        {"field": "module", "operator": "eq", "value": module},
-                        {"field": "viewOptions", "operator": "in", "value": list(view_options)},
-                    ],
-                }
-            ],
-            "__selectFields": ["uuid", "module", "viewOptions", "filters"],
-        }
-        resp = self.client.post("/api/query/system_view_templates", data=body)
-        rows = extract_members(resp)
-        return [
-            {
-                "uuid": r["uuid"],
-                "module": r.get("module", module),
-                "viewOptions": r.get("viewOptions"),
-                "filters": r.get("filters") or [],
-            }
-            for r in rows
+        if _is_uuid(name_or_uuid):
+            return name_or_uuid
+        for tmpl in self.client.export_templates.list():
+            if tmpl.name == name_or_uuid and tmpl.type != "SolutionPack Export" and tmpl.uuid:
+                return tmpl.uuid
+        raise ValueError(f"export template {name_or_uuid!r} not found")
+
+    def _resolve_view_templates(self, module: str, view_options: list[str]) -> list[dict[str, Any]]:
+        """Resolve a module's view-template rows to their export-selection wire form.
+
+        Uses the typed :meth:`~pyfsr.api.view_templates.ViewTemplatesAPI.list_templates`
+        surface, keeps the requested layouts, and renders each as a
+        :class:`~pyfsr.models.ViewTemplateSelection` (``{uuid, module, viewOptions,
+        filters}``) — the objects the export engine embeds (live-verified 8.0.0).
+        """
+        wanted = set(view_options)
+        rows = [
+            row for row in self.client.view_templates.list_templates(module) if row.viewOptions in wanted and row.uuid
         ]
-
-    def _global_variable_index(self) -> list[dict[str, Any]]:
-        """List playbook global variables (``GET /api/wf/api/dynamic-variable/``)."""
-        return extract_members(self.client.get("/api/wf/api/dynamic-variable/", params={"offset": 0, "limit": 1000}))
-
-    def _reusable_block_index(self) -> list[dict[str, Any]]:
-        """List reusable playbook blocks (``GET /api/3/workflow_groups?reusable=true``)."""
-        return extract_members(self.client.get("/api/3/workflow_groups", params={"reusable": "true", "$limit": 1000}))
+        return [
+            ViewTemplateSelection(
+                uuid=row.uuid,
+                module=row.module or module,
+                viewOptions=row.viewOptions,
+                filters=list(row.filters or []),
+            ).wire()
+            for row in rows
+        ]
 
     def _resolve_mcp_config_uuid(self, name_or_uuid: str) -> str:
         """Resolve an MCP config name to its uuid (``GET /api/3/mcp_configurations``); uuid passes through."""

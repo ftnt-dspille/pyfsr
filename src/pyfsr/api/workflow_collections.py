@@ -45,13 +45,14 @@ from pathlib import Path
 from typing import Any
 
 from ..exceptions import ResourceNotFoundError
-from ..models import WorkflowCollection
+from ..models import ReusableBlock, WorkflowCollection
 from ..pagination import extract_members
 from ..records import RecordSet
 from ..utils.validation import is_uuid
 from .base import BaseAPI
 
 _BASE = "/api/3/workflow_collections"
+_REUSABLE_BLOCKS = "/api/3/workflow_groups"
 # A hard delete must also reach already-recycled rows; together these skip the recycle bin.
 _HARD_DELETE = {"$hardDelete": "true", "$showDeleted": "true"}
 
@@ -70,6 +71,19 @@ class WorkflowCollectionsAPI(BaseAPI):
         if relationships:
             params["$relationships"] = "true"
         return [_as_collection(m) for m in extract_members(self.client.get(_BASE, params=params))]
+
+    def list_reusable_blocks(self, *, limit: int = 2147483647) -> list[ReusableBlock]:
+        """List **reusable playbook blocks** (``workflow_groups`` with ``reusable=true``).
+
+        These are the saved, re-droppable step groups the playbook editor and the
+        Configuration Export wizard's *Playbook Blocks* category work with. Returns
+        typed, dict-compatible :class:`~pyfsr.models.ReusableBlock` records from
+        ``GET /api/3/workflow_groups?reusable=true`` (live-verified 8.0).
+        """
+        params = {"reusable": "true", "$limit": limit}
+        return [
+            ReusableBlock.model_validate(m) for m in extract_members(self.client.get(_REUSABLE_BLOCKS, params=params))
+        ]
 
     def get(self, uuid: str, *, relationships: bool = True) -> WorkflowCollection:
         """Fetch one collection by uuid. ``relationships=True`` (default) inlines its
