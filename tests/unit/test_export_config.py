@@ -664,6 +664,41 @@ def test_create_template_rule_channel_not_found_raises():
         api.create_template(ExportTemplate("C").add_rule_channel("Ghost"))
 
 
+def test_export_template_ai_agent_needs_resolution():
+    assert ExportTemplate("T").add_ai_agent("ioc-masking").needs_resolution is True
+
+
+def _ai_agent_handler(m, u, **k):
+    if m == "POST" and u.startswith("/api/query/solutionpacks"):
+        return {"hydra:member": [{"uuid": "a1", "name": "ioc-masking", "label": "IOC Masking", "version": "1.0.0"}]}
+    return {"@id": "/api/3/export_templates/t1"}
+
+
+def test_create_template_resolves_ai_agent_by_id():
+    api, c = _api(_ai_agent_handler)
+    api.create_template(ExportTemplate("A").add_ai_agent("ioc-masking"))
+    entry = c.calls[-1][2]["options"]["ai_agents"][0]
+    # live-verified wire shape.
+    assert entry["name"] == "ioc-masking"
+    assert entry["label"] == "IOC Masking"
+    assert entry["version"] == "1.0.0"
+    assert entry["install"] is True and entry["configurations"] is True
+
+
+def test_create_template_resolves_ai_agent_by_label():
+    api, c = _api(_ai_agent_handler)
+    api.create_template(ExportTemplate("A").add_ai_agent("IOC Masking", install=False))
+    entry = c.calls[-1][2]["options"]["ai_agents"][0]
+    assert entry["name"] == "ioc-masking"  # label resolved back to the id
+    assert entry["install"] is False
+
+
+def test_create_template_ai_agent_not_found_raises():
+    api, _ = _api(lambda m, u, **k: {"hydra:member": []} if m == "POST" and "solutionpacks" in u else {"@id": "/x"})
+    with pytest.raises(ValueError, match="AI agent 'Ghost' not found"):
+        api.create_template(ExportTemplate("A").add_ai_agent("Ghost"))
+
+
 def test_export_template_preprocessing_rule_needs_resolution():
     assert ExportTemplate("T").add_preprocessing_rule("Enforce Files").needs_resolution is True
 
