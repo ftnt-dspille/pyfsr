@@ -91,6 +91,7 @@ class ExportTemplate:
         self._actors: list[str] = []
         self._reports: list[dict[str, Any]] = []
         self._preprocessing_rules: list[str] = []
+        self._rules: list[str] = []
         # Navigation slices (options.views[]). Each spec is {sections, merge};
         # the "app" view uuid is resolved live at create_template time.
         self._navigation: list[dict[str, Any]] = []
@@ -206,6 +207,17 @@ class ExportTemplate:
         self._reports.append({"name": name, "includeSchedules": bool(include_schedules)})
         return self
 
+    def add_rule(self, name: str) -> "ExportTemplate":
+        """Export a delivery rule by **name** (``options.rules[]``).
+
+        Delivery rules (the SOAR UI's *Rules* / notification rules) live in the
+        rule-engine app at ``/rule/api/rules/``. The name is resolved to its uuid
+        at :meth:`ExportConfigAPI.create_template` time; the wire shape matches
+        :meth:`add_preprocessing_rule`.
+        """
+        self._rules.append(name)
+        return self
+
     def add_preprocessing_rule(self, name: str) -> "ExportTemplate":
         """Export a preprocessing rule by **name** (``options.preprocessingRules[]``).
 
@@ -303,6 +315,7 @@ class ExportTemplate:
             or self._actors
             or self._reports
             or self._preprocessing_rules
+            or self._rules
             or self._navigation
             or self._mcp_configs
         )
@@ -761,6 +774,16 @@ class ExportConfigAPI(BaseAPI):
                 for name in template._preprocessing_rules
             ]
 
+        if template._rules:
+            rule_index = self._delivery_rule_index()
+            rules_out: list[dict[str, Any]] = []
+            for name in template._rules:
+                rec = rule_index.get(name)
+                if not rec:
+                    raise ValueError(f"delivery rule {name!r} not found")
+                rules_out.append(RuleSelection(name=rec["name"], uuid=rec["uuid"], value=rec["uuid"]).wire())
+            options["rules"] = rules_out
+
         if template._navigation:
             nav_view = self._get_navigation_view()
             available = self._navigation_section_titles(nav_view)
@@ -820,6 +843,16 @@ class ExportConfigAPI(BaseAPI):
     def _get_report_info(self, name: str) -> dict[str, Any]:
         """Resolve a report by ``displayName`` to its ``Reporting`` record (``/api/3/reporting``)."""
         return self._get_named_record("/api/3/reporting", "displayName", name, "report")
+
+    def _delivery_rule_index(self) -> dict[str, dict[str, Any]]:
+        """``{name: record}`` for all delivery rules (``GET /rule/api/rules/``).
+
+        The rule-engine app is served from its own ``/rule/api/`` root (outside
+        ``/api/3``) and doesn't take a ``name`` server filter, so the (small)
+        list is fetched once and matched client-side by ``name``.
+        """
+        members = extract_members(self.client.get("/rule/api/rules/", params={"limit": 2147483647}))
+        return {r["name"]: r for r in members if isinstance(r, dict) and r.get("name")}
 
     def _rule_entry(self, endpoint: str, name: str, kind: str) -> dict[str, Any]:
         """Resolve a rule by ``name`` and render its ``{name, uuid, value, exists, include}`` entry.

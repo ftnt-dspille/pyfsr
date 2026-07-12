@@ -568,7 +568,9 @@ class FortiSOAR:
         # rather than under /api/3 — e.g. POST /mcp/config/export,
         # /mcp/add/tools, /mcp/tools/{uuid}, /mcp/servers/connector — so are
         # excluded from the default prefixing, same as /auth/ and /api/public/.
-        if not endpoint.startswith(("/api/3/", "/auth/", "/api/public/", "/api/", "/mcp/")):
+        # The rule-engine app (delivery rules / channels) is served from its own
+        # /rule/api/ root, likewise outside /api/3.
+        if not endpoint.startswith(("/api/3/", "/auth/", "/api/public/", "/api/", "/mcp/", "/rule/")):
             endpoint = f"/api/3{endpoint}"
 
         url = urljoin(self.base_url, endpoint)
