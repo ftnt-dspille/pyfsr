@@ -7,6 +7,7 @@ For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
 from . import repo
 from .api.ai import pack_agent
 from .api.connectors import pack_connector
+from .api.export_config import ExportTemplate
 from .appliance import Appliance
 from .client import FortiSOAR
 from .concurrency import ConcurrencyResult, compute_overlap
@@ -73,6 +74,7 @@ __all__ = [
     "EnvConfig",
     "pack_agent",
     "pack_connector",
+    "ExportTemplate",
     "Query",
     "QueryBody",
     "OPERATOR_SPECS",

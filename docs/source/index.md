@@ -73,6 +73,13 @@ Every field type, its properties, and how relationship fields wire to other modu
 Discover, configure, execute, and install connectors; manage remote agents.
 :::
 
+:::{grid-item-card} Config Export & Import
+:link: guides/export-import
+:link-type: doc
+
+Bundle schema, records, connectors, and more into a `.zip` and re-apply it safely.
+:::
+
 :::{grid-item-card} Playbook Authoring
 :link: guides/playbook-authoring
 :link-type: doc
@@ -122,6 +129,7 @@ guides/querying
 guides/module-admin
 guides/module-field-schema
 guides/connectors
+guides/export-import
 guides/playbook-authoring
 guides/playbook-yaml-reference
 guides/ai-agents
