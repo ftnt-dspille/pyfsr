@@ -584,6 +584,11 @@ class RecordSet(Generic[T]):
         the error names the field, bad value, and valid options, instead of
         letting the box return an opaque ``FSR_CH_0000001`` 400. Default
         ``False`` leaves unresolvable values in place (back-compatible).
+
+        >>> client = demo_client()
+        >>> alert = client.records("alerts").create({"name": "Suspicious Activity"})
+        >>> alert.name
+        'Response Capture Test Alert'
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
@@ -628,6 +633,13 @@ class RecordSet(Generic[T]):
         ``resolve_picklists=False`` to skip that (see :meth:`create`). Pass
         ``strict_picklists=True`` to raise pre-flight on an unresolvable value
         (see :meth:`create`).
+
+        >>> client = demo_client()
+        >>> alert = client.records("alerts").update(
+        ...     "9f0eb603-ac1e-41c3-b47b-444589beed39", {"description": "Escalated"}
+        ... )
+        >>> alert.name
+        'Response Capture Test Alert'
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
@@ -987,6 +999,9 @@ class RecordSet(Generic[T]):
         (e.g. ``workflow_collections``) the server cascades to children. An
         empty/blank ``ref`` raises — to delete many rows by filter use
         :meth:`delete_by_query`.
+
+        >>> client = demo_client()
+        >>> client.records("alerts").delete("9f0eb603-ac1e-41c3-b47b-444589beed39")
         """
         path = self._single_record_path(ref, action="delete")
         params = {"$hardDelete": "true"} if hard else None
