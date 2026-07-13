@@ -211,6 +211,25 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("POST", "/api/3/import_jobs", cap.IMPORT_JOB_CREATE_RESPONSE),
         _entry("GET", "/api/3/import_jobs/aa0e8400-e29b-41d4-a716-446655440013", cap.IMPORT_JOB_GET_RESPONSE),
         _entry("GET", "/api/import/aa0e8400-e29b-41d4-a716-446655440013", {"status": "generating"}),
+        # PlaybooksAPI — playbook run history and manual input management.
+        _entry("GET", "/api/wf/api/workflows/", cap.EXECUTION_HISTORY_RESPONSE),
+        # get_execution — single run (any pk resolves to one of the run records).
+        _entry("GET", "/api/wf/api/workflows/1/", cap.GET_EXECUTION_RESPONSE),
+        _entry("GET", "/api/wf/api/workflows/2/", cap.GET_EXECUTION_AWAITING_RESPONSE),
+        _entry("GET", "/api/wf/api/workflows/3/", cap.GET_EXECUTION_FAILED_RESPONSE),
+        _entry("GET", "/api/wf/api/workflows/count/", cap.PLAYBOOK_COUNT_RESPONSE),
+        _entry("POST", "/api/wf/api/workflows/log_list/", cap.LOG_LIST_RESPONSE),
+        _entry("POST", "/api/wf/api/query/workflow_logs/", cap.QUERY_LOGS_RESPONSE),
+        _entry("POST", "/api/wf/api/jinja-editor/", cap.RENDER_JINJA_RESPONSE),
+        # start/retry on any workflow pk.
+        _entry("POST", "/api/wf/api/workflows/1/start/", cap.WORKFLOW_CONTROL_RESPONSE),
+        _entry("POST", "/api/wf/api/workflows/3/retry/", cap.WORKFLOW_CONTROL_RESPONSE),
+        # wfinput_resume — resume response on any workflow pk.
+        _entry("POST", "/api/wf/api/workflows/2/wfinput_resume/", cap.WFINPUT_RESUME_RESPONSE),
+        # Manual input list (GET for approval workflows).
+        _entry("GET", "/api/wf/api/manual-wf-input/", cap.APPROVAL_MANUAL_INPUT_LIST_RESPONSE),
+        # Approval manual input retrieve.
+        _entry("POST", "/api/wf/api/manual-wf-input/2/retrieve_wfinput/", cap.APPROVAL_MANUAL_INPUT_RETRIEVE_RESPONSE),
     ]
 )
 
