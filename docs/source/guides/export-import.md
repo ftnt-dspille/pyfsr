@@ -74,6 +74,16 @@ path = client.export_config.export_record_data(
 )
 ```
 
+On a template's `add_record_set`, pass `limit="all"` to skip the manual count —
+`create_template` counts the matching records live and sets the limit to that
+count for you:
+
+```python
+tmpl = ExportTemplate("Every open alert").add_record_set(
+    "alerts", query=Query(module="alerts").eq("status", "Open"), limit="all",
+)
+```
+
 ### Record data vs. module schema
 
 `export_record_data` exports **rows**. It does *not* carry the module's schema —
@@ -129,6 +139,15 @@ and `add_playbook_block` validate their name/uuid against the live appliance;
 ```{note}
 `add_ai_agent` and `add_mcp_configuration` are **8.0.0+** categories and are
 version-gated — exporting them against an older appliance raises.
+```
+
+To have the engine also pull each selected item's dependencies for a category,
+enable it with `auto_select_deps` — this sets the template's
+`metadata.autoSelectDeps` `{<category>: bool}` map (the category key matches the
+`add_*` category, e.g. `"ai_agents"`):
+
+```python
+tmpl = ExportTemplate("Agent + deps").add_ai_agent("Phishing Triage").auto_select_deps("ai_agents")
 ```
 
 ### Exporting a single connector (with configs)

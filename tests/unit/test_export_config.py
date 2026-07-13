@@ -314,6 +314,61 @@ def test_export_template_accepts_raw_query_dict():
     assert "limit" not in raw
 
 
+def test_export_template_record_set_all_uses_placeholder_offline():
+    # limit="all" leaves a placeholder limit in the offline build and flags the
+    # index for live count resolution at create_template time.
+    tmpl = ExportTemplate("T").add_record_set("alerts", limit="all")
+    assert tmpl._record_set_count_all == {0}
+    assert tmpl.build()["recordSets"][0]["query"]["limit"] == 1000  # placeholder
+
+
+def test_export_template_record_set_rejects_bad_limit_string():
+    with pytest.raises(ValueError, match="int or the string 'all'"):
+        ExportTemplate("T").add_record_set("alerts", limit="everything")
+
+
+def test_create_template_resolves_limit_all_to_live_count():
+    # limit="all" is resolved by counting matching records live and setting the
+    # limit to that count; other record sets keep their explicit limit.
+    class _Records:
+        def __init__(self, module):
+            self.module = module
+
+        def count(self, query=None, **kw):
+            assert "limit" not in (query or {})  # count strips the placeholder
+            return 42
+
+    api, c = _api(lambda m, u, **k: {"@id": "/api/3/export_templates/t1"})
+    c.records = lambda module: _Records(module)
+    tmpl = ExportTemplate("Backup").add_record_set("alerts", limit="all").add_record_set("incidents", limit=5)
+    options = api._resolve_template_options(tmpl)
+    assert options["recordSets"][0]["query"]["limit"] == 42
+    assert options["recordSets"][1]["query"]["limit"] == 5
+
+
+def test_create_template_limit_all_raises_without_count():
+    class _Records:
+        def __init__(self, module):
+            pass
+
+        def count(self, query=None, **kw):
+            return None
+
+    api, c = _api(lambda m, u, **k: {})
+    c.records = lambda module: _Records(module)
+    tmpl = ExportTemplate("Backup").add_record_set("alerts", limit="all")
+    with pytest.raises(ValueError, match="did not report a total count"):
+        api._resolve_template_options(tmpl)
+
+
+def test_export_template_auto_select_deps_in_metadata():
+    tmpl = ExportTemplate("T").auto_select_deps("ai_agents")
+    assert tmpl.metadata == {"autoSelectPicklists": True, "autoSelectDeps": {"ai_agents": True}}
+    # disabling a category records False rather than dropping it
+    tmpl.auto_select_deps("connectors", enabled=False)
+    assert tmpl.metadata["autoSelectDeps"] == {"ai_agents": True, "connectors": False}
+
+
 def test_export_template_build_omits_empty_categories():
     # a freshly-built template with nothing added yields an empty options dict
     assert ExportTemplate("T").build() == {}

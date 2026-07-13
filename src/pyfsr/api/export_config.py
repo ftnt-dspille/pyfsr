@@ -87,6 +87,12 @@ class ExportTemplate:
         self._auto_select_picklists = auto_select_picklists
         self._modules: list[ModuleSelection] = []
         self._record_sets: list[RecordSet] = []
+        # Indices into _record_sets whose limit is "all" — the real record count is
+        # resolved live at create_template time (build() emits a placeholder limit).
+        self._record_set_count_all: set[int] = set()
+        # Per-category dependency auto-selection (metadata.autoSelectDeps, a
+        # {<category>: bool} map — e.g. {"ai_agents": True}, live-verified on 8.0.0).
+        self._auto_select_deps: dict[str, bool] = {}
         # View templates are resolved live: the wizard picks a (module, layouts)
         # pair and looks up the real system_view_template rows to embed, rather
         # than taking a bare id. Each spec is {module, view_options}.
@@ -381,7 +387,7 @@ class ExportTemplate:
         module: str,
         *,
         query: Any = None,
-        limit: int = _DEFAULT_RECORD_LIMIT,
+        limit: int | str = _DEFAULT_RECORD_LIMIT,
         include_correlations: bool = False,
         label: str | None = None,
     ) -> "ExportTemplate":
@@ -394,7 +400,9 @@ class ExportTemplate:
             limit: max records to emit. **Required trigger** — the export engine
                 emits records only when the query carries a ``limit`` (live-verified
                 on 8.0.0); a record set without one exports nothing. There is no
-                "unlimited", so raise this for large sets.
+                "unlimited" on the wire, so pass ``"all"`` to have
+                :meth:`ExportConfigAPI.create_template` count the matching records
+                live and set the limit to that count.
             include_correlations: also pull records correlated/linked to the
                 matched records (the wizard's *Include Correlations* toggle).
             label: friendly name for the record set (defaults to ``module``).
@@ -405,10 +413,27 @@ class ExportTemplate:
             q = {"logic": "AND", "filters": []}
         else:
             q = dict(query)
-        q["limit"] = int(limit)
+        if isinstance(limit, str):
+            if limit != "all":
+                raise ValueError(f"limit must be an int or the string 'all', not {limit!r}")
+            self._record_set_count_all.add(len(self._record_sets))
+            q["limit"] = _DEFAULT_RECORD_LIMIT  # placeholder; resolved live at create time
+        else:
+            q["limit"] = int(limit)
         self._record_sets.append(
             RecordSet(type=module, query=q, label=label or module, includeCorrelations=include_correlations)
         )
+        return self
+
+    def auto_select_deps(self, category: str, enabled: bool = True) -> "ExportTemplate":
+        """Toggle automatic dependency selection for a category (``metadata.autoSelectDeps``).
+
+        When enabled, the export engine pulls each selected item's dependencies for
+        that category rather than only the item itself. The map is a
+        ``{<category>: bool}`` on the wire; ``"ai_agents"`` is the live-verified
+        category (8.0.0), and the key matches the ``options.<category>`` name.
+        """
+        self._auto_select_deps[category] = bool(enabled)
         return self
 
     def build(self) -> dict[str, Any]:
@@ -456,8 +481,11 @@ class ExportTemplate:
 
     @property
     def metadata(self) -> dict[str, Any]:
-        """The template ``metadata`` (currently the ``autoSelectPicklists`` flag)."""
-        return {"autoSelectPicklists": self._auto_select_picklists}
+        """The template ``metadata`` — ``autoSelectPicklists`` plus any ``autoSelectDeps``."""
+        md: dict[str, Any] = {"autoSelectPicklists": self._auto_select_picklists}
+        if self._auto_select_deps:
+            md["autoSelectDeps"] = dict(self._auto_select_deps)
+        return md
 
 
 class ExportConfigAPI(BaseAPI):
@@ -827,6 +855,18 @@ class ExportConfigAPI(BaseAPI):
         lookups :meth:`create_simplified_template` uses (so the wire shapes match).
         """
         options = template.build()
+
+        if template._record_set_count_all:
+            for idx in template._record_set_count_all:
+                entry = options["recordSets"][idx]
+                count_query = {k: v for k, v in entry["query"].items() if k != "limit"}
+                total = self.client.records(entry["type"]).count(count_query)
+                if total is None:
+                    raise ValueError(
+                        f"cannot resolve limit='all' for record set {entry.get('label')!r}: "
+                        "the server did not report a total count"
+                    )
+                entry["query"]["limit"] = int(total)
 
         if template._picklists:
             options["picklistNames"] = [self._get_picklist_iri(name) for name in template._picklists]
