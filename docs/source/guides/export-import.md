@@ -252,14 +252,47 @@ client.import_config.import_file(
 )
 ```
 
-```{note}
-These same defaults govern a **solution-pack install** from Content Hub. A pack is
-installed through the porter engine via
-`POST /api/3/solutionpacks/install?$type=<type>[&$replace=true]`. By default
-`$replace` is off, so the install **merges**: records replace by match, existing
-picklists are kept (new items added), and module schema is extended additively
-rather than wiped. Checking the wizard's *Replace Existing* box sets `$replace=true`,
-which forces the pack's version to overwrite existing content wholesale.
+Module **settings and schema** merge separately, per module. On the review screen
+each existing module defaults to an additive **merge**: new fields from the import
+are added and non-conflicting setting changes (e.g. default sort, labels) are
+applied, while existing fields — and system / unique-constraint fields — are kept.
+The module-level helpers set the equivalent of the wizard's per-module dropdown:
+{func}`~pyfsr.api.import_config.overwrite_all` applies every incoming field change
+(replace), {func}`~pyfsr.api.import_config.keep_existing` keeps every existing
+field and adds only new ones (append), and
+{func}`~pyfsr.api.import_config.skip_schema_changes` imports records/views but runs
+**no** schema migration at all.
+
+(solution-pack-defaults)=
+### Default behavior when installing or updating a solution pack
+
+A solution pack **is** an export-configuration template (`type: "SolutionPack
+Export"`), and installing one runs the *same* porter engine as
+{meth}`~pyfsr.api.import_config.ImportConfigAPI.import_file`, via
+`POST /api/3/solutionpacks/install?$type=<type>[&$replace=true]`. So the defaults
+above apply — which matters most when you **update** a pack that is already
+installed, because the update can change live data and schema in place. With
+`$replace` **off (the default)** the install merges:
+
+| Category | Default on install/update | What it can change |
+|---|---|---|
+| **Records** (record sets) | `whenExists = "replace"` | Existing records that **match** the pack's are overwritten with the pack's version; non-matching rows are left alone. Local edits to a matched record are lost. |
+| **Picklists** | `whenExists = "keep"` | Existing picklists are left as-is; only genuinely new picklist items are added. A pack that *renames* or *reorders* items will not change them unless you overwrite. |
+| **Module settings / schema** | additive **merge**, schema migration runs | New fields and non-conflicting module settings are applied; existing fields are kept. A field **type change**, a `tableName` change, or a **unique-constraint** change drives a destructive migrate. |
+
+Checking the wizard's **Replace Existing** box (or passing `$replace=true`) flips
+this toward a wholesale overwrite of existing content with the pack's version.
+
+```{warning}
+A solution-pack **update** is not read-only. By default it can overwrite records
+that match the pack's record sets and run a schema migration on its modules. Before
+updating a pack in production, export the affected modules/records first (see the
+Exporting section above) so you have a restore point, and — if you drive the import
+yourself — inspect the generated options with
+{func}`~pyfsr.api.import_config.inspect_changes` and steer the merge with
+{func}`~pyfsr.api.import_config.merge_mode` /
+{func}`~pyfsr.api.import_config.keep_existing` /
+{func}`~pyfsr.api.import_config.skip_schema_changes`.
 ```
 
 ```{warning}
