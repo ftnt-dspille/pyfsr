@@ -116,9 +116,11 @@ class TeamSelection(_ExportEntry):
 class ActorSelection(_ExportEntry):
     """An actor (person) selection (``options.actors[]``).
 
-    Actors resolve to people, so ``value`` is a ``/api/3/people/<uuid>`` IRI and
-    the identity field is ``title`` (not ``name``). Live-observed shape on 8.0.0:
-    ``{value, title, uuid, include}``.
+    An *actor* is any principal in FortiSOAR's shared ``actors`` table (people,
+    appliances, api-key actors — single-table inheritance on ``record_type``),
+    but config-export only offers **person** actors: ``value`` is a
+    ``/api/3/people/<uuid>`` IRI and the identity field is ``title`` (not
+    ``name``). Live-observed shape on 8.0.0: ``{value, title, uuid, include}``.
     """
 
     value: str
