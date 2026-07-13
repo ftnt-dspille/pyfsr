@@ -679,10 +679,17 @@ class ExportOptions(ApiResult):
     """An export template's selection manifest (``export_template.options``).
 
     ``connectors`` is modeled (see :class:`ExportConnectorRef`). The manifest's
-    other selection lists (``modules``, ``playbooks``, ``roles``, ``views`` …) are
-    preserved verbatim in ``extra`` rather than typed, because their element shapes
-    have not been captured populated from live wire — they are added here as they
-    are observed, never guessed.
+    other selection lists are preserved verbatim in ``extra`` rather than typed,
+    because their element shapes have not been captured populated from live wire —
+    they are added here as they are observed, never guessed.
+
+    Live-verified on 8.0.0, an ``options`` manifest carries up to 25 category keys:
+    ``actors``, ``ai_agents``, ``appSettings``, ``connectors``, ``dashboards``,
+    ``exportTemplates``, ``externalTemplates``, ``fixtures``, ``mcp_configurations``,
+    ``modules``, ``picklistNames``, ``playbookBlocks``, ``playbooks``,
+    ``postInstall``, ``preInstall``, ``preprocessingRules``, ``recordSets``,
+    ``reports``, ``roles``, ``ruleChannels``, ``rules``, ``teams``,
+    ``viewTemplates``, ``views``, ``widgets``.
     """
 
     connectors: list[ExportConnectorRef] = []
@@ -701,11 +708,14 @@ class Attachment(BaseRecord):
     file: FileRecord | str | None = None
     type: str | None = None
     assignee: User | str | None = None
+    recordTags: list[str] | None = None  # tag name strings (matches sibling records)
     createUser: str | User | None = None
     createDate: float | None = None
     modifyUser: str | User | None = None
     modifyDate: float | None = None
     id: int | str | None = None
+    # Tenancy/conflict keys (``conflict``/``tenant``/``tenantRecordId``) also ride
+    # the wire; they stay in ``extra`` (live-verified 8.0.0).
 
     # FortiSOAR returns ``[]``/``""`` for an unset reference — normalize to None.
     _empty_refs = field_validator("file", "assignee", "createUser", "modifyUser", mode="before")(_empty_to_none)
@@ -714,10 +724,12 @@ class Attachment(BaseRecord):
 class ExportTemplate(BaseRecord):
     """An ``/api/3/export_templates`` record — a reusable export selection.
 
-    Field set captured from a live 7.6.5 ``/api/3/export_templates`` response.
-    ``options`` is the typed :class:`ExportOptions` selection manifest. Export
-    bookkeeping (``metadata``, ``solutionPack``) is preserved in ``extra`` until
-    captured populated from live wire.
+    Field set captured from a live ``/api/3/export_templates`` response.
+    ``options`` is the typed :class:`ExportOptions` selection manifest. ``type``
+    distinguishes the export kind — live-verified on 8.0.0 the values are
+    ``"Export Wizard"`` (a normal config export) and ``"SolutionPack Export"``.
+    Export bookkeeping (``metadata``, ``solutionPack``) rides the wire but stays
+    in ``extra`` until its element shape is captured populated.
     """
 
     name: str | None = None
