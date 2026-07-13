@@ -2,18 +2,22 @@
   "_comment": "Per-file {doctest} block counts under docs/source. `python scripts/check_doc_examples.py --check-floor` fails if any file's doctest count drops below its baseline, so a {doctest} cannot quietly be replaced by a plain {code-block}. Regenerate with `python scripts/check_doc_examples.py --update-floor` when a file legitimately changes its doctest count.",
   "files": {
     "contributing.md": 1,
-    "getting-started.md": 0,
-    "guides/ai-agents.md": 1,
+    "getting-started.md": 2,
+    "guides/ai-agents.md": 4,
     "guides/appliance-cli.md": 7,
     "guides/authentication.md": 3,
-    "guides/connectors.md": 1,
-    "guides/module-admin.md": 0,
+    "guides/connectors.md": 7,
+    "guides/content-hub-mirror.md": 2,
+    "guides/export-import.md": 0,
+    "guides/module-admin.md": 3,
     "guides/module-field-schema.md": 0,
     "guides/playbook-authoring.md": 2,
     "guides/playbook-yaml-reference.md": 2,
     "guides/querying.md": 5,
-    "guides/records.md": 6,
+    "guides/records.md": 7,
+    "guides/repo-cli.md": 0,
     "index.md": 0,
+    "reference-advanced.md": 0,
     "reference.md": 0
   }
 }

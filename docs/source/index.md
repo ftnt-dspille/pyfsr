@@ -135,6 +135,7 @@ guides/playbook-yaml-reference
 guides/ai-agents
 guides/appliance-cli
 guides/repo-cli
+guides/content-hub-mirror
 ```
 
 ```{toctree}
