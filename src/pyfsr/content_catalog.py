@@ -120,7 +120,7 @@ def fetch_catalog(
 
     ``host`` may be a bare host (``secops-content.forticloud.com``), a
     ``scheme://host`` base, or a full URL ending in ``content-hub.json`` — the
-    manifest path (:data:`_CATALOG_PATH`) is appended unless already present, and
+    manifest path (``_CATALOG_PATH``) is appended unless already present, and
     a bare host defaults to ``https://``. This is the upstream half of the merge:
     fetch Fortinet's (or any mirror's) catalog, then splice your local entries in
     via :meth:`ContentCatalog.merge`.
@@ -271,7 +271,7 @@ def entry_from_artifact(
 
     Reads the archive's bundled ``info.json`` (:func:`read_artifact_info`), maps
     its fields onto a spec-valid entry via :func:`build_entry`, and infers the
-    ``type`` (:func:`_infer_type`) unless you pass one. ``buildNumber`` and any
+    ``type`` (``_infer_type``) unless you pass one. ``buildNumber`` and any
     other keyword ``overrides`` (e.g. ``publisher=``, ``certified=``) win over the
     values read from the archive — so a repackaged in-house build can stamp its
     own build number.
@@ -314,7 +314,7 @@ def validate_entry(entry: Any) -> list[str]:
     Checks structural requirements the sync relies on, not editorial quality:
 
     * entry is a JSON object;
-    * every key in :data:`_REQUIRED_KEYS` is present and non-empty;
+    * every key in ``_REQUIRED_KEYS`` is present and non-empty;
     * ``type`` is one of :data:`CATALOG_TYPES`;
     * ``buildNumber`` is an int (the sync builds numeric artifact paths from it);
     * ``availableVersions``, when present, is a list; ``category`` is a list or
