@@ -1,0 +1,22 @@
+{
+  "name": "acmeEnrichment",
+  "type": "connector",
+  "version": "1.0.0",
+  "buildNumber": 1,
+  "label": "Acme Enrichment",
+  "description": "In-house enrichment connector",
+  "publisher": "Acme",
+  "certified": false,
+  "category": "Threat Intelligence",
+  "availableVersions": [
+    "1.0.0"
+  ],
+  "infoPath": "/content-hub/acmeEnrichment-1.0.0/1",
+  "iconLarge": "/content-hub/acmeEnrichment-1.0.0/1/images/fsr-icon-large.png",
+  "operations": [
+    {
+      "operation": "lookup",
+      "title": "Lookup Indicator"
+    }
+  ]
+}

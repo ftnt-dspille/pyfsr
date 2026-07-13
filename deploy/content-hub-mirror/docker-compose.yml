@@ -1,0 +1,35 @@
+# Content Hub mirror. Point a FortiSOAR appliance's REPOSERVER/OSSERVER at this
+# host (OFFLINEREPO=true) and it will see your content + (optionally) Fortinet's.
+services:
+  content-hub-mirror:
+    build: .
+    image: pyfsr/content-hub-mirror:latest
+    ports:
+      - "8080:80"     # http  (local testing)
+      - "8443:443"    # https (what the appliance uses)
+      - "9000:9000"   # admin GUI + API (add/remove content)
+    environment:
+      # Admin console: set a token to require auth (recommended off-localhost):
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      ADMIN_ENABLED: ${ADMIN_ENABLED:-1}
+      # --- upstream (choose ONE, or neither for local-only) ---
+      # A saved catalog crawled once through an entitled box (no cert needed):
+      UPSTREAM_SNAPSHOT: ${UPSTREAM_SNAPSHOT:-}
+      # ...or crawl the live entitled host at build time (needs the FDN cert):
+      UPSTREAM_HOST: ${UPSTREAM_HOST:-}
+      # Reverse-proxy cache-misses to the upstream (1) or 404 them (0):
+      UPSTREAM_PROXY: ${UPSTREAM_PROXY:-1}
+      # Skip upstream TLS verify only for a self-signed mirror-of-a-mirror:
+      TLS_VERIFY: ${TLS_VERIFY:-1}
+    volumes:
+      # Your own catalog entries (one or more *.json files). Writable so the
+      # admin GUI/CLI can add/remove entries here:
+      - ./local-content:/local-content
+      # Downloadable artifacts (uploaded via the admin GUI/CLI land here):
+      - ./artifacts:/artifacts
+      # Certs: server.crt/server.key (TLS the appliance trusts) and, for the
+      # upstream proxy, fdn.pem/fdn.key (the appliance's FDN client cert):
+      - ./certs:/etc/nginx/certs
+      # Optional: a saved upstream snapshot referenced by UPSTREAM_SNAPSHOT
+      # (mount it somewhere under here and set UPSTREAM_SNAPSHOT to its path).
+    restart: unless-stopped
