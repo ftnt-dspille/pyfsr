@@ -121,8 +121,16 @@ class BaseRecord(BaseModel):
             return model.model_validate(value)
         return None
 
-    def _as_actor(self, field: str, user_model: type[BaseModel], appliance_model: type[BaseModel]) -> Any:
-        """Coerce an actor field (createUser/modifyUser) to User or Appliance by ``@type``."""
+    def _as_actor(self, field: str, default_model: type[BaseModel], by_type: dict[str, type[BaseModel]]) -> Any:
+        """Coerce an actor field (createUser/modifyUser) to its subtype by ``@type``.
+
+        FortiSOAR stores every principal in one ``actors`` table (single-table
+        inheritance on ``record_type``); an expanded actor reference carries the
+        subtype in ``@type`` — live-verified values ``Person`` (default →
+        ``default_model``), ``Appliance`` (playbook engine), and ``ApiKey`` (a
+        record created via an API key). ``by_type`` maps the non-default
+        discriminator values to their models.
+        """
         value = self.get(field)
         if value is None:
             return None
@@ -131,7 +139,7 @@ class BaseRecord(BaseModel):
             atype = value.get("@type")
         elif hasattr(value, "record_type"):
             atype = value.record_type
-        model = appliance_model if atype == "Appliance" else user_model
+        model = by_type.get(atype, default_model) if atype else default_model
         return self.as_record(field, model)
 
     def _as_records(self, field: str, model: type[BaseModel]) -> list[Any]:
@@ -154,13 +162,14 @@ class BaseRecord(BaseModel):
         """The ``createUser`` as a :class:`~pyfsr.models.User` or :class:`~pyfsr.models.Appliance`.
 
         Dispatches on ``@type``: ``"Appliance"`` records (playbook-engine actors)
-        return an :class:`~pyfsr.models.Appliance`; everything else returns a
-        :class:`~pyfsr.models.User`. Both share ``BaseRecord`` so ``.iri`` and
-        ``.uuid`` always work.
+        return an :class:`~pyfsr.models.Appliance`, ``"ApiKey"`` records (a record
+        created via an API key) return an :class:`~pyfsr.models.ApiKey`, and
+        everything else (``"Person"``) returns a :class:`~pyfsr.models.User`. All
+        share ``BaseRecord`` so ``.iri`` and ``.uuid`` always work.
         """
-        from ._system import Appliance, User
+        from ._system import ApiKey, Appliance, User
 
-        return self._as_actor("createUser", User, Appliance)
+        return self._as_actor("createUser", User, {"Appliance": Appliance, "ApiKey": ApiKey})
 
     @property
     def modify_user(self) -> Actor | None:
@@ -168,9 +177,9 @@ class BaseRecord(BaseModel):
 
         See :attr:`create_user` for dispatch logic.
         """
-        from ._system import Appliance, User
+        from ._system import ApiKey, Appliance, User
 
-        return self._as_actor("modifyUser", User, Appliance)
+        return self._as_actor("modifyUser", User, {"Appliance": Appliance, "ApiKey": ApiKey})
 
     @property
     def assigned_to(self) -> User | None:

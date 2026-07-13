@@ -241,8 +241,8 @@ class User(BaseRecord):
     security principal in one ``actors`` table via single-table inheritance keyed
     on the ``record_type`` discriminator (root-verified: ``Person`` extends the
     base ``Actor`` entity, same ``actors`` table); the sibling subtypes are
-    :class:`Appliance` (``record_type == "Appliance"``) and the API-key actor
-    (see :class:`ApiKeyUser`). ``@type`` on the wire is ``Person`` and the module
+    :class:`Appliance` (``record_type == "Appliance"``) and the :class:`ApiKey`
+    actor (``record_type == "ApiKey"``). ``@type`` on the wire is ``Person`` and the module
     slug is ``people`` — the ``/api/3/people`` collection is the person-only view
     of the shared table, whereas ``/api/3/actors`` spans all subtypes.
 
@@ -282,18 +282,6 @@ class User(BaseRecord):
         """Display name (``"firstname lastname"``), or ``None`` if neither is set."""
         parts = [p for p in (self.firstname, self.lastname) if p]
         return " ".join(parts) or None
-
-
-#: A FortiSOAR **actor** — any security principal in the shared ``actors`` table.
-#: The table is single-table-inheritance keyed on ``record_type``; the two
-#: subtypes that surface as expanded relationship targets (``createUser`` /
-#: ``modifyUser`` / assignee / team member) are the human :class:`User`
-#: (``Person``) and the :class:`Appliance` (playbook engine). The API-key actor
-#: is a third row-level subtype but is not (yet) a modelled relationship target —
-#: its expanded ``@type`` hasn't been captured from a live box, so it is left out
-#: rather than guessed. :meth:`BaseRecord.create_user` / ``modify_user`` return
-#: this union.
-Actor = User | Appliance
 
 
 class Team(BaseRecord):
@@ -538,7 +526,11 @@ class ApiKey(BaseRecord):
     """An **API-key binding** record from ``/api/3/api_keys/``.
 
     This is the *scope* object that binds roles/teams to an API-key user (the
-    user record carrying the key material, created via ``/api/auth/users``).
+    user record carrying the key material, created via ``/api/auth/users`` —
+    :class:`ApiKeyUser`). It is also an **actor**: it's the ``record_type ==
+    "ApiKey"`` subtype of the shared ``actors`` table, so a record created via an
+    API key expands its ``createUser`` / ``modifyUser`` to this record (``@type ==
+    "ApiKey"``, IRI ``/api/3/api_keys/<uuid>`` — live-verified on 8.0.0).
     ``@type`` on the wire is ``ApiKey``; the module slug is ``api_keys``. The
     key value itself is masked on every read here ��� the plaintext lives on the
     API-key user, recoverable only at create time (or via ``show_api_key`` when
@@ -557,6 +549,18 @@ class ApiKey(BaseRecord):
     modifyUser: str | dict[str, Any] | None = None
     modifyDate: float | None = None
     id: int | None = None
+
+
+#: A FortiSOAR **actor** — any security principal in the shared ``actors`` table.
+#: The table is single-table-inheritance keyed on ``record_type``; the three
+#: subtypes that surface as expanded relationship targets (``createUser`` /
+#: ``modifyUser``) are the human :class:`User` (``@type == "Person"``), the
+#: :class:`Appliance` (playbook engine, ``@type == "Appliance"``), and the
+#: :class:`ApiKey` actor (``@type == "ApiKey"``, IRI ``/api/3/api_keys/<uuid>`` —
+#: what ``createUser`` expands to on a record created via an API key;
+#: live-verified on 8.0.0). :meth:`BaseRecord.create_user` / ``modify_user``
+#: return this union.
+Actor = User | Appliance | ApiKey
 
 
 class ApiKeyMaterial(BaseRecord):
@@ -579,11 +583,12 @@ class ApiKeyMaterial(BaseRecord):
 class ApiKeyUser(BaseRecord):
     """An **API-key user** from ``/api/auth/users`` (``usersresp[0]``).
 
-    The user record that carries key material — the third *actor* subtype
-    (``user_type == 9``) alongside the human :class:`User` (``Person``) and
-    :class:`Appliance` in the shared ``actors`` table, distinct from a People
-    :class:`User`. This ``/api/auth/users`` shape is not a JSON-LD ``/api/3``
-    collection (no ``@id``/``@type`` on the wire), but ``BaseRecord`` works fine:
+    The user record that carries key material (``user_type == 9``), linked to the
+    :class:`ApiKey` binding — which is the actual actor-table row (``record_type
+    == "ApiKey"``) that shows up on ``createUser``/``modifyUser``. Distinct from a
+    People :class:`User`. This ``/api/auth/users`` shape is not a JSON-LD
+    ``/api/3`` collection (no ``@id``/``@type`` on the wire), but ``BaseRecord``
+    works fine:
     ``id_iri``/``record_type`` stay ``None`` and dict-access (``u["uuid"]``,
     ``u.get("api_key")``) keeps working. The nested ``api_key`` is parsed into
     :class:`ApiKeyMaterial`.
