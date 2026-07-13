@@ -9,14 +9,14 @@ historical table also carries richer inline fields). ``execution_history()``
 queries both and merges them, deduped by IRI and sorted newest-first.
 
 Example:
-    >>> client.playbooks.list(limit=10)                                    # playbook definitions
-    >>> client.playbooks.get_definition("<uuid>")                          # one playbook template
-    >>> client.playbooks.create_playbooks([payload])                      # re-push definitions
-    >>> client.playbooks.execution_history(playbook="Block IP", limit=5)  # one playbook's runs
-    >>> client.playbooks.last_run(playbook="Block IP")                    # newest run summary
-    >>> client.playbooks.why_failed(playbook="Block IP")                  # newest run's error details
-    >>> client.playbooks.get_execution("<run-pk>")                         # one run, full
-    >>> client.playbooks.search_executions("High Risk", status="failed")  # filtered search
+    >>> client.playbooks.list(limit=10)                                    # doctest: +SKIP
+    >>> client.playbooks.get_definition("<uuid>")                          # doctest: +SKIP
+    >>> client.playbooks.create_playbooks([payload])                      # doctest: +SKIP
+    >>> client.playbooks.execution_history(playbook="Block IP", limit=5)  # doctest: +SKIP
+    >>> client.playbooks.last_run(playbook="Block IP")                    # doctest: +SKIP
+    >>> client.playbooks.why_failed(playbook="Block IP")                  # doctest: +SKIP
+    >>> client.playbooks.get_execution("<run-pk>")                         # doctest: +SKIP
+    >>> client.playbooks.search_executions("High Risk", status="failed")  # doctest: +SKIP
 """
 
 from __future__ import annotations
@@ -807,6 +807,16 @@ class PlaybooksAPI(BaseAPI):
         — the curated fields (``task_id``/``status``/``error_message``/``pk``/…) as
         typed attributes, with the full raw run record preserved in ``extra`` and
         reachable by item access (``run["created"]``).
+
+        Example:
+            >>> client = demo_client()
+            >>> runs = client.playbooks.execution_history(limit=1)
+            >>> len(runs)
+            1
+            >>> runs[0].status
+            'finished'
+            >>> runs[0]["uuid"]
+            'a0afba58-9dbe-44dd-a6e6-7227e33990db'
         """
         extra = ""
         if playbook_uuid or playbook:
@@ -907,6 +917,14 @@ class PlaybooksAPI(BaseAPI):
         Pass ``step_detail=True`` to include the per-step execution trace; the
         per-step results then ride in the model's ``extra`` under ``steps``/``env``
         (see :meth:`run_env` for a reshaped view of them).
+
+        Example:
+            >>> client = demo_client()
+            >>> run = client.playbooks.get_execution("1")
+            >>> run.status
+            'finished'
+            >>> run.task_id
+            'a0afba58-9dbe-44dd-a6e6-7227e33990db'
         """
         if not isinstance(run_pk, str) or not run_pk.strip():
             raise ValueError("get_execution() requires a non-empty run pk")
@@ -1010,9 +1028,9 @@ class PlaybooksAPI(BaseAPI):
             or ``None`` if the playbook has no runs or does not exist.
 
         Example:
-            >>> run = client.playbooks.last_run(playbook="Block IP")
-            >>> if run:
-            ...     print(f"{run.name}: {run.status} ({run.pk})")
+            >>> run = client.playbooks.last_run(playbook="Block IP")  # doctest: +SKIP
+            >>> if run:  # doctest: +SKIP
+            ...     print(f"{run.name}: {run.status} ({run.pk})")  # doctest: +SKIP
         """
         runs = self.execution_history(
             playbook=playbook,
@@ -1049,9 +1067,9 @@ class PlaybooksAPI(BaseAPI):
             playbook has no runs or does not exist.
 
         Example:
-            >>> failure = client.playbooks.why_failed(playbook="Block IP")
-            >>> if failure and failure.failing_step:
-            ...     print(f"Run {failure.pk} failed at {failure.failing_step}: {failure.error_message}")
+            >>> failure = client.playbooks.why_failed(playbook="Block IP")  # doctest: +SKIP
+            >>> if failure and failure.failing_step:  # doctest: +SKIP
+            ...     print(f"{failure.pk} failed at {failure.failing_step}")  # doctest: +SKIP
         """
         run = self.last_run(playbook=playbook, playbook_uuid=playbook_uuid)
         if not run:
@@ -1595,15 +1613,13 @@ class PlaybooksAPI(BaseAPI):
                 ``timeout`` seconds.
             ValueError: if the playbook does not exist or is not found.
 
-        Example:
-            >>> # Trigger a playbook, then wait for it to finish
-            >>> result = client.playbooks.trigger("AI Investigation", records=[alert_uuid])
-            >>> task_id = result["task_id"]
-            >>> # ... or just wait by playbook name (polls the newest run)
-            >>> run = client.playbooks.wait_for_run(playbook="AI Investigation", timeout=120)
-            >>> print(f"Run {run['pk']}: {run['status']}")
-            >>> if run["error_message"]:
-            ...     print(f"Error: {run['error_message']}")
+        Example (illustrative only, requires trigger fixtures):
+            >>> result = client.playbooks.trigger("AI Investigation", records=[alert_uuid])  # doctest: +SKIP
+            >>> task_id = result["task_id"]  # doctest: +SKIP
+            >>> run = client.playbooks.wait_for_run(playbook="AI Investigation", timeout=120)  # doctest: +SKIP
+            >>> print(f"Run {run['pk']}: {run['status']}")  # doctest: +SKIP
+            >>> if run["error_message"]:  # doctest: +SKIP
+            ...     print(f"Error: {run['error_message']}")  # doctest: +SKIP
         """
         # Resolve playbook name to uuid if needed
         uuid = playbook_uuid or (self._resolve_uuid(playbook) if playbook else None)
@@ -1675,6 +1691,14 @@ class PlaybooksAPI(BaseAPI):
         POSTs to ``/api/wf/api/workflows/<pk>/wfinput_resume/``. ``input`` is the
         manual-input value payload; ``approved`` (when set) drives an approval
         step. The other args identify which waiting step to resume.
+
+        Example:
+            >>> client = demo_client()
+            >>> result = client.playbooks.resume("2", manual_input_id=2, step_id="200")
+            >>> result["task_id"]
+            'b0afba58-9dbe-44dd-a6e6-7227e33990dc'
+            >>> result["message"]
+            'Awaiting Playbook resumed successfully.'
         """
         if not isinstance(run_pk, str) or not run_pk.strip():
             raise ValueError("resume() requires a non-empty run pk")
@@ -1694,11 +1718,25 @@ class PlaybooksAPI(BaseAPI):
 
     # ------------------------------------------------------- run control verbs
     def start(self, run_pk: str) -> dict[str, Any]:
-        """Manually queue a workflow run (``POST .../workflows/{pk}/start/``)."""
+        """Manually queue a workflow run (``POST .../workflows/{pk}/start/``).
+
+        Example:
+            >>> client = demo_client()
+            >>> result = client.playbooks.start("1")
+            >>> result.get("status")
+            'started'
+        """
         return self.client.post(f"/api/wf/api/workflows/{_pk(run_pk)}/start/", data={})
 
     def retry(self, run_pk: str) -> dict[str, Any]:
-        """Retry a failed run from its failed step (``POST .../workflows/{pk}/retry/``)."""
+        """Retry a failed run from its failed step (``POST .../workflows/{pk}/retry/``).
+
+        Example:
+            >>> client = demo_client()
+            >>> result = client.playbooks.retry("3")
+            >>> result.get("status")
+            'started'
+        """
         return self.client.post(f"/api/wf/api/workflows/{_pk(run_pk)}/retry/", data={})
 
     def approval(
@@ -1746,6 +1784,18 @@ class PlaybooksAPI(BaseAPI):
             ValueError: the run has no pending manual-wf-input (it already
                 finished, or it is paused on a legacy ``type: approval`` step).
             LookupError: ``decision`` does not match any response option.
+
+        Example:
+            >>> client = demo_client()  # doctest: +SKIP
+            >>> result = client.playbooks.approval("2", decision="Approve")  # doctest: +SKIP
+            >>> result["task_id"]  # doctest: +SKIP
+            'b0afba58-9dbe-44dd-a6e6-7227e33990dc'
+            >>> result.message  # doctest: +SKIP
+            'Awaiting Playbook resumed successfully.'
+
+        .. note::
+            Approval is a complex multi-call flow. The doctest is skipped
+            pending a complete hydra response fixture for the people endpoint.
         """
         mi_api = self.client.manual_input
         resp = self.client.get(
@@ -1780,6 +1830,12 @@ class PlaybooksAPI(BaseAPI):
 
         ``logs`` is ``"all"`` (recent + historical, default), ``"recent"``, or
         ``"historical"``. The trailing slash matters (the slashless path 403s).
+
+        Example:
+            >>> client = demo_client()
+            >>> result = client.playbooks.count()
+            >>> result["count"]
+            42
         """
         return self.client.get("/api/wf/api/workflows/count/", params={"logs": logs})
 
@@ -1797,6 +1853,15 @@ class PlaybooksAPI(BaseAPI):
         return). Other query filters (``status``, ``template_iri``, ``records``,
         ``created_after``, ``tags_include``, …) pass through verbatim as
         ``filters``; ``limit`` caps the page.
+
+        Example:
+            >>> client = demo_client()
+            >>> result = client.playbooks.log_list(limit=1)
+            >>> members = result.get("hydra:member", [])
+            >>> len(members)
+            1
+            >>> members[0]["status"]
+            'finished'
         """
         params: dict[str, Any] = {"limit": limit, **filters}
         if task_id is not None:
@@ -1820,6 +1885,15 @@ class PlaybooksAPI(BaseAPI):
         ``filters`` is a list of filter dicts combined by ``logic`` (``"AND"``/
         ``"OR"``); ``sort``/``aggregates`` follow the engine's query shape. ``logs``
         restricts the source (``"all"``/``"recent"``/``"historical"``).
+
+        Example:
+            >>> client = demo_client()
+            >>> result = client.playbooks.query_logs()
+            >>> members = result.get("hydra:member", [])
+            >>> len(members)
+            1
+            >>> members[0].get("status")
+            'finished'
         """
         body: dict[str, Any] = {"logic": logic}
         if filters is not None:
@@ -2002,6 +2076,12 @@ class PlaybooksAPI(BaseAPI):
 
         Returns:
             The rendered output as a string.
+
+        Example:
+            >>> client = demo_client()
+            >>> output = client.playbooks.render_jinja("Hello {{ name }}", {"name": "World"})
+            >>> output
+            'Rendered Jinja output'
         """
         resp = self.client.post(
             "/api/wf/api/jinja-editor/",

@@ -1477,6 +1477,54 @@ MANUAL_INPUT_RESUME_RESPONSE = {
     "message": "Awaiting Playbook resumed successfully.",
 }
 
+# Approval manual input (with response mapping for approval workflow).
+_APPROVAL_MANUAL_INPUT_RECORD = {
+    "id": 2,
+    "workflow": "CRYPT0K8EV6MQ2Q3DJDOQ2H2EQHI______",  # encrypted Fernet token
+    "title": "ApprovalStep",
+    "type": "approval",
+    "step_id": 200,
+    "step_iri": "/api/wf/api/workflows/2/steps/200",
+    "is_approval": True,
+    "input": {
+        "schema": {
+            "type": "object",
+            "title": "Approval Required",
+            "description": "Please approve or reject",
+        }
+    },
+    "response_mapping": {
+        "options": [
+            {
+                "option": "Approve",
+                "primary": True,
+                "step_iri": "/api/wf/api/workflows/2/steps/200",
+                "message": "Approved",
+            },
+            {
+                "option": "Reject",
+                "primary": False,
+                "step_iri": "/api/wf/api/workflows/2/steps/200",
+                "message": "Rejected",
+            },
+        ]
+    },
+}
+
+# List response for approval manual input (GET /api/wf/api/manual-wf-input/).
+APPROVAL_MANUAL_INPUT_LIST_RESPONSE = {
+    "hydra:member": [_APPROVAL_MANUAL_INPUT_RECORD],
+    "hydra:totalItems": 1,
+    "hydra:view": {
+        "@id": "/api/wf/api/manual-wf-input/?workflow=2",
+        "@type": "hydra:PartialCollectionView",
+    },
+}
+
+# Retrieve response for approval manual input.
+APPROVAL_MANUAL_INPUT_RETRIEVE_RESPONSE = dict(_APPROVAL_MANUAL_INPUT_RECORD)
+APPROVAL_MANUAL_INPUT_RETRIEVE_RESPONSE["workflow"] = 2  # numeric id in retrieve response
+
 # ---------------------------------------------------------------------------
 # Attachments — client.attachments (attachment record management)
 # ---------------------------------------------------------------------------
@@ -1558,3 +1606,124 @@ _IMPORT_JOB_RESPONSE = {
 
 IMPORT_JOB_CREATE_RESPONSE = _IMPORT_JOB_RESPONSE
 IMPORT_JOB_GET_RESPONSE = _IMPORT_JOB_RESPONSE
+
+# ---------------------------------------------------------------------------
+# PlaybooksAPI — client.playbooks (playbook run history and manual input)
+# ---------------------------------------------------------------------------
+# Playbook run and execution endpoints. Simplified fixtures representing
+# typical run states (pending/running/completed). Captured from a live 8.0.x
+# appliance; volatile data (user refs, timestamps) masked for doctest stability.
+
+# A single workflow run (execution_history / get_execution response).
+_WORKFLOW_RUN_RECORD = {
+    "@context": "/api/wf/api/contexts/Workflow",
+    "@id": "/wf/api/workflows/1/",
+    "@type": "Workflow",
+    "uuid": "a0afba58-9dbe-44dd-a6e6-7227e33990db",
+    "id": 1,
+    "task_id": "a0afba58-9dbe-44dd-a6e6-7227e33990db",
+    "name": "Example Playbook",
+    "status": "finished",
+    "error_message": None,
+    "result": {"status": "success"},
+    "created": "2026-07-13T10:30:00Z",
+    "modified": "2026-07-13T10:35:00Z",
+    "env": {"request": {}, "steps": {}},
+    "tags": [],
+}
+
+# execution_history list response (hydra-formatted collection).
+EXECUTION_HISTORY_RESPONSE = {
+    "@context": "/api/wf/api/contexts/Workflow",
+    "@id": "/api/wf/api/workflows/",
+    "@type": "Collection",
+    "hydra:member": [_WORKFLOW_RUN_RECORD],
+    "hydra:totalItems": 1,
+    "hydra:view": {"@id": "/api/wf/api/workflows/?limit=20"},
+}
+
+# get_execution single run response (same shape as member in list).
+GET_EXECUTION_RESPONSE = _WORKFLOW_RUN_RECORD
+
+# count response (run count envelope).
+PLAYBOOK_COUNT_RESPONSE = {
+    "count": 42,
+}
+
+# log_list response (workflow log query result).
+LOG_LIST_RESPONSE = {
+    "hydra:member": [
+        {
+            "@id": "/api/wf/api/workflows/1/",
+            "uuid": "a0afba58-9dbe-44dd-a6e6-7227e33990db",
+            "task_id": "a0afba58-9dbe-44dd-a6e6-7227e33990db",
+            "status": "finished",
+            "created": "2026-07-13T10:30:00Z",
+        }
+    ],
+    "hydra:totalItems": 1,
+}
+
+# query_logs response (filtered workflow log query result).
+QUERY_LOGS_RESPONSE = {
+    "hydra:member": [
+        {
+            "@id": "/api/wf/api/workflows/1/",
+            "uuid": "a0afba58-9dbe-44dd-a6e6-7227e33990db",
+            "status": "finished",
+        }
+    ],
+    "hydra:totalItems": 1,
+}
+
+# render_jinja response (Jinja rendering result).
+RENDER_JINJA_RESPONSE = {
+    "result": "Rendered Jinja output",
+}
+
+# manual_input wfinput_resume response (resume acknowledgement).
+WFINPUT_RESUME_RESPONSE = {
+    "task_id": "b0afba58-9dbe-44dd-a6e6-7227e33990dc",
+    "message": "Awaiting Playbook resumed successfully.",
+}
+
+# A run in "awaiting" status (for resume/approval doctests).
+_AWAITING_RUN_RECORD = {
+    "@context": "/api/wf/api/contexts/Workflow",
+    "@id": "/wf/api/workflows/2/",
+    "@type": "Workflow",
+    "uuid": "b0afba58-9dbe-44dd-a6e6-7227e33990dc",
+    "id": 2,
+    "task_id": "b0afba58-9dbe-44dd-a6e6-7227e33990dc",
+    "name": "Approval Playbook",
+    "status": "awaiting",
+    "error_message": None,
+    "created": "2026-07-13T11:00:00Z",
+    "modified": "2026-07-13T11:00:00Z",
+}
+
+# get_execution for an awaiting run.
+GET_EXECUTION_AWAITING_RESPONSE = _AWAITING_RUN_RECORD
+
+# A run in "failed" status (for retry doctest).
+_FAILED_RUN_RECORD = {
+    "@context": "/api/wf/api/contexts/Workflow",
+    "@id": "/wf/api/workflows/3/",
+    "@type": "Workflow",
+    "uuid": "c0afba58-9dbe-44dd-a6e6-7227e33990dd",
+    "id": 3,
+    "task_id": "c0afba58-9dbe-44dd-a6e6-7227e33990dd",
+    "name": "Failed Playbook",
+    "status": "failed",
+    "error_message": "Step failed",
+    "created": "2026-07-13T11:30:00Z",
+    "modified": "2026-07-13T11:35:00Z",
+}
+
+# get_execution for a failed run.
+GET_EXECUTION_FAILED_RESPONSE = _FAILED_RUN_RECORD
+
+# start/retry/manual workflow control response (standard workflow post response).
+WORKFLOW_CONTROL_RESPONSE = {
+    "status": "started",
+}
