@@ -231,6 +231,37 @@ client.import_config.import_file(
 )
 ```
 
+### Merge behavior for existing records and picklists
+
+When a bundle's records or picklists already exist on the target, the porter
+engine gives each category a `whenExists` merge mode.
+{func}`~pyfsr.api.import_config.merge_mode` sets them:
+
+- **record sets** — `"replace"` (the default) overwrites matching records with the
+  bundle's; `"append"` keeps the existing records and adds the bundle's alongside.
+- **picklists** — `"keep"` (the default) leaves an already-present picklist as-is;
+  `"overwrite"` replaces it with the bundle's version.
+
+```python
+from pyfsr.api.import_config import merge_mode
+
+# Add the bundle's records without clobbering existing rows, and refresh picklists.
+client.import_config.import_file(
+    "bundle.zip",
+    modify_options=lambda o: merge_mode(o, record_sets="append", picklists="overwrite"),
+)
+```
+
+```{note}
+These same defaults govern a **solution-pack install** from Content Hub. A pack is
+installed through the porter engine via
+`POST /api/3/solutionpacks/install?$type=<type>[&$replace=true]`. By default
+`$replace` is off, so the install **merges**: records replace by match, existing
+picklists are kept (new items added), and module schema is extended additively
+rather than wiped. Checking the wizard's *Replace Existing* box sets `$replace=true`,
+which forces the pack's version to overwrite existing content wholesale.
+```
+
 ```{warning}
 `allow_schema_changes=True` bypasses the precheck entirely and triggers with the
 server-default options even when risky changes are present. Reach for a `resolve=`
