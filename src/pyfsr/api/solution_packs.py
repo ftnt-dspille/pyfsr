@@ -5,6 +5,14 @@ playbooks, connectors, and views shipped as one unit). Packs can be resolved by
 name, label, or search term; install polls to completion and export writes the
 pack archive to disk. Content discovery is delegated to
 :class:`~pyfsr.api.content_hub.ContentHubSearch`.
+
+Example:
+    >>> client = demo_client()
+    >>> resp = client.solution_packs.install("SOAR Framework", "2.2.1")
+    >>> resp.name
+    'SOAR Framework'
+    >>> resp.job_id
+    '990e8400-e29b-41d4-a716-446655440012'
 """
 
 import time
@@ -96,14 +104,14 @@ class SolutionPackAPI(BaseAPI):
             ``wait=True`` — check ``status == "Import Complete"`` for success.
 
         Example:
-            .. code-block:: python
-
-                resp = client.solution_packs.install("SOAR Framework", "2.2.1")
-                status = client.solution_packs.wait_for_install(resp.job_id)
-                print(status.status)  # "Import Complete"
-
-                # or in one call:
-                status = client.solution_packs.install("SOAR Framework", "2.2.1", wait=True)
+            >>> client = demo_client()
+            >>> resp = client.solution_packs.install("SOAR Framework", "2.2.1")
+            >>> resp.name
+            'SOAR Framework'
+            >>> resp.version
+            '2.2.1'
+            >>> resp.job_id
+            '990e8400-e29b-41d4-a716-446655440012'
         """
         resp = self.client.post("/api/3/solutionpacks/install", data={"name": name, "version": version})
         if not isinstance(resp, dict):

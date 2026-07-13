@@ -13,10 +13,15 @@ Server-enforced caps (PUT returns HTTP 400 otherwise):
     * ``token_lifetime`` ≤ 7200 seconds (2 h)
 
 Example:
-    >>> client.auth_config.get("TOKEN")["idle_time"]
+    >>> client = demo_client()  # doctest: +SKIP
+    >>> client.auth_config.get("TOKEN")["idle_time"]  # doctest: +SKIP
     30
-    >>> client.auth_config.set_idle_timeout(360)        # 6 h — the max
-    >>> client.auth_config.set("max_session", 1440)     # 24 h absolute cap
+    >>> client.auth_config.set_idle_timeout(360)  # doctest: +SKIP
+    >>> client.auth_config.set("max_session", 1440)  # doctest: +SKIP
+
+.. note::
+    Requires username/password auth — raises ``UnsupportedAuthOperationError``
+    under ``demo_client()``'s ``APIKeyAuth``, so these examples are ``+SKIP``.
 """
 
 from __future__ import annotations

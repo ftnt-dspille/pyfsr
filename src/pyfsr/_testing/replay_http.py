@@ -137,6 +137,80 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         # ViewTemplatesAPI.list_templates — backs resolve_view_template() /
         # get_view_template_name() / set_view_template(module, <name>).
         _entry("GET", "/api/3/system_view_templates", cap.SYSTEM_VIEW_TEMPLATES_RESPONSE),
+        # Audit API — query and manage audit activity records.
+        _entry("GET", "/api/gateway/audit/operations", cap.AUDIT_OPERATIONS_RESPONSE),
+        _entry(
+            "GET",
+            "/api/gateway/audit/activities/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            cap.AUDIT_ACTIVITY_RECORD,
+        ),
+        _entry("POST", "/api/gateway/audit/activities", cap.AUDIT_ACTIVITIES_RESPONSE),
+        _entry("POST", "/api/gateway/audit/activities/count", cap.AUDIT_COUNT_RESPONSE),
+        _entry("DELETE", "/api/gateway/audit/activities/ttl", {}, status=204),
+        _entry("DELETE", "/api/gateway/audit/activities", {}, status=204),
+        # SystemAPI — version/permissions/feature-access/daily-action-count.
+        _entry("GET", "/api/version", cap.VERSION_RESPONSE),
+        _entry("GET", "/api/permissions/current", cap.PERMISSIONS_RESPONSE),
+        _entry("GET", "/api/product/feature-access", cap.FEATURE_ACCESS_RESPONSE),
+        _entry("GET", "/api/auth/cluster/health", cap.CLUSTER_HEALTH_RESPONSE),
+        _entry("GET", "/api/auth/license", cap.LICENSE_RESPONSE),
+        _entry("GET", "/api/wf/workflow/config/", cap.DAILY_ACTION_COUNT_RESPONSE),
+        # TaxiiAPI — discovery/collections/manifest/objects.
+        _entry("GET", "/api/taxii/1/", cap.TAXII_DISCOVERY_RESPONSE),
+        _entry("GET", "/api/taxii/1/collections", cap.TAXII_COLLECTIONS_RESPONSE),
+        _entry("GET", "/api/taxii/1/collections/malware-samples", cap.TAXII_COLLECTION_RESPONSE),
+        _entry("GET", "/api/taxii/1/collections/malware-samples/manifest", cap.TAXII_MANIFEST_RESPONSE),
+        _entry("GET", "/api/taxii/1/collections/malware-samples/objects", cap.TAXII_OBJECTS_RESPONSE),
+        _entry(
+            "GET",
+            "/api/taxii/1/collections/malware-samples/objects/malware--31b7aa16-6a19-4d5e-9e1a-3a5c9f6a2b40",
+            cap.TAXII_OBJECTS_RESPONSE,
+        ),
+        # AuthConfigAPI — username/password auth only, all doctests are +SKIP.
+        _entry("GET", "/api/auth/config", cap.AUTH_CONFIG_TOKEN_ROWS),
+        # SearchAPI — global search + persisted-query execution.
+        _entry("POST", "/api/search", cap.GLOBAL_SEARCH_RESPONSE),
+        _entry(
+            "POST",
+            "/api/query/alerts/6f1c9e2a-6b7a-4b0a-9a1e-2f6a5c9b3d10",
+            cap.PERSISTED_QUERY_RESPONSE,
+        ),
+        # FeedsAPI — bulk trigger-bypassing ingest for threat-intel + records.
+        _entry("POST", "/api/ingest-feeds/indicators", cap.INDICATORS_INGEST_RESPONSE),
+        _entry("POST", "/api/ingest-feeds/observables", cap.OBSERVABLES_INGEST_RESPONSE),
+        _entry("POST", "/api/ingest-feeds/reputation", cap.REPUTATION_INGEST_RESPONSE),
+        _entry("POST", "/api/ingest-feeds/threatintel", cap.THREATINTEL_INGEST_RESPONSE),
+        _entry("POST", "/api/ingest-feeds/stix-bundle", cap.STIX_BUNDLE_INGEST_RESPONSE),
+        # insert() for arbitrary record types (e.g., /api/ingest-feeds/alerts)
+        # resolves to the same fixture regardless of record_type (the body varies,
+        # the path structure is matched generically).
+        _entry("POST", "/api/ingest-feeds/alerts", cap.INSERT_RECORDS_RESPONSE),
+        # ApiKeyUsersAPI — API-key user lifecycle management.
+        _entry("POST", "/api/auth/users", cap.APIKEY_USER_CREATE_RESPONSE),
+        _entry("GET", "/api/auth/users", cap.APIKEY_USER_GET_RESPONSE),
+        _entry("POST", "/api/auth/query/users", cap.APIKEY_USER_QUERY_RESPONSE),
+        _entry("PUT", "/api/auth/users", cap.APIKEY_USER_LIFECYCLE_RESPONSE),
+        # ApiKeysAPI — API-key binding (roles/teams on a user).
+        _entry("GET", "/api/3/api_keys", cap.APIKEY_LIST_RESPONSE),
+        _entry("POST", "/api/3/api_keys", cap.APIKEY_CREATE_RESPONSE),
+        # get() / update() / delete() for any api_key uuid — collapse to recorded uuid.
+        _entry("GET", "/api/3/api_keys/660e8400-e29b-41d4-a716-446655440008", cap.APIKEY_GET_RESPONSE),
+        _entry("PUT", "/api/3/api_keys/660e8400-e29b-41d4-a716-446655440008", cap.APIKEY_UPDATE_RESPONSE),
+        _entry("DELETE", "/api/3/api_keys/660e8400-e29b-41d4-a716-446655440008", {}, status=204),
+        # ManualInputAPI — pending manual workflow inputs.
+        _entry("POST", "/api/wf/api/manual-wf-input/list_wfinput/", cap.MANUAL_INPUT_LIST_RESPONSE),
+        _entry("POST", "/api/wf/api/manual-wf-input/1/retrieve_wfinput/", cap.MANUAL_INPUT_RETRIEVE_RESPONSE),
+        _entry("POST", "/api/wf/api/workflows/1/wfinput_resume/", cap.MANUAL_INPUT_RESUME_RESPONSE),
+        # AttachmentsAPI — attachment record management.
+        _entry("POST", "/api/3/attachments", cap.ATTACHMENT_CREATE_RESPONSE),
+        _entry("GET", "/api/3/attachments/770e8400-e29b-41d4-a716-446655440009", cap.ATTACHMENT_GET_RESPONSE),
+        _entry("DELETE", "/api/3/attachments/770e8400-e29b-41d4-a716-446655440009", {}, status=204),
+        # SolutionPackAPI — solution pack management.
+        _entry("POST", "/api/3/solutionpacks/install", cap.SOLUTION_PACK_INSTALL_RESPONSE),
+        # ImportConfigAPI — configuration import management.
+        _entry("POST", "/api/3/import_jobs", cap.IMPORT_JOB_CREATE_RESPONSE),
+        _entry("GET", "/api/3/import_jobs/aa0e8400-e29b-41d4-a716-446655440013", cap.IMPORT_JOB_GET_RESPONSE),
+        _entry("GET", "/api/import/aa0e8400-e29b-41d4-a716-446655440013", {"status": "generating"}),
     ]
 )
 
@@ -216,6 +290,20 @@ def _path_and_match(method: str, url: str) -> tuple[str, str]:
         and segments[5] in ("status", "result")
     ):
         return f"/api/ai/agents/{cap.FORTIAI_TASK_ID}/{segments[5]}", path
+    # /api/3/api_keys/<uuid>  (get / update / delete)  ->  collapse to the
+    # recorded uuid. The bare collection (4 segments) is left alone so list()
+    # resolves to the list capture, not this one.
+    if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "api_keys":
+        return "/api/3/api_keys/660e8400-e29b-41d4-a716-446655440008", path
+    # /api/3/attachments/<uuid>  (get / delete)  ->  collapse to the recorded uuid.
+    if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "attachments":
+        return "/api/3/attachments/770e8400-e29b-41d4-a716-446655440009", path
+    # /api/3/import_jobs/<uuid>  (get / put)  ->  collapse to the recorded uuid.
+    if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "import_jobs":
+        return "/api/3/import_jobs/aa0e8400-e29b-41d4-a716-446655440013", path
+    # /api/import/<uuid>  (generate options / trigger)  ->  collapse to the recorded uuid.
+    if len(segments) == 4 and segments[1] == "api" and segments[2] == "import":
+        return "/api/import/aa0e8400-e29b-41d4-a716-446655440013", path
     return path, path
 
 

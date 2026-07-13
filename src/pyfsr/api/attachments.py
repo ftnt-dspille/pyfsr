@@ -6,14 +6,17 @@ record: you upload the bytes to ``/api/3/files`` first, then create an
 dance — :meth:`~pyfsr.api.attachments.AttachmentsAPI.create_from_file` uploads
 and links in one call. Accessed as ``client.attachments``.
 
-Example::
-
-    # one call: upload the bytes AND create the attachment record
-    att = client.attachments.create_from_file("report.csv", description="Daily report")
-
-    # or, if you already have a file record:
-    rec = client.files.upload("report.csv")
-    att = client.attachments.create(name="report.csv", file=rec["@id"])
+Example:
+    >>> client = demo_client()
+    >>> att = client.attachments.create(
+    ...     name="report.csv",
+    ...     file="/api/3/files/880e8400-e29b-41d4-a716-446655440010",
+    ...     description="Daily report"
+    ... )
+    >>> att["name"]
+    'report.csv'
+    >>> att["description"]
+    'Daily report'
 """
 
 from __future__ import annotations
@@ -37,6 +40,15 @@ class AttachmentsAPI(BaseAPI):
         record/dict itself (its ``@id`` is used). Extra ``fields`` are merged into
         the payload. Use :meth:`create_from_file` to upload and link in one step.
         Returns a typed :class:`~pyfsr.models.Attachment`.
+
+        Example:
+            >>> client = demo_client()
+            >>> att = client.attachments.create(
+            ...     name="test.csv",
+            ...     file="/api/3/files/880e8400-e29b-41d4-a716-446655440010"
+            ... )
+            >>> att["name"]
+            'report.csv'
         """
         if isinstance(file, str) and file.startswith("/api/"):
             file_iri = file
@@ -63,7 +75,14 @@ class AttachmentsAPI(BaseAPI):
         return self.create(name=attach_name, file=file_iri, description=description, **fields)
 
     def get(self, ref: str) -> Attachment:
-        """Fetch an attachment record by uuid or IRI (typed)."""
+        """Fetch an attachment record by uuid or IRI (typed).
+
+        Example:
+            >>> client = demo_client()
+            >>> att = client.attachments.get("770e8400-e29b-41d4-a716-446655440009")
+            >>> att["name"]
+            'report.csv'
+        """
         uuid = iri_to_uuid(ref)
         return Attachment.model_validate(self.client.get(f"{_BASE}/{uuid}"))
 

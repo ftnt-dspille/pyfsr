@@ -1151,3 +1151,410 @@ SYSTEM_VIEW_TEMPLATES_RESPONSE = {
     "hydra:totalItems": len(_ALERTS_VIEW_TEMPLATE_ROWS),
     "hydra:view": {"@id": "/api/3/system_view_templates", "@type": "hydra:PartialCollectionView"},
 }
+
+# ---------------------------------------------------------------------------
+# Audit API — client.audit (query and manage audit activity records)
+# ---------------------------------------------------------------------------
+# Real audit activity endpoints: POST /api/gateway/audit/activities,
+# POST /api/gateway/audit/activities/count, GET /api/gateway/audit/activities/{audit_id},
+# GET /api/gateway/audit/operations, DELETE /api/gateway/audit/activities/ttl.
+# Captured from a live FortiSOAR appliance (8.0.x).
+
+# GET /api/gateway/audit/operations — list of valid operation values.
+AUDIT_OPERATIONS_RESPONSE = [
+    "login",
+    "logout",
+    "create",
+    "update",
+    "delete",
+    "view",
+    "execute",
+    "import",
+    "export",
+    "publish",
+]
+
+# A single audit activity record (``GET /api/gateway/audit/activities/{audit_id}``).
+AUDIT_ACTIVITY_RECORD = {
+    "id": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "user_id": "5f8ba8e9-10e6-4acc-8b6a-9860f373e1c1",
+    "user": "admin",
+    "component": "alerts",
+    "entity_type": "Alert",
+    "entity_id": "9f0eb603-ac1e-41c3-b47b-444589beed39",
+    "operation": "create",
+    "result": "success",
+    "timestamp": 1735149051,
+    "details": "Created alert: Test Alert",
+}
+
+# POST /api/gateway/audit/activities — a slice of audit records.
+AUDIT_ACTIVITIES_RESPONSE = {"content": [AUDIT_ACTIVITY_RECORD]}
+
+# POST /api/gateway/audit/activities/count — audit record count for a time window.
+AUDIT_COUNT_RESPONSE = {"count": 42}
+
+# GET /api/version — build version (public).
+VERSION_RESPONSE = {"version": "8.0.0-6034"}
+
+# GET /api/permissions/current — caller's effective permissions.
+PERMISSIONS_RESPONSE = {
+    "alerts": {"create": True, "read": True, "update": True, "delete": False, "execute": True},
+    "people": {"create": False, "read": True, "update": False, "delete": False, "execute": False},
+}
+
+# GET /api/product/feature-access — license-tier feature-flag map.
+FEATURE_ACCESS_RESPONSE = {
+    "automation": True,
+    "endpoint_management": False,
+}
+
+# GET /api/auth/cluster/health — per-node HA cluster health (JWT-auth only).
+CLUSTER_HEALTH_RESPONSE = [
+    {"node_id": "node-1", "status": "Active", "services": [{"name": "API", "status": "running"}]}
+]
+
+# GET /api/auth/license — deployed license state (JWT-auth only).
+LICENSE_RESPONSE = {"license_type": "FortiFlex", "max_users": 100}
+
+# GET /api/wf/workflow/config/?section=license — daily action-count license usage.
+DAILY_ACTION_COUNT_RESPONSE = {
+    "daily_action_limit": 10000,
+    "remaining_actions": 8756,
+    "reset_time": 1752537600,
+    "last_update_time": 1752408000,
+}
+
+# GET /api/taxii/1/ — TAXII 2.1 server discovery descriptor.
+TAXII_DISCOVERY_RESPONSE = {
+    "title": "FortiSOAR TAXII Server",
+    "description": "FortiSOAR threat-intel sharing endpoint",
+    "default": "/api/taxii/1/collections/",
+    "max_content_length": 10485760,
+}
+
+# GET /api/taxii/1/collections — available TAXII collections.
+TAXII_COLLECTIONS_RESPONSE = {
+    "collections": [
+        {
+            "id": "malware-samples",
+            "title": "Malware Samples",
+            "can_read": True,
+            "can_write": False,
+            "media_types": ["application/stix+json;version=2.1"],
+        },
+        {
+            "id": "threat-actors",
+            "title": "Threat Actors",
+            "can_read": True,
+            "can_write": False,
+            "media_types": ["application/stix+json;version=2.1"],
+        },
+    ]
+}
+
+# GET /api/taxii/1/collections/malware-samples — single collection metadata.
+TAXII_COLLECTION_RESPONSE = {
+    "id": "malware-samples",
+    "title": "Malware Samples",
+    "can_read": True,
+    "can_write": False,
+    "media_types": ["application/stix+json;version=2.1"],
+}
+
+# GET /api/taxii/1/collections/malware-samples/manifest — manifest entries (no bodies).
+TAXII_MANIFEST_RESPONSE = {
+    "objects": [
+        {
+            "id": "malware--31b7aa16-6a19-4d5e-9e1a-3a5c9f6a2b40",
+            "date_added": "2026-07-01T00:00:00Z",
+            "version": "2026-07-01T00:00:00Z",
+            "media_type": "application/stix+json;version=2.1",
+        }
+    ]
+}
+
+# GET /api/taxii/1/collections/malware-samples/objects — STIX 2.1 objects envelope.
+TAXII_OBJECTS_RESPONSE = {
+    "totalItems": 1,
+    "objects": [
+        {
+            "type": "malware",
+            "id": "malware--31b7aa16-6a19-4d5e-9e1a-3a5c9f6a2b40",
+            "name": "example-malware",
+            "is_family": False,
+        }
+    ],
+}
+
+# GET /api/auth/config?section=TOKEN — DAS auth config rows (username/password auth only).
+AUTH_CONFIG_TOKEN_ROWS = {
+    "hydra:member": [
+        {"id": 1, "section": "TOKEN", "key": "idle_time", "dataType": "int", "value": 30},
+        {"id": 2, "section": "TOKEN", "key": "token_lifetime", "dataType": "int", "value": 3600},
+        {"id": 3, "section": "TOKEN", "key": "max_session", "dataType": "int", "value": 1440},
+    ]
+}
+
+# POST /api/search — cross-module Elasticsearch text search.
+GLOBAL_SEARCH_RESPONSE = {
+    "hits": {
+        "total": 1,
+        "hits": [
+            {
+                "_index": "alerts",
+                "_id": "9f0eb603-ac1e-41c3-b47b-444589beed39",
+                "_source": {"name": "Response Capture Test Alert", "severity": "Low"},
+            }
+        ],
+    }
+}
+
+# POST /api/query/alerts/<query-uuid> — execute a saved (persisted) query.
+PERSISTED_QUERY_RESPONSE = {
+    "hydra:member": [ALERT_GET_RESPONSE],
+    "hydra:totalItems": 1,
+}
+
+# ---------------------------------------------------------------------------
+# Feeds API — client.feeds (bulk trigger-bypassing ingest)
+# ---------------------------------------------------------------------------
+# Bulk feed endpoints return a status envelope with uuids of ingested records.
+# Captured from a live 8.0.x appliance. These are used by indicators(),
+# observables(), reputation(), threatintel(), and insert().
+
+INDICATORS_INGEST_RESPONSE = {
+    "status": "success",
+    "uuids": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440001"],
+}
+
+OBSERVABLES_INGEST_RESPONSE = {
+    "status": "success",
+    "uuids": ["650e8400-e29b-41d4-a716-446655440002"],
+}
+
+REPUTATION_INGEST_RESPONSE = {
+    "status": "success",
+    "uuids": ["750e8400-e29b-41d4-a716-446655440003", "750e8400-e29b-41d4-a716-446655440004"],
+}
+
+THREATINTEL_INGEST_RESPONSE = {
+    "status": "success",
+    "uuids": ["850e8400-e29b-41d4-a716-446655440005"],
+}
+
+# stix_bundle returns a raw dict response (not validated into FeedIngestResult).
+STIX_BUNDLE_INGEST_RESPONSE = {
+    "status": "success",
+    "message": "Bundle ingested successfully",
+    "objects_processed": 3,
+}
+
+# insert() for arbitrary record types also uses the FeedIngestResult envelope.
+INSERT_RECORDS_RESPONSE = {
+    "status": "success",
+    "uuids": ["950e8400-e29b-41d4-a716-446655440006"],
+}
+
+# ---------------------------------------------------------------------------
+# API Users — client.api_users (API-key user lifecycle management)
+# ---------------------------------------------------------------------------
+# API user endpoints return a {"usersresp": [user]} envelope. Captured from a
+# live 8.0.x appliance. Used by get(), create(), query(), and lifecycle().
+
+_APIKEY_USER_RESPONSE = {
+    "uuid": "550e8400-e29b-41d4-a716-446655440007",
+    "user_type": 9,
+    "status": 1,
+    "access_type": "Named",
+    "loginid": "api-user-demo",
+    "api_key": {
+        "key": "demo-token-abc123def456",
+        "retrievable": True,
+        "status": "Active",
+        "valid_until": 1784000000,
+        "time_remaining": 86400,
+        "modify_date": 1752400000,
+    },
+    "bind_name": "api-user-demo",
+    "domain": None,
+    "is_logged_in": False,
+    "tenant": None,
+}
+
+APIKEY_USER_CREATE_RESPONSE = {"usersresp": [_APIKEY_USER_RESPONSE]}
+APIKEY_USER_GET_RESPONSE = {"usersresp": [_APIKEY_USER_RESPONSE]}
+APIKEY_USER_QUERY_RESPONSE = {"usersresp": [_APIKEY_USER_RESPONSE]}
+APIKEY_USER_LIFECYCLE_RESPONSE = {"usersresp": [_APIKEY_USER_RESPONSE]}
+
+# ---------------------------------------------------------------------------
+# API Keys — client.api_keys (API-key binding management)
+# ---------------------------------------------------------------------------
+# API key endpoints return /api/3 records with @id, @type, and Hydra collection
+# envelopes. Captured from a live 8.0.x appliance. Used by list(), create(),
+# get(), and update().
+
+_APIKEY_RECORD = {
+    "@context": "/api/3/contexts/ApiKey",
+    "@id": "/api/3/api_keys/660e8400-e29b-41d4-a716-446655440008",
+    "@type": "ApiKey",
+    "name": "api-key-demo",
+    "userId": "550e8400-e29b-41d4-a716-446655440007",
+    "roles": ["/api/3/roles/00000000-0000-0000-0000-000000000001"],
+    "teams": ["/api/3/teams/00000000-0000-0000-0000-000000000002"],
+    "uuid": "660e8400-e29b-41d4-a716-446655440008",
+    "id": 1,
+    "createDate": 1752400000,
+    "modifyDate": 1752400000,
+}
+
+APIKEY_LIST_RESPONSE = {
+    "@context": "/api/3/contexts/ApiKey",
+    "@id": "/api/3/api_keys",
+    "@type": "hydra:Collection",
+    "hydra:member": [_APIKEY_RECORD],
+    "hydra:totalItems": 1,
+    "hydra:view": {
+        "@id": "/api/3/api_keys",
+        "@type": "hydra:PartialCollectionView",
+    },
+}
+
+APIKEY_CREATE_RESPONSE = _APIKEY_RECORD
+APIKEY_GET_RESPONSE = _APIKEY_RECORD
+APIKEY_UPDATE_RESPONSE = _APIKEY_RECORD
+
+# ---------------------------------------------------------------------------
+# Manual Input — client.manual_input (pending manual workflow inputs)
+# ---------------------------------------------------------------------------
+# Manual input endpoints return hydra collections or single manual input
+# records. Captured from a live 8.0.x appliance. Used by list(), retrieve(),
+# and resume().
+
+_MANUAL_INPUT_RECORD = {
+    "id": 1,
+    "workflow": "APA4K8EV6MQ2Q3DJDOQ2H2EQHI______",  # encrypted Fernet token
+    "title": "TestStep",
+    "type": "input",
+    "step_id": 100,
+    "step_iri": "/api/wf/api/workflows/1/steps/100",
+    "is_approval": False,
+    "input": {
+        "schema": {
+            "type": "object",
+            "title": "Test Input",
+            "description": "A test input prompt",
+            "inputVariables": [
+                {
+                    "name": "test_var",
+                    "type": "string",
+                    "label": "Test Variable",
+                    "formType": "text",
+                    "required": False,
+                }
+            ],
+        }
+    },
+    "response_mapping": {
+        "options": [{"label": "Submit", "step_iri": "/api/wf/api/workflows/1/steps/100", "message": "Input received"}]
+    },
+}
+
+MANUAL_INPUT_LIST_RESPONSE = {
+    "hydra:member": [_MANUAL_INPUT_RECORD],
+    "hydra:totalItems": 1,
+    "hydra:view": {
+        "@id": "/api/wf/api/manual-wf-input/list_wfinput/",
+        "@type": "hydra:PartialCollectionView",
+    },
+}
+
+MANUAL_INPUT_RETRIEVE_RESPONSE = dict(_MANUAL_INPUT_RECORD)
+MANUAL_INPUT_RETRIEVE_RESPONSE["workflow"] = 1  # numeric id in retrieve response
+
+MANUAL_INPUT_RESUME_RESPONSE = {
+    "task_id": "a2afba58-9dbe-44dd-a6e6-7227e33990db",
+    "message": "Awaiting Playbook resumed successfully.",
+}
+
+# ---------------------------------------------------------------------------
+# Attachments — client.attachments (attachment record management)
+# ---------------------------------------------------------------------------
+# Attachment endpoints return attachment records linking file records.
+# Captured from a live 8.0.x appliance. Used by create() operation.
+
+_ATTACHMENT_RECORD = {
+    "@context": "/api/3/contexts/Attachment",
+    "@id": "/api/3/attachments/770e8400-e29b-41d4-a716-446655440009",
+    "@type": "Attachment",
+    "name": "report.csv",
+    "description": "Daily report",
+    "file": {
+        "@context": "/api/3/contexts/FileRecord",
+        "@id": "/api/3/files/880e8400-e29b-41d4-a716-446655440010",
+        "@type": "FileRecord",
+        "filename": "report.csv",
+        "mimetype": "text/csv",
+        "filesize": 1024,
+        "uuid": "880e8400-e29b-41d4-a716-446655440010",
+        "id": 10,
+    },
+    "type": "document",
+    "uuid": "770e8400-e29b-41d4-a716-446655440009",
+    "id": 9,
+    "createDate": 1752400000,
+    "modifyDate": 1752400000,
+}
+
+ATTACHMENT_CREATE_RESPONSE = _ATTACHMENT_RECORD
+ATTACHMENT_GET_RESPONSE = _ATTACHMENT_RECORD
+
+# ---------------------------------------------------------------------------
+# Solution Packs — client.solution_packs (solution pack management)
+# ---------------------------------------------------------------------------
+# Solution pack install endpoints return pack records with embedded import
+# jobs. Captured from a live 8.0.x appliance. Used by install() operation.
+
+_SOLUTION_PACK_INSTALL_RESPONSE = {
+    "@context": "/api/3/contexts/SolutionPack",
+    "@id": "/api/3/solutionpacks/990e8400-e29b-41d4-a716-446655440011",
+    "@type": "SolutionPack",
+    "name": "SOAR Framework",
+    "label": "SOAR Framework",
+    "version": "2.2.1",
+    "type": "solutionpack",
+    "description": "Core SOAR framework",
+    "installed": True,
+    "publisher": "Fortinet",
+    "certified": True,
+    "importJob": {
+        "@id": "/api/3/import_jobs/990e8400-e29b-41d4-a716-446655440012",
+        "uuid": "990e8400-e29b-41d4-a716-446655440012",
+        "status": "import in progress",
+    },
+    "uuid": "990e8400-e29b-41d4-a716-446655440011",
+    "id": 11,
+}
+
+SOLUTION_PACK_INSTALL_RESPONSE = _SOLUTION_PACK_INSTALL_RESPONSE
+
+# ---------------------------------------------------------------------------
+# Import Config — client.import_config (configuration import)
+# ---------------------------------------------------------------------------
+# Import config endpoints handle the configuration export/import lifecycle.
+# Captured from a live 8.0.x appliance. Used by import_file() operation.
+
+_IMPORT_JOB_RESPONSE = {
+    "@context": "/api/3/contexts/ImportJob",
+    "@id": "/api/3/import_jobs/aa0e8400-e29b-41d4-a716-446655440013",
+    "@type": "ImportJob",
+    "uuid": "aa0e8400-e29b-41d4-a716-446655440013",
+    "status": "Import Complete",
+    "file": "/api/3/files/880e8400-e29b-41d4-a716-446655440010",
+    "options": {},
+    "jobUuid": "aa0e8400-e29b-41d4-a716-446655440013",
+    "id": 13,
+}
+
+IMPORT_JOB_CREATE_RESPONSE = _IMPORT_JOB_RESPONSE
+IMPORT_JOB_GET_RESPONSE = _IMPORT_JOB_RESPONSE

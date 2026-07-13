@@ -7,9 +7,12 @@ module's unique-constraint criterion (only changed fields are touched — unlike
 ``bulkupsert``, this does not overwrite the whole row). Accessed as ``client.feeds``.
 
 Example:
-    >>> client.feeds.indicators([{"value": "8.8.8.8", "typeofindicator": "IP Address"}])
-    >>> client.feeds.stix_bundle(bundle)          # a STIX 2.x bundle dict
-    >>> client.feeds.insert("alerts", [{...}])    # any record type
+    >>> client = demo_client()
+    >>> result = client.feeds.indicators([{"value": "8.8.8.8", "typeofindicator": "IP Address"}])
+    >>> result.ok
+    True
+    >>> len(result.uuids)
+    2
 """
 
 from __future__ import annotations
@@ -54,6 +57,17 @@ class IngestFeedsAPI(BaseAPI):
 
         Field names follow the ``indicators`` module schema. Bypasses on-create
         playbook triggers (unlike ``POST /api/3/insert/indicators``).
+
+        Example:
+            >>> client = demo_client()
+            >>> result = client.feeds.indicators([
+            ...     {"value": "8.8.8.8", "typeofindicator": "IP Address"},
+            ...     {"value": "1.1.1.1", "typeofindicator": "IP Address"},
+            ... ])
+            >>> result.ok
+            True
+            >>> result.status
+            'success'
         """
         resp = self.client.post("/api/ingest-feeds/indicators", data={"data": _to_rows(records)})
         return FeedIngestResult.model_validate(resp)
@@ -63,6 +77,14 @@ class IngestFeedsAPI(BaseAPI):
 
         Field names follow the ``observables`` module schema. Same trigger-bypass
         behavior as :meth:`indicators`.
+
+        Example:
+            >>> client = demo_client()
+            >>> result = client.feeds.observables([
+            ...     {"name": "test-hash", "type": "File", "value": "abc123def456"}
+            ... ])
+            >>> result.ok
+            True
         """
         resp = self.client.post("/api/ingest-feeds/observables", data={"data": _to_rows(records)})
         return FeedIngestResult.model_validate(resp)
@@ -71,6 +93,15 @@ class IngestFeedsAPI(BaseAPI):
         """Bulk-upsert reputation scores (``POST /api/ingest-feeds/reputation``).
 
         For enrichment pipelines writing scored IOCs back without firing triggers.
+
+        Example:
+            >>> client = demo_client()
+            >>> result = client.feeds.reputation([
+            ...     {"value": "8.8.8.8", "score": 75},
+            ...     {"value": "1.1.1.1", "score": 10},
+            ... ])
+            >>> result.ok
+            True
         """
         resp = self.client.post("/api/ingest-feeds/reputation", data={"data": _to_rows(records)})
         return FeedIngestResult.model_validate(resp)
@@ -81,6 +112,14 @@ class IngestFeedsAPI(BaseAPI):
         The top-level container linking indicators, campaigns, threat actors, and
         reports. Field names match the ``threat_intel`` module schema
         (``GET /api/3/contexts/ThreatIntel``).
+
+        Example:
+            >>> client = demo_client()
+            >>> result = client.feeds.threatintel([
+            ...     {"name": "APT28", "type": "Threat Actor"}
+            ... ])
+            >>> result.ok
+            True
         """
         resp = self.client.post("/api/ingest-feeds/threatintel", data={"data": _to_rows(records)})
         return FeedIngestResult.model_validate(resp)
@@ -94,6 +133,19 @@ class IngestFeedsAPI(BaseAPI):
         endpoint takes the STIX bundle as-is (not the ``{"data": [...]}``
         row-list envelope the other feed endpoints use), and its response shape
         has not been live-verified, so it is returned unparsed.
+
+        Example:
+            >>> client = demo_client()
+            >>> bundle = {
+            ...     "type": "bundle",
+            ...     "id": "bundle--00000000-0000-0000-0000-000000000000",
+            ...     "objects": [
+            ...         {"type": "malware", "id": "malware--00000000-0000-0000-0000-000000000001"}
+            ...     ]
+            ... }
+            >>> result = client.feeds.stix_bundle(bundle)
+            >>> result["status"]
+            'success'
         """
         return self.client.post("/api/ingest-feeds/stix-bundle", data=bundle)
 
@@ -117,6 +169,14 @@ class IngestFeedsAPI(BaseAPI):
             routing config — it 404s at the router level for every
             ``record_type``, not because of a permissions/module restriction.
             Do not confuse the two.
+
+        Example:
+            >>> client = demo_client()
+            >>> result = client.feeds.insert("alerts", [
+            ...     {"name": "Alert from Feed", "severity": "Medium"}
+            ... ])
+            >>> result.ok
+            True
         """
         if not isinstance(record_type, str) or not record_type.strip():
             raise ValueError("insert() requires a non-empty record_type")

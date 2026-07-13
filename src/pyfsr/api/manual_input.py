@@ -15,10 +15,12 @@ To drive a paused prompt in one call (find + fill + resume), use
 low-level pieces it composes.
 
 Example:
-    >>> pending = client.manual_input.list(assigned_to="me")
-    >>> pending[0].title          # NB: this is the STEP name, not the schema title
-    'AskNumber'
-    >>> client.manual_input.answer(654321, by_title="AskNumber")
+    >>> client = demo_client()
+    >>> pending = client.manual_input.list(assigned_to="all")
+    >>> pending[0].title
+    'TestStep'
+    >>> pending[0].is_approval
+    False
 """
 
 from __future__ import annotations
@@ -72,7 +74,12 @@ class ManualInputAPI(BaseAPI):
                 pass ``False`` for raw dicts.
 
         Example:
-            >>> client.manual_input.list(assigned_to="all", is_approval=True)
+            >>> client = demo_client()
+            >>> pending = client.manual_input.list(assigned_to="all")
+            >>> len(pending)
+            1
+            >>> pending[0].title
+            'TestStep'
         """
         params: dict[str, Any] = {
             "format": "json",
@@ -144,11 +151,14 @@ class ManualInputAPI(BaseAPI):
             already finished or is not paused on a manual input/approval step).
 
         Example:
-            >>> run = client.playbooks.trigger("Triage Alert", follow=False)
-            >>> pending = client.manual_input.pending_for_run(run.task_id)
-            >>> pending[0].input["schema"]["title"]
+            >>> client = demo_client()  # doctest: +SKIP
+            >>> run = client.playbooks.trigger("Triage Alert", follow=False)  # doctest: +SKIP
+            >>> pending = client.manual_input.pending_for_run(run.task_id)  # doctest: +SKIP
+            >>> pending[0].input["schema"]["title"]  # doctest: +SKIP
             'Approve ingestion of the fetched indicators?'
-            >>> client.manual_input.answer(input_id=pending[0].id, option="approve")
+
+            .. note::
+                Requires playbook/run state setup, so this example is ``+SKIP``.
         """
         # task_id -> run pk (the @id path's trailing segment).
         resp = self.client.playbooks.log_list(task_id=task_id, limit=1)
@@ -230,9 +240,12 @@ class ManualInputAPI(BaseAPI):
                 ``False`` for the raw dict.
 
         Example:
-            >>> mi = client.manual_input.retrieve(1, owners="/api/3/people/<uuid>")
+            >>> client = demo_client()
+            >>> mi = client.manual_input.retrieve(1)
+            >>> mi.title
+            'TestStep'
             >>> mi.input["schema"]["title"]
-            'Final Go Call'
+            'Test Input'
         """
         params: dict[str, Any] = {
             "format": "json",
@@ -275,13 +288,17 @@ class ManualInputAPI(BaseAPI):
                 ``{"test": "def"}`` -- omit for an approval/button-only step.
 
         Example:
-            >>> mi = client.manual_input.retrieve(3)
-            >>> opt = mi.response_mapping["options"][0]      # the "primary" button
-            >>> client.manual_input.resume(
-            ...     mi.workflow, step_iri=opt["step_iri"], step_id=mi.step_id,
-            ...     manual_input_id=mi.id, user="/api/3/people/<uuid>",
-            ...     input={"test": "def"})
-            {'task_id': '...', 'message': 'Awaiting Playbook resumed successfully.'}
+            >>> client = demo_client()
+            >>> result = client.manual_input.resume(
+            ...     workflow_id=1,
+            ...     step_iri="/api/wf/api/workflows/1/steps/100",
+            ...     step_id=100,
+            ...     manual_input_id=1,
+            ...     user="/api/3/people/00000000-0000-0000-0000-000000000001",
+            ...     input={"test_var": "test_value"}
+            ... )
+            >>> result["message"]
+            'Awaiting Playbook resumed successfully.'
 
         See also:
             :meth:`answer` -- finds the pending input, resolves the numeric run
@@ -348,9 +365,12 @@ class ManualInputAPI(BaseAPI):
             ``message``); the resume is asynchronous.
 
         Example:
-            >>> # re-prompt loop: answer the "AskNumber" step until it passes
-            >>> client.manual_input.answer(123, by_title="AskNumber")
+            >>> client = demo_client()  # doctest: +SKIP
+            >>> client.manual_input.answer(123, by_title="AskNumber")  # doctest: +SKIP
             {'task_id': '...', 'message': 'Awaiting Playbook resumed successfully.'}
+
+            .. note::
+                Requires playbook state setup, so this example is ``+SKIP``.
 
         See also:
             :meth:`resume` for the low-level form when you already hold the
@@ -435,7 +455,11 @@ class ManualInputAPI(BaseAPI):
             input_id: the manual input's integer ``id`` (from :meth:`list`).
 
         Example:
-            >>> client.manual_input.delete(2)
+            >>> client = demo_client()  # doctest: +SKIP
+            >>> client.manual_input.delete(2)  # doctest: +SKIP
+
+            .. note::
+                Simple delete operation; marked +SKIP as it has no output.
         """
         self.client.delete(f"{_BASE}{input_id}/", params={"format": "json"})
 

@@ -4,11 +4,11 @@ Read-only probes the UI uses for gating, plus license deploy/inspect. Accessed
 as ``client.system``.
 
 Example:
-    >>> client.system.version()                 # build version (public)
-    >>> client.system.permissions()             # caller's effective permissions
-    >>> client.system.feature_access()          # license-tier feature flags
-    >>> client.system.cluster_health()          # per-node HA health
-    >>> client.system.license()                 # deployed license state
+    >>> client = demo_client()
+    >>> client.system.version()["version"]
+    '8.0.0-6034'
+    >>> client.system.feature_access()["automation"]
+    True
 """
 
 from __future__ import annotations
@@ -23,7 +23,13 @@ class SystemAPI(BaseAPI):
     """Version, permissions, feature flags, cluster health, and licensing."""
 
     def version(self) -> dict[str, Any]:
-        """Build version (``GET /api/version``). Public — no auth required."""
+        """Build version (``GET /api/version``). Public — no auth required.
+
+        Example:
+            >>> client = demo_client()
+            >>> client.system.version()["version"]
+            '8.0.0-6034'
+        """
         return self.client.get("/api/version")
 
     def permissions(self) -> dict[str, Any]:
@@ -31,6 +37,14 @@ class SystemAPI(BaseAPI):
 
         A module -> ``{create, read, update, delete, execute}`` boolean map —
         authoritative for UI/automation gating.
+
+        Example:
+            >>> client = demo_client()
+            >>> perms = client.system.permissions()
+            >>> perms["alerts"]["read"]
+            True
+            >>> perms["people"]["create"]
+            False
         """
         return self.client.get("/api/permissions/current")
 
@@ -39,6 +53,14 @@ class SystemAPI(BaseAPI):
 
         Each key is a product feature; the boolean says whether the current
         license unlocks it. Gate paths off this instead of hard-coding tiers.
+
+        Example:
+            >>> client = demo_client()
+            >>> features = client.system.feature_access()
+            >>> features["automation"]
+            True
+            >>> features["endpoint_management"]
+            False
         """
         return self.client.get("/api/product/feature-access")
 
@@ -47,6 +69,16 @@ class SystemAPI(BaseAPI):
 
         One object per node (status, services, connectivity, cpu/memory/disk,
         replication, …). JWT auth only on tested appliances.
+
+        Example:
+            >>> client = demo_client()  # doctest: +SKIP
+            >>> health = client.system.cluster_health()  # doctest: +SKIP
+            >>> health[0]["status"]  # doctest: +SKIP
+            'Active'
+
+        .. note::
+            Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+            ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
         """
         return self.client.get("/api/auth/cluster/health")
 
@@ -56,6 +88,16 @@ class SystemAPI(BaseAPI):
 
         Reports the deployed license for the cluster, or one node with
         ``node_id``. Authenticated equivalent of the public ``get_info`` flow.
+
+        Example:
+            >>> client = demo_client()  # doctest: +SKIP
+            >>> lic = client.system.license()  # doctest: +SKIP
+            >>> lic["license_type"]  # doctest: +SKIP
+            'FortiFlex'
+
+        .. note::
+            Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+            ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
         """
         params: dict[str, Any] = {}
         if node_id is not None:
@@ -77,6 +119,14 @@ class SystemAPI(BaseAPI):
         Connector Action, Set Variable, etc.; Wait/Approval/Loops/Reference-a-
         Playbook are not counted. This is the endpoint the UI's
         ``getDailyActionCount`` calls.
+
+        Example:
+            >>> client = demo_client()
+            >>> dac = client.system.daily_action_count()
+            >>> dac.daily_action_limit
+            10000
+            >>> dac.enforced
+            True
         """
         resp = self.client.get("/api/wf/workflow/config/", params={"section": "license"})
         return DailyActionCount.model_validate(resp if isinstance(resp, dict) else {})
