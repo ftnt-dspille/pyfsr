@@ -238,6 +238,21 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             "/api/triggers/1/action/2b6a1e8e-6f0a-4c6b-9e29-6c2f6a1d8b30",
             cap.TRIGGER_ACTION_RESPONSE,
         ),
+        # AgentsAPI — execution-agent lifecycle + installer + agent-scoped connectors.
+        _entry("GET", "/api/3/agents", cap.AGENT_LIST_RESPONSE),
+        _entry("GET", "/api/3/agents/6f5e4d3c-2b1a-4c9d-8e7f-1a2b3c4d5e6f", cap.AGENT_RECORD),
+        _entry("POST", "/api/3/agents", cap.AGENT_RECORD),
+        _entry("DELETE", "/api/3/agents/6f5e4d3c-2b1a-4c9d-8e7f-1a2b3c4d5e6f", {}, status=204),
+        _entry("POST", "/api/integration/agent-installer/", cap.AGENT_INSTALLER_BLOB_RESPONSE),
+        _entry("POST", "/api/integration/install-connector/", cap.AGENT_INSTALL_CONNECTOR_RESPONSE),
+        _entry("PUT", "/api/integration/install-connector/", cap.AGENT_INSTALL_CONNECTOR_RESPONSE),
+        _entry("DELETE", "/api/integration/install-connector/", cap.AGENT_INSTALL_CONNECTOR_RESPONSE),
+        _entry("GET", "/api/integration/agent-heartbeat/edge-1/", cap.AGENT_HEARTBEAT_RESPONSE),
+        _entry(
+            "POST",
+            "/api/integration/connectors/agents/cyops_utilities/3.7.1/",
+            cap.AGENT_CONNECTOR_INSTALL_STATUS_RESPONSE,
+        ),
     ]
 )
 
