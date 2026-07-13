@@ -864,13 +864,13 @@ class ExportConfigAPI(BaseAPI):
         if template._roles:
             roles: list[dict[str, Any]] = []
             for name in template._roles:
-                info = self._get_role_info(name)
+                role = self.client.roles.get(name)
                 roles.append(
                     RoleSelection(
-                        value=info["@id"],
-                        label=info.get("label") or info.get("name"),
-                        name=info.get("name"),
-                        uuid=info.get("uuid"),
+                        value=role.iri,
+                        label=role.get("label") or role.name,
+                        name=role.name,
+                        uuid=role.uuid,
                     ).wire()
                 )
             options["roles"] = roles
@@ -878,8 +878,8 @@ class ExportConfigAPI(BaseAPI):
         if template._teams:
             teams: list[dict[str, Any]] = []
             for name in template._teams:
-                info = self._get_named_record("/api/3/teams", "name", name, "team")
-                teams.append(TeamSelection(value=info["@id"], name=info.get("name"), uuid=info.get("uuid")).wire())
+                team = self.client.teams.get(name)
+                teams.append(TeamSelection(value=team.iri, name=team.name, uuid=team.uuid).wire())
             options["teams"] = teams
 
         if template._actors:
@@ -1167,10 +1167,6 @@ class ExportConfigAPI(BaseAPI):
         if not members:
             raise ValueError(f"{kind} {value!r} not found")
         return members[0]
-
-    def _get_role_info(self, name: str) -> dict[str, Any]:
-        """Resolve an RBAC role by name to its record (``@id``/``label``/``uuid``)."""
-        return self._get_named_record("/api/3/roles", "name", name, "role")
 
     def export_record_data(
         self,

@@ -51,6 +51,8 @@ def _api(handler=None):
     # The resolution path reaches sibling SDK surfaces (view_templates / wf_tools /
     # workflow_collections) rather than raw HTTP — attach real instances backed by
     # the same fake client so the handler still drives every underlying request.
+    from pyfsr.api.roles import RolesAPI
+    from pyfsr.api.teams import TeamsAPI
     from pyfsr.api.view_templates import ViewTemplatesAPI
     from pyfsr.api.wf_tools import WfToolsAPI
     from pyfsr.api.workflow_collections import WorkflowCollectionsAPI
@@ -58,6 +60,8 @@ def _api(handler=None):
     c.view_templates = ViewTemplatesAPI(c)
     c.wf_tools = WfToolsAPI(c)
     c.workflow_collections = WorkflowCollectionsAPI(c)
+    c.roles = RolesAPI(c)
+    c.teams = TeamsAPI(c)
     return ExportConfigAPI(c), c
 
 
@@ -551,18 +555,19 @@ def test_export_template_role_needs_resolution():
 
 
 def test_create_template_resolves_role_entry():
+    role_rec = {
+        "@id": "/api/3/roles/role-uuid",
+        "name": "Full App Permissions",
+        "uuid": "role-uuid",
+        "label": "Full App Permissions",
+    }
+
     def handler(m, u, **k):
+        # roles.get(name) lists roles (name→uuid), then fetches the record by uuid.
         if m == "GET" and u == "/api/3/roles":
-            return {
-                "hydra:member": [
-                    {
-                        "@id": "/api/3/roles/role-uuid",
-                        "name": k["params"]["name"],
-                        "uuid": "role-uuid",
-                        "label": "Full App Permissions",
-                    }
-                ]
-            }
+            return {"hydra:member": [role_rec]}
+        if m == "GET" and u == "/api/3/roles/role-uuid":
+            return role_rec
         return {"@id": "/api/3/export_templates/t1"}
 
     api, c = _api(handler)
@@ -584,11 +589,14 @@ def test_create_template_role_not_found_raises():
 
 
 def test_create_template_resolves_team_entry():
+    team_rec = {"@id": "/api/3/teams/team-uuid", "name": "SOC Team", "uuid": "team-uuid"}
+
     def handler(m, u, **k):
+        # teams.get(name) lists teams (name→uuid), then fetches the record by uuid.
         if m == "GET" and u == "/api/3/teams":
-            return {
-                "hydra:member": [{"@id": "/api/3/teams/team-uuid", "name": k["params"]["name"], "uuid": "team-uuid"}]
-            }
+            return {"hydra:member": [team_rec]}
+        if m == "GET" and u == "/api/3/teams/team-uuid":
+            return team_rec
         return {"@id": "/api/3/export_templates/t1"}
 
     api, c = _api(handler)
