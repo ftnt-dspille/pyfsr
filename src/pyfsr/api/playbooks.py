@@ -1960,6 +1960,13 @@ class PlaybooksAPI(BaseAPI):
 
         ``request_timeout`` bounds the POST itself (default ``None`` = the client's
         configured timeout) — set it to fail fast on a stalled submit.
+
+        Example:
+            >>> client = demo_client()
+            >>> client.playbooks.trigger_by_name("my-hook").task_id
+            'c0afba58-9dbe-44dd-a6e6-7227e33990dd'
+            >>> client.playbooks.trigger_by_name("my-hook", deferred=True).task_id
+            'c0afba58-9dbe-44dd-a6e6-7227e33990dd'
         """
         if not isinstance(name, str) or not name.strip():
             raise ValueError("trigger_by_name() requires a non-empty name")
@@ -2004,6 +2011,14 @@ class PlaybooksAPI(BaseAPI):
 
         Returns:
             The trigger response, typically ``{"task_id": "<run-uuid>"}``.
+
+        Example:
+            >>> client = demo_client()
+            >>> route = "2b6a1e8e-6f0a-4c6b-9e29-6c2f6a1d8b30"
+            >>> client.playbooks.trigger_action(
+            ...     route, module="alerts", record_uuid="9f0eb603-ac1e-41c3-b47b-444589beed39"
+            ... ).task_id
+            'c0afba58-9dbe-44dd-a6e6-7227e33990dd'
         """
         if not isinstance(route_uuid, str) or not route_uuid.strip():
             raise ValueError("trigger_action() requires a non-empty route_uuid")

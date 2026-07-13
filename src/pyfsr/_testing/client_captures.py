@@ -1727,3 +1727,9 @@ GET_EXECUTION_FAILED_RESPONSE = _FAILED_RUN_RECORD
 WORKFLOW_CONTROL_RESPONSE = {
     "status": "started",
 }
+
+# POST /api/triggers/1/{name} and /api/triggers/1/deferred/{name} — named-webhook trigger.
+TRIGGER_BY_NAME_RESPONSE = {"task_id": "c0afba58-9dbe-44dd-a6e6-7227e33990dd"}
+
+# POST /api/triggers/1/action/{route_uuid} — record-context action trigger.
+TRIGGER_ACTION_RESPONSE = {"task_id": "c0afba58-9dbe-44dd-a6e6-7227e33990dd"}

@@ -230,6 +230,14 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("GET", "/api/wf/api/manual-wf-input/", cap.APPROVAL_MANUAL_INPUT_LIST_RESPONSE),
         # Approval manual input retrieve.
         _entry("POST", "/api/wf/api/manual-wf-input/2/retrieve_wfinput/", cap.APPROVAL_MANUAL_INPUT_RETRIEVE_RESPONSE),
+        # Named/action triggers — any name/route_uuid resolves to the same fixture.
+        _entry("POST", "/api/triggers/1/my-hook", cap.TRIGGER_BY_NAME_RESPONSE),
+        _entry("POST", "/api/triggers/1/deferred/my-hook", cap.TRIGGER_BY_NAME_RESPONSE),
+        _entry(
+            "POST",
+            "/api/triggers/1/action/2b6a1e8e-6f0a-4c6b-9e29-6c2f6a1d8b30",
+            cap.TRIGGER_ACTION_RESPONSE,
+        ),
     ]
 )
 
