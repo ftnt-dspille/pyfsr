@@ -16,6 +16,7 @@ from pyfsr.api.import_config import (
     connectors_only,
     inspect_changes,
     keep_existing,
+    merge_mode,
     overwrite_all,
     skip_schema_changes,
 )
@@ -260,6 +261,55 @@ def test_connector_flags_noop_when_nothing_specified():
     out = connector_flags(options)
     # no toggles given -> include flag not forced on
     assert out["connectors"]["include"] is False
+
+
+# --------------------------------------------------------------------------- merge_mode
+
+
+def _merge_options():
+    # Mirrors the live-verified generated-options shape (8.0.0): per-category
+    # values each carry a whenExists string.
+    return {
+        "recordSets": {
+            "include": True,
+            "values": [
+                {"type": "alerts", "whenExists": "replace", "moduleNotExists": False},
+                {"type": "incidents", "whenExists": "replace", "moduleNotExists": False},
+            ],
+        },
+        "picklistNames": {
+            "include": True,
+            "values": [{"name": "AlertStatus", "whenExists": "keep", "exists": True}],
+        },
+    }
+
+
+def test_merge_mode_sets_record_sets_and_picklists():
+    out = merge_mode(_merge_options(), record_sets="append", picklists="overwrite")
+    assert [v["whenExists"] for v in out["recordSets"]["values"]] == ["append", "append"]
+    assert out["picklistNames"]["values"][0]["whenExists"] == "overwrite"
+
+
+def test_merge_mode_none_leaves_category_untouched():
+    out = merge_mode(_merge_options(), record_sets="append")  # picklists left alone
+    assert out["recordSets"]["values"][0]["whenExists"] == "append"
+    assert out["picklistNames"]["values"][0]["whenExists"] == "keep"
+
+
+def test_merge_mode_rejects_bad_record_set_mode():
+    with pytest.raises(ValueError, match="record_sets must be one of"):
+        merge_mode(_merge_options(), record_sets="clobber")
+
+
+def test_merge_mode_rejects_bad_picklist_mode():
+    with pytest.raises(ValueError, match="picklists must be one of"):
+        merge_mode(_merge_options(), picklists="append")
+
+
+def test_merge_mode_tolerates_missing_category():
+    # a bundle with no record sets / picklists -> no error, nothing to set
+    out = merge_mode({"modules": {"include": True, "values": []}}, record_sets="append", picklists="keep")
+    assert out == {"modules": {"include": True, "values": []}}
 
 
 # --------------------------------------------------------------------------- import_file

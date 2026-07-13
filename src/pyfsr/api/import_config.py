@@ -240,8 +240,8 @@ class ImportConfigAPI(BaseAPI):
             modify_options: callback given the generated ``options`` dict; return
                 the (mutated) dict to ``PUT`` back before triggering. Full control;
                 takes precedence over ``resolve``. See :func:`connectors_only`,
-                :func:`connector_flags`, :func:`overwrite_all`, :func:`keep_existing`,
-                :func:`skip_schema_changes`.
+                :func:`connector_flags`, :func:`merge_mode`, :func:`overwrite_all`,
+                :func:`keep_existing`, :func:`skip_schema_changes`.
             resolve: one-shot conflict strategy instead of a callback — one of
                 ``"overwrite"`` (apply all field changes), ``"keep_existing"``
                 (keep every existing field, add only new ones), or ``"skip_schema"``
@@ -407,6 +407,64 @@ def connector_flags(
                 entry["includeConfigurations"] = include_configurations
         if include_install is not None or include_configurations is not None:
             conn["include"] = True
+    return options
+
+
+#: Valid ``whenExists`` merge modes for the record-set category (live-verified 8.0.0).
+_RECORD_SET_MERGE_MODES = ("replace", "append")
+#: Valid ``whenExists`` merge modes for the picklist category (live-verified 8.0.0).
+_PICKLIST_MERGE_MODES = ("keep", "overwrite")
+
+
+def merge_mode(
+    options: dict[str, Any],
+    *,
+    record_sets: str | None = None,
+    picklists: str | None = None,
+) -> dict[str, Any]:
+    """``modify_options`` helper: set the per-category merge behavior for existing data.
+
+    When a bundle's records or picklists already exist on the target, the import
+    wizard offers a per-category "when it exists" choice. Each entry in the
+    generated options carries a ``whenExists`` string that pyfsr sets here:
+
+    - ``record_sets`` — ``"replace"`` (default) overwrites matching records with
+      the bundle's; ``"append"`` adds the bundle's records alongside the existing
+      ones. Sets ``options.recordSets.values[].whenExists``.
+    - ``picklists`` — ``"keep"`` (default) leaves each already-present picklist as
+      it is; ``"overwrite"`` replaces it with the bundle's version. Sets
+      ``options.picklistNames.values[].whenExists``.
+
+    Pass either to force it across every entry in that category; leave it ``None``
+    to keep whatever the generated options already have. Both vocabularies and
+    their round-trip persistence are live-verified on 8.0.0. Note the read-only
+    ``moduleNotExists`` flag on a record-set entry (the target module is missing):
+    the engine skips such a set regardless of ``record_sets``.
+
+    Example — import records without clobbering existing rows, and refresh
+    picklists::
+
+        client.import_config.import_file(
+            "bundle.zip",
+            modify_options=lambda o: merge_mode(o, record_sets="append", picklists="overwrite"),
+        )
+    """
+    if record_sets is not None:
+        if record_sets not in _RECORD_SET_MERGE_MODES:
+            raise ValueError(f"record_sets must be one of {_RECORD_SET_MERGE_MODES}, not {record_sets!r}")
+        rs = options.get("recordSets")
+        if isinstance(rs, dict):
+            for entry in rs.get("values") or []:
+                if isinstance(entry, dict):
+                    entry["whenExists"] = record_sets
+    if picklists is not None:
+        if picklists not in _PICKLIST_MERGE_MODES:
+            raise ValueError(f"picklists must be one of {_PICKLIST_MERGE_MODES}, not {picklists!r}")
+        pl = options.get("picklistNames")
+        if isinstance(pl, dict):
+            for entry in pl.get("values") or []:
+                if isinstance(entry, dict):
+                    entry["whenExists"] = picklists
     return options
 
 
