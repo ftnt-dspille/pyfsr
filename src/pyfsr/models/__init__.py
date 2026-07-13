@@ -92,6 +92,7 @@ from ._playbooks import (
 )
 from ._schedules import CrontabScheduleModel, ScheduledTask
 from ._system import (
+    Actor,
     AggregateRow,
     ApiKey,
     ApiKeyMaterial,
@@ -219,6 +220,7 @@ __all__ = [
     "ExportJobResult",
     "LogMessage",
     # entity records
+    "Actor",
     "Appliance",
     "Alert",
     "Incident",

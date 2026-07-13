@@ -210,11 +210,17 @@ class ContentHubItem(BaseRecord):
 
 
 class Appliance(BaseRecord):
-    """A FortiSOAR **appliance** actor from ``/api/3/appliances/``.
+    """A FortiSOAR **appliance** actor (``@type == "Appliance"``).
 
-    Appears as ``createUser`` / ``modifyUser`` on records created by the
-    playbook engine itself (``@type == "Appliance"``). Distinct from a human
-    :class:`User` (``@type == "Person"``). ``name`` is typically ``"Playbook"``.
+    One of the concrete subtypes of an *actor*: FortiSOAR stores all security
+    principals in a single ``actors`` table using single-table inheritance keyed
+    on the ``record_type`` discriminator (root-verified against the appliance's
+    Doctrine entities — ``Person`` extends ``Actor``, same ``actors`` table). An
+    ``Appliance`` is the ``record_type == "Appliance"`` sibling of a human
+    :class:`User` (``record_type == "Person"``); it appears as ``createUser`` /
+    ``modifyUser`` on records created by the playbook engine itself, where
+    ``name`` is typically ``"Playbook"``. The ``/api/3/appliances/`` collection
+    is the filtered view of these rows.
     """
 
     name: str | None = None
@@ -231,12 +237,21 @@ class Appliance(BaseRecord):
 class User(BaseRecord):
     """A FortiSOAR **user** (``Person``) record from ``/api/3/people/``.
 
+    A ``Person`` is the human subtype of an *actor*. FortiSOAR keeps every
+    security principal in one ``actors`` table via single-table inheritance keyed
+    on the ``record_type`` discriminator (root-verified: ``Person`` extends the
+    base ``Actor`` entity, same ``actors`` table); the sibling subtypes are
+    :class:`Appliance` (``record_type == "Appliance"``) and the API-key actor
+    (see :class:`ApiKeyUser`). ``@type`` on the wire is ``Person`` and the module
+    slug is ``people`` — the ``/api/3/people`` collection is the person-only view
+    of the shared table, whereas ``/api/3/actors`` spans all subtypes.
+
     This is the entity behind every ``createUser`` / ``modifyUser`` /
     ``assignedTo`` relationship: when a record is pulled with relationships
     expanded those fields arrive as a full Person object, and
     :meth:`BaseRecord.create_user` / :meth:`~BaseRecord.modify_user` /
-    :meth:`~BaseRecord.assigned_to` parse them into this model. ``@type`` on the
-    wire is ``Person``; the module slug is ``people``.
+    :meth:`~BaseRecord.assigned_to` parse them into this model (dispatching to
+    :class:`Appliance` when the expanded ``@type`` is ``Appliance``).
     """
 
     firstname: str | None = None
@@ -269,6 +284,18 @@ class User(BaseRecord):
         return " ".join(parts) or None
 
 
+#: A FortiSOAR **actor** — any security principal in the shared ``actors`` table.
+#: The table is single-table-inheritance keyed on ``record_type``; the two
+#: subtypes that surface as expanded relationship targets (``createUser`` /
+#: ``modifyUser`` / assignee / team member) are the human :class:`User`
+#: (``Person``) and the :class:`Appliance` (playbook engine). The API-key actor
+#: is a third row-level subtype but is not (yet) a modelled relationship target —
+#: its expanded ``@type`` hasn't been captured from a live box, so it is left out
+#: rather than guessed. :meth:`BaseRecord.create_user` / ``modify_user`` return
+#: this union.
+Actor = User | Appliance
+
+
 class Team(BaseRecord):
     """A FortiSOAR **team** record from ``/api/3/teams/``.
 
@@ -281,7 +308,10 @@ class Team(BaseRecord):
     name: str | None = None
     description: str | None = None
     importedBy: list[Any] | None = None
-    actors: list[User | str] | None = None  # member people; expanded User per $relationships=true
+    # Team membership is over actors (the polymorphic principal). In practice
+    # members are people, so expanded rows ($relationships=true) parse as User;
+    # non-person actors are schema-possible but not observed here.
+    actors: list[User | str] | None = None
     parents: list[Any] | None = None
     siblings: list[Any] | None = None
     children: list[Any] | None = None
@@ -549,11 +579,14 @@ class ApiKeyMaterial(BaseRecord):
 class ApiKeyUser(BaseRecord):
     """An **API-key user** from ``/api/auth/users`` (``usersresp[0]``).
 
-    The user record that carries key material — distinct from a People
-    :class:`User`. Not a JSON-LD ``/api/3`` collection (no ``@id``/``@type`` on
-    the wire), but ``BaseRecord`` works fine: ``id_iri``/``record_type`` stay
-    ``None`` and dict-access (``u["uuid"]``, ``u.get("api_key")``) keeps working.
-    The nested ``api_key`` is parsed into :class:`ApiKeyMaterial`.
+    The user record that carries key material — the third *actor* subtype
+    (``user_type == 9``) alongside the human :class:`User` (``Person``) and
+    :class:`Appliance` in the shared ``actors`` table, distinct from a People
+    :class:`User`. This ``/api/auth/users`` shape is not a JSON-LD ``/api/3``
+    collection (no ``@id``/``@type`` on the wire), but ``BaseRecord`` works fine:
+    ``id_iri``/``record_type`` stay ``None`` and dict-access (``u["uuid"]``,
+    ``u.get("api_key")``) keeps working. The nested ``api_key`` is parsed into
+    :class:`ApiKeyMaterial`.
     """
 
     uuid: str | None = None

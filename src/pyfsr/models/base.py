@@ -14,9 +14,12 @@ remain reachable as ``rec["@id"]`` for round-tripping.
 
 from __future__ import annotations
 
-from typing import Any, get_args
+from typing import TYPE_CHECKING, Any, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+if TYPE_CHECKING:
+    from ._system import Actor, User
 
 
 def _is_str_like(t: Any) -> bool:
@@ -147,7 +150,7 @@ class BaseRecord(BaseModel):
         return out
 
     @property
-    def create_user(self) -> Any:
+    def create_user(self) -> Actor | None:
         """The ``createUser`` as a :class:`~pyfsr.models.User` or :class:`~pyfsr.models.Appliance`.
 
         Dispatches on ``@type``: ``"Appliance"`` records (playbook-engine actors)
@@ -160,7 +163,7 @@ class BaseRecord(BaseModel):
         return self._as_actor("createUser", User, Appliance)
 
     @property
-    def modify_user(self) -> Any:
+    def modify_user(self) -> Actor | None:
         """The ``modifyUser`` as a :class:`~pyfsr.models.User` or :class:`~pyfsr.models.Appliance`.
 
         See :attr:`create_user` for dispatch logic.
@@ -170,7 +173,7 @@ class BaseRecord(BaseModel):
         return self._as_actor("modifyUser", User, Appliance)
 
     @property
-    def assigned_to(self) -> Any:
+    def assigned_to(self) -> User | None:
         """The assignee as a :class:`~pyfsr.models.User`, or ``None``.
 
         Reads ``assignedTo`` (alerts/incidents) and falls back to
