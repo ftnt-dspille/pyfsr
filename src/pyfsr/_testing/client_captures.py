@@ -1733,3 +1733,45 @@ TRIGGER_BY_NAME_RESPONSE = {"task_id": "c0afba58-9dbe-44dd-a6e6-7227e33990dd"}
 
 # POST /api/triggers/1/action/{route_uuid} — record-context action trigger.
 TRIGGER_ACTION_RESPONSE = {"task_id": "c0afba58-9dbe-44dd-a6e6-7227e33990dd"}
+
+# GET /api/3/agents — execution-agent records.
+AGENT_RECORD = {
+    "@id": "/api/3/agents/6f5e4d3c-2b1a-4c9d-8e7f-1a2b3c4d5e6f",
+    "@type": "Agent",
+    "uuid": "6f5e4d3c-2b1a-4c9d-8e7f-1a2b3c4d5e6f",
+    "agentId": "edge-1",
+    "name": "edge-1",
+    "active": True,
+    "description": "Edge collector",
+    "router": "/api/3/routers/3a2b1c0d-9e8f-4a7b-6c5d-4e3f2a1b0c9d",
+    "installerType": "/api/3/picklists/d9f874be-3068-4282-9aed-100eba51e61b",
+    "configurationHealth": "/api/3/picklists/e1f2a3b4-c5d6-4e7f-8a9b-0c1d2e3f4a5b",
+}
+
+AGENT_LIST_RESPONSE = {
+    "hydra:member": [AGENT_RECORD],
+    "hydra:totalItems": 1,
+}
+
+# POST /api/integration/agent-installer/ — install-bundle download (real response is a
+# binary .bin; a small placeholder envelope stands in since demo_client() only replays JSON).
+AGENT_INSTALLER_BLOB_RESPONSE = {"placeholder": "install-bundle-bytes"}
+
+# POST /api/integration/install-connector/ — register/activate a connector on an agent.
+AGENT_INSTALL_CONNECTOR_RESPONSE = {"result": "Success"}
+
+# GET /api/integration/agent-heartbeat/{agent}/ — SME-bus liveness probe.
+AGENT_HEARTBEAT_RESPONSE = {"agent": "edge-1", "status": "alive", "latency_ms": 42}
+
+# POST /api/integration/connectors/agents/{name}/{version}/ — per-agent install status.
+AGENT_CONNECTOR_INSTALL_STATUS_RESPONSE = [
+    {
+        "agent": "edge-1",
+        "agentId": "edge-1",
+        "name": "cyops_utilities",
+        "version": "3.7.1",
+        "status": "Completed",
+        "label": "Utilities",
+        "progressPercent": 100,
+    }
+]

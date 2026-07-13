@@ -65,6 +65,7 @@ WHITELIST = [
     "pyfsr.api.solution_packs",
     "pyfsr.api.import_config",
     "pyfsr.api.playbooks",
+    "pyfsr.api.agents",
     "pyfsr.pagination",
 ]
 

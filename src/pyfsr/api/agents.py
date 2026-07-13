@@ -15,13 +15,15 @@ Creating a working agent is a two-step dance, mirroring the product:
    run on the agent host. Connectors can be baked into that bundle, or pushed later with
    ``install_connector()``.
 
-Example::
-
-    router = client.routers.first()                      # the configured secure-message router
-    agent = client.agents.create("edge-1", router=router, installer_type="docker")
-    blob = client.agents.installer(agent["agentId"])     # bytes — write to a .bin and run on host
-    client.agents.install_connector(agent["agentId"], name="cyops_utilities", version="3.7.1")
-    client.agents.delete(agent["uuid"])
+Example:
+    >>> client = demo_client()
+    >>> router = "/api/3/routers/3a2b1c0d-9e8f-4a7b-6c5d-4e3f2a1b0c9d"
+    >>> agent = client.agents.create("edge-1", router=router, installer_type="docker")
+    >>> agent.agentId
+    'edge-1'
+    >>> client.agents.install_connector(agent.agentId, name="cyops_utilities", version="3.7.1")
+    {'result': 'Success'}
+    >>> client.agents.delete(agent.uuid)
 """
 
 from __future__ import annotations
@@ -55,6 +57,12 @@ class AgentsAPI(BaseAPI):
 
         ``active_only=True`` filters to agents whose ``active`` flag is truthy. Each record
         carries at least ``uuid``, ``agentId``, and ``active``.
+
+        Example:
+            >>> client = demo_client()
+            >>> agents = client.agents.list()
+            >>> agents[0].agentId
+            'edge-1'
         """
         members = extract_members(self.client.get(_BASE, params={"$limit": limit}))
         agents = [Agent.model_validate(a) for a in members if isinstance(a, dict)]
@@ -63,7 +71,13 @@ class AgentsAPI(BaseAPI):
         return agents
 
     def get(self, uuid: str) -> Agent:
-        """Fetch a single agent record by ``uuid`` (``GET /api/3/agents/{uuid}``)."""
+        """Fetch a single agent record by ``uuid`` (``GET /api/3/agents/{uuid}``).
+
+        Example:
+            >>> client = demo_client()
+            >>> client.agents.get("6f5e4d3c-2b1a-4c9d-8e7f-1a2b3c4d5e6f").name
+            'edge-1'
+        """
         uuid = _require_uuid(uuid, "get")
         resp = self.client.get(f"{_BASE}/{uuid}")
         return Agent.model_validate(resp if isinstance(resp, dict) else {"uuid": uuid})
@@ -83,6 +97,12 @@ class AgentsAPI(BaseAPI):
         IRI, or its bare uuid. ``installer_type`` is ``"docker"`` (default) or ``"bash"``, or a
         full picklist IRI. Creating the record does **not** install anything; follow with
         :meth:`installer`.
+
+        Example:
+            >>> client = demo_client()
+            >>> router = "/api/3/routers/3a2b1c0d-9e8f-4a7b-6c5d-4e3f2a1b0c9d"
+            >>> client.agents.create("edge-1", router=router).agentId
+            'edge-1'
         """
         if not isinstance(name, str) or not name.strip():
             raise ValueError("create() requires a non-empty agent name")
@@ -96,7 +116,12 @@ class AgentsAPI(BaseAPI):
         return Agent.model_validate(resp if isinstance(resp, dict) else {})
 
     def delete(self, uuid: str) -> None:
-        """Delete an agent record (``DELETE /api/3/agents/{uuid}``). Sends no body."""
+        """Delete an agent record (``DELETE /api/3/agents/{uuid}``). Sends no body.
+
+        Example:
+            >>> client = demo_client()
+            >>> client.agents.delete("6f5e4d3c-2b1a-4c9d-8e7f-1a2b3c4d5e6f")
+        """
         uuid = _require_uuid(uuid, "delete")
         self.client.delete(f"{_BASE}/{uuid}")
 
@@ -114,6 +139,12 @@ class AgentsAPI(BaseAPI):
         bake into the bundle; ``include_last_known_configurations`` ships the agent's last
         known connector configs. Returns the raw bytes — write them to a ``.bin`` and run it
         on the agent host.
+
+        Example:
+            >>> client = demo_client()
+            >>> blob = client.agents.installer("edge-1")
+            >>> isinstance(blob, bytes)
+            True
         """
         if not isinstance(agent_id, str) or not agent_id.strip():
             raise ValueError("installer() requires a non-empty agent_id")
@@ -144,6 +175,11 @@ class AgentsAPI(BaseAPI):
         and ``version`` **must match the appliance's connector catalog** (look it up via
         ``GET /api/integration/connectors/?name=<name>&format=json``); a version the catalog
         doesn't know returns a bare 500. Poll :meth:`connector_install_status` for progress.
+
+        Example:
+            >>> client = demo_client()
+            >>> client.agents.install_connector("edge-1", name="cyops_utilities", version="3.7.1")
+            {'result': 'Success'}
         """
         if not isinstance(agent_id, str) or not agent_id.strip():
             raise ValueError("install_connector() requires a non-empty agent_id")
@@ -167,6 +203,11 @@ class AgentsAPI(BaseAPI):
         upgrade to ``agent_id`` over SME; poll :meth:`connector_install_status`
         for progress. To go the other way (downgrade/reinstall) pass the target
         ``version`` explicitly.
+
+        Example:
+            >>> client = demo_client()
+            >>> client.agents.upgrade_connector("edge-1", name="cyops_utilities", version="3.8.0")
+            {'result': 'Success'}
         """
         if not isinstance(agent_id, str) or not agent_id.strip():
             raise ValueError("upgrade_connector() requires a non-empty agent_id")
@@ -180,6 +221,11 @@ class AgentsAPI(BaseAPI):
         agent_id}``. Distinct from the appliance-level
         :meth:`~pyfsr.api.connectors.ConnectorsAPI.uninstall`, which removes a
         connector from the appliance's self-agent by integer id.
+
+        Example:
+            >>> client = demo_client()
+            >>> client.agents.uninstall_connector("edge-1", name="cyops_utilities", version="3.7.1")
+            {'result': 'Success'}
         """
         if not isinstance(agent_id, str) or not agent_id.strip():
             raise ValueError("uninstall_connector() requires a non-empty agent_id")
@@ -197,6 +243,11 @@ class AgentsAPI(BaseAPI):
         heartbeat to the named agent and returns its response. This reflects the
         *current* SME-bus state, independent of the agent record's asynchronously
         updated ``configurationHealth.itemValue`` field.
+
+        Example:
+            >>> client = demo_client()
+            >>> client.agents.heartbeat("edge-1")["status"]
+            'alive'
         """
         if not isinstance(agent_id, str) or not agent_id.strip():
             raise ValueError("heartbeat() requires a non-empty agent_id")
@@ -216,6 +267,12 @@ class AgentsAPI(BaseAPI):
         ``POST /api/integration/connectors/agents/<connector>/<version>/?format=json`` — this
         endpoint is **POST-only** (a GET is forbidden) and an empty body is enough. Returns
         the list of agent×version rows; pass ``agent_id`` to keep only that agent's row.
+
+        Example:
+            >>> client = demo_client()
+            >>> rows = client.agents.connector_install_status("cyops_utilities", "3.7.1")
+            >>> rows[0].status
+            'Completed'
         """
         path = f"/api/integration/connectors/agents/{connector}/{version}/?format=json"
         if active:
