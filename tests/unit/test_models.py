@@ -115,6 +115,29 @@ def test_dict_field_preserves_expanded_relationship():
     assert alert.modifyUser == {"@id": "/api/3/people/u-1", "name": "Ann"}
 
 
+def test_create_user_dispatches_actor_subtype_by_type():
+    # Actors are single-table-inheritance rows keyed on @type; create_user /
+    # modify_user must dispatch each live-verified subtype to its model.
+    from pyfsr.models import ApiKey, Appliance, User
+
+    person = Alert.model_validate(
+        {"uuid": "a1", "createUser": {"@id": "/api/3/people/u-1", "@type": "Person", "firstname": "Ann"}}
+    )
+    assert isinstance(person.create_user, User)
+
+    engine = Alert.model_validate(
+        {"uuid": "a2", "createUser": {"@id": "/api/3/appliances/e-1", "@type": "Appliance", "name": "Playbook"}}
+    )
+    assert isinstance(engine.create_user, Appliance)
+
+    # record created via an API key: createUser expands to the ApiKey actor
+    # (@type ApiKey, /api/3/api_keys/<uuid>) — live-captured on 8.0.0.
+    apikey = Alert.model_validate(
+        {"uuid": "a3", "modifyUser": {"@id": "/api/3/api_keys/k-1", "@type": "ApiKey", "name": "svc"}}
+    )
+    assert isinstance(apikey.modify_user, ApiKey)
+
+
 def test_str_picklist_field_collapses_to_iri():
     # severity is typed str — the collapse validator flattens the expanded picklist
     # object to its @id IRI; callers use picklist_uuid() to extract the UUID.
