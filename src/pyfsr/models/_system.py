@@ -108,8 +108,11 @@ class ReusableBlock(BaseRecord):
     reusable: bool | None = None
     hasTriggerStep: bool | None = None
     hideInLogs: bool | None = None
+    recordTags: list[str] | None = None  # tag name strings (matches Workflow/Collection)
     #: Editor canvas metadata; a bare ``[]`` when unset (live-verified 8.0).
     metadata: dict[str, Any] | list[Any] | None = None
+    # Editor-canvas geometry (``top``/``left``/``width``/``height``/``isCollapsed``)
+    # also rides the wire; it's positioning noise, left in ``extra`` untyped.
 
 
 class WorkflowRun(BaseRecord):
@@ -129,6 +132,14 @@ class WorkflowRun(BaseRecord):
     node_name: str | None = None
     task_id: str | None = None
     result: Any | None = None
+    # Extra fields the historical-workflows endpoint carries (absent on the live
+    # /api/wf/api/workflows/ active-run listing; live-verified 8.0.0):
+    template_iri: str | None = None  # IRI of the source Workflow (/api/3/workflows/<uuid>)
+    user: Any | None = None  # actor that ran it (IRI or expanded dict)
+    steps: Any | None = None  # per-step execution records
+    env: Any | None = None  # run environment/input snapshot
+    metadata: Any | None = None
+    peer_details: Any | None = None
 
 
 class FeaturedTag(ApiResult):
@@ -296,10 +307,12 @@ class Team(BaseRecord):
     name: str | None = None
     description: str | None = None
     importedBy: list[Any] | None = None
-    # Team membership is over actors (the polymorphic principal). In practice
-    # members are people, so expanded rows ($relationships=true) parse as User;
-    # non-person actors are schema-possible but not observed here.
-    actors: list[User | str] | None = None
+    # Team membership is over actors (the polymorphic principal), not just people.
+    # Expanded rows ($relationships=true) carry an @type and can be any actor
+    # subtype: live-verified on 8.0.0 the built-in "SOC Team" holds both Person
+    # actors and Appliance actors (the "Playbook"/"Access Node" engine appliances),
+    # so this parses as the full Actor union, falling back to the IRI string.
+    actors: list[Actor | str] | None = None
     parents: list[Any] | None = None
     siblings: list[Any] | None = None
     children: list[Any] | None = None
@@ -562,6 +575,11 @@ class ApiKey(BaseRecord):
 #: return this union.
 Actor = User | Appliance | ApiKey
 
+# Team.actors references the Actor union, which is defined only here (after the
+# subtypes). With deferred annotations pydantic leaves the field unresolved until
+# rebuilt, so finalize it now that the union exists.
+Team.model_rebuild()
+
 
 class ApiKeyMaterial(BaseRecord):
     """The nested ``api_key`` block on an :class:`ApiKeyUser`.
@@ -618,8 +636,15 @@ class FileRecord(BaseRecord):
     filename: str | None = None
     mimeType: str | None = None
     size: int | None = None
+    #: Upload timestamp (epoch). The ``/api/3/files`` listing carries this rather
+    #: than create/modifyDate (live-verified 8.0.0).
+    uploadDate: float | None = None
+    thumbnail: Any | None = None  # preview thumbnail ref, null for non-image files
+    assignee: str | None = None  # owning user (empty string when unassigned)
     file: Any | None = None
     metadata: Any | None = None
+    # create/modifyUser/Date are present on some file responses but absent on the
+    # bare /api/3/files listing (which uses uploadDate instead); kept for tolerance.
     createUser: str | dict[str, Any] | None = None
     createDate: float | None = None
     modifyUser: str | dict[str, Any] | None = None
@@ -995,11 +1020,17 @@ class SystemViewTemplate(ApiResult):
     uuid: str | None = None
     name: str | None = None
     module: str | None = None
-    #: Layout kind: ``"list"``, ``"detail"``, or ``"form"``.
+    #: Layout kind: ``"list"``, ``"detail"``, ``"form"``, or ``"settings"``
+    #: (live-verified 8.0).
     viewOptions: str | None = None
-    #: Storage type, e.g. ``"rows"`` or ``"form"``.
+    #: Storage type, e.g. ``"rows"`` / ``"form"`` / ``"gridColumns"`` (``None`` for
+    #: some rows; live-verified 8.0).
     type: str | None = None
     isDefault: bool | None = None
+    #: Platform-shipped flag (vs a user-authored template).
+    system: bool | None = None
+    #: Whether the template is exposed in the layout picker.
+    visible: bool | None = None
     #: The layout body (rows/columns/widgets); shape varies by ``type`` and is a
     #: bare ``[]`` for some modules' empty layouts (live-verified 8.0).
     config: dict[str, Any] | list[Any] | None = None
