@@ -261,11 +261,19 @@ def test_from_file_rejects_non_array(tmp_path):
 
 
 def test_from_sample_catalog_loads():
-    """The captured live sample (one entry per type) validates clean."""
+    """The captured live sample (one entry per type) validates clean.
+
+    The sample lives under the gitignored ``docs/plans/`` (it is a local
+    provenance artifact, not shipped), so skip when it is absent — e.g. a clean
+    CI checkout. The entry-shape validation itself is covered by the unit tests
+    above; this is a "does the real captured catalog still load clean" smoke check.
+    """
     import os
 
     root = os.path.join(os.path.dirname(__file__), "..", "..")
     sample = os.path.join(root, "docs", "plans", "CONTENT_HUB_sample_catalog.json")
+    if not os.path.exists(sample):
+        pytest.skip("local-only sample catalog (docs/plans/ is gitignored) not present")
     with open(sample, encoding="utf-8") as fh:
         by_type = json.load(fh)
     cat = ContentCatalog(by_type.values())
