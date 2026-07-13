@@ -339,8 +339,9 @@ class Notification(BaseRecord):
     The per-user bell-icon notifications the platform raises for record events
     (task assignments, approvals, SLA breaches, …). This is a ``rule`` API entity,
     not a ``/api/3`` module, so there is no JSON-LD envelope — ``uuid`` is the
-    identity and ``id_iri``/``record_type`` stay ``None``. Field set captured from
-    a live 8.0 box.
+    identity and ``id_iri``/``record_type`` stay ``None``. The listing is fetched
+    with **POST** (see :class:`~pyfsr.api.notifications.NotificationsAPI`), not GET.
+    Field set re-verified against a live 8.0.0 box (no drift).
 
     ``content`` is the rendered HTML shown in the notification panel; ``entity_type``
     / ``entity_id`` point at the record the event fired on (e.g. ``"tasks"`` plus a
