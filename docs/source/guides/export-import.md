@@ -264,17 +264,17 @@ field and adds only new ones (append), and
 **no** schema migration at all.
 
 (solution-pack-defaults)=
-### Default behavior when installing or updating a solution pack
+### Default behavior when installing or upgrading a solution pack
 
 A solution pack **is** an export-configuration template (`type: "SolutionPack
 Export"`), and installing one runs the *same* porter engine as
 {meth}`~pyfsr.api.import_config.ImportConfigAPI.import_file`, via
 `POST /api/3/solutionpacks/install?$type=<type>[&$replace=true]`. So the defaults
-above apply — which matters most when you **update** a pack that is already
-installed, because the update can change live data and schema in place. With
+above apply — which matters most when you **upgrade** a pack that is already
+installed, because the upgrade can change live data and schema in place. With
 `$replace` **off (the default)** the install merges:
 
-| Category | Default on install/update | What it can change |
+| Category | Default on install/upgrade | What it can change |
 |---|---|---|
 | **Records** (record sets) | `whenExists = "replace"` | Existing records that **match** the pack's are overwritten with the pack's version; non-matching rows are left alone. Local edits to a matched record are lost. |
 | **Picklists** | `whenExists = "keep"` | Existing picklists are left as-is; only genuinely new picklist items are added. A pack that *renames* or *reorders* items will not change them unless you overwrite. |
@@ -284,9 +284,9 @@ Checking the wizard's **Replace Existing** box (or passing `$replace=true`) flip
 this toward a wholesale overwrite of existing content with the pack's version.
 
 ```{warning}
-A solution-pack **update** is not read-only. By default it can overwrite records
+A solution-pack **upgrade** is not read-only. By default it can overwrite records
 that match the pack's record sets and run a schema migration on its modules. Before
-updating a pack in production, export the affected modules/records first (see the
+upgrading a pack in production, export the affected modules/records first (see the
 Exporting section above) so you have a restore point, and — if you drive the import
 yourself — inspect the generated options with
 {func}`~pyfsr.api.import_config.inspect_changes` and steer the merge with
