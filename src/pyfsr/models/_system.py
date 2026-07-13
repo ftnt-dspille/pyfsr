@@ -473,7 +473,10 @@ class ManualInput(BaseRecord):
     agent_id: str | None = None
     is_approval: bool | None = None
     workflow: str | int | None = None  # encrypted run token (list) or numeric run id (retrieve)
-    # Present only on the single-item retrieve (``retrieve_wfinput``), not the list:
+    # ``input``/``response_mapping`` are richest on the single-item retrieve
+    # (``retrieve_wfinput``); live-verified 8.0.0 they also appear on the list rows
+    # (so both shapes parse) -- ``workflow`` is the only field that differs (int
+    # run id on retrieve vs the list's value).
     input: ManualInputForm | None = None  # the form: {"schema": {title, description, inputVariables}}
     response_mapping: ResponseMapping | None = None  # approval/input options + messages
     custom_fields: dict[str, Any] | None = None  # custom email subject/body/attachment IRIs
