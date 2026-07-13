@@ -1,0 +1,99 @@
+<!doctype html>
+<meta charset=utf-8><title>Content Hub mirror — admin</title>
+<style>
+ body{font:15px/1.5 system-ui,sans-serif;margin:0;background:#0f1115;color:#e6e6e6}
+ header{padding:16px 24px;background:#161a22;border-bottom:1px solid #262b36}
+ h1{font-size:18px;margin:0}main{max-width:900px;margin:0 auto;padding:24px}
+ .card{background:#161a22;border:1px solid #262b36;border-radius:10px;padding:18px;margin:0 0 18px}
+ h2{font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:#8b93a7;margin:0 0 12px}
+ label{display:block;font-size:13px;color:#aeb6c6;margin:10px 0 4px}
+ input,select{width:100%;box-sizing:border-box;padding:8px 10px;background:#0f1115;border:1px solid #333a49;border-radius:6px;color:#e6e6e6}
+ button{margin-top:14px;padding:9px 16px;background:#3b82f6;border:0;border-radius:6px;color:#fff;font-weight:600;cursor:pointer}
+ button.sec{background:#2a2f3a}
+ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:7px 8px;border-bottom:1px solid #262b36;font-size:14px}
+ .tag{font-size:11px;padding:2px 7px;border-radius:20px;background:#243044;color:#93b4ff}
+ .row{display:flex;gap:14px}.row>div{flex:1}
+ .del{color:#ff8080;cursor:pointer;background:none;border:0;padding:0;margin:0;font-size:13px}
+ .msg{padding:10px 12px;border-radius:6px;margin:0 0 14px;display:none}
+ .ok{background:#12331f;color:#7ee2a8}.err{background:#3a1720;color:#ff9aa8}
+</style>
+<header><h1>Content Hub mirror — admin</h1></header>
+<main>
+ <div id=msg class=msg></div>
+ <div class=card>
+  <h2>Add content by artifact</h2>
+  <form id=fup>
+   <label>Connector .tgz / widget .tgz / solution-pack .zip</label>
+   <input type=file name=artifact required>
+   <div class=row>
+    <div><label>Type (blank = auto-detect)</label>
+     <select name=type><option value="">auto</option><option>connector</option><option>widget</option><option>solutionpack</option><option>ai_agent</option></select></div>
+    <div><label>Build number</label><input name=buildNumber value=1></div>
+   </div>
+   <button>Upload &amp; add</button>
+  </form>
+ </div>
+ <div class=card>
+  <h2>Add content manually</h2>
+  <form id=fman>
+   <div class=row>
+    <div><label>Name</label><input name=name required></div>
+    <div><label>Type</label><select name=type><option>connector</option><option>widget</option><option>solutionpack</option><option>ai_agent</option></select></div>
+   </div>
+   <div class=row>
+    <div><label>Version</label><input name=version value=1.0.0 required></div>
+    <div><label>Build number</label><input name=buildNumber value=1></div>
+   </div>
+   <label>Label</label><input name=label>
+   <label>Description</label><input name=description>
+   <div class=row>
+    <div><label>Publisher</label><input name=publisher></div>
+    <div><label>Category</label><input name=category></div>
+   </div>
+   <button>Add entry</button>
+  </form>
+ </div>
+ <div class=card>
+  <h2>Current local content (<span id=n>0</span>)</h2>
+  <table><thead><tr><th>Type</th><th>Name</th><th>Version</th><th>Label</th><th></th></tr></thead>
+  <tbody id=rows></tbody></table>
+  <button class=sec onclick=rebuild()>Rebuild served catalog</button>
+ </div>
+</main>
+<script>
+const TOKEN = localStorage.getItem('chm_token') || (location.hash.slice(1)) || '';
+function H(){return TOKEN?{'Authorization':'Bearer '+TOKEN}:{}}
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function flash(m,ok){const e=document.getElementById('msg');e.textContent=m;e.className='msg '+(ok?'ok':'err');e.style.display='block';setTimeout(()=>e.style.display='none',4000)}
+async function load(){
+ const r=await fetch('/api/content',{headers:H()});
+ if(!r.ok){flash('list failed: '+r.status,false);return}
+ const d=await r.json();document.getElementById('n').textContent=d.count;
+ const tb=document.getElementById('rows');
+ // Build rows with escaped text; bind remove via data-attrs (no inline handler).
+ tb.innerHTML=d.entries.map(e=>
+  `<tr><td><span class=tag>${esc(e.type)}</span></td><td>${esc(e.name)}</td><td>${esc(e.version)}</td><td>${esc(e.label)}</td>`+
+  `<td><button class=del data-type="${esc(e.type)}" data-name="${esc(e.name)}">remove</button></td></tr>`).join('');
+ tb.querySelectorAll('button.del').forEach(b=>b.addEventListener('click',()=>del(b.dataset.type,b.dataset.name)));
+}
+async function del(t,n){
+ if(!confirm('Remove '+t+'/'+n+'?'))return;
+ const r=await fetch('/api/content/'+encodeURIComponent(t)+'/'+encodeURIComponent(n),{method:'DELETE',headers:H()});
+ flash(r.ok?'removed '+n:'remove failed',r.ok);load();
+}
+async function rebuild(){
+ const r=await fetch('/api/rebuild',{method:'POST',headers:H()});
+ const d=await r.json();flash(r.ok?('rebuilt, '+d.total+' entries served'):'rebuild failed',r.ok);
+}
+document.getElementById('fup').onsubmit=async ev=>{
+ ev.preventDefault();const r=await fetch('/api/content',{method:'POST',headers:H(),body:new FormData(ev.target)});
+ const d=await r.json();flash(r.ok?('added '+d.added.name):('error: '+(d.error||r.status)),r.ok);if(r.ok){ev.target.reset();load()}
+};
+document.getElementById('fman').onsubmit=async ev=>{
+ ev.preventDefault();const f=new FormData(ev.target),o={};
+ f.forEach((v,k)=>o[k]=v);o.buildNumber=parseInt(o.buildNumber||'1');
+ const r=await fetch('/api/content',{method:'POST',headers:{...H(),'Content-Type':'application/json'},body:JSON.stringify(o)});
+ const d=await r.json();flash(r.ok?('added '+d.added.name):('error: '+(d.error||JSON.stringify(d.problems||''))),r.ok);if(r.ok){load()}
+};
+load();
+</script>
