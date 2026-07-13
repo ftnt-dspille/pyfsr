@@ -5,8 +5,13 @@ as ``client.search``. (Ad-hoc per-module queries are built with
 :class:`~pyfsr.query.Query` and run via ``client.query``/record sets.)
 
 Example:
-    >>> client.search.search("8.8.8.8", index=["alerts", "incidents"])
-    >>> client.search.run_persisted("alerts", "<query-uuid>", limit=50)
+    >>> client = demo_client()
+    >>> results = client.search.search("8.8.8.8", index=["alerts", "incidents"])
+    >>> results["hits"]["total"]
+    1
+    >>> qid = "6f1c9e2a-6b7a-4b0a-9a1e-2f6a5c9b3d10"
+    >>> client.search.run_persisted("alerts", qid, limit=50)["hydra:totalItems"]
+    1
 """
 
 from __future__ import annotations
@@ -37,6 +42,12 @@ class SearchAPI(BaseAPI):
         ``index`` is the list of module api names to search. Results are RBAC/team
         scoped automatically. Optional: ``size``/``offset`` paging, ``sort``,
         ``search_type``, and ``modify_date_gte``/``modify_date_lte`` (epoch ms).
+
+        Example:
+            >>> client = demo_client()
+            >>> results = client.search.search("8.8.8.8", index=["alerts"])
+            >>> results["hits"]["hits"][0]["_source"]["severity"]
+            'Low'
         """
         if not isinstance(q, str) or len(q.strip()) < 3:
             raise ValueError("search() requires a query string of at least 3 characters")
@@ -68,6 +79,12 @@ class SearchAPI(BaseAPI):
         system query under ``/api/3/system_queries``). ``collection`` is the
         module the query targets. Override paging with ``limit``/``page`` and
         ordering with ``orderby`` (e.g. ``"+name"``).
+
+        Example:
+            >>> client = demo_client()
+            >>> qid = "6f1c9e2a-6b7a-4b0a-9a1e-2f6a5c9b3d10"
+            >>> client.search.run_persisted("alerts", qid, limit=50)["hydra:totalItems"]
+            1
         """
         body: dict[str, Any] = {}
         if limit is not None:

@@ -32,8 +32,13 @@ settles on a responsive schema cache before returning (see
 :meth:`~ImportConfigAPI.wait_until_ready`).
 
 Example:
-    >>> client.import_config.import_file("code-snippet-backup.zip", wait=True)
-    {'status': 'Import Complete', ...}
+    >>> client = demo_client()  # doctest: +SKIP
+    >>> result = client.import_config.import_file("config-backup.zip", wait=False)  # doctest: +SKIP
+    >>> result.status  # doctest: +SKIP
+    'Import Complete'
+
+    .. note::
+        Requires file upload capability and complex state setup, so this example is ``+SKIP``.
 """
 
 from __future__ import annotations
@@ -82,6 +87,12 @@ class ImportConfigAPI(BaseAPI):
 
         ``file_iri`` is the ``@id`` of a ``/api/3/files`` record (what
         ``client.files.upload`` returns under ``@id``).
+
+        Example:
+            >>> client = demo_client()
+            >>> job_uuid = client.import_config.create_job("/api/3/files/880e8400-e29b-41d4-a716-446655440010")
+            >>> job_uuid
+            'aa0e8400-e29b-41d4-a716-446655440013'
         """
         resp = self.client.post("/api/3/import_jobs", data={"status": "InProgress", "file": file_iri})
         uuid = _job_uuid(resp)
@@ -100,7 +111,14 @@ class ImportConfigAPI(BaseAPI):
         self.client.get(f"/api/import/{job_uuid}")
 
     def get_job(self, job_uuid: str) -> ImportJobResult:
-        """Fetch the full import-job record (``options``, ``status``, ``log``)."""
+        """Fetch the full import-job record (``options``, ``status``, ``log``).
+
+        Example:
+            >>> client = demo_client()
+            >>> job = client.import_config.get_job("aa0e8400-e29b-41d4-a716-446655440013")
+            >>> job.status
+            'Import Complete'
+        """
         resp = self.client.get(f"/api/3/import_jobs/{job_uuid}")
         return ImportJobResult.model_validate(resp if isinstance(resp, dict) else {"result": resp})
 

@@ -10,9 +10,16 @@ user here (:meth:`ApiKeyUsersAPI.create`), then attach roles/teams by POSTing it
 returned by ``GET /api/3/api_keys``.
 
 Example:
-    >>> u = client.api_users.create(api_key_validity=365)   # type=9, status=1
-    >>> client.api_users.get(u["uuid"], show_api_key=True)
-    >>> client.api_users.revoke(u["uuid"])
+    >>> client = demo_client()  # doctest: +SKIP
+    >>> u = client.api_users.create(api_key_validity=365)  # doctest: +SKIP
+    >>> u["user_type"]  # doctest: +SKIP
+    9
+    >>> u["status"]  # doctest: +SKIP
+    1
+
+    .. note::
+        Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+        ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
 """
 
 from __future__ import annotations
@@ -53,6 +60,18 @@ class ApiKeyUsersAPI(BaseAPI):
         Unwraps the ``{"usersresp": [user]}`` envelope and parses the user into an
         :class:`~pyfsr.models.ApiKeyUser` (dict-compatible: ``u["uuid"]``,
         ``u["api_key"]["key"]`` still work).
+
+        Example:
+            >>> client = demo_client()  # doctest: +SKIP
+            >>> u = client.api_users.get("550e8400-e29b-41d4-a716-446655440007")  # doctest: +SKIP
+            >>> u["uuid"]  # doctest: +SKIP
+            '550e8400-e29b-41d4-a716-446655440007'
+            >>> u["user_type"]  # doctest: +SKIP
+            9
+
+            .. note::
+                Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+                ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
         """
         params: dict[str, Any] = {"uuid": uuid}
         if show_api_key:
@@ -67,6 +86,18 @@ class ApiKeyUsersAPI(BaseAPI):
         ``uuids`` are ``userId`` values from ``GET /api/3/api_keys``. Keys are
         masked unless ``show_api_key=True`` (and the user was ``retrievable_mode``).
         Returns typed :class:`~pyfsr.models.ApiKeyUser` records.
+
+        Example:
+            >>> client = demo_client()  # doctest: +SKIP
+            >>> users = client.api_users.query(["550e8400-e29b-41d4-a716-446655440007"])  # doctest: +SKIP
+            >>> len(users)  # doctest: +SKIP
+            1
+            >>> users[0]["uuid"]  # doctest: +SKIP
+            '550e8400-e29b-41d4-a716-446655440007'
+
+            .. note::
+                Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+                ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
         """
         body: dict[str, Any] = {"users": list(uuids)}
         if show_api_key:
@@ -94,6 +125,20 @@ class ApiKeyUsersAPI(BaseAPI):
                 ``retrievable_mode`` on). The exception carries the workaround
                 (``client.auth_config.set_api_key_retrievable(False)``) instead
                 of surfacing the cryptic encrypt 400.
+
+        Example:
+            >>> client = demo_client()  # doctest: +SKIP
+            >>> u = client.api_users.create(api_key_validity=365)  # doctest: +SKIP
+            >>> u["uuid"]  # doctest: +SKIP
+            '550e8400-e29b-41d4-a716-446655440007'
+            >>> u["user_type"]  # doctest: +SKIP
+            9
+            >>> u["status"]  # doctest: +SKIP
+            1
+
+            .. note::
+                Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+                ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
         """
         body = {"type": type, "status": status, "api_key_validity": api_key_validity}
         try:
@@ -123,6 +168,16 @@ class ApiKeyUsersAPI(BaseAPI):
 
         Prefer the named convenience wrappers (:meth:`revoke`, :meth:`activate`,
         …) over calling this directly.
+
+        Example:
+            >>> client = demo_client()  # doctest: +SKIP
+            >>> u = client.api_users.lifecycle("550e8400-e29b-41d4-a716-446655440007", "REVOKE")  # doctest: +SKIP
+            >>> u["uuid"]  # doctest: +SKIP
+            '550e8400-e29b-41d4-a716-446655440007'
+
+            .. note::
+                Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+                ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
         """
         op = operation.upper()
         if op not in _OPS:

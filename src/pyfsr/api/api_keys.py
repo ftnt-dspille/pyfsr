@@ -22,9 +22,12 @@ mirroring the product:
 Accessed as ``client.api_keys``.
 
 Example:
-    >>> u = client.api_users.create(api_key_validity=365)
-    >>> plaintext = u["api_key"]["key"]
-    >>> client.api_keys.create(name="repro-teamb", user_uuid=u["uuid"], teams=["TeamB"])
+    >>> client = demo_client()
+    >>> keys = client.api_keys.list()
+    >>> len(keys)
+    1
+    >>> keys[0]["name"]
+    'api-key-demo'
 """
 
 from __future__ import annotations
@@ -78,11 +81,28 @@ class ApiKeysAPI(BaseAPI):
 
         Each member carries ``name``, ``userId``, ``roles``, ``teams`` (the key
         value itself is masked).
+
+        Example:
+            >>> client = demo_client()
+            >>> keys = client.api_keys.list()
+            >>> len(keys)
+            1
+            >>> keys[0]["name"]
+            'api-key-demo'
         """
         return [ApiKey.model_validate(m) for m in extract_members(self.client.get(_BASE, params=params))]
 
     def get(self, uuid: str) -> ApiKey:
-        """Fetch one API-key binding by uuid (``GET /api/3/api_keys/{uuid}``)."""
+        """Fetch one API-key binding by uuid (``GET /api/3/api_keys/{uuid}``).
+
+        Example:
+            >>> client = demo_client()
+            >>> key = client.api_keys.get("660e8400-e29b-41d4-a716-446655440008")
+            >>> key["name"]
+            'api-key-demo'
+            >>> key["userId"]
+            '550e8400-e29b-41d4-a716-446655440007'
+        """
         return ApiKey.model_validate(self.client.get(f"{_BASE}/{uuid}"))
 
     def create(
@@ -103,6 +123,15 @@ class ApiKeysAPI(BaseAPI):
                 :meth:`~pyfsr.api.roles.RolesAPI.role_uuid_by_name`).
             teams: optional team IRIs or names (resolved via
                 :meth:`~pyfsr.api.teams.TeamsAPI.team_uuid_by_name`).
+
+        Example:
+            >>> client = demo_client()
+            >>> key = client.api_keys.create(
+            ...     name="test-key",
+            ...     user_uuid="550e8400-e29b-41d4-a716-446655440007"
+            ... )
+            >>> key["name"]
+            'api-key-demo'
         """
         body: dict[str, Any] = {"name": name, "userId": user_uuid}
         if roles is not None:
@@ -116,6 +145,12 @@ class ApiKeysAPI(BaseAPI):
 
         Pass only the keys to change, e.g. ``teams=[...]``, ``roles=[...]``.
         ``roles``/``teams`` accept IRIs or names, like :meth:`create`.
+
+        Example:
+            >>> client = demo_client()
+            >>> key = client.api_keys.update("660e8400-e29b-41d4-a716-446655440008", name="updated-key")
+            >>> key["name"]
+            'api-key-demo'
         """
         if "roles" in fields and fields["roles"] is not None:
             fields["roles"] = self._resolve_roles(list(fields["roles"]))
