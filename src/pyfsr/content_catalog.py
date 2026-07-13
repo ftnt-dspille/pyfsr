@@ -51,9 +51,11 @@ import requests
 from .exceptions import RepoArtifactNotFoundError, RepoUnreachableError
 
 #: ``name``/``version`` become filesystem path segments in the served tree
-#: (``{name}-{version}/{build}/…``), so they must not contain path separators or
-#: ``..``. Every live-catalog value matches this (e.g. ``abuseipdb`` / ``2.0.0``).
-_SLUG_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+#: (``{name}-{version}/{build}/…``), so they must not contain path separators,
+#: ``..``, or control characters. We reject exactly those (not an allowlist —
+#: real catalog names legitimately contain ``&``, e.g. ``mITREATT&CKThreatHunting``);
+#: :meth:`ContentCatalog.write_tree` adds a realpath-containment backstop.
+_PATH_HOSTILE = re.compile(r"[/\\\x00-\x1f\x7f]")
 
 #: Path a served mirror exposes the manifest at, relative to the repo host.
 _CATALOG_PATH = "/content-hub/content-hub.json"
@@ -335,13 +337,14 @@ def validate_entry(entry: Any) -> list[str]:
         problems.append(f"unknown type {etype!r} (expected one of {sorted(CATALOG_TYPES)})")
 
     # ``name``/``version`` are interpolated into filesystem paths by
-    # :meth:`ContentCatalog.write_tree`; reject anything that could escape the
-    # served root (path separators, ``..``, control chars). This is the primary
-    # guard for untrusted entries (e.g. a manual add via the mirror admin API).
+    # :meth:`ContentCatalog.write_tree`; reject only what could escape the served
+    # root (path separators, ``..``, control chars) — not otherwise-unusual but
+    # safe characters like ``&`` that appear in real catalog names. This is the
+    # primary guard for untrusted entries (e.g. a manual add via the mirror API).
     for key in ("name", "version"):
         val = entry.get(key)
-        if isinstance(val, str) and val and (not _SLUG_RE.match(val) or ".." in val):
-            problems.append(f"{key!r} has illegal characters {val!r} (allowed: letters, digits, . _ -; no '..')")
+        if isinstance(val, str) and val and (_PATH_HOSTILE.search(val) or ".." in val or val in (".", "..")):
+            problems.append(f"{key!r} has path-unsafe characters {val!r} (no '/', '\\', '..', or control chars)")
 
     build = entry.get("buildNumber")
     if build is not None and not isinstance(build, int):

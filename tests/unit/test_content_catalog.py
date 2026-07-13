@@ -154,15 +154,15 @@ def test_validate_entry_non_dict():
     assert validate_entry("nope") == ["entry is not a JSON object (got str)"]
 
 
-@pytest.mark.parametrize("bad", ["../evil", "a/b", "..", "x\x00y", "a b", "foo/../bar"])
+@pytest.mark.parametrize("bad", ["../evil", "a/b", "..", "x\x00y", "foo/../bar", "a\\b", "x\ty"])
 def test_validate_entry_rejects_path_traversal_names(bad):
     e = build_entry(name="ok", type="connector", version="1.0.0", buildNumber=1, label="X")
     e["name"] = bad
-    assert any("illegal characters" in p for p in validate_entry(e)), bad
+    assert any("path-unsafe" in p for p in validate_entry(e)), bad
     e2 = build_entry(name="ok", type="connector", version="1.0.0", buildNumber=1, label="X")
     e2["version"] = bad
     e2["availableVersions"] = [bad]
-    assert any("illegal characters" in p for p in validate_entry(e2)), bad
+    assert any("path-unsafe" in p for p in validate_entry(e2)), bad
 
 
 def test_validate_entry_allows_normal_slugs():
@@ -173,6 +173,19 @@ def test_validate_entry_allows_normal_slugs():
         buildNumber=1,
         label="X",
         availableVersions=["2.0.0-rc.1"],
+    )
+    assert validate_entry(e) == []
+
+
+def test_validate_entry_allows_ampersand_names():
+    # real Fortinet solution packs carry '&' in the name (e.g. mITREATT&CKThreatHunting);
+    # it is not path-hostile, so it must be accepted
+    e = build_entry(
+        name="mITREATT&CKThreatHunting",
+        type="solutionpack",
+        version="1.0.0",
+        buildNumber=1,
+        label="MITRE ATT&CK Threat Hunting",
     )
     assert validate_entry(e) == []
 
