@@ -203,8 +203,8 @@ def test_write_tree_refuses_traversal_even_without_validate(tmp_path):
 # -- ContentCatalog: add / merge / dedup -------------------------------------
 
 
-def _entry(name, type="connector", version="1.0.0", build=1):
-    return build_entry(name=name, type=type, version=version, buildNumber=build, label=name)
+def _entry(name, type="connector", version="1.0.0", build=1, **extra):
+    return build_entry(name=name, type=type, version=version, buildNumber=build, label=name, **extra)
 
 
 def test_add_dedups_by_type_and_name_last_wins():
@@ -228,6 +228,30 @@ def test_merge_argument_wins():
     by_name = {e["name"]: e for e in local}
     assert by_name["shared"]["version"] == "1.0.0"
     assert {"shared", "localonly", "uponly"} == set(by_name)
+
+
+def test_merge_bumps_published_date_past_upstream():
+    # An override with no (or older) publishedDate is bumped to upstream+1 so a
+    # scheduled (non --force) appliance sync applies it.
+    upstream = ContentCatalog([_entry("shared", publishedDate=1_000)])
+    local = ContentCatalog([_entry("shared", version="2.0.0")])  # no publishedDate
+    upstream.merge(local)
+    assert upstream.to_list()[0]["publishedDate"] == 1_001
+    assert upstream.to_list()[0]["version"] == "2.0.0"
+
+
+def test_merge_keeps_newer_local_published_date():
+    upstream = ContentCatalog([_entry("shared", publishedDate=1_000)])
+    local = ContentCatalog([_entry("shared", version="2.0.0", publishedDate=5_000)])
+    upstream.merge(local)
+    assert upstream.to_list()[0]["publishedDate"] == 5_000
+
+
+def test_merge_no_bump_when_disabled():
+    upstream = ContentCatalog([_entry("shared", publishedDate=1_000)])
+    local = ContentCatalog([_entry("shared", version="2.0.0")])
+    upstream.merge(local, bump_published=False)
+    assert "publishedDate" not in upstream.to_list()[0]
 
 
 def test_remove_and_counts():
@@ -509,15 +533,26 @@ def test_write_tree_copies_artifact_and_icon(tmp_path):
     assert icon_dst.read_bytes() == b"PNGBYTES"
 
 
-def test_write_tree_preserves_tgz_extension(tmp_path):
-    # a .tgz source (connectors/widgets) must be served as .tgz, not renamed .zip
+def test_write_tree_serves_artifact_at_zip_path(tmp_path):
+    # The catalog always advertises {name}-{version}.zip (artifact_path), so a
+    # source of any extension is served at the .zip path the manifest implies.
     art = tmp_path / "conn-1.0.0.tgz"
     art.write_bytes(b"TGZBYTES")
     cat = ContentCatalog([build_entry(name="conn", type="connector", version="1.0.0", buildNumber=1, label="Conn")])
     out = tmp_path / "out"
     cat.write_tree(str(out), artifacts={("connector", "conn"): str(art)})
-    tgz_dst = out / "content-hub" / "conn-1.0.0" / "1" / "conn-1.0.0.tgz"
-    assert tgz_dst.read_bytes() == b"TGZBYTES"
+    zip_dst = out / "content-hub" / "conn-1.0.0" / "1" / "conn-1.0.0.zip"
+    assert zip_dst.read_bytes() == b"TGZBYTES"
+    # no legacy .tgz served
+    assert not (out / "content-hub" / "conn-1.0.0" / "1" / "conn-1.0.0.tgz").exists()
+
+
+def test_write_tree_emits_build_json(tmp_path):
+    cat = ContentCatalog([build_entry(name="conn", type="connector", version="1.0.0", buildNumber=42, label="Conn")])
+    cat.write_tree(str(tmp_path))
+    for sub in ("42", "latest"):
+        bj = tmp_path / "content-hub" / "conn-1.0.0" / sub / "build.json"
+        assert json.loads(bj.read_text()) == {"buildNumber": 42}
 
 
 def test_write_tree_refuses_invalid_catalog(tmp_path):
