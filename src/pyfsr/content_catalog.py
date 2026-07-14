@@ -264,6 +264,30 @@ def _infer_type(info: dict[str, Any]) -> str:
     return "widget"
 
 
+def _with_published_after(entry: dict[str, Any], replaced: dict[str, Any]) -> dict[str, Any]:
+    """Return ``entry`` guaranteed a ``publishedDate`` strictly newer than the
+    ``replaced`` (upstream) entry's.
+
+    ``publishedDate`` is the appliance's "is this newer?" gate: a *scheduled*
+    (non-``--force``) content-hub sync only overwrites a synced item when the
+    incoming ``publishedDate`` is greater. So an override whose date isn't newer
+    than the upstream item it replaces is silently ignored until the next forced
+    sync. When ``entry`` already carries a newer date it's returned untouched;
+    otherwise a shallow copy is returned with ``publishedDate = replaced + 1`` (a
+    minimal bump — epoch seconds on the wire). If the replaced entry has no
+    ``publishedDate`` there's nothing to beat, so ``entry`` is returned as-is.
+    """
+    old = replaced.get("publishedDate")
+    if not isinstance(old, (int, float)):
+        return entry
+    cur = entry.get("publishedDate")
+    if isinstance(cur, (int, float)) and cur > old:
+        return entry
+    bumped = dict(entry)
+    bumped["publishedDate"] = int(old) + 1
+    return bumped
+
+
 def read_artifact_info(path: str) -> dict[str, Any]:
     """Extract and parse the ``info.json`` bundled inside an artifact archive.
 
@@ -471,16 +495,31 @@ class ContentCatalog:
             raise TypeError(f"entry must be a dict, got {type(entry).__name__}")
         self._by_key[_entry_key(entry)] = entry
 
-    def merge(self, other: ContentCatalog | Iterable[dict[str, Any]]) -> None:
+    def merge(
+        self,
+        other: ContentCatalog | Iterable[dict[str, Any]],
+        *,
+        bump_published: bool = True,
+    ) -> None:
         """Splice another catalog in, its entries winning on ``type``+``name`` collisions.
 
         Use to union Fortinet's mirrored catalog with your local one: build the
-        local catalog, then ``local.merge(upstream)`` to keep local overrides, or
-        ``upstream.merge(local)`` to let local win — merge always lets the
-        argument win, so order the call to match your intent.
+        upstream catalog, then ``upstream.merge(local)`` to let your local entries
+        win — merge always lets the argument (``other``) win, so order the call to
+        match your intent.
+
+        With ``bump_published=True`` (default), any incoming entry that *replaces*
+        an existing one is given a ``publishedDate`` strictly newer than the entry
+        it overrides (see :func:`_with_published_after`), so a *scheduled*
+        (non-``--force``) appliance sync actually applies the override instead of
+        silently keeping the upstream item. Pass ``False`` to splice verbatim.
         """
         entries = other.to_list() if isinstance(other, ContentCatalog) else other
         for e in entries:
+            if bump_published:
+                existing = self._by_key.get(_entry_key(e))
+                if existing is not None:
+                    e = _with_published_after(e, existing)
             self.add(e)
 
     def remove(self, *, type: str, name: str) -> bool:
@@ -542,12 +581,15 @@ class ContentCatalog:
 
             {root}/content-hub/content-hub.json
             {root}/content-hub/{name}-{version}/{buildNumber}/info.json
+            {root}/content-hub/{name}-{version}/{buildNumber}/build.json
             {root}/content-hub/{name}-{version}/latest/info.json
 
         Each entry's own dict is written as its ``info.json`` at both the numbered
         build dir and the ``latest/`` copy (matching the live layout where both
-        exist). If ``artifacts`` / ``icons`` map an entry's ``(type, name)`` to a
-        local file, that file is copied to the artifact/icon path the sync expects.
+        exist), alongside a ``build.json`` (``{"buildNumber": N}``) the appliance
+        reads. If ``artifacts`` / ``icons`` map an entry's ``(type, name)`` to a
+        local file, that file is copied to the ``.zip`` artifact / icon path the
+        sync expects (:func:`artifact_path` / :func:`icon_path`).
 
         With ``validate=True`` (default) a non-empty :meth:`validate` raises
         ``ValueError`` before anything is written, so a bad catalog never produces
@@ -582,17 +624,25 @@ class ContentCatalog:
             os.makedirs(latest_dir, exist_ok=True)
 
             info_json = json.dumps(entry, indent=2, ensure_ascii=False)
+            # ``build.json`` (= ``{"buildNumber": N}``) sits beside ``info.json`` on
+            # the live wire; the appliance reads it to learn the numeric build. Emit
+            # it in both dirs so the ``latest/`` copy is self-describing too.
+            build_json = json.dumps({"buildNumber": int(build)})
             for d in (build_dir, latest_dir):
                 with open(os.path.join(d, "info.json"), "w", encoding="utf-8") as fh:
                     fh.write(info_json)
+                with open(os.path.join(d, "build.json"), "w", encoding="utf-8") as fh:
+                    fh.write(build_json)
 
             key = _entry_key(entry)
             if artifacts and key in artifacts:
-                # Preserve the source extension — solution packs ship as ``.zip``
-                # but connectors/widgets as ``.tgz``; the appliance fetches the
-                # artifact at whatever name the catalog implies for its type.
-                ext = os.path.splitext(artifacts[key])[1] or ".zip"
-                shutil.copyfile(artifacts[key], os.path.join(build_dir, f"{name}-{version}{ext}"))
+                # Serve the artifact at the ``.zip`` path the catalog advertises
+                # (:func:`artifact_path` is always ``{name}-{version}.zip``, matching
+                # the live wire) so the manifest-derived download URL resolves. A
+                # connector's content-hub artifact is a metadata-only zip (built by
+                # the mirror's connector_publish); its runnable payload ships in the
+                # RPM, not here.
+                shutil.copyfile(artifacts[key], os.path.join(build_dir, f"{name}-{version}.zip"))
             if icons and key in icons:
                 img_dir = os.path.join(build_dir, "images")
                 os.makedirs(img_dir, exist_ok=True)

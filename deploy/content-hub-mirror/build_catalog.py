@@ -132,14 +132,16 @@ def build_catalog(
         # The appliance sync only overwrites an existing record when the override's
         # publishedDate is STRICTLY greater than the synced one (a --force sync
         # bypasses this, but scheduled syncs do not). buildNumber/version do NOT
-        # gate this; publishedDate does.
+        # gate this; publishedDate does. cat.merge(local) below auto-bumps an
+        # override's publishedDate past Fortinet's, so scheduled syncs apply it —
+        # just note when that bump is happening for visibility.
         ours = e.get("publishedDate") or 0
         theirs = up.get("publishedDate") or 0
         if ours <= theirs:
             log(
-                f"[build] WARNING: local override {key[0]}/{key[1]} has "
-                f"publishedDate={ours} <= Fortinet's {theirs}; scheduled syncs will "
-                f"KEEP Fortinet's version. Set a newer publishedDate to make yours win."
+                f"[build] note: local override {key[0]}/{key[1]} publishedDate "
+                f"{ours} <= Fortinet's {theirs}; auto-bumping to {theirs + 1} so "
+                f"scheduled syncs apply your version."
             )
     cat.merge(local)
     log(f"[build] upstream={upstream_n} + local={len(local)} -> merged={len(cat)} {cat.counts()}")
