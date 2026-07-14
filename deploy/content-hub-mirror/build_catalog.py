@@ -95,7 +95,52 @@ def build_catalog(
         cat = ContentCatalog()
 
     upstream_n = len(cat)
+    # Map upstream entries by (type, name) so we can warn when a local entry
+    # shadows a Fortinet one but would lose the sync's "is this newer?" test.
+    upstream_entries = cat.to_list()
+    upstream_by_key = {(str(e.get("type", "")), str(e.get("name", ""))): e for e in upstream_entries}
+
+    def _categories(entry):
+        c = entry.get("category")
+        if isinstance(c, str):
+            return [c] if c.strip() else []
+        return [x for x in (c or []) if isinstance(x, str) and x.strip()]
+
+    # The appliance sync rejects an entry outright (FSR_CH_0000001) if its category
+    # isn't in the "Solution Pack Category" picklist. Every category the upstream
+    # catalog already uses IS valid by definition; fall back to the shipped set when
+    # there is no upstream to learn from. This is a warning only — never fatal.
+    from pyfsr.content_catalog import SOLUTION_PACK_CATEGORIES
+
+    known_categories = {c for e in upstream_entries for c in _categories(e)}
+    known_categories |= set(SOLUTION_PACK_CATEGORIES)
+
     local = load_local_entries(local_dir)
+    for e in local:
+        for c in _categories(e):
+            if c not in known_categories:
+                log(
+                    f"[build] WARNING: local entry {e.get('type')}/{e.get('name')} "
+                    f"category {c!r} is not a known 'Solution Pack Category'; the "
+                    f"appliance sync will REJECT this entry. Use a category the "
+                    f"upstream catalog uses, or leave it empty."
+                )
+        key = (str(e.get("type", "")), str(e.get("name", "")))
+        up = upstream_by_key.get(key)
+        if not up:
+            continue  # brand-new (type, name) — always inserts
+        # The appliance sync only overwrites an existing record when the override's
+        # publishedDate is STRICTLY greater than the synced one (a --force sync
+        # bypasses this, but scheduled syncs do not). buildNumber/version do NOT
+        # gate this; publishedDate does.
+        ours = e.get("publishedDate") or 0
+        theirs = up.get("publishedDate") or 0
+        if ours <= theirs:
+            log(
+                f"[build] WARNING: local override {key[0]}/{key[1]} has "
+                f"publishedDate={ours} <= Fortinet's {theirs}; scheduled syncs will "
+                f"KEEP Fortinet's version. Set a newer publishedDate to make yours win."
+            )
     cat.merge(local)
     log(f"[build] upstream={upstream_n} + local={len(local)} -> merged={len(cat)} {cat.counts()}")
 

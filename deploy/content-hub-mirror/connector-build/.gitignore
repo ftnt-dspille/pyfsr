@@ -1,0 +1,4 @@
+# Vendor connector tarballs and built RPMs never ship in the public repo.
+src/
+dist/
+.build-tmp/

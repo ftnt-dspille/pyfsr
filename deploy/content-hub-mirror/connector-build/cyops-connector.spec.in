@@ -1,0 +1,149 @@
+%global connector_name @NAME@
+%global mod_version @MOD_VERSION@
+
+Name:           cyops-connector-%{connector_name}
+Version:        @VERSION@
+Release:        @RELEASE@
+Summary:        FortiSOAR %{connector_name} connector (mirror rebuild)
+
+License:        Commercial
+Group:          Applications/Internet
+# noarch: the payload is a connector tgz (python) + shell scriptlets — no
+# compiled content, so the RPM is architecture-independent. It still installs on
+# the x86_64 appliance (noarch is compatible), and it builds natively on any
+# host arch (no x86_64 emulation needed). Any per-python .so binaries the
+# connector ships live inside the tgz and are symlinked by %post, not by the RPM.
+BuildArch:      noarch
+Source0:        %{connector_name}.tgz
+
+%description
+FortiSOAR %{connector_name} connector, repackaged by the self-hosted Content
+Hub mirror so the appliance installs the mirror-advertised version through the
+normal yum/content-hub path. Payload is the connector tgz; the post scriptlet
+hands it to the integrations framework exactly as the upstream RPM does.
+
+%prep
+# nothing to unpack; the source tgz is dropped verbatim during install
+
+%build
+# no compilation; the connector tgz is the artifact
+
+%install
+rm -rf %{buildroot}
+mkdir -p %{buildroot}/opt/cyops-connector-%{connector_name}
+install -m 0644 %{SOURCE0} %{buildroot}/opt/cyops-connector-%{connector_name}/%{connector_name}.tgz
+
+%files
+%defattr(-,root,root,-)
+/opt/cyops-connector-%{connector_name}/%{connector_name}.tgz
+
+%pre
+mkdir -p /var/log/cyops/install
+{
+    set -x
+    echo "Date: `date`"
+    echo "cyops-connector-%{connector_name}: pre"
+    echo "============================================"
+    echo "============================================"
+} >> /var/log/cyops/install/connectors.log 2>&1
+
+# NOTE: %pre/%post/%postun below mirror the *8.0* (Rocky 9 / el9) upstream
+# connector RPM, NOT the older el7 layout: it detects RUN_USER (nginx OR
+# fortisoar), extracts into /opt/cyops/configs/integrations/connectors, and
+# symlinks any per-python binaries. The el7 scriptlet hardcoded `sudo -u nginx`
+# and so silently no-op'd on 8.0 (connector extracted but never activated).
+%post
+mkdir -p /var/log/cyops/install
+{
+    RUN_USER=$(
+        if id nginx >/dev/null 2>&1; then echo nginx
+        elif id fortisoar >/dev/null 2>&1; then echo fortisoar
+        fi
+    )
+    [ -n "$RUN_USER" ] || { echo "Neither nginx nor fortisoar user found"; exit 1; }
+    echo "Current User: $RUN_USER"
+    set -x
+    echo "Date: `date`"
+    echo "cyops-connector-%{connector_name}: post"
+    echo "============================================"
+
+    restorecon -R /opt/cyops-connector-%{connector_name} 2>/dev/null || true
+
+    mod_version=%{mod_version}
+    connector_name_version=%{connector_name}_${mod_version}
+    connector_root_dir="/opt/cyops/configs/integrations/connectors"
+    connector_dir="${connector_root_dir}/${connector_name_version}"
+
+    # Symlink per-python-version compiled binaries if the connector ships any.
+    handle_binaries() {
+        local connector_dir=$1
+        [ -d "${connector_dir}/binaries" ] || { echo "No binaries dir; skipping"; return 0; }
+        PYTHON_VERSION=$(/opt/cyops-integrations/.env/bin/python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        case "${PYTHON_VERSION}" in
+            3.9)  VERSION_DIR="py39" ;;
+            3.12) VERSION_DIR="py312" ;;
+            *) echo "ERROR: Unsupported Python ${PYTHON_VERSION}"; exit 1 ;;
+        esac
+        BINARIES_DIR="${connector_dir}/binaries/${VERSION_DIR}"
+        if [ -d "${BINARIES_DIR}" ]; then
+            ( cd "${BINARIES_DIR}" && find . -type f -name "*.so" | while read -r so_file; do
+                rel_path="${so_file#./}"; target_link="${connector_dir}/${rel_path}"
+                mkdir -p "$(dirname "${target_link}")"
+                ln -sf "${BINARIES_DIR}/${rel_path}" "${target_link}"
+            done )
+        elif ! find "${connector_dir}" -name "*.so" -not -path "*/binaries/*" | grep -q .; then
+            echo "ERROR: No binaries for ${VERSION_DIR}"; exit 1
+        fi
+    }
+
+    if [ $1 = 1 ]; then
+        cp /opt/cyops-connector-%{connector_name}/%{connector_name}.tgz /opt/cyops-integrations/integrations/connectors/
+        cd /opt/cyops-integrations/integrations
+        sudo -u $RUN_USER /opt/cyops-integrations/.env/bin/python3 manage.py connectors
+        handle_binaries "${connector_dir}"
+        rm -rf /opt/cyops-integrations/integrations/connectors/%{connector_name}.tgz
+    elif [ $1 -gt 1 ]; then
+        if [ -f /opt/cyops-connector-%{connector_name}/compatibility.txt ]; then
+            compatibility=`cat /opt/cyops-connector-%{connector_name}/compatibility.txt`
+            cd /opt/cyops-integrations/integrations
+            sudo -u $RUN_USER /opt/cyops-integrations/.env/bin/python3 /opt/cyops-connector-%{connector_name}/install.py --name %{connector_name} --compatibility ${compatibility}
+        else
+            cp /opt/cyops-connector-%{connector_name}/%{connector_name}.tgz /opt/cyops-integrations/integrations/connectors/
+            cd /opt/cyops-integrations/integrations
+            sudo -u $RUN_USER /opt/cyops-integrations/.env/bin/python3 manage.py connectors
+            handle_binaries "${connector_dir}"
+            rm -rf /opt/cyops-integrations/integrations/connectors/%{connector_name}.tgz
+        fi
+    fi
+
+    reqs=/opt/cyops-integrations/integrations/connectors/${connector_name_version}/requirements.txt
+    if [ -f "$reqs" ]; then
+        rm -rf ~/.cache/pip/
+        export LC_ALL="en_US.UTF-8"; export TMPDIR=./tmp
+        sudo -u $RUN_USER /opt/cyops-integrations/.env/bin/python3 /opt/cyops-integrations/.env/bin/pip3 install -r "$reqs"
+    fi
+    rm -rf /opt/cyops-integrations/integrations/tmp
+    restorecon -R /opt/cyops-connector-%{connector_name} 2>/dev/null || true
+    echo "============================================"
+} >> /var/log/cyops/install/connectors.log 2>&1
+
+%postun
+mkdir -p /var/log/cyops/install
+{
+    RUN_USER=$(
+        if id nginx >/dev/null 2>&1; then echo nginx
+        elif id fortisoar >/dev/null 2>&1; then echo fortisoar
+        fi
+    )
+    set -x
+    echo "cyops-connector-%{connector_name}: postun"
+    if [ $1 = 0 ] && [ -n "$RUN_USER" ]; then
+        cd /opt/cyops-integrations/integrations
+        sudo -u $RUN_USER /opt/cyops-integrations/.env/bin/python3 manage.py deleteconnector %{connector_name} %{version} || true
+        rm -rf /opt/cyops-connector-%{connector_name}
+    fi
+} >> /var/log/cyops/install/connectors.log 2>&1
+
+%changelog
+* Mon Jul 13 2026 content-hub-mirror - @VERSION@-@RELEASE@
+- Mirror rebuild of the %{connector_name} connector at the advertised version

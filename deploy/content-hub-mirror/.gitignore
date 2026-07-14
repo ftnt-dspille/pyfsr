@@ -13,3 +13,6 @@ upstream/
 # uploaded artifacts (regenerated at runtime)
 artifacts/*.zip
 artifacts/*.tgz
+
+# Local connector RPM repo — vendor RPMs + generated repodata, never committed
+connectors-local/
