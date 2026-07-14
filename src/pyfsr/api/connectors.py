@@ -981,7 +981,7 @@ class ConnectorsAPI(BaseAPI):
                         }
                     )
 
-            branch = (field.get("onchange") or {}).get(value)
+            branch = (field.get("onchange") or {}).get(_onchange_key(value))
             if isinstance(branch, list):
                 self._collect_field_problems(
                     branch,

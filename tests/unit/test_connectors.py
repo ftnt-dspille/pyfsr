@@ -557,10 +557,22 @@ _HTTP_SCHEMA = {
                     ],
                 },
             },
+            {"name": "default_headers", "title": "Default Headers", "type": "json", "required": False},
             {"name": "verify_ssl", "title": "Verify SSL", "type": "checkbox", "required": False},
         ]
     }
 }
+
+
+def test_validate_config_tolerates_dict_valued_field():
+    """A json/dict field value must not crash the onchange walk (unhashable key)."""
+    api, _ = _api(post_resp=_HTTP_SCHEMA)
+    res = api.validate_config(
+        "http",
+        {"auth_type": "None", "default_headers": {"X-Api-Key": "abc"}},
+        version="1.0.0",
+    )
+    assert res["valid"] is True
 
 
 def test_validate_config_conditional_required_revealed_by_selection():
