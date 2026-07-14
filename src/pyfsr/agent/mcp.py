@@ -44,6 +44,49 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 SERVER_NAME = "pyfsr"
 
+#: Cap on a single tool result's serialized size. A raw connector/record dump can
+#: be tens of KB — enough to blow an agent's context in one call — so a larger
+#: result is replaced by a valid-JSON envelope that keeps a head preview and tells
+#: the agent to narrow its query. Small results (the common case) pass through
+#: verbatim and stay directly parseable.
+MAX_TOOL_OUTPUT_CHARS = 4000
+
+
+def _cap_output(text: str) -> str:
+    """Return ``text`` unchanged, or a JSON truncation envelope if it's oversized.
+
+    The envelope is itself valid JSON (``truncated``/``total_chars``/``preview``)
+    so a consuming agent can still parse the result and act on the hint rather
+    than choke on a multi-KB blob or a blindly-sliced, invalid-JSON fragment.
+    """
+    if len(text) <= MAX_TOOL_OUTPUT_CHARS:
+        return text
+
+    def envelope(preview: str) -> str:
+        return json.dumps(
+            {
+                "truncated": True,
+                "total_chars": len(text),
+                "shown_chars": len(preview),
+                "note": (
+                    "Result exceeded the MCP output cap. Narrow the query — add filters, "
+                    "request fewer fields, or lower the limit — to retrieve it in full."
+                ),
+                "preview": preview,
+            },
+            indent=2,
+        )
+
+    # Start with headroom for the wrapper, then shrink until the *serialized*
+    # envelope fits — JSON-escaping the preview (quotes/backslashes) can inflate
+    # it non-linearly, so a single fixed slice isn't enough.
+    budget = MAX_TOOL_OUTPUT_CHARS - 320
+    out = envelope(text[:budget])
+    while len(out) > MAX_TOOL_OUTPUT_CHARS and budget > 0:
+        budget -= len(out) - MAX_TOOL_OUTPUT_CHARS + 16
+        out = envelope(text[: max(budget, 0)])
+    return out
+
 
 def client_from_env(env: dict[str, str] | None = None) -> FortiSOAR:
     """Build a :class:`~pyfsr.client.FortiSOAR` client from ``FSR_*`` env vars.
@@ -74,7 +117,7 @@ def _call(client: FortiSOAR, name: str, arguments: dict[str, Any] | None) -> lis
     import mcp.types as types
 
     result = dispatch(client, name, arguments or {})
-    text = json.dumps(result, indent=2, default=str)
+    text = _cap_output(json.dumps(result, indent=2, default=str))
     return [types.TextContent(type="text", text=text)]
 
 

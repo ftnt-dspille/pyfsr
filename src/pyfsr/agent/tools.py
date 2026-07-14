@@ -819,7 +819,14 @@ _TOOLS: tuple[ToolSpec, ...] = (
                     "type": "string",
                     "description": "Operation name, e.g. 'get_reputation_ip'.",
                 },
-                "params": {"type": "object", "description": "Operation parameters."},
+                "params": {
+                    "type": "object",
+                    "description": (
+                        "The operation's own parameters as a flat inline object, e.g. "
+                        '{"ip": "8.8.8.8"} — not wrapped in another key. Inspect the '
+                        "connector's operation schema for the exact field names."
+                    ),
+                },
                 "config_name": {
                     "type": "string",
                     "description": "Select a non-default configuration by name.",
