@@ -37,7 +37,8 @@ client certificate** the official host requires.
 | `entrypoint.sh`     | build catalog → seed connector repos → ensure TLS cert → generate `nginx.conf` → admin → nginx |
 | `docker-compose.yml`| run config (ports, env, volume mounts) |
 | `build.sh`          | build this checkout's pyfsr wheel into `./wheels`, then `docker build` |
-| `smoke-test.sh`     | assert the fetch contract against a running mirror (no appliance) |
+| `smoke-test.sh`     | assert the catalog fetch contract against a running mirror (no appliance) |
+| `smoke-test-connector.sh` | publish a throwaway connector and assert every offline-install artifact resolves (RPM, `connectors-all.json`, metadata zip) |
 | `local-content/`    | your catalog entries (`*.json`); ships a sample connector |
 | `certs/`            | `server.crt`/`server.key` (TLS) + `fdn.pem`/`fdn.key` (upstream proxy) |
 
@@ -153,6 +154,12 @@ curl -F tgz=@http.tgz -F release=5 http://<mirror-host>:9000/api/connector
 ```
 
 The Web GUI exposes the same as an **Add connector (installable)** upload.
+
+`./smoke-test-connector.sh [BASE_URL] [ADMIN_URL]` runs this whole path against a
+running mirror — it builds a throwaway connector, publishes it, and asserts the
+RPM, the `connectors-all.json` entry, and the staged metadata zip all resolve
+over HTTP, so you can confirm a from-scratch container reproduces the publish
+state without touching an appliance.
 
 Then, on an appliance pointed at the mirror (see below), a normal
 `client.connectors.install(name, version)` — or the Content Hub **Install**
