@@ -396,6 +396,64 @@ rather than leaving it dangling:
   type: end
 ```
 
+## Jinja value transforms (filters)
+
+FortiSOAR evaluates `{{ … }}` with Jinja2, so every standard Jinja filter is
+available for reshaping an upstream step's output before the next step reads it.
+These are the transforms you reach for most on a list of records
+(`vars.input.records`, a `find_record` result at `vars.steps.<Step>.data`, etc.).
+All are chainable with `|`.
+
+- **`selectattr` / `rejectattr`** — keep (or drop) items whose attribute passes a
+  test. Filter a record set down to the ones that matter:
+
+  ```jinja
+  {# open, high-severity alerts only #}
+  {{ vars.steps.Find_Alerts.data | selectattr('status', 'equalto', 'Open')
+                                 | selectattr('severity', 'equalto', 'High') | list }}
+  ```
+
+  ```{note}
+  `selectattr`/`sort` reach attributes with dotted access, which works on objects
+  but not plain dicts. When a step hands you a list of **dicts**, the common idiom
+  is to normalize first (e.g. run it through a `code_snippet`, or use the FortiSOAR
+  custom `json_query` filter) before `selectattr`.
+  ```
+
+- **`select` / `reject`** — same idea on scalars in a list (no attribute):
+  `{{ some_list | reject('equalto', '') | list }}` drops empty strings.
+
+- **`map`** — pluck one attribute from every item: `map(attribute='sourceIp')`.
+  Pair with `unique`/`join` to build a deduped, comma-joined string:
+
+  ```jinja
+  {{ vars.input.records | map(attribute='sourceIp') | unique | join(', ') }}
+  ```
+
+- **`unique`** — de-duplicate a list (order-preserving).
+- **`sort`** — order a list; `sort(attribute='severity', reverse=True)` for records.
+- **`groupby`** — bucket records by an attribute into `(grouper, items)` pairs,
+  e.g. count alerts per status:
+
+  ```jinja
+  {% for status, items in vars.input.records | groupby('status') -%}
+  {{ status }}: {{ items | length }}
+  {% endfor %}
+  ```
+
+- **`join`** — flatten a list to a string with a separator: `| join(', ')`.
+
+```{caution}
+There is **no `split` filter** in Jinja. To split a string, call the Python
+`.split()` method on it instead — `{{ device.split(':')[0] }}`,
+`{{ vars.record_metadata.get('tags').split(',') }}`. (FortiSOAR also ships a
+custom `np_split` filter, but that batches a list into chunks — a different job.)
+```
+
+Beyond the built-ins, FortiSOAR adds ~30 custom filters/globals (date math,
+`picklist`, `extract_artifacts`, `toJSON`, `json_query`, …); consult your
+appliance's Dynamic Values picker for the full, version-exact list.
+
 ## Compile, validate, deploy
 
 ```bash
