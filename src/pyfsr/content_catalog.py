@@ -510,9 +510,10 @@ class ContentCatalog:
 
         With ``bump_published=True`` (default), any incoming entry that *replaces*
         an existing one is given a ``publishedDate`` strictly newer than the entry
-        it overrides (see :func:`_with_published_after`), so a *scheduled*
-        (non-``--force``) appliance sync actually applies the override instead of
-        silently keeping the upstream item. Pass ``False`` to splice verbatim.
+        it overrides, so a *scheduled* (non-``--force``) appliance sync actually
+        applies the override instead of silently keeping the upstream item (an
+        override that already carries a newer date is left untouched). Pass
+        ``False`` to splice verbatim.
         """
         entries = other.to_list() if isinstance(other, ContentCatalog) else other
         for e in entries:
