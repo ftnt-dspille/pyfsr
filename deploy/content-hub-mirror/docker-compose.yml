@@ -5,8 +5,11 @@ services:
     build: .
     image: pyfsr/content-hub-mirror:latest
     ports:
-      - "8080:80"     # http  (local testing)
-      - "8443:443"    # https (what the appliance uses)
+      # The appliance points REPOSERVER/OSSERVER at this host on 443 (see
+      # setup-appliance.sh, which defaults to :443), so publish the privileged
+      # ports directly. Override in a compose.override.yml for local dev.
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
       - "9000:9000"   # admin GUI + API (add/remove content)
     environment:
       # Admin console: set a token to require auth (recommended off-localhost):
@@ -21,15 +24,35 @@ services:
       UPSTREAM_PROXY: ${UPSTREAM_PROXY:-1}
       # Skip upstream TLS verify only for a self-signed mirror-of-a-mirror:
       TLS_VERIFY: ${TLS_VERIFY:-1}
+      # --- connector RPM repo (Option C: hybrid proxy + local override) ---
+      # Reverse-proxy the PUBLIC Fortinet connector repo for the long tail (1),
+      # and serve our own override RPMs from a local yum repo:
+      CONNECTORS_PROXY: ${CONNECTORS_PROXY:-1}
+      CONNECTORS_UPSTREAM: ${CONNECTORS_UPSTREAM:-repo.fortisoar.fortinet.com}
+      CONNECTORS_UPSTREAM_PATH: ${CONNECTORS_UPSTREAM_PATH:-/prod/connectors}
+      # Comma/space list of upstream RPM filenames to pull into the local repo at
+      # start (handy to seed an override test), e.g.
+      # "cyops-connector-http-1.0.0-2734.el7.centos.x86_64.rpm":
+      CONNECTORS_PREFETCH: ${CONNECTORS_PREFETCH:-}
     volumes:
       # Your own catalog entries (one or more *.json files). Writable so the
       # admin GUI/CLI can add/remove entries here:
       - ./local-content:/local-content
       # Downloadable artifacts (uploaded via the admin GUI/CLI land here):
       - ./artifacts:/artifacts
+      # Local connector yum repo (Option C): drop override RPMs under x86_64/;
+      # repodata is (re)generated on start. Writable so createrepo_c can write.
+      # `chctl add-connector` also lands built RPMs here:
+      - ./connectors-local:/connectors-local
+      # Published-connector state that must survive restarts: the merged
+      # connectors-all.json + each connector's Content-Hub metadata zip (built by
+      # `chctl add-connector`). /srv is rebuilt on every start, so this can't live
+      # there. nginx serves /content-hub/ from here as a fallback after /srv:
+      - ./published:/published
       # Certs: server.crt/server.key (TLS the appliance trusts) and, for the
       # upstream proxy, fdn.pem/fdn.key (the appliance's FDN client cert):
       - ./certs:/etc/nginx/certs
       # Optional: a saved upstream snapshot referenced by UPSTREAM_SNAPSHOT
-      # (mount it somewhere under here and set UPSTREAM_SNAPSHOT to its path).
+      # (mount it here and set UPSTREAM_SNAPSHOT=/upstream/content-hub.json).
+      - ./upstream:/upstream
     restart: unless-stopped

@@ -80,6 +80,47 @@ _COMMON_KEYS = (
     "certified",
 )
 
+#: Known-good values of the appliance's "Solution Pack Category" picklist. The sync
+#: **rejects the whole entry** — with ``FSR_CH_0000001`` — if ``category`` is a
+#: non-empty value outside that picklist, so an override with a made-up category
+#: (e.g. ``"HTTP Requests"``) silently never lands. This set is a best-effort
+#: *fallback* for warnings when no upstream catalog is available to compare against;
+#: it is NOT exhaustive (real 8.0.0 solutionpacks use more, e.g. "Document Reader"),
+#: so it is deliberately NOT used to hard-reject entries — prefer comparing a local
+#: override's category against the categories the upstream catalog already uses.
+SOLUTION_PACK_CATEGORIES = frozenset(
+    {
+        "Analytics and SIEM",
+        "Asset Management",
+        "Attack surface management",
+        "Case Management",
+        "Cloud Security",
+        "Cloud access security broker (CASB)",
+        "Communication and Coordination",
+        "Compliance and Reporting",
+        "Compute Platform",
+        "Data Enrichment & Threat Intelligence",
+        "DevOps and Digital Operations",
+        "Email Gateway",
+        "Email Security",
+        "Endpoint Security",
+        "Firewall and Network Protection",
+        "Identity and Access Management",
+        "IT Service Management",
+        "IT Services",
+        "ML Service",
+        "Malware Analysis",
+        "Monitoring",
+        "Network Security",
+        "OT & IoT Security",
+        "Security Posture Management",
+        "Threat Intelligence",
+        "Ticket Management",
+        "Utilities",
+        "Web Application",
+    }
+)
+
 #: The minimal set a well-formed entry MUST have for the sync to place it and
 #: for the artifact/info/icon paths to resolve.
 _REQUIRED_KEYS = ("name", "type", "version", "buildNumber", "label")

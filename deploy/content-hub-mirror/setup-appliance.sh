@@ -31,6 +31,7 @@ if [[ "${1:-}" == "--revert" ]]; then
     cert=$(cat "$BACKUP/mirror-cert-path"); rm -f "$cert" && echo "  removed $cert"
     command -v update-ca-trust >/dev/null && update-ca-trust extract || update-ca-certificates --fresh >/dev/null 2>&1 || true
   fi
+  rm -f /etc/yum.repos.d/fsr-mirror-connectors.repo && echo "  removed connector repo"
   systemctl restart php-fpm && echo "  restarted php-fpm"
   echo "==> reverted. Re-run 'csadm package content-hub sync --force' to repull from FortiCloud."
   exit 0
@@ -93,6 +94,38 @@ if [[ -n "$POOL" ]]; then
 else
   echo "  (no php-fpm pool conf found; relying on /etc/environment)"
 fi
+
+# Connector RPM install source (Option C). Two repos: a local override repo that
+# wins (priority=1) so our custom cyops-connector-<name>-<ver> installs over
+# Fortinet's, and a proxy to the public Fortinet connector repo for everything
+# else (priority=50). dnf treats a lower priority number as higher precedence.
+echo "==> connector install repos -> the mirror"
+cat > /etc/yum.repos.d/fsr-mirror-connectors.repo <<REPO
+[fsr-mirror-connectors-override]
+name=FortiSOAR Mirror Connectors (override)
+baseurl=https://$HOSTPORT/connectors-local/x86_64/
+enabled=1
+gpgcheck=0
+priority=1
+sslverify=0
+skip_if_unavailable=True
+# The mirror is authoritative and its RPM set changes as we (re)build custom
+# connectors. Without this, dnf caches the override repo's metadata for the
+# default 48h, so a rebuilt/renamed RPM 404s (dnf still asks for the cached
+# NEVRA) until the cache expires. metadata_expire=1 makes every install re-read
+# the mirror's repomd, so a freshly pushed RPM is picked up immediately.
+metadata_expire=1
+
+[fsr-mirror-connectors]
+name=FortiSOAR Mirror Connectors (proxy)
+baseurl=https://$HOSTPORT/connectors/x86_64/
+enabled=1
+gpgcheck=0
+priority=50
+sslverify=0
+skip_if_unavailable=True
+REPO
+echo "  wrote /etc/yum.repos.d/fsr-mirror-connectors.repo"
 
 echo "==> [4/5] restarting php-fpm"
 systemctl restart php-fpm && echo "  php-fpm restarted"

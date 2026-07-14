@@ -10,12 +10,14 @@ from your laptop against a remote mirror. Configure the target once:
 Commands:
     chctl list                                   list current local content
     chctl add <artifact.tgz|.zip> [--type T] [--build N]   add by artifact
+    chctl add-connector <src.tgz> [--release N]  build+publish a connector RPM from its tgz
     chctl add-entry --name N --type T --version V [--label ...] [--publisher ...]
     chctl remove <type> <name>                   remove an entry (+ its artifact)
     chctl rebuild                                re-merge + rewrite the served tree
 
 Examples:
     chctl add ./myconn-1.0.0.tgz
+    chctl add-connector ./http.tgz              # mirror builds the RPM for you
     chctl add-entry --name acme --type connector --version 1.0.0 --label "Acme"
     chctl remove connector acme
 """
@@ -82,6 +84,18 @@ def cmd_add(args) -> int:
     return _show(r)
 
 
+def cmd_add_connector(args) -> int:
+    if not os.path.isfile(args.tgz):
+        print(f"no such file: {args.tgz}", file=sys.stderr)
+        return 1
+    data = {"release": str(args.release)}
+    with open(args.tgz, "rb") as fh:
+        files = {"tgz": (os.path.basename(args.tgz), fh)}
+        # RPM build can take a bit — generous timeout.
+        r = requests.post(f"{_base()}/api/connector", headers=_headers(), data=data, files=files, timeout=600)
+    return _show(r)
+
+
 def cmd_add_entry(args) -> int:
     payload = {
         "name": args.name,
@@ -118,6 +132,11 @@ def main(argv=None) -> int:
     a.add_argument("--type", choices=["connector", "widget", "solutionpack", "ai_agent"], default=None)
     a.add_argument("--build", type=int, default=None)
     a.set_defaults(fn=cmd_add)
+
+    ac = sub.add_parser("add-connector", help="build+publish a connector RPM from its source tgz")
+    ac.add_argument("tgz", help="connector source tarball (top-level <name>/ with info.json)")
+    ac.add_argument("--release", type=int, default=1, help="RPM release number (bump to force a re-pull)")
+    ac.set_defaults(fn=cmd_add_connector)
 
     ae = sub.add_parser("add-entry", help="add a catalog entry by fields (no artifact)")
     ae.add_argument("--name", required=True)

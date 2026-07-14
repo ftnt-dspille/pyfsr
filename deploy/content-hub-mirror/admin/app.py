@@ -29,6 +29,7 @@ from flask import Flask, jsonify, request
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from build_catalog import build_catalog, load_local_entries  # noqa: E402
+from connector_publish import publish_connector  # noqa: E402
 
 from pyfsr.content_catalog import entry_from_artifact, validate_entry  # noqa: E402
 
@@ -37,6 +38,15 @@ app = Flask(__name__)
 LOCAL_DIR = os.environ.get("LOCAL_CONTENT_DIR", "/local-content")
 ARTIFACTS_DIR = os.environ.get("ARTIFACTS_DIR", "/artifacts")
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/srv")
+CONNECTORS_LOCAL_DIR = os.environ.get("CONNECTORS_LOCAL_DIR", "/connectors-local")
+CONTENT_HUB_DIR = os.environ.get("CONTENT_HUB_DIR", "/srv/content-hub")
+CONNECTORS_CINFO = os.environ.get("CONNECTORS_CINFO", "/srv/local-cinfo/connectors-all.json")
+CONNECTOR_SPEC_IN = os.environ.get(
+    "CONNECTOR_SPEC_IN",
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "connector-build", "cyops-connector.spec.in"
+    ),
+)
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "").strip()
 
 _SAFE = re.compile(r"[^A-Za-z0-9._-]")
@@ -133,6 +143,62 @@ def add_content():
     return jsonify(
         added={"type": entry["type"], "name": entry["name"], "version": entry.get("version")}, total=len(cat)
     ), 201
+
+
+@app.post("/api/connector")
+def add_connector():
+    """Publish a connector from an uploaded source tgz — the mirror builds the RPM.
+
+    Multipart form: ``tgz`` = the connector tarball (top-level ``<name>/`` with
+    ``info.json``); optional ``release`` (RPM release number, bump to force a
+    re-pull of the same version). Builds the RPM, drops it in the local yum repo
+    (+ ``createrepo``), merges ``connectors-all.json``, and stages the
+    Content-Hub metadata zip — everything ``install(name, version)`` needs.
+    """
+    up = request.files.get("tgz")
+    if not up or not up.filename:
+        return jsonify(error="missing 'tgz' file upload"), 400
+    release = (request.form.get("release") or "1").strip()
+    os.makedirs("/tmp/uploads", exist_ok=True)
+    tmp_tgz = os.path.join("/tmp/uploads", _safe(os.path.basename(up.filename)))
+    up.save(tmp_tgz)
+    try:
+        summary = publish_connector(
+            tmp_tgz,
+            connectors_local_dir=CONNECTORS_LOCAL_DIR,
+            content_hub_dir=CONTENT_HUB_DIR,
+            cinfo_path=CONNECTORS_CINFO,
+            spec_in=CONNECTOR_SPEC_IN,
+            release=release,
+        )
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    except Exception as exc:  # rpmbuild/createrepo failures surface as 500 w/ detail
+        return jsonify(error=f"connector publish failed: {exc}"), 500
+    finally:
+        if os.path.isfile(tmp_tgz):
+            os.remove(tmp_tgz)
+    # also add a catalog entry so the connector shows in content-hub.json
+    entry = {
+        "type": "connector",
+        "name": summary["name"],
+        "version": summary["version"],
+        "buildNumber": summary["buildNumber"],
+    }
+    for k in ("label", "publisher", "category"):
+        if summary["info"].get(k):
+            entry[k] = summary["info"][k]
+    if not validate_entry(entry):
+        import json as _json
+
+        os.makedirs(LOCAL_DIR, exist_ok=True)
+        with open(_entry_file(entry), "w", encoding="utf-8") as fh:
+            _json.dump(entry, fh, indent=2)
+        try:
+            _rebuild()
+        except ValueError:
+            pass
+    return jsonify(published=summary), 201
 
 
 @app.delete("/api/content/<etype>/<name>")
