@@ -15,6 +15,7 @@ from . import playbook as playbook_cmds
 from . import repo as repo_cmds
 from . import widget as widget_cmds
 from .appliance import certs as certs_cmds
+from .appliance import content_hub as content_hub_cmds
 from .appliance import db as db_cmds
 from .appliance import diagnose as diagnose_cmds
 from .appliance import es as es_cmds
@@ -34,6 +35,11 @@ def _add_connection_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--host", help="appliance host (SSH); defaults to local if on-box")
     g.add_argument("--user", default="csadmin", help="SSH user (default: csadmin)")
     g.add_argument("--password", help="SSH/sudo password (or PYFSR_APPLIANCE_PASSWORD)")
+    g.add_argument(
+        "--sudo-password",
+        help="sudo password when SSH uses key auth (no SSH password) — or PYFSR_APPLIANCE_SUDO_PASSWORD. "
+        "Distinct from --password: a key-auth box logs in without one but still needs sudo creds for csadm.",
+    )
     g.add_argument("--port", type=int, default=22, help="SSH port (default: 22)")
     g.add_argument("--key", dest="key_path", help="SSH private key path")
     g.add_argument(
@@ -54,6 +60,7 @@ def _make_transport(args: argparse.Namespace) -> Transport:
         host=args.host,
         user=args.user,
         password=args.password,
+        sudo_password=getattr(args, "sudo_password", None),
         port=args.port,
         key_path=args.key_path,
         insecure_skip_host_key_check=args.insecure_skip_host_key_check,
@@ -206,6 +213,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_svc_ctl.add_argument("--signal", help="signal for `kill` (e.g. SIGKILL, 9); default SIGTERM")
     p_svc_ctl.add_argument("--yes", action="store_true", help="confirm a mutating action")
     p_svc_ctl.set_defaults(func=cmd_service_systemctl)
+
+    # --- content-hub group ---
+    p_ch = asub.add_parser("content-hub", help="Content Hub sync (csadm package content-hub sync)")
+    chsub = p_ch.add_subparsers(dest="ch_command", required=True)
+
+    p_ch_sync = chsub.add_parser(
+        "sync",
+        help="pull the Content Hub catalog + artifacts from REPOSERVER (gated). "
+        "A forced sync re-fetches everything regardless of publishedDate ��� use it to "
+        "pick up a freshly-published connector from a self-hosted mirror immediately.",
+    )
+    _add_connection_args(p_ch_sync)
+    p_ch_sync.add_argument(
+        "--no-force",
+        action="store_false",
+        dest="force",
+        help="run a scheduled (non-forced) sync: only apply overrides with a newer publishedDate",
+    )
+    p_ch_sync.add_argument("--yes", action="store_true", help="skip confirmation")
+    p_ch_sync.set_defaults(func=cmd_content_hub_sync, force=True)
 
     # --- mq group ---
     p_mq = asub.add_parser("mq", help="RabbitMQ verbs (rabbitmqctl)")
@@ -640,6 +667,12 @@ def cmd_service_stop_all(args: argparse.Namespace) -> int:
 
 def cmd_service_start_all(args: argparse.Namespace) -> int:
     r = service_cmds.start_all(_make_transport(args))
+    print(str(r))
+    return 0 if r.ok else 1
+
+
+def cmd_content_hub_sync(args: argparse.Namespace) -> int:
+    r = content_hub_cmds.sync(_make_transport(args), force=args.force, yes=args.yes)
     print(str(r))
     return 0 if r.ok else 1
 

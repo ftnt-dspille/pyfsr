@@ -238,6 +238,40 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             "/api/triggers/1/action/2b6a1e8e-6f0a-4c6b-9e29-6c2f6a1d8b30",
             cap.TRIGGER_ACTION_RESPONSE,
         ),
+        # Playbook versions (workflow_versions snapshots) — the editor's "Versions"
+        # tab. list (bare collection), get/create/delete on <id> (collapsed below so
+        # any version uuid resolves to the v1 fixture; the diff doctest needs v2, so
+        # a specific second uuid is pinned). list_versions resolves the playbook by
+        # name first via the workflows?name= capture above.
+        _entry("GET", "/api/3/workflow_versions", cap.WORKFLOW_VERSION_LIST_RESPONSE),
+        _entry("POST", "/api/3/workflow_versions", cap.WORKFLOW_VERSION_CREATE_RESPONSE),
+        _entry("DELETE", "/api/3/workflow_versions/00000000-0000-0000-0000-000000000001", None, status=204),
+        # The diff doctest fetches two distinct versions; pin v1 + v2 by uuid.
+        _entry(
+            "GET",
+            "/api/3/workflow_versions/00000000-0000-0000-0000-000000000001",
+            cap.WORKFLOW_VERSION_GET_RESPONSE,
+        ),
+        _entry(
+            "GET",
+            "/api/3/workflow_versions/00000000-0000-0000-0000-000000000002",
+            cap.WORKFLOW_VERSION_GET_RESPONSE_2,
+        ),
+        # The fixture playbook's definition — backs list_versions' name lookup
+        # (GET /api/3/workflows?name=...) and create_version's get_definition
+        # (GET /api/3/workflows/<uuid>?$relationships=true, collapsed below to
+        # the fixture uuid), plus restore_version's PUT.
+        _entry("GET", "/api/3/workflows", cap.WORKFLOW_DEFINITION_LIST_RESPONSE),
+        _entry(
+            "GET",
+            "/api/3/workflows/00000000-0000-0000-0000-0000000000aa",
+            cap.WORKFLOW_DEFINITION_GET_RESPONSE,
+        ),
+        _entry(
+            "PUT",
+            "/api/3/workflows/00000000-0000-0000-0000-0000000000aa",
+            cap.WORKFLOW_DEFINITION_PUT_RESPONSE,
+        ),
         # AgentsAPI — execution-agent lifecycle + installer + agent-scoped connectors.
         _entry("GET", "/api/3/agents", cap.AGENT_LIST_RESPONSE),
         _entry("GET", "/api/3/agents/6f5e4d3c-2b1a-4c9d-8e7f-1a2b3c4d5e6f", cap.AGENT_RECORD),
@@ -340,6 +374,22 @@ def _path_and_match(method: str, url: str) -> tuple[str, str]:
     # /api/3/attachments/<uuid>  (get / delete)  ->  collapse to the recorded uuid.
     if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "attachments":
         return "/api/3/attachments/770e8400-e29b-41d4-a716-446655440009", path
+    # /api/3/workflows/<uuid>  (get_definition / restore PUT)  ->  collapse to the
+    # fixture playbook's uuid. The bare collection (4 segments) is left alone so
+    # the name-lookup list capture resolves.
+    if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "workflows":
+        return "/api/3/workflows/00000000-0000-0000-0000-0000000000aa", path
+    # /api/3/workflow_versions/<uuid>  (get / delete)  ->  collapse to the v1
+    # fixture uuid, EXCEPT the pinned v2 uuid (the diff doctest needs it distinct).
+    # The bare collection (4 segments) is left alone so list_versions resolves.
+    if (
+        len(segments) == 5
+        and segments[1] == "api"
+        and segments[2] == "3"
+        and segments[3] == "workflow_versions"
+        and segments[4] != "00000000-0000-0000-0000-000000000002"
+    ):
+        return "/api/3/workflow_versions/00000000-0000-0000-0000-000000000001", path
     # /api/3/import_jobs/<uuid>  (get / put)  ->  collapse to the recorded uuid.
     if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "import_jobs":
         return "/api/3/import_jobs/aa0e8400-e29b-41d4-a716-446655440013", path

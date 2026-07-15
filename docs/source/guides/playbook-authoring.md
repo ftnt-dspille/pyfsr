@@ -275,6 +275,61 @@ which is always recorded.
 
 A complete worked example lives in `examples/do_until_validation_loop.py`.
 
+## Playbook version control (saved snapshots)
+
+FortiSOAR keeps a **snapshot history** for each playbook — the editor's
+"Versions" tab — backed by the `workflow_versions` module. (This is *not* a
+revision/diff resource; the word "revision" appears nowhere on the wire.) Each
+snapshot freezes the playbook definition at a point in time into a stringified
+`json` field, capped at 20 per playbook. pyfsr exposes it as
+{meth}`~pyfsr.api.playbooks.PlaybooksAPI.list_versions` /
+`get_version` / `create_version` / `restore_version` / `delete_version` /
+`diff_versions`:
+
+```{doctest}
+>>> client = demo_client()
+>>> vers = client.playbooks.list_versions("Block IP (test fixture)")
+>>> [v.note for v in vers]                        # doctest: +ELLIPSIS
+['v2', 'v1']
+>>> v1, v2 = vers[1], vers[0]
+>>> v1.note, v1.autosave
+('v1', False)
+```
+
+`create_version` captures the playbook as it is now (the server doesn't echo the
+large `json` blob back on the POST — re-`get_version` to read it):
+
+```python
+client.playbooks.create_version("Block IP", note="before-change")
+```
+
+`diff_versions` is **client-side** (FortiSOAR has no diff endpoint) — it compares
+two snapshots' step graphs by `uuid`, surfacing added/removed/changed steps:
+
+```{doctest}
+>>> d = client.playbooks.diff_versions(v1, v2)
+>>> d.is_clean, [(c.step[:8], c.field) for c in d.changed]   # doctest: +ELLIPSIS
+(False, [('bbbb2222', 'arguments')])
+```
+
+`restore_version` overwrites the live playbook with a snapshot's content (the
+editor's flow: fetch the snapshot, parse its `json`, PUT it back) — call
+`create_version` first if you want a rollback point. It's destructive, so the
+CLI gates it behind `--yes`:
+
+```python
+client.playbooks.restore_version("Block IP", "<version-uuid>")
+```
+
+The CLI mirrors all six verbs under `pyfsr playbook versions` (`list` / `get` /
+`create` / `restore` / `delete` / `diff`):
+
+```sh
+pyfsr playbook versions list "Block IP"
+pyfsr playbook versions diff <v1-uuid> <v2-uuid>
+pyfsr playbook versions restore "Block IP" <version-uuid> --yes
+```
+
 ## Code-snippet sandbox: writing Python that runs
 
 The `code_snippet` step runs a Python snippet through the `code-snippet`

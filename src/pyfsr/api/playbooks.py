@@ -31,7 +31,9 @@ from pydantic import ValidationError
 
 from ..models import (
     CreatePlaybookRequest,
+    CreateVersionRequest,
     ManualInputResume,
+    PlaybookVersion,
     ResumeRequest,
     RunEnv,
     RunFailure,
@@ -42,6 +44,8 @@ from ..models import (
     TriggerActionRequest,
     TriggerRequest,
     TriggerResponse,
+    VersionDiff,
+    VersionStepDelta,
     Workflow,
 )
 from ..pagination import HydraPage, extract_members
@@ -106,6 +110,14 @@ _RUN_PATHS = ("/api/wf/api/workflows/", "/api/wf/api/historical-workflows/")
 # Playbook *definitions* (the templates), distinct from the run-history tables above.
 _WORKFLOWS = "/api/3/workflows"
 _WORKFLOWS_BULKUPSERT = "/api/3/bulkupsert/workflows"
+# Saved playbook *snapshots* (the editor's "Versions" tab). A version is a
+# frozen copy of a workflow stringified into ``json`` — not a revision/diff
+# resource. Live-verified on 8.0.0 (.159); wire traced from the editor bundle's
+# ``playbookService.saveVersion``/``loadVersion``/``loadVersionsForPlaybook``.
+_WORKFLOW_VERSIONS = "/api/3/workflow_versions"
+# Server-managed fields the bundle's ``preparePlaybookForOverwrite`` strips
+# before stringifying a workflow into a snapshot (and before a restore PUT).
+_VERSION_STRIP_FIELDS = ("versions", "collection", "modifyUser", "modifyDate")
 # A hard delete must also reach already-recycled rows; together they skip the recycle bin.
 _HARD_DELETE = {"$hardDelete": "true", "$showDeleted": "true"}
 
@@ -250,6 +262,79 @@ def _collect_uuids(definition: dict[str, Any]) -> set[str]:
             if isinstance(u, str) and _looks_like_uuid(u):
                 uuids.add(u)
     return uuids
+
+
+def _version_id(version: str, op: str) -> str:
+    """Validate + normalize a workflow_version ref (uuid or IRI) to a bare uuid."""
+    if not isinstance(version, str) or not version.strip():
+        raise ValueError(f"{op}() requires a non-empty version uuid")
+    ref = version.strip()
+    if ref.startswith("/api/"):
+        ref = ref.rstrip("/").rsplit("/", 1)[-1]
+    if not _looks_like_uuid(ref):
+        raise ValueError(f"{op}() expected a workflow_versions uuid or IRI, got {version!r}")
+    return ref
+
+
+def _prepare_version_body(workflow: dict[str, Any]) -> dict[str, Any]:
+    """Strip server-managed fields + normalize step/group lists for a snapshot.
+
+    Mirrors the editor bundle's ``preparePlaybookForOverwrite``: removes
+    ``versions``/``collection``/``modifyUser``/``modifyDate`` and coerces
+    ``steps``/``groups`` from dict-keyed to list form (the wire shape a
+    snapshot ``json`` and a restore PUT expect). Routes are filtered to those
+    with both endpoints resolved.
+    """
+    body = {k: v for k, v in workflow.items() if k not in _VERSION_STRIP_FIELDS}
+    steps = body.get("steps")
+    if isinstance(steps, dict):
+        body["steps"] = list(steps.values())
+    groups = body.get("groups")
+    if isinstance(groups, dict):
+        body["groups"] = list(groups.values())
+    return body
+
+
+# Step fields whose change between two snapshots is worth surfacing in a diff.
+_DIFF_STEP_FIELDS = ("arguments", "name", "stepType")
+
+
+def _diff_snapshots(a: dict[str, Any], b: dict[str, Any]) -> VersionDiff:
+    """Compare two parsed-workflow snapshots at the step/route/group level."""
+
+    def _keyed(items: Any) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for it in items or []:
+            if isinstance(it, dict) and it.get("uuid"):
+                out[it["uuid"]] = it
+        return out
+
+    a_steps, b_steps = _keyed(a.get("steps")), _keyed(b.get("steps"))
+    a_routes, b_routes = _keyed(a.get("routes")), _keyed(b.get("routes"))
+    a_groups, b_groups = _keyed(a.get("groups")), _keyed(b.get("groups"))
+
+    changed: list[VersionStepDelta] = []
+    for suuid in a_steps.keys() & b_steps.keys():
+        sa, sb = a_steps[suuid], b_steps[suuid]
+        for field in _DIFF_STEP_FIELDS:
+            if sa.get(field) != sb.get(field):
+                changed.append(
+                    VersionStepDelta(
+                        step=suuid,
+                        field=field,
+                        **{"from": sa.get(field), "to": sb.get(field)},
+                    )
+                )
+
+    return VersionDiff(
+        added=sorted(b_steps.keys() - a_steps.keys()),
+        removed=sorted(a_steps.keys() - b_steps.keys()),
+        changed=changed,
+        routes_added=sorted(b_routes.keys() - a_routes.keys()),
+        routes_removed=sorted(a_routes.keys() - b_routes.keys()),
+        groups_added=sorted(b_groups.keys() - a_groups.keys()),
+        groups_removed=sorted(a_groups.keys() - b_groups.keys()),
+    )
 
 
 # Per-entity metadata keys that must be dropped off every nested step/route/group
@@ -719,6 +804,195 @@ class PlaybooksAPI(BaseAPI):
         uuid = _require_uuid(uuid, "delete")
         params = dict(_HARD_DELETE) if hard else None
         self.client.delete(f"{_WORKFLOWS}/{uuid}", params=params)
+
+    # ---------------------------------------------- version control (snapshots)
+    # Playbook "versions" are saved snapshots (the ``workflow_versions`` module),
+    # not a revision/diff resource. The editor's Versions tab reads/writes these:
+    # each snapshot freezes a workflow definition into a stringified ``json``
+    # field, capped at 20 per playbook. ``restore_version`` is a client-side
+    # content swap (get_version -> parse json -> PUT back onto the workflow),
+    # mirroring the editor's ``selectVersion`` flow; FortiSOAR has no restore
+    # endpoint. Wire live-verified on 8.0.0 (.159).
+
+    def _resolve_playbook_uuid(self, playbook: str, op: str) -> str:
+        """Resolve a playbook ref (uuid / IRI / name) to a bare uuid for versions."""
+        if not isinstance(playbook, str) or not playbook.strip():
+            raise ValueError(f"{op}() requires a playbook uuid, IRI, or name")
+        ref = playbook.strip()
+        if ref.startswith("/api/"):
+            tail = ref.rstrip("/").rsplit("/", 1)[-1]
+            if _looks_like_uuid(tail):
+                return tail
+        if _looks_like_uuid(ref):
+            return ref
+        uuid = self._resolve_uuid(ref)
+        if not uuid:
+            raise ValueError(f"{op}() could not resolve playbook name {ref!r}")
+        return uuid
+
+    def list_versions(
+        self,
+        playbook: str,
+        *,
+        include_data: bool = True,
+        limit: int = 100,
+    ) -> list[PlaybookVersion]:
+        """List a playbook's saved snapshots (``GET /api/3/workflow_versions``).
+
+        Snapshots are returned newest-first by ``modifyDate`` (the editor's sort).
+        ``include_data=True`` (default) inlines each snapshot's ``json`` payload;
+        pass ``False`` for a lighter metadata-only listing. ``playbook`` accepts a
+        uuid, a ``/api/3/workflows/<uuid>`` IRI, or a name (resolved to the first
+        matching playbook).
+
+        Returns typed :class:`~pyfsr.models.PlaybookVersion` records (also
+        dict-compatible). Example:
+
+            >>> client.playbooks.list_versions("Block IP")  # doctest: +SKIP
+        """
+        uuid = self._resolve_playbook_uuid(playbook, "list_versions")
+        params: dict[str, Any] = {"workflow": uuid, "$limit": limit}
+        if include_data:
+            params["$includeData"] = "true"
+        resp = self.client.get(_WORKFLOW_VERSIONS, params=params)
+        return [PlaybookVersion.model_validate(m) for m in extract_members(resp)]
+
+    def get_version(
+        self,
+        version: str,
+        *,
+        include_data: bool = True,
+    ) -> PlaybookVersion:
+        """Fetch one saved snapshot (``GET /api/3/workflow_versions/{id}``).
+
+        ``version`` accepts a uuid or ``/api/3/workflow_versions/<uuid>`` IRI. The
+        snapshot's ``json`` (the stringified workflow) is always present on GET —
+        use :meth:`PlaybookVersion.parsed_json` to decode it, e.g. before a
+        :meth:`restore_version`. ``include_data`` is kept for wire-faithfulness
+        but the server returns ``json`` either way.
+
+            >>> client.playbooks.get_version("<uuid>").note  # doctest: +SKIP
+        """
+        vid = _version_id(version, "get_version")
+        params = {"$includeData": "true"} if include_data else None
+        resp = self.client.get(f"{_WORKFLOW_VERSIONS}/{vid}", params=params)
+        return PlaybookVersion.model_validate(resp)
+
+    def create_version(
+        self,
+        playbook: str,
+        *,
+        note: str = "",
+    ) -> PlaybookVersion:
+        """Save a snapshot of the current playbook definition (``POST /api/3/workflow_versions``).
+
+        Mirrors the editor's ``saveSnapshot``: fetches the live workflow, strips
+        server-managed fields (``versions``/``collection``/``modifyUser``/
+        ``modifyDate``), stringifies it into ``json``, and POSTs the bundle
+        ``{note, json, workflow, modifyDate}``. The snapshot captures the playbook
+        **as it currently is** on the appliance.
+
+        The server does **not** echo the large ``json`` blob back on the create
+        response (it comes back ``None``); call :meth:`get_version` on the
+        returned record to read ``json``. FortiSOAR caps snapshots at 20 per
+        playbook — beyond that the server rejects the POST (delete an old one
+        first). Returns the created :class:`~pyfsr.models.PlaybookVersion`.
+
+            >>> v = client.playbooks.create_version("Block IP", note="v2")  # doctest: +SKIP
+        """
+        uuid = self._resolve_playbook_uuid(playbook, "create_version")
+        wf = self.get_definition(uuid, relationships=True).to_dict(by_alias=True)
+        prepared = _prepare_version_body(wf)
+        req = _build(
+            CreateVersionRequest,
+            "create_version",
+            workflow=f"{_WORKFLOWS}/{uuid}",
+            json=json.dumps(prepared, default=str),
+            note=note,
+            modify_date=int(time.time()),
+        )
+        resp = self.client.post(_WORKFLOW_VERSIONS, data=req.to_body())
+        return PlaybookVersion.model_validate(resp)
+
+    def restore_version(self, playbook: str, version: str) -> Workflow:
+        """Overwrite a playbook with a saved snapshot's content (client-side restore).
+
+        FortiSOAR has no restore endpoint: the editor's flow is
+        ``loadVersion -> JSON.parse(.json) -> PUT /api/3/workflows/{id}``. This
+        method does the same — it fetches the snapshot, decodes its ``json``, and
+        PUTs the workflow definition back onto ``playbook``.
+
+        .. warning::
+            This **overwrites the live playbook** with the snapshot's steps/routes
+            (the snapshot's step uuids must already belong to this playbook, which
+            they do for a snapshot taken from it). It does not create a new
+            snapshot first; call :meth:`create_version` beforehand if you want a
+            rollback point.
+
+        ``playbook`` accepts a uuid/IRI/name; ``version`` accepts a uuid/IRI.
+        Returns the updated :class:`~pyfsr.models.Workflow`.
+
+            >>> client.playbooks.restore_version("Block IP", "<ver-uuid>")  # doctest: +SKIP
+        """
+        uuid = self._resolve_playbook_uuid(playbook, "restore_version")
+        snap = self.get_version(version)
+        try:
+            payload = snap.parsed_json()
+        except ValueError as e:
+            raise ValueError(
+                "restore_version() needs the snapshot's json; the version record has none — re-fetch via get_version()"
+            ) from e
+        payload["uuid"] = uuid
+        prepared = _prepare_version_body(payload)
+        resp = self.client.put(f"{_WORKFLOWS}/{uuid}", data=prepared)
+        return Workflow(**resp)
+
+    def delete_version(self, version: str) -> None:
+        """Delete a saved snapshot (``DELETE /api/3/workflow_versions/{id}``).
+
+        ``version`` accepts a uuid or ``/api/3/workflow_versions/<uuid>`` IRI.
+        This deletes the snapshot record only — the playbook itself is untouched.
+        """
+        vid = _version_id(version, "delete_version")
+        self.client.delete(f"{_WORKFLOW_VERSIONS}/{vid}")
+
+    def diff_versions(
+        self,
+        a: str | PlaybookVersion,
+        b: str | PlaybookVersion,
+    ) -> VersionDiff:
+        """Compare two snapshots' step graphs (client-side; no server diff API).
+
+        ``a``/``b`` accept a :class:`PlaybookVersion` or a uuid/IRI (fetched via
+        :meth:`get_version`). Each snapshot's ``json`` is decoded and the steps
+        (keyed by ``uuid``), routes, and groups are compared: ``added``/``removed``
+        are uuids present on only one side; ``changed`` holds per-step field deltas
+        (``arguments``/``name``/``stepType``…). Useful to see what a restore would
+        change before running :meth:`restore_version`.
+
+            >>> d = client.playbooks.diff_versions("<v1>", "<v2>")  # doctest: +SKIP
+            >>> d.is_clean, d.added, d.removed  # doctest: +SKIP
+        """
+        va = self._version_with_json(a)
+        vb = self._version_with_json(b)
+        return _diff_snapshots(va.parsed_json(), vb.parsed_json())
+
+    def _version_with_json(self, version: str | PlaybookVersion) -> PlaybookVersion:
+        """Resolve a version arg to one carrying its ``json`` payload.
+
+        A :class:`PlaybookVersion` from :meth:`create_version` has ``json=None``
+        (the server doesn't echo the blob on POST); a uuid/IRI needs fetching.
+        Either way, fetch fresh so the snapshot payload is present.
+        """
+        if isinstance(version, PlaybookVersion) and version.snapshot:
+            return version
+        if isinstance(version, PlaybookVersion):
+            # Object from create_version (json=None): refetch by its uuid/IRI.
+            vid = version.uuid or uuid_from_iri(version.model_dump().get("@id", ""))
+            if not vid:
+                raise ValueError("diff_versions(): version object has no uuid to refetch")
+            return self.get_version(vid)
+        return self.get_version(version)
 
     def create_playbooks(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
         """Create or re-push many playbook definitions (``POST /api/3/bulkupsert/workflows``).

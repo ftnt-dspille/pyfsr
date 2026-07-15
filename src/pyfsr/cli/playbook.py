@@ -44,7 +44,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from . import _output
 
@@ -454,6 +454,139 @@ def _workflows_of(result: CompiledPlaybook, collection_name: str) -> list[str]:
     return []
 
 
+# --- version-control (snapshots) handlers ---------------------------------
+def _versions_format(args: argparse.Namespace) -> str:
+    return "json" if getattr(args, "json", False) else "table"
+
+
+def _version_row(v: Any) -> list[str]:
+    """One table row for a PlaybookVersion (newest-first caller sorts already)."""
+    wf = v.workflow
+    wf_name = wf.get("name") if isinstance(wf, dict) else ""
+    return [
+        v.uuid or "",
+        v.note or "",
+        "autosave" if v.autosave else "snapshot",
+        _ts(v.modify_date),
+        wf_name or "",
+    ]
+
+
+def _ts(epoch: float | None) -> str:
+    """Render an epoch-second modifyDate as a local timestamp (blank if None)."""
+    import datetime as _dt
+
+    if not epoch:
+        return ""
+    try:
+        return _dt.datetime.fromtimestamp(float(epoch)).strftime("%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError, OSError):
+        return str(epoch)
+
+
+def cmd_versions_list(args: argparse.Namespace) -> int:
+    client = _make_client(args)
+    vers = cast(list, client.playbooks.list_versions(args.playbook, limit=args.limit))
+    vers.sort(key=lambda v: v.modify_date or 0, reverse=True)
+    if getattr(args, "json", False):
+        # list-of-objects (model_dump preserves the wire ``json`` alias etc.).
+        import json as _json
+
+        _json.dump([v.model_dump(by_alias=True) for v in vers], sys.stdout, indent=2, default=str)
+        sys.stdout.write("\n")
+        return 0
+    rows = [_version_row(v) for v in vers]
+    _output.render(rows, ["uuid", "note", "type", "modified", "playbook"], fmt="table")
+    return 0
+
+
+def cmd_versions_get(args: argparse.Namespace) -> int:
+    client = _make_client(args)
+    v = client.playbooks.get_version(args.version)
+    if getattr(args, "json", False):
+        _output.kv(v.model_dump(by_alias=True), fmt="json")
+        return 0
+    _output.kv(
+        {
+            "uuid": v.uuid,
+            "note": v.note,
+            "type": "autosave" if v.autosave else "snapshot",
+            "modified": _ts(v.modify_date),
+            "playbook": (v.workflow.get("name") if isinstance(v.workflow, dict) else v.workflow_iri),
+        },
+        fmt="table",
+    )
+    if getattr(args, "show_json", False) and v.snapshot:
+        print(v.snapshot)
+    return 0
+
+
+def cmd_versions_create(args: argparse.Namespace) -> int:
+    client = _make_client(args)
+    v = client.playbooks.create_version(args.playbook, note=args.note or "")
+    print(f"created snapshot {v.uuid} (note={v.note!r}) on {args.playbook}", file=sys.stderr)
+    if getattr(args, "json", False):
+        _output.kv(v.model_dump(by_alias=True), fmt="json")
+    return 0
+
+
+def _confirm(args: argparse.Namespace, verb: str, what: str) -> bool:
+    if getattr(args, "yes", False):
+        return True
+    print(f"About to {verb} {what}. Continue? [y/N] ", end="", file=sys.stderr, flush=True)
+    return sys.stdin.readline().strip().lower() in {"y", "yes"}
+
+
+def cmd_versions_restore(args: argparse.Namespace) -> int:
+    what = f"overwrite playbook {args.playbook!r} with version {args.version}"
+    if not _confirm(args, "restore (replace live playbook with snapshot)", what):
+        print("aborted", file=sys.stderr)
+        return 1
+    client = _make_client(args)
+    wf = client.playbooks.restore_version(args.playbook, args.version)
+    print(
+        f"restored {args.playbook!r} from version {args.version} -> {wf.name}",
+        file=sys.stderr,
+    )
+    if getattr(args, "json", False):
+        _output.kv(wf.to_dict(by_alias=True) if hasattr(wf, "to_dict") else dict(wf), fmt="json")
+    return 0
+
+
+def cmd_versions_delete(args: argparse.Namespace) -> int:
+    if not _confirm(args, "delete version", args.version):
+        print("aborted", file=sys.stderr)
+        return 1
+    client = _make_client(args)
+    client.playbooks.delete_version(args.version)
+    print(f"deleted version {args.version}", file=sys.stderr)
+    return 0
+
+
+def cmd_versions_diff(args: argparse.Namespace) -> int:
+    client = _make_client(args)
+    d = client.playbooks.diff_versions(args.a, args.b)
+    if getattr(args, "json", False):
+        _output.kv(d.model_dump(by_alias=True), fmt="json")
+        return 0
+    _output.render(
+        [[s, c.field] for c in d.changed for s in (c.step,)],
+        ["step", "field"],
+        fmt="table",
+    )
+    if d.added:
+        print(f"added steps:    {', '.join(d.added)}")
+    if d.removed:
+        print(f"removed steps:  {', '.join(d.removed)}")
+    if d.routes_added:
+        print(f"routes added:   {', '.join(d.routes_added)}")
+    if d.routes_removed:
+        print(f"routes removed: {', '.join(d.routes_removed)}")
+    if not d.changed and not d.added and not d.removed and not d.routes_added and not d.routes_removed:
+        print("no differences (identical snapshots)")
+    return 0
+
+
 def build_subparser(asub: argparse._SubParsersAction) -> None:
     """Wire the ``playbook`` subcommands onto an existing subparsers object."""
     p_steps = asub.add_parser("steps", help="list every friendly step type with its purpose (offline)")
@@ -531,3 +664,67 @@ def build_subparser(asub: argparse._SubParsersAction) -> None:
     add_connection_args(p_fresh)
     p_fresh.add_argument("--db", help="reference catalog path (default: packaged/dev DB)")
     p_fresh.set_defaults(func=cmd_check_fresh)
+
+    # --- versions: saved-snapshot history (the editor's "Versions" tab) ---
+    p_ver = asub.add_parser(
+        "versions",
+        help="list/get/create/restore/delete/diff a playbook's saved snapshots",
+        description=(
+            "Playbook version control: saved snapshots (the 'workflow_versions' "
+            "module, i.e. the editor's 'Versions' tab). A snapshot freezes a "
+            "playbook definition at a point in time; restore overwrites the live "
+            "playbook with a snapshot's content.\n\n"
+            "Subcommands: list / get / create / restore / delete / diff"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    vsub = p_ver.add_subparsers(dest="versions_command", required=True)
+
+    p_vl = vsub.add_parser("list", help="list a playbook's saved snapshots (newest first)")
+    add_connection_args(p_vl)
+    p_vl.add_argument("playbook", help="playbook uuid, IRI, or name")
+    p_vl.add_argument("--limit", type=int, default=100, help="max snapshots (default 100)")
+    p_vl.add_argument("--json", action="store_true", help="emit raw JSON instead of a table")
+    p_vl.set_defaults(func=cmd_versions_list)
+
+    p_vg = vsub.add_parser("get", help="show one saved snapshot")
+    add_connection_args(p_vg)
+    p_vg.add_argument("version", help="version uuid or /api/3/workflow_versions/<uuid> IRI")
+    p_vg.add_argument("--json", action="store_true", help="emit the full record as JSON")
+    p_vg.add_argument(
+        "--show-json",
+        action="store_true",
+        help="also print the snapshot's stringified workflow payload (the 'json' field)",
+    )
+    p_vg.set_defaults(func=cmd_versions_get)
+
+    p_vc = vsub.add_parser("create", help="save a snapshot of the playbook as it is now")
+    add_connection_args(p_vc)
+    p_vc.add_argument("playbook", help="playbook uuid, IRI, or name")
+    p_vc.add_argument("--note", default="", help="label for the snapshot")
+    p_vc.add_argument("--json", action="store_true", help="emit the created record as JSON")
+    p_vc.set_defaults(func=cmd_versions_create)
+
+    p_vr = vsub.add_parser(
+        "restore",
+        help="overwrite the live playbook with a snapshot's content (destructive)",
+    )
+    add_connection_args(p_vr)
+    p_vr.add_argument("playbook", help="playbook uuid, IRI, or name")
+    p_vr.add_argument("version", help="version uuid or IRI to restore from")
+    p_vr.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    p_vr.add_argument("--json", action="store_true", help="emit the restored workflow as JSON")
+    p_vr.set_defaults(func=cmd_versions_restore)
+
+    p_vd = vsub.add_parser("delete", help="delete a saved snapshot (the playbook itself is untouched)")
+    add_connection_args(p_vd)
+    p_vd.add_argument("version", help="version uuid or IRI")
+    p_vd.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    p_vd.set_defaults(func=cmd_versions_delete)
+
+    p_vdiff = vsub.add_parser("diff", help="compare two snapshots' step graphs (client-side)")
+    add_connection_args(p_vdiff)
+    p_vdiff.add_argument("a", help="first version uuid/IRI")
+    p_vdiff.add_argument("b", help="second version uuid/IRI")
+    p_vdiff.add_argument("--json", action="store_true", help="emit the diff as JSON")
+    p_vdiff.set_defaults(func=cmd_versions_diff)

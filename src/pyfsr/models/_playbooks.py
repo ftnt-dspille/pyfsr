@@ -308,3 +308,139 @@ class CreatePlaybookRequest(_RequestModel):
         if self.origin is not None:
             body["playbookOrigin"] = self.origin
         return body
+
+
+# --------------------------------------------------------- version-control shapes
+class PlaybookVersion(ApiResult):
+    """One saved playbook snapshot (the ``workflow_versions`` module).
+
+    FortiSOAR's playbook "version control" is a **snapshot history**, not a
+    revision/diff resource: each version is a frozen copy of the playbook
+    stored under ``/api/3/workflow_versions`` (capped at 20 per playbook). A
+    version is either a manual snapshot (``autosave=False``, a caller-supplied
+    ``note``) or an editor auto-save (``autosave=True``).
+
+    ``json`` is the snapshot payload — the full workflow definition
+    stringified (``steps`` / ``routes`` / ``groups`` / ``triggerStep`` / …).
+    It is populated on ``list_versions`` / ``get_version`` but **not** echoed
+    back by ``create_version`` (the server omits the blob on the POST
+    response); fetch the version again to read ``json``. ``workflow`` is the
+    embedded workflow the snapshot belongs to.
+    """
+
+    note: str | None = None
+    autosave: bool | None = None
+    uuid: str | None = None
+    # Stored under ``snapshot_json`` to avoid shadowing pydantic's ``.json()``
+    # method; the wire field is ``json`` (alias), and the ``snapshot`` property
+    # below exposes it under a name that doesn't clash with BaseModel.
+    snapshot_json: str | None = Field(default=None, alias="json")
+    workflow: Any | None = None
+    create_date: float | None = Field(default=None, alias="createDate")
+    modify_date: float | None = Field(default=None, alias="modifyDate")
+
+    @property
+    def snapshot(self) -> str | None:
+        """The snapshot payload (stringified workflow). Wire field ``json``."""
+        return self.snapshot_json
+
+    @property
+    def workflow_iri(self) -> str | None:
+        """The snapshot's workflow ``@id`` (the playbook it belongs to)."""
+        wf = self.workflow
+        if isinstance(wf, dict):
+            return wf.get("@id")
+        return wf if isinstance(wf, str) else None
+
+    def parsed_json(self) -> dict[str, Any]:
+        """Decode the snapshot's ``json`` field into the workflow dict.
+
+        Raises ``ValueError`` if ``json`` is absent (e.g. a ``create_version``
+        response, which does not echo the blob) — call ``get_version`` first.
+        """
+        if not self.snapshot_json:
+            raise ValueError(
+                "version has no json payload (create_version does not echo one); "
+                "call get_version() to load the snapshot"
+            )
+        import json as _json
+
+        return dict(_json.loads(self.snapshot_json))
+
+
+class VersionStepDelta(ApiResult):
+    """One changed step between two playbook versions (:meth:`diff_versions`).
+
+    ``field`` is the top-level step key that differs (``arguments``,
+    ``name``, ``stepType``…); ``from`` / ``to`` are the old / new values
+    (``Any`` — may be dicts, strings, or ``None``).
+    """
+
+    step: str | None = None
+    field: str | None = None
+    from_value: Any | None = Field(default=None, alias="from")
+    to_value: Any | None = Field(default=None, alias="to")
+
+
+class VersionDiff(ApiResult):
+    """A step-graph diff between two playbook snapshots (:meth:`diff_versions`).
+
+    Steps are keyed by ``uuid``. ``added`` / ``removed`` are step uuids present
+    in only one side; ``changed`` holds per-step field deltas. ``routes`` /
+    ``groups`` are the simpler added/removed-uuid lists for those graphs.
+    """
+
+    added: list[str] = Field(default_factory=list)
+    removed: list[str] = Field(default_factory=list)
+    changed: list[VersionStepDelta] = Field(default_factory=list)
+    routes_added: list[str] = Field(default_factory=list)
+    routes_removed: list[str] = Field(default_factory=list)
+    groups_added: list[str] = Field(default_factory=list)
+    groups_removed: list[str] = Field(default_factory=list)
+
+    @property
+    def is_clean(self) -> bool:
+        """True when the two snapshots are identical (no added/removed/changed)."""
+        return not (
+            self.added
+            or self.removed
+            or self.changed
+            or self.routes_added
+            or self.routes_removed
+            or self.groups_added
+            or self.groups_removed
+        )
+
+
+class CreateVersionRequest(_RequestModel):
+    """Typed body for :meth:`~pyfsr.api.playbooks.PlaybooksAPI.create_version`.
+
+    Mirrors FortiSOAR's editor ``saveSnapshot`` wire: ``json`` is the prepared
+    workflow stringified, ``workflow`` is the workflow IRI, ``modifyDate`` is
+    an epoch second timestamp. ``note`` labels the snapshot.
+    """
+
+    workflow: str
+    # Wire field is ``json``; renamed on the model to avoid shadowing
+    # pydantic's ``.json()`` method (see :class:`PlaybookVersion`).
+    snapshot_json: str = Field(alias="json")
+    note: str = ""
+    modify_date: int | None = None
+
+    @field_validator("workflow")
+    @classmethod
+    def _workflow_non_empty(cls, v: str) -> str:
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("create_version() requires a workflow IRI")
+        return v
+
+    def to_body(self) -> dict[str, Any]:
+        """Render the snapshot-create JSON body (the editor's ``Q()`` shape)."""
+        body: dict[str, Any] = {
+            "note": self.note,
+            "json": self.snapshot_json,
+            "workflow": self.workflow,
+        }
+        if self.modify_date is not None:
+            body["modifyDate"] = self.modify_date
+        return body

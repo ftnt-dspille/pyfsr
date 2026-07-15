@@ -164,6 +164,14 @@ nitpick_ignore = [
     # Private helper referenced from a public function's docstring in
     # playbook_library.py; autoapi skips it (underscore prefix), no target page.
     ("py:func", "_build_fixture_catalog_db"),
+    # PlaybookVersion is documented under the private _playbooks module; bare
+    # class refs in docstrings resolve at runtime but not under -n.
+    ("py:class", "PlaybookVersion"),
+    ("py:meth", "PlaybookVersion.parsed_json"),
+    # Appliance is documented at pyfsr.appliance.Appliance but the bare
+    # pyfsr.Appliance form (used in the cli/appliance module docstring) has
+    # no autoapi target under -n.
+    ("py:class", "pyfsr.Appliance"),
 ]
 
 # Type annotations autoapi renders as xrefs that resolve at runtime but not

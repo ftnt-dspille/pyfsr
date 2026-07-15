@@ -29,6 +29,8 @@ then re-trim here. Do **not** edit a capture by hand to "fix" a failing doctest
 
 from __future__ import annotations
 
+import json as _json
+
 # Provenance — captured from a live FortiSOAR appliance, trimmed to a stable,
 # doctest-friendly slice. Drift across FortiSOAR releases is visible at a glance
 # via CAPTURE_VERSION. Re-capture the raw files from a live box (needs creds),
@@ -1775,3 +1777,165 @@ AGENT_CONNECTOR_INSTALL_STATUS_RESPONSE = [
         "progressPercent": 100,
     }
 ]
+
+
+# ---------------------------------------------------------------------------
+# Playbook versions (``workflow_versions``) — saved snapshots, the editor's
+# "Versions" tab. Captured from a live 8.0 appliance and trimmed: the real
+# ``json`` field (a 13KB stringified workflow) is replaced with a small,
+# shape-faithful 2-step workflow so doctests stay readable. Field names,
+# types, and the ``WorkflowVersion``/``@type`` markers are the live wire.
+# ---------------------------------------------------------------------------
+
+# A minimal playbook definition stringified into a snapshot's ``json`` field —
+# real shape (steps/routes/triggerStep/groups), synthetic content (no PII).
+_PB_VERSION_JSON = _json.dumps(
+    {
+        "@type": "Workflow",
+        "name": "Block IP (test fixture)",
+        "description": "Trimmed snapshot fixture for the playbook-versions doctest.",
+        "isActive": True,
+        "debug": False,
+        "remoteExecutableFlag": False,
+        "singleRecordExecution": False,
+        "synchronous": False,
+        "triggerLimit": None,
+        "aliasName": None,
+        "tag": None,
+        "priority": None,
+        "parameters": [],
+        "triggerStep": "/api/3/workflow_steps/aaaa1111-0000-0000-0000-000000000001",
+        "collection": "/api/3/workflow_collections/00000000-0000-0000-0000-000000000010",
+        "steps": [
+            {
+                "uuid": "aaaa1111-0000-0000-0000-000000000001",
+                "name": "Manual Trigger",
+                "stepType": {"@id": "/api/3/workflow_step_types/manual", "name": "ManualTrigger"},
+                "arguments": {},
+            },
+            {
+                "uuid": "bbbb2222-0000-0000-0000-000000000002",
+                "name": "Block the IP",
+                "stepType": {"@id": "/api/3/workflow_step_types/connector", "name": "Connectors"},
+                "arguments": {"connector": "fortigate", "operation": "block_ip"},
+            },
+        ],
+        "routes": [
+            {
+                "uuid": "rrrr3333-0000-0000-0000-000000000003",
+                "sourceStep": "/api/3/workflow_steps/aaaa1111-0000-0000-0000-000000000001",
+                "targetStep": "/api/3/workflow_steps/bbbb2222-0000-0000-0000-000000000002",
+            }
+        ],
+        "groups": [],
+        "owners": [],
+        "versions": [],
+    }
+)
+
+# The playbook the snapshots below belong to (embedded on each version record
+# as ``workflow``, as the live GET/list responses carry it).
+_PB_VERSION_WORKFLOW = {
+    "@id": "/api/3/workflows/00000000-0000-0000-0000-0000000000aa",
+    "@type": "Workflow",
+    "name": "Block IP (test fixture)",
+    "uuid": "00000000-0000-0000-0000-0000000000aa",
+    "isActive": True,
+}
+
+# GET /api/3/workflow_versions/<id> — one saved snapshot. Real field set; the
+# ``json`` payload is the trimmed ``_PB_VERSION_JSON`` above. ``modifyDate`` is
+# an epoch-second float as on the wire.
+WORKFLOW_VERSION_GET_RESPONSE = {
+    "@context": "/api/3/context/WorkflowVersion",
+    "@id": "/api/3/workflow_versions/00000000-0000-0000-0000-000000000001",
+    "@type": "WorkflowVersion",
+    "id": 1,
+    "uuid": "00000000-0000-0000-0000-000000000001",
+    "note": "v1",
+    "autosave": False,
+    "json": _PB_VERSION_JSON,
+    "workflow": _PB_VERSION_WORKFLOW,
+    "createDate": 1780000000.0,
+    "modifyDate": 1780000000.0,
+    "createUser": None,
+    "modifyUser": None,
+}
+
+# A second snapshot of the same playbook with one step changed (``arguments``
+# on "Block the IP") — backs the diff_versions doctest's "changed" path.
+_PB_VERSION_JSON_2 = _json.loads(_PB_VERSION_JSON)
+_PB_VERSION_JSON_2["steps"][1]["arguments"] = {
+    "connector": "fortigate",
+    "operation": "block_ip",
+    "comment": "blocked by SOC",
+}
+WORKFLOW_VERSION_GET_RESPONSE_2 = dict(WORKFLOW_VERSION_GET_RESPONSE)
+WORKFLOW_VERSION_GET_RESPONSE_2 = {
+    **WORKFLOW_VERSION_GET_RESPONSE,
+    "@id": "/api/3/workflow_versions/00000000-0000-0000-0000-000000000002",
+    "uuid": "00000000-0000-0000-0000-000000000002",
+    "id": 2,
+    "note": "v2",
+    "json": _json.dumps(_PB_VERSION_JSON_2),
+    "modifyDate": 1780000100.0,
+}
+
+# POST /api/3/workflow_versions — create response. The server does NOT echo the
+# large ``json`` blob on POST (it returns ``None``); callers re-fetch via GET.
+WORKFLOW_VERSION_CREATE_RESPONSE = {
+    **WORKFLOW_VERSION_GET_RESPONSE,
+    "json": None,
+    "note": "v1",
+}
+
+# GET /api/3/workflow_versions?workflow=<uuid> — list (newest-first by modifyDate).
+WORKFLOW_VERSION_LIST_RESPONSE = {
+    "@context": "/api/3/context/WorkflowVersion",
+    "@id": "/api/3/workflow_versions",
+    "@type": "hydra:Collection",
+    "hydra:totalItems": 2,
+    "hydra:member": [WORKFLOW_VERSION_GET_RESPONSE_2, WORKFLOW_VERSION_GET_RESPONSE],
+}
+
+# The playbook definition the snapshots above belong to. Backs the name-lookup
+# (``GET /api/3/workflows?name=...``) and ``get_definition`` (``GET /api/3/
+# workflows/<uuid>?$relationships=true``) calls that ``list_versions`` and
+# ``create_version`` make. ``uuid`` matches the ``workflow`` IRI on each snapshot.
+WORKFLOW_DEFINITION_LIST_RESPONSE = {
+    "@context": "/api/3/context/Workflow",
+    "@id": "/api/3/workflows",
+    "@type": "hydra:Collection",
+    "hydra:totalItems": 1,
+    "hydra:member": [_PB_VERSION_WORKFLOW],
+}
+
+# A definition with steps/routes inlined (relationships=true) — the source
+# ``create_version`` stringifies into a snapshot's ``json``. Mirrors the live
+# ``preparePlaybookForOverwrite`` input shape (steps as a list).
+WORKFLOW_DEFINITION_GET_RESPONSE = {
+    **_PB_VERSION_WORKFLOW,
+    "@context": "/api/3/context/Workflow",
+    "description": "Trimmed snapshot fixture for the playbook-versions doctest.",
+    "debug": False,
+    "remoteExecutableFlag": False,
+    "singleRecordExecution": False,
+    "synchronous": False,
+    "triggerLimit": None,
+    "aliasName": None,
+    "tag": None,
+    "priority": None,
+    "parameters": [],
+    "triggerStep": "/api/3/workflow_steps/aaaa1111-0000-0000-0000-000000000001",
+    "collection": "/api/3/workflow_collections/00000000-0000-0000-0000-000000000010",
+    "steps": _json.loads(_PB_VERSION_JSON)["steps"],
+    "routes": _json.loads(_PB_VERSION_JSON)["routes"],
+    "groups": [],
+    "owners": [],
+}
+
+# PUT /api/3/workflows/<uuid> — restore_version's write. Echoes the definition.
+WORKFLOW_DEFINITION_PUT_RESPONSE = dict(WORKFLOW_DEFINITION_GET_RESPONSE)
+
+# DELETE /api/3/workflow_versions/<id> — 204 No Content (no body).
+WORKFLOW_VERSION_DELETE_RESPONSE = None
