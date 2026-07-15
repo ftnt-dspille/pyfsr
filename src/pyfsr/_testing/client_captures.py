@@ -158,6 +158,41 @@ ALERT_LIST_RESPONSE = {
     },
 }
 
+# Comments on a record (``GET /api/3/alerts/<uuid>/comments``). The server scopes
+# the query to the parent record; the response is a Hydra collection of comment
+# objects. Synthetic (no live capture needed — the shape is trivial and stable).
+ALERT_COMMENTS_RESPONSE = {
+    "@context": "/api/3/contexts/Comment",
+    "@id": "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39/comments",
+    "@type": "hydra:Collection",
+    "hydra:member": [
+        {
+            "@id": "/api/3/comments/abc12345-0000-0000-0000-000000000001",
+            "@type": "Comment",
+            "comment": "Investigating this alert.",
+            "createdBy": {"@id": "/api/3/people/3", "@type": "Person"},
+            "createDate": "2026-01-15T10:30:00.000000+00:00",
+        }
+    ],
+    "hydra:totalItems": 1,
+}
+
+# Upsert response (``POST /api/3/upsert/alerts``). The server echoes back the
+# full record (same shape as a GET/POST), so we reuse the trimmed alert capture.
+UPSERT_ALERT_RESPONSE = dict(ALERT_GET_RESPONSE)
+
+# Bulk insert all-succeeded response (``POST /api/3/insert/alerts``). When every
+# row succeeds, the server replies 201 with a bare hydra:Collection (no
+# ``success``/``failure`` keys) — ``bulk_insert`` normalizes this to a
+# ``BulkUpsertResult``. The member records have the same shape as a single alert.
+BULK_INSERT_ALERTS_RESPONSE = {
+    "@context": "/api/3/contexts/Alert",
+    "@id": "/api/3/insert/alerts",
+    "@type": "hydra:Collection",
+    "hydra:member": [ALERT_GET_RESPONSE],
+    "hydra:totalItems": 1,
+}
+
 
 # A single Incident record (``GET``/``POST /api/3/incidents``), captured live
 # from a throwaway record (created, fetched, deleted in the same session —

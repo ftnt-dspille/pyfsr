@@ -265,6 +265,11 @@ class RecordSet(Generic[T]):
 
         Note: comments are read-only on this path (create 405s); to add one,
         ``client.records("comments").create({...})`` against ``/api/3/comments``.
+
+        >>> client = demo_client()
+        >>> comments = client.records("alerts").comments("9f0eb603-ac1e-41c3-b47b-444589beed39")
+        >>> (len(comments), comments[0]["comment"])
+        (1, 'Investigating this alert.')
         """
         from .pagination import extract_members
 
@@ -313,6 +318,11 @@ class RecordSet(Generic[T]):
         :class:`~pyfsr.query.Query`); for free-text search use :meth:`search`;
         to page through all results lazily use :meth:`iterate`.
         Pass ``show_deleted=True`` to include recycle-bin records.
+
+        >>> client = demo_client()
+        >>> page = client.records("alerts").list(limit=10)
+        >>> (page.total, len(page.members), page.members[0].name)
+        (1, 1, 'Response Capture Test Alert')
         """
         query = dict(params or {})
         query["$limit"] = limit
@@ -799,6 +809,11 @@ class RecordSet(Generic[T]):
         Returns:
             The upserted record (newly created or updated), parsed as the bound
             model (or raw dict if ``raw=True``).
+
+        >>> client = demo_client()
+        >>> alert = client.records("alerts").upsert({"name": "Response Capture Test Alert"})
+        >>> alert.name
+        'Response Capture Test Alert'
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
@@ -877,6 +892,13 @@ class RecordSet(Generic[T]):
         ``resolve_picklists=False`` to skip that. Pass ``strict_picklists=True``
         to raise pre-flight on the first row with an unresolvable picklist value
         (see :meth:`create`).
+
+        >>> client = demo_client()
+        >>> result = client.records("alerts").bulk_upsert(
+        ...     [{"name": "pyfsr-bulk-doctest-ok"}], parse=True
+        ... )
+        >>> (result.ok, len(result.succeeded), len(result.failed))
+        (False, 1, 1)
         """
         payload: list[dict[str, Any]] = []
         for row in rows:
@@ -949,6 +971,13 @@ class RecordSet(Generic[T]):
             ``success``/``failure`` keys) instead of the multi-status
             envelope; this method normalizes that case so ``parse=True``
             always yields a consistent :class:`BulkUpsertResult` either way.
+
+        >>> client = demo_client()
+        >>> result = client.records("alerts").bulk_insert(
+        ...     [{"name": "Response Capture Test Alert"}], parse=True
+        ... )
+        >>> (result.ok, len(result.succeeded))
+        (True, 1)
         """
         payload: list[dict[str, Any]] = []
         for row in rows:

@@ -179,15 +179,34 @@ def add_connector():
         if os.path.isfile(tmp_tgz):
             os.remove(tmp_tgz)
     # also add a catalog entry so the connector shows in content-hub.json
+    import time
+
+    now = int(time.time())
+    bn = summary["buildNumber"]
+    slug = f"{summary['name']}-{summary['version']}"
+    info_path = f"/content-hub/{slug}/{bn}"
     entry = {
         "type": "connector",
         "name": summary["name"],
         "version": summary["version"],
-        "buildNumber": summary["buildNumber"],
+        "buildNumber": bn,
+        "label": summary["info"].get("label") or summary["name"],
+        "publisher": summary["info"].get("publisher", "Fortinet"),
+        "category": summary["info"].get("category", ""),
+        "description": summary["info"].get("description", ""),
+        "tags": [],
+        "publishedDate": now,
+        "lastUpdated": now,
+        "availableVersions": [summary["version"]],
+        "scm": {"forks": 0, "watchers": 0, "stars": 0, "type": "private", "url": ""},
+        "infoPath": info_path,
+        "iconLarge": f"{info_path}/images/large.png",
+        "certified": False,
+        "operations": summary["info"].get("operations", []),
+        "help": "",
+        "dependentSolutionPacks": [],
+        "releaseNotes": "unavailable",
     }
-    for k in ("label", "publisher", "category"):
-        if summary["info"].get(k):
-            entry[k] = summary["info"][k]
     if not validate_entry(entry):
         import json as _json
 
