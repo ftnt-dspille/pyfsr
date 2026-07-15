@@ -16,7 +16,7 @@ from pyfsr.cli.appliance.facts import Facts
 
 
 def _appliance(**kw) -> Appliance:
-    return Appliance(facts=Facts(FakeTransport(**kw)))
+    return Appliance(_facts=Facts(FakeTransport(**kw)))
 
 
 def test_namespaces_present():
@@ -103,13 +103,13 @@ def test_mq_purge_requires_yes():
 
 def test_facts_and_transport_exposed():
     fake = FakeTransport()
-    a = Appliance(facts=Facts(fake))
-    assert a.transport is fake
-    assert isinstance(a.facts, Facts)
+    a = Appliance(_facts=Facts(fake))
+    assert a._facts.transport is fake
+    assert isinstance(a._facts, Facts)
 
 
 def test_client_appliance_derives_host(mock_client):
     # The appliance reuses the client's host but builds its own SSH transport;
     # no connection is attempted until a verb runs.
     box = mock_client.appliance(key_path="/tmp/none")
-    assert getattr(box.transport, "host", None) == "test.fortisoar.com"
+    assert getattr(box._facts.transport, "host", None) == "test.fortisoar.com"

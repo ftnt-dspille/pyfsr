@@ -78,7 +78,6 @@ class ReplayTransport(Transport):
         return CommandResult(argv, 0, out, "")
 
     def _dispatch(self, argv: list[str]) -> str:
-
         # --- identity / version ---
         if argv[:2] == ["cat", "/home/csadmin/device_uuid"]:
             return f"{self._file_uuid}\n"
@@ -284,4 +283,4 @@ def demo_box():
     """
     from ..appliance import Appliance
 
-    return Appliance(facts=Facts(ReplayTransport()))
+    return Appliance(_facts=Facts(ReplayTransport()))

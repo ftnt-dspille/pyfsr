@@ -156,11 +156,11 @@ resolve which one to hit by this precedence:
    (Commonly `venom`, but never assume the name.)
 
 ```{doctest}
->>> box.facts.resolve_db(db="venom")              # explicit name → verbatim
+>>> box.db.resolve_db(db_name="venom")              # explicit name → verbatim
 'venom'
->>> box.facts.resolve_db(role="das")             # fixed role → its DB name
+>>> box.db.resolve_db(role="das")                   # fixed role → its DB name
 'das'
->>> box.facts.resolve_db()                        # default content role → discovered
+>>> box.db.resolve_db()                             # default content role → discovered
 'venom'
 ```
 
@@ -169,7 +169,7 @@ The DB/ES password is the appliance **device UUID** (user `cyberpgsql` /
 unknown role is rejected outright rather than silently hitting the wrong DB:
 
 ```{doctest}
->>> box.facts.resolve_db(role="bogus")
+>>> box.db.resolve_db(role="bogus")
 Traceback (most recent call last):
     ...
 pyfsr.cli.appliance.transport.TransportError: unknown DB role 'bogus'; known roles: content, das, gateway, connectors, notifier, data_archival
@@ -359,9 +359,12 @@ box = client.appliance(key_path="~/.ssh/id_rsa")
 box.service.liveness()
 ```
 
-For any verb not surfaced as a method, drop down to `box.facts` /
-`box.transport` and call the underlying `pyfsr.cli.appliance.*` functions
-directly.
+For any verb not surfaced as a method, use `box.run(argv)` to run an arbitrary
+command on the appliance:
+
+```python
+box.run(["uname", "-r"])            # returns stdout; raises on non-zero exit
+```
 
 ## When to use the API instead
 
