@@ -49,6 +49,14 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("DELETE", "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39", {}, status=204),
         _entry("POST", "/api/query/alerts", cap.ALERT_LIST_RESPONSE),
         _entry("POST", "/api/3/bulkupsert/alerts", cap.BULK_UPSERT_ALERTS_MIXED_RESPONSE),
+        _entry("POST", "/api/3/upsert/alerts", cap.UPSERT_ALERT_RESPONSE),
+        _entry("POST", "/api/3/insert/alerts", cap.BULK_INSERT_ALERTS_RESPONSE),
+        # Comments on a record — keyed by the collapsed alert uuid path.
+        _entry(
+            "GET",
+            "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39/comments",
+            cap.ALERT_COMMENTS_RESPONSE,
+        ),
         # Incidents — the generic-record-path example in getting-started.md.
         _entry("GET", "/api/3/incidents/0740411d-e852-4eee-b33b-596210d09a9b", cap.INCIDENT_GET_RESPONSE),
         _entry("POST", "/api/3/incidents", cap.INCIDENT_CREATE_RESPONSE),
@@ -324,6 +332,16 @@ def _path_and_match(method: str, url: str) -> tuple[str, str]:
     parsed = urllib.parse.urlparse(url)
     path = parsed.path
     segments = path.rstrip("/").split("/")
+    # /api/3/alerts/<uuid>/comments  ->  collapse the uuid to the recorded one.
+    # Must precede the 5-segment single-record rule below.
+    if (
+        len(segments) == 6
+        and segments[1] == "api"
+        and segments[2] == "3"
+        and segments[3] == "alerts"
+        and segments[5] == "comments"
+    ):
+        return "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39/comments", path
     # /api/3/alerts/<uuid>  ->  collapse the uuid to the recorded one.
     if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "alerts":
         return "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39", path

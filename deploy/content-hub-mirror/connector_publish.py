@@ -252,7 +252,7 @@ def publish_connector(
         "version": version,
         "buildNumber": build_number,
         "rpm_full_name": rpm_full_name,
-        "info": {k: info.get(k) for k in ("label", "publisher", "category")},
+        "info": {k: info.get(k) for k in ("label", "publisher", "category", "description", "operations")},
     }
 
 
