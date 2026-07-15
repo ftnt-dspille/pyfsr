@@ -2,9 +2,8 @@
 
 The appliance verbs (DB queries, service control, queue management, log tails,
 Elasticsearch/HA health, …) are implemented as plain functions under
-:mod:`pyfsr.cli.appliance`, but they take either a :class:`~pyfsr.cli.appliance.facts.Facts`
-or a :class:`~pyfsr.cli.appliance.transport.Transport` and are grouped per module —
-fine for the CLI, awkward to call by hand.
+:mod:`pyfsr.cli.appliance`, grouped per module — fine for the CLI, awkward to
+call by hand.
 
 :class:`Appliance` wraps a single connection and exposes those verbs as grouped
 methods (``appliance.db.query(...)``, ``appliance.service.status()``,
@@ -27,6 +26,8 @@ Or reuse a client's host (SSH still needs its own credentials):
 
 The same ``--yes`` / ``--write`` gating as the CLI applies: mutating methods
 take ``yes=True`` and SQL writes go through ``box.db.execute(..., yes=True)``.
+For any command not surfaced as a named method, :meth:`Appliance.run` is the
+escape hatch.
 """
 
 from __future__ import annotations
@@ -111,6 +112,15 @@ class DbNamespace:
         Non-destructive. Reclaim a reported base with :meth:`drop_module_tables`.
         """
         return db.find_orphan_module_tables(self._facts)
+
+    def resolve_db(self, *, role: str | None = None, db_name: str | None = None) -> str:
+        """Resolve the target DB name from an explicit name or a logical role.
+
+        ``db_name`` wins outright. A fixed role (``das``, ``gateway``, …) maps
+        directly. The default ``content`` role is discovered by fingerprinting
+        for ``model_metadatas``.
+        """
+        return self._facts.resolve_db(role=role, db=db_name)
 
 
 class ServiceNamespace:
@@ -327,11 +337,11 @@ class Appliance:
     - :attr:`ha` — cluster nodes/health/replication
     - :attr:`certs` — TLS cert regeneration
 
-    plus :meth:`info` and :meth:`diagnose`. Drop down to :attr:`facts` /
-    :attr:`transport` for any verb not surfaced here.
+    plus :meth:`info`, :meth:`diagnose`, and :meth:`run` (the escape hatch for
+    arbitrary shell commands).
 
     Connection args fall back to ``PYFSR_APPLIANCE_HOST`` / ``_USER`` / ``_PASSWORD``
-    when omitted. Pass an existing ``transport`` or ``facts`` to reuse a connection.
+    when omitted.
 
     .. note::
 
@@ -355,8 +365,6 @@ class Appliance:
        - :mod:`pyfsr.cli.appliance.es` — :class:`~pyfsr.cli.appliance.es.ESHealth`
        - :mod:`pyfsr.cli.appliance.ha` — :class:`~pyfsr.cli.appliance.ha.HaNode`,
          :class:`~pyfsr.cli.appliance.ha.HaHealth`
-       - :mod:`pyfsr.cli.appliance.facts` — :class:`~pyfsr.cli.appliance.facts.Facts`
-       - :mod:`pyfsr.cli.appliance.transport` — :class:`~pyfsr.cli.appliance.transport.Transport`
     """
 
     db: DbNamespace
@@ -396,22 +404,20 @@ class Appliance:
         key_path: str | None = None,
         sudo_password: str | None = None,
         insecure_skip_host_key_check: bool = False,
-        transport: Transport | None = None,
-        facts: Facts | None = None,
+        _facts: Facts | None = None,
     ) -> None:
-        if facts is not None:
-            self._facts = facts
+        if _facts is not None:
+            self._facts = _facts
         else:
-            if transport is None:
-                transport = make_transport(
-                    host=host,
-                    user=user,
-                    password=password,
-                    port=port,
-                    key_path=key_path,
-                    sudo_password=sudo_password,
-                    insecure_skip_host_key_check=insecure_skip_host_key_check,
-                )
+            transport = make_transport(
+                host=host,
+                user=user,
+                password=password,
+                port=port,
+                key_path=key_path,
+                sudo_password=sudo_password,
+                insecure_skip_host_key_check=insecure_skip_host_key_check,
+            )
             self._facts = Facts(transport)
 
         t = self._facts.transport
@@ -425,16 +431,6 @@ class Appliance:
         self.ha = HaNamespace(t)
         self.certs = CertsNamespace(t)
 
-    @property
-    def facts(self) -> Facts:
-        """The underlying :class:`~pyfsr.cli.appliance.facts.Facts` (memoized device UUID, content DB, …)."""
-        return self._facts
-
-    @property
-    def transport(self) -> Transport:
-        """The underlying :class:`~pyfsr.cli.appliance.transport.Transport` (local or SSH)."""
-        return self._facts.transport
-
     def info(self) -> dict[str, str]:
         """Identity card: host, FortiSOAR version, content DB, device UUID."""
         return info.identity(self._facts)
@@ -444,5 +440,28 @@ class Appliance:
         from .cli.appliance import diagnose as diagnose_mod
 
         if path is None:
-            return diagnose_mod.run(self.transport, timeout=timeout)
-        return diagnose_mod.run(self.transport, path=path, timeout=timeout)
+            return diagnose_mod.run(self._facts.transport, timeout=timeout)
+        return diagnose_mod.run(self._facts.transport, path=path, timeout=timeout)
+
+    def run(
+        self,
+        argv: list[str],
+        *,
+        input_text: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout: float = 60.0,
+        sudo: bool = False,
+    ) -> str:
+        """Run an arbitrary command on the appliance; returns ``stdout``.
+
+        Raises ``RuntimeError`` on non-zero exit.  Use this as the escape hatch
+        for commands not covered by a namespace method.
+
+        >>> box = Appliance(host="10.0.0.1", key_path="~/.ssh/id_rsa")  # doctest: +SKIP
+        >>> box.run(["uname", "-r"])                                      # doctest: +SKIP
+        '5.15.0-101-generic\\n'
+        """
+        res = self._facts.transport.run(argv, input_text=input_text, env=env, timeout=timeout, sudo=sudo)
+        if not res.ok:
+            raise RuntimeError(f"command failed ({res.returncode}): {' '.join(argv)}\n{res.stderr.strip()}")
+        return res.stdout

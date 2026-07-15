@@ -120,7 +120,7 @@ Point any MCP-capable agent at any FortiSOAR with one command:
 
 ```bash
 pip install 'pyfsr[mcp]'
-FSR_BASE_URL=soar.example.com FSR_API_KEY=... python -m pyfsr.mcp
+FSR_BASE_URL=soar.example.com FSR_API_KEY=... python -m pyfsr.agent.mcp
 ```
 
 It exposes the same registry (record CRUD, schema discovery, picklists,
@@ -129,7 +129,7 @@ distinct from any domain-specific FortiSOAR MCP.
 
 ## Command-line tools
 
-Installing pyfsr puts a `pyfsr` command on your path with two groups.
+Installing pyfsr puts a `pyfsr` command on your path with six groups.
 
 **`pyfsr appliance`** — operational verbs against a FortiSOAR box (most run over
 SSH/sudo and stay dependency-light on the far end):
@@ -141,24 +141,46 @@ pyfsr appliance service restart cyops-postman --yes
 pyfsr appliance db                   # Postgres verbs, multi-DB aware
 pyfsr appliance es                   # Elasticsearch health + shard state
 pyfsr appliance license              # licensing / identity, drift check
+pyfsr appliance content-hub sync     # pull the Content Hub catalog + artifacts
 ```
 
-Other groups: `mq` (RabbitMQ), `ha`, `certs`, `logs`, and `diagnose` (runs
-`fsr_diagnose.sh`). `--help` on any of them lists the verbs.
+Other appliance subgroups: `mq` (RabbitMQ), `ha`, `certs`, `logs`, and
+`diagnose` (runs `fsr_diagnose.sh`). `--help` on any of them lists the verbs.
 
 **`pyfsr playbook`** — author playbooks as YAML and deploy them:
 
 ```bash
+pyfsr playbook steps                 # list every step type you can write
+pyfsr playbook step-help TYPE        # keys + a compiling example for one type
+pyfsr playbook examples              # foundational playbook library (--intent/--stage/--manifest)
+pyfsr playbook show SLUG             # print one library playbook's metadata + YAML
 pyfsr playbook validate flow.yaml    # compile + report diagnostics (offline)
 pyfsr playbook compile flow.yaml     # emit the FSR import envelope (offline)
+pyfsr playbook lint flow.yaml        # live preflight: connector steps missing config
 pyfsr playbook deploy flow.yaml      # compile and create it on the appliance
 pyfsr playbook check-fresh           # compare the cached catalog vs a live SOAR
 ```
 
+**`pyfsr records`** — query and manage FortiSOAR records over the API:
+
+```bash
+pyfsr records alerts [--status Open] [--severity High]
+pyfsr records incidents '<field=value or Query DSL JSON>'
+pyfsr records delete <module> <uuid...> [--yes]
+```
+
+**`pyfsr repo`** — discover and download from Fortinet's content repo (no
+appliance needed).
+
+**`pyfsr widget`** — upload and publish widgets on a live appliance.
+
+**`pyfsr mcp`** — call FortiSOAR's own native MCP tool gateway
+(`list-tools` / `call`), distinct from the generic `pyfsr.agent.mcp` server.
+
 ## Development
 
 ```bash
-uv sync --extra dev
+uv sync
 uv run pytest -q                 # unit tests (live tests deselected by default)
 uvx ruff check src tests
 ```

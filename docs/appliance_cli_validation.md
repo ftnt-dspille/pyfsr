@@ -139,16 +139,15 @@ logs.scan(transport, minutes=30)              # Recent errors across units
 
 ### Database (psql)
 ```python
-from pyfsr.cli.appliance.facts import Facts
-from pyfsr.cli.appliance import db
+from pyfsr import Appliance
 
-facts = Facts(transport)
+box = Appliance(host="10.0.0.1", key_path="~/.ssh/id_rsa")
 
-db.query(facts, "SELECT ...")                  # Read-only (rejects writes)
-db.list_databases(facts)                       # [name, size, role]
-db.find_module_tables(facts, "widgets")        # Base + join tables
-db.drop_module_tables(facts, "widgets", yes=True)  # Delete + publish
-db.exec_write(facts, "DELETE...", yes=True)    # Arbitrary writes (gated)
+box.db.query("SELECT ...")                       # Read-only (rejects writes)
+box.db.databases()                               # [name, size, role]
+box.db.find_module_tables("widgets")              # Base + join tables
+box.db.drop_module_tables("widgets", yes=True)    # Delete + publish
+box.db.execute("DELETE ...", yes=True)           # Arbitrary writes (gated)
 ```
 
 ## Known Issues & Workarounds
