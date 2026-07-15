@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-15
+
+### Added
+- **Playbook version control** — `client.playbooks` now exposes the
+  `workflow_versions` snapshot history (the editor's "Versions" tab):
+  `list_versions()`, `get_version()`, `create_version()`,
+  `restore_version()`, `delete_version()`, and `diff_versions()`. The diff
+  is client-side (FortiSOAR has no diff endpoint); it compares two
+  snapshots' step graphs by uuid, surfacing added/removed/changed steps,
+  routes, and groups. New typed models: `PlaybookVersion`, `VersionDiff`,
+  `VersionStepDelta`, `CreateVersionRequest`. CLI mirrors all six verbs
+  under `pyfsr playbook versions` (`list` / `get` / `create` / `restore` /
+  `delete` / `diff`).
+- **`pyfsr appliance content-hub sync`** — pull the Content Hub catalog +
+  artifacts from REPOSERVER via `csadm package content-hub sync` (forced
+  by default; `--no-force` for a scheduled sync). Gated by `--yes`.
+- `--sudo-password` CLI flag (and `PYFSR_APPLIANCE_SUDO_PASSWORD` env) for
+  key-auth boxes that still need sudo creds for `csadm`.
+
+### Changed
+- **Transport is hidden from the public API.** `Appliance` now accepts only
+  connection kwargs (`host`, `user`, `key_path`, …) — the `transport=` and
+  `facts=` constructor params and the `.transport` / `.facts` properties are
+  removed. `box.run(argv)` is the escape hatch for arbitrary commands;
+  `box.db.resolve_db()` exposes DB resolution. Transport classes
+  (`Transport`, `SSHTransport`, `make_transport`, …) are no longer
+  re-exported from `pyfsr.cli.appliance`; import from
+  `pyfsr.cli.appliance.transport` directly only when needed.
+- `PlaybookVersion.json` property renamed to `.snapshot` (avoid shadowing
+  pydantic v2's `BaseModel.json()` method, which confused mypy).
+- README: fixed stale MCP module path (`pyfsr.mcp` → `pyfsr.agent.mcp`),
+  dev install (`uv sync --extra dev` → `uv sync`), and documented all six
+  CLI groups (was "two").
+
 ## [0.6.7] - 2026-06-22
 
 ### Added

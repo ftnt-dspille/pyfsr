@@ -79,6 +79,8 @@ from ._modules_admin import (
 from ._playbooks import (
     ApprovalRequest,
     CreatePlaybookRequest,
+    CreateVersionRequest,
+    PlaybookVersion,
     ResumeRequest,
     RunEnv,
     RunFailure,
@@ -89,6 +91,8 @@ from ._playbooks import (
     TriggerActionRequest,
     TriggerRequest,
     TriggerResponse,
+    VersionDiff,
+    VersionStepDelta,
 )
 from ._schedules import CrontabScheduleModel, ScheduledTask
 from ._system import (
@@ -238,12 +242,17 @@ __all__ = [
     "RunNode",
     "RunFailure",
     "TriggerResponse",
+    # playbook version-control shapes (workflow_versions snapshots)
+    "PlaybookVersion",
+    "VersionDiff",
+    "VersionStepDelta",
     # playbook write-request bodies
     "TriggerRequest",
     "TriggerActionRequest",
     "ResumeRequest",
     "ApprovalRequest",
     "CreatePlaybookRequest",
+    "CreateVersionRequest",
     "FileRecord",
     "Attachment",
     "ExportTemplate",
