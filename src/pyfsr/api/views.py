@@ -6,12 +6,17 @@ several SVT rows for the same layout (duplicates both flagged ``isDefault``), so
 the active layout must never be picked by name or flag; these methods resolve the
 single live template. To enumerate or write the raw SVT rows instead, use
 ``client.modules_admin.get_view_templates(module)``.
+
+Also serves the one view that isn't a module layout: :meth:`ViewsAPI.app` returns
+the left-hand **navigation** view, whose section titles drive the ``views`` export
+category.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from ..models import NavigationView
 from .base import BaseAPI
 
 #: Fixed canonical viewset segment. ``/api/views/1/...`` is the only routed
@@ -77,3 +82,34 @@ class ViewsAPI(BaseAPI):
     def form(self, module: str) -> dict[str, Any]:
         """Return the active **form** (add/edit) layout SVT for ``module``."""
         return self.resolve(module, "form")
+
+    def app(self, *, typed: bool = True) -> NavigationView | dict[str, Any]:
+        """Return the **"app" navigation view** (``GET /api/views/1/app``).
+
+        Not a module layout: this is the single view record describing the
+        left-hand navigation. ``config["navigation"]`` holds the top-level
+        sections, whose titles are what the ``views`` export category ships.
+
+        Args:
+            typed: parse into :class:`~pyfsr.models.NavigationView` (default) or
+                return the raw dict.
+
+        Example:
+            .. code-block:: python
+
+                nav = client.views.app()
+                print(nav.section_titles)  # ['Dashboard', 'AI', ...]
+        """
+        result = self.client.get(f"/api/views/{_VIEWSET}/app")
+        assert isinstance(result, dict)
+        return NavigationView.model_validate(result) if typed else result
+
+    def navigation_sections(self) -> list[str]:
+        """Return the top-level navigation section titles, in display order.
+
+        Convenience over :meth:`app` for the common case — validating or
+        enumerating the sections available to the ``views`` export category.
+        """
+        nav = self.app()
+        assert isinstance(nav, NavigationView)
+        return nav.section_titles

@@ -235,6 +235,11 @@ class Appliance(BaseRecord):
     """
 
     name: str | None = None
+    # The shared ``actors`` table carries a ``title`` column, but only ``Person``
+    # rows populate it — an Appliance omits the key entirely on the wire and is
+    # identified by ``name`` instead. Declared so ``title`` is safe to read across
+    # the whole :data:`Actor` union rather than raising on the non-Person subtypes.
+    title: str | None = None
     userType: Any | None = None
     avatar: Any | None = None
     userId: str | None = None
@@ -555,6 +560,10 @@ class ApiKey(BaseRecord):
     """
 
     name: str | None = None
+    # See the note on :class:`Appliance` — the shared ``actors`` table's ``title``
+    # column is populated only by ``Person`` rows; declared here so ``title`` reads
+    # safely across the :data:`Actor` union.
+    title: str | None = None
     userId: str | None = None
     roles: list[str] | None = None  # role IRIs (/api/3/roles/<uuid>)
     teams: list[str] | None = None  # team IRIs (/api/3/teams/<uuid>)
@@ -752,6 +761,83 @@ class ExportTemplate(BaseRecord):
 
 class SolutionPack(ContentHubItem):
     """A Content Hub **solution pack** (``type == "solutionpack"``)."""
+
+
+class AIAgent(ContentHubItem):
+    """A Content Hub **AI agent** (``type == "ai_agent"``). FortiSOAR 8.0.0+.
+
+    AI agents ship through the same Content Hub catalog as packs and connectors and
+    are served by the same ``/api/query/solutionpacks`` endpoint (``@type`` on the
+    wire is ``SolutionPack``) — only the ``type`` discriminator differs. ``name`` is
+    the agent id (e.g. ``"conversation"``) and ``label`` its display name (e.g.
+    ``"Chat Assistant"``); either resolves an agent via
+    :meth:`~pyfsr.api.content_hub.ContentHubSearch.find_installed_ai_agent`.
+    """
+
+
+class Report(BaseRecord):
+    """A **report** (``GET /api/3/reporting``).
+
+    The report definitions behind the SOAR UI's *Reports* section. Note the display
+    name is ``displayName``, **not** ``name`` — there is no ``name`` field on this
+    entity, which is why report lookups match on ``displayName``.
+
+    ``config`` holds the report layout/definition and ``filterArray`` its saved
+    filters. ``templateType`` distinguishes shipped templates from user-authored
+    reports; ``parentTemplateId`` links a report back to the template it was cloned
+    from (``None`` for originals).
+    """
+
+    displayName: str | None = None
+    type: str | None = None
+    templateType: str | None = None
+    parentTemplateId: str | None = None
+    config: dict[str, Any] | None = None
+    filterArray: list[Any] | None = None
+    importedBy: list[Any] | None = None
+    createUser: str | dict[str, Any] | None = None
+    createDate: float | None = None
+    modifyUser: str | dict[str, Any] | None = None
+    modifyDate: float | None = None
+    updateDate: float | None = None
+
+
+class NavigationView(BaseRecord):
+    """The **"app" navigation view** (``GET /api/views/1/app``).
+
+    A single view record (not a collection) describing the left-hand navigation.
+    ``config["navigation"]`` is the list of top-level sections, each a dict with a
+    ``title`` and optional nested ``items`` — those titles are what the ``views``
+    export category ships. Use
+    :meth:`~pyfsr.api.views.ViewsAPI.navigation_sections` to read them without
+    walking ``config`` by hand.
+
+    Note this endpoint returns the view **without** a JSON-LD envelope, so
+    :attr:`~pyfsr.models.base.BaseRecord.iri` is ``None``; ``uuid`` identifies it.
+    """
+
+    uuid: str | None = None
+    name: str | None = None
+    type: str | None = None
+    module: str | None = None
+    owner: str | None = None
+    config: dict[str, Any] | None = None
+    filters: list[Any] | None = None
+    viewOptions: str | None = None
+    isDefault: bool | None = None
+    system: bool | None = None
+    visible: bool | None = None
+
+    @property
+    def sections(self) -> list[dict[str, Any]]:
+        """Top-level navigation sections from ``config["navigation"]`` (``[]`` if absent)."""
+        nav = (self.config or {}).get("navigation") or []
+        return [n for n in nav if isinstance(n, dict)]
+
+    @property
+    def section_titles(self) -> list[str]:
+        """Titles of the top-level navigation sections, in display order."""
+        return [t for n in self.sections if (t := n.get("title"))]
 
 
 class ImportJob(ApiResult):

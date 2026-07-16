@@ -544,17 +544,22 @@ class ExportConfigAPI(BaseAPI):
             raise ValueError(f"Playbook collection not found: {collection_name}")
 
     def _get_template_uuid(self, template_name: str) -> str:
-        """Look up template UUID by name"""
-        response = self.client.get("/api/3/export_templates", params={"name": template_name})
-        templates = extract_members(response)
-        matching_templates = [t for t in templates if t["name"] == template_name]
+        """Look up an export template's uuid by name.
 
-        if not matching_templates:
+        The server-side ``name`` filter is a prefix/contains match, so results are
+        re-checked for an exact name here. Names aren't unique — the most recently
+        created match wins, which is what the wizard's own list shows first.
+        """
+        matching = [t for t in self.client.export_templates.list({"name": template_name}) if t.name == template_name]
+        if not matching:
             raise ValueError(f"Export template not found: {template_name}")
-
-        # Get the most recently created template if multiple exist
-        template = sorted(matching_templates, key=lambda x: x.get("createDate", 0), reverse=True)[0]
-        return template["@id"].split("/")[-1]
+        newest = sorted(matching, key=lambda t: t.createDate or 0, reverse=True)[0]
+        # Live records carry both, and ``uuid`` equals the ``@id`` tail; fall back to
+        # the IRI so a projection that selects only ``@id`` still resolves.
+        uuid = newest.uuid or (newest.iri or "").rsplit("/", 1)[-1]
+        if not uuid:
+            raise ValueError(f"Export template {template_name!r} has neither a uuid nor an @id")
+        return uuid
 
     def _trigger_export(self, template_uuid: str, filename: str) -> dict[str, Any]:
         """Trigger the export process using a template"""
@@ -925,61 +930,58 @@ class ExportConfigAPI(BaseAPI):
         if template._actors:
             actors: list[dict[str, Any]] = []
             for title in template._actors:
-                info = self._get_actor_info(title)
-                actors.append(ActorSelection(value=info["@id"], title=info.get("title"), uuid=info.get("uuid")).wire())
+                actor = self.client.actors.get(title)
+                actors.append(ActorSelection(value=actor.iri, title=actor.title, uuid=actor.uuid).wire())
             options["actors"] = actors
 
         if template._reports:
             reports: list[dict[str, Any]] = []
             for spec in template._reports:
-                info = self._get_report_info(spec["name"])
+                report = self.client.reporting.get(spec["name"])
                 reports.append(
                     ReportSelection(
-                        value=info["uuid"],
-                        label=info.get("displayName"),
+                        value=report.uuid,
+                        label=report.displayName,
                         includeSchedules=spec["includeSchedules"],
                     ).wire()
                 )
             options["reports"] = reports
 
         if template._preprocessing_rules:
-            options["preprocessingRules"] = [
-                self._rule_entry("/api/3/preprocessing_rules", name, "preprocessing rule")
-                for name in template._preprocessing_rules
-            ]
+            preprocessing: list[dict[str, Any]] = []
+            for name in template._preprocessing_rules:
+                rule = self.client.rules.get_preprocessing_rule(name)
+                preprocessing.append(RuleSelection(name=rule.name, uuid=rule.uuid, value=rule.uuid).wire())
+            options["preprocessingRules"] = preprocessing
 
         if template._rules:
-            rule_index = self._delivery_rule_index()
             rules_out: list[dict[str, Any]] = []
             for name in template._rules:
-                rec = rule_index.get(name)
-                if not rec:
-                    raise ValueError(f"delivery rule {name!r} not found")
-                rules_out.append(DeliveryRuleSelection(type="rule", value=rec["uuid"], label=rec["name"]).wire())
+                rule = self.client.rules.get_delivery_rule(name)
+                rules_out.append(DeliveryRuleSelection(type="rule", value=rule.uuid, label=rule.name).wire())
             options["rules"] = rules_out
 
         if template._rule_channels:
-            chan_index = self._rule_channel_index()
             channels_out: list[dict[str, Any]] = []
             for name in template._rule_channels:
-                rec = chan_index.get(name)
-                if not rec:
-                    raise ValueError(f"rule channel {name!r} not found")
-                channels_out.append(DeliveryRuleSelection(type="channel", value=rec["uuid"], label=rec["name"]).wire())
+                channel = self.client.rules.get_channel(name)
+                entry = DeliveryRuleSelection(type="channel", value=channel.uuid, label=channel.name)
+                channels_out.append(entry.wire())
             options["ruleChannels"] = channels_out
 
         if template._ai_agents:
-            agent_index = self._ai_agent_index()
+            # Gate before resolving: on a pre-8.0 box the Content Hub simply has no
+            # ai_agent content, so an unguarded lookup would surface as a confusing
+            # "not found" rather than "this category needs 8.0.0+".
+            self._require_8_0("AI agent")
             agents_out: list[dict[str, Any]] = []
             for spec in template._ai_agents:
-                rec = agent_index.get(spec["name"])
-                if not rec:
-                    raise ValueError(f"AI agent {spec['name']!r} not found in Content Hub")
+                agent = self.client.content_hub.get_installed_ai_agent(spec["name"])
                 agents_out.append(
                     AiAgentSelection(
-                        name=rec["name"],
-                        label=rec.get("label"),
-                        version=rec.get("version"),
+                        name=agent.name,
+                        label=agent.label,
+                        version=agent.version,
                         install=spec["install"],
                         configurations=spec["configurations"],
                     ).wire()
@@ -987,8 +989,8 @@ class ExportConfigAPI(BaseAPI):
             options["ai_agents"] = agents_out
 
         if template._navigation:
-            nav_view = self._get_navigation_view()
-            available = self._navigation_section_titles(nav_view)
+            nav_view = self.client.views.app()
+            available = nav_view.section_titles
             views: list[dict[str, Any]] = []
             for spec in template._navigation:
                 sections = spec["sections"] or available
@@ -998,7 +1000,7 @@ class ExportConfigAPI(BaseAPI):
                     raise ValueError(f"navigation section(s) {unknown} not found; available: {available}")
                 views.append(
                     NavigationSelection(
-                        uuid=nav_view["uuid"],
+                        uuid=nav_view.uuid,
                         mergeType=merge_type,
                         appendNavigation=list(sections),
                         navigationOptions=[{"title": s, "mergeType": merge_type} for s in sections],
@@ -1083,70 +1085,14 @@ class ExportConfigAPI(BaseAPI):
         ]
 
     def _resolve_mcp_config_uuid(self, name_or_uuid: str) -> str:
-        """Resolve an MCP config name to its uuid (``GET /api/3/mcp_configurations``); uuid passes through."""
+        """Resolve an MCP config name to its uuid; a uuid passes through untouched."""
         self._require_8_0("MCP configuration")
         if _is_uuid(name_or_uuid):
             return name_or_uuid
-        members = extract_members(self.client.get("/api/3/mcp_configurations", params={"name": name_or_uuid}))
-        if not members:
-            raise ValueError(f"MCP configuration {name_or_uuid!r} not found")
-        return members[0]["uuid"]
-
-    def _get_navigation_view(self) -> dict[str, Any]:
-        """Fetch the "app" navigation view record (``GET /api/views/1/app``)."""
-        return self.client.get("/api/views/1/app")
-
-    @staticmethod
-    def _navigation_section_titles(nav_view: dict[str, Any]) -> list[str]:
-        """Top-level navigation section titles from an "app" view record."""
-        nav = (nav_view.get("config") or {}).get("navigation") or []
-        return [n["title"] for n in nav if isinstance(n, dict) and n.get("title")]
-
-    def _get_actor_info(self, title: str) -> dict[str, Any]:
-        """Resolve an actor by ``title`` via a client-side match.
-
-        The ``/api/3/actors`` endpoint is an aggregate that does not accept a
-        ``title`` server filter, so fetch the (small) actor list and match the
-        title exactly.
-        """
-        for actor in extract_members(self.client.get("/api/3/actors")):
-            if isinstance(actor, dict) and actor.get("title") == title:
-                return actor
-        raise ValueError(f"actor {title!r} not found")
-
-    def _get_report_info(self, name: str) -> dict[str, Any]:
-        """Resolve a report by ``displayName`` to its ``Reporting`` record (``/api/3/reporting``)."""
-        return self._get_named_record("/api/3/reporting", "displayName", name, "report")
-
-    def _rule_engine_get(self, subpath: str) -> dict[str, Any]:
-        """GET a rule-engine collection, tolerating both front-door route styles.
-
-        The rule engine is proxied at ``/rule/api/...`` on some builds and
-        ``/api/rule/api/...`` on others; the unmatched style falls through to the
-        SPA (an HTML body that fails JSON parsing). Try each and return the first
-        that yields JSON.
-        """
-        last_exc: Exception | None = None
-        for root in ("/rule/api/", "/api/rule/api/"):
-            try:
-                return self.client.get(root + subpath, params={"limit": 2147483647})
-            except Exception as exc:  # SPA fallthrough / 404 on the wrong route
-                last_exc = exc
-        raise RuntimeError(f"rule-engine app not reachable at /rule/api/ or /api/rule/api/ ({last_exc})")
-
-    def _delivery_rule_index(self) -> dict[str, dict[str, Any]]:
-        """``{name: record}`` for all delivery rules (``GET .../api/rules/``).
-
-        The rule-engine app doesn't take a ``name`` server filter, so the (small)
-        list is fetched once and matched client-side by ``name``.
-        """
-        members = extract_members(self._rule_engine_get("rules/"))
-        return {r["name"]: r for r in members if isinstance(r, dict) and r.get("name")}
-
-    def _rule_channel_index(self) -> dict[str, dict[str, Any]]:
-        """``{name: record}`` for all rule channels (``GET .../api/channel/``)."""
-        members = extract_members(self._rule_engine_get("channel/"))
-        return {r["name"]: r for r in members if isinstance(r, dict) and r.get("name")}
+        uuid = self.client.ai.get_mcp_config(name_or_uuid).uuid
+        if not uuid:
+            raise ValueError(f"MCP configuration {name_or_uuid!r} has no uuid")
+        return uuid
 
     def _require_8_0(self, feature: str) -> None:
         """Raise if the appliance predates 8.0.0, where ``feature`` first shipped.
@@ -1160,53 +1106,6 @@ class ExportConfigAPI(BaseAPI):
                 f"{feature} export requires FortiSOAR 8.0.0+ (this appliance is "
                 f"{'.'.join(map(str, v))}); the category exists only on 8.0.0 and later."
             )
-
-    def _ai_agent_index(self) -> dict[str, dict[str, Any]]:
-        """``{name/label: record}`` for installed AI agents (Content Hub ``type: ai_agent``).
-
-        AI agents are Content Hub items; the same ``/api/query/solutionpacks``
-        endpoint the connector/pack search uses serves them under the
-        ``ai_agent`` type. Indexed by both ``name`` (id) and ``label`` so callers
-        can pass either.
-        """
-        self._require_8_0("AI agent")
-        query = {
-            "limit": 2147483647,
-            "logic": "AND",
-            "filters": [
-                {"field": "type", "operator": "in", "value": ["ai_agent"]},
-                {"field": "installed", "operator": "eq", "value": True},
-            ],
-            "search": "",
-            "__selectFields": ["uuid", "name", "label", "version", "installed", "type"],
-        }
-        members = extract_members(self.client.post("/api/query/solutionpacks?$limit=2147483647&$page=1", data=query))
-        index: dict[str, dict[str, Any]] = {}
-        for rec in members:
-            if not isinstance(rec, dict):
-                continue
-            if rec.get("name"):
-                index[rec["name"]] = rec
-            if rec.get("label"):
-                index.setdefault(rec["label"], rec)
-        return index
-
-    def _rule_entry(self, endpoint: str, name: str, kind: str) -> dict[str, Any]:
-        """Resolve a rule by ``name`` and render its ``{name, uuid, value, exists, include}`` entry.
-
-        Shared by the ``rules`` and ``preprocessingRules`` categories (identical
-        wire shape). ``endpoint`` is the source collection (e.g.
-        ``/api/3/preprocessing_rules``).
-        """
-        info = self._get_named_record(endpoint, "name", name, kind)
-        return RuleSelection(name=info["name"], uuid=info["uuid"], value=info["uuid"]).wire()
-
-    def _get_named_record(self, endpoint: str, key: str, value: str, kind: str) -> dict[str, Any]:
-        """Resolve a record by a name-like field (``name``/``title``) to its full record."""
-        members = extract_members(self.client.get(endpoint, params={key: value}))
-        if not members:
-            raise ValueError(f"{kind} {value!r} not found")
-        return members[0]
 
     def export_record_data(
         self,

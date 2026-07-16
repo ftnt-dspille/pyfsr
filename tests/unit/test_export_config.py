@@ -46,14 +46,22 @@ def _no_sleep(monkeypatch):
     monkeypatch.setattr("pyfsr.api.export_config.time.sleep", lambda *_: None)
 
 
-def _api(handler=None):
-    c = FakeClient(handler)
+def _api(handler=None, **client_kwargs):
+    c = FakeClient(handler, **client_kwargs)
     # The resolution path reaches sibling SDK surfaces (view_templates / wf_tools /
-    # workflow_collections) rather than raw HTTP — attach real instances backed by
-    # the same fake client so the handler still drives every underlying request.
+    # workflow_collections / actors / reporting / rules / content_hub / views / ai)
+    # rather than raw HTTP — attach real instances backed by the same fake client so
+    # the handler still drives every underlying request.
+    from pyfsr.api.actors import ActorsAPI
+    from pyfsr.api.ai import AIApi
+    from pyfsr.api.content_hub import ContentHubSearch
+    from pyfsr.api.export_templates import ExportTemplatesAPI
+    from pyfsr.api.reporting import ReportingAPI
     from pyfsr.api.roles import RolesAPI
+    from pyfsr.api.rules import RulesAPI
     from pyfsr.api.teams import TeamsAPI
     from pyfsr.api.view_templates import ViewTemplatesAPI
+    from pyfsr.api.views import ViewsAPI
     from pyfsr.api.wf_tools import WfToolsAPI
     from pyfsr.api.workflow_collections import WorkflowCollectionsAPI
 
@@ -62,6 +70,13 @@ def _api(handler=None):
     c.workflow_collections = WorkflowCollectionsAPI(c)
     c.roles = RolesAPI(c)
     c.teams = TeamsAPI(c)
+    c.actors = ActorsAPI(c)
+    c.reporting = ReportingAPI(c)
+    c.rules = RulesAPI(c)
+    c.content_hub = ContentHubSearch(c)
+    c.views = ViewsAPI(c)
+    c.ai = AIApi(c)
+    c.export_templates = ExportTemplatesAPI(c)
     return ExportConfigAPI(c), c
 
 
@@ -893,8 +908,7 @@ def test_create_template_mcp_config_rejected_below_8_0():
 
 def test_create_template_ai_agent_allowed_when_version_unknown():
     # permissive: unknown version (None) must not block.
-    c = FakeClient(_ai_agent_handler, version=None)
-    api = ExportConfigAPI(c)
+    api, c = _api(_ai_agent_handler, version=None)
     api.create_template(ExportTemplate("A").add_ai_agent("ioc-masking"))
     assert c.calls[-1][2]["options"]["ai_agents"][0]["name"] == "ioc-masking"
 

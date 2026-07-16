@@ -13,6 +13,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .api.actors import ActorsAPI
 from .api.agents import AgentsAPI
 from .api.ai import AIApi
 from .api.alerts import AlertsAPI
@@ -37,8 +38,10 @@ from .api.native_mcp import NativeMCPApi
 from .api.notifications import NotificationsAPI
 from .api.picklists import PicklistsAPI
 from .api.playbooks import PlaybooksAPI
+from .api.reporting import ReportingAPI
 from .api.roles import RolesAPI
 from .api.routers import RoutersAPI
+from .api.rules import RulesAPI
 from .api.schedules import SchedulesAPI
 from .api.search import SearchAPI
 from .api.solution_packs import SolutionPackAPI
@@ -357,6 +360,15 @@ class FortiSOAR:
         self.roles: RolesAPI = RolesAPI(self)
         self.teams: TeamsAPI = TeamsAPI(self)
         self.routers: RoutersAPI = RoutersAPI(self)
+
+        # The actors union (people + appliances + API keys share one table)
+        self.actors: ActorsAPI = ActorsAPI(self)
+
+        # Report definitions (matched on displayName, not name)
+        self.reporting: ReportingAPI = ReportingAPI(self)
+
+        # Delivery rules + channels (rule-engine app) and preprocessing rules (crudhub)
+        self.rules: RulesAPI = RulesAPI(self)
 
         # Threat-intel / bulk ingest, TAXII sharing, audit log
         self.feeds: IngestFeedsAPI = IngestFeedsAPI(self)
