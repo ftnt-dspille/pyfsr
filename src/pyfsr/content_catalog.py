@@ -17,9 +17,21 @@ The fetch contract a served mirror must satisfy (all live-verified on 8.0.0)::
 
     /content-hub/content-hub.json                                  # this manifest
     /content-hub/{name}-{version}/{buildNumber}/info.json          # per-item detail
-    /content-hub/{name}-{version}/latest/info.json                 # + a "latest" copy
     /content-hub/{name}-{version}/{buildNumber}/{name}-{version}.zip   # artifact
     /content-hub/{name}-{version}/{buildNumber}/images/fsr-icon-large.png
+
+Every one of those per-item files is written to a ``latest/`` alias as well as the
+numbered build dir::
+
+    /content-hub/{name}-{version}/latest/info.json
+    /content-hub/{name}-{version}/latest/{name}-{version}.zip
+    /content-hub/{name}-{version}/latest/images/fsr-icon-large.png
+
+The ``latest/`` artifact is **load-bearing, not a convenience**: an install request
+that omits ``buildNumber`` makes the appliance fetch the literal ``latest`` path
+(cyops-api ``SolutionPackController``: ``$requestBody->buildNumber ?? "latest"``).
+A tree carrying only numbered builds 404s that download, which the appliance
+misreports as ``"Please check the network connection to <repo>"``.
 
 Typical use::
 
@@ -590,7 +602,9 @@ class ContentCatalog:
         exist), alongside a ``build.json`` (``{"buildNumber": N}``) the appliance
         reads. If ``artifacts`` / ``icons`` map an entry's ``(type, name)`` to a
         local file, that file is copied to the ``.zip`` artifact / icon path the
-        sync expects (:func:`artifact_path` / :func:`icon_path`).
+        sync expects (:func:`artifact_path` / :func:`icon_path`) — in **both** the
+        numbered build dir and ``latest/``, because an install that omits
+        ``buildNumber`` fetches the ``latest`` path (see the module docstring).
 
         With ``validate=True`` (default) a non-empty :meth:`validate` raises
         ``ValueError`` before anything is written, so a bad catalog never produces
@@ -643,10 +657,21 @@ class ContentCatalog:
                 # connector's content-hub artifact is a metadata-only zip (built by
                 # the mirror's connector_publish); its runnable payload ships in the
                 # RPM, not here.
-                shutil.copyfile(artifacts[key], os.path.join(build_dir, f"{name}-{version}.zip"))
+                #
+                # Copy to the ``latest/`` dir too, not just the numbered build. The
+                # appliance defaults ``buildNumber`` to the literal ``"latest"`` when
+                # an install request omits it (cyops-api
+                # ``SolutionPackController``: ``$requestBody->buildNumber ?? "latest"``),
+                # so a tree with only numbered builds 404s that download — and the
+                # appliance reports the 404 as "check the network connection to
+                # <repo>", which sends you chasing connectivity instead. Live-verified
+                # on 8.0.0.
+                for d in (build_dir, latest_dir):
+                    shutil.copyfile(artifacts[key], os.path.join(d, f"{name}-{version}.zip"))
             if icons and key in icons:
-                img_dir = os.path.join(build_dir, "images")
-                os.makedirs(img_dir, exist_ok=True)
-                shutil.copyfile(icons[key], os.path.join(img_dir, "fsr-icon-large.png"))
+                for d in (build_dir, latest_dir):
+                    img_dir = os.path.join(d, "images")
+                    os.makedirs(img_dir, exist_ok=True)
+                    shutil.copyfile(icons[key], os.path.join(img_dir, "fsr-icon-large.png"))
 
         return manifest_path

@@ -16,6 +16,7 @@ Example:
 """
 
 import time
+from typing import Any
 
 from ..models._integration import InstallJobStatus
 from ..models._system import SolutionPackInstallResponse
@@ -77,6 +78,7 @@ class SolutionPackAPI(BaseAPI):
         name: str,
         version: str,
         *,
+        build_number: int | str | None = None,
         wait: bool = False,
         interval: float = 3.0,
         timeout: float = 300.0,
@@ -87,12 +89,24 @@ class SolutionPackAPI(BaseAPI):
         the same call the Content Hub *Install* button makes. The install runs
         asynchronously as an import job.
 
+        ``build_number`` selects which build of ``version`` to fetch. **Omit it and
+        the appliance falls back to the repo's ``latest`` build path** — which 404s
+        on a repo that publishes numbered builds without a ``latest`` alias (a
+        self-hosted mirror typically does). The appliance reports that 404 as
+        ``Unable to download <name> file. Please check the network connection to
+        <repo>``, which blames the network for what is really a missing artifact —
+        so if you hit that error against a working repo, pass the ``buildNumber``
+        from the catalog row (``client.content_hub.search_available_packs()``)
+        rather than debugging connectivity.
+
         Discover installable packs via
         ``client.content_hub.search_available_packs()``.
 
         Args:
             name: solution pack name (e.g. ``"SOAR Framework"``).
             version: the Content Hub version to install (e.g. ``"1.0.0"``).
+            build_number: the build of ``version`` to fetch. Omitted → the
+                appliance uses the repo's ``latest`` build path.
             wait: block until the import job reaches a terminal status.
             interval: seconds between polls when ``wait`` (default 3).
             timeout: give up waiting after this many seconds (default 300).
@@ -113,7 +127,10 @@ class SolutionPackAPI(BaseAPI):
             >>> resp.job_id
             '990e8400-e29b-41d4-a716-446655440012'
         """
-        resp = self.client.post("/api/3/solutionpacks/install", data={"name": name, "version": version})
+        body: dict[str, Any] = {"name": name, "version": version}
+        if build_number is not None:
+            body["buildNumber"] = build_number
+        resp = self.client.post("/api/3/solutionpacks/install", data=body)
         if not isinstance(resp, dict):
             return SolutionPackInstallResponse()
         install_resp = SolutionPackInstallResponse.model_validate(resp)

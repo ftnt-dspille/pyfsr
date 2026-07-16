@@ -149,3 +149,44 @@ def test_uninstall_not_found(mock_client, mock_response, monkeypatch):
     )
     with pytest.raises(ValueError, match="No installed solution pack"):
         mock_client.solution_packs.uninstall("Nonexistent Pack")
+
+
+def _capture_body(monkeypatch, mock_response, payload):
+    """Record the POST body install() sends."""
+    seen = {}
+
+    def _req(*args, **kwargs):
+        seen.update(kwargs)
+        return mock_response(json_data=payload)
+
+    monkeypatch.setattr("requests.Session.request", _req)
+    return seen
+
+
+_INSTALL_OK = {"uuid": "pack-uuid", "name": "vulnerabilityManagement", "version": "2.3.0"}
+
+
+def test_install_omits_build_number_by_default(mock_client, mock_response, monkeypatch):
+    # Back-compat: the body stays {name, version} unless a build is asked for.
+    seen = _capture_body(monkeypatch, mock_response, _INSTALL_OK)
+    mock_client.solution_packs.install("vulnerabilityManagement", "2.3.0")
+    assert seen["json"] == {"name": "vulnerabilityManagement", "version": "2.3.0"}
+
+
+def test_install_sends_build_number_when_given(mock_client, mock_response, monkeypatch):
+    # Without buildNumber the appliance falls back to the repo's "latest" build path,
+    # which 404s on a repo that publishes numbered builds with no "latest" alias --
+    # surfaced as a misleading "check the network connection" error (live-verified 8.0.0).
+    seen = _capture_body(monkeypatch, mock_response, _INSTALL_OK)
+    mock_client.solution_packs.install("vulnerabilityManagement", "2.3.0", build_number=1102)
+    assert seen["json"] == {
+        "name": "vulnerabilityManagement",
+        "version": "2.3.0",
+        "buildNumber": 1102,
+    }
+
+
+def test_install_build_number_accepts_str(mock_client, mock_response, monkeypatch):
+    seen = _capture_body(monkeypatch, mock_response, _INSTALL_OK)
+    mock_client.solution_packs.install("vulnerabilityManagement", "2.3.0", build_number="latest")
+    assert seen["json"]["buildNumber"] == "latest"
