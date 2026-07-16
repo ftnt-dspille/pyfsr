@@ -61,6 +61,7 @@ docstring states which it expects.
 | [`heist_tracker.py`](heist_tracker.py) | **Big end-to-end demo:** two linked modules → publish → RBAC grant → on-create YAML playbook ([`playbooks/heist_intake.yaml`](playbooks/heist_intake.yaml)) → a record that triggers it. Syntax in the [YAML reference](../docs/source/guides/playbook-yaml-reference.md). | 🔌 |
 | [`playbook_structural_queries.py`](playbook_structural_queries.py) | Query playbooks by *shape* across all three tiers: server filter, server `aggregate()`, and the client-side `match()`/`match_across()` structural matcher (same-step precision, step quantities, parent↔child joins) | 🔌 |
 | [`do_until_validation_loop.py`](do_until_validation_loop.py) | **Parent/child do-until loop:** a parent `workflow_reference` step re-runs a child playbook ([`playbooks/do_until_validation_demo.yaml`](playbooks/do_until_validation_demo.yaml)) until its Manual Input passes a jinja validation. Answers the prompt wrong a few times (loop re-prompts), then right (loop exits), and reads the child's output back via `vars.steps.<ref>.*`. | 🔌 |
+| [`playbooks/version_lifecycle_demo.yaml`](playbooks/version_lifecycle_demo.yaml) | **Playbook snapshot ("Versions") lifecycle** — no driver script; it is exercised by [`tests/integration/test_playbook_versions_integration.py`](../tests/integration/test_playbook_versions_integration.py): run → snapshot v1 → edit → snapshot v2 → `list_versions` → run (output *differs*) → `diff_versions` → `restore_version` → run (output *reverts*). | 🔌 |
 
 ## Appliance administration CLI
 

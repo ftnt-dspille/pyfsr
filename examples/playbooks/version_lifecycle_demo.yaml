@@ -1,0 +1,42 @@
+# Playbook snapshot ("Versions" tab) lifecycle demo.
+#
+# A deliberately tiny playbook whose ONLY job is to produce an externally
+# OBSERVABLE output: it CREATES an alert carrying a marker string. That makes
+# "did the playbook definition actually change?" provable from the created
+# record itself -- no debug-logging dependency and no run-env reading (runtime
+# `set_variable` values are only persisted when global workflow debug logging is
+# on, so a set_variable probe would be a weaker signal).
+#
+# It is deliberately SELF-CONTAINED: it does not read `vars.input.records`, so
+# it needs no record selected at trigger time and can be fired by uuid alone.
+# (The capstone playbook takes the same approach -- it operates on a record it
+# finds/creates itself rather than one handed in by the trigger.)
+#
+# The lifecycle it backs (see
+# tests/integration/test_playbook_versions_integration.py):
+#   run -> snapshot v1 -> edit the marker -> snapshot v2 -> list -> run (output
+#   DIFFERS) -> restore v1 -> run (output REVERTS)
+#
+# The marker lives in exactly one place (the Emit step's `description` arg) so
+# the "edit" half of the loop is a one-field change.
+
+collection: ZZ Version Lifecycle Demo
+playbooks:
+  - name: Stamp Marker
+    description: Creates an alert whose description is the current marker.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        next: Emit
+        arguments:
+          module: alerts
+          button_label: Stamp marker
+
+      - name: Emit
+        type: create_record
+        arguments:
+          module: alerts
+          resource:
+            name: ZZ VLD emitted
+            description: ALPHA
