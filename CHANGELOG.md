@@ -4,7 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-16
+
 ### Added
+- **Multi-instance MCP server + instance registry.** `pyfsr.instances.InstanceRegistry`
+  maps a short alias (`"206"`, `"ga"`) to a resolved `EnvConfig` and hands out
+  cached clients, so one agent process can reach several appliances without
+  re-wiring host/auth. Config lives in `~/.pyfsr/instances.toml` (or
+  `$PYFSR_INSTANCES`); each entry either points at an existing `FSR_*` env file
+  (credentials stay there) or inlines the same `[fortisoar]` shape
+  `EnvConfig.from_config_file` already understands. The bundled MCP server takes
+  an optional `instance` argument per tool and gains a `list_instances`
+  meta-tool; with no config file it falls back to a single `"default"` instance
+  from the `FSR_*` environment, so existing single-box callers are unaffected.
+  New `pyfsr-mcp` entrypoint (needs the `mcp` extra).
+- `EnvConfig.from_mapping()` — build config from an already-parsed `[fortisoar]`
+  mapping (the full document or the inner table), reusing the same auth/host
+  parsing as `from_config_file` without re-reading a file.
+- Agent tools `list_agent_sessions` / `get_agent_session` — read the FortiAI
+  Agentic Assistant chat store. The assistant connector's machine name varies by
+  deployment, so both accept a `connector` override.
 - **`client.actors`** — the actors *union* (`/api/3/actors`), spanning the
   `Person` / `Appliance` / `ApiKey` subtypes that share the single `actors`
   table. `list()` parses each record into its concrete model per `@type`;
@@ -47,6 +66,17 @@ All notable changes to this project will be documented in this file.
 - `client.ai.get_mcp_config()` no longer mistakes an empty response for a match:
   the collection GET uses `extract_members`, not `_as_list` (which coerces a bare
   `{}` into a phantom one-element list).
+- **Docs: the solution-pack picklist merge rule was wrong.** The export/import
+  guide said picklists are "left as-is" under `whenExists="keep"` and that "a pack
+  that renames or reorders items will not change them unless you overwrite". Both
+  are false. `"keep"` preserves your **additions** — locally-added items survive
+  and nothing is deleted — but the pack's own items are still **upserted by uuid**,
+  so a local edit to a pack-shipped item is overwritten. Verified two ways on
+  8.0.0: live (a recoloured pack item reverted to the pack's colour) and in the
+  appliance source (`PicklistNameConfig::import` points the bundle's payload at
+  the matching existing row's `@id`, re-appending only items the bundle doesn't
+  ship). The records (`replace`, uuid-matched) and modules (additive merge) rows
+  were confirmed correct.
 
 ## [0.9.0] - 2026-07-15
 
