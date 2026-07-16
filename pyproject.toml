@@ -75,6 +75,8 @@ playbooks = [
 
 [project.scripts]
 pyfsr = "pyfsr.cli.__main__:main"
+# Multi-instance MCP server for MCP-capable agents (needs the `mcp` extra).
+pyfsr-mcp = "pyfsr.agent.mcp:main"
 
 # Local dev toolchain (PEP 735 dependency group). uv installs the `dev` group
 # automatically on a bare `uv sync` (default-groups defaults to ["dev"]), so
