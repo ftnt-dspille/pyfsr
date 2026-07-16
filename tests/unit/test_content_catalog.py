@@ -562,3 +562,29 @@ def test_write_tree_refuses_invalid_catalog(tmp_path):
         cat.write_tree(str(tmp_path))
     # nothing written
     assert not (tmp_path / "content-hub").exists()
+
+
+def test_write_tree_serves_artifact_and_icon_at_latest_too(tmp_path):
+    # The appliance defaults buildNumber to the literal "latest" when an install
+    # request omits it (cyops-api: `$requestBody->buildNumber ?? "latest"`), so a
+    # tree with the artifact ONLY under the numbered build 404s that download --
+    # reported by the appliance as "check the network connection to <repo>".
+    # Live-verified on 8.0.0: this asymmetry blocked every solution-pack install.
+    art = tmp_path / "pack.zip"
+    art.write_bytes(b"ZIPBYTES")
+    ico = tmp_path / "icon.png"
+    ico.write_bytes(b"PNGBYTES")
+    cat = ContentCatalog(
+        [build_entry(name="pack", type="solutionpack", version="2.3.0", buildNumber=1102, label="Pack")]
+    )
+    out = tmp_path / "out"
+    cat.write_tree(
+        str(out),
+        artifacts={("solutionpack", "pack"): str(art)},
+        icons={("solutionpack", "pack"): str(ico)},
+    )
+    item = out / "content-hub" / "pack-2.3.0"
+    # both the numbered build and the latest/ alias must serve the artifact
+    for d in ("1102", "latest"):
+        assert (item / d / "pack-2.3.0.zip").read_bytes() == b"ZIPBYTES", f"missing artifact in {d}/"
+        assert (item / d / "images" / "fsr-icon-large.png").read_bytes() == b"PNGBYTES", f"missing icon in {d}/"
