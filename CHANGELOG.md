@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-07-16
+
+### Fixed
+- **A self-hosted mirror built by `content_catalog.write_tree` could not install any
+  solution pack.** The artifact and icon were copied only into the numbered build
+  dir, while `info.json` / `build.json` went to both it and `latest/`. That asymmetry
+  is fatal: the appliance defaults `buildNumber` to the literal `"latest"` when an
+  install request omits it, so it fetched `{name}-{ver}/latest/{name}-{ver}.zip` and
+  got a 404. `write_tree` now copies the artifact and icon into `latest/` as well,
+  matching what the appliance actually fetches. The module contract is corrected —
+  it previously specified a `latest/` copy for `info.json` only, and the tests
+  asserted the artifact only under the numbered build, which is why this survived.
+- The download 404 surfaces as `Unable to download <name> file. Please check the
+  network connection to <repo>` — the appliance catches connection and client errors
+  in one block, so a missing artifact is reported as a connectivity problem. That
+  message sends you debugging the network, the repo host, and TLS trust; none of it
+  is the cause. This is now documented on `solution_packs.install`.
+
+### Added
+- `solution_packs.install(build_number=)` — send an explicit `buildNumber` instead
+  of letting the appliance fall back to the repo's `latest` path. Useful against a
+  repo whose `latest` alias is missing or stale.
+
 ## [0.10.0] - 2026-07-16
 
 ### Added
