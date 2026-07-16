@@ -158,11 +158,22 @@ class EnvConfig:
             password = "..."
             # key = "..."        # when type = "api_key"
         """
-        data = _load_toml(path)
+        return cls.from_mapping(_load_toml(path), source=str(path))
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any], *, source: str = "<mapping>") -> EnvConfig:
+        """Build configuration from an already-parsed ``[fortisoar]`` mapping.
+
+        Accepts either the full document (with a top-level ``fortisoar`` table) or
+        the inner table directly, so callers holding a sub-table — e.g. one entry
+        of an instance registry — can reuse the same auth/host parsing as
+        :meth:`from_config_file` without re-reading a file. ``source`` only labels
+        error messages.
+        """
         fsr = data.get("fortisoar", data)
         base_url = str(fsr.get("base_url") or fsr.get("host") or "").strip()
         if not base_url:
-            raise ValueError(f"{path}: [fortisoar].base_url is required")
+            raise ValueError(f"{source}: [fortisoar].base_url is required")
 
         auth_cfg = fsr.get("auth", {}) or {}
         auth_type = str(auth_cfg.get("type") or "").strip().lower()
@@ -171,12 +182,12 @@ class EnvConfig:
         password = auth_cfg.get("password") or ""
         if auth_type == "api_key" or (key and not username):
             if not key:
-                raise ValueError(f"{path}: [fortisoar.auth].key is required for api_key auth")
+                raise ValueError(f"{source}: [fortisoar.auth].key is required for api_key auth")
             auth: str | tuple[str, str] = key
         elif username and password:
             auth = (username, password)
         else:
-            raise ValueError(f"{path}: set [fortisoar.auth] key (api_key), or both username and password")
+            raise ValueError(f"{source}: set [fortisoar.auth] key (api_key), or both username and password")
 
         port = fsr.get("port")
         timeout = fsr.get("timeout")

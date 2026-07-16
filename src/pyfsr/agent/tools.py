@@ -192,6 +192,22 @@ def _h_run_connector_operation(client, *, connector, operation, params=None, con
     return client.connectors.execute(connector, operation, params=params or {}, config_name=config_name)
 
 
+#: The FortiAI Agentic Assistant connector that owns the chat-session store.
+#: The machine name varies by deployment/version (e.g. some boxes register it as
+#: 'fortinet-fsr-playbook-builder') — pass the ``connector`` arg to override.
+_AGENT_CONNECTOR = "connector-fsr-soc-assistant"
+
+
+def _h_list_agent_sessions(client, *, limit=50, connector=_AGENT_CONNECTOR) -> Any:
+    return to_jsonable(client.connectors.execute(connector, "list_sessions", params={"limit": limit}))
+
+
+def _h_get_agent_session(client, *, session_id, limit=200, connector=_AGENT_CONNECTOR) -> Any:
+    return to_jsonable(
+        client.connectors.execute(connector, "chat_history", params={"session_id": session_id, "limit": limit})
+    )
+
+
 def _h_list_playbook_runs(client, *, playbook=None, limit=20) -> Any:
     runs = client.playbooks.execution_history(playbook=playbook, limit=limit)
     return {"runs": to_jsonable(runs)}
@@ -835,6 +851,43 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["connector", "operation"],
         ),
         _h_run_connector_operation,
+    ),
+    ToolSpec(
+        "list_agent_sessions",
+        "List recent FortiAI Agentic Assistant chat sessions (session_id, title, entries, "
+        "timestamps), newest first. Use get_agent_session to read a full transcript.",
+        _obj(
+            {
+                "limit": _LIMIT,
+                "connector": {
+                    "type": "string",
+                    "description": "Override the assistant connector name (default "
+                    "'connector-fsr-soc-assistant'; some boxes use "
+                    "'fortinet-fsr-playbook-builder').",
+                },
+            }
+        ),
+        _h_list_agent_sessions,
+    ),
+    ToolSpec(
+        "get_agent_session",
+        "Fetch a full FortiAI Agentic Assistant chat transcript by session_id. Returns the turn "
+        "sequence including raw tool-call arguments and API response bodies — the ground truth for "
+        "what a create_record/update_record call actually sent and received.",
+        _obj(
+            {
+                "session_id": {"type": "string", "description": "The chat session id to fetch."},
+                "limit": _LIMIT,
+                "connector": {
+                    "type": "string",
+                    "description": "Override the assistant connector name (default "
+                    "'connector-fsr-soc-assistant'; some boxes use "
+                    "'fortinet-fsr-playbook-builder').",
+                },
+            },
+            ["session_id"],
+        ),
+        _h_get_agent_session,
     ),
     ToolSpec(
         "list_playbook_runs",
