@@ -37,9 +37,11 @@ http. The version bump stays in lockstep across the three places that matter:
 # -> dist/cyops-connector-http-2.1.0-1.x86_64.rpm
 ```
 
-`build.sh` runs `rpmbuild` inside a throwaway `centos:7` container
-(`--platform linux/amd64`), so no host rpm toolchain is needed. `src/` and
-`dist/` are gitignored — vendor tarballs and built RPMs stay local.
+`build.sh` runs `rpmbuild` inside a throwaway `rockylinux:9` container, matching
+the appliance's el9 toolchain, so no host rpm toolchain is needed. The spec is
+`BuildArch: noarch` (pure data + scriptlets), so rpmbuild runs natively on any
+host arch — no `--platform`/qemu emulation on Apple Silicon. `src/` and `dist/`
+are gitignored — vendor tarballs and built RPMs stay local.
 
 ## Serving it from the mirror
 
