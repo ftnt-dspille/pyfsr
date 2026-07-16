@@ -239,8 +239,12 @@ engine gives each category a `whenExists` merge mode.
 
 - **record sets** — `"replace"` (the default) overwrites matching records with the
   bundle's; `"append"` keeps the existing records and adds the bundle's alongside.
-- **picklists** — `"keep"` (the default) leaves an already-present picklist as-is;
-  `"overwrite"` replaces it with the bundle's version.
+- **picklists** — `"keep"` (the default) keeps the picklist *list*: items you added
+  locally survive and nothing is deleted. It does **not** protect the individual
+  items the bundle ships — those are still upserted by uuid, so a local edit to a
+  bundle-shipped item is overwritten (live-verified on 8.0.0: a recoloured item
+  reverted to the bundle's colour under `"keep"`). `"overwrite"` replaces the
+  picklist with the bundle's version wholesale.
 
 ```python
 from pyfsr.api.import_config import merge_mode
@@ -276,9 +280,34 @@ installed, because the upgrade can change live data and schema in place. With
 
 | Category | Default on install/upgrade | What it can change |
 |---|---|---|
-| **Records** (record sets) | `whenExists = "replace"` | Existing records that **match** the pack's are overwritten with the pack's version; non-matching rows are left alone. Local edits to a matched record are lost. |
-| **Picklists** | `whenExists = "keep"` | Existing picklists are left as-is; only genuinely new picklist items are added. A pack that *renames* or *reorders* items will not change them unless you overwrite. |
-| **Module settings / schema** | additive **merge**, schema migration runs | New fields and non-conflicting module settings are applied; existing fields are kept. A field **type change**, a `tableName` change, or a **unique-constraint** change drives a destructive migrate. |
+| **Records** (record sets) | `whenExists = "replace"` | Existing records that **match** the pack's (by uuid) are overwritten with the pack's version; non-matching rows — including records from *other* packs and your own — are left alone. Local edits to a matched record are lost. |
+| **Picklists** | `whenExists = "keep"` | Keeps the picklist *list* — items you added survive, nothing is deleted — but the pack's own items are still **upserted by uuid**, so local edits to a pack-shipped item (colour, and by the same path display/order) are **overwritten**. `"keep"` is not "left untouched". |
+| **Module settings / schema** | additive **merge**, schema migration runs | New fields and non-conflicting module settings are applied; existing fields — including fields *you* added — are kept. A field **type change**, a `tableName` change, or a **unique-constraint** change drives a destructive migrate. |
+
+```{note}
+The three rows above are **live-verified on 8.0.0** by running the porter engine
+over a real solution pack's own archive against deliberately-mutated state: a
+pack-owned record reverted to the pack's value; a locally-added picklist item
+survived while a recoloured pack-shipped item reverted; a locally-added module
+field survived. Two controls held — a record belonging to a *different* pack and a
+record in no pack both kept their local edits, confirming the match is scoped to
+the pack's own record set.
+
+They are also **confirmed in the appliance source** (8.0.0), which is why they
+apply to a pack install and not just a hand-rolled import: `SolutionPackController::install`
+builds an ordinary `ImportJob` (`setType('SolutionPack Import')`) and delegates to the
+same `Service/ConfigExportImport/*` porter the import wizard uses, where the defaults are
+hardcoded — `RecordSetConfig` sets `whenExists = 'replace'`, `PicklistNameConfig` sets
+`whenExists = 'keep'`. `$replace` is read with Symfony's `$request->query->getBoolean('$replace')`,
+which is `false` when the flag is absent — so an install/upgrade merges unless you ask
+otherwise.
+
+`PicklistNameConfig::import` is also where the `"keep"` subtlety comes from: it snapshots
+the existing items, then walks the **bundle's** items and points each one at the matching
+existing row's `@id` (matching on uuid *or* `itemValue`) — so the bundle's values win —
+and only the leftover items the bundle doesn't ship are re-appended untouched. `"keep"`
+preserves your *additions*, not your *edits*.
+```
 
 Checking the wizard's **Replace Existing** box (or passing `$replace=true`) flips
 this toward a wholesale overwrite of existing content with the pack's version.
