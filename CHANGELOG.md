@@ -4,6 +4,50 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`client.actors`** — the actors *union* (`/api/3/actors`), spanning the
+  `Person` / `Appliance` / `ApiKey` subtypes that share the single `actors`
+  table. `list()` parses each record into its concrete model per `@type`;
+  `get(title)` resolves by exact title. Because titles are **not unique** on a
+  live box, `find_by_title(title)` returns every match so the ambiguity `get()`
+  hides is inspectable.
+- **`client.reporting`** — report definitions (`/api/3/reporting`) as typed
+  `Report` records. Lookups match on `displayName`; the entity has no `name`.
+- **`client.rules`** — delivery rules and channels from the rule-engine app
+  (`list_delivery_rules()`, `list_channels()`, `get_delivery_rule()`,
+  `get_channel()`) plus crudhub preprocessing rules
+  (`list_preprocessing_rules()`, `get_preprocessing_rule()`). The rule engine's
+  dual proxy root (`/rule/api/` vs `/api/rule/api/`, build-dependent) is probed
+  and cached internally, so callers never see it.
+- **`client.views.app()` / `.navigation_sections()`** — the left-hand
+  navigation view as a typed `NavigationView`, with `section_titles` instead of
+  hand-walking `config["navigation"]`.
+- **Content Hub AI agents (8.0.0+)** — `ContentType.AI_AGENT` plus
+  `search_installed_ai_agents()`, `search_available_ai_agents()`, and
+  `get_installed_ai_agent(name_or_label)` (exact match, unlike the fuzzy
+  `search_*`/`find_*` methods).
+- **`client.ai.get_mcp_config(name_or_uuid)`** — resolve one registered MCP
+  server in a single filtered round-trip (vs scanning `mcp_configs()`).
+- New typed models: `AIAgent`, `Report`, `NavigationView`, `DeliveryRule`,
+  `RuleChannel`, `PreprocessingRule` — every field set transcribed from live
+  8.0.0 responses.
+
+### Changed
+- **Config-export resolution now routes through typed SDK APIs** instead of raw
+  `client.get`/`post` calls: the actor, report, delivery-rule, rule-channel,
+  preprocessing-rule, AI-agent, navigation, MCP-config, and export-template
+  resolvers all use the surfaces above. Live-verified byte-identical wire output
+  against the previous raw path — no behavior change. `_get_picklist_iri` is
+  deliberately left raw (the typed path costs 3+ GETs vs one).
+- `Appliance` and `ApiKey` now declare `title` (always `None` — only `Person`
+  rows populate the shared `actors` table's title column), so reading `.title`
+  across the `Actor` union no longer raises `AttributeError`.
+
+### Fixed
+- `client.ai.get_mcp_config()` no longer mistakes an empty response for a match:
+  the collection GET uses `extract_members`, not `_as_list` (which coerces a bare
+  `{}` into a phantom one-element list).
+
 ## [0.9.0] - 2026-07-15
 
 ### Added

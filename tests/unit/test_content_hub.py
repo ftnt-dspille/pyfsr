@@ -231,3 +231,83 @@ def test_repo_404_raises(monkeypatch):
 
     with pytest.raises(requests.HTTPError):
         api.connector_versions("code-snippet")
+
+
+# --------------------------------------------------------------- AI agents (8.0.0+)
+
+# Trimmed from a live 8.0.0 catalog query: AI agents are served by the same
+# /api/query/solutionpacks endpoint (@type stays "SolutionPack") and are
+# discriminated only by `type: "ai_agent"`.
+_AGENTS = [
+    {
+        "uuid": "a1",
+        "name": "conversation",
+        "label": "Chat Assistant",
+        "type": "ai_agent",
+        "version": "1.0.0",
+        "installed": True,
+    },
+    {
+        "uuid": "a2",
+        "name": "alert-investigation",
+        "label": "Alert Investigation",
+        "type": "ai_agent",
+        "version": "1.2.0",
+        "installed": True,
+    },
+]
+
+
+def test_search_installed_ai_agents_filters_on_ai_agent_type():
+    api, client = _api(_AGENTS)
+    agents = api.search_installed_ai_agents()
+    assert [a.name for a in agents] == ["conversation", "alert-investigation"]
+    body = client.calls[-1][2]
+    assert {"field": "type", "operator": "in", "value": ["ai_agent"]} in body["filters"]
+    assert {"field": "installed", "operator": "eq", "value": True} in body["filters"]
+
+
+def test_ai_agents_parse_as_ai_agent_model():
+    from pyfsr.models import AIAgent
+
+    api, _ = _api(_AGENTS)
+    assert isinstance(api.search_installed_ai_agents()[0], AIAgent)
+
+
+def test_search_available_ai_agents_flips_installed_filter():
+    api, client = _api(_AGENTS)
+    api.search_available_ai_agents()
+    assert {"field": "installed", "operator": "eq", "value": False} in client.calls[-1][2]["filters"]
+
+
+def test_get_installed_ai_agent_matches_name_exactly():
+    api, _ = _api(_AGENTS)
+    assert api.get_installed_ai_agent("conversation").label == "Chat Assistant"
+
+
+def test_get_installed_ai_agent_matches_label_exactly():
+    api, _ = _api(_AGENTS)
+    assert api.get_installed_ai_agent("Chat Assistant").name == "conversation"
+
+
+def test_get_installed_ai_agent_prefers_name_over_label_on_collision():
+    members = [
+        {"uuid": "x", "name": "zeta", "label": "alpha", "type": "ai_agent"},
+        {"uuid": "y", "name": "alpha", "label": "other", "type": "ai_agent"},
+    ]
+    api, _ = _api(members)
+    # "alpha" is zeta's label AND alpha's name — name wins.
+    assert api.get_installed_ai_agent("alpha").uuid == "y"
+
+
+def test_get_installed_ai_agent_requests_every_agent_not_a_page():
+    # An exact match must not be lost off the end of a fuzzy-ranked default page.
+    api, client = _api(_AGENTS)
+    api.get_installed_ai_agent("conversation")
+    assert client.calls[-1][2]["limit"] == 2147483647
+
+
+def test_get_installed_ai_agent_unknown_raises():
+    api, _ = _api(_AGENTS)
+    with pytest.raises(ValueError, match="AI agent 'Ghost' not found"):
+        api.get_installed_ai_agent("Ghost")

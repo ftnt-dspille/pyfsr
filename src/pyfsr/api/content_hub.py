@@ -1,9 +1,13 @@
 """Content Hub discovery — ``client.content_hub``.
 
-Search and discover installable content (connectors, solution packs, widgets)
-from Fortinet's Content Hub at ``repo.fortisoar.fortinet.com``. Use this to find
-what is *available* to install on an appliance. For no-appliance discovery and
-direct artifact download, see :mod:`pyfsr.repo`.
+Search and discover installable content (connectors, solution packs, widgets, and
+— on 8.0.0+ — AI agents) from Fortinet's Content Hub at
+``repo.fortisoar.fortinet.com``. Use this to find what is *available* to install
+on an appliance. For no-appliance discovery and direct artifact download, see
+:mod:`pyfsr.repo`.
+
+Every content type is served by one catalog endpoint and discriminated by its
+``type`` field; :class:`ContentType` enumerates them.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from .base import BaseAPI
 
 if TYPE_CHECKING:
     from ..models import (
+        AIAgent,
         ConnectorVersionInfo,
         ContentHubConnector,
         ContentHubItem,
@@ -28,6 +33,11 @@ if TYPE_CHECKING:
 _REPO_HOST = "https://repo.fortisoar.fortinet.com"
 _REPO_BASE = f"{_REPO_HOST}/content-hub"
 
+#: Exact AI-agent lookup must see every installed agent, not the default page of
+#: 30 — an appliance can carry more, and a fuzzy-ranked page could omit the exact
+#: match entirely.
+_ALL_AI_AGENTS = 2147483647
+
 
 class ContentType(Enum):
     """Types of content that can be searched for in FortiSOAR Content Hub"""
@@ -35,16 +45,19 @@ class ContentType(Enum):
     SOLUTION_PACK = "solutionpack"
     CONNECTOR = "connector"
     WIDGET = "widget"
+    #: FortiSOAR 8.0.0+ only; earlier appliances have no ``ai_agent`` content.
+    AI_AGENT = "ai_agent"
 
 
 def _model_for_type(content_type: ContentType):
     """Return the typed model class for a Content Hub ``content_type``."""
-    from ..models import ContentHubConnector, SolutionPack, Widget
+    from ..models import AIAgent, ContentHubConnector, SolutionPack, Widget
 
     return {
         ContentType.SOLUTION_PACK: SolutionPack,
         ContentType.CONNECTOR: ContentHubConnector,
         ContentType.WIDGET: Widget,
+        ContentType.AI_AGENT: AIAgent,
     }[content_type]
 
 
@@ -295,6 +308,58 @@ class ContentHubSearch(BaseAPI):
             search_term=search_term,
             limit=limit,
         )
+
+    # AI Agent Methods (FortiSOAR 8.0.0+)
+    def search_installed_ai_agents(self, search_term: str = "", limit: int = 30) -> list[AIAgent]:
+        """Search installed AI agents (fuzzy — name, label, or description).
+
+        AI agents are Content Hub items served by the same catalog endpoint as
+        packs and connectors, discriminated by ``type: "ai_agent"``. Requires
+        FortiSOAR 8.0.0+; earlier appliances return nothing.
+
+        Returns dict-compatible ``AIAgent`` objects.
+        """
+        return self._search_content(
+            ContentType.AI_AGENT,
+            installed=True,
+            search_term=search_term,
+            limit=limit,
+        )
+
+    def search_available_ai_agents(self, search_term: str = "", limit: int = 30) -> list[AIAgent]:
+        """Search available (not-yet-installed) AI agents. FortiSOAR 8.0.0+."""
+        return self._search_content(
+            ContentType.AI_AGENT,
+            installed=False,
+            search_term=search_term,
+            limit=limit,
+        )
+
+    def get_installed_ai_agent(self, name_or_label: str) -> AIAgent:
+        """Resolve one installed AI agent by **exact** ``name`` or ``label``.
+
+        Unlike the fuzzy ``search_*``/``find_*`` methods (which also match on
+        description and would happily return a near-miss), this matches exactly —
+        use it when the identity of the agent matters, e.g. resolving the agent an
+        export template references. ``name`` is the agent id (``"conversation"``);
+        ``label`` its display name (``"Chat Assistant"``). ``name`` wins a tie.
+
+        Requires FortiSOAR 8.0.0+.
+
+        Args:
+            name_or_label: the agent's exact ``name`` or ``label``.
+
+        Raises:
+            ValueError: if no installed agent matches exactly.
+        """
+        agents = self.search_installed_ai_agents(limit=_ALL_AI_AGENTS)
+        for agent in agents:
+            if agent.name == name_or_label:
+                return agent
+        for agent in agents:
+            if agent.label == name_or_label:
+                return agent
+        raise ValueError(f"AI agent {name_or_label!r} not found")
 
     def connector_versions(self, name: str) -> ConnectorVersionInfo:
         """Return all published versions of a connector from Fortinet's public repo.

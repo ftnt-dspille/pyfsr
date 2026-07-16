@@ -728,3 +728,59 @@ def test_delete_mcp_tools_sends_delete_request():
     ai = AIApi(c)
     ai.delete_mcp_tools([{"uuid": "m-imap", "name": "fetch_email"}])
     assert ("DELETE", "/mcp/tools/delete", [{"uuid": "m-imap", "name": "fetch_email"}]) in c.calls
+
+
+# ------------------------------------------------------------- get_mcp_config
+
+
+class _ParamRecordingClient(RecordingClient):
+    """RecordingClient that also records query params (get_mcp_config filters on them)."""
+
+    def get(self, endpoint, params=None, **kw):
+        self.calls.append(("GET", endpoint, params))
+        return self.responses.get(("GET", endpoint), {})
+
+
+# Shaped like a live 8.0.0 /api/3/mcp_configurations member. The stored
+# `authentication` is a JSON *string*; the value here is a dummy, never a real token.
+_MCP_CFG = {
+    "@id": "/api/3/mcp_configurations/0df120f7-4676-46a7-9d74-a3f1ebd97361",
+    "@type": "MCPConfiguration",
+    "uuid": "0df120f7-4676-46a7-9d74-a3f1ebd97361",
+    "name": "Bridge: Example",
+    "url": "https://mcp.example.com/mcp/example/",
+    "transport": "http",
+    "type": "external",
+    "active": True,
+    "timeout": 30,
+    "authentication": '{"value": "dummy-token", "type": "BEARER"}',
+}
+
+
+def test_get_mcp_config_by_name_uses_server_side_filter():
+    c = _ParamRecordingClient({("GET", "/api/3/mcp_configurations"): {"hydra:member": [_MCP_CFG]}})
+    cfg = AIApi(c).get_mcp_config("Bridge: Example")
+    assert cfg.uuid == "0df120f7-4676-46a7-9d74-a3f1ebd97361"
+    assert cfg.transport == "http"
+    # One filtered round-trip, not a full scan of every configuration.
+    assert c.calls == [("GET", "/api/3/mcp_configurations", {"name": "Bridge: Example"})]
+
+
+def test_get_mcp_config_by_uuid_fetches_directly():
+    c = _ParamRecordingClient({("GET", "/api/3/mcp_configurations/0df120f7-4676-46a7-9d74-a3f1ebd97361"): _MCP_CFG})
+    cfg = AIApi(c).get_mcp_config("0df120f7-4676-46a7-9d74-a3f1ebd97361")
+    assert cfg.name == "Bridge: Example"
+    assert c.calls == [("GET", "/api/3/mcp_configurations/0df120f7-4676-46a7-9d74-a3f1ebd97361", None)]
+
+
+def test_get_mcp_config_unknown_name_raises():
+    c = _ParamRecordingClient({("GET", "/api/3/mcp_configurations"): {"hydra:member": []}})
+    with pytest.raises(ValueError, match="MCP configuration 'Ghost' not found"):
+        AIApi(c).get_mcp_config("Ghost")
+
+
+def test_get_mcp_config_empty_response_is_not_found_not_a_phantom_member():
+    # A bare {} must not coerce into a single empty member (the _as_list trap).
+    c = _ParamRecordingClient({("GET", "/api/3/mcp_configurations"): {}})
+    with pytest.raises(ValueError, match="MCP configuration 'Ghost' not found"):
+        AIApi(c).get_mcp_config("Ghost")

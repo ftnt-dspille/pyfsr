@@ -104,6 +104,7 @@ from ..models._ai import (
 from ..models._ai_agent_package import AgentPackage
 from ..pagination import extract_members
 from ..utils.iri import uuid_from_iri
+from ..utils.validation import is_uuid as _is_uuid
 from .base import BaseAPI
 
 #: Triage/agent statuses that mean the pipeline has stopped running. While running,
@@ -510,6 +511,29 @@ class AIApi(BaseAPI):
         *string*). Used by :meth:`mcp_tool_catalog` to re-probe each server.
         """
         return [MCPServerConfig.model_validate(m) for m in _as_list(self.client.get("/api/3/mcp_configurations"))]
+
+    def get_mcp_config(self, name_or_uuid: str) -> MCPServerConfig:
+        """Resolve one registered MCP server by **name** or **uuid**.
+
+        A uuid is fetched directly; a name uses the collection's server-side
+        ``name`` filter (one round-trip) rather than scanning :meth:`mcp_configs`.
+
+        Args:
+            name_or_uuid: the server's ``name`` (e.g. ``"Bridge: FortiSIEM"``) or uuid.
+
+        Raises:
+            ValueError: if no MCP configuration matches.
+        """
+        if _is_uuid(name_or_uuid):
+            return MCPServerConfig.model_validate(self.client.get(f"/api/3/mcp_configurations/{name_or_uuid}"))
+        # ``extract_members``, not ``_as_list``: this is a collection GET, and
+        # ``_as_list`` coerces a bare dict to ``[resp]`` — which would turn an empty
+        # response into a phantom member and mask a genuine "not found".
+        members = extract_members(self.client.get("/api/3/mcp_configurations", params={"name": name_or_uuid}))
+        for record in members:
+            if isinstance(record, dict):
+                return MCPServerConfig.model_validate(record)
+        raise ValueError(f"MCP configuration {name_or_uuid!r} not found")
 
     def mcp_tool_catalog(self) -> dict[str, dict[str, Any]]:
         """Map every advertised tool to the MCP server that owns it.
