@@ -18,11 +18,13 @@ Example:
 import time
 from typing import Any
 
+from ..exceptions import APIError
 from ..models._integration import InstallJobStatus
 from ..models._system import SolutionPackInstallResponse
+from ._solutionpacks import upload_solutionpack
 from .base import BaseAPI
 from .content_hub import ContentHubSearch
-from .export_config import ExportConfigAPI
+from .export_config import ExportConfigAPI, SolutionPackBuilder
 
 _INSTALL_TERMINAL = {"import complete", "import failed", "error"}
 _INSTALL_FIELDS = ["status", "progressPercent", "errorMessage", "currentlyImporting"]
@@ -61,13 +63,23 @@ class SolutionPackAPI(BaseAPI):
         if not pack:
             raise ValueError(f"An Installed Solution pack was not found with the search term: {pack_identifier}")
 
-        if not pack.get("template"):
+        # The catalog lookup does not expand relationships, so ``template`` is
+        # absent there; re-fetch the pack with relationships to get its export
+        # template (the row the server ties the pack export to).
+        template = pack.get("template")
+        if not template:
+            uuid = pack.get("uuid") or pack.get("@id", "").rstrip("/").split("/")[-1]
+            full = self.client.get(f"/api/3/solutionpacks/{uuid}?$relationships=true") if uuid else {}
+            template = full.get("template") if isinstance(full, dict) else None
+
+        if not template:
             raise ValueError(f"Solution Pack {pack_identifier} has no export template")
 
-        template_uuid = pack["template"]["uuid"]
+        template_uuid = template["uuid"] if isinstance(template, dict) else str(template).rstrip("/").split("/")[-1]
 
         if not output_path:
-            output_path = f"{pack['name']}_{pack['version']}.json"
+            # The export payload is a .zip archive, not JSON — name it accordingly.
+            output_path = f"{pack['name']}_{pack['version']}.zip"
 
         return self.export_config.export_by_template_uuid(
             template_uuid=template_uuid, output_path=output_path, poll_interval=poll_interval
@@ -143,8 +155,19 @@ class SolutionPackAPI(BaseAPI):
 
         ``GET /api/3/import_jobs/{job_id}`` (selecting just the progress fields).
         ``status == "Import Complete"`` means the install finished.
+
+        A larger solution-pack import runs a schema migrate that briefly restarts
+        the API, so this endpoint can answer ``503`` for a few seconds mid-import
+        (the UI treats an ``import_jobs`` 503 the same way). That transient is
+        reported as a non-terminal ``"Importing"`` status so :meth:`wait_for_install`
+        keeps polling instead of aborting the wait.
         """
-        resp = self.client.get(f"/api/3/import_jobs/{job_id}", params={"__selectFields": _INSTALL_FIELDS})
+        try:
+            resp = self.client.get(f"/api/3/import_jobs/{job_id}", params={"__selectFields": _INSTALL_FIELDS})
+        except APIError as exc:
+            if getattr(exc.response, "status_code", None) == 503:
+                return InstallJobStatus(status="Importing")
+            raise
         return InstallJobStatus.model_validate(resp if isinstance(resp, dict) else {"status": resp})
 
     def wait_for_install(self, job_id: str, *, interval: float = 3.0, timeout: float = 300.0) -> InstallJobStatus:
@@ -188,3 +211,107 @@ class SolutionPackAPI(BaseAPI):
         if not uuid:
             raise ValueError(f"Cannot resolve UUID for solution pack {name!r}")
         self.client.delete(f"/api/3/solutionpacks/{uuid}")
+
+    def create(self, builder: SolutionPackBuilder, *, publish: bool = False) -> SolutionPackInstallResponse:
+        """Author a new local solution pack from a :class:`SolutionPackBuilder`.
+
+        Resolves the builder's content selection to a full export ``options``
+        payload, then ``POST``\\s ``/api/3/solutionpacks`` with the pack metadata
+        and a nested ``SolutionPack Export`` template — the same shape the Content
+        Hub *Create Solution Pack* wizard posts. The pack is created ``local`` and
+        ``draft``; ``publish=True`` marks it ``installed`` (available) rather than
+        a development draft.
+
+        Args:
+            builder: the configured :class:`SolutionPackBuilder`.
+            publish: create it published/available (``installed=True``) instead of
+                a development draft.
+
+        Returns:
+            :class:`~pyfsr.models.SolutionPackInstallResponse` — the created pack
+            record (``.uuid``, ``.name``, ``.version``).
+
+        Example:
+            .. code-block:: python
+
+                from pyfsr.api.export_config import SolutionPackBuilder
+
+                pack = (
+                    SolutionPackBuilder("My SOC Pack", version="1.0.0")
+                    .add_module("alerts")
+                    .add_playbook_collection("Incident Response")
+                    .post_install_widget("AI Assistant", "5.0.0", auto_launch=True)
+                    .tags("Agentic AI")
+                )
+                created = client.solution_packs.create(pack, publish=True)
+        """
+        options = self.export_config._resolve_template_options(builder)
+        body: dict[str, Any] = {
+            "name": builder.name,
+            "label": builder.label,
+            "version": builder.version,
+            "type": "solutionpack",
+            "publisher": builder.publisher,
+            "infoContent": builder.info_content(),
+            "recordTags": list(builder._tags),
+            "draft": True,
+            "local": True,
+            "installed": publish,
+            "development": not publish,
+            "template": {
+                "name": builder.name,
+                "options": options,
+                "type": "SolutionPack Export",
+            },
+        }
+        if builder.description is not None:
+            body["description"] = builder.description
+        if builder.min_compatibility is not None:
+            body["fsrMinCompatibility"] = builder.min_compatibility
+        if builder._categories:
+            body["category"] = list(builder._categories)
+        resp = self.client.post("/api/3/solutionpacks", data=body)
+        return SolutionPackInstallResponse.model_validate(resp)
+
+    def install_from_file(
+        self,
+        path: str,
+        *,
+        replace: bool = False,
+        wait: bool = False,
+        interval: float = 3.0,
+        timeout: float = 300.0,
+    ) -> SolutionPackInstallResponse | InstallJobStatus:
+        """Install a solution pack from a local ``.zip``/``.tgz`` bundle.
+
+        Uploads the archive to ``POST /api/3/solutionpacks/install`` (``$type``
+        defaults to ``solutionpack`` server-side), the same multipart endpoint the
+        Content Hub *Upload* button uses. This is the file counterpart of
+        :meth:`install` (which fetches by name/version from the repo) and returns
+        the same shape — a pack record carrying the async import job.
+
+        Args:
+            path: filesystem path to the pack bundle.
+            replace: overwrite an already-staged copy of this exact name+version
+                (``$replace=true``).
+            wait: block until the import job reaches a terminal status.
+            interval: seconds between polls when ``wait`` (default 3).
+            timeout: give up waiting after this many seconds (default 300).
+
+        Returns:
+            :class:`~pyfsr.models.SolutionPackInstallResponse` (with ``.job_id``
+            for polling) when ``wait=False``; :class:`~pyfsr.models.InstallJobStatus`
+            when ``wait=True`` — check ``status == "Import Complete"``.
+
+        Example:
+            .. code-block:: python
+
+                client.solution_packs.install_from_file("MyPack-1.0.0.zip", wait=True)
+        """
+        resp = upload_solutionpack(self.client, path, type_="solutionpack", replace=replace)
+        parsed = SolutionPackInstallResponse.model_validate(resp)
+        if not wait:
+            return parsed
+        if not parsed.job_id:
+            raise ValueError(f"install_from_file: no import job id in response: {resp}")
+        return self.wait_for_install(parsed.job_id, interval=interval, timeout=timeout)
