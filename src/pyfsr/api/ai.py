@@ -98,6 +98,8 @@ from ..models._ai import (
     LLMProvider,
     MCPServerConfig,
     MCPServerRef,
+    MCPTool,
+    MCPToolResult,
     MCPValidateResult,
     ToolCall,
 )
@@ -534,6 +536,77 @@ class AIApi(BaseAPI):
             if isinstance(record, dict):
                 return MCPServerConfig.model_validate(record)
         raise ValueError(f"MCP configuration {name_or_uuid!r} not found")
+
+    def _resolve_registered_endpoint(self, name_or_uuid: str, token: str | None) -> tuple[str, dict[str, str], Any]:
+        """Resolve a registered server to ``(url, auth_headers, verify)``.
+
+        Decodes the record's stored ``authentication`` (a JSON string), lets
+        ``token`` override its ``value`` (for a masked/rotated secret), and builds
+        the request headers the same way fsr-ai does.
+        """
+        from .native_mcp import build_mcp_auth_headers
+
+        rec = self.get_mcp_config(name_or_uuid)
+        if not rec.url:
+            raise ValueError(f"registered MCP server {name_or_uuid!r} has no url")
+        auth = rec.authentication
+        if isinstance(auth, str):
+            auth = json.loads(auth) if auth else {}
+        auth = dict(auth or {"type": "NONE"})
+        if token is not None:
+            auth["value"] = token
+        verify = rec.get("verify", self.client.verify_ssl)
+        return rec.url, build_mcp_auth_headers(auth), verify
+
+    def list_registered_tools(self, name_or_uuid: str, *, token: str | None = None) -> list[MCPTool]:
+        """List the tools a **registered** MCP server advertises, by calling it.
+
+        Resolves the server's ``url`` + ``authentication`` from its registration
+        and opens a real MCP ``tools/list`` — the same reach fsr-ai's agent uses
+        (streamable-HTTP + auth header), driven from your own process. Thinner
+        than :meth:`mcp_tool_catalog` (one server, typed :class:`~pyfsr.models.MCPTool`).
+
+        ``token`` supplies the credential value when the stored one is masked or
+        you want to override it. Needs ``pip install 'pyfsr[mcp]'``.
+        """
+        url, headers, verify = self._resolve_registered_endpoint(name_or_uuid, token)
+        return self.client.mcp.list_tools_at(url, headers, verify=verify)
+
+    def call_registered_tool(
+        self,
+        name_or_uuid: str,
+        tool: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        token: str | None = None,
+    ) -> MCPToolResult:
+        """Execute one tool on a **registered** MCP server (external or internal).
+
+        This is how you invoke a registered server's tool *outside* an agent
+        investigation: FortiSOAR exposes no REST endpoint that runs one (only
+        ``/api/ai/mcp/validate`` — a ``tools/list`` probe), so this resolves the
+        server's ``url`` + ``authentication`` from its registration and speaks MCP
+        ``tools/call`` directly over streamable-HTTP — the same mechanism fsr-ai's
+        agent uses (``langchain_mcp_adapters.MultiServerMCPClient``), reusing
+        pyfsr's own raw-MCP session (no langchain dependency).
+
+        The appliance is not in the tool-call path (it never proxies external
+        servers); only the config lookup goes through it.
+
+        Args:
+            name_or_uuid: registered server ``name`` (e.g. ``"Bridge: FortiSIEM"``) or uuid.
+            tool: the tool name (see :meth:`list_registered_tools`).
+            arguments: tool arguments (shape is the tool's own ``input_schema``).
+            token: credential value to use when the stored one is masked/rotated.
+
+        Returns a typed :class:`~pyfsr.models.MCPToolResult` (``r.ok`` / ``r.result``
+        / ``r.error``). Needs ``pip install 'pyfsr[mcp]'``.
+        """
+        from .native_mcp import _to_tool_result
+
+        url, headers, verify = self._resolve_registered_endpoint(name_or_uuid, token)
+        payload = self.client.mcp.call_tool_at(url, headers, tool, arguments, verify=verify)
+        return _to_tool_result(payload)
 
     def mcp_tool_catalog(self) -> dict[str, dict[str, Any]]:
         """Map every advertised tool to the MCP server that owns it.

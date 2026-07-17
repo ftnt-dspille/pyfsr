@@ -139,7 +139,17 @@ def test_list_tools_returns_name_description_schema(monkeypatch):
 
     result = api.list_tools("soc")
 
-    assert result == [{"name": "get_alert", "description": "fetch an alert", "input_schema": {"type": "object"}}]
+    # typed MCPTool objects, but still dict-compatible (the tool-surface
+    # materializer reads them via ["name"] / .get("input_schema"))
+    assert len(result) == 1
+    tool = result[0]
+    assert tool.name == "get_alert"
+    assert tool.description == "fetch an alert"
+    assert tool.inputSchema == {"type": "object"}
+    assert tool["name"] == "get_alert"
+    assert tool.get("description") == "fetch an alert"
+    assert tool["input_schema"] == {"type": "object"}
+    assert tool.get("input_schema") == {"type": "object"}
     assert session.initialized
 
 
@@ -178,6 +188,107 @@ def test_call_tool_defaults_arguments_to_empty_dict(monkeypatch):
     api.call_tool("soc", "get_current_datetime")
 
     assert session.calls == [("get_current_datetime", {})]
+
+
+# -- call_tool_result (typed MCPToolResult) ------------------------------------
+def test_call_tool_result_wraps_success_envelope(monkeypatch):
+    session = FakeSession(call_result_text='{"status": "success", "result": {"a": 1}, "error": null}')
+    _patch_mcp(monkeypatch, session)
+    api = NativeMCPApi(FakeClient())
+
+    r = api.call_tool_result("soc", "get_alert", {"uuid": ["x"]})
+
+    assert r.ok is True
+    assert r.status == "success"
+    assert r.result == {"a": 1}
+    assert r.error is None
+    # dict-compatible too
+    assert r["result"] == {"a": 1}
+    assert r.get("status") == "success"
+
+
+def test_call_tool_result_wraps_non_envelope_payload(monkeypatch):
+    # an in-band failure that comes back as a bare string still yields a model
+    session = FakeSession(call_result_text="not json")
+    _patch_mcp(monkeypatch, session)
+    api = NativeMCPApi(FakeClient())
+
+    r = api.call_tool_result("soc", "get_alert")
+
+    assert r.ok is False
+    assert r.status is None
+    assert r.result == "not json"
+
+
+def test_call_tool_result_wraps_none_content(monkeypatch):
+    session = FakeSession(call_result_text=None)
+    _patch_mcp(monkeypatch, session)
+    api = NativeMCPApi(FakeClient())
+
+    r = api.call_tool_result("soc", "get_alert")
+
+    assert r.ok is False
+    assert r.result is None
+
+
+# -- auth-header builder + httpx factory ---------------------------------------
+def test_build_mcp_auth_headers_variants():
+    from pyfsr.api.native_mcp import build_mcp_auth_headers
+
+    assert build_mcp_auth_headers({"type": "BEARER", "value": "tok"}) == {"Authorization": "Bearer tok"}
+    assert build_mcp_auth_headers({"type": "FSR", "value": "tok"}) == {"Authorization": "Bearer tok"}
+    assert build_mcp_auth_headers({"type": "BEARER", "value": "tok", "prefix": "Token", "header_name": "X-Auth"}) == {
+        "X-Auth": "Token tok"
+    }
+    assert build_mcp_auth_headers({"type": "API_KEY", "header_name": "X-Key", "value": "k"}) == {"X-Key": "k"}
+    assert build_mcp_auth_headers({"type": "BASIC", "username": "u", "password": "p"}) == {
+        "Authorization": "Basic dTpw"  # base64("u:p")
+    }
+    assert build_mcp_auth_headers({"type": "NONE"}) == {}
+    assert build_mcp_auth_headers(None) == {}
+
+
+def test_build_mcp_auth_headers_unsupported_raises():
+    from pyfsr.api.native_mcp import build_mcp_auth_headers
+
+    with pytest.raises(ValueError, match="unsupported MCP auth type"):
+        build_mcp_auth_headers({"type": "OAUTH2"})
+
+
+def test_new_httpx_client_follows_redirects():
+    from pyfsr.api.native_mcp import _new_httpx_client
+
+    client = _new_httpx_client(verify=False)
+    try:
+        assert client.follow_redirects is True
+    finally:
+        import anyio
+
+        anyio.run(client.aclose)
+
+
+# -- call_tool_at / list_tools_at (arbitrary registered server) ----------------
+def test_call_tool_at_reaches_arbitrary_url(monkeypatch):
+    session = FakeSession(call_result_text='{"status": "success", "result": {"n": 1}}')
+    _patch_mcp(monkeypatch, session)
+    api = NativeMCPApi(FakeClient())
+
+    out = api.call_tool_at(
+        "https://bridge.example.com/mcp/siem/", {"Authorization": "Bearer x"}, "get_incident", {"id": "1"}
+    )
+
+    assert out == {"status": "success", "result": {"n": 1}}
+    assert session.calls == [("get_incident", {"id": "1"})]
+
+
+def test_list_tools_at_returns_typed_tools(monkeypatch):
+    session = FakeSession(tools=[FakeTool("get_incident", "desc")])
+    _patch_mcp(monkeypatch, session)
+    api = NativeMCPApi(FakeClient())
+
+    tools = api.list_tools_at("https://bridge.example.com/mcp/siem/", {"Authorization": "Bearer x"})
+
+    assert [t.name for t in tools] == ["get_incident"]
 
 
 # -- reauth-on-401/403 ----------------------------------------------------------

@@ -75,6 +75,8 @@ docstring states which it expects.
 | Script | What it shows | |
 |---|---|---|
 | [`tune_new_instance.py`](tune_new_instance.py) | Apply the standard tuning every new FortiSOAR instance needs | 🔌 |
+| [`native_mcp_gateway.py`](native_mcp_gateway.py) | Call the appliance's own native `/mcp/*` gateway directly via `client.mcp` (list + trigger soc/playbooks/modules/utility tools) | 🔌 |
+| [`register_and_call_public_mcp_server.py`](register_and_call_public_mcp_server.py) | Register an *external* MCP server (public DeepWiki) with FortiSOAR and call its tools | 🔌 |
 | [`connect_fortisiem_mcp.py`](connect_fortisiem_mcp.py) | Register FortiSIEM's MCP server with FortiAI and grant it to triage agents | 🔌 |
 | [`trigger_ai_investigation.py`](trigger_ai_investigation.py) | Trigger a FortiAI investigation on an alert and print the verdict | 🔌 |
 | [`investigate_fortisiem_incident.py`](investigate_fortisiem_incident.py) | End-to-end FortiSIEM incident investigation with tool-usage audit | 🔌 |

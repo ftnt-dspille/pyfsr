@@ -11,7 +11,13 @@ import argparse
 from io import StringIO
 from unittest.mock import patch
 
-from pyfsr.cli.__main__ import build_parser, cmd_mcp_call, cmd_mcp_list_tools
+from pyfsr.cli.__main__ import (
+    build_parser,
+    cmd_mcp_call,
+    cmd_mcp_call_registered,
+    cmd_mcp_list_registered,
+    cmd_mcp_list_tools,
+)
 
 
 def suppress_output(func):
@@ -157,3 +163,64 @@ def test_missing_mcp_dependency_surfaces_as_clean_error(capsys):
         exit_code = main(["mcp", "list-tools"])
     assert exit_code == 1
     assert "pyfsr[mcp]" in capsys.readouterr().err
+
+
+# --- registered-server verbs (client.ai) --------------------------------------
+class MockAI:
+    def __init__(self, tools=None, call_result=None):
+        from pyfsr.models import MCPTool, MCPToolResult
+
+        self._tools = tools or [MCPTool(name="get_incident", description="d")]
+        self._call_result = call_result or MCPToolResult(status="success", result={"incidentId": 1})
+        self.list_calls = []
+        self.call_calls = []
+
+    def list_registered_tools(self, server, *, token=None):
+        self.list_calls.append((server, token))
+        return self._tools
+
+    def call_registered_tool(self, server, tool, arguments=None, *, token=None):
+        self.call_calls.append((server, tool, arguments, token))
+        return self._call_result
+
+
+class MockClientAI(MockClient):
+    def __init__(self, ai=None):
+        super().__init__()
+        self.ai = ai or MockAI()
+
+
+def test_parser_wires_call_registered():
+    parser = build_parser()
+    args = parser.parse_args(
+        ["mcp", "call-registered", "Bridge: FortiSIEM", "get_incident", "--args", "{}", "--mcp-token", "t"]
+    )
+    assert args.registered_server == "Bridge: FortiSIEM"
+    assert args.tool == "get_incident"
+    assert args.mcp_token == "t"
+    assert args.func is cmd_mcp_call_registered
+
+
+def test_call_registered_dispatches_and_prints_result(capsys):
+    ai = MockAI()
+    args = argparse.Namespace(
+        registered_server="Bridge: FortiSIEM", tool="get_incident", args='{"incident_id": "1"}', mcp_token=None
+    )
+    with patch("pyfsr.cli.__main__.playbook_cmds._make_client", return_value=MockClientAI(ai)):
+        assert cmd_mcp_call_registered(args) == 0
+    assert ai.call_calls == [("Bridge: FortiSIEM", "get_incident", {"incident_id": "1"}, None)]
+    assert '"incidentId": 1' in capsys.readouterr().out
+
+
+def test_list_registered_table():
+    ai = MockAI()
+    args = argparse.Namespace(registered_server="Bridge: FortiSIEM", fmt="table", mcp_token=None)
+    with patch("pyfsr.cli.__main__.playbook_cmds._make_client", return_value=MockClientAI(ai)):
+        assert suppress_output(cmd_mcp_list_registered)(args) == 0
+    assert ai.list_calls == [("Bridge: FortiSIEM", None)]
+
+
+def test_call_registered_rejects_malformed_args():
+    args = argparse.Namespace(registered_server="X", tool="t", args="not-json", mcp_token=None)
+    with patch("pyfsr.cli.__main__.playbook_cmds._make_client", return_value=MockClientAI()):
+        assert suppress_output(cmd_mcp_call_registered)(args) == 1

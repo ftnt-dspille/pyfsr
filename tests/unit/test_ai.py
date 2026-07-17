@@ -779,6 +779,82 @@ def test_get_mcp_config_unknown_name_raises():
         AIApi(c).get_mcp_config("Ghost")
 
 
+# -- call_registered_tool / list_registered_tools ------------------------------
+class _FakeNativeMCP:
+    """Stands in for client.mcp — records the (url, headers, ...) it's reached with."""
+
+    def __init__(self, call_payload=None, tools=None):
+        self.call_payload = call_payload
+        self.tools = tools or []
+        self.calls = []
+
+    def call_tool_at(self, url, headers, name, arguments=None, *, verify=None):
+        self.calls.append(("call", url, headers, name, arguments, verify))
+        return self.call_payload
+
+    def list_tools_at(self, url, headers, *, verify=None):
+        self.calls.append(("list", url, headers, verify))
+        return self.tools
+
+
+class _RegisteredClient(_ParamRecordingClient):
+    def __init__(self, responses=None, mcp=None, verify_ssl=False):
+        super().__init__(responses)
+        self.mcp = mcp
+        self.verify_ssl = verify_ssl
+
+
+def test_call_registered_tool_resolves_and_calls():
+    from pyfsr.models import MCPToolResult
+
+    mcp = _FakeNativeMCP(call_payload={"status": "success", "result": {"incidentId": 1}})
+    c = _RegisteredClient({("GET", "/api/3/mcp_configurations"): {"hydra:member": [_MCP_CFG]}}, mcp=mcp)
+
+    r = AIApi(c).call_registered_tool("Bridge: Example", "get_incident", {"incident_id": "1"})
+
+    assert isinstance(r, MCPToolResult)
+    assert r.ok is True
+    assert r.result == {"incidentId": 1}
+    # reached the registered url with the stored bearer, tool + args + client verify
+    kind, url, headers, name, args, verify = mcp.calls[0]
+    assert (kind, url, name, args, verify) == (
+        "call",
+        "https://mcp.example.com/mcp/example/",
+        "get_incident",
+        {"incident_id": "1"},
+        False,
+    )
+    assert headers == {"Authorization": "Bearer dummy-token"}
+
+
+def test_call_registered_tool_token_override():
+    mcp = _FakeNativeMCP(call_payload={"status": "success"})
+    c = _RegisteredClient({("GET", "/api/3/mcp_configurations"): {"hydra:member": [_MCP_CFG]}}, mcp=mcp)
+
+    AIApi(c).call_registered_tool("Bridge: Example", "get_incident", token="demo-token")
+
+    assert mcp.calls[0][2] == {"Authorization": "Bearer demo-token"}
+
+
+def test_list_registered_tools_returns_typed():
+    from pyfsr.models import MCPTool
+
+    mcp = _FakeNativeMCP(tools=[MCPTool(name="get_incident", description="d")])
+    c = _RegisteredClient({("GET", "/api/3/mcp_configurations"): {"hydra:member": [_MCP_CFG]}}, mcp=mcp)
+
+    tools = AIApi(c).list_registered_tools("Bridge: Example")
+
+    assert [t.name for t in tools] == ["get_incident"]
+    assert mcp.calls[0][:2] == ("list", "https://mcp.example.com/mcp/example/")
+
+
+def test_call_registered_tool_no_url_raises():
+    cfg = {**_MCP_CFG, "url": None}
+    c = _RegisteredClient({("GET", "/api/3/mcp_configurations"): {"hydra:member": [cfg]}}, mcp=_FakeNativeMCP())
+    with pytest.raises(ValueError, match="has no url"):
+        AIApi(c).call_registered_tool("Bridge: Example", "get_incident")
+
+
 def test_get_mcp_config_empty_response_is_not_found_not_a_phantom_member():
     # A bare {} must not coerce into a single empty member (the _as_list trap).
     c = _ParamRecordingClient({("GET", "/api/3/mcp_configurations"): {}})

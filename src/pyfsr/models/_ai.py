@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from .base import BaseRecord
 
@@ -74,11 +74,58 @@ class MCPServerRef(_Lenient):
 
 
 class MCPTool(_Lenient):
-    """One tool advertised by an MCP server's ``tools/list`` (from validate/probe)."""
+    """One tool advertised by an MCP server's ``tools/list``.
+
+    Used both by the *registration* probe (:meth:`~pyfsr.api.ai.AIApi.validate_mcp_server`,
+    which reads the MCP-native ``inputSchema`` key) and by the appliance's own
+    native gateway (:meth:`~pyfsr.api.native_mcp.NativeMCPApi.list_tools`, whose
+    historical dict shape used ``input_schema``). ``inputSchema`` accepts either
+    spelling on the wire and :attr:`input_schema` reads it back either way, so
+    ``tool["input_schema"]``/``tool.get("input_schema")`` and ``tool.inputSchema``
+    all resolve — the dict-style access the tool-surface materializer relies on
+    keeps working.
+    """
 
     name: str | None = None
     description: str | None = None
-    inputSchema: dict[str, Any] | None = None
+    inputSchema: dict[str, Any] | None = Field(
+        default=None, validation_alias=AliasChoices("inputSchema", "input_schema")
+    )
+
+    @property
+    def input_schema(self) -> dict[str, Any] | None:
+        """Snake-case alias for :attr:`inputSchema` (native-gateway dict shape)."""
+        return self.inputSchema
+
+
+class MCPToolResult(_Lenient):
+    """The ``{"status", "result", "error"}`` envelope a native gateway tool returns.
+
+    Every FortiSOAR native tool (``/mcp/soc/``, ``/mcp/playbooks/``, ...) replies
+    with this envelope on success; :attr:`ok` is a convenience for
+    ``status == "success"``. In-band tool failures come back as a plain string
+    instead of this envelope — :meth:`~pyfsr.api.native_mcp.NativeMCPApi.call_tool`
+    returns that raw value untouched, while
+    :meth:`~pyfsr.api.native_mcp.NativeMCPApi.call_tool_result` always wraps into
+    this model (a non-envelope payload lands under :attr:`result` with
+    ``status=None``). Extra keys are preserved (``extra="allow"``).
+    """
+
+    status: str | None = None
+    result: Any = None
+    error: Any = None
+
+    @property
+    def ok(self) -> bool:
+        """``status == "success"`` — the FortiSOAR-native envelope convention.
+
+        Only meaningful for FortiSOAR's own tools (native gateway / internal
+        registered servers), which reply with ``{"status": "success", ...}``. A
+        third-party MCP server returns its own payload shape (e.g. raw text or its
+        own JSON), so ``ok`` is ``False`` even on success — read :attr:`result` /
+        :attr:`error` for those.
+        """
+        return self.status == "success"
 
 
 class MCPValidateResult(_Lenient):

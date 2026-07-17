@@ -492,6 +492,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_mcp_call.set_defaults(func=cmd_mcp_call)
 
+    p_mcp_lr = mcpsub.add_parser(
+        "list-registered", help="list the tools a REGISTERED MCP server advertises (external or internal)"
+    )
+    playbook_cmds.add_connection_args(p_mcp_lr)
+    _add_fmt(p_mcp_lr)
+    p_mcp_lr.add_argument(
+        "registered_server", metavar="server", help="registered server name or uuid, e.g. 'Bridge: FortiSIEM'"
+    )
+    p_mcp_lr.add_argument(
+        "--mcp-token", dest="mcp_token", default=None, help="credential value if the stored one is masked/rotated"
+    )
+    p_mcp_lr.set_defaults(func=cmd_mcp_list_registered)
+
+    p_mcp_cr = mcpsub.add_parser(
+        "call-registered", help="call one tool on a REGISTERED MCP server (external or internal)"
+    )
+    playbook_cmds.add_connection_args(p_mcp_cr)
+    p_mcp_cr.add_argument(
+        "registered_server", metavar="server", help="registered server name or uuid, e.g. 'Bridge: FortiSIEM'"
+    )
+    p_mcp_cr.add_argument("tool", help="tool name, e.g. get_incident")
+    p_mcp_cr.add_argument("--args", default="{}", help="tool arguments as a JSON object")
+    p_mcp_cr.add_argument(
+        "--mcp-token", dest="mcp_token", default=None, help="credential value if the stored one is masked/rotated"
+    )
+    p_mcp_cr.set_defaults(func=cmd_mcp_call_registered)
+
     # Global HTTP trace flag (applies to all top-level commands)
     parser.add_argument(
         "--log-requests",
@@ -1060,7 +1087,8 @@ def cmd_mcp_list_tools(args: argparse.Namespace) -> int:
     client = playbook_cmds._make_client(args)
     tools = client.mcp.list_tools(args.mcp_server)
     if args.fmt == "json":
-        print(json.dumps(tools, indent=2, default=str))
+        payload = [t.model_dump() if hasattr(t, "model_dump") else t for t in tools]
+        print(json.dumps(payload, indent=2, default=str))
     else:
         rows = [[t["name"], (t.get("description") or "").splitlines()[0][:80]] for t in tools]
         _output.render(rows, ["name", "description"], fmt=args.fmt)
@@ -1080,6 +1108,34 @@ def cmd_mcp_call(args: argparse.Namespace) -> int:
         return 1
     result = client.mcp.call_tool(args.mcp_server, args.tool, arguments)
     print(json.dumps(result, indent=2, default=str))
+    return 0
+
+
+def cmd_mcp_list_registered(args: argparse.Namespace) -> int:
+    """List the tools a registered MCP server (external or internal) advertises."""
+    client = playbook_cmds._make_client(args)
+    tools = client.ai.list_registered_tools(args.registered_server, token=args.mcp_token)
+    if args.fmt == "json":
+        print(json.dumps([t.model_dump() for t in tools], indent=2, default=str))
+    else:
+        rows = [[t["name"], (t.get("description") or "").splitlines()[0][:80]] for t in tools]
+        _output.render(rows, ["name", "description"], fmt=args.fmt)
+    return 0
+
+
+def cmd_mcp_call_registered(args: argparse.Namespace) -> int:
+    """Call one tool on a registered MCP server and print its result as JSON."""
+    client = playbook_cmds._make_client(args)
+    try:
+        arguments = json.loads(args.args)
+    except json.JSONDecodeError as exc:
+        print(f"--args must be a JSON object: {exc}", file=sys.stderr)
+        return 1
+    if not isinstance(arguments, dict):
+        print('--args must be a JSON object (e.g. \'{"incident_id": "1"}\')', file=sys.stderr)
+        return 1
+    result = client.ai.call_registered_tool(args.registered_server, args.tool, arguments, token=args.mcp_token)
+    print(json.dumps(result.model_dump(), indent=2, default=str))
     return 0
 
 
