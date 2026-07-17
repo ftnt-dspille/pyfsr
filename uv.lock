@@ -591,7 +591,7 @@ wheels = [
 
 [[package]]
 name = "fsr-playbooks"
-version = "0.4.8"
+version = "0.4.27"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jinja2" },
@@ -600,7 +600,7 @@ dependencies = [
     { name = "ruamel-yaml" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/07/cb/0acd6140be6defded4ef079fc4f39748f215eea94df7d912f054d4221e49/fsr_playbooks-0.4.8-py3-none-any.whl", hash = "sha256:e841702560796239ad3efd5f979c614b38b98bb26cbd91658e3c22ffcbc23054", size = 558771, upload-time = "2026-06-26T20:19:58.423Z" },
+    { url = "https://files.pythonhosted.org/packages/76/39/52ac6b477e9465f6f1c58b0c594bdb99c040456ad2864d85e515a8f866e4/fsr_playbooks-0.4.27-py3-none-any.whl", hash = "sha256:f099f7253a96232d31b46ca43e6e859ee7d056519399907a60f9b0d623177c65", size = 798229, upload-time = "2026-07-16T23:27:34.391Z" },
 ]
 
 [[package]]
@@ -1343,8 +1343,6 @@ docs = [
     { name = "furo" },
     { name = "myst-parser", version = "4.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "myst-parser", version = "5.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "sphinx", version = "8.1.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "sphinx", version = "9.0.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "sphinx", version = "9.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "sphinx-autoapi" },
     { name = "sphinx-autodoc-typehints", version = "3.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -1381,7 +1379,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "coverage", marker = "extra == 'test'", specifier = ">=7.6.9" },
-    { name = "fsr-playbooks", marker = "extra == 'playbooks'", specifier = ">=0.4.8" },
+    { name = "fsr-playbooks", marker = "extra == 'playbooks'", specifier = ">=0.4.11" },
     { name = "furo", marker = "extra == 'docs'", specifier = ">=2024.8.6" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0" },
     { name = "mcp", marker = "extra == 'test'", specifier = ">=1.0" },
@@ -1392,8 +1390,8 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'test'" },
     { name = "pytest-mock", marker = "extra == 'test'" },
     { name = "requests", specifier = ">=2.31.0" },
-    { name = "sphinx", marker = "extra == 'docs'", specifier = ">=8.1.3" },
-    { name = "sphinx-autoapi", marker = "extra == 'docs'", specifier = ">=3.4.0" },
+    { name = "sphinx", marker = "python_full_version >= '3.12' and extra == 'docs'", specifier = ">=9.1,<10" },
+    { name = "sphinx-autoapi", marker = "extra == 'docs'", specifier = ">=3.8,<4" },
     { name = "sphinx-autodoc-typehints", marker = "extra == 'docs'", specifier = ">=3.0.0" },
     { name = "sphinx-copybutton", marker = "extra == 'docs'", specifier = ">=0.5.2" },
     { name = "sphinx-design", marker = "extra == 'docs'", specifier = ">=0.6.1" },
