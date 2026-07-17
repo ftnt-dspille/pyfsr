@@ -182,6 +182,10 @@ nitpick_ignore = [
     ("py:class", "StepMatcher"),
     ("py:class", "PlaybookPredicate"),
     ("py:class", "SurfaceFn"),
+    # SolutionPackBuilder is defined in api.export_config but used as a param
+    # type in api.solution_packs.create(); autoapi's per-page context there
+    # can't resolve the bare cross-module class name (it resolves at runtime).
+    ("py:class", "SolutionPackBuilder"),
     # Bare method names in cross-module docstring xrefs (e.g. :meth:`runs`)
     # that resolve at runtime but not in autoapi's per-page context.
     ("py:meth", "run"),
