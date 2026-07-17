@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Author a solution pack from Python** — `SolutionPackBuilder` (subclasses the
+  `ExportTemplate` content builder, so every `add_*` content method chains the same
+  way) plus pack metadata: `.tags()`, `.category()`, and `.post_install_widget()`
+  (the *Configure post-install action* — widget name/version, launch button label,
+  and "launch automatically the first time"). `client.solution_packs.create(builder,
+  publish=)` POSTs `/api/3/solutionpacks` with a nested `SolutionPack Export`
+  template — the same shape the Content Hub *Create Solution Pack* wizard sends.
+  Live-verified on 8.0.0: creating the pack auto-creates its export template with the
+  `solutionPack` back-reference that scopes a later export.
+- **`client.solution_packs.install_from_file(path, *, replace=, wait=)`** — install a
+  pack from a local `.zip`/`.tgz` (`POST /api/3/solutionpacks/install` multipart,
+  `$type` defaults to `solutionpack`), the file counterpart of `install()`. Returns
+  the same typed `SolutionPackInstallResponse`.
+- **`PostInstallConfig` / `PostInstallWidget` models** typing a pack's
+  `infoContent.postInstallConfig` (`{enabled, widgets:[{name, label, version,
+  buttonLabel, autoLaunch}]}`), now also on `SolutionPackInfo`. Captured from a live
+  `info.json` and the 8.0.0 editor's pack-metadata wizard.
+- `examples/solution_pack_full_lifecycle.py` — end-to-end: create-from-content →
+  publish → export → uninstall → reinstall from file.
+
+### Fixed
+- **`solution_packs.export_pack()` now works when the pack's export template isn't
+  expanded in the catalog lookup** (it re-fetches with `$relationships=true`) and
+  **defaults the output filename to `.zip`** — the payload is a zip archive, not the
+  `.json` the old default implied.
+- **The install poll tolerates the transient `503` a pack import triggers.** A larger
+  pack import runs a schema migrate that briefly restarts the API; `install_status()`
+  now reports that as a non-terminal `"Importing"` status so `wait_for_install()` (and
+  `install()` / `install_from_file()` with `wait=True`) keep polling instead of
+  aborting the wait. Live-verified end to end on 8.0.0.
+
 ## [0.11.0] - 2026-07-17
 
 ### Fixed
