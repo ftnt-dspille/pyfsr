@@ -34,5 +34,5 @@ class WidgetRecord(ApiResult):
 
     @property
     def published(self) -> bool:
-        """True once the widget is live: installed and no longer a draft."""
+        """True once the widget is live -- installed and no longer a draft."""
         return bool(self.installed) and not bool(self.draft)
