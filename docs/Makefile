@@ -5,26 +5,22 @@ SOURCEDIR     = source
 BUILDDIR      = build
 SPHINXPROJ    = pyfsr
 
-.PHONY: help clean clean-html html linkcheck doctest coverage check-examples
+.PHONY: help clean html linkcheck doctest coverage check-examples
 
 # Help command
 help:
 	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
-# Clean everything, INCLUDING the generated AutoAPI rst. Regenerating it costs
-# ~45s, so prefer `clean-html` when you only want fresh HTML output; reach for
-# this when the API tree itself is stale (modules added/removed/renamed).
+# Full reset: drops the rendered output, sphinx's doctree cache (it lives in
+# $(BUILDDIR)/html/.doctrees) and the generated AutoAPI rst. Rebuilding all
+# three costs ~55s, vs ~15s for a plain incremental `make html` -- so only
+# clean when you actually want a from-scratch build. Editing a guide or a
+# docstring does NOT need it; sphinx tracks those and rebuilds what changed.
 clean:
 	rm -rf $(BUILDDIR)/*
 	rm -rf $(SOURCEDIR)/api/*.rst
 	rm -rf $(SOURCEDIR)/autoapi/*
 	@echo "Cleaned build directory and generated API docs"
-
-# Clean only the rendered output, keeping the generated AutoAPI rst
-# (autoapi_keep_files = True) so the rebuild reuses it: ~15s instead of ~55s.
-clean-html:
-	rm -rf $(BUILDDIR)/html $(BUILDDIR)/doctest
-	@echo "Cleaned rendered output; generated API docs kept for a fast rebuild."
 
 # Build HTML documentation
 html:
