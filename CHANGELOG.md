@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **`connectors.list_configurations(name=...)` filtered the wrong thing, silently.**
+  The docstring said `name` filters by *connector* name; live-checking showed it
+  filters the **configuration** name. Passing a connector name returned `[]` rather
+  than raising — the endpoint ignores filters it doesn't understand, and this one
+  simply matched nothing — so "list this connector's configurations" reported none
+  and looked like an empty result, not a mistake. The docs now state what it does,
+  and the existing test no longer encodes the wrong belief: it passed
+  `name="virustotal"` (a connector name) while only asserting param passthrough, so
+  it could never have caught this.
+
+### Added
+- **`connectors.list_configurations(connector=...)`** — the filter the docs used to
+  promise, done properly: takes a machine name or an install id and resolves a name
+  to its id first, because the endpoint's `connector` filter is numeric and a name
+  passed through errors ("Unknown error occurred"). A not-installed connector
+  returns `[]`; a `bool` is rejected (it is an `int` subclass, so `connector=True`
+  would otherwise query id 1).
+
+### Deprecated
+- **`config=` on `connectors.execute()` / `connectors.healthcheck()` is deprecated in
+  favour of `config_id=`.** `config` named two different types across one API — a
+  configuration **UUID** here, but the configuration **field map** on
+  `create_configuration` / `update_configuration` / `upsert_configuration` /
+  `validate_config`. Nothing caught the mix-up: a dict passed where a UUID belonged
+  just became a bad query param. `config=` still works and still sends the same wire
+  body (the rename is client-side only); passing both raises `ValueError`.
+
 ### Deprecated
 - **`playbooks.manual_inputs()` and `playbooks.retrieve_manual_input()`** — they hit
   the exact same endpoints as `client.manual_input.list()` / `.retrieve()`
