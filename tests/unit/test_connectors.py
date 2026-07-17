@@ -144,10 +144,11 @@ def test_healthcheck_resolves_version_and_hits_path():
     assert hc[0] == "/api/integration/connectors/healthcheck/virustotal/3.1.0/"
 
 
-def test_healthcheck_with_config_param():
+def test_healthcheck_with_config_id_param():
     api, client = _api()
-    api.healthcheck("virustotal", config="vt-default")
+    api.healthcheck("virustotal", config_id="vt-default")
     hc = [c for c in client.get_calls if "healthcheck" in c[0]][0]
+    # the wire param stays "config" — the rename is client-side only
     assert hc[1] == {"config": "vt-default"}
 
 
@@ -214,7 +215,7 @@ def test_execute_builds_body_and_resolves_version():
 
 def test_execute_explicit_version_and_config_no_resolution():
     api, client = _api()
-    api.execute("acme", "op", version="9.9", config="cfg-1")
+    api.execute("acme", "op", version="9.9", config_id="cfg-1")
     _, body = client.post_calls[0]
     assert (body["version"], body["config"]) == ("9.9", "cfg-1")
     # no list_configured fetch needed when both are explicit
@@ -730,12 +731,59 @@ def test_connector_detail_posts_empty_body_to_id():
     assert client.post_calls[-1] == ("/api/integration/connectors/16/", {})
 
 
-def test_list_configurations_filters():
+def test_list_configurations_filters_by_configuration_name():
+    """`name` is the CONFIGURATION's name, not the connector's.
+
+    This test used to pass name="virustotal" — a connector name — which read as
+    though it filtered by connector and quietly encoded the wrong belief (it only
+    ever asserted passthrough, so it could not catch the mismatch). Live-checked:
+    the endpoint's `name` matches the configuration name, and a connector name
+    there returns [] rather than erroring, because unknown/unmatched filters are
+    silently ignored.
+    """
     api, client = _api()
-    api.list_configurations(name="virustotal", active=True)
+    api.list_configurations(name="VT Production", active=True)
     endpoint, params = client.get_calls[-1]
     assert endpoint == "/api/integration/configuration/"
-    assert params["name"] == "virustotal" and params["active"] is True
+    assert params["name"] == "VT Production" and params["active"] is True
+    assert "connector" not in params
+
+
+def test_list_configurations_by_connector_name_resolves_to_install_id():
+    """`connector=` takes a name but must query the numeric id.
+
+    The endpoint's `connector` filter is the install id; a machine name passed
+    straight through errors ("Unknown error occurred"), so the name is resolved
+    first.
+    """
+    api, client = _api()
+    api.list_configurations(connector="virustotal")
+    _, params = client.get_calls[-1]
+    assert params["connector"] == 16  # virustotal's install id in the fixture
+    assert "name" not in params
+
+
+def test_list_configurations_by_connector_id_skips_resolution():
+    api, client = _api()
+    api.list_configurations(connector=16)
+    _, params = client.get_calls[-1]
+    assert params["connector"] == 16
+    # an int id needs no connector lookup
+    assert not [c for c in client.get_calls if "/api/integration/connectors/" in c[0]]
+
+
+def test_list_configurations_unknown_connector_returns_empty_without_querying():
+    """A connector that isn't installed cannot have configurations."""
+    api, client = _api()
+    assert api.list_configurations(connector="not-installed") == []
+    assert not [c for c in client.get_calls if c[0] == "/api/integration/configuration/"]
+
+
+def test_list_configurations_rejects_bool_connector():
+    # bool is an int subclass — connector=True would otherwise query id 1.
+    api, _ = _api()
+    with pytest.raises(TypeError, match="not a bool"):
+        api.list_configurations(connector=True)
 
 
 def test_dev_read_and_write_file():
@@ -1519,3 +1567,50 @@ def test_ensure_version_no_auto_fetch_reraises(monkeypatch):
     with pytest.raises(RuntimeError, match="Content Hub"):
         api.ensure_version("servicenow", "1.0.0", auto_fetch=False)
     assert calls["downloaded"] == []
+
+
+# -- config -> config_id rename ---------------------------------------------
+# `config` meant a configuration UUID on execute/healthcheck but the config FIELD
+# MAP on create/update/upsert_configuration + validate_config — one name, two
+# types, and nothing caught the mix-up (a dict where a UUID belonged just became a
+# bad query param). The UUID sense is now `config_id`; `config` still works.
+
+
+def test_execute_config_kwarg_still_works_but_warns():
+    api, client = _api()
+    with pytest.deprecated_call(match="config_id"):
+        api.execute("acme", "op", version="9.9", config="cfg-1")
+    _, body = client.post_calls[0]
+    assert body["config"] == "cfg-1"  # same wire body as before the rename
+
+
+def test_healthcheck_config_kwarg_still_works_but_warns():
+    api, client = _api()
+    with pytest.deprecated_call(match="config_id"):
+        api.healthcheck("virustotal", config="vt-default")
+    hc = [c for c in client.get_calls if "healthcheck" in c[0]][0]
+    assert hc[1] == {"config": "vt-default"}
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda api: api.execute("acme", "op", version="9.9", config_id="a", config="b"),
+        lambda api: api.healthcheck("virustotal", config_id="a", config="b"),
+    ],
+)
+def test_passing_both_config_and_config_id_raises(call):
+    api, _ = _api()
+    with pytest.raises(ValueError, match="not both"):
+        call(api)
+
+
+def test_config_id_is_the_quiet_path():
+    """The new spelling must not warn — otherwise callers can't get clean."""
+    import warnings as _w
+
+    api, _ = _api()
+    with _w.catch_warnings():
+        _w.simplefilter("error", DeprecationWarning)
+        api.execute("acme", "op", version="9.9", config_id="cfg-1")
+        api.healthcheck("virustotal", config_id="vt-default")
