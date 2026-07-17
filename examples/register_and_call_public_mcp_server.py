@@ -16,18 +16,21 @@ you already have:
                just a config row FortiSOAR accepted.
   cleanup   -- remove the registered server (``client.ai.delete_mcp_server``).
 
-Why a plain MCP client for the ``call`` step, not something on ``client``:
-FortiSOAR's fsr-ai only calls a registered external server *during an agent
-investigation* — there's no REST passthrough to invoke one of its tools
-directly for testing (that's why ``fortisiem_mcp_setup_and_test.py`` proves
-usage by attributing an *investigation's* tool calls back to the server,
-rather than calling a tool directly). Since DeepWiki takes no auth, calling
-it directly here is simpler and just as real a proof.
+How the ``call`` step reaches the server:
+FortiSOAR itself exposes no REST endpoint that *runs* a registered external
+server's tool — its fsr-ai calls them only inside an agent investigation (that's
+why ``fortisiem_mcp_setup_and_test.py`` proves usage by attributing an
+investigation's tool calls back to the server). So the ``call`` step here uses
+``client.ai.call_registered_tool`` / ``list_registered_tools``, which resolve the
+server's url + auth from its registration and do the MCP ``tools/call``
+client-side — the same mechanism fsr-ai's agent uses, driven from your process.
+DeepWiki takes no auth; a bearer server (e.g. a bridge) uses the stored token, or
+pass ``token=...`` when it's write-only.
 
 For an appliance's *own* native MCP gateway (``/mcp/soc/``, ``/mcp/modules/``,
 one auto-generated server per installed connector, ...) use ``client.mcp``
 (:class:`pyfsr.api.native_mcp.NativeMCPApi`) instead — see
-``examples/`` for that surface once written, or the module docstring.
+``examples/native_mcp_gateway.py`` for that surface, or the module docstring.
 
 Configure via env — anything :meth:`pyfsr.config.EnvConfig.from_env` reads:
   FSR_BASE_URL (or FSR_HOST), FSR_USERNAME + FSR_PASSWORD (or FSR_API_KEY),
@@ -42,7 +45,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import asyncio
 import sys
 
 from pyfsr import FortiSOAR
@@ -80,42 +82,41 @@ def register(client: FortiSOAR) -> str:
         saved = client.ai.register_and_verify(build_config())
     except ValueError as exc:
         sys.exit(str(exc))
-    print(f"Validation: tools={[t.get('name') for t in saved['tools']]}")
+    print(f"Validation: tools={saved['tools']}")
     print(f"Registered {MCP_NAME!r} in FortiSOAR as {saved['uuid']}")
     return saved["uuid"]
 
 
-async def _call_tools(repo: str) -> None:
-    from mcp import ClientSession
-    from mcp.client.streamable_http import streamablehttp_client
+def call(client: FortiSOAR, repo: str) -> None:
+    """The full register→list→call flow, all through pyfsr.
 
-    async with streamablehttp_client(MCP_URL) as (read, write, _get_session_id):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
+    Once a server is registered, ``client.ai.list_registered_tools`` and
+    ``client.ai.call_registered_tool`` resolve its url + auth from the
+    registration and speak MCP ``tools/list`` / ``tools/call`` — the same reach
+    fsr-ai's agent uses, driven from your own process. FortiSOAR has no REST
+    endpoint that runs an external server's tool, so pyfsr does the MCP call
+    client-side (the appliance is not in the tool-call path — only the config
+    lookup goes through it). For a server whose credential is stored write-only,
+    pass ``token=...``; DeepWiki takes no auth so none is needed here.
+    """
+    print(f"\n-- list_registered_tools({MCP_NAME!r}) --")
+    tools = client.ai.list_registered_tools(MCP_NAME)
+    print("tools:", [t.name for t in tools])
 
-            print(f"\n-- read_wiki_structure({repo!r}) --")
-            structure = await session.call_tool("read_wiki_structure", {"repoName": repo})
-            for block in structure.content:
-                text = getattr(block, "text", None)
-                if text:
-                    print(text[:600])
+    # NB: r.ok means status == "success" — a FortiSOAR-native envelope convention.
+    # A third-party server like DeepWiki returns its own payload (here markdown
+    # text), so .ok is False even on success; use .result / .error for such servers.
+    print(f"\n-- call_registered_tool read_wiki_structure({repo!r}) --")
+    r = client.ai.call_registered_tool(MCP_NAME, "read_wiki_structure", {"repoName": repo})
+    print(str(r.result)[:600])
 
-            print(f"\n-- ask_question({repo!r}, ...) --")
-            answer = await session.call_tool(
-                "ask_question",
-                {"repoName": repo, "question": "What transport layers does this project support?"},
-            )
-            for block in answer.content:
-                text = getattr(block, "text", None)
-                if text:
-                    print(text[:800])
-
-
-def call(repo: str) -> None:
-    """Call a couple of DeepWiki's tools directly — no FortiSOAR round-trip
-    needed for the call itself, since the point is proving the *server* (the
-    thing FortiSOAR just registered) is real and answers real queries."""
-    asyncio.run(_call_tools(repo))
+    print(f"\n-- call_registered_tool ask_question({repo!r}, ...) --")
+    r = client.ai.call_registered_tool(
+        MCP_NAME,
+        "ask_question",
+        {"repoName": repo, "question": "What transport layers does this project support?"},
+    )
+    print(str(r.result)[:800])
 
 
 def cleanup(client: FortiSOAR) -> None:
@@ -132,7 +133,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("register", help="validate + register DeepWiki as an external MCP server")
-    c = sub.add_parser("call", help="call a couple of DeepWiki's tools directly")
+    c = sub.add_parser("call", help="list + call the registered server's tools via client.ai")
     c.add_argument("--repo", default=DEFAULT_REPO, help=f"GitHub repo to ask about (default: {DEFAULT_REPO})")
     sub.add_parser("cleanup", help="delete the registered DeepWiki server")
     args = ap.parse_args()
@@ -140,7 +141,7 @@ def main() -> None:
     if args.cmd == "register":
         register(connect())
     elif args.cmd == "call":
-        call(args.repo)
+        call(connect(), args.repo)
     elif args.cmd == "cleanup":
         cleanup(connect())
 

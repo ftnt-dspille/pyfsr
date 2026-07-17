@@ -26,6 +26,7 @@ from ._ai import (
     MCPServerConfig,
     MCPServerRef,
     MCPTool,
+    MCPToolResult,
     MCPValidateResult,
     ToolCall,
 )
@@ -214,6 +215,7 @@ __all__ = [
     "MCPServerConfig",
     "MCPServerRef",
     "MCPTool",
+    "MCPToolResult",
     "MCPValidateResult",
     "ToolCall",
     # integration API result shapes

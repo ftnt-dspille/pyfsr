@@ -45,6 +45,14 @@ installed on the appliance) uses the same ``server`` argument with a
 ``connector:`` prefix:
 
     >>> client.mcp.list_tools("connector:fortisiem")
+
+Note the per-connector servers are feature-gated on the appliance: a connector
+that isn't exposed as an MCP server answers ``/mcp/connector/<name>/`` with
+``404 "Connector not found"``, which surfaces here as an ``McpError("Session
+terminated")`` during ``initialize`` (the stream closes before the handshake
+completes). The four fixed servers (``modules``, ``playbooks``, ``soc``,
+``utility``) are always present. ``<name>`` is the connector's install name
+(e.g. ``virustotal``), not its display label.
 """
 
 from __future__ import annotations
@@ -55,6 +63,7 @@ import json
 import threading
 from typing import Any
 
+from ..models._ai import MCPTool, MCPToolResult
 from .base import BaseAPI
 
 _CONNECTOR_PREFIX = "connector:"
@@ -82,8 +91,70 @@ def _server_path(server: str) -> str:
     return server
 
 
-def _tools_to_dicts(tools: Any) -> list[dict[str, Any]]:
-    return [{"name": t.name, "description": t.description, "input_schema": t.inputSchema} for t in tools]
+def _tools_to_models(tools: Any) -> list[MCPTool]:
+    return [MCPTool(name=t.name, description=t.description, inputSchema=t.inputSchema) for t in tools]
+
+
+def _new_httpx_client(verify: Any, **kw: Any) -> Any:
+    """Build the ``httpx.AsyncClient`` every MCP session uses.
+
+    ``follow_redirects=True`` is required: some registered servers 307-redirect a
+    trailing-slash path (e.g. the bridge answers ``/mcp/fortisiem/`` with a
+    redirect to ``/mcp/fortisiem``); without it the MCP handshake dies with a bare
+    ``ExceptionGroup`` wrapping the 307 (live-verified against a real server).
+    """
+    import httpx
+
+    return httpx.AsyncClient(verify=verify, follow_redirects=True, **kw)
+
+
+def _bearer_headers(auth: dict[str, Any]) -> dict[str, str]:
+    prefix = auth.get("prefix", "Bearer")
+    return {auth.get("header_name", "Authorization"): f"{prefix} {auth['value']}"}
+
+
+def _basic_headers(auth: dict[str, Any]) -> dict[str, str]:
+    import base64
+
+    raw = f"{auth['username']}:{auth['password']}".encode()
+    return {"Authorization": "Basic " + base64.b64encode(raw).decode()}
+
+
+_MCP_AUTH_HEADER_BUILDERS = {
+    "BEARER": _bearer_headers,
+    "FSR": _bearer_headers,
+    "API_KEY": lambda a: {a["header_name"]: a["value"]},
+    "BASIC": _basic_headers,
+    "NONE": lambda a: {},
+}
+
+
+def build_mcp_auth_headers(auth: dict[str, Any] | None) -> dict[str, str]:
+    """Map a registered MCP server's ``authentication`` dict to request headers.
+
+    Mirrors FortiSOAR fsr-ai's own ``mcp_auth.py`` builders so a registered
+    server is reached the same way the product's agent reaches it: ``BEARER``/
+    ``FSR`` → ``Authorization: <prefix> <value>`` (``prefix``/``header_name``
+    overridable), ``API_KEY`` → ``<header_name>: <value>``, ``BASIC`` →
+    base64, ``NONE`` → no header.
+    """
+    auth = auth or {"type": "NONE"}
+    builder = _MCP_AUTH_HEADER_BUILDERS.get((auth.get("type") or "NONE").upper())
+    if builder is None:
+        raise ValueError(f"unsupported MCP auth type: {auth.get('type')!r}")
+    return builder(auth)
+
+
+def _to_tool_result(payload: Any) -> MCPToolResult:
+    """Wrap a decoded ``call_tool`` payload into :class:`MCPToolResult`.
+
+    A dict is validated as the envelope (keeping any extra keys); any other
+    payload (bare string, list, ``None``) lands under ``result`` with
+    ``status=None`` so the return type is stable.
+    """
+    if isinstance(payload, dict):
+        return MCPToolResult.model_validate(payload)
+    return MCPToolResult(result=payload)
 
 
 def _content_to_result(content: Any) -> Any:
@@ -166,7 +237,6 @@ class MCPSession:
                 self._ready.set()
 
     async def _worker(self) -> None:
-        import httpx
         from mcp import ClientSession
         from mcp.client.streamable_http import streamablehttp_client
 
@@ -178,7 +248,7 @@ class MCPSession:
         async with streamablehttp_client(
             url,
             headers=headers,
-            httpx_client_factory=lambda **kw: httpx.AsyncClient(verify=verify, **kw),
+            httpx_client_factory=lambda **kw: _new_httpx_client(verify, **kw),
         ) as (read, write, _get_session_id):
             async with ClientSession(read, write) as session:
                 await session.initialize()
@@ -192,7 +262,7 @@ class MCPSession:
                     try:
                         if method == "list_tools":
                             result = await session.list_tools()
-                            future.set_result(_tools_to_dicts(result.tools))
+                            future.set_result(_tools_to_models(result.tools))
                         else:  # "call_tool"
                             name, arguments = args
                             result = await session.call_tool(name, arguments or {})
@@ -207,13 +277,17 @@ class MCPSession:
         asyncio.run_coroutine_threadsafe(self._queue.put((method, args, future)), self._loop)
         return future.result()
 
-    def list_tools(self) -> list[dict[str, Any]]:
+    def list_tools(self) -> list[MCPTool]:
         """Same shape as :meth:`NativeMCPApi.list_tools`, on the open session."""
         return self._dispatch("list_tools", None)
 
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
         """Same shape as :meth:`NativeMCPApi.call_tool`, on the open session."""
         return self._dispatch("call_tool", (name, arguments))
+
+    def call_tool_result(self, name: str, arguments: dict[str, Any] | None = None) -> MCPToolResult:
+        """Same as :meth:`NativeMCPApi.call_tool_result`, on the open session."""
+        return _to_tool_result(self._dispatch("call_tool", (name, arguments)))
 
 
 class NativeMCPApi(BaseAPI):
@@ -234,35 +308,78 @@ class NativeMCPApi(BaseAPI):
         during the call, mirroring the retry-on-stale-session behavior the
         client's own REST calls already get.
         """
-        _require_mcp_sdk()
-        import httpx
-        from mcp import ClientSession
-        from mcp.client.streamable_http import streamablehttp_client
-
         auth = self.client.auth
         url = self._url_for(server)
         verify = self.client.verify_ssl
 
-        async def _attempt() -> Any:
-            headers = auth.get_auth_headers()
-            async with streamablehttp_client(
-                url,
-                headers=headers,
-                httpx_client_factory=lambda **kw: httpx.AsyncClient(verify=verify, **kw),
-            ) as (read, write, _get_session_id):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    return await coro_factory(session)
-
         try:
-            return await _attempt()
+            return await self._run_at(url, auth.get_auth_headers(), verify, coro_factory)
         except Exception as exc:  # noqa: BLE001 - inspect for an auth failure to retry
             if _looks_like_auth_error(exc) and getattr(auth, "can_refresh", False):
                 auth.refresh()
-                return await _attempt()
+                return await self._run_at(url, auth.get_auth_headers(), verify, coro_factory)
             raise
 
-    def list_tools(self, server: str = "soc") -> list[dict[str, Any]]:
+    async def _run_at(self, url: str, headers: dict[str, str], verify: Any, coro_factory: Any) -> Any:
+        """Open one MCP session at an arbitrary ``url``/``headers`` and run ``coro_factory(session)``.
+
+        The transport-level core shared by the native gateway (:meth:`_run`, which
+        adds the client's auth + 401/403 refresh) and the *registered-server* path
+        (:meth:`~pyfsr.api.ai.AIApi.call_registered_tool`, which supplies the
+        server's own url + auth header). No auth-refresh here — a registered
+        server owns its credential.
+        """
+        _require_mcp_sdk()
+        from mcp import ClientSession
+        from mcp.client.streamable_http import streamablehttp_client
+
+        async with streamablehttp_client(
+            url,
+            headers=headers,
+            httpx_client_factory=lambda **kw: _new_httpx_client(verify, **kw),
+        ) as (read, write, _get_session_id):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                return await coro_factory(session)
+
+    def list_tools_at(self, url: str, headers: dict[str, str], *, verify: Any = None) -> list[MCPTool]:
+        """List tools of *any* MCP server at ``url`` (auth already in ``headers``).
+
+        Lower-level than :meth:`list_tools` (which targets the appliance's own
+        ``/mcp/*`` gateway with the client's credential). Used by
+        :meth:`~pyfsr.api.ai.AIApi.call_registered_tool` to reach a registered
+        external server; ``verify`` defaults to the client's ``verify_ssl``.
+        """
+
+        async def _list(session: Any) -> list[MCPTool]:
+            return _tools_to_models((await session.list_tools()).tools)
+
+        v = self.client.verify_ssl if verify is None else verify
+        return asyncio.run(self._run_at(url, headers, v, _list))
+
+    def call_tool_at(
+        self,
+        url: str,
+        headers: dict[str, str],
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        verify: Any = None,
+    ) -> Any:
+        """Call ``name`` on *any* MCP server at ``url`` (auth already in ``headers``).
+
+        Lower-level companion to :meth:`call_tool`; see :meth:`list_tools_at`.
+        Returns the raw decoded payload (wrap with :func:`_to_tool_result` for a
+        typed :class:`~pyfsr.models.MCPToolResult`).
+        """
+
+        async def _call(session: Any) -> Any:
+            return _content_to_result((await session.call_tool(name, arguments or {})).content)
+
+        v = self.client.verify_ssl if verify is None else verify
+        return asyncio.run(self._run_at(url, headers, v, _call))
+
+    def list_tools(self, server: str = "soc") -> list[MCPTool]:
         """Return ``[{"name", "description", "input_schema"}, ...]`` for ``server``.
 
         ``server`` is one of the fixed paths (``"modules"``, ``"playbooks"``,
@@ -270,9 +387,9 @@ class NativeMCPApi(BaseAPI):
         connector's auto-generated server.
         """
 
-        async def _list(session: Any) -> list[dict[str, Any]]:
+        async def _list(session: Any) -> list[MCPTool]:
             result = await session.list_tools()
-            return _tools_to_dicts(result.tools)
+            return _tools_to_models(result.tools)
 
         return asyncio.run(self._run(server, _list))
 
@@ -290,6 +407,19 @@ class NativeMCPApi(BaseAPI):
             return _content_to_result(result.content)
 
         return asyncio.run(self._run(server, _call))
+
+    def call_tool_result(self, server: str, name: str, arguments: dict[str, Any] | None = None) -> MCPToolResult:
+        """Like :meth:`call_tool`, but always return a typed :class:`MCPToolResult`.
+
+        Native tools reply with a ``{"status", "result", "error"}`` envelope on
+        success; this wraps it into the model (``r.ok``, ``r.result``, ``r.error``,
+        plus dict-style ``r["result"]``). An in-band failure that comes back as a
+        bare string (or any non-dict payload) is wrapped as
+        ``MCPToolResult(status=None, result=<raw>)`` so callers get one stable
+        type regardless of outcome. Use :meth:`call_tool` when you want the raw
+        decoded payload untouched.
+        """
+        return _to_tool_result(self.call_tool(server, name, arguments))
 
     def session(self, server: str = "soc") -> MCPSession:
         """Open a reusable :class:`MCPSession` against ``server`` for a batch
