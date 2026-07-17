@@ -177,6 +177,41 @@ class AggregateRow(ApiResult):
         return self.get(alias, default)
 
 
+class PostInstallWidget(ApiResult):
+    """One widget in a solution pack's post-install action.
+
+    A pack's *Configure post-install action* offers a widget the operator can
+    launch once the pack is installed. Shape captured from a live pack's
+    ``info.json`` and confirmed against the 8.0.0 editor's solution-pack metadata
+    wizard: the dropdown sets ``name``/``label``/``version`` together, and the two
+    controls beside it set ``buttonLabel`` (the launch button's text, required
+    when the action is enabled) and ``autoLaunch`` ("Launch automatically the
+    first time"). ``autoLaunchTriggered`` is runtime-only — the install flow sets
+    it after the first auto-launch — and is never authored. Dict-compatible.
+    """
+
+    name: str | None = None
+    label: str | None = None
+    version: str | None = None
+    buttonLabel: str | None = None
+    autoLaunch: bool | None = None
+    autoLaunchTriggered: bool | None = None  # runtime-only; set after first launch
+
+
+class PostInstallConfig(ApiResult):
+    """A solution pack's *post-install action* (``infoContent.postInstallConfig``).
+
+    Live shape ``{"enabled": true, "widgets": [{...}]}`` — ``enabled`` mirrors the
+    wizard's *Configure post-install action* checkbox and ``widgets`` holds the
+    widget(s) to offer after install (the wizard authors exactly one). There is no
+    matching pre-install action in the wizard; the ``preInstall``/``postInstall``
+    export-manifest keys are unrelated install-time *scripts*. Dict-compatible.
+    """
+
+    enabled: bool | None = None
+    widgets: list[PostInstallWidget] | None = None
+
+
 class ContentHubItem(BaseRecord):
     """Shared base for Content Hub items (solution packs, connectors, widgets).
 
@@ -1112,6 +1147,8 @@ class SolutionPackInfo(ApiResult):
     category: str | list[Any] | None = None
     publisher: str | None = None
     certified: bool | None = None
+    # The pack's post-install action, when it declares one (many packs don't).
+    postInstallConfig: PostInstallConfig | None = None
 
 
 class PicklistItem(ApiResult):
