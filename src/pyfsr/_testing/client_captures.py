@@ -570,6 +570,16 @@ _ALERTS_ATTRIBUTES = [
 # the ``pending_changes`` module-set comparison). Real uuids.
 _MODULE_ROWS = [
     {
+        # Threat intel feeds — the module a TAXII collection (dataset) targets.
+        "type": "threat_intel_feeds",
+        "module": "threat_intel_feeds",
+        "uuid": "acbac353-3593-41d2-af46-67951cfab083",
+        "displayName": "{{ value }}",
+        "parentType": "threat_intel_base",
+        "tableName": "threat_intel_feeds",
+        "descriptions": {"singular": "Threat Intel", "plural": "Threat Intel Feed"},
+    },
+    {
         "type": "agents",
         "module": "agents",
         "uuid": "266e4fbb-2bcd-47dd-9ba6-400b88d49a92",
@@ -1465,40 +1475,48 @@ APIKEY_UPDATE_RESPONSE = _APIKEY_RECORD
 # Manual Input — client.manual_input (pending manual workflow inputs)
 # ---------------------------------------------------------------------------
 # Manual input endpoints return hydra collections or single manual input
-# records. Captured from a live 8.0.x appliance. Used by list(), retrieve(),
+# records. Captured from a live 8.0.0 appliance. Used by list(), retrieve(),
 # and resume().
+#
+# The list and retrieve shapes are NOT the same record, and the difference is
+# load-bearing -- keep them apart when editing:
+#
+#   * ``list_wfinput/`` rows carry NO ``input``, NO ``response_mapping`` and NO
+#     ``custom_fields``; ``workflow`` is the encrypted Fernet token.
+#   * ``retrieve_wfinput/`` adds all three and swaps ``workflow`` for the
+#     numeric run id that ``wfinput_resume`` needs.
+#
+# ``title`` is the prompt's SCHEMA title (the Manual Input step's ``title:``),
+# mirroring ``input.schema.title`` -- NOT the step name. These fixtures come
+# from a step *named* ``AskNumber`` whose ``title:`` is "Enter a six digit
+# number", so the two can never be silently conflated again.
 
-_MANUAL_INPUT_RECORD = {
+# Live-captured Fernet run token (shape preserved, value neutered).
+_FERNET_TOKEN = "gAAAAABmAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+
+# The list row: step "AskNumber", schema title "Enter a six digit number".
+_MANUAL_INPUT_LIST_ROW = {
     "id": 1,
-    "workflow": "APA4K8EV6MQ2Q3DJDOQ2H2EQHI______",  # encrypted Fernet token
-    "title": "TestStep",
-    "type": "input",
+    "record": "",
+    "type": "InputBased",
+    "external_channel_list": [],
+    "inline_channel_list": [],
+    "owners": [],
+    "assignment_type": "none",
+    "owner_details": {"isAssigned": False},
+    "created": "2026-01-01T00:00:00.000000Z",
+    "timeout": None,
+    "timeout_details": None,
     "step_id": 100,
-    "step_iri": "/api/wf/api/workflows/1/steps/100",
+    "unauthenticated_input": False,
+    "agent_id": None,
     "is_approval": False,
-    "input": {
-        "schema": {
-            "type": "object",
-            "title": "Test Input",
-            "description": "A test input prompt",
-            "inputVariables": [
-                {
-                    "name": "test_var",
-                    "type": "string",
-                    "label": "Test Variable",
-                    "formType": "text",
-                    "required": False,
-                }
-            ],
-        }
-    },
-    "response_mapping": {
-        "options": [{"label": "Submit", "step_iri": "/api/wf/api/workflows/1/steps/100", "message": "Input received"}]
-    },
+    "workflow": _FERNET_TOKEN,  # encrypted Fernet token (list only)
+    "title": "Enter a six digit number",  # schema title, NOT the step name
 }
 
 MANUAL_INPUT_LIST_RESPONSE = {
-    "hydra:member": [_MANUAL_INPUT_RECORD],
+    "hydra:member": [_MANUAL_INPUT_LIST_ROW],
     "hydra:totalItems": 1,
     "hydra:view": {
         "@id": "/api/wf/api/manual-wf-input/list_wfinput/",
@@ -1506,28 +1524,88 @@ MANUAL_INPUT_LIST_RESPONSE = {
     },
 }
 
-MANUAL_INPUT_RETRIEVE_RESPONSE = dict(_MANUAL_INPUT_RECORD)
-MANUAL_INPUT_RETRIEVE_RESPONSE["workflow"] = 1  # numeric id in retrieve response
+# retrieve_wfinput/: adds input + response_mapping + custom_fields, and the
+# numeric run id in place of the encrypted token.
+MANUAL_INPUT_RETRIEVE_RESPONSE = {
+    **_MANUAL_INPUT_LIST_ROW,
+    "input": {
+        "schema": {
+            "title": "Enter a six digit number",
+            "description": "Please enter a number that is exactly 6 digits long.",
+            "inputVariables": [
+                {
+                    "name": "my_number",
+                    "type": "integer",
+                    "label": "My Number",
+                    "title": "Integer",
+                    "usable": True,
+                    "tooltip": "",
+                    "dataType": "text",
+                    "formType": "integer",
+                    "required": True,
+                    "_expanded": True,
+                    "templateUrl": "app/components/form/fields/input.html",
+                    "defaultValue": None,
+                    "_previousName": "",
+                    "playbookField": True,
+                    "jinjaExpressionView": True,
+                    "useRecordFieldDefault": False,
+                }
+            ],
+        }
+    },
+    "response_mapping": {
+        "options": [
+            {
+                "option": "Submit",
+                "primary": True,
+                # Wired from the step's `next:` -- an /api/3/workflow_steps IRI.
+                "step_iri": "/api/3/workflow_steps/d809f3f4-edd6-5dba-9e7e-e21cf2a9aa26",
+            }
+        ],
+        "duplicateOption": False,
+        "customSuccessMessage": "Awaiting Playbook resumed successfully.",
+    },
+    "custom_fields": {
+        "custom_email_body": None,
+        "custom_email_subject": None,
+        "custom_email_attachment_iris": None,
+    },
+    "workflow": 1,  # numeric run id (retrieve only)
+}
 
 MANUAL_INPUT_RESUME_RESPONSE = {
     "task_id": "a2afba58-9dbe-44dd-a6e6-7227e33990db",
     "message": "Awaiting Playbook resumed successfully.",
 }
 
-# Approval manual input (with response mapping for approval workflow).
-_APPROVAL_MANUAL_INPUT_RECORD = {
+# Approval gate: a manual_input step with `is_approval: true`, which the wire
+# reports as type "ApprovalManualInput" + is_approval True. Button-only, so
+# inputVariables is empty. Both buttons route to the same next step, and the
+# non-primary button simply omits `primary` (it is not `primary: False`).
+_APPROVAL_MANUAL_INPUT_FULL_ROW = {
     "id": 2,
-    "workflow": "CRYPT0K8EV6MQ2Q3DJDOQ2H2EQHI______",  # encrypted Fernet token
-    "title": "ApprovalStep",
-    "type": "approval",
+    "record": "",
+    "type": "ApprovalManualInput",
+    "external_channel_list": [],
+    "inline_channel_list": [],
+    "owners": [],
+    "assignment_type": "none",
+    "owner_details": {"isAssigned": False},
+    "created": "2026-01-01T00:00:00.000000Z",
+    "timeout": None,
+    "timeout_details": None,
     "step_id": 200,
-    "step_iri": "/api/wf/api/workflows/2/steps/200",
+    "unauthenticated_input": False,
+    "agent_id": None,
     "is_approval": True,
+    "workflow": 2,  # numeric run id -- the full shape, not the list token
+    "title": "Approve ingestion of the fetched indicators?",
     "input": {
         "schema": {
-            "type": "object",
-            "title": "Approval Required",
-            "description": "Please approve or reject",
+            "title": "Approve ingestion of the fetched indicators?",
+            "description": "Approve or reject the pending ingestion.",
+            "inputVariables": [],
         }
     },
     "response_mapping": {
@@ -1535,22 +1613,29 @@ _APPROVAL_MANUAL_INPUT_RECORD = {
             {
                 "option": "Approve",
                 "primary": True,
-                "step_iri": "/api/wf/api/workflows/2/steps/200",
-                "message": "Approved",
+                "step_iri": "/api/3/workflow_steps/c67f1c72-d6f5-548e-9242-16c20b5ac927",
             },
             {
                 "option": "Reject",
-                "primary": False,
-                "step_iri": "/api/wf/api/workflows/2/steps/200",
-                "message": "Rejected",
+                "step_iri": "/api/3/workflow_steps/c67f1c72-d6f5-548e-9242-16c20b5ac927",
             },
-        ]
+        ],
+        "duplicateOption": False,
+        "customSuccessMessage": "Awaiting Playbook resumed successfully.",
+    },
+    "custom_fields": {
+        "custom_email_body": None,
+        "custom_email_subject": None,
+        "custom_email_attachment_iris": None,
     },
 }
 
-# List response for approval manual input (GET /api/wf/api/manual-wf-input/).
+# The run-scoped join (GET /api/wf/api/manual-wf-input/?workflow=<pk>, which
+# pending_for_run() uses) is NOT the summary shape: live-verified 8.0.0 it
+# returns the FULL row -- input + response_mapping + custom_fields and the
+# numeric run id -- so a row from here needs no follow-up retrieve().
 APPROVAL_MANUAL_INPUT_LIST_RESPONSE = {
-    "hydra:member": [_APPROVAL_MANUAL_INPUT_RECORD],
+    "hydra:member": [_APPROVAL_MANUAL_INPUT_FULL_ROW],
     "hydra:totalItems": 1,
     "hydra:view": {
         "@id": "/api/wf/api/manual-wf-input/?workflow=2",
@@ -1558,9 +1643,39 @@ APPROVAL_MANUAL_INPUT_LIST_RESPONSE = {
     },
 }
 
-# Retrieve response for approval manual input.
-APPROVAL_MANUAL_INPUT_RETRIEVE_RESPONSE = dict(_APPROVAL_MANUAL_INPUT_RECORD)
-APPROVAL_MANUAL_INPUT_RETRIEVE_RESPONSE["workflow"] = 2  # numeric id in retrieve response
+# retrieve_wfinput/ returns that same full shape.
+APPROVAL_MANUAL_INPUT_RETRIEVE_RESPONSE = dict(_APPROVAL_MANUAL_INPUT_FULL_ROW)
+
+# A prompt whose button was never wired to a next step (the Manual Input step
+# has no `next:`), so its option carries no step_iri. Live-verified: such a run
+# cannot be resumed -- wfinput_resume 500s on a null/absent step_iri -- so
+# answer() refuses up front rather than posting null.
+UNWIRED_MANUAL_INPUT_RETRIEVE_RESPONSE = {
+    **MANUAL_INPUT_RETRIEVE_RESPONSE,
+    "id": 3,
+    "title": "hold here",
+    "input": {
+        "schema": {
+            "title": "hold here",
+            "description": "hold here",
+            "inputVariables": [
+                {
+                    "name": "verdict",
+                    "type": "string",
+                    "label": "Verdict",
+                    "formType": "text",
+                    "required": False,
+                }
+            ],
+        }
+    },
+    "response_mapping": {
+        "options": [{"option": "Continue", "primary": True}],  # no step_iri
+        "duplicateOption": False,
+        "customSuccessMessage": "Awaiting Playbook resumed successfully.",
+    },
+    "workflow": 3,
+}
 
 # ---------------------------------------------------------------------------
 # Attachments — client.attachments (attachment record management)
@@ -1977,3 +2092,64 @@ WORKFLOW_DEFINITION_PUT_RESPONSE = dict(WORKFLOW_DEFINITION_GET_RESPONSE)
 
 # DELETE /api/3/workflow_versions/<id> — 204 No Content (no body).
 WORKFLOW_VERSION_DELETE_RESPONSE = None
+
+# ---------------------------------------------------------------------------
+# System queries (datasets) — client.system_queries
+# ---------------------------------------------------------------------------
+# A dataset is a named, module-scoped filter. On ``threat_intel_feeds`` a dataset
+# doubles as a TAXII collection (its uuid IS the collection id). Shape captured
+# from a live 8.0.x appliance: the vendor "Block List (IP Address)" dataset.
+# Note ``logic`` on the body and ``type`` on every filter — without them the
+# appliance silently ignores the filters and returns all records.
+
+_TIF_MODEL_METADATA = {
+    "@id": "/api/3/model_metadatas/acbac353-3593-41d2-af46-67951cfab083",
+    "@type": "ModelMetadata",
+    "type": "threat_intel_feeds",
+    "module": "threat_intel_feeds",
+    "uuid": "acbac353-3593-41d2-af46-67951cfab083",
+}
+
+SYSTEM_QUERY_GET_RESPONSE = {
+    "@context": "/api/3/contexts/SystemQuery",
+    "@id": "/api/3/system_queries/7d245801-38d7-4400-9453-7bf7c42b7353",
+    "@type": "SystemQuery",
+    "uuid": "7d245801-38d7-4400-9453-7bf7c42b7353",
+    "name": "Block List (IP Address)",
+    "models": _TIF_MODEL_METADATA,
+    "resultCacheSeconds": 0,
+    "assignee": "",
+    "advanced": None,
+    "query": {
+        "limit": 30,
+        "logic": "AND",
+        "page": 1,
+        "filters": [
+            {
+                "field": "typeOfFeed",
+                "operator": "eq",
+                "value": "/api/3/picklists/b788efc2-dadb-4448-9018-043b37266de4",
+                "type": "object",
+            },
+            {"field": "confidence", "operator": "gte", "value": 70, "type": "primitive"},
+            {
+                "field": "reputation",
+                "operator": "eq",
+                "value": "/api/3/picklists/7074e547-7785-4979-be32-c6d0c863e4bd",
+                "type": "object",
+            },
+        ],
+        "sort": [],
+        "aggregates": [],
+    },
+}
+
+SYSTEM_QUERY_LIST_RESPONSE = {
+    "@context": "/api/3/contexts/SystemQuery",
+    "@id": "/api/3/system_queries",
+    "@type": "hydra:Collection",
+    "hydra:member": [SYSTEM_QUERY_GET_RESPONSE],
+    "hydra:totalItems": 1,
+}
+
+SYSTEM_QUERY_CREATE_RESPONSE = dict(SYSTEM_QUERY_GET_RESPONSE)

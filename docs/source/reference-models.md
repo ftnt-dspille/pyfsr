@@ -606,6 +606,20 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 ```
 
 ```{eval-rst}
+.. autoclass:: pyfsr.models.QueryDefinition
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.QueryFilter
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
 .. autoclass:: pyfsr.models.RepoConnectorEntry
    :members:
    :undoc-members:
@@ -656,6 +670,13 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 
 ```{eval-rst}
 .. autoclass:: pyfsr.models.SolutionPackInstallResponse
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.SystemQuery
    :members:
    :undoc-members:
    :show-inheritance:

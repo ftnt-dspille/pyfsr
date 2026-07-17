@@ -129,6 +129,8 @@ from ._system import (
     NotificationPurge,
     PicklistItem,
     PicklistName,
+    QueryDefinition,
+    QueryFilter,
     RepoConnectorEntry,
     Report,
     ResponseMapping,
@@ -137,6 +139,7 @@ from ._system import (
     SolutionPack,
     SolutionPackInfo,
     SolutionPackInstallResponse,
+    SystemQuery,
     SystemViewTemplate,
     Team,
     User,
@@ -166,6 +169,7 @@ MODEL_REGISTRY: dict[str, type[BaseRecord]] = {
     "email_templates": EmailTemplate,
     "roles": Role,
     "api_keys": ApiKey,
+    "system_queries": SystemQuery,
 }
 
 
@@ -284,6 +288,9 @@ __all__ = [
     "FeaturedTag",
     "SolutionPack",
     "SolutionPackInstallResponse",
+    "SystemQuery",
+    "QueryFilter",
+    "QueryDefinition",
     "SolutionPackInfo",
     "AIAgent",
     "Report",

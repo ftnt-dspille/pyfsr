@@ -5,18 +5,26 @@ SOURCEDIR     = source
 BUILDDIR      = build
 SPHINXPROJ    = pyfsr
 
-.PHONY: help clean html linkcheck doctest coverage check-examples
+.PHONY: help clean clean-html html linkcheck doctest coverage check-examples
 
 # Help command
 help:
 	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
-# Clean build directory
+# Clean everything, INCLUDING the generated AutoAPI rst. Regenerating it costs
+# ~45s, so prefer `clean-html` when you only want fresh HTML output; reach for
+# this when the API tree itself is stale (modules added/removed/renamed).
 clean:
 	rm -rf $(BUILDDIR)/*
 	rm -rf $(SOURCEDIR)/api/*.rst
 	rm -rf $(SOURCEDIR)/autoapi/*
 	@echo "Cleaned build directory and generated API docs"
+
+# Clean only the rendered output, keeping the generated AutoAPI rst
+# (autoapi_keep_files = True) so the rebuild reuses it: ~15s instead of ~55s.
+clean-html:
+	rm -rf $(BUILDDIR)/html $(BUILDDIR)/doctest
+	@echo "Cleaned rendered output; generated API docs kept for a fast rebuild."
 
 # Build HTML documentation
 html:
@@ -29,9 +37,11 @@ linkcheck:
 	@echo "Link check complete; look for any errors in the above output " \
 	      "or in $(BUILDDIR)/linkcheck/output.txt."
 
-# Run doctests
+# Run doctests. DOCS_SKIP_AUTOAPI=1 drops the AutoAPI tree: it is ~70% of this
+# build's time and contributes no doctests (see conf.py). Docstring examples are
+# covered by tests/unit/test_docstring_doctests.py, not by this builder.
 doctest:
-	$(SPHINXBUILD) -b doctest "$(SOURCEDIR)" "$(BUILDDIR)/doctest" $(SPHINXOPTS)
+	DOCS_SKIP_AUTOAPI=1 $(SPHINXBUILD) -b doctest "$(SOURCEDIR)" "$(BUILDDIR)/doctest" $(SPHINXOPTS)
 	@echo "Testing of doctests in the sources finished, look at the " \
 	      "results in $(BUILDDIR)/doctest/output.txt."
 

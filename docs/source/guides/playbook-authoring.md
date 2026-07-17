@@ -247,13 +247,26 @@ installed-package API).
 A playbook that pauses on a **Manual Input** / **Approval** step can be driven
 end to end from Python. {meth}`~pyfsr.api.manual_input.ManualInputAPI.answer`
 finds the pending prompt, resolves the numeric run id / submit option / user, and
-resumes — in one call (it hides the gotcha that a prompt's `.title` is the *step
-name*):
+resumes — in one call:
 
 ```python
 client.playbooks.trigger("Loop Until Six Digits")
-client.manual_input.answer(654321, by_title="AskNumber")   # fill + resume
+# by_title matches the prompt's *schema title* — the step's `title:` — and NOT
+# the step name, which here is "AskNumber":
+client.manual_input.answer(654321, by_title="Enter a six digit number")
 ```
+
+:::{note}
+A pending prompt's `.title` is the manual_input step's `title:`, mirrored from
+`input.schema.title` — **not** the step name. The two coincide only when the step
+declares no `title:`, in which case the schema title defaults to the step name.
+
+Titles are also not unique: the same step paused in two runs yields two
+identically-titled rows, and `answer()` refuses an ambiguous match rather than
+resuming an arbitrary run. When you hold the trigger's `task_id`, prefer the
+run-scoped {meth}`~pyfsr.api.manual_input.ManualInputAPI.pending_for_run`, whose
+rows carry the full prompt and the numeric run id.
+:::
 
 To inspect what ran, {meth}`~pyfsr.api.playbooks.PlaybooksAPI.run_tree` resolves a
 `task_id` to the run **plus its child runs** (no finding the parent by name), and

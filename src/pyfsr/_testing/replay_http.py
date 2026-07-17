@@ -199,6 +199,25 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("POST", "/api/auth/query/users", cap.APIKEY_USER_QUERY_RESPONSE),
         _entry("PUT", "/api/auth/users", cap.APIKEY_USER_LIFECYCLE_RESPONSE),
         # ApiKeysAPI — API-key binding (roles/teams on a user).
+        # System queries (datasets) — client.system_queries
+        _entry("GET", "/api/3/system_queries", cap.SYSTEM_QUERY_LIST_RESPONSE),
+        _entry("POST", "/api/3/system_queries", cap.SYSTEM_QUERY_CREATE_RESPONSE),
+        _entry(
+            "GET",
+            "/api/3/system_queries/7d245801-38d7-4400-9453-7bf7c42b7353",
+            cap.SYSTEM_QUERY_GET_RESPONSE,
+        ),
+        _entry(
+            "PUT",
+            "/api/3/system_queries/7d245801-38d7-4400-9453-7bf7c42b7353",
+            cap.SYSTEM_QUERY_GET_RESPONSE,
+        ),
+        _entry(
+            "DELETE",
+            "/api/3/system_queries/7d245801-38d7-4400-9453-7bf7c42b7353",
+            {},
+            status=204,
+        ),
         _entry("GET", "/api/3/api_keys", cap.APIKEY_LIST_RESPONSE),
         _entry("POST", "/api/3/api_keys", cap.APIKEY_CREATE_RESPONSE),
         # get() / update() / delete() for any api_key uuid — collapse to recorded uuid.
