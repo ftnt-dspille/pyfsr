@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-17
+
 ### Added
 - **Author a solution pack from Python** — `SolutionPackBuilder` (subclasses the
   `ExportTemplate` content builder, so every `add_*` content method chains the same
