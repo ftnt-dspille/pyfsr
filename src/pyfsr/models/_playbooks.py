@@ -38,13 +38,13 @@ def _alert_iri(ref: str) -> str:
 
 # ---------------------------------------------------------------- output shapes
 class RunSummary(ApiResult):
-    """A flattened playbook-run summary (the default :class:`PlaybooksAPI` view).
+    """A flattened playbook-run summary (the default :class:`~pyfsr.api.playbooks.PlaybooksAPI` view).
 
-    Produced by :func:`~pyfsr.api.playbooks._shape_run` for
+    Produced by ``_shape_run`` for
     :meth:`~pyfsr.api.playbooks.PlaybooksAPI.execution_history`,
     :meth:`~pyfsr.api.playbooks.PlaybooksAPI.last_run`,
     :meth:`~pyfsr.api.playbooks.PlaybooksAPI.wait`, and friends. ``pk`` is the
-    trailing segment of the run's ``@id`` (what :meth:`get_execution` takes);
+    trailing segment of the run's ``@id`` (what :meth:`~pyfsr.api.playbooks.PlaybooksAPI.get_execution` takes);
     ``source`` is ``"live"`` or ``"historical"`` (which run table it came from).
     """
 
@@ -59,7 +59,7 @@ class RunSummary(ApiResult):
 
 
 class RunStep(ApiResult):
-    """One step's outcome within a run, as reshaped by :meth:`run_env`."""
+    """One step's outcome within a run, as reshaped by :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_env`."""
 
     status: str | None = None
     result: Any | None = None
@@ -388,7 +388,7 @@ class PlaybookVersion(ApiResult):
 
 
 class VersionStepDelta(ApiResult):
-    """One changed step between two playbook versions (:meth:`diff_versions`).
+    """One changed step between two playbook versions (:meth:`~pyfsr.api.playbooks.PlaybooksAPI.diff_versions`).
 
     ``field`` is the top-level step key that differs (``arguments``,
     ``name``, ``stepType``…); ``from`` / ``to`` are the old / new values
@@ -402,7 +402,7 @@ class VersionStepDelta(ApiResult):
 
 
 class VersionDiff(ApiResult):
-    """A step-graph diff between two playbook snapshots (:meth:`diff_versions`).
+    """A step-graph diff between two playbook snapshots (:meth:`~pyfsr.api.playbooks.PlaybooksAPI.diff_versions`).
 
     Steps are keyed by ``uuid``. ``added`` / ``removed`` are step uuids present
     in only one side; ``changed`` holds per-step field deltas. ``routes`` /

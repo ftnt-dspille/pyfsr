@@ -426,8 +426,15 @@ class ManualInputOption(ApiResult):
     """One response button of a Manual Input (``response_mapping.options[]``).
 
     ``option`` is the button label; ``step_iri`` the workflow step the run routes
-    to when chosen; ``primary`` marks the default/highlighted button (absent on
-    plain buttons). Live-verified from ``retrieve_wfinput``.
+    to when chosen (an ``/api/3/workflow_steps/<uuid>`` IRI); ``primary`` marks
+    the default/highlighted button (absent on plain buttons). Live-verified from
+    ``retrieve_wfinput``.
+
+    ``step_iri`` is wired at author time from the step's ``next:``, so a Manual
+    Input step with no next step yields an option **without** one. Such a run
+    cannot be resumed -- ``wfinput_resume`` 500s on a null or absent
+    ``step_iri`` -- which :meth:`~pyfsr.api.manual_input.ManualInputAPI.answer`
+    reports up front.
     """
 
     option: str | None = None
@@ -459,6 +466,11 @@ class ManualInput(BaseRecord):
     step, and ``is_approval`` distinguishes an approval gate from a data-input
     prompt. ``assignment_type`` / ``owners`` / ``owner_details`` describe who the
     input is assigned to.
+
+    ``title`` is the prompt's **schema title** -- the Manual Input step's
+    ``title:``, mirrored from ``input.schema.title`` -- **not** the step name.
+    They coincide only when the step declares no ``title:``, in which case the
+    schema title defaults to the step name.
     """
 
     id: int | None = None
@@ -478,10 +490,11 @@ class ManualInput(BaseRecord):
     agent_id: str | None = None
     is_approval: bool | None = None
     workflow: str | int | None = None  # encrypted run token (list) or numeric run id (retrieve)
-    # ``input``/``response_mapping`` are richest on the single-item retrieve
-    # (``retrieve_wfinput``); live-verified 8.0.0 they also appear on the list rows
-    # (so both shapes parse) -- ``workflow`` is the only field that differs (int
-    # run id on retrieve vs the list's value).
+    # ``input``/``response_mapping``/``custom_fields`` appear ONLY on the
+    # single-item retrieve (``retrieve_wfinput``); live-verified 8.0.0 the
+    # ``list_wfinput/`` rows omit them entirely, so they stay ``None`` after a
+    # list() and both shapes parse. ``workflow`` also differs: the encrypted
+    # Fernet token on list vs the numeric run id on retrieve.
     input: ManualInputForm | None = None  # the form: {"schema": {title, description, inputVariables}}
     response_mapping: ResponseMapping | None = None  # approval/input options + messages
     custom_fields: dict[str, Any] | None = None  # custom email subject/body/attachment IRIs
@@ -638,7 +651,7 @@ class ApiKeyUser(BaseRecord):
 
 
 class FileRecord(BaseRecord):
-    """A ``/api/3/files`` record, returned by :meth:`FileOperations.upload`.
+    """A ``/api/3/files`` record, returned by :meth:`~pyfsr.utils.file_operations.FileOperations.upload`.
 
     Stable platform schema. The ``@id`` IRI (``rec.iri``) is what attachment,
     import, and similar payloads reference as their ``file`` field. ``filename``
@@ -771,7 +784,7 @@ class AIAgent(ContentHubItem):
     wire is ``SolutionPack``) — only the ``type`` discriminator differs. ``name`` is
     the agent id (e.g. ``"conversation"``) and ``label`` its display name (e.g.
     ``"Chat Assistant"``); either resolves an agent via
-    :meth:`~pyfsr.api.content_hub.ContentHubSearch.find_installed_ai_agent`.
+    :meth:`~pyfsr.api.content_hub.ContentHubSearch.get_installed_ai_agent`.
     """
 
 
@@ -1122,7 +1135,7 @@ class SystemViewTemplate(ApiResult):
     uuid: str | None = None
     name: str | None = None
     module: str | None = None
-    #: Layout kind: ``"list"``, ``"detail"``, ``"form"``, or ``"settings"``
+    #: Layout kind -- ``"list"``, ``"detail"``, ``"form"``, or ``"settings"``
     #: (live-verified 8.0).
     viewOptions: str | None = None
     #: Storage type, e.g. ``"rows"`` / ``"form"`` / ``"gridColumns"`` (``None`` for

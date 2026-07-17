@@ -105,6 +105,10 @@ nitpick_ignore = [
     ("py:class", "FortiSOAR"),
     ("py:class", "pyfsr.FortiSOAR"),
     ("py:class", "pyfsr.models.BaseRecord"),
+    # Unqualified forms autodoc emits from bare annotations: `Actor` is a union
+    # alias (not a class) and `ConfigSchema` is internal to _integration.
+    ("py:class", "Actor"),
+    ("py:class", "ConfigSchema"),
     # ApiResult is re-exported from pyfsr.models but documented at its canonical
     # private module; the "Bases:" xref from public subclasses (FreshnessReport,
     # FreshnessProbe) resolves at runtime but not under `-n`.
@@ -178,9 +182,28 @@ nitpick_ignore = [
 # under `-n`: model classes are documented at their canonical module path, so
 # the package-root / private-module annotation forms have no target here.
 nitpick_ignore_regex = [
-    (r"py:class", r"pyfsr\.models[\._].*"),
+    # NOTE: `(r"py:class", r"pyfsr\.models[\._].*")` used to live here, masking
+    # EVERY xref into pyfsr.models. The models are re-exported from private
+    # submodules that autoapi does not page, so all ~52 `:class:`~pyfsr.models.X``
+    # refs in our docstrings were silently dead. `reference-models.md` now
+    # documents them under their public names, so those refs resolve for real and
+    # the mask is gone. Only the private module paths still need one (below).
     (r"py:mod", r"pyfsr\.models\._.*"),
     (r"py:(class|func)", r"pyfsr\.cli\..*"),
+    # Sphinx's Python domain splits a subscripted annotation on the comma and
+    # then tries to xref each fragment: `dict[str, Any]` becomes a lookup for the
+    # literal `dict[str`. A real class name can never contain a bracket, so any
+    # target with one is a parser artifact of rendering pydantic field
+    # annotations (`:undoc-members:` on reference-models.md), NOT a broken link.
+    (r"py:class", r".*\[.*"),
+    # Private model internals: the union alias's home (`pyfsr.models._system.Actor`),
+    # internal classes referenced from public annotations (`_integration.ConfigSchema`),
+    # and private bases surfaced by `:show-inheritance:` (`_playbooks._RequestModel`).
+    # Public model names resolve for real via reference-models.md.
+    (r"py:class", r"pyfsr\.models\._.*"),
+    # `pyfsr.models.Actor` is a union ALIAS (User | Appliance | ApiKey), not a
+    # class, so it has no target under its public name either.
+    (r"py:class", r"pyfsr\.models\.Actor"),
 ]
 
 # -- AutoAPI configuration ---------------------------------------------------
