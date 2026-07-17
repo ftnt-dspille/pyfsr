@@ -46,6 +46,7 @@ from .api.schedules import SchedulesAPI
 from .api.search import SearchAPI
 from .api.solution_packs import SolutionPackAPI
 from .api.system import SystemAPI
+from .api.system_queries import SystemQueriesAPI
 from .api.system_settings import SystemSettingsAPI
 from .api.tags import TagsAPI
 from .api.tasks import TasksAPI
@@ -344,6 +345,7 @@ class FortiSOAR:
         self.solution_packs: SolutionPackAPI = SolutionPackAPI(self)
 
         # Appliance tuning: system settings, DAS auth config, periodic schedules
+        self.system_queries: SystemQueriesAPI = SystemQueriesAPI(self)
         self.system_settings: SystemSettingsAPI = SystemSettingsAPI(self)
         self.user_settings: UserSettingsAPI = UserSettingsAPI(self)
         self.auth_config: AuthConfigAPI = AuthConfigAPI(self)

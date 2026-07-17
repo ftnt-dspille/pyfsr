@@ -48,7 +48,12 @@ typecheck = [
 # false-green pre-push hooks. Keep the floor == what the docs gate is verified
 # against; bump deliberately, not implicitly.
 docs = [
-    "sphinx>=9.1,<10",
+    # Marker-gated: sphinx 9.1 requires Python >=3.12 while the library itself
+    # supports >=3.10. Without the marker the dependency set is unresolvable for
+    # 3.10/3.11 and `uv lock` fails outright, freezing uv.lock (which once left
+    # it pinned to an fsr_playbooks below the floor below). Docs are built on
+    # 3.12 in CI, so gating here costs nothing.
+    "sphinx>=9.1,<10; python_version >= '3.12'",
     "sphinx-autodoc-typehints>=3.0.0",
     "sphinx-autoapi>=3.8,<4",
     "furo>=2024.8.6",

@@ -42,6 +42,15 @@ except PackageNotFoundError:  # not installed (e.g. bare checkout)
 # shows without the long, noisy build metadata overflowing the brand.
 version = ".".join(release.split("+")[0].split(".")[:3])
 
+# DOCS_SKIP_AUTOAPI=1 drops the AutoAPI tree from the build. Only `make doctest`
+# sets it: AutoAPI parses every module under src/pyfsr and is ~70% of that
+# build's wall clock, yet contributes ZERO doctests. `>>>` blocks in docstrings
+# aren't collected (doctest_test_doctest_blocks = "" below) and no docstring
+# carries an explicit ``.. doctest::`` directive — tests/unit/test_docstring_doctests.py
+# is what covers docstring examples. The doctest count is identical either way;
+# if that ever stops being true, --check-floor fails and this gate is the reason.
+_skip_autoapi = os.environ.get("DOCS_SKIP_AUTOAPI")
+
 # -- Extensions --------------------------------------------------------------
 extensions = [
     "sphinx.ext.autodoc",
@@ -49,7 +58,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
-    "autoapi.extension",
+    *([] if _skip_autoapi else ["autoapi.extension"]),
     "myst_parser",  # author guides in Markdown (.md) alongside .rst
     "sphinx_design",  # grid cards / tabs on the landing page
     "sphinx_copybutton",  # one-click copy on code blocks
@@ -64,6 +73,12 @@ extensions = [
 # with a *role* subtype (``ref.meth`` / ``ref.class`` / ...), so they are NOT
 # masked here — the nitpicky ``-n`` gate still catches unresolved xrefs.
 suppress_warnings = ["ref.python"]
+
+# index.md's toctree lists the reference pages excluded from doctest builds
+# (see exclude_patterns); silence that one warning only in that mode, so the
+# nitpicky `-W` html build keeps reporting every real toctree break.
+if _skip_autoapi:
+    suppress_warnings += ["toc.not_readable"]
 
 # Author guides in Markdown; keep .rst working for the AutoAPI output.
 source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
@@ -303,3 +318,10 @@ copybutton_prompt_is_regexp = True
 # (sidebar showed each module twice). reference.md curates the canonical flat
 # list, so drop the landing page rather than surface its competing tree.
 exclude_patterns = ["build", "autoapi/pyfsr/index.rst"]
+
+# With AutoAPI off (doctest builds), the pages that toctree its output would
+# emit "toctree contains reference to nonexisting document" warnings, so drop
+# the stale generated tree and the two curated pages that index it. Neither
+# holds a doctest, so nothing is lost from the run.
+if _skip_autoapi:
+    exclude_patterns += ["autoapi/**", "reference.md", "reference-advanced.md"]

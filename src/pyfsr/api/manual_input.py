@@ -17,10 +17,12 @@ low-level pieces it composes.
 Example:
     >>> client = demo_client()
     >>> pending = client.manual_input.list(assigned_to="all")
-    >>> pending[0].title
-    'TestStep'
+    >>> pending[0].title  # the prompt's schema title, not the step name
+    'Enter a six digit number'
     >>> pending[0].is_approval
     False
+    >>> pending[0].response_mapping is None  # list rows omit it; retrieve() has it
+    True
 """
 
 from __future__ import annotations
@@ -41,9 +43,13 @@ AssignedTo = Literal["me", "myTeams", "all"]
 class ManualInputAPI(BaseAPI):
     """List and delete pending manual workflow inputs (Manual Input / Approval steps)."""
 
-    # Note: each row's ``.title`` is the *step name*, not the prompt's schema
-    # title. To select and answer a prompt by step name in one call, use
-    # :meth:`answer` (``by_title=``) rather than matching ``.title`` by hand.
+    # Note: each row's ``.title`` is the prompt's *schema* title -- the Manual
+    # Input step's ``title:``, NOT the step name. The two coincide only when the
+    # step declares no ``title:`` (the schema title then defaults to the step
+    # name), which is why matching on the step name appears to work until an
+    # author sets a real title. Titles are also not unique across runs, so
+    # prefer :meth:`pending_for_run` (a run-scoped join) when you hold a
+    # ``task_id``; :meth:`answer` (``by_title=``) is the best-effort shortcut.
     def list(
         self,
         *,
@@ -78,8 +84,8 @@ class ManualInputAPI(BaseAPI):
             >>> pending = client.manual_input.list(assigned_to="all")
             >>> len(pending)
             1
-            >>> pending[0].title
-            'TestStep'
+            >>> pending[0].title  # schema title (step "AskNumber" sets title:)
+            'Enter a six digit number'
         """
         params: dict[str, Any] = {
             "format": "json",
@@ -124,14 +130,24 @@ class ManualInputAPI(BaseAPI):
         each row's ``workflow`` field is an opaque Fernet token, so it cannot be
         filtered by task_id client-side.
 
-        Each row carries the full prompt the UI renders (``input.schema`` --
-        title/description/``inputVariables`` -- plus ``response_mapping`` for the
-        approval/button options). An Approval step (``type: approval`` ->
-        ``ApprovalManualInput``) surfaces here with ``is_approval=True`` even
-        though it does NOT appear in the ``approvals`` module -- this is how you
-        find the ``manual_input_id`` to pass to :meth:`resume` (``approved=True``)
-        to drive an approval gate (the modern approval step resumes via
-        ``wfinput_resume``, not the ``/approval/`` endpoint).
+        Unlike :meth:`list` (whose ``list_wfinput/`` rows are summary-only),
+        these rows carry the full prompt the UI renders -- ``input.schema``
+        (title/description/``inputVariables``), ``response_mapping``'s buttons,
+        and the **numeric** run id in ``workflow`` -- so a row from here has
+        everything :meth:`resume` needs without a second :meth:`retrieve` call.
+        Live-verified on 8.0.0.
+
+        Each row's ``title`` is the prompt's schema title (the Manual Input
+        step's ``title:``), not the step name.
+
+        An approval gate -- a Manual Input step with ``is_approval: true``,
+        which the wire reports as ``type: "ApprovalManualInput"`` -- surfaces
+        here with ``is_approval=True`` even though it does NOT appear in the
+        ``approvals`` module. (This is distinct from the legacy ``approval``
+        step type, which writes to the ``approvals`` module and never reaches
+        this queue.) This is how you find the ``manual_input_id`` to pass to
+        :meth:`resume` to drive the gate: the modern approval step resumes via
+        ``wfinput_resume``, not the ``/approval/`` endpoint.
 
         Args:
             task_id: the ``task_id`` returned by
@@ -242,10 +258,12 @@ class ManualInputAPI(BaseAPI):
         Example:
             >>> client = demo_client()
             >>> mi = client.manual_input.retrieve(1)
-            >>> mi.title
-            'TestStep'
+            >>> mi.title  # the row's title IS the schema title, mirrored
+            'Enter a six digit number'
             >>> mi.input["schema"]["title"]
-            'Test Input'
+            'Enter a six digit number'
+            >>> mi.workflow  # numeric run id here, encrypted token on list()
+            1
         """
         params: dict[str, Any] = {
             "format": "json",
@@ -331,8 +349,10 @@ class ManualInputAPI(BaseAPI):
         :meth:`resume`. It hides the foot-guns those three expose when wired by
         hand:
 
-        * a pending input's ``.title`` is the **step name**, not the schema
-          title -- so you select by step name with ``by_title=``;
+        * a pending input's ``.title`` is the prompt's **schema title** (the
+          Manual Input step's ``title:``), not the step name -- ``by_title=``
+          matches that, and only falls back to the step name for a step that
+          declares no ``title:``;
         * :meth:`list` returns an encrypted ``workflow`` token while
           :meth:`resume` needs the **numeric** run id -- this pulls the numeric
           id from :meth:`retrieve` for you;
@@ -346,8 +366,12 @@ class ManualInputAPI(BaseAPI):
                 to the input's declared variable name automatically. For an
                 approval/button-only step, omit it. For a multi-variable prompt,
                 use ``inputs=`` instead.
-            by_title: select the pending input whose ``title`` (the step name)
-                matches; the newest match is used. Mutually exclusive with
+            by_title: select the pending input whose ``title`` -- the prompt's
+                schema title, i.e. the Manual Input step's ``title:`` -- matches
+                exactly. Titles are not unique (the same step pausing in two
+                runs yields two identically-titled rows), so an ambiguous match
+                raises rather than guessing; pass ``input_id=`` or use
+                :meth:`pending_for_run` to disambiguate. Mutually exclusive with
                 ``input_id``.
             input_id: select the pending input by its numeric ``id`` directly.
             inputs: collected values keyed by variable name, e.g.
@@ -366,7 +390,8 @@ class ManualInputAPI(BaseAPI):
 
         Example:
             >>> client = demo_client()  # doctest: +SKIP
-            >>> client.manual_input.answer(123, by_title="AskNumber")  # doctest: +SKIP
+            >>> # by_title is the step's `title:`, not its name ("AskNumber"):
+            >>> client.manual_input.answer(654321, by_title="Enter a six digit number")  # doctest: +SKIP
             {'task_id': '...', 'message': 'Awaiting Playbook resumed successfully.'}
 
             .. note::
@@ -383,10 +408,20 @@ class ManualInputAPI(BaseAPI):
             rows = self.list(assigned_to=assigned_to)
             matches = [mi for mi in rows if (mi.title or "") == by_title]
             if not matches:
+                available = sorted({mi.title for mi in rows if mi.title})
                 raise LookupError(
-                    f"no pending manual input with title (step name) {by_title!r} "
-                    f"in scope assigned_to={assigned_to!r}; remember .title is the "
-                    f"step name, not the schema title"
+                    f"no pending manual input titled {by_title!r} in scope "
+                    f"assigned_to={assigned_to!r}. .title is the prompt's schema "
+                    f"title (the Manual Input step's `title:`), not the step name "
+                    f"-- it only matches the step name when the step sets no "
+                    f"`title:`. Pending titles in scope: {available or 'none'}"
+                )
+            if len(matches) > 1:
+                raise LookupError(
+                    f"{len(matches)} pending manual inputs are titled {by_title!r} "
+                    f"(ids {[mi.id for mi in matches]}) -- titles are not unique, so "
+                    f"answering by title could resume the wrong run. Pass input_id=, "
+                    f"or use pending_for_run(task_id) to scope to one run."
                 )
             input_id = matches[0].id
 
@@ -398,12 +433,25 @@ class ManualInputAPI(BaseAPI):
             raise LookupError(f"manual input {input_id} exposes no response options")
         opt = self._pick_option(options, option)
 
+        # A button is wired to its next step at author time: the step's
+        # `next:` becomes the option's step_iri. A Manual Input step with no
+        # `next:` compiles to an option without one, and wfinput_resume 500s on
+        # a null (or absent) step_iri -- fail here with the cause instead.
+        step_iri = opt.get("step_iri")
+        if not step_iri:
+            raise ValueError(
+                f"response option {opt.get('option')!r} on manual input {input_id} has no "
+                f"step_iri, so the run cannot be resumed: the Manual Input step has no "
+                f"next step wired to this button (no `next:` on the step). Fix the "
+                f"playbook -- the paused run is unresumable via the API as authored."
+            )
+
         if inputs is None and value is not None:
             inputs = self._map_scalar(full, value)
 
         return self.resume(
             full.workflow,
-            step_iri=opt["step_iri"],
+            step_iri=step_iri,
             step_id=full.step_id,
             manual_input_id=int(input_id),
             user=user_iri,
