@@ -27,12 +27,13 @@ from ..models._export import (
     ViewTemplateSelection,
 )
 from ..models._integration import ExportJobResult
+from ..models._system import PostInstallConfig, PostInstallWidget
 from ..pagination import extract_members
 from ..utils.validation import is_uuid as _is_uuid
 from .base import BaseAPI
 from .content_hub import ContentHubSearch
 
-__all__ = ["ExportConfigAPI", "ExportTemplate"]
+__all__ = ["ExportConfigAPI", "ExportTemplate", "SolutionPackBuilder"]
 
 # Default cap on records emitted per record set. The export engine treats the
 # query's ``limit`` as a *required trigger*: a record set whose query has no
@@ -486,6 +487,123 @@ class ExportTemplate:
         if self._auto_select_deps:
             md["autoSelectDeps"] = dict(self._auto_select_deps)
         return md
+
+
+def _slugify_pack_name(label: str) -> str:
+    """Derive a solution pack API name from its display label.
+
+    Mirrors the wizard's default: lower-case, non-alphanumerics collapsed to
+    single hyphens (e.g. ``"My SOC Pack"`` -> ``"my-soc-pack"``).
+    """
+    import re
+
+    slug = re.sub(r"[^a-z0-9]+", "-", label.strip().lower()).strip("-")
+    return slug or "solution-pack"
+
+
+class SolutionPackBuilder(ExportTemplate):
+    """Author a **solution pack** from selected content, plus pack metadata.
+
+    A solution pack is a "SolutionPack Export" template (the content selection —
+    modules, playbooks, connectors, roles, …) wrapped with pack metadata (label,
+    version, tags, and an optional post-install action). This subclasses
+    :class:`ExportTemplate`, so every content ``add_*`` method is inherited and
+    chains the same way; the pack-specific methods below add the metadata::
+
+        pack = (
+            SolutionPackBuilder("My SOC Pack", version="1.0.0")
+            .add_module("alerts")
+            .add_playbook_collection("Incident Response")
+            .post_install_widget("AI Assistant", "5.0.0", auto_launch=True)
+            .tags("Agentic AI")
+        )
+        client.solution_packs.create(pack, publish=True)
+
+    ``name`` is the pack's API identifier (slugified from ``label`` if omitted);
+    ``label`` is the display name shown in Content Hub.
+    """
+
+    def __init__(
+        self,
+        label: str,
+        *,
+        version: str,
+        name: str | None = None,
+        description: str | None = None,
+        help_url: str | None = None,
+        support_info: str | None = None,
+        publisher: str = "Community",
+        min_compatibility: str | None = None,
+        auto_select_picklists: bool = True,
+    ) -> None:
+        pack_name = name or _slugify_pack_name(label)
+        super().__init__(pack_name, auto_select_picklists=auto_select_picklists)
+        self.label = label
+        self.version = version
+        self.description = description
+        self.help_url = help_url
+        self.support_info = support_info
+        self.publisher = publisher
+        self.min_compatibility = min_compatibility
+        self._tags: list[str] = []
+        self._categories: list[str] = []
+        self._post_install: PostInstallConfig | None = None
+
+    def tags(self, *tags: str) -> "SolutionPackBuilder":
+        """Add record tags (the pack's *Tags* field). Repeatable; de-duplicated."""
+        for t in tags:
+            if t not in self._tags:
+                self._tags.append(t)
+        return self
+
+    def category(self, *categories: str) -> "SolutionPackBuilder":
+        """Add Content Hub categories by name (e.g. ``"Utilities"``). Repeatable."""
+        for c in categories:
+            if c not in self._categories:
+                self._categories.append(c)
+        return self
+
+    def post_install_widget(
+        self,
+        widget_name: str,
+        widget_version: str,
+        *,
+        label: str | None = None,
+        button_label: str = "Configure",
+        auto_launch: bool = False,
+    ) -> "SolutionPackBuilder":
+        """Configure the **post-install action** — a widget offered after install.
+
+        Mirrors the wizard's *Configure post-install action*: pick a widget by
+        ``name``/``version``, set the launch ``button_label`` (required by the UI
+        when enabled), and optionally ``auto_launch`` it the first time.
+        """
+        self._post_install = PostInstallConfig(
+            enabled=True,
+            widgets=[
+                PostInstallWidget(
+                    name=widget_name,
+                    label=label or widget_name,
+                    version=widget_version,
+                    buttonLabel=button_label,
+                    autoLaunch=auto_launch,
+                )
+            ],
+        )
+        return self
+
+    def info_content(self) -> dict[str, Any]:
+        """The pack's ``infoContent`` block (label/description/help + post-install)."""
+        ic: dict[str, Any] = {"label": self.label, "version": self.version}
+        if self.description is not None:
+            ic["description"] = self.description
+        if self.help_url is not None:
+            ic["help"] = self.help_url
+        if self.support_info is not None:
+            ic["supportInfo"] = self.support_info
+        if self._post_install is not None:
+            ic["postInstallConfig"] = self._post_install.model_dump(exclude_none=True)
+        return ic
 
 
 class ExportConfigAPI(BaseAPI):
