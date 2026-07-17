@@ -490,11 +490,13 @@ class ManualInput(BaseRecord):
     agent_id: str | None = None
     is_approval: bool | None = None
     workflow: str | int | None = None  # encrypted run token (list) or numeric run id (retrieve)
-    # ``input``/``response_mapping``/``custom_fields`` appear ONLY on the
-    # single-item retrieve (``retrieve_wfinput``); live-verified 8.0.0 the
-    # ``list_wfinput/`` rows omit them entirely, so they stay ``None`` after a
-    # list() and both shapes parse. ``workflow`` also differs: the encrypted
-    # Fernet token on list vs the numeric run id on retrieve.
+    # Live-verified 8.0.0, three shapes parse into this one model:
+    #   * POST ``list_wfinput/`` (:meth:`list`) -- summary only: omits
+    #     ``input``/``response_mapping``/``custom_fields`` (they stay ``None``)
+    #     and ``workflow`` is the encrypted Fernet token.
+    #   * GET ``manual-wf-input/?workflow=<pk>`` (:meth:`pending_for_run`) and
+    #     POST ``<id>/retrieve_wfinput/`` (:meth:`retrieve`) -- full: all three
+    #     present and ``workflow`` is the numeric run id ``resume`` needs.
     input: ManualInputForm | None = None  # the form: {"schema": {title, description, inputVariables}}
     response_mapping: ResponseMapping | None = None  # approval/input options + messages
     custom_fields: dict[str, Any] | None = None  # custom email subject/body/attachment IRIs
