@@ -611,11 +611,31 @@ def test_query_logs_body_and_logs_param():
 
 
 def test_manual_inputs_and_retrieve():
-    c = _Rec(resp={"hydra:member": [{"id": 7, "step_id": "s1"}]})
-    rows = PlaybooksAPI(c).manual_inputs()
-    assert rows == [{"id": 7, "step_id": "s1"}]
-    assert c.calls[-1][1] == "/api/wf/api/manual-wf-input/list_wfinput/"
-    PlaybooksAPI(c).retrieve_manual_input("mi-1")
+    """Both are deprecated thin delegates to client.manual_input — same endpoints.
+
+    They must keep hitting the exact endpoints (and returning raw dicts) they always
+    did: `manual_inputs()` posted a bare body, which the server reads as
+    `assigned_to="all"` (live-verified: `{}` and `"all"` return the full queue, `"me"`
+    returns none), so the delegate must pass "all" and NOT ManualInputAPI's "me"
+    default — that would silently scope the listing down to nothing.
+    """
+    from pyfsr.api.manual_input import ManualInputAPI
+
+    class _C(_Rec):
+        def __init__(self, **kw):
+            super().__init__(**kw)
+            self.manual_input = ManualInputAPI(self)
+
+    c = _C(resp={"hydra:member": [{"id": 7, "step_id": "s1"}]})
+    with pytest.deprecated_call():
+        rows = PlaybooksAPI(c).manual_inputs()
+    assert rows == [{"id": 7, "step_id": "s1"}], "still raw dicts, not typed models"
+    method, endpoint, body = c.calls[-1][0], c.calls[-1][1], c.calls[-1][2]
+    assert (method, endpoint) == ("POST", "/api/wf/api/manual-wf-input/list_wfinput/")
+    assert body == {"assigned_to": "all"}, "must not inherit ManualInputAPI's 'me' default"
+
+    with pytest.deprecated_call():
+        PlaybooksAPI(c).retrieve_manual_input("mi-1")
     assert c.calls[-1][1] == "/api/wf/api/manual-wf-input/mi-1/retrieve_wfinput/"
 
 

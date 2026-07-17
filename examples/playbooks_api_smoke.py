@@ -175,7 +175,11 @@ def run_read_checks(r: Runner, pb) -> dict[str, Any]:
     print("\n[read-only] log + manual-input surface")
     r.check("log_list", lambda: pb.log_list(limit=3))
     r.check("query_logs", lambda: pb.query_logs(limit=3))
-    r.check("manual_inputs", lambda: pb.manual_inputs())
+    # `pb.manual_inputs()` is deprecated — same endpoint, but this is the typed,
+    # filterable, paginated accessor. `assigned_to="all"` matches what the old
+    # method sent (a bare body, which the server reads as "all"; the default here
+    # is "me", which would scope this smoke check down to nothing).
+    r.check("manual_input.list", lambda: pb.client.manual_input.list(assigned_to="all"))
     r.check(
         "render_jinja",
         lambda: _expect_str(pb.render_jinja("{{ 1 + 1 }}", {})),

@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Deprecated
+- **`playbooks.manual_inputs()` and `playbooks.retrieve_manual_input()`** — they hit
+  the exact same endpoints as `client.manual_input.list()` / `.retrieve()`
+  (`POST .../manual-wf-input/list_wfinput/` and `.../{id}/retrieve_wfinput/`), but in
+  a raw-dict form with no typing, filtering, paging, or scoping. They are now thin
+  delegates to `client.manual_input` and emit a `DeprecationWarning`; return shapes
+  are unchanged (verified payload-identical against a live appliance). `client.manual_input`
+  is the single interface for this surface — a direction already begun by
+  `playbooks.approval()`, which delegates to it.
+- Migration note for `manual_inputs()`: pass `assigned_to="all"`. The old method sent
+  a bare body, which the server reads as *all*; `ManualInputAPI.list()` defaults to
+  `"me"`. Live-verified on the same queue: `{}` and `"all"` each returned 3 rows while
+  `"me"` returned 0 — so a mechanical migration to the default silently returns
+  nothing. The delegate passes `"all"` explicitly and a test pins it.
+- Not consolidated: `playbooks.resume()` and `manual_input.resume()` share the
+  `wfinput_resume/` endpoint but are **not** interchangeable — they build different
+  bodies (`playbooks.resume` takes optional `step_iri`/`step_id` plus an `approved=`
+  approval shortcut and sends no `user`; `manual_input.resume` requires
+  `step_iri`/`step_id`/`user` and has no `approved`). Collapsing either direction
+  would drop a capability, so both remain.
+
 ### Changed
 - **`playbooks.trigger(records=...)` now raises `ValueError` instead of starting a
   silently record-blind run.** It posts to the manual-execute (`notrigger`) route,
