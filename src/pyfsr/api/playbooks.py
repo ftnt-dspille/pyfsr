@@ -2345,8 +2345,8 @@ class PlaybooksAPI(BaseAPI):
             ``{"task_ids": [...]}`` — plural, a list — where :meth:`trigger`'s
             ``notrigger`` route answers a scalar ``{"task_id": ...}``.
             :class:`~pyfsr.models.TriggerResponse` folds the plural key into
-            ``task_id``, so :attr:`~pyfsr.models.TriggerResponse.task_ids` is the
-            uniform accessor across both routes.
+            ``task_id``, so ``task_ids`` is the uniform accessor across both
+            routes.
 
         Example:
             >>> client = demo_client()

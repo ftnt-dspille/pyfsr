@@ -143,7 +143,6 @@ guides/content-hub-mirror
 :caption: Reference
 
 reference
-reference-models
 ```
 
 ```{toctree}
