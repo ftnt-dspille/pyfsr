@@ -1769,7 +1769,10 @@ WORKFLOW_CONTROL_RESPONSE = {
 TRIGGER_BY_NAME_RESPONSE = {"task_id": "c0afba58-9dbe-44dd-a6e6-7227e33990dd"}
 
 # POST /api/triggers/1/action/{route_uuid} — record-context action trigger.
-TRIGGER_ACTION_RESPONSE = {"task_id": "c0afba58-9dbe-44dd-a6e6-7227e33990dd"}
+# Live-captured: this route answers `task_ids` (PLURAL, a list) — unlike the
+# notrigger/named-webhook routes, which answer a scalar `task_id`. The fixture
+# previously claimed a scalar `task_id` here, which no appliance ever sent.
+TRIGGER_ACTION_RESPONSE = {"task_ids": ["c0afba58-9dbe-44dd-a6e6-7227e33990dd"]}
 
 # GET /api/3/agents — execution-agent records.
 AGENT_RECORD = {
