@@ -57,8 +57,9 @@ from pyfsr import FortiSOAR
 YAML_PATH = Path(__file__).parent / "playbooks" / "do_until_validation_demo.yaml"
 PARENT_NAME = "Loop Until Six Digits"
 CHILD_NAME = "Validate Six Digit Number"
-# A pending manual input's `title` field is the STEP name, not the schema title.
-MI_TITLE = "AskNumber"
+# A pending manual input's `title` is the prompt's SCHEMA title -- the
+# manual_input step's `title:` -- not the step name (the step is "AskNumber").
+MI_TITLE = "Enter a six digit number"
 
 
 # --------------------------------------------------------------------------- #
