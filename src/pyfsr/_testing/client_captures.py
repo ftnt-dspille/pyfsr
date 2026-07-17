@@ -570,6 +570,16 @@ _ALERTS_ATTRIBUTES = [
 # the ``pending_changes`` module-set comparison). Real uuids.
 _MODULE_ROWS = [
     {
+        # Threat intel feeds — the module a TAXII collection (dataset) targets.
+        "type": "threat_intel_feeds",
+        "module": "threat_intel_feeds",
+        "uuid": "acbac353-3593-41d2-af46-67951cfab083",
+        "displayName": "{{ value }}",
+        "parentType": "threat_intel_base",
+        "tableName": "threat_intel_feeds",
+        "descriptions": {"singular": "Threat Intel", "plural": "Threat Intel Feed"},
+    },
+    {
         "type": "agents",
         "module": "agents",
         "uuid": "266e4fbb-2bcd-47dd-9ba6-400b88d49a92",
@@ -1977,3 +1987,64 @@ WORKFLOW_DEFINITION_PUT_RESPONSE = dict(WORKFLOW_DEFINITION_GET_RESPONSE)
 
 # DELETE /api/3/workflow_versions/<id> — 204 No Content (no body).
 WORKFLOW_VERSION_DELETE_RESPONSE = None
+
+# ---------------------------------------------------------------------------
+# System queries (datasets) — client.system_queries
+# ---------------------------------------------------------------------------
+# A dataset is a named, module-scoped filter. On ``threat_intel_feeds`` a dataset
+# doubles as a TAXII collection (its uuid IS the collection id). Shape captured
+# from a live 8.0.x appliance: the vendor "Block List (IP Address)" dataset.
+# Note ``logic`` on the body and ``type`` on every filter — without them the
+# appliance silently ignores the filters and returns all records.
+
+_TIF_MODEL_METADATA = {
+    "@id": "/api/3/model_metadatas/acbac353-3593-41d2-af46-67951cfab083",
+    "@type": "ModelMetadata",
+    "type": "threat_intel_feeds",
+    "module": "threat_intel_feeds",
+    "uuid": "acbac353-3593-41d2-af46-67951cfab083",
+}
+
+SYSTEM_QUERY_GET_RESPONSE = {
+    "@context": "/api/3/contexts/SystemQuery",
+    "@id": "/api/3/system_queries/7d245801-38d7-4400-9453-7bf7c42b7353",
+    "@type": "SystemQuery",
+    "uuid": "7d245801-38d7-4400-9453-7bf7c42b7353",
+    "name": "Block List (IP Address)",
+    "models": _TIF_MODEL_METADATA,
+    "resultCacheSeconds": 0,
+    "assignee": "",
+    "advanced": None,
+    "query": {
+        "limit": 30,
+        "logic": "AND",
+        "page": 1,
+        "filters": [
+            {
+                "field": "typeOfFeed",
+                "operator": "eq",
+                "value": "/api/3/picklists/b788efc2-dadb-4448-9018-043b37266de4",
+                "type": "object",
+            },
+            {"field": "confidence", "operator": "gte", "value": 70, "type": "primitive"},
+            {
+                "field": "reputation",
+                "operator": "eq",
+                "value": "/api/3/picklists/7074e547-7785-4979-be32-c6d0c863e4bd",
+                "type": "object",
+            },
+        ],
+        "sort": [],
+        "aggregates": [],
+    },
+}
+
+SYSTEM_QUERY_LIST_RESPONSE = {
+    "@context": "/api/3/contexts/SystemQuery",
+    "@id": "/api/3/system_queries",
+    "@type": "hydra:Collection",
+    "hydra:member": [SYSTEM_QUERY_GET_RESPONSE],
+    "hydra:totalItems": 1,
+}
+
+SYSTEM_QUERY_CREATE_RESPONSE = dict(SYSTEM_QUERY_GET_RESPONSE)

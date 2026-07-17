@@ -557,6 +557,90 @@ class Role(BaseRecord):
     importedBy: list[Any] | None = None
 
 
+class QueryFilter(ApiResult):
+    """One condition inside a :class:`SystemQuery`'s ``query.filters``.
+
+    ``type`` is **not** cosmetic and must not be dropped: FortiSOAR **silently
+    ignores a filter that omits it** (and silently ignores every filter when the
+    enclosing body omits ``logic``), returning *all* records rather than an
+    error — see :class:`QueryDefinition`. Use ``primitive`` for scalars,
+    ``object`` for picklist/IRI values, ``datetime`` for dates.
+
+    A nested group sets ``logic`` + ``filters`` instead of ``field``/``value``.
+    """
+
+    field: str | None = None
+    operator: str | None = None
+    value: Any | None = None
+    type: str | None = None
+    #: Nested group members (a group carries ``logic`` + ``filters``).
+    logic: str | None = None
+    filters: list[QueryFilter] | None = None
+
+
+class QueryDefinition(ApiResult):
+    """The ``query`` body of a :class:`SystemQuery` (also the shape you POST to
+    ``/api/query/<module>``).
+
+    .. warning::
+       ``logic`` is **load-bearing**. Omit it and FortiSOAR drops every filter on
+       the floor and returns the whole module — no error, no warning. Same for a
+       filter missing :attr:`QueryFilter.type`. Live-verified on 8.0.0::
+
+           {"filters": [{"field": "source", "operator": "eq", "value": "nope"}]}
+               -> ALL records
+           {"logic": "AND", "filters": [
+               {"field": "source", "operator": "eq", "value": "nope",
+                "type": "primitive"}]}
+               -> 0 records
+
+       Never delete straight from a query result without re-checking each record
+       client-side.
+    """
+
+    logic: str = "AND"
+    filters: list[QueryFilter] = Field(default_factory=list)
+    limit: int | None = None
+    page: int | None = None
+    search: str | None = None
+    sort: list[Any] | None = None
+    aggregates: list[Any] | None = None
+
+
+class SystemQuery(BaseRecord):
+    """A saved **dataset** from ``/api/3/system_queries/``.
+
+    A system query is a named, module-scoped filter — what the UI calls a
+    *dataset*. Beyond driving saved views, a dataset on ``threat_intel_feeds``
+    **is a TAXII collection**: the collection id served at
+    ``/api/taxii/1/collections/<id>/objects`` *is* this record's ``uuid``
+    (live-verified on 8.0.0). That is how FortiSOAR publishes an outgoing threat
+    feed — see :class:`~pyfsr.api.taxii.TaxiiAPI`.
+
+    ``models`` is the target module's ``model_metadatas`` IRI (expanded to the
+    full object on read).
+    """
+
+    name: str | None = None
+    models: str | dict[str, Any] | None = None
+    query: QueryDefinition | None = None
+    assignee: str | None = None
+    advanced: Any | None = None
+    resultCacheSeconds: int | None = None
+    createUser: str | dict[str, Any] | None = None
+    createDate: float | None = None
+    modifyUser: str | dict[str, Any] | None = None
+    modifyDate: float | None = None
+
+    @property
+    def module(self) -> str | None:
+        """The module slug this dataset targets (``models.type`` when expanded)."""
+        m = self.models
+        if isinstance(m, dict):
+            return m.get("type")
+        return None
+
+
 class ApiKey(BaseRecord):
     """An **API-key binding** record from ``/api/3/api_keys/``.
 
