@@ -50,6 +50,75 @@ All notable changes to this project will be documented in this file.
   just became a bad query param. `config=` still works and still sends the same wire
   body (the rename is client-side only); passing both raises `ValueError`.
 
+### Documentation
+- **The 130 public `pyfsr.models` classes are now documented** (`reference-models.md`).
+  They are re-exported from private submodules that autoapi does not page, so
+  `pyfsr.models.X` had no doc target and ~52 `:class:`~pyfsr.models.X`` references
+  across the docstrings resolved to nothing. That was invisible because
+  `nitpick_ignore_regex` masked the whole namespace; the strict `-W -n` build was
+  green *over* the dead links. The mask is gone, so the build now proves they
+  resolve — 85 model links render from the API pages. The page is generated from
+  `__all__` by `scripts/gen_models_reference.py` and a unit test fails in both
+  directions if it drifts.
+- Documenting the models rendered their docstrings for the first time, which
+  surfaced real errors the mask had hidden: `run_env` / `get_execution` /
+  `diff_versions` were written as bare relative references to methods that live on
+  `PlaybooksAPI`; a docstring pointed at `ContentHubSearch.find_installed_ai_agent`,
+  **a method that does not exist** (the shipped name is `get_installed_ai_agent`);
+  and two docstrings had prose parsed as a *type* because their first line contained
+  a colon (`SystemViewTemplate.viewOptions`, `WidgetRecord.published`). All fixed.
+- `docs/source/conf.py` now imports `fsr_playbooks.compiler` up front. This is
+  load-bearing, not tidying: sphinx resolves autodoc at read time, before any
+  doctest runs, and inspecting 130 pydantic models perturbs the state pydantic uses
+  to resolve string annotations — so a later `import fsr_playbooks` inside a doctest
+  failed with `PydanticSchemaGenerationError: The type annotation for
+  `__pydantic_extra__` must be `dict[str, ...]``. `conf.py` runs first, so importing
+  there builds those schemas while the state is clean.
+
+### Fixed
+- **`manual_input.answer(by_title=)` matches the prompt's *schema title*, not the
+  step name** — the docstrings, the `LookupError` text, the shipped example, and the
+  authoring guide all claimed the opposite. Live-proven on 8.0.0: a step named
+  `AskNumber` with `title: Enter a six digit number` produces a pending row whose
+  `.title` is `Enter a six digit number`. The old claim was true only by accident:
+  fsr_playbooks <0.4.11 silently dropped a step's `title:` and defaulted the schema
+  title to the step name, so the two strings always coincided. Once the compiler was
+  fixed the accident ended, and `examples/do_until_validation_loop.py` (which filtered
+  on the step name) could no longer find its own prompt. The two coincide only when a
+  step declares no `title:`.
+- **`answer()` no longer posts a null `step_iri`.** A response option's `step_iri` is
+  wired at author time from the step's `next:`, so a Manual Input step with no next
+  step yields an option without one. `ManualInputOption.step_iri` defaults to `None`
+  and `ApiResult.__getitem__` returns `None` rather than raising, so the old code
+  silently sent `step_iri: null` and `wfinput_resume` answered with an opaque HTTP
+  500 (live-verified: the server rejects a null *and* an omitted `step_iri`). It now
+  raises up front, naming the cause — the run is unresumable as authored.
+- **Corrected the `ManualInput` model's wire notes.** `input` / `response_mapping` /
+  `custom_fields` do **not** appear on `list_wfinput/` rows (the model claimed they
+  did); they are present on `pending_for_run()` and `retrieve()`, which also carry the
+  numeric run id instead of the encrypted Fernet token. The test fixtures invented a
+  single merged shape that no endpoint returns — carrying `input` and a
+  `/api/wf/api/workflows/<id>/steps/<id>` style `step_iri` on a list row, and pairing
+  a step-name `title` with a different schema title. They are now captured from a live
+  8.0.0 box, and the real `step_iri` is an `/api/3/workflow_steps/<uuid>` IRI.
+- **`pending_for_run()` no longer mis-describes approval gates.** An approval gate is a
+  `manual_input` step with `is_approval: true` (the wire reports
+  `type: "ApprovalManualInput"`), not the legacy `approval` step type — that one writes
+  to the `approvals` module and never reaches this queue.
+- **`uv.lock` pinned `fsr-playbooks==0.4.8`, below the `>=0.4.11` floor** declared in
+  `pyproject.toml`, so a local `uv sync` silently installed a compiler the project
+  rejects (CI is unaffected — it resolves the extra with pip). The lock could not be
+  regenerated because `pyfsr[docs]` required `sphinx>=9.1`, which needs Python >=3.12
+  while the project supports >=3.10, making the dependency set unresolvable. The docs
+  pin is now marker-gated to `python_version >= '3.12'` (docs build on 3.12 in CI), and
+  the lock is regenerated at 0.4.27.
+
+### Changed
+- **`answer(by_title=)` now raises on an ambiguous match** instead of silently taking
+  the newest. Titles are not unique — the same step paused in two runs yields two
+  identically-titled rows — so the old behavior could resume an arbitrary run. Pass
+  `input_id=`, or use `pending_for_run(task_id)` to scope to one run.
+
 ### Deprecated
 - **`playbooks.manual_inputs()` and `playbooks.retrieve_manual_input()`** — they hit
   the exact same endpoints as `client.manual_input.list()` / `.retrieve()`
