@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-17
+
 ### Fixed
 - **`connectors.list_configurations(name=...)` filtered the wrong thing, silently.**
   The docstring said `name` filters by *connector* name; live-checking showed it
