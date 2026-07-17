@@ -43,6 +43,7 @@ _GLOBS = {"demo_client": demo_client, "demo_box": demo_box, "Query": Query}
 # schema envelopes + picklist bulk calls).
 WHITELIST = [
     "pyfsr.config",
+    "pyfsr.api.system_queries",
     "pyfsr.query",
     "pyfsr.records",
     "pyfsr.api.connectors",

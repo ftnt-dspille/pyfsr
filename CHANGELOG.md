@@ -16,6 +16,24 @@ All notable changes to this project will be documented in this file.
   it could never have caught this.
 
 ### Added
+- **`client.system_queries`** — saved **datasets** (`/api/3/system_queries`), typed via
+  the new `SystemQuery` / `QueryDefinition` / `QueryFilter` models. `list(module=...)`,
+  `get`, `find_by_name`, `create`, `ensure` (idempotent), `update`, `delete`, and `run`
+  (delegates to `search.run_persisted`, resolving the dataset's module for you).
+  `create`/`ensure` take a module **slug** and resolve the `model_metadatas` IRI
+  themselves.
+
+  This exists because **a dataset on `threat_intel_feeds` *is* a TAXII collection** —
+  the id served at `/api/taxii/1/collections/<id>/objects` is the dataset's uuid. So
+  `client.system_queries` defines a collection and the read-only `client.taxii` serves
+  it; together they're how FortiSOAR publishes an outgoing threat feed that a FortiGate
+  can pull. See `examples/taxii_threat_feed_to_fortigate.py`.
+
+  The filter builders are the point: **FortiSOAR silently ignores a filter that omits
+  `type`, and every filter when the body omits `logic`** — returning *all* records
+  instead of erroring, which turns "delete what matched" into "delete the module".
+  `SystemQueriesAPI.filter()` infers `type` (IRI → `object`, else `primitive`) and
+  `.query()` always sets `logic`, so the shape can't be got wrong by accident.
 - **`connectors.list_configurations(connector=...)`** — the filter the docs used to
   promise, done properly: takes a machine name or an install id and resolves a name
   to its id first, because the endpoint's `connector` filter is numeric and a name
