@@ -155,23 +155,34 @@ def test_trigger_by_uuid_posts_to_notrigger():
     client = FakeClient()
     out = PlaybooksAPI(client).trigger(
         "f0674018-306d-414a-94da-90ace5d98350",
-        records="alerts:abc-123",
         inputs={"foo": "bar"},
     )
     endpoint, body = client.post_calls[0]
     assert endpoint == "/api/triggers/1/notrigger/f0674018-306d-414a-94da-90ace5d98350"
-    assert body["records"] == ["/api/3/alerts/abc-123"]
     assert body["inputs"] == {"foo": "bar"}
     assert out["task_id"] == "run-uuid"
 
 
+def test_trigger_rejects_records_and_points_at_trigger_action():
+    """`records=` on the notrigger route starts a record-BLIND run — fail loudly.
+
+    Live-verified: the notrigger route leaves `vars.input.records` empty no matter
+    what body it is given (records alone, or the full action envelope), so a step
+    reading `{{ vars.input.records[0]['@id'] }}` dies with CS-WF-35 while the
+    trigger call itself looks successful. Silently starting that run is worse than
+    refusing it.
+    """
+    client = FakeClient()
+    with pytest.raises(ValueError, match="trigger_action"):
+        PlaybooksAPI(client).trigger("f0674018-306d-414a-94da-90ace5d98350", records="alerts:abc-123")
+    assert not client.post_calls, "must refuse BEFORE starting a record-blind run"
+
+
 def test_trigger_by_name_resolves_uuid_first():
     client = FakeClient(name_lookup={"hydra:member": [{"uuid": "pb-uuid"}]})
-    PlaybooksAPI(client).trigger("AI Investigation", records=["/api/3/alerts/x"])
+    PlaybooksAPI(client).trigger("AI Investigation")
     assert any("/api/3/workflows?" in c[0] for c in client.get_calls)
     assert client.post_calls[0][0] == "/api/triggers/1/notrigger/pb-uuid"
-    # already-IRI records are passed through unchanged
-    assert client.post_calls[0][1]["records"] == ["/api/3/alerts/x"]
 
 
 def test_trigger_unknown_playbook_raises():
@@ -1412,6 +1423,31 @@ def test_trigger_returns_typed_trigger_response():
     resp = PlaybooksAPI(c).trigger("aabbccdd-0000-0000-0000-000000000000")
     assert isinstance(resp, TriggerResponse)
     assert resp.task_id == "t99"
+
+
+def test_trigger_response_absorbs_the_action_routes_plural_task_ids():
+    """The action route answers `task_ids` (plural); both accessors must still work.
+
+    Live-verified: POST /api/triggers/1/action/<route> returns
+    {"task_ids": [...]} while notrigger returns {"task_id": ...}. Only `task_id`
+    was declared, so the plural key fell into model_extra while the `task_ids`
+    PROPERTY (which normalizes `task_id`) shadowed it and returned [] — leaving a
+    trigger_action caller unable to reach the run they just started.
+    """
+    from pyfsr.models import TriggerResponse
+
+    resp = TriggerResponse(**{"task_ids": ["run-1"]})
+    assert resp.task_ids == ["run-1"], "the wire's plural key must be reachable"
+    assert resp.task_id == ["run-1"], "folded into task_id (documented as str|list)"
+
+    # the scalar notrigger shape is untouched
+    scalar = TriggerResponse(**{"task_id": "run-2"})
+    assert scalar.task_ids == ["run-2"]
+    assert scalar.task_id == "run-2"
+
+    # an explicit task_id always wins over a stray plural key
+    both = TriggerResponse(**{"task_id": "real", "task_ids": ["ignored"]})
+    assert both.task_id == "real"
 
 
 def test_why_failed_returns_typed_run_failure():

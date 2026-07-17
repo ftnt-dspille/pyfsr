@@ -1737,13 +1737,29 @@ class PlaybooksAPI(BaseAPI):
         Args:
             playbook: the playbook to run — a uuid, or a name resolved to its
                 uuid (the playbook must have a *manual* trigger step).
-            records: record IRI(s) to pass in as the trigger's selected records
-                (e.g. ``"/api/3/alerts/<uuid>"`` or a list). A bare uuid/ref is
-                expanded to an ``/api/3/alerts/`` IRI.
-            inputs: values for the playbook's manual input fields, sent as the
-                request body's ``inputs``.
-            env: extra keys merged into the POST body verbatim, for the rare
-                playbook expecting a custom trigger envelope.
+            records: **rejected — raises ValueError.** The ``notrigger`` route
+                cannot deliver record context: the run starts but
+                ``vars.input.records`` stays empty, so a step reading
+                ``{{ vars.input.records[0]['@id'] }}`` fails with *CS-WF-35:
+                Record IRI is empty*. Live-verified as a property of the route,
+                not the body (the full action envelope does not help). Use
+                :meth:`trigger_action` for a record-scoped run. The parameter is
+                kept only to fail loudly rather than start a silently
+                record-blind run.
+            inputs: sent as the request body's ``inputs`` key. **Caveat
+                (live-verified):** this lands in the run env as top-level
+                ``vars.inputs`` — it does NOT populate ``vars.input.params``,
+                which stays ``{}`` on this route. The notrigger handler
+                array_merges the body into the trigger step's arguments and only
+                interprets a fixed key set (``env``/``priority``/``parent_wf``/
+                ``step_id``/``runtime_tags``/``force_debug``/
+                ``_eval_input_params_from_env``/``inputVariables``); ``inputs``
+                is not one of them. So read it as ``{{ vars.inputs.<name> }}``,
+                and note a playbook whose trigger declares ``inputVariables``
+                expects those values as **top-level** body keys (pass them via
+                ``env=``), not nested under ``inputs``.
+            env: keys merged into the POST body verbatim — live-verified to
+                arrive as top-level ``vars.<key>``.
             follow: if ``True``, block until the run completes and return the
                 shaped run dict instead of the raw trigger response. Equivalent
                 to calling :meth:`wait` on the returned ``task_id``.
@@ -1769,6 +1785,20 @@ class PlaybooksAPI(BaseAPI):
             :meth:`step_status` asserts a step finished without relying on
             ``set_variable`` values (only recorded with debug logging on).
         """
+        if records:
+            raise ValueError(
+                "trigger() cannot pass records: it posts to the manual-execute "
+                "(notrigger) route, which does NOT deliver record context — the run "
+                "starts, but `vars.input.records` is empty and any step reading "
+                "`{{ vars.input.records[0]['@id'] }}` fails with "
+                "'CS-WF-35: Record IRI is empty'. Confirmed in the appliance source: "
+                "the notrigger handler only array_merges the POST body into the "
+                "trigger step's arguments (it never fetches a record), so the route "
+                "ignores records even given the full action envelope. Use "
+                "trigger_action(route_uuid, module=..., record_uuid=...) for a "
+                "record-scoped run — its route uuid is the trigger step's "
+                "`arguments.route` (see get_definition(..., relationships=True))."
+            )
         uuid = playbook if _looks_like_uuid(playbook) else self._resolve_uuid(playbook)
         if not uuid:
             raise ValueError(f"playbook {playbook!r} not found")
@@ -1888,7 +1918,7 @@ class PlaybooksAPI(BaseAPI):
             ValueError: if the playbook does not exist or is not found.
 
         Example (illustrative only, requires trigger fixtures):
-            >>> result = client.playbooks.trigger("AI Investigation", records=[alert_uuid])  # doctest: +SKIP
+            >>> result = client.playbooks.trigger("AI Investigation")  # doctest: +SKIP
             >>> task_id = result["task_id"]  # doctest: +SKIP
             >>> run = client.playbooks.wait_for_run(playbook="AI Investigation", timeout=120)  # doctest: +SKIP
             >>> print(f"Run {run['pk']}: {run['status']}")  # doctest: +SKIP
@@ -2284,15 +2314,20 @@ class PlaybooksAPI(BaseAPI):
             env: extra keys merged into the POST body verbatim.
 
         Returns:
-            The trigger response, typically ``{"task_id": "<run-uuid>"}``.
+            The trigger response. Live-verified: **this route answers**
+            ``{"task_ids": [...]}`` — plural, a list — where :meth:`trigger`'s
+            ``notrigger`` route answers a scalar ``{"task_id": ...}``.
+            :class:`~pyfsr.models.TriggerResponse` folds the plural key into
+            ``task_id``, so :attr:`~pyfsr.models.TriggerResponse.task_ids` is the
+            uniform accessor across both routes.
 
         Example:
             >>> client = demo_client()
             >>> route = "2b6a1e8e-6f0a-4c6b-9e29-6c2f6a1d8b30"
             >>> client.playbooks.trigger_action(
             ...     route, module="alerts", record_uuid="9f0eb603-ac1e-41c3-b47b-444589beed39"
-            ... ).task_id
-            'c0afba58-9dbe-44dd-a6e6-7227e33990dd'
+            ... ).task_ids
+            ['c0afba58-9dbe-44dd-a6e6-7227e33990dd']
         """
         if not isinstance(route_uuid, str) or not route_uuid.strip():
             raise ValueError("trigger_action() requires a non-empty route_uuid")

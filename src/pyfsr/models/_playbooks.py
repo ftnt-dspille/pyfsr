@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ._integration import ApiResult
 
@@ -137,9 +137,28 @@ class TriggerResponse(ApiResult):
     (e.g. a deferred 202 envelope) are preserved. Use :attr:`task_ids` for a
     uniform list, or :attr:`task_id` to track the started run with
     :meth:`~pyfsr.api.playbooks.PlaybooksAPI.wait`.
+
+    The routes do not agree on the key. Live-verified on the record-action route
+    (``/api/triggers/1/action/<route>``): it answers ``{"task_ids": [...]}`` —
+    **plural** — where the manual-execute route (``notrigger``) answers
+    ``{"task_id": "..."}``. Because only ``task_id`` was declared, a wire
+    ``task_ids`` used to land in ``model_extra`` while the :attr:`task_ids`
+    *property* (which normalizes ``task_id``) shadowed it and returned ``[]`` —
+    so ``trigger_action`` callers could not reach the run they had just started
+    through either accessor. ``_absorb_plural_task_ids`` folds the plural wire
+    key into ``task_id`` before validation, making both accessors work for both
+    routes and honouring this docstring's "task_id may be a list" contract.
     """
 
     task_id: str | list[str] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _absorb_plural_task_ids(cls, data: Any) -> Any:
+        """Fold the action route's plural ``task_ids`` wire key into ``task_id``."""
+        if isinstance(data, dict) and data.get("task_id") is None and data.get("task_ids") is not None:
+            data = {**data, "task_id": data["task_ids"]}
+        return data
 
     @property
     def task_ids(self) -> list[str]:

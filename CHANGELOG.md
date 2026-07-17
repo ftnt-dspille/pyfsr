@@ -4,6 +4,44 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **`playbooks.trigger(records=...)` now raises `ValueError` instead of starting a
+  silently record-blind run.** It posts to the manual-execute (`notrigger`) route,
+  which cannot deliver record context: the appliance's `noTriggerExecuteAction`
+  only `array_merge`s the POST body into the trigger step's arguments and
+  interprets a fixed key set (`env`/`priority`/`parent_wf`/`step_id`/
+  `runtime_tags`/`force_debug`/`_eval_input_params_from_env`/`inputVariables`) —
+  `records` is not among them and nothing fetches a record. So `vars.input.records`
+  stayed empty and any step reading `{{ vars.input.records[0]['@id'] }}` died with
+  `CS-WF-35: Record IRI is empty`, while the trigger call itself returned a valid
+  `task_id` and looked successful. Verified as a property of the route, not the
+  body: posting the full action envelope
+  (`singleRecordExecution`/`__resource`/`__uuid`) to `notrigger` changes nothing.
+  Use `trigger_action(route_uuid, module=..., record_uuid=...)` for a record-scoped
+  run — the route uuid is the trigger step's `arguments.route`. Nothing in the SDK
+  used the old path: the only callers were a fake-client unit test and a
+  `# doctest: +SKIP` example, and the AI investigation surface does not go through
+  `trigger()` at all (it POSTs the alert to `/api/ai/triage/alert`).
+
+### Fixed
+- **`trigger_action` callers could not reach the run they had just started.** The
+  record-action route answers `{"task_ids": [...]}` — plural, a list — where
+  `notrigger` answers a scalar `{"task_id": ...}` (the appliance fans out one task
+  per record and returns `JsonResponse(['task_ids' => $taskIds])` in its
+  `singleRecordExecution` branch, which `TriggerActionRequest` always requests).
+  `TriggerResponse` declared only `task_id`, so the plural key landed in
+  `model_extra` while the `task_ids` *property* — which normalizes `task_id` —
+  shadowed it and returned `[]`. Both accessors therefore reported nothing.
+  `TriggerResponse` now folds the plural wire key into `task_id` before validation.
+- The `TRIGGER_ACTION_RESPONSE` replay fixture claimed a scalar `task_id` that no
+  appliance ever sends, which is why the shadowing survived: the doctest asserting
+  `.task_id` passed against a fixture that did not match the live wire. The fixture
+  is corrected to the captured shape.
+- `trigger(inputs=...)` is documented accurately: it arrives as top-level
+  `vars.inputs`, and does **not** populate `vars.input.params` (which stays `{}` on
+  this route). A trigger declaring `inputVariables` expects those values as
+  top-level body keys, not nested under `inputs`.
+
 ## [0.10.1] - 2026-07-16
 
 ### Fixed
