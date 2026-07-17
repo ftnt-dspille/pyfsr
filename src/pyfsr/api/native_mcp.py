@@ -146,7 +146,7 @@ def build_mcp_auth_headers(auth: dict[str, Any] | None) -> dict[str, str]:
 
 
 def _to_tool_result(payload: Any) -> MCPToolResult:
-    """Wrap a decoded ``call_tool`` payload into :class:`MCPToolResult`.
+    """Wrap a decoded ``call_tool`` payload into :class:`~pyfsr.models.MCPToolResult`.
 
     A dict is validated as the envelope (keeping any extra keys); any other
     payload (bare string, list, ``None``) lands under ``result`` with
@@ -369,8 +369,8 @@ class NativeMCPApi(BaseAPI):
         """Call ``name`` on *any* MCP server at ``url`` (auth already in ``headers``).
 
         Lower-level companion to :meth:`call_tool`; see :meth:`list_tools_at`.
-        Returns the raw decoded payload (wrap with :func:`_to_tool_result` for a
-        typed :class:`~pyfsr.models.MCPToolResult`).
+        Returns the raw decoded payload; use :meth:`call_tool_result` for a typed
+        :class:`~pyfsr.models.MCPToolResult`.
         """
 
         async def _call(session: Any) -> Any:
@@ -409,7 +409,7 @@ class NativeMCPApi(BaseAPI):
         return asyncio.run(self._run(server, _call))
 
     def call_tool_result(self, server: str, name: str, arguments: dict[str, Any] | None = None) -> MCPToolResult:
-        """Like :meth:`call_tool`, but always return a typed :class:`MCPToolResult`.
+        """Like :meth:`call_tool`, but always return a typed :class:`~pyfsr.models.MCPToolResult`.
 
         Native tools reply with a ``{"status", "result", "error"}`` envelope on
         success; this wraps it into the model (``r.ok``, ``r.result``, ``r.error``,
