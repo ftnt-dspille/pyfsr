@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import time
 import urllib.parse
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -2214,21 +2215,47 @@ class PlaybooksAPI(BaseAPI):
     def manual_inputs(self) -> list[dict[str, Any]]:
         """List runs awaiting manual input (``POST .../manual-wf-input/list_wfinput/``).
 
+        .. deprecated::
+            Use :meth:`client.manual_input.list <pyfsr.api.manual_input.ManualInputAPI.list>`
+            — the same endpoint, but typed, filterable (``is_approval=``), paginated,
+            and assignment-scoped. This raw-dict form is retained as a thin delegate.
+
         Each entry carries ``id`` (the ``manual_input_id`` for :meth:`resume`) and
         ``step_id``. Buttons/options are omitted here — fetch them per-record with
         :meth:`retrieve_manual_input`. (POST-only; GET 405s.)
         """
-        return extract_members(self.client.post("/api/wf/api/manual-wf-input/list_wfinput/", data={}))
+        warnings.warn(
+            "playbooks.manual_inputs() is deprecated; use client.manual_input.list("
+            "assigned_to='all') — same endpoint, typed and filterable.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        # assigned_to='all' preserves the old behaviour exactly: this method posted a
+        # bare `{}` body, and the server treats a missing `assigned_to` as 'all' (live-
+        # verified: {} and 'all' both returned the full queue; 'me' returned none).
+        return self.client.manual_input.list(assigned_to="all", typed=False)
 
     def retrieve_manual_input(self, pk: str) -> dict[str, Any]:
         """Fetch one manual-input record with its buttons/options.
+
+        .. deprecated::
+            Use :meth:`client.manual_input.retrieve <pyfsr.api.manual_input.ManualInputAPI.retrieve>`
+            — the same endpoint, but typed and able to scope the retrieve with
+            ``owners=``. This raw-dict form is retained as a thin delegate.
 
         ``POST .../manual-wf-input/{pk}/retrieve_wfinput/``. Returns the full
         record including ``response_mapping.options[]`` (each option's label and
         ``step_iri``) — which :meth:`manual_inputs` omits, so you need this to know
         what to send when resuming via :meth:`resume`.
         """
-        return self.client.post(f"/api/wf/api/manual-wf-input/{_pk(pk)}/retrieve_wfinput/", data={})
+        warnings.warn(
+            "playbooks.retrieve_manual_input() is deprecated; use "
+            "client.manual_input.retrieve() — same endpoint, typed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        # Live-verified payload-identical to the old bare-`{}` POST.
+        return self.client.manual_input.retrieve(_pk(pk), typed=False)
 
     def update_manual_input(self, pk: str, **fields: Any) -> dict[str, Any]:
         """Update a manual-input record (``PUT .../manual-wf-input/{pk}/``).
@@ -2314,12 +2341,12 @@ class PlaybooksAPI(BaseAPI):
             env: extra keys merged into the POST body verbatim.
 
         Returns:
-            The trigger response. Live-verified: **this route answers**
+            The trigger response. Live-verified — **this route answers**
             ``{"task_ids": [...]}`` — plural, a list — where :meth:`trigger`'s
             ``notrigger`` route answers a scalar ``{"task_id": ...}``.
             :class:`~pyfsr.models.TriggerResponse` folds the plural key into
-            ``task_id``, so :attr:`~pyfsr.models.TriggerResponse.task_ids` is the
-            uniform accessor across both routes.
+            ``task_id``, so ``task_ids`` is the uniform accessor across both
+            routes.
 
         Example:
             >>> client = demo_client()
