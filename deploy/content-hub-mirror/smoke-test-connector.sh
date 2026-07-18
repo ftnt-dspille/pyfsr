@@ -38,7 +38,7 @@ auth=()
 [[ -n "${CHM_TOKEN:-}" ]] && auth=(-H "Authorization: Bearer $CHM_TOKEN")
 resp="$(curl -fsS "${auth[@]}" -F "tgz=@$work/$NAME.tgz" -F "release=$REL" \
   "$ADMIN/api/connector")" || fail "POST /api/connector"
-rpm="$(echo "$resp" | python3 -c "import json,sys; print(json.load(sys.stdin)['rpm_full_name'])")" \
+rpm="$(echo "$resp" | python3 -c "import json,sys; d=json.load(sys.stdin); print((d.get('published') or d).get('rpm_full_name'))")" \
   || fail "response had no rpm_full_name: $resp"
 echo "ok   published -> $rpm"
 
@@ -71,5 +71,11 @@ for sub in ("1", "latest"):
     assert info["name"] == name, f"{sub}/info.json name mismatch"
 print(f"ok   /content-hub/{slug}/{{1,latest}}/ metadata zip + info.json")
 PY
+
+# 4. clean up: remove the throwaway catalog entry (RPM/cinfo are gitignored;
+# leaving the entry would show up in subsequent catalog fetches).
+curl -fsS "${auth[@]}" -X DELETE "$ADMIN/api/content/connector/$NAME" >/dev/null 2>&1 \
+  && echo "ok   cleaned up catalog entry for $NAME" \
+  || echo "ok   (cleanup skipped — entry may still be in local-content/)"
 
 echo "== PASS =="

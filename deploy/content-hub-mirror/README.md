@@ -23,6 +23,28 @@ collisions), serves your local content directly, and reverse-proxies any
 un-overridden request to the upstream — presenting the FortiCloud **FDN mutual-TLS
 client certificate** the official host requires.
 
+## What it proxies (the "see both" promise)
+
+The mirror is the single `REPOSERVER` for the appliance. Anything it doesn't
+host locally it proxies, so the appliance sees one merged store:
+
+| path on the mirror | served from | needs a cert? |
+|---|---|---|
+| `/content-hub/content-hub.json`        | local merged manifest (always) | — |
+| `/content-hub/<name>-<ver>/...`        | local first, then `UPSTREAM_HOST` (Option B fallback) | FDN mTLS for the entitled host; **plain HTTPS for any other upstream** (e.g. the public `repo.fortisoar.fortinet.com`, or another mirror) |
+| `/fsr-widgets/<name>-<ver>/...`        | `repo.fortisoar.fortinet.com` (widget `.tgz` long tail) | no cert (public host) |
+| `/widgets/<name>-<ver>/...`            | `repo.fortisoar.fortinet.com` (older widget `.tgz`) | no cert |
+| `/xf-widgets/`, `/xf/widgets/...`      | `repo.fortisoar.fortinet.com` (alt widget paths) | no cert |
+| `/xf/solutions/solutionpacks/...`      | `repo.fortisoar.fortinet.com` (SP `.zip` long tail) | no cert |
+| `/xf/solutions/connectors/...`         | `repo.fortisoar.fortinet.com` (connector `.tgz` long tail) | no cert |
+| `/connectors/x86_64/...`               | `repo.fortisoar.fortinet.com` connector RPM yum repo | no cert |
+| `/connectors/info/connectors-all.json` | local **merged** map (Fortinet's + your overrides) | — |
+| `/connectors-local/x86_64/...`         | local override RPM repo (your `chctl add-connector` output) | — |
+
+Set `PUBLIC_PROXY=0` to 404 anything the mirror doesn't host locally (Option A,
+strict local-only). Set `UPSTREAM_PROXY=0` to disable just the
+`/content-hub/` fallback while keeping the widget/SP/connector long-tail proxies.
+
 ## What's here
 
 | file | role |
@@ -33,12 +55,13 @@ client certificate** the official host requires.
 | `chctl`             | **CLI** for the admin API — add / list / remove / `add-connector` from your laptop |
 | `connector_publish.py` | build an installable connector **RPM** from a source `.tgz` and publish it to the mirror (behind `add-connector`) |
 | `connector-build/`  | the RPM recipe (`cyops-connector.spec.in` + `build.sh`) `connector_publish.py` uses; also a standalone rebuild tool |
-| `setup-appliance.sh`| point a FortiSOAR box at this mirror (content-hub + connector yum `.repo`) |
+| `setup-appliance.sh`| point a FortiSOAR box at this mirror — installs + verifies TLS trust, env vars, connector repo, sync (see below) |
 | `entrypoint.sh`     | build catalog → seed connector repos → ensure TLS cert → generate `nginx.conf` → admin → nginx |
 | `docker-compose.yml`| run config (ports, env, volume mounts) |
 | `build.sh`          | build this checkout's pyfsr wheel into `./wheels`, then `docker build` |
 | `smoke-test.sh`     | assert the catalog fetch contract against a running mirror (no appliance) |
 | `smoke-test-connector.sh` | publish a throwaway connector and assert every offline-install artifact resolves (RPM, `connectors-all.json`, metadata zip) |
+| `smoke-test-proxy.sh` | assert the widget/SP/connector-tgz long-tail paths proxy to the public Fortinet repo (no cert, no appliance) |
 | `local-content/`    | your catalog entries (`*.json`); ships a sample connector |
 | `certs/`            | `server.crt`/`server.key` (TLS) + `fdn.pem`/`fdn.key` (upstream proxy) |
 
@@ -47,7 +70,9 @@ client certificate** the official host requires.
 ```bash
 ./build.sh                        # builds the pyfsr wheel + the image
 docker compose up -d              # serves on :80 (http) and :443 (https)
-./smoke-test.sh http://localhost
+./smoke-test.sh http://localhost          # catalog fetch contract (manifest + info.json)
+./smoke-test-connector.sh http://localhost http://localhost:9000   # installable-connector publish path
+./smoke-test-proxy.sh http://localhost    # widget/SP/connector-tgz long-tail proxy (needs network)
 ```
 
 > The compose file publishes the privileged ports `:80`/`:443` by default (an
@@ -58,7 +83,9 @@ docker compose up -d              # serves on :80 (http) and :443 (https)
 `smoke-test.sh` fetches the merged manifest and confirms every entry's
 `info.json` resolves at both its numbered-build and `latest/` path. With no
 upstream configured you get **local-only** mode (Option A) — just your
-`local-content/` entries.
+`local-content/` entries. `smoke-test-proxy.sh` exercises the public-repo
+reverse-proxy paths (widget `.tgz`, SP `.zip`, connector `.tgz` long tails) and
+needs network egress to `repo.fortisoar.fortinet.com`.
 
 > The published `pyfsr` on PyPI may not yet include `content_catalog`; `build.sh`
 > builds a wheel from this checkout so the image always has it. Without it the
@@ -178,30 +205,52 @@ existing upstream connector RPM at a different version), see
 
 ## Seeing Fortinet's store too ("both")
 
-Give the mirror an upstream, one of two ways:
+The mirror proxies everything it doesn't host, so the appliance always sees a
+single merged store. Three layers of upstream:
 
-1. **Snapshot (no cert on this host).** Crawl the catalog once through an
-   entitled appliance and save the `content-hub.json`, then:
+1. **Catalog merge (no cert, recommended first deploy).** Crawl the catalog
+   once through an entitled appliance and save the `content-hub.json`, then:
    ```bash
    UPSTREAM_SNAPSHOT=/upstream/content-hub.json docker compose up -d
    ```
    (mount the file into the container and point `UPSTREAM_SNAPSHOT` at it).
+   The merged manifest is always served locally; per-item `info.json` / artifact
+   paths fall through to the proxies below.
 
-2. **Live crawl (needs the FDN cert).** Put the appliance's FDN client cert at
-   `certs/fdn.pem` + `certs/fdn.key` and set:
+2. **Live catalog crawl (needs the FDN cert).** Put the appliance's FDN client
+   cert at `certs/fdn.pem` + `certs/fdn.key` and set:
    ```bash
    UPSTREAM_HOST=secops-content.forticloud.com docker compose up -d
    ```
 
+3. **Long-tail proxy (no cert, always on by default).** Whatever the catalog
+   says, any per-item fetch the mirror doesn't have locally is reverse-proxied
+   to the **public** Fortinet repo (`repo.fortisoar.fortinet.com` — open HTTPS,
+   no FDN cert) for the widget `.tgz` (`/fsr-widgets/`, `/widgets/`), SP `.zip`
+   (`/xf/solutions/solutionpacks/`), connector `.tgz` (`/xf/solutions/connectors/`),
+   and connector RPM (`/connectors/x86_64/`) long tails. With `UPSTREAM_PROXY=1`
+   the `/content-hub/<name>-<ver>/...` fallback also goes through, so a miss
+   there is transparently fetched from `UPSTREAM_HOST` — presenting the FDN mTLS
+   cert if present, **or plain HTTPS if not** (e.g. pointing `UPSTREAM_HOST`
+   at the public repo for the connector bundles it carries under `/content-hub/`).
+
 With `UPSTREAM_PROXY=1` (default), any per-item `info.json` / artifact / icon the
-mirror doesn't have locally is reverse-proxied to `UPSTREAM_HOST` using that same
-FDN cert — so the big upstream artifact zips stream through without mirroring
-them. Set `UPSTREAM_PROXY=0` to serve strictly local content (404 on misses).
+mirror doesn't have locally is reverse-proxied to `UPSTREAM_HOST` — using the
+FDN client cert if present, **or plain HTTPS if not** — so the big upstream
+artifact zips stream through without mirroring them. Set `UPSTREAM_PROXY=0` to
+serve strictly local content for `/content-hub/` paths (404 on misses, but keep
+the widget/SP/connector long-tail proxies — set `PUBLIC_PROXY=0` to disable
+those too).
 
 The **FDN cert lives on the appliance** at
 `/opt/cyops-auth/certs/fdn_client_keystore.p12` (a PKCS#12; split into
 cert/key PEMs with `openssl pkcs12`). It is per-appliance and entitlement-gated —
 keep it out of git (see `.gitignore`).
+
+> The public-repo proxy + a snapshot catalog gets you "both Fortinet's store
+> and mine" with **no FDN cert on the mirror at all** — the cert is only
+> needed to crawl the entitled catalog live or to proxy to
+> `secops-content.forticloud.com` itself.
 
 ## Pointing an appliance at the mirror
 
@@ -214,18 +263,45 @@ sudo ./setup-appliance.sh <mirror-host>[:port]
 ssh <appliance> 'sudo bash -s' -- <mirror-host> < setup-appliance.sh
 ```
 
-It (1) points `product_yum_server`/`fsr_os_server` (REPOSERVER/OSSERVER) at the
-mirror, (2) enables `OFFLINEREPO` (direct-HTTPS to your host, not FortiCloud) in
-the php-fpm pool env, (3) writes `/etc/yum.repos.d/fsr-mirror-connectors.repo` —
-the mirror's local connector repo at `priority=1` (so a custom
-`cyops-connector-<name>-<ver>` installs over Fortinet's) plus the proxied
-upstream at `priority=50`, with `metadata_expire=1` so a swapped RPM isn't served
-stale — and (4) runs `csadm package content-hub sync --force`. Pass `--revert`
-to undo it.
+It runs **seven steps**, each reversible with `--revert`:
+
+1. **Trusts the mirror's TLS cert** in the OS trust store (`update-ca-trust
+   extract` on Rocky). *This is the step the original setup was missing in
+   practice* — the content-hub sync skips TLS verify (so it succeeds either
+   way), but the `solutionpacks/install` endpoint **does** verify TLS, and a
+   self-signed mirror's cert that isn't trusted here is the root cause of the
+   misleading `Please check the network connection to <mirror>` error.
+2. **Verifies the trust works** — a real TLS handshake against the mirror with
+   the OS trust store, *before* anything else is touched. Fails loudly with
+   the actual cause (trust) instead of the runtime symptom (network).
+3. Sets `product_yum_server`/`fsr_os_server` (REPOSERVER/OSSERVER) at the mirror
+4. Enables `OFFLINEREPO` (direct-HTTPS to your host, not FortiCloud) in
+   `/etc/environment` **and** the php-fpm pool env
+5. Writes `/etc/yum.repos.d/fsr-mirror-connectors.repo` — the mirror's local
+   connector repo at `priority=1` (so a custom `cyops-connector-<name>-<ver>`
+   installs over Fortinet's) plus the proxied upstream at `priority=50`, with
+   `metadata_expire=1` so a swapped RPM isn't served stale
+6. Restarts `php-fpm`
+7. Runs `csadm package content-hub sync --force`
+8. **Post-sync verification** — a verified HTTPS GET of the catalog + one
+   per-item `info.json` using the OS trust store. This is the exact code path
+   the SP install endpoint uses; if it fails here, the SP install would have
+   failed too, and you get the real cause instead of a runtime misdirection.
+
+Options:
+
+| flag | effect |
+|---|---|
+| `--cert-file <path>` | trust this cert instead of fetching one from the mirror (use when the mirror isn't reachable from the box yet, or its chain is split across files) |
+| `--check` | read-only: verify the mirror is trusted + env is set, then exit (non-zero if anything is missing). Re-run any time. |
+| `--no-verify` | skip the post-trust TLS verification (NOT recommended — this is exactly the step that catches a bad trust install before the SP install path hits it) |
+| `--insecure` | don't hard-fail if the cert fetch fails AND skip the post-trust TLS verification — lets the setup proceed to the sync. The SP install path WILL still fail at runtime — only use for a quick "is the mirror up" check. |
+| `--revert` | restore the pre-mirror state (env, trust, repos, php-fpm) |
 
 If the mirror uses a self-signed TLS cert (the default when none is mounted),
-either install `certs/server.crt` in the appliance trust store or provide a cert
-the box already trusts. Full env-var propagation chain:
+either install `certs/server.crt` in the appliance trust store (the script does
+this automatically by fetching the cert from the mirror) or provide a cert the
+box already trusts. Full env-var propagation chain:
 `Miscellaneous/fortisoar/troubleshooting/tools/fsr_diagnose.sh` §content-hub.
 
 ## Environment variables
@@ -233,21 +309,24 @@ the box already trusts. Full env-var propagation chain:
 | var | default | meaning |
 |-----|---------|---------|
 | `UPSTREAM_SNAPSHOT` | — | path to a saved upstream `content-hub.json` (preferred; no cert) |
-| `UPSTREAM_HOST`     | — | live upstream host to crawl at build (needs FDN cert) |
-| `UPSTREAM_PROXY`    | `1` | reverse-proxy cache-misses to upstream (`0` = 404 them) |
-| `TLS_VERIFY`        | `1` | verify upstream TLS during the crawl (`0` = self-signed) |
-| `FDN_CERT`/`FDN_KEY`| `/etc/nginx/certs/fdn.{pem,key}` | FDN client cert for the upstream |
+| `UPSTREAM_HOST`     | — | live upstream host to crawl + proxy `/content-hub/` misses to |
+| `UPSTREAM_PROXY`    | `1` | reverse-proxy `/content-hub/` cache-misses to `UPSTREAM_HOST` (`0` = 404 them) |
+| `UPSTREAM_TLS_VERIFY` | `1` | verify `UPSTREAM_HOST` TLS at proxy time (set `0` ONLY for a self-signed mirror-of-a-mirror) |
+| `TLS_VERIFY`        | `1` | verify upstream TLS during the build-time crawl (`0` = self-signed) |
+| `FDN_CERT`/`FDN_KEY`| `/etc/nginx/certs/fdn.{pem,key}` | FDN client cert — present → mTLS to `UPSTREAM_HOST`; absent → plain HTTPS to it |
 | `SERVER_CERT`/`SERVER_KEY` | `/etc/nginx/certs/server.{crt,key}` | mirror's TLS cert (self-signed if absent) |
+| `PUBLIC_PROXY`     | `1` | reverse-proxy widget `.tgz` / SP `.zip` / connector `.tgz` long-tail paths to the public Fortinet repo (`0` = 404 them) |
+| `PUBLIC_FORTINET_HOST` | `repo.fortisoar.fortinet.com` | public host serving the widget/SP/connector long tail (no cert needed) |
 | `LOCAL_CONTENT_DIR` | `/local-content` | dir of your entry JSON files |
 | `ARTIFACTS_DIR`     | `/artifacts` | dir of downloadable `{name}-{version}.tgz/.zip` |
 | `OUTPUT_DIR`        | `/srv` | where the served `content-hub/` tree is written |
 | `ADMIN_ENABLED`     | `1` | run the admin GUI/API (`0` to disable) |
 | `ADMIN_TOKEN`       | — | require `Bearer <token>` on the admin API (set off-localhost) |
 | `ADMIN_PORT`        | `9000` | admin GUI/API port |
-| `CONNECTORS_PROXY`  | `1` | reverse-proxy connector-RPM misses to the public Fortinet connector repo (`0` = local only) |
+| `CONNECTORS_PROXY`  | follows `PUBLIC_PROXY` | reverse-proxy connector-RPM misses to the public Fortinet connector repo (`0` = local only) |
 | `CONNECTORS_UPSTREAM` | `repo.fortisoar.fortinet.com` | public upstream connector yum host (no cert) |
 | `CONNECTORS_UPSTREAM_PATH` | `/prod/connectors` | path to the upstream connector repo |
-| `CONNECTORS_PREFETCH` | — | space-separated `cyops-connector-*` RPM URLs to prefetch into the local repo at start |
+| `CONNECTORS_PREFETCH` | — | space-separated `cyops-connector-*` RPM filenames to prefetch into the local repo at start |
 
 The connector RPMs published via `add-connector` live under the mounted
 `./connectors-local` volume; `./published` persists the staged metadata zips and
@@ -257,15 +336,25 @@ merged `connectors-all.json` across restarts.
 
 - Fetch contract (manifest + per-item `info.json`) is **validated locally** by
   `smoke-test.sh`; merge + local-override-wins verified with a captured live
-  sample catalog as a stand-in upstream.
+  sample catalog as a stand-in upstream. The long-tail proxy paths
+  (widget `.tgz`, SP `.zip`, connector `.tgz`, connector RPM) are validated
+  locally by `smoke-test-proxy.sh` against the **live public Fortinet repo**
+  (no appliance, no FDN cert).
 - **Live-verified on 8.0.0** end to end: `OFFLINEREPO` catalog sync from the
   mirror, and the full installable-connector loop (`add-connector` → the
   appliance installs the RPM from the mirror → in-place version update → the
   connector executes).
+- `setup-appliance.sh` now installs + **verifies** the mirror's TLS cert before
+  the sync runs, with a `--check` mode for ongoing verification — closes the
+  "SP install fails with a misleading 'network connection' error" gap in the
+  prior setup (the content-hub sync skips TLS verify, so a missing trust was
+  invisible until a SP install).
 - Overriding an *existing* upstream item requires the entry's `category` to be a
   valid "Solution Pack Category" (else the appliance's bulkupsert silently
   rejects the whole entry with `FSR_CH_0000001`), and a `publishedDate` newer
   than upstream's for a scheduled (non-`--force`) sync to overwrite it.
-- Online-mode upstream path mapping (whether the official host serves under
-  `/content-hub/` vs `/content/`) may need a `proxy_pass` rewrite; the snapshot
-  path avoids this and is the recommended first deployment.
+- Online-mode upstream path mapping (whether the official entitled host serves
+  under `/content-hub/` vs `/content/`) may need a `proxy_pass` rewrite if you
+  point `UPSTREAM_HOST` at `secops-content.forticloud.com`; the snapshot path
+  + the public-repo long-tail proxy avoid this and are the recommended first
+  deployment.

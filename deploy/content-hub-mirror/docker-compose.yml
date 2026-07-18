@@ -20,14 +20,26 @@ services:
       UPSTREAM_SNAPSHOT: ${UPSTREAM_SNAPSHOT:-}
       # ...or crawl the live entitled host at build time (needs the FDN cert):
       UPSTREAM_HOST: ${UPSTREAM_HOST:-}
-      # Reverse-proxy cache-misses to the upstream (1) or 404 them (0):
+      # Reverse-proxy /content-hub/ cache-misses to the upstream (1) or 404 them (0):
       UPSTREAM_PROXY: ${UPSTREAM_PROXY:-1}
       # Skip upstream TLS verify only for a self-signed mirror-of-a-mirror:
       TLS_VERIFY: ${TLS_VERIFY:-1}
+      # Skip /content-hub/ upstream cert verification at proxy time (only for a
+      # self-signed UPSTREAM_HOST you control; leave ON for the real upstream):
+      UPSTREAM_TLS_VERIFY: ${UPSTREAM_TLS_VERIFY:-1}
+      # --- public-repo proxy (widget/SP/connector-tgz + connector RPM long tail) ---
+      # Reverse-proxy widget .tgz (/fsr-widgets/, /widgets/, /xf-widgets/),
+      # SP .zip (/xf/solutions/solutionpacks/), and connector .tgz
+      # (/xf/solutions/connectors/) to the open public Fortinet repo — NO FDN
+      # cert needed. Set 0 to 404 anything the mirror doesn't host locally.
+      PUBLIC_PROXY: ${PUBLIC_PROXY:-1}
+      PUBLIC_FORTINET_HOST: ${PUBLIC_FORTINET_HOST:-repo.fortisoar.fortinet.com}
       # --- connector RPM repo (Option C: hybrid proxy + local override) ---
-      # Reverse-proxy the PUBLIC Fortinet connector repo for the long tail (1),
-      # and serve our own override RPMs from a local yum repo:
-      CONNECTORS_PROXY: ${CONNECTORS_PROXY:-1}
+      # Reverse-proxy the PUBLIC Fortinet connector repo for the long tail,
+      # and serve our own override RPMs from a local yum repo. Defaults to
+      # empty so the container's entrypoint default applies (which is to follow
+      # PUBLIC_PROXY); set explicitly to override.
+      CONNECTORS_PROXY: ${CONNECTORS_PROXY:-}
       CONNECTORS_UPSTREAM: ${CONNECTORS_UPSTREAM:-repo.fortisoar.fortinet.com}
       CONNECTORS_UPSTREAM_PATH: ${CONNECTORS_UPSTREAM_PATH:-/prod/connectors}
       # Comma/space list of upstream RPM filenames to pull into the local repo at
