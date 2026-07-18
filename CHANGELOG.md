@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Documentation
+- **More docstring examples now run offline instead of `doctest: +SKIP`.** Converted
+  read-only examples whose endpoints already have replay captures (playbook
+  `list_versions`/`last_run`/`why_failed`; and, via a new JWT-auth replay fixture
+  `demo_client_jwt()`, `system.cluster_health`/`system.license`, `auth_config.get`,
+  and `api_users.get`/`query`). The JWT fixture unblocks endpoints that
+  `APIKeyAuth` marks unsupported. Write/mutating and live-only examples remain
+  correctly skipped. Docstring-doctest gate stays green (26/26 modules).
+
 ### Added
 - **Idempotent `get_or_create_*` / `ensure_*` helpers across the resource surface** —
   check-then-create methods returning `(obj, created)` so callers can converge
