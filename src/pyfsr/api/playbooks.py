@@ -884,7 +884,10 @@ class PlaybooksAPI(BaseAPI):
         Returns typed :class:`~pyfsr.models.PlaybookVersion` records (also
         dict-compatible). Example:
 
-            >>> client.playbooks.list_versions("Block IP")  # doctest: +SKIP
+            >>> client = demo_client()
+            >>> versions = client.playbooks.list_versions("Block IP")
+            >>> len(versions)
+            2
         """
         uuid = self._resolve_playbook_uuid(playbook, "list_versions")
         params: dict[str, Any] = {"workflow": uuid, "$limit": limit}
@@ -1338,9 +1341,11 @@ class PlaybooksAPI(BaseAPI):
             or ``None`` if the playbook has no runs or does not exist.
 
         Example:
-            >>> run = client.playbooks.last_run(playbook="Block IP")  # doctest: +SKIP
-            >>> if run:  # doctest: +SKIP
-            ...     print(f"{run.name}: {run.status} ({run.pk})")  # doctest: +SKIP
+            >>> client = demo_client()
+            >>> run = client.playbooks.last_run(playbook="Block IP")
+            >>> if run:
+            ...     print(f"{run.name}: {run.status} ({run.pk})")
+            Example Playbook: finished (1)
         """
         runs = self.execution_history(
             playbook=playbook,
@@ -1377,9 +1382,10 @@ class PlaybooksAPI(BaseAPI):
             playbook has no runs or does not exist.
 
         Example:
-            >>> failure = client.playbooks.why_failed(playbook="Block IP")  # doctest: +SKIP
-            >>> if failure and failure.failing_step:  # doctest: +SKIP
-            ...     print(f"{failure.pk} failed at {failure.failing_step}")  # doctest: +SKIP
+            >>> client = demo_client()
+            >>> failure = client.playbooks.why_failed(playbook="Block IP")
+            >>> if failure and failure.failing_step:
+            ...     print(f"{failure.pk} failed at {failure.failing_step}")
         """
         run = self.last_run(playbook=playbook, playbook_uuid=playbook_uuid)
         if not run:
