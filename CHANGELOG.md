@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Documentation
+- **9 more read-only endpoints now have offline doctested `list()` examples.**
+  Live-captured `roles`, `teams`, `users` (people), `tags`, `comments`,
+  `reporting`, `routers`, `rules` (preprocessing), and system `notifications` —
+  none previously had a replay fixture — so each module's `list()` docstring now
+  runs and output-matches under `demo_client()` with no appliance.
 - **More docstring examples now run offline instead of `doctest: +SKIP`.** Converted
   read-only examples whose endpoints already have replay captures (playbook
   `list_versions`/`last_run`/`why_failed`; and, via a new JWT-auth replay fixture
