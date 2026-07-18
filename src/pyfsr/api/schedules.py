@@ -240,6 +240,74 @@ class SchedulesAPI(BaseAPI):
         resp = self.client.post(_ENDPOINT, data=body, params={"format": "json"})
         return ScheduledTask.model_validate(resp) if typed else resp
 
+    def get_or_create(
+        self,
+        name: str,
+        workflow_iri: str,
+        cron: str,
+        *,
+        timezone: str = "UTC",
+        enabled: bool = True,
+        exit_if_running: bool = True,
+        create_user: str | None = None,
+        priority: dict[str, Any] | None = None,
+        update_if_exists: bool = False,
+        typed: bool = True,
+    ) -> tuple[ScheduledTask | dict[str, Any], bool]:
+        """Idempotently ensure a schedule named ``name`` exists; return ``(task, created)``.
+
+        If a schedule with that name already exists, it is returned unchanged
+        (``created=False``). When ``update_if_exists=True`` and the schedule
+        exists, its ``workflow_iri``/``cron``/``timezone`` are updated in place
+        via :meth:`set_enabled`-style PUT; otherwise the existing record is
+        returned as-is. Returns ``created=True`` only when the schedule was
+        newly created.
+
+        Args:
+            name: schedule display name (the lookup key).
+            workflow_iri: the workflow IRI — used on create (and on update if
+                ``update_if_exists=True``).
+            cron: 5-field cron expression — used on create (and on update if
+                ``update_if_exists=True``).
+            timezone: IANA timezone (default ``"UTC"``).
+            enabled: create the task enabled (default ``True``).
+            exit_if_running: skip a fire if the previous run is still active.
+            create_user: optional ``/api/3/people/<uuid>`` IRI.
+            priority: optional task-priority picklist object.
+            update_if_exists: when ``True`` and the schedule exists, replace its
+                cron/workflow/timezone with the new values. Default ``False``
+                (leave the existing schedule untouched).
+            typed: parse the result into a :class:`~pyfsr.models.ScheduledTask`.
+
+        Returns:
+            ``(ScheduledTask, created)`` — the existing task with
+            ``created=False``, or the newly-created task with ``created=True``.
+        """
+        existing = self.get(name, typed=False)
+        if existing is not None:
+            if update_if_exists:
+                body = copy.deepcopy(existing)
+                crontab = _parse_cron(cron)
+                crontab["timezone"] = timezone
+                body["crontab"] = crontab
+                body["kwargs"]["wf_iri"] = workflow_iri
+                body["kwargs"]["timezone"] = timezone
+                body["enabled"] = enabled
+                updated = self.client.put(f"{_ENDPOINT}{existing['id']}/", data=body, params={"format": "json"})
+                return (ScheduledTask.model_validate(updated) if typed else updated), False
+            return (ScheduledTask.model_validate(existing) if typed else existing), False
+        return self.create(
+            name,
+            workflow_iri,
+            cron,
+            timezone=timezone,
+            enabled=enabled,
+            exit_if_running=exit_if_running,
+            create_user=create_user,
+            priority=priority,
+            typed=typed,
+        ), True
+
     def trigger_now(self, *, name: str | None = None, task_id: str | None = None) -> dict[str, Any]:
         """Force-trigger a scheduled task immediately (``POST .../trigger-now/``).
 

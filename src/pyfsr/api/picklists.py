@@ -371,6 +371,47 @@ class PicklistsAPI(BaseAPI):
         self.clear_cache()
         return item
 
+    def get_or_create_option(
+        self,
+        picklist: str,
+        value: str,
+        *,
+        color: str | None = None,
+        order: int | None = None,
+    ) -> tuple[PicklistItem, bool]:
+        """Idempotently ensure option ``value`` exists in ``picklist``; return ``(item, created)``.
+
+        If an option with the same ``itemValue`` already exists, it is returned
+        unchanged (its ``color``/``orderIndex`` are **not** modified — only
+        presence is ensured). Returns ``created=True`` only when the option was
+        newly added.
+
+        Args:
+            picklist: the target list — a name, IRI, or bare uuid.
+            value: the option's friendly label (``itemValue``).
+            color: hex color for a newly-created option (ignored if existing).
+            order: ``orderIndex`` for a newly-created option (ignored if existing).
+
+        Returns:
+            ``(PicklistItem, created)`` — the existing item with ``created=False``,
+            or the newly-created item with ``created=True``.
+        """
+        # Check the cached items for an existing match by itemValue.
+        list_name = picklist if picklist in self.list() else None
+        if list_name is None:
+            # picklist was given as an IRI/uuid — resolve to the name for the cache lookup
+            list_iri = self._resolve_list_iri(picklist)
+            if list_iri is not None:
+                for name, items in self.all().items():
+                    if any(it.iri and it.iri == list_iri for it in items):
+                        list_name = name
+                        break
+        if list_name is not None:
+            for item in self.all().get(list_name, []):
+                if item.itemValue == value:
+                    return item, False
+        return self.add_option(picklist, value, color=color, order=order), True
+
     def remove_option(
         self,
         picklist: str | None = None,

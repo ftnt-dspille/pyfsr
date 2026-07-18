@@ -795,6 +795,41 @@ class PlaybooksAPI(BaseAPI):
             raise ValueError("update() requires at least one field to change")
         return self.client.put(f"{_WORKFLOWS}/{uuid}", data=fields)
 
+    def ensure_active(self, playbook: str | dict[str, Any], *, active: bool = True) -> dict[str, Any]:
+        """Idempotently ensure a playbook's ``isActive`` flag is set; no-op if already correct.
+
+        Resolves ``playbook`` (a uuid, IRI, name, or a playbook dict carrying
+        ``uuid``/``@id``) to its definition record. If the ``isActive`` field
+        already matches ``active``, returns the record unchanged; otherwise PUTs
+        ``{"isActive": active}`` and returns the updated record.
+
+        This is the idempotent alternative to :meth:`update` when the only goal
+        is to flip activation state — re-running a deploy script that activates
+        a playbook won't issue a redundant PUT.
+
+        Args:
+            playbook: uuid, ``/api/3/workflows/<uuid>`` IRI, playbook name, or a
+                playbook dict (e.g. from :meth:`list` / :meth:`find`).
+            active: the desired ``isActive`` value (default ``True`` — activate).
+
+        Returns:
+            The playbook definition record (current state after any update).
+
+        Raises:
+            ValueError: if ``playbook`` can't be resolved to a definition.
+        """
+        if isinstance(playbook, dict):
+            uuid = playbook.get("uuid") or playbook.get("@id", "").rstrip("/").split("/")[-1]
+            if not uuid or not _looks_like_uuid(uuid):
+                raise ValueError("ensure_active(): playbook dict has no resolvable uuid")
+            record = playbook
+        else:
+            uuid = self._resolve_playbook_uuid(playbook, "ensure_active")
+            record = self.client.get(f"{_WORKFLOWS}/{uuid}")
+        if bool(record.get("isActive", False)) == active:
+            return record
+        return self.update(uuid, isActive=active)
+
     def delete(self, uuid: str, *, hard: bool = True) -> None:
         """Delete a playbook definition. ``hard=True`` (default) bypasses the recycle bin.
 

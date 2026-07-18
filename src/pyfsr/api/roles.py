@@ -180,6 +180,23 @@ class RolesAPI(BaseAPI):
         self._role_cache = None  # name→record cache is now stale
         return role_rec
 
+    def get_or_create(
+        self,
+        name: str,
+        *,
+        description: str | None = None,
+    ) -> tuple[Role, bool]:
+        """Idempotently ensure role ``name`` exists; return ``(role, created)``.
+
+        If a role with that name already exists, it is returned unchanged (its
+        ``description`` is **not** modified — only presence is ensured). Returns
+        ``created=True`` only when the role was newly created.
+        """
+        existing = self.role_uuid_by_name(name)
+        if existing is not None:
+            return self.get(name), False
+        return self.create(name, description=description), True
+
     def update(self, role: str, *, name: str | None = None, description: str | None = None) -> Role:
         """Update a role's ``name`` and/or ``description`` (``PUT /api/3/roles/<uuid>``).
 
