@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Idempotent `get_or_create_*` / `ensure_*` helpers across the resource surface** —
+  check-then-create methods returning `(obj, created)` so callers can converge
+  state without pre-checking existence. An existing record is returned unchanged
+  (`created=False`); an absent one is created (`created=True`); re-running is a
+  safe no-op. Covers teams, roles, agents, users, schedules, picklist options,
+  module fields, navigation items, playbook activation, solution packs, widgets,
+  and (keyed by name) export templates and view templates. Append-only resources
+  (alerts, attachments, comments) are intentionally excluded — they have no
+  natural unique key. Backed by fake-client unit tests, no appliance required.
 - **Author a solution pack from Python** — `SolutionPackBuilder` (subclasses the
   `ExportTemplate` content builder, so every `add_*` content method chains the same
   way) plus pack metadata: `.tags()`, `.category()`, and `.post_install_widget()`
