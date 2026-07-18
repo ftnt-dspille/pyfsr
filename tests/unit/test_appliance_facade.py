@@ -113,3 +113,73 @@ def test_client_appliance_derives_host(mock_client):
     # no connection is attempted until a verb runs.
     box = mock_client.appliance(key_path="/tmp/none")
     assert getattr(box._facts.transport, "host", None) == "test.fortisoar.com"
+
+
+def test_appliance_instance_kwarg_resolves_registry(tmp_path, monkeypatch):
+    """``Appliance(instance="206")`` resolves an SSH profile from instances.toml."""
+    toml = tmp_path / "instances.toml"
+    toml.write_text(
+        """
+        [instances.206]
+        base_url = "https://10.0.0.206"
+        [instances.206.auth]
+        type = "api_key"
+        key = "k"
+
+        [instances.206.appliance]
+        password = "secret"
+        port = 13000
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PYFSR_INSTANCES", str(toml))
+
+    box = Appliance(instance="206")
+    from pyfsr.cli.appliance.transport import SSHTransport
+
+    assert isinstance(box._facts.transport, SSHTransport)
+    assert box._facts.transport.host == "10.0.0.206"
+    assert box._facts.transport.port == 13000
+    assert box._facts.transport.password == "secret"
+
+
+def test_appliance_instance_takes_precedence_over_host(tmp_path, monkeypatch):
+    """``instance=`` wins over an explicit ``host=`` kwarg (mirrors the CLI flag)."""
+    toml = tmp_path / "instances.toml"
+    toml.write_text(
+        """
+        [instances.lab]
+        base_url = "https://10.0.0.206"
+        [instances.lab.auth]
+        type = "api_key"
+        key = "k"
+
+        [instances.lab.appliance]
+        password = "secret"
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PYFSR_INSTANCES", str(toml))
+
+    box = Appliance(host="should-be-ignored", instance="lab")
+    assert box._facts.transport.host == "10.0.0.206"
+    assert box._facts.transport.password == "secret"
+
+
+def test_appliance_instance_without_subtable_raises(tmp_path, monkeypatch):
+    """An alias with no appliance subtable raises a clear error (not a silent fallback)."""
+    toml = tmp_path / "instances.toml"
+    toml.write_text(
+        """
+        [instances.x]
+        base_url = "https://x"
+        [instances.x.auth]
+        type = "api_key"
+        key = "k"
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PYFSR_INSTANCES", str(toml))
+
+    with pytest.raises(ValueError, match="no \\[instances.x.appliance\\] subtable"):
+        Appliance(instance="x")

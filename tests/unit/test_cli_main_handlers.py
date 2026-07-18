@@ -183,3 +183,99 @@ def test_service_restart_ok_and_fail():
             assert m.cmd_service_restart(_args(name="nginx", yes=True)) == 0
         with patch.object(m.service_cmds, "restart", return_value=SimpleNamespace(ok=False)):
             assert m.cmd_service_restart(_args(name="nginx", yes=True)) == 1
+
+
+# -- _make_transport --instance flag (C4) ------------------------------------
+def test_make_transport_uses_registry_when_instance_set(tmp_path, monkeypatch):
+    """``--instance <alias>`` resolves via InstanceRegistry, ignoring --host/--user."""
+    toml = tmp_path / "instances.toml"
+    toml.write_text(
+        """
+        [instances.206]
+        base_url = "https://10.0.0.206"
+        [instances.206.auth]
+        type = "api_key"
+        key = "k"
+
+        [instances.206.appliance]
+        password = "secret"
+        port = 13000
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PYFSR_INSTANCES", str(toml))
+
+    args = _args(
+        instance="206",
+        host="should-be-ignored",
+        user="should-be-ignored",
+        password=None,
+        sudo_password=None,
+        port=22,
+        key_path=None,
+        insecure_skip_host_key_check=False,
+    )
+    t = m._make_transport(args)
+    from pyfsr.cli.appliance.transport import SSHTransport
+
+    assert isinstance(t, SSHTransport)
+    assert t.host == "10.0.0.206"  # from the appliance subtable (base_url-derived)
+    assert t.port == 13000  # from the subtable, not the CLI default 22
+    assert t.password == "secret"
+    assert t.user == "csadmin"  # default, not the ignored --user value
+
+
+def test_make_transport_falls_back_when_instance_unset(monkeypatch):
+    """No ``--instance`` → the existing ``--host``/env path is untouched."""
+    args = _args(
+        instance=None,
+        host="10.0.0.206",
+        user="admin",
+        password="secret",
+        sudo_password=None,
+        port=2222,
+        key_path=None,
+        insecure_skip_host_key_check=False,
+    )
+    with patch.object(m, "make_transport") as mk:
+        m._make_transport(args)
+        kwargs = mk.call_args.kwargs
+        assert kwargs["host"] == "10.0.0.206"
+        assert kwargs["user"] == "admin"
+        assert kwargs["port"] == 2222
+
+
+def test_make_transport_instance_takes_precedence_over_host_flags(tmp_path, monkeypatch):
+    """``--instance`` wins even when --host is also given (the flag is documented
+    as overriding the explicit host flags)."""
+    toml = tmp_path / "instances.toml"
+    toml.write_text(
+        """
+        [instances.lab]
+        base_url = "https://10.0.0.206"
+        [instances.lab.auth]
+        type = "api_key"
+        key = "k"
+
+        [instances.lab.appliance]
+        password = "secret"
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PYFSR_INSTANCES", str(toml))
+
+    args = _args(
+        instance="lab",
+        host="10.0.0.159",
+        user="otheruser",
+        password="changeme",
+        sudo_password=None,
+        port=22,
+        key_path=None,
+        insecure_skip_host_key_check=False,
+    )
+    t = m._make_transport(args)
+    # The subtable wins on every field it sets; --host/--user/--pw are ignored.
+    assert t.host == "10.0.0.206"
+    assert t.user == "csadmin"
+    assert t.password == "secret"

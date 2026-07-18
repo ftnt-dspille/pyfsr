@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Multi-box SSH profiles for the `pyfsr appliance` CLI (C4).** Each
+  `[instances.<alias>]` table in `~/.pyfsr/instances.toml` (or `$PYFSR_INSTANCES`)
+  can now carry an optional `[instances.<alias>.appliance]` subtable with SSH
+  transport fields, so `pyfsr appliance --instance <alias>` resolves a full SSH
+  profile (host/user/password/port/key/sudo) from one config file — the SSH
+  counterpart of the MCP server's `--instance` flag. `--instance` takes precedence
+  over `--host`/`--user`/`--password` (the named profile wins), and an alias
+  without an appliance subtable raises a clear error instead of silently
+  falling back. `host` defaults to the hostname parsed from the instance's
+  `base_url`, so a box whose REST and SSH endpoints share an IP needs no
+  repetition. SSH creds can stay out of the TOML by pointing at a
+  `PYFSR_APPLIANCE_*` env file (`env_file = ".env.206.ssh"`, relative to the
+  toml's dir). The SDK counterpart is `Appliance(instance="206")` via
+  `InstanceRegistry.transport(alias)`.
+
 ### Documentation
 - **9 more read-only endpoints now have offline doctested `list()` examples.**
   Live-captured `roles`, `teams`, `users` (people), `tags`, `comments`,

@@ -34,6 +34,7 @@ pyfsr appliance service status --host 10.0.0.1 --password '...'
 
 | Flag | Meaning |
 |---|---|
+| `--instance` | Named SSH profile from `~/.pyfsr/instances.toml` — see [Multi-box profiles](#multi-box-profiles) below. Overrides `--host`/`--user`/`--password`. |
 | `--host` | SSH target. **Omit it to run locally** — if `/opt/cyops` exists on the current box, the CLI execs directly instead of opening an SSH connection. |
 | `--user` | SSH user (default `csadmin`). |
 | `--password` | SSH/sudo password. |
@@ -59,6 +60,63 @@ appliance **device UUID** — is resolved once and never logged. Privileged
 verbs (`csadm`, `rabbitmqctl`, `journalctl`) run under `sudo -S`, so the
 account needs sudo on the box.
 ```
+
+## Multi-box profiles
+
+When you administer more than one appliance, re-typing `--host`/`--user`/`--password`
+on every call gets old. The same `~/.pyfsr/instances.toml` the REST client and
+the MCP server use for multi-instance routing
+(see :class:`~pyfsr.instances.InstanceRegistry`) can also carry an **SSH
+subtable** per appliance, so `pyfsr appliance --instance <alias>` resolves the
+full SSH profile from one config file:
+
+```toml
+# ~/.pyfsr/instances.toml
+default = "206"
+
+[instances.206]
+base_url = "https://10.0.0.206"
+[instances.206.auth]
+type = "api_key"
+key = "k-123"
+
+[instances.206.appliance]          # optional: SSH for the same box
+# host defaults to the hostname parsed from base_url (10.0.0.206) — set
+# `host` explicitly only when SSH is on a different IP/jump-host.
+user = "csadmin"
+password = "..."                    # or use key_path / env_file
+port = 22
+
+[instances.159]
+base_url = "https://10.0.0.159"
+[instances.159.auth]
+type = "api_key"
+key = "k-456"
+
+[instances.159.appliance]
+port = 13000                        # .130 serves SSH on :13000
+key_path = "~/.ssh/id_ed25519"
+sudo_password = "..."               # needed when SSH uses key auth (no --password)
+```
+
+```bash
+pyfsr appliance info --instance 206
+pyfsr appliance service status --instance 159
+pyfsr appliance db tables --instance 206 --role connectors
+```
+
+`--instance` takes precedence over `--host`/`--user`/`--password` (the named
+profile wins), and an alias without an `[instances.<alias>.appliance]` subtable
+raises a clear error rather than silently falling back. Keep SSH credentials
+out of the TOML by pointing at a `PYFSR_APPLIANCE_*` env file instead:
+
+```toml
+[instances.206.appliance]
+env_file = ".env.206.ssh"   # relative to the toml's dir; holds PYFSR_APPLIANCE_* vars
+```
+
+The SDK counterpart is `Appliance(instance="206")` — it resolves the same
+subtable via :meth:`InstanceRegistry.transport <pyfsr.instances.InstanceRegistry.transport>`.
 
 ## Inspecting the appliance
 
