@@ -84,9 +84,11 @@ class RunEnv(ApiResult):
 
     ``env`` is the run's top-level environment (input/request/resources/…);
     ``steps`` is keyed by step display name. In Jinja a step is referenced as
-    ``vars.steps.<name with spaces replaced by underscores>``.
+    ``vars.steps.<name with spaces replaced by underscores>``. ``name`` is the
+    run's playbook display name (handy for pulling the live playbook back).
     """
 
+    name: str | None = None
     env: dict[str, Any] = Field(default_factory=dict)
     status: str | None = None
     steps: dict[str, RunStep] = Field(default_factory=dict)
