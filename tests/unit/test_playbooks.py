@@ -253,6 +253,50 @@ def test_run_env_reshapes_env_and_steps():
     assert step["result"] == {"data": 2}
 
 
+def test_run_env_carries_playbook_name():
+    """RunEnv exposes the run's playbook name (for pulling the live playbook back)."""
+    client = FakeClient(workflows=[_run_with_steps("902")])
+    env = PlaybooksAPI(client).run_env("902")
+    assert env["name"] == "PB"
+
+
+def test_run_failure_by_pk_projects_failing_step_and_error():
+    """run_failure(run) returns a typed RunFailure for a SPECIFIC run — the first
+    real failing step and its error — without a name→run lookup."""
+    full_record = {
+        "@id": "/api/wf/api/workflows/77/",
+        "name": "Emitter",
+        "status": "failed",
+        "result": {"Error message": "top error"},
+        "steps": [
+            {"name": "Start", "status": "finished", "result": {}},
+            {
+                "name": "Emit",
+                "status": "failed",
+                "result": {"error": "insert_data() takes at least 2 positional arguments (1 given)"},
+            },
+        ],
+    }
+
+    class _RunClient(FakeClient):
+        def get(self, endpoint, params=None, **kw):
+            if "step_detail=true" in endpoint:
+                return full_record
+            return super().get(endpoint, params, **kw)
+
+    result = PlaybooksAPI(_RunClient()).run_failure("77")
+    assert result is not None
+    assert result["status"] == "failed"
+    assert result["pk"] == "77"
+    assert result["failing_step"] == "Emit"
+    assert "insert_data" in result["error_message"]
+
+
+def test_run_failure_returns_none_when_run_unresolvable():
+    """A run pk that can't be resolved yields None, not an exception."""
+    assert PlaybooksAPI(FakeClient()).run_failure("") is None
+
+
 class CrudClient:
     """Records GET/PUT/DELETE for definition-CRUD tests."""
 

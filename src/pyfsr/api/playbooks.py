@@ -390,6 +390,38 @@ def _prepare_clone_body(src: dict[str, Any], *, new_name: str, is_active: bool) 
     return body
 
 
+def _run_failure_from_full(full: Any, pk: str | None) -> RunFailure:
+    """Project a full run record (``get_execution(step_detail=True)``) into a
+    typed :class:`RunFailure` — the first failing step and its error message
+    (step-level preferred, else the run's top-level result). Shared by
+    :meth:`PlaybooksAPI.why_failed` (most-recent run for a playbook) and
+    :meth:`PlaybooksAPI.run_failure` (a specific run)."""
+    failing_step = None
+    failing_step_msg = None
+    for step in full.get("steps") or []:
+        if not isinstance(step, dict):
+            continue
+        status = (step.get("status") or "").lower()
+        # Only ACTUAL failure statuses: a non-last step failing leaves its
+        # downstream steps incipient/pending/skipped — not failures.
+        if status in _STEP_FAILURE_STATUSES:
+            failing_step = step.get("name")
+            result = step.get("result") or {}
+            if isinstance(result, dict):
+                failing_step_msg = result.get("Error message") or result.get("error") or result.get("message")
+            break
+    res = full.get("result") if isinstance(full.get("result"), dict) else {}
+    top_error = None
+    if isinstance(res, dict):
+        top_error = res.get("Error message") or res.get("error") or res.get("message")
+    return RunFailure(
+        status=full.get("status"),
+        failing_step=failing_step,
+        error_message=failing_step_msg or top_error,
+        pk=pk,
+    )
+
+
 def _shape_run(m: dict[str, Any]) -> RunSummary:
     """Wrap a raw workflow-run record in a typed :class:`RunSummary`.
 
@@ -1395,40 +1427,26 @@ class PlaybooksAPI(BaseAPI):
         if not pk:
             return None
 
-        full = self.get_execution(pk, step_detail=True)
+        return _run_failure_from_full(self.get_execution(pk, step_detail=True), pk)
 
-        # Extract the first failing step, if any.
-        failing_step = None
-        failing_step_msg = None
-        for step in full.get("steps") or []:
-            if not isinstance(step, dict):
-                continue
-            status = (step.get("status") or "").lower()
-            # Match only ACTUAL failure statuses. A non-last step failing leaves its
-            # downstream steps ``incipient``/``pending``/``skipped`` — those are not
-            # failures and must be skipped, else the wrong step is reported.
-            if status in _STEP_FAILURE_STATUSES:
-                failing_step = step.get("name")
-                result = step.get("result") or {}
-                if isinstance(result, dict):
-                    failing_step_msg = result.get("Error message") or result.get("error") or result.get("message")
-                break
+    def run_failure(self, run: str | int) -> RunFailure | None:
+        """Failure projection for a SPECIFIC run — by pk, ``@id`` path, or task_id.
 
-        # Extract error message from the run's top-level result.
-        res = full.get("result") if isinstance(full.get("result"), dict) else {}
-        top_error = None
-        if isinstance(res, dict):
-            top_error = res.get("Error message") or res.get("error") or res.get("message")
+        The by-run counterpart to :meth:`why_failed` (which locates the most
+        recent run for a *playbook*). Resolves ``run`` the same way as
+        :meth:`run_env`/:meth:`step_status`, fetches the full record with
+        ``step_detail=True``, and returns a typed :class:`~pyfsr.models.RunFailure`
+        (``status``, ``failing_step``, ``error_message``, ``pk``). Returns
+        ``None`` if the run pk can't be resolved.
 
-        # Use the step-level message if available, else fall back to top-level.
-        error_message = failing_step_msg or top_error
-
-        return RunFailure(
-            status=full.get("status"),
-            failing_step=failing_step,
-            error_message=error_message,
-            pk=pk,
-        )
+        Use this when you already have a run in hand (e.g. from
+        :meth:`trigger`/:meth:`search_executions`) and want its failure detail
+        without a second name→run lookup.
+        """
+        pk = self._resolve_run_pk(run)
+        if pk is None:
+            return None
+        return _run_failure_from_full(self.get_execution(str(pk), step_detail=True), str(pk))
 
     def run_env(self, run: str | int) -> RunEnv:
         """Return a run's execution environment + per-step results.
@@ -1479,6 +1497,7 @@ class PlaybooksAPI(BaseAPI):
                 continue
             steps[name] = RunStep(status=s.get("status"), result=s.get("result"))
         return RunEnv(
+            name=full.get("name"),
             env=full.get("env") or {},
             status=full.get("status"),
             steps=steps,
