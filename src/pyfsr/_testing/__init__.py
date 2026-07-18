@@ -21,12 +21,13 @@ from __future__ import annotations
 
 from .appliance_captures import CAPTURE_DATE, CAPTURE_HOST, CAPTURE_VERSION
 from .replay import ReplayTransport, demo_box
-from .replay_http import ReplaySession, demo_client
+from .replay_http import ReplaySession, demo_client, demo_client_jwt
 
 __all__ = [
     "ReplayTransport",
     "demo_box",
     "demo_client",
+    "demo_client_jwt",
     "ReplaySession",
     "CAPTURE_HOST",
     "CAPTURE_VERSION",

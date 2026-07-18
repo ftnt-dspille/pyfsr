@@ -29,12 +29,17 @@ import io
 import pytest
 
 from pyfsr import Query
-from pyfsr._testing import demo_box, demo_client
+from pyfsr._testing import demo_box, demo_client, demo_client_jwt
 
 # Globals available to every docstring example (mirrors conf.py
 # `doctest_global_setup`). `demo_client`/`demo_box` build offline replay objects;
 # `Query` is the DSL entry point used in the querying examples.
-_GLOBS = {"demo_client": demo_client, "demo_box": demo_box, "Query": Query}
+_GLOBS = {
+    "demo_client": demo_client,
+    "demo_client_jwt": demo_client_jwt,
+    "demo_box": demo_box,
+    "Query": Query,
+}
 
 # Modules whose docstrings are executed + output-matched here. Each must be
 # doctest-clean: every `>>>` example runs green or is `# doctest: +SKIP`.

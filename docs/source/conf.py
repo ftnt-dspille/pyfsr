@@ -93,7 +93,7 @@ myst_heading_anchors = 3
 # verified-live captures, so appliance return-example doctests run offline.
 # `demo_client()` builds a FortiSOAR client over a replay REST session seeded
 # with recorded /api/3 captures, so API-guide return-example doctests run offline.
-doctest_global_setup = "from pyfsr import Query\nfrom pyfsr._testing import demo_box, demo_client"
+doctest_global_setup = "from pyfsr import Query\nfrom pyfsr._testing import demo_box, demo_client, demo_client_jwt"
 
 # Only execute *explicit* doctest directives (```{doctest} / .. doctest::). The
 # many illustrative `>>>` snippets in API docstrings reference live clients and

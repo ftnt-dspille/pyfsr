@@ -514,3 +514,48 @@ def demo_client(
     replay.headers.update(client.auth.get_auth_headers())
     client.session = replay
     return client
+
+
+def demo_client_jwt(
+    *,
+    base_url: str = "https://demo.fortisoar.example",
+    username: str = "demo",
+    password: str = "demo",  # noqa: S107 - placeholder for an offline replay client
+    overrides: dict[tuple[str, str], dict] | None = None,
+) -> FortiSOAR:
+    """Return a :class:`pyfsr.FortiSOAR` on **username/password (JWT) auth**, replay-backed.
+
+    The counterpart to :func:`demo_client`: some endpoints only work under JWT
+    auth (the appliance rejects an API key), so :class:`~pyfsr.auth.api_key.APIKeyAuth`
+    marks operations like config export, the ``/auth`` surface, ``system.license``,
+    ``system.cluster_health``, and the ``api_users`` API as unsupported. Those
+    docstring examples call ``client = demo_client_jwt()`` instead, so they can
+    run offline against the same replay captures.
+
+    Construction uses :class:`~pyfsr.auth.user_pass.UserPasswordAuth`, whose
+    ``__init__`` exchanges the credentials for a bearer token via a live
+    ``POST /auth/authenticate``. As with :func:`demo_client`, that one call is
+    briefly neutralised (a fixed demo token stands in) so no network is touched;
+    every subsequent call replays from fixtures.
+    """
+    from ..auth.user_pass import UserPasswordAuth
+    from ..client import FortiSOAR
+
+    orig_authenticate = UserPasswordAuth._authenticate
+    UserPasswordAuth._authenticate = lambda self: "demo-jwt-token"  # type: ignore[method-assign]
+    try:
+        client = FortiSOAR(
+            base_url=base_url,
+            username=username,
+            password=password,
+            verify_ssl=False,
+            suppress_insecure_warnings=True,
+        )
+    finally:
+        UserPasswordAuth._authenticate = orig_authenticate  # type: ignore[method-assign]
+
+    replay = ReplaySession(overrides=overrides)
+    replay.verify = False
+    replay.headers.update(client.auth.get_auth_headers())
+    client.session = replay
+    return client
