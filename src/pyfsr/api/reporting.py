@@ -38,6 +38,16 @@ class ReportingAPI(BaseAPI):
         Args:
             params: optional query params passed through to the collection.
             typed: parse into :class:`~pyfsr.models.Report` (default) or return dicts.
+
+        Doctest:
+
+            >>> from pyfsr._testing import demo_client
+            >>> client = demo_client()
+            >>> reports = client.reporting.list()
+            >>> len(reports)
+            2
+            >>> reports[0].displayName  # doctest: +ELLIPSIS
+            'Weekly Alert Report'
         """
         members = [m for m in extract_members(self.client.get(_BASE, params=params)) if isinstance(m, dict)]
         if not typed:

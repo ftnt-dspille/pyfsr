@@ -1,0 +1,16 @@
+{
+    "@context": "/api/3/contexts/Team",
+    "@id": "/api/3/teams",
+    "@type": "hydra:Collection",
+    "hydra:member": [
+        {
+            "@id": "/api/3/teams/6e569c09-3bd4-40f1-98b0-cc994464c3c5",
+            "@type": "Team",
+            "description": "Management team",
+            "name": "SOC Team",
+            "uuid": "6e569c09-3bd4-40f1-98b0-cc994464c3c5",
+            "importedBy": []
+        }
+    ],
+    "hydra:totalItems": 1
+}

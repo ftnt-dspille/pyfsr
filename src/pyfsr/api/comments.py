@@ -74,7 +74,18 @@ class CommentsAPI(BaseAPI):
         return self.client.post(f"/api/3/{self.module}", data=payload)
 
     def list(self, params: dict | None = None) -> dict[str, Any]:
-        """List comments, optionally filtered via query parameters."""
+        """List comments, optionally filtered via query parameters.
+
+        Doctest:
+
+            >>> from pyfsr._testing import demo_client
+            >>> client = demo_client()
+            >>> result = client.comments.list()
+            >>> len(result.get("hydra:member", []))
+            2
+            >>> result["hydra:totalItems"]
+            2
+        """
         return self.client.get(f"/api/3/{self.module}", params=params)
 
     def get(self, comment_id: str) -> dict[str, Any]:

@@ -124,6 +124,18 @@ class RolesAPI(BaseAPI):
 
         ``params`` adds/overrides query params (e.g. ``{"$page": 1}``); ``$limit``
         defaults to ``limit`` unless ``params`` supplies one.
+
+        Doctest:
+
+            >>> from pyfsr._testing import demo_client
+            >>> client = demo_client()
+            >>> roles = client.roles.list()
+            >>> len(roles)  # doctest: +ELLIPSIS
+            3
+            >>> roles[0].name
+            'Agentic AI'
+            >>> roles[1].name
+            'SOC Analyst'
         """
         query = dict(params or {})
         query.setdefault("$limit", limit)

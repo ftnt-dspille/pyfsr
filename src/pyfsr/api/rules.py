@@ -133,7 +133,18 @@ class RulesAPI(BaseAPI):
     def list_preprocessing_rules(
         self, params: dict[str, Any] | None = None, *, typed: bool = True
     ) -> list[PreprocessingRule] | list[dict[str, Any]]:
-        """List preprocessing rules (``GET /api/3/preprocessing_rules``)."""
+        """List preprocessing rules (``GET /api/3/preprocessing_rules``).
+
+        Doctest:
+
+            >>> from pyfsr._testing import demo_client
+            >>> client = demo_client()
+            >>> rules = client.rules.list_preprocessing_rules()
+            >>> len(rules)
+            1
+            >>> rules[0].name
+            'Enforcing File Attachments for File Indicators'
+        """
         members = [m for m in extract_members(self.client.get(_PREPROCESSING, params=params)) if isinstance(m, dict)]
         if not typed:
             return members

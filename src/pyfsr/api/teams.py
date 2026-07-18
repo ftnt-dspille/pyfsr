@@ -62,7 +62,18 @@ class TeamsAPI(BaseAPI):
 
     # ------------------------------------------------------------------- read
     def list(self, params: dict[str, Any] | None = None) -> list[Team]:
-        """List all teams (``GET /api/3/teams``) as typed :class:`~pyfsr.models.Team` records."""
+        """List all teams (``GET /api/3/teams``) as typed :class:`~pyfsr.models.Team` records.
+
+        Doctest:
+
+            >>> from pyfsr._testing import demo_client
+            >>> client = demo_client()
+            >>> teams = client.teams.list()
+            >>> len(teams)
+            1
+            >>> teams[0].name
+            'SOC Team'
+        """
         return [Team.model_validate(m) for m in extract_members(self.client.get(_BASE, params=params))]
 
     def get(self, team: str) -> Team:

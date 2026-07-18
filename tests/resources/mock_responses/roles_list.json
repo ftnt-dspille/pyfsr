@@ -1,0 +1,44 @@
+{
+    "@context": "/api/3/contexts/Role",
+    "@id": "/api/3/roles",
+    "@type": "hydra:Collection",
+    "hydra:member": [
+        {
+            "@id": "/api/3/roles/02216a19-8930-4f6f-8173-8fbfae9fdee0",
+            "@type": "Role",
+            "description": "Manages required permission for Agentic AI",
+            "name": "Agentic AI",
+            "uuid": "02216a19-8930-4f6f-8173-8fbfae9fdee0",
+            "importedBy": [
+                {
+                    "apiName": "fortinetAdvisor",
+                    "name": "FortiAI",
+                    "version": "6.0.0"
+                }
+            ]
+        },
+        {
+            "@id": "/api/3/roles/7b56d139-7ee6-455e-8658-35727e202b8a",
+            "@type": "Role",
+            "description": "Responsible for Alert Triaging, false-positive filtering, and escalating potentially malicious alerts to Incidents.",
+            "name": "SOC Analyst",
+            "uuid": "7b56d139-7ee6-455e-8658-35727e202b8a",
+            "importedBy": [
+                {
+                    "apiName": "sOAREssentials",
+                    "name": "SOAR Essentials",
+                    "version": "1.0.0"
+                }
+            ]
+        },
+        {
+            "@id": "/api/3/roles/c5ff8174-b3fa-41c5-b781-2b890b426a80",
+            "@type": "Role",
+            "description": "Full access to general application-wide features for system configuration",
+            "name": "Application Administrator",
+            "uuid": "c5ff8174-b3fa-41c5-b781-2b890b426a80",
+            "importedBy": []
+        }
+    ],
+    "hydra:totalItems": 3
+}

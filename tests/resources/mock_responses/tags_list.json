@@ -1,0 +1,18 @@
+{
+    "@context": "/api/3/contexts/Tag",
+    "@id": "/api/3/tags",
+    "@type": "hydra:Collection",
+    "hydra:member": [
+        "2022 Annual Report",
+        "3CX Supply Chain Attack",
+        "Agentic AI"
+    ],
+    "hydra:totalItems": 3,
+    "hydra:view": {
+        "@id": "/api/3/tags?%24limit=20&%24page=1",
+        "@type": "hydra:PartialCollectionView",
+        "hydra:first": "/api/3/tags?%24limit=20&%24page=1",
+        "hydra:last": "/api/3/tags?%24limit=20&%24page=1",
+        "hydra:next": null
+    }
+}

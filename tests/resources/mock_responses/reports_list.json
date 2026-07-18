@@ -1,0 +1,104 @@
+{
+  "@context": "/api/3/contexts/Reporting",
+  "@id": "/api/3/reporting",
+  "@type": "hydra:Collection",
+  "hydra:member": [
+    {
+      "@id": "/api/3/reporting/11ece146-396e-42f8-a2c4-358550c6f03f",
+      "@type": "Reporting",
+      "uuid": "11ece146-396e-42f8-a2c4-358550c6f03f",
+      "createUser": {
+        "@id": "/api/3/appliances/57545210-2adc-472b-a24f-2df6ee8dfe63",
+        "@type": "Appliance",
+        "name": "Playbook",
+        "userType": null,
+        "avatar": null,
+        "uuid": "57545210-2adc-472b-a24f-2df6ee8dfe63",
+        "createUser": null,
+        "createDate": 1781872210.014607,
+        "modifyUser": null,
+        "modifyDate": 1781872210.014607,
+        "id": 1,
+        "userId": "6f3626c1-0da7-4b44-8d5e-43750f780a47"
+      },
+      "createDate": 1781873513.570913,
+      "modifyUser": {
+        "@id": "/api/3/appliances/57545210-2adc-472b-a24f-2df6ee8dfe63",
+        "@type": "Appliance",
+        "name": "Playbook",
+        "userType": null,
+        "avatar": null,
+        "uuid": "57545210-2adc-472b-a24f-2df6ee8dfe63",
+        "createUser": null,
+        "createDate": 1781872210.014607,
+        "modifyUser": null,
+        "modifyDate": 1781872210.014607,
+        "id": 1,
+        "userId": "6f3626c1-0da7-4b44-8d5e-43750f780a47"
+      },
+      "modifyDate": 1781873513.570913,
+      "importedBy": [
+        {
+          "apiName": "sOARFramework",
+          "name": "SOAR Framework",
+          "version": "4.0.0"
+        }
+      ],
+      "displayName": "Weekly Alert Report",
+      "type": "rows",
+      "templateType": "reporting",
+      "parentTemplateId": null,
+      "filterArray": [],
+      "updateDate": null
+    },
+    {
+      "@id": "/api/3/reporting/2bc7fd32-1dd6-48b0-bcfb-3a7c04938c4a",
+      "@type": "Reporting",
+      "uuid": "2bc7fd32-1dd6-48b0-bcfb-3a7c04938c4a",
+      "createUser": {
+        "@id": "/api/3/appliances/57545210-2adc-472b-a24f-2df6ee8dfe63",
+        "@type": "Appliance",
+        "name": "Playbook",
+        "userType": null,
+        "avatar": null,
+        "uuid": "57545210-2adc-472b-a24f-2df6ee8dfe63",
+        "createUser": null,
+        "createDate": 1781872210.014607,
+        "modifyUser": null,
+        "modifyDate": 1781872210.014607,
+        "id": 1,
+        "userId": "6f3626c1-0da7-4b44-8d5e-43750f780a47"
+      },
+      "createDate": 1781873513.755819,
+      "modifyUser": {
+        "@id": "/api/3/appliances/57545210-2adc-472b-a24f-2df6ee8dfe63",
+        "@type": "Appliance",
+        "name": "Playbook",
+        "userType": null,
+        "avatar": null,
+        "uuid": "57545210-2adc-472b-a24f-2df6ee8dfe63",
+        "createUser": null,
+        "createDate": 1781872210.014607,
+        "modifyUser": null,
+        "modifyDate": 1781872210.014607,
+        "id": 1,
+        "userId": "6f3626c1-0da7-4b44-8d5e-43750f780a47"
+      },
+      "modifyDate": 1781873513.755819,
+      "importedBy": [
+        {
+          "apiName": "sOARFramework",
+          "name": "SOAR Framework",
+          "version": "4.0.0"
+        }
+      ],
+      "displayName": "Weekly IOC Report",
+      "type": "rows",
+      "templateType": "reporting",
+      "parentTemplateId": null,
+      "filterArray": [],
+      "updateDate": null
+    }
+  ],
+  "hydra:totalItems": 2
+}

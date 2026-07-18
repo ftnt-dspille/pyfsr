@@ -222,6 +222,18 @@ class UsersAPI(BaseAPI):
             Typed :class:`~pyfsr.models.User` records, or the raw Hydra
             collection dict (``hydra:member`` list of People records) when
             ``typed=False``.
+
+        Doctest:
+
+            >>> from pyfsr._testing import demo_client
+            >>> client = demo_client()
+            >>> users = client.users.list()
+            >>> len(users)
+            2
+            >>> users[0].firstname
+            'CS'
+            >>> users[0].lastname
+            'Admin'
         """
         resp = self.client.get("/api/3/people", params=params)
         if typed:

@@ -26,7 +26,16 @@ class RoutersAPI(BaseAPI):
 
     def list(self, *, limit: int = 2147483647) -> list[dict[str, Any]]:
         """Return router records (the ``hydra:member`` array). Each carries ``@id``,
-        ``uuid``, ``name``, ``address``, ``sni``, and the broker ``certificate`` PEM."""
+        ``uuid``, ``name``, ``address``, ``sni``, and the broker ``certificate`` PEM.
+
+        Doctest:
+
+            >>> from pyfsr._testing import demo_client
+            >>> client = demo_client()
+            >>> routers = client.routers.list()
+            >>> len(routers)
+            0
+        """
         return extract_members(self.client.get(_BASE, params={"$limit": limit}))
 
     def first(self) -> dict[str, Any] | None:
