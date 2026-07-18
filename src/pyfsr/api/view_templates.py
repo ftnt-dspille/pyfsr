@@ -234,6 +234,42 @@ class ViewTemplatesAPI(BaseAPI):
         assert isinstance(result, dict)
         return SystemViewTemplate.model_validate(result)
 
+    def get_or_create_template(
+        self,
+        name: str,
+        config: dict[str, Any],
+        *,
+        module: str,
+        viewOptions: str,
+        type: str = "rows",
+        isDefault: bool = False,
+        uuid: str | None = None,
+        **extra: Any,
+    ) -> tuple[SystemViewTemplate, bool]:
+        """Idempotently ensure a view template ``name`` exists; return ``(template, created)``.
+
+        Existence is checked by name (view-template names are unique across the
+        ``/api/views/{viewset}/{name}`` endpoint). If it already exists, the row is
+        returned unchanged (its ``config``/``isDefault``/``extra`` are **not**
+        modified). Returns ``created=True`` only when the template was newly created.
+        """
+        for existing in self.list_templates(module=module):
+            if existing.name == name:
+                return existing, False
+        return (
+            self.create_template(
+                name,
+                config,
+                module=module,
+                viewOptions=viewOptions,
+                type=type,
+                isDefault=isDefault,
+                uuid=uuid,
+                **extra,
+            ),
+            True,
+        )
+
     def update_template(
         self,
         name: str,

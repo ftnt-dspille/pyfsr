@@ -552,3 +552,77 @@ def test_solution_pack_ensure_installed_installs_when_absent(monkeypatch):
     result = api.ensure_installed("SOAR Framework", "2.2.1")
     assert result is not None
     assert any(call[0] == "POST" and "solutionpacks/install" in call[1] for call in c.calls)
+
+
+# ======================================================== export templates
+def _export_templates_client(existing: bool = True) -> FakeClient:
+    from pyfsr.api.export_templates import ExportTemplatesAPI  # noqa: F401
+
+    c = FakeClient()
+    members = (
+        [{"@id": "/api/3/export_templates/et-uuid", "name": "Nightly alerts", "uuid": "et-uuid"}] if existing else []
+    )
+    c.route("GET", "/api/3/export_templates", {"hydra:member": members})
+    c.route(
+        "POST",
+        "/api/3/export_templates",
+        {"@id": "/api/3/export_templates/new-et", "name": "Nightly alerts", "uuid": "new-et"},
+    )
+    return c
+
+
+def test_export_template_get_or_create_existing_returns_not_created():
+    from pyfsr.api.export_templates import ExportTemplatesAPI
+
+    c = _export_templates_client(existing=True)
+    tmpl, created = ExportTemplatesAPI(c).get_or_create("Nightly alerts")
+    assert created is False
+    assert tmpl.name == "Nightly alerts"
+    assert not any(call[0] == "POST" for call in c.calls)
+
+
+def test_export_template_get_or_create_absent_creates():
+    from pyfsr.api.export_templates import ExportTemplatesAPI
+
+    c = _export_templates_client(existing=False)
+    tmpl, created = ExportTemplatesAPI(c).get_or_create("Nightly alerts", options={"modules": ["alerts"]})
+    assert created is True
+    assert any(call[0] == "POST" and call[1] == "/api/3/export_templates" for call in c.calls)
+
+
+# ========================================================== view templates
+def _view_templates_client(existing: bool = True) -> FakeClient:
+    c = FakeClient()
+    members = (
+        [{"name": "Custom Detail", "module": "alerts", "viewOptions": "detail", "uuid": "svt-uuid"}] if existing else []
+    )
+    c.route("GET", "/api/3/system_view_templates", {"hydra:member": members})
+    c.route(
+        "POST",
+        "/api/views/1/Custom Detail",
+        {"name": "Custom Detail", "module": "alerts", "viewOptions": "detail", "uuid": "new-svt"},
+    )
+    return c
+
+
+def test_view_template_get_or_create_existing_returns_not_created():
+    from pyfsr.api.view_templates import ViewTemplatesAPI
+
+    c = _view_templates_client(existing=True)
+    tmpl, created = ViewTemplatesAPI(c).get_or_create_template(
+        "Custom Detail", {"rows": []}, module="alerts", viewOptions="detail"
+    )
+    assert created is False
+    assert tmpl.name == "Custom Detail"
+    assert not any(call[0] == "POST" for call in c.calls)
+
+
+def test_view_template_get_or_create_absent_creates():
+    from pyfsr.api.view_templates import ViewTemplatesAPI
+
+    c = _view_templates_client(existing=False)
+    tmpl, created = ViewTemplatesAPI(c).get_or_create_template(
+        "Custom Detail", {"rows": []}, module="alerts", viewOptions="detail"
+    )
+    assert created is True
+    assert any(call[0] == "POST" and call[1] == "/api/views/1/Custom Detail" for call in c.calls)

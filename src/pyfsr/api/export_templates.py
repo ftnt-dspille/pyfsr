@@ -48,6 +48,27 @@ class ExportTemplatesAPI(BaseAPI):
         """Fetch an export template by uuid or IRI (typed)."""
         return ExportTemplate.model_validate(self.client.get(f"{_BASE}/{iri_to_uuid(ref)}"))
 
+    def find_by_name(self, name: str) -> ExportTemplate | None:
+        """Return the export template named ``name``, or ``None`` if absent."""
+        for tmpl in self.list(params={"name": name}):
+            if tmpl.name == name:
+                return tmpl
+        return None
+
+    def get_or_create(
+        self, name: str, *, options: dict[str, Any] | None = None, **fields: Any
+    ) -> tuple[ExportTemplate, bool]:
+        """Idempotently ensure an export template ``name`` exists; return ``(template, created)``.
+
+        If a template with that name already exists, it is returned unchanged (its
+        ``options``/``fields`` are **not** modified). Returns ``created=True`` only
+        when the template was newly created.
+        """
+        existing = self.find_by_name(name)
+        if existing is not None:
+            return existing, False
+        return self.create(name, options=options, **fields), True
+
     def delete(self, ref: str) -> None:
         """Delete an export template by uuid or IRI."""
         self.client.delete(f"{_BASE}/{iri_to_uuid(ref)}")
