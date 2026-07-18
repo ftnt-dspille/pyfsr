@@ -71,14 +71,14 @@ class SystemAPI(BaseAPI):
         replication, …). JWT auth only on tested appliances.
 
         Example:
-            >>> client = demo_client()  # doctest: +SKIP
-            >>> health = client.system.cluster_health()  # doctest: +SKIP
-            >>> health[0]["status"]  # doctest: +SKIP
+            >>> client = demo_client_jwt()
+            >>> health = client.system.cluster_health()
+            >>> health[0]["status"]
             'Active'
 
         .. note::
             Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
-            ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
+            ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
         """
         return self.client.get("/api/auth/cluster/health")
 
@@ -90,14 +90,14 @@ class SystemAPI(BaseAPI):
         ``node_id``. Authenticated equivalent of the public ``get_info`` flow.
 
         Example:
-            >>> client = demo_client()  # doctest: +SKIP
-            >>> lic = client.system.license()  # doctest: +SKIP
-            >>> lic["license_type"]  # doctest: +SKIP
+            >>> client = demo_client_jwt()
+            >>> lic = client.system.license()
+            >>> lic["license_type"]
             'FortiFlex'
 
         .. note::
             Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
-            ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
+            ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
         """
         params: dict[str, Any] = {}
         if node_id is not None:

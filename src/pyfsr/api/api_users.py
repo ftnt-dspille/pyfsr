@@ -62,16 +62,16 @@ class ApiKeyUsersAPI(BaseAPI):
         ``u["api_key"]["key"]`` still work).
 
         Example:
-            >>> client = demo_client()  # doctest: +SKIP
-            >>> u = client.api_users.get("550e8400-e29b-41d4-a716-446655440007")  # doctest: +SKIP
-            >>> u["uuid"]  # doctest: +SKIP
+            >>> client = demo_client_jwt()
+            >>> u = client.api_users.get("550e8400-e29b-41d4-a716-446655440007")
+            >>> u["uuid"]
             '550e8400-e29b-41d4-a716-446655440007'
-            >>> u["user_type"]  # doctest: +SKIP
+            >>> u["user_type"]
             9
 
             .. note::
                 Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
-                ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
+                ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
         """
         params: dict[str, Any] = {"uuid": uuid}
         if show_api_key:
@@ -88,16 +88,16 @@ class ApiKeyUsersAPI(BaseAPI):
         Returns typed :class:`~pyfsr.models.ApiKeyUser` records.
 
         Example:
-            >>> client = demo_client()  # doctest: +SKIP
-            >>> users = client.api_users.query(["550e8400-e29b-41d4-a716-446655440007"])  # doctest: +SKIP
-            >>> len(users)  # doctest: +SKIP
+            >>> client = demo_client_jwt()
+            >>> users = client.api_users.query(["550e8400-e29b-41d4-a716-446655440007"])
+            >>> len(users)
             1
-            >>> users[0]["uuid"]  # doctest: +SKIP
+            >>> users[0]["uuid"]
             '550e8400-e29b-41d4-a716-446655440007'
 
             .. note::
                 Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
-                ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
+                ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
         """
         body: dict[str, Any] = {"users": list(uuids)}
         if show_api_key:
