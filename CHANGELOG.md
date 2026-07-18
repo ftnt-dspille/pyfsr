@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-07-18
+
 ### Added
 - **Multi-box SSH profiles for the `pyfsr appliance` CLI (C4).** Each
   `[instances.<alias>]` table in `~/.pyfsr/instances.toml` (or `$PYFSR_INSTANCES`)
