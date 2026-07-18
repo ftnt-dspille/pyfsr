@@ -142,6 +142,73 @@ class UsersAPI(BaseAPI):
         resp = self.client.post("/api/3/people", data=payload)
         return User.model_validate(resp) if typed else resp
 
+    def find_by_email(self, email: str, *, typed: bool = True) -> User | None:
+        """Find a user by email address (``GET /api/3/people?email=``).
+
+        Returns ``None`` if no user has that email. ``email`` is the filterable
+        unique key for People records (unlike ``loginid``, which lives on the
+        nested auth-user and is not queryable on ``/api/3/people``).
+
+        Args:
+            email: the email address to look up.
+            typed: parse the result into a :class:`~pyfsr.models.User` (default);
+                pass ``False`` for the raw dict.
+
+        Returns:
+            The matching :class:`~pyfsr.models.User`, or ``None``.
+        """
+        members = extract_members(self.client.get("/api/3/people", params={"email": email}))
+        if not members:
+            return None
+        return User.model_validate(members[0]) if typed else members[0]
+
+    def get_or_create(
+        self,
+        loginid: str,
+        password: str,
+        firstname: str,
+        lastname: str,
+        email: str,
+        roles: list[str],
+        **kwargs: Any,
+    ) -> tuple[User, bool]:
+        """Idempotently ensure a user with ``email`` exists; return ``(user, created)``.
+
+        Looks up by ``email`` (the filterable unique key on ``/api/3/people`` —
+        ``loginid`` is not queryable). If found, the existing user is returned
+        unchanged (``created=False``); otherwise a new user is created with the
+        given credentials, roles, and profile fields (``created=True``).
+
+        Accepts the same keyword arguments as :meth:`create` (``access_type``,
+        ``active``, ``department``, ``teams``, etc.).
+
+        Args:
+            loginid: Login username (must be unique). Used only on the create path.
+            password: Initial password. Used only on the create path.
+            firstname: First name. Used only on the create path.
+            lastname: Last name. Used only on the create path.
+            email: Email address — the lookup key and the create-time email.
+            roles: Role UUIDs or friendly names. Used only on the create path.
+            **kwargs: Additional :meth:`create` arguments (``access_type``,
+                ``active``, ``department``, ``teams``, etc.).
+
+        Returns:
+            ``(User, created)`` — the existing user with ``created=False``, or
+            the newly-created user with ``created=True``.
+        """
+        existing = self.find_by_email(email)
+        if existing is not None:
+            return existing, False
+        return self.create(
+            loginid=loginid,
+            password=password,
+            firstname=firstname,
+            lastname=lastname,
+            email=email,
+            roles=roles,
+            **kwargs,
+        ), True
+
     def list(self, params: dict | None = None, *, typed: bool = True) -> list[User] | dict[str, Any]:
         """
         List People records.

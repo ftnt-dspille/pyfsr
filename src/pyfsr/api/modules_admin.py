@@ -1461,6 +1461,37 @@ class ModulesAdminAPI(BaseAPI):
                 self._ensure_reverse_field(*reverse, source_module=module, source_field=field)
         return result
 
+    def ensure_field(
+        self,
+        module: str,
+        field: dict[str, Any] | AttributeMetadata,
+        *,
+        create_reverse: bool = True,
+    ) -> dict[str, Any] | None:
+        """Append ``field`` to ``module`` in staging if it isn't there yet.
+
+        Idempotent wrapper around :meth:`add_field`: if a field with the same
+        ``name`` already exists (in staging **or** published), this is a no-op
+        returning ``None``; otherwise it calls :meth:`add_field` and returns the
+        staged module metadata. A re-run from a deploy script won't duplicate
+        the field. When the field is absent and is created, the ``create_reverse``
+        semantics are identical to :meth:`add_field`.
+
+        Returns ``None`` when the field was already present; the staged module
+        metadata dict when it was newly added.
+        """
+        field = self._to_field_dict(field)
+        name = field.get("name")
+        if not name:
+            raise ValueError("field dict has no 'name' — cannot ensure presence")
+        mod = self.get_staging(module) or self.get_published(module)
+        if mod is None:
+            raise ValueError(f"module {module!r} not found in staging or published")
+        existing = next((a for a in mod.get("attributes", []) if a.get("name") == name), None)
+        if existing is not None:
+            return None
+        return self.add_field(module, field, create_reverse=create_reverse)
+
     def _ensure_reverse_field(
         self,
         target_module: str,

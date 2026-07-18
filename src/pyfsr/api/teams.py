@@ -85,6 +85,23 @@ class TeamsAPI(BaseAPI):
         self._team_cache = None  # name→record cache is now stale
         return team
 
+    def get_or_create(
+        self,
+        name: str,
+        *,
+        description: str | None = None,
+    ) -> tuple[Team, bool]:
+        """Idempotently ensure team ``name`` exists; return ``(team, created)``.
+
+        If a team with that name already exists, it is returned unchanged (its
+        ``description`` is **not** modified). Returns ``created=True`` only when
+        the team was newly created.
+        """
+        existing = self.team_uuid_by_name(name)
+        if existing is not None:
+            return self.get(name), False
+        return self.create(name, description=description), True
+
     def update(self, team: str, *, name: str | None = None, description: str | None = None) -> Team:
         """Update a team's ``name`` and/or ``description`` (``PUT /api/3/teams/<uuid>``).
 

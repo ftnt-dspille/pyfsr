@@ -275,6 +275,37 @@ class AppConfigAPI(BaseAPI):
 
         return self.update_navigation(nav)
 
+    def ensure_navigation_item(
+        self,
+        item: NavItem,
+        *,
+        parent: str | None = None,
+        position: Literal["top", "bottom"] = "bottom",
+    ) -> dict[str, Any] | None:
+        """Add ``item`` to the navigation only if it isn't already present.
+
+        Idempotent wrapper around :meth:`add_navigation_item`: if an item
+        matching the same ``module`` (from ``item.require.module`` or
+        ``item.state.parameters.module``) or ``title`` already exists in the
+        tree, this is a no-op returning ``None``; otherwise the item is added
+        and the updated config document is returned. Re-running a deploy
+        script won't duplicate the nav entry.
+
+        Args:
+            item: The :class:`~pyfsr.models.NavItem` to ensure.
+            parent: Where to add it (same semantics as :meth:`add_navigation_item`).
+            position: ``"bottom"`` (default) or ``"top"``.
+
+        Returns:
+            The updated config document when the item was added, or ``None``
+            when it was already present.
+        """
+        module = _item_module(item)
+        existing = self.find_navigation_item(module=module, title=item.title)
+        if existing is not None:
+            return None
+        return self.add_navigation_item(item, parent=parent, position=position)
+
     def remove_navigation_item(
         self, module: str | None = None, title: str | None = None, *, missing_ok: bool = True
     ) -> dict[str, Any] | None:

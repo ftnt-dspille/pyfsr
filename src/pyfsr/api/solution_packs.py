@@ -315,3 +315,44 @@ class SolutionPackAPI(BaseAPI):
         if not parsed.job_id:
             raise ValueError(f"install_from_file: no import job id in response: {resp}")
         return self.wait_for_install(parsed.job_id, interval=interval, timeout=timeout)
+
+    def ensure_installed(
+        self,
+        name: str,
+        version: str,
+        *,
+        build_number: int | str | None = None,
+        wait: bool = True,
+        interval: float = 3.0,
+        timeout: float = 300.0,
+    ) -> SolutionPackInstallResponse | InstallJobStatus:
+        """Idempotently ensure solution pack ``name`` at ``version`` is installed.
+
+        If the pack is already installed at the requested version, returns its
+        record immediately (no re-install). Otherwise installs from Content Hub
+        via :meth:`install` and waits for completion (``wait=True``, default).
+
+        Args:
+            name: solution pack name (e.g. ``"SOAR Framework"``).
+            version: the version to ensure (e.g. ``"2.2.1"``).
+            build_number: the build of ``version`` to fetch (see :meth:`install`).
+            wait: block until the import job finishes (default ``True``).
+            interval: seconds between polls.
+            timeout: give up waiting after this many seconds.
+
+        Returns:
+            :class:`~pyfsr.models.SolutionPackInstallResponse` when already
+            installed (``.version`` confirms the match); the install response or
+            final :class:`~pyfsr.models.InstallJobStatus` when newly installed.
+        """
+        existing = self.content_hub.find_installed_pack(name)
+        if existing is not None and existing.version == version:
+            return SolutionPackInstallResponse.model_validate(existing.to_dict())
+        return self.install(
+            name,
+            version,
+            build_number=build_number,
+            wait=wait,
+            interval=interval,
+            timeout=timeout,
+        )

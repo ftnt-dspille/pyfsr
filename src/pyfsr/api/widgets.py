@@ -240,6 +240,47 @@ class WidgetsAPI(BaseAPI):
             version=published.version,
         )
 
+    def ensure_deployed(
+        self,
+        path: str,
+        *,
+        replace: bool = True,
+        wait: bool = True,
+        interval: float = 3.0,
+        timeout: float = 60.0,
+    ) -> WidgetRecord:
+        """Deploy a widget ``.tgz`` only if it isn't already live at the same version.
+
+        Idempotent wrapper around :meth:`deploy`: reads the widget name and
+        version from the ``.tgz`` (via a lightweight upload probe), and if a
+        widget with the same name+version is already ``installed`` and
+        ``published``, skips the upload/publish cycle and returns the existing
+        record. Otherwise falls through to :meth:`deploy`.
+
+        Re-running a deploy script that ships the same widget version is a
+        no-op; a version bump deploys the new one.
+
+        Args:
+            path: filesystem path to the widget ``.tgz``.
+            replace: passed to :meth:`deploy` (and through to upload/publish).
+            wait: settle-poll after publish.
+            interval: seconds between settle polls.
+            timeout: give up waiting after this many seconds.
+
+        Returns:
+            The settled :class:`~pyfsr.models.WidgetRecord` (existing or newly
+            deployed).
+        """
+        import tarfile
+
+        # Peek the widget name + version from the .tgz manifest without uploading.
+        name, version = _peek_widget_manifest(path, tarfile)
+        if name is not None:
+            existing = self.get(name)
+            if existing is not None and existing.version == version and existing.installed and existing.published:
+                return existing
+        return self.deploy(path, replace=replace, wait=wait, interval=interval, timeout=timeout)
+
     # ---------------------------------------------------------------- export
     def export(self, uuid: str, dest: str, *, development: bool = False) -> str:
         """Export a widget ``.tgz`` (mirrors the connector export).
@@ -280,3 +321,31 @@ def _version_key(version: str | None) -> tuple:
     for p in version.split("."):
         parts.append((0, int(p)) if p.isdigit() else (1, p))
     return tuple(parts)
+
+
+def _peek_widget_manifest(path: str, _tarfile) -> tuple[str | None, str | None]:
+    """Extract ``(name, version)`` from a widget ``.tgz`` without uploading.
+
+    Reads the ``info.json`` manifest inside the archive (the same file
+    :meth:`upload` sends to the appliance). Returns ``(None, None)`` if the
+    archive can't be read or the manifest is absent — the caller falls through
+    to :meth:`deploy` in that case, preserving the original behavior.
+    """
+    import json
+
+    try:
+        with _tarfile.open(path, mode="r:gz") as tar:
+            # Find info.json (it's at the archive root or under a subdir)
+            info_member = next(
+                (m for m in tar.getmembers() if m.name.endswith("info.json") and m.isfile()),
+                None,
+            )
+            if info_member is None:
+                return None, None
+            f = tar.extractfile(info_member)
+            if f is None:
+                return None, None
+            data = json.loads(f.read())
+            return data.get("name"), data.get("version")
+    except Exception:
+        return None, None

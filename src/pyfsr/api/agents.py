@@ -115,6 +115,34 @@ class AgentsAPI(BaseAPI):
         resp = self.client.post(_BASE, data=body)
         return Agent.model_validate(resp if isinstance(resp, dict) else {})
 
+    def get_or_create(
+        self,
+        name: str,
+        *,
+        router: str | dict[str, Any],
+        installer_type: str = "docker",
+        description: str = "",
+    ) -> tuple[Agent, bool]:
+        """Idempotently ensure agent ``name`` exists; return ``(agent, created)``.
+
+        If an agent with that ``name`` already exists, it is returned unchanged
+        (its router/installer_type/description are **not** modified — only
+        presence is ensured). Returns ``created=True`` only when the agent was
+        newly created. ``router`` is required for the create path but ignored
+        when the agent already exists.
+
+        Example:
+            >>> client = demo_client()
+            >>> router = "/api/3/routers/3a2b1c0d-9e8f-4a7b-6c5d-4e3f2a1b0c9d"
+            >>> agent, created = client.agents.get_or_create("edge-1", router=router)
+            >>> created
+            False
+        """
+        for agent in self.list():
+            if agent.name == name:
+                return agent, False
+        return self.create(name, router=router, installer_type=installer_type, description=description), True
+
     def delete(self, uuid: str) -> None:
         """Delete an agent record (``DELETE /api/3/agents/{uuid}``). Sends no body.
 
