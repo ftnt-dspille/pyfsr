@@ -16,3 +16,13 @@ artifacts/*.tgz
 
 # Local connector RPM repo — vendor RPMs + generated repodata, never committed
 connectors-local/
+
+# Published-connector state that survives restarts — the merged
+# connectors-all.json and staged Content-Hub metadata zips written by
+# `chctl add-connector` / entrypoint.sh. Regenerated at runtime.
+published/
+
+# Smoke-test artifacts: the throwaway connector entries + RPMs the smoke
+# tests publish. (smoke-test-connector.sh cleans these up itself, but a
+# killed run can leave them behind.)
+local-content/*__smoketestconnector.json

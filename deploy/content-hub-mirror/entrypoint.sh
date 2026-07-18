@@ -3,7 +3,14 @@
 #
 #   1. build the merged content-hub tree (pyfsr.content_catalog) into /srv
 #   2. ensure a TLS server cert exists (self-signed if none mounted)
-#   3. generate nginx.conf — with an upstream-proxy fallback only if configured
+#   3. generate nginx.conf — serving local content + reverse-proxy fallbacks
+#      for everything the mirror doesn't host:
+#        /content-hub/<name>-<ver>/...      -> UPSTREAM_HOST (FDN cert OR plain HTTPS)
+#        /fsr-widgets/, /widgets/           -> PUBLIC_FORTINET_HOST (widget .tgz, no cert)
+#        /xf/solutions/solutionpacks/       -> PUBLIC_FORTINET_HOST (SP .zip, no cert)
+#        /xf/solutions/connectors/          -> PUBLIC_FORTINET_HOST (connector .tgz, no cert)
+#        /xf-widgets/, /xf/widgets/         -> PUBLIC_FORTINET_HOST (alt widget paths, no cert)
+#        /connectors/                       -> PUBLIC_FORTINET_HOST connector yum repo (no cert)
 #   4. exec nginx in the foreground
 #
 # See README.md for the env vars.
@@ -11,18 +18,30 @@ set -euo pipefail
 
 : "${OUTPUT_DIR:=/srv}"
 : "${UPSTREAM_HOST:=}"
-: "${UPSTREAM_PROXY:=1}"     # set 0 to disable the reverse-proxy fallback
+: "${UPSTREAM_PROXY:=1}"     # set 0 to disable the /content-hub/ reverse-proxy fallback
+: "${UPSTREAM_TLS_VERIFY:=1}"  # 0 = skip upstream TLS verify (e.g. self-signed mirror-of-a-mirror)
 : "${SERVER_CERT:=/etc/nginx/certs/server.crt}"
 : "${SERVER_KEY:=/etc/nginx/certs/server.key}"
 : "${FDN_CERT:=/etc/nginx/certs/fdn.pem}"
 : "${FDN_KEY:=/etc/nginx/certs/fdn.key}"
 
+# The PUBLIC Fortinet repo (repo.fortisoar.fortinet.com) is open HTTPS — no FDN
+# client cert needed. It hosts the artifact long tail for everything the mirror
+# itself doesn't carry: widget .tgz at /fsr-widgets/, SP .zip at
+# /xf/solutions/solutionpacks/, connector .tgz at /xf/solutions/connectors/,
+# and the connector RPM yum repo at /connectors/. Proxying these lets the
+# mirror "see both" — local content wins, public repo fills the long tail —
+# without needing the entitlement-gated FDN cert at all. Set PUBLIC_PROXY=0
+# to serve strictly local content (404 anything we don't host).
+: "${PUBLIC_PROXY:=1}"
+: "${PUBLIC_FORTINET_HOST:=repo.fortisoar.fortinet.com}"
+
 # --- Option C: connector RPM yum-repo (hybrid proxy + local override) ---------
 # /connectors/       -> reverse-proxy the PUBLIC Fortinet connector repo (no cert)
 # /connectors-local/ -> a small local yum repo we own (custom/override RPMs), so
 #                       our cyops-connector-<name>-<ver> wins via repo priority.
-: "${CONNECTORS_PROXY:=1}"
-: "${CONNECTORS_UPSTREAM:=repo.fortisoar.fortinet.com}"
+: "${CONNECTORS_PROXY:=${PUBLIC_PROXY}}"   # default = follow PUBLIC_PROXY
+: "${CONNECTORS_UPSTREAM:=${PUBLIC_FORTINET_HOST}}"
 : "${CONNECTORS_UPSTREAM_PATH:=/prod/connectors}"   # /connectors/x86_64 -> $PATH/x86_64
 : "${CONNECTORS_LOCAL_DIR:=/connectors-local}"      # mount custom RPMs under x86_64/
 : "${CONNECTORS_PREFETCH:=}"                          # comma/space list of RPM files to pull local
@@ -98,14 +117,21 @@ if [[ ! -f "$SERVER_CERT" || ! -f "$SERVER_KEY" ]]; then
 fi
 
 echo "==> [3/4] generating nginx.conf"
-# The upstream fallback is only wired in when a host is set AND the FDN client
-# cert is present — otherwise a cache miss simply 404s (Option A, local-only).
+# /content-hub/ upstream fallback. Two modes:
+#   * FDN cert present  -> mTLS to UPSTREAM_HOST (entitled secops-content.forticloud.com)
+#   * no FDN cert        -> plain HTTPS to UPSTREAM_HOST (e.g. another mirror, or the
+#                          public repo for the connector bundles it carries there)
+# Both require UPSTREAM_HOST set; otherwise a miss simply 404s (Option A, local-only).
+#
+# `UPSTREAM_TLS_VERIFY=0` skips upstream cert verification — use ONLY for a
+# self-signed upstream you control (mirror-of-a-mirror); the public Fortinet
+# host and secops-content both present valid CA certs, so leave verify ON.
 UPSTREAM_BLOCK=""
 MISS_HANDLER="=404"
-if [[ "$UPSTREAM_PROXY" == "1" && -n "$UPSTREAM_HOST" && -f "$FDN_CERT" && -f "$FDN_KEY" ]]; then
-  echo "    upstream proxy: https://$UPSTREAM_HOST (FDN client cert present)"
-  MISS_HANDLER="@upstream"
-  UPSTREAM_BLOCK=$(cat <<NGINX
+if [[ "$UPSTREAM_PROXY" == "1" && -n "$UPSTREAM_HOST" ]]; then
+  if [[ -f "$FDN_CERT" && -f "$FDN_KEY" ]]; then
+    echo "    /content-hub/ upstream: https://$UPSTREAM_HOST (FDN mTLS client cert)"
+    UPSTREAM_BLOCK=$(cat <<NGINX
     location @upstream {
         proxy_pass https://${UPSTREAM_HOST};
         proxy_ssl_certificate     ${FDN_CERT};
@@ -117,8 +143,94 @@ if [[ "$UPSTREAM_PROXY" == "1" && -n "$UPSTREAM_HOST" && -f "$FDN_CERT" && -f "$
     }
 NGINX
 )
+  else
+    echo "    /content-hub/ upstream: https://$UPSTREAM_HOST (plain HTTPS, no FDN cert)"
+    UPSTREAM_BLOCK=$(cat <<NGINX
+    location @upstream {
+        proxy_pass https://${UPSTREAM_HOST};
+        proxy_ssl_server_name on;
+        proxy_ssl_name ${UPSTREAM_HOST};
+        proxy_set_header Host ${UPSTREAM_HOST};
+        proxy_set_header User-Agent "content-hub-mirror";
+        $([[ "$UPSTREAM_TLS_VERIFY" == "0" ]] && echo "        proxy_ssl_verify off;")
+    }
+NGINX
+)
+  fi
+  MISS_HANDLER="@upstream"
 else
-  echo "    upstream proxy: disabled (serving local content only)"
+  echo "    /content-hub/ upstream: disabled (serving local content only)"
+fi
+
+# Public-repo proxy block — widget .tgz, SP .zip, connector .tgz, and the
+# connector RPM yum repo. All live on the open PUBLIC_FORTINET_HOST (no FDN
+# client cert needed). Each is a pure reverse-proxy: a miss through one of
+# these is a real 404 from the public host, surfaced as-is. Set PUBLIC_PROXY=0
+# to disable all of them (404 anything we don't host locally).
+PUBLIC_BLOCK=""
+if [[ "$PUBLIC_PROXY" == "1" && -n "$PUBLIC_FORTINET_HOST" ]]; then
+  echo "    public-repo proxy: https://$PUBLIC_FORTINET_HOST (widget/SP/connector-tgz + connector RPM)"
+  # nginx proxy_ssl_verify defaults to ON; the public Fortinet host presents a
+  # valid CA cert, so we leave verification on. To proxy to a self-signed
+  # mirror-of-a-mirror, point PUBLIC_FORTINET_HOST at it and add
+  # `proxy_ssl_verify off;` to each block below.
+  PUBLIC_BLOCK=$(cat <<NGINX
+
+    # Widget .tgz (current path) + info.json — what pyfsr.repo.download_widget
+    # and the Content Hub widget install pull from.
+    location /fsr-widgets/ {
+        proxy_pass https://${PUBLIC_FORTINET_HOST}/fsr-widgets/;
+        proxy_ssl_server_name on;
+        proxy_ssl_name ${PUBLIC_FORTINET_HOST};
+        proxy_set_header Host ${PUBLIC_FORTINET_HOST};
+        proxy_set_header User-Agent "content-hub-mirror";
+    }
+
+    # Widget .tgz (older 7.x path) — kept for older widget versions that only
+    # live here, not under /fsr-widgets/.
+    location /widgets/ {
+        proxy_pass https://${PUBLIC_FORTINET_HOST}/widgets/;
+        proxy_ssl_server_name on;
+        proxy_ssl_name ${PUBLIC_FORTINET_HOST};
+        proxy_set_header Host ${PUBLIC_FORTINET_HOST};
+        proxy_set_header User-Agent "content-hub-mirror";
+    }
+
+    # Next-gen widget paths (alternate names the public repo also serves).
+    location /xf-widgets/ {
+        proxy_pass https://${PUBLIC_FORTINET_HOST}/xf-widgets/;
+        proxy_ssl_server_name on;
+        proxy_ssl_name ${PUBLIC_FORTINET_HOST};
+        proxy_set_header Host ${PUBLIC_FORTINET_HOST};
+        proxy_set_header User-Agent "content-hub-mirror";
+    }
+
+    # Solution-pack .zip + info.json — the public repo's SP layout (different
+    # from the /content-hub/<name>-<ver>/<build>/ convention the appliance's
+    # OFFLINEREPO sync uses; both exist on the public host). pyfsr.repo and
+    # any direct-URL SP download go through here.
+    location /xf/solutions/solutionpacks/ {
+        proxy_pass https://${PUBLIC_FORTINET_HOST}/xf/solutions/solutionpacks/;
+        proxy_ssl_server_name on;
+        proxy_ssl_name ${PUBLIC_FORTINET_HOST};
+        proxy_set_header Host ${PUBLIC_FORTINET_HOST};
+        proxy_set_header User-Agent "content-hub-mirror";
+    }
+
+    # Connector .tgz (next-gen /xf/solutions/ layout) — the public repo's
+    # non-RPM connector distribution path. pyfsr.repo.download_connector hits
+    # this; the RPM path (/connectors/x86_64/) is wired separately below.
+    location /xf/solutions/connectors/ {
+        proxy_pass https://${PUBLIC_FORTINET_HOST}/xf/solutions/connectors/;
+        proxy_ssl_server_name on;
+        proxy_ssl_name ${PUBLIC_FORTINET_HOST};
+        proxy_set_header Host ${PUBLIC_FORTINET_HOST};
+        proxy_set_header User-Agent "content-hub-mirror";
+    }
+NGINX
+)
+else
+  echo "    public-repo proxy: disabled (serving local content only)"
 fi
 
 # Connector-repo blocks (Option C). The local override repo is served whenever a
@@ -153,7 +265,7 @@ NGINX
 )
 fi
 if [[ "$CONNECTORS_PROXY" == "1" ]]; then
-  echo "    connector proxy: https://${CONNECTORS_UPSTREAM}${CONNECTORS_UPSTREAM_PATH} (long tail)"
+  echo "    connector RPM proxy: https://${CONNECTORS_UPSTREAM}${CONNECTORS_UPSTREAM_PATH} (long tail)"
   CONNECTORS_BLOCK+=$(cat <<NGINX
 
     location /connectors/ {
@@ -197,8 +309,8 @@ server {
     }
 
     location = /healthz { return 200 "ok\n"; default_type text/plain; }
-
 ${UPSTREAM_BLOCK}
+${PUBLIC_BLOCK}
 ${CONNECTORS_BLOCK}
 }
 NGINX

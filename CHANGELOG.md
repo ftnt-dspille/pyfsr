@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Content Hub mirror now proxies what it doesn't host — widget `.tgz`, SP
+  `.zip`, connector `.tgz` long tails via the public Fortinet repo (no FDN
+  cert needed).** `deploy/content-hub-mirror/entrypoint.sh` reverse-proxies
+  `/fsr-widgets/`, `/widgets/`, `/xf-widgets/`, `/xf/solutions/solutionpacks/`,
+  and `/xf/solutions/connectors/` to `repo.fortisoar.fortinet.com` (open HTTPS).
+  The `/content-hub/<name>-<ver>/...` upstream proxy also now works **without**
+  the FDN cert — plain HTTPS to a no-cert upstream (the public repo, or another
+  mirror). New env vars `PUBLIC_PROXY` (default 1), `PUBLIC_FORTINET_HOST`,
+  `UPSTREAM_TLS_VERIFY`; `CONNECTORS_PROXY` now defaults to follow `PUBLIC_PROXY`.
+  A snapshot catalog + this proxy get "both Fortinet's store and mine" with no
+  FDN cert on the mirror at all. Verified locally by the new
+  `smoke-test-proxy.sh` against the live public repo (no appliance, no cert).
+- **`setup-appliance.sh` now installs AND verifies TLS trust.** The 2026-07-13
+  live run noted the content-hub sync skipped TLS verify (so a missing trust
+  was invisible until a SP install failed with a misleading "network
+  connection" error). The rewrite closes that: the mirror's cert is installed
+  into the OS trust store, then **verified** with a real `openssl s_client`
+  handshake *before* anything else is touched (hard-fail on a bad install with
+  the actual cause, not the runtime symptom). A post-sync verified HTTPS GET
+  of the catalog + one per-item `info.json` gates success — the exact code path
+  the SP install endpoint uses. New flags: `--cert-file <path>` (trust a
+  provided cert), `--check` (read-only verification of trust + env + connector
+  repo, re-runnable any time), `--insecure` (skip TLS checks for a quick
+  reachability probe), `--no-verify`.
+
 ## [0.11.1] - 2026-07-18
 
 ### Added
