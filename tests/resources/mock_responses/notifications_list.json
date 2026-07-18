@@ -1,0 +1,39 @@
+{
+    "@context": "/rule/api/system-notification/notifications/context/",
+    "hydra:nextPage": null,
+    "hydra:previousPage": null,
+    "hydra:totalItems": 2,
+    "hydra:itemsPerPage": 2,
+    "hydra:firstPage": "/rule/api/system-notification/notifications/?%24limit=5",
+    "hydra:lastPage": "/rule/api/system-notification/notifications/?%24limit=5&offset=63880",
+    "hydra:member": [
+        {
+            "uuid": "7f7f96ca-acb1-4adf-82e2-f57ee0bcd420",
+            "content": "<p>A task, Revoke active sessions for compromised account, has been assigned to you!</p>\n<p></p>\n<p><a href=\"modules/tasks/0fca18d8-d5ef-4c68-8e79-fde919a5cc99\">View Task</a></p>",
+            "footer": [],
+            "entity_type": "tasks",
+            "event_type": "create",
+            "entity_id": "0fca18d8-d5ef-4c68-8e79-fde919a5cc99",
+            "read": false,
+            "dismissible": true,
+            "created_on": "2026-07-18T12:27:16.775290Z",
+            "roles": [],
+            "user": "3451141c-bac6-467c-8d72-85e0fab569ce",
+            "teams": []
+        },
+        {
+            "uuid": "7d7b1ddf-e21f-4ec1-93a6-f2f4381c562b",
+            "content": "<p>A task, Validate finding with second analyst, has been assigned to you!</p>\n<p></p>\n<p><a href=\"modules/tasks/420a2e6c-eb14-494e-9e6d-9dbcbd504cbb\">View Task</a></p>",
+            "footer": [],
+            "entity_type": "tasks",
+            "event_type": "create",
+            "entity_id": "420a2e6c-eb14-494e-9e6d-9dbcbd504cbb",
+            "read": false,
+            "dismissible": true,
+            "created_on": "2026-07-18T12:26:55.694226Z",
+            "roles": [],
+            "user": "3451141c-bac6-467c-8d72-85e0fab569ce",
+            "teams": []
+        }
+    ]
+}

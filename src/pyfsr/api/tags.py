@@ -55,6 +55,18 @@ class TagsAPI(BaseAPI):
 
         Tolerates both wire shapes: members as bare name strings (seen on 7.6.x
         demo boxes) or as dicts carrying the name in ``uuid``.
+
+        Doctest:
+
+            >>> from pyfsr._testing import demo_client
+            >>> client = demo_client()
+            >>> tags = client.tags.list()
+            >>> len(tags)
+            3
+            >>> tags[0]
+            '2022 Annual Report'
+            >>> tags[1]
+            '3CX Supply Chain Attack'
         """
         params: dict[str, object] = {"$export": "true", "$limit": limit}
         if prefix:

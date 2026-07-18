@@ -1,0 +1,11 @@
+{
+    "@context": "/api/3/contexts/Router",
+    "@id": "/api/3/routers",
+    "@type": "hydra:Collection",
+    "hydra:member": [],
+    "hydra:totalItems": 0,
+    "hydra:view": {
+        "@id": "/api/3/routers?%24limit=20",
+        "@type": "hydra:PartialCollectionView"
+    }
+}

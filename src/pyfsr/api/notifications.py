@@ -72,6 +72,16 @@ class NotificationsAPI(BaseAPI):
         Example:
             >>> client.notifications.list(read=False, entity_type="comments")
             >>> client.notifications.list(entity_type=["approvals", "manualinput"])
+
+        Doctest:
+
+            >>> from pyfsr._testing import demo_client
+            >>> client = demo_client()
+            >>> notifications = client.notifications.list(limit=10)
+            >>> len(notifications)
+            2
+            >>> notifications[0].entity_type
+            'tasks'
         """
         params: dict[str, Any] = {"format": "json"}
         if read is not None:

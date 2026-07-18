@@ -314,6 +314,16 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             "/api/integration/connectors/agents/cyops_utilities/3.7.1/",
             cap.AGENT_CONNECTOR_INSTALL_STATUS_RESPONSE,
         ),
+        # RolesAPI, TeamsAPI, UsersAPI, TagsAPI, CommentsAPI, ReportingAPI, RoutersAPI, RulesAPI, NotificationsAPI.
+        _entry("GET", "/api/3/roles", cap.ROLES_LIST_RESPONSE),
+        _entry("GET", "/api/3/teams", cap.TEAMS_LIST_RESPONSE),
+        _entry("GET", "/api/3/people", cap.PEOPLE_LIST_RESPONSE),
+        _entry("GET", "/api/3/tags", cap.TAGS_LIST_RESPONSE),
+        _entry("GET", "/api/3/comments", cap.COMMENTS_LIST_RESPONSE),
+        _entry("GET", "/api/3/reporting", cap.REPORTS_LIST_RESPONSE),
+        _entry("GET", "/api/3/routers", cap.ROUTERS_LIST_RESPONSE),
+        _entry("GET", "/api/3/preprocessing_rules", cap.PREPROCESSING_RULES_RESPONSE),
+        _entry("POST", "/api/rule/api/system-notification/notifications/", cap.NOTIFICATIONS_LIST_RESPONSE),
     ]
 )
 
