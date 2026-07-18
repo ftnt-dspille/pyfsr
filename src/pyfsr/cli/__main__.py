@@ -32,6 +32,11 @@ from .appliance.transport import Transport, TransportError, make_transport
 
 def _add_connection_args(p: argparse.ArgumentParser) -> None:
     g = p.add_argument_group("connection")
+    g.add_argument(
+        "--instance",
+        help="named appliance profile from ~/.pyfsr/instances.toml "
+        "([instances.<alias>.appliance] subtable); overrides --host/--user/--password/--key",
+    )
     g.add_argument("--host", help="appliance host (SSH); defaults to local if on-box")
     g.add_argument("--user", default="csadmin", help="SSH user (default: csadmin)")
     g.add_argument("--password", help="SSH/sudo password (or PYFSR_APPLIANCE_PASSWORD)")
@@ -56,6 +61,13 @@ def _add_target_args(p: argparse.ArgumentParser) -> None:
 
 
 def _make_transport(args: argparse.Namespace) -> Transport:
+    instance = getattr(args, "instance", None)
+    if instance:
+        # Named profile from ~/.pyfsr/instances.toml — the SSH counterpart of the
+        # MCP server's --instance. Takes precedence over --host/--user/--password.
+        from ..instances import InstanceRegistry
+
+        return InstanceRegistry.load().transport(instance)
     return make_transport(
         host=args.host,
         user=args.user,

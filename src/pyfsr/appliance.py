@@ -341,7 +341,11 @@ class Appliance:
     arbitrary shell commands).
 
     Connection args fall back to ``PYFSR_APPLIANCE_HOST`` / ``_USER`` / ``_PASSWORD``
-    when omitted.
+    when omitted. Pass ``instance="<alias>"`` to resolve a named SSH profile from
+    ``~/.pyfsr/instances.toml`` (the same file
+    :class:`~pyfsr.instances.InstanceRegistry` uses for the REST client) — this
+    takes precedence over the explicit host/user/password kwargs and is the SDK
+    counterpart of ``pyfsr appliance --instance <alias>``.
 
     .. note::
 
@@ -404,10 +408,20 @@ class Appliance:
         key_path: str | None = None,
         sudo_password: str | None = None,
         insecure_skip_host_key_check: bool = False,
+        instance: str | None = None,
         _facts: Facts | None = None,
     ) -> None:
         if _facts is not None:
             self._facts = _facts
+        elif instance is not None:
+            # Named SSH profile from ~/.pyfsr/instances.toml — the SDK counterpart
+            # of `pyfsr appliance --instance <alias>`. Takes precedence over the
+            # explicit host/user/password kwargs. Requires an
+            # [instances.<alias>.appliance] subtable.
+            from .instances import InstanceRegistry
+
+            transport = InstanceRegistry.load().transport(instance)
+            self._facts = Facts(transport)
         else:
             transport = make_transport(
                 host=host,
