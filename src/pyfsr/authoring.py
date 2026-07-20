@@ -31,6 +31,7 @@ import os
 import shutil
 import sqlite3
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
@@ -107,7 +108,7 @@ class PlaybooksExtraNotInstalled(ImportError):
         self.original = original
 
 
-def _load_compiler():
+def _load_compiler() -> tuple[Any, Any]:
     """Import the fsr_playbooks compiler, translating a missing dep to a clear error."""
     try:
         from fsr_playbooks import compile_yaml
@@ -117,7 +118,7 @@ def _load_compiler():
     return compile_yaml, default_db_path
 
 
-def _load_decompiler():
+def _load_decompiler() -> Any:
     """Import the fsr_playbooks decompiler (playbook JSON -> authored YAML)."""
     try:
         from fsr_playbooks.compiler.decompiler import decompile_to_yaml
@@ -557,7 +558,7 @@ def warm_catalog(
     return summary
 
 
-def _flatten_op_params(params: Any):
+def _flatten_op_params(params: Any) -> Iterator[tuple[dict[str, Any], str | None, str | None]]:
     """Yield ``(param, parent_param_name, condition_value)`` for every operation
     param, descending into ``onchange`` conditional sub-params.
 
@@ -573,7 +574,9 @@ def _flatten_op_params(params: Any):
     ``(param, None, None)``. Params lacking ``.get`` or a ``name`` are skipped.
     """
 
-    def _walk(items: Any, parent: str | None, cond: str | None):
+    def _walk(
+        items: Any, parent: str | None, cond: str | None
+    ) -> Iterator[tuple[dict[str, Any], str | None, str | None]]:
         for p in items or []:
             if not hasattr(p, "get") or not p.get("name"):
                 continue
@@ -815,7 +818,7 @@ def _resolve_catalog(client: _AuthoringClient | None, db_path: str | Path | None
     return default_db_path()
 
 
-def _load_verify():
+def _load_verify() -> tuple[Any, Any]:
     """Import the fsr_playbooks verify gate + its check-group catalog."""
     try:
         from fsr_playbooks import CHECK_GROUPS, verify

@@ -379,3 +379,29 @@ def test_compute_overlap_preserves_other_fields():
     result = compute_overlap(runs)
     assert result.max_concurrent == 1
     assert result.run_count == 1
+
+
+def test_compute_overlap_malformed_end_timestamp_treated_as_ongoing():
+    # A non-None but unparseable endDate must NOT crash the timeline build.
+    # Pre-fix this appended (None, -1, ...) into the events list and then
+    # crashed on event_time.isoformat() during the sweep. Post-fix the run
+    # is treated as ongoing (gets an implicit end at max_time + 1s).
+    runs = [
+        {
+            "startDate": "2026-06-08T12:00:00Z",
+            "endDate": "not-a-timestamp",
+        },
+        {
+            "startDate": "2026-06-08T12:01:00Z",
+            "endDate": "2026-06-08T12:02:00Z",
+        },
+    ]
+    result = compute_overlap(runs)
+    # Both runs have valid starts; the malformed-end run is treated as ongoing
+    # (extends to max_time + 1s), so it overlaps the second run's window.
+    assert result.run_count == 2
+    assert result.max_concurrent == 2
+    # No event_time.isoformat() crash — every event has a real time string.
+    for e in result.events:
+        assert isinstance(e["time"], str)
+        datetime.fromisoformat(e["time"])  # parseable

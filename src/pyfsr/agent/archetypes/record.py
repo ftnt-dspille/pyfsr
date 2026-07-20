@@ -4,10 +4,14 @@ An **archetype** is the reusable shape of an operational use case (reconcile-and
 ingest-enrich-notify, ...): the module schema it needs, the connectors + operations it uses,
 and a playbook skeleton, plus the ``{{param}}`` slots a router fills to instantiate it.
 
-This module holds only the record types -- pure stdlib dataclasses (no pydantic, no I/O),
-mirroring :class:`pyfsr.authoring.CompiledPlaybook`'s style so ``archetypes`` stays core-pyfsr
+This module holds only the record types -- pure stdlib dataclasses (no I/O), mirroring
+:class:`pyfsr.authoring.CompiledPlaybook`'s style so ``archetypes`` stays core-pyfsr
 with no new dependencies. Records are JSON-serializable so :class:`~pyfsr.agent.archetypes.store.ArchetypeStore`
-can persist them as a blob.
+can persist them as a blob. (Pydantic is a hard dep of pyfsr as of 2026-07-20, but
+these records deliberately stay stdlib dataclasses: they round-trip through
+``asdict()``/``from_dict()``/JSON for SQLite storage with manual field-by-field
+reconstruction in every ``from_dict``, so a pydantic conversion would be cosmetic
+churn for no validation gain. Skip unless archetypes grow validation needs.)
 
 A record produced by the harvester (:mod:`pyfsr.agent.archetypes.harvest`) is a **draft**:
 ``when_to_use`` is empty and ``parameters`` is unset -- an operator (or agent) curates those
