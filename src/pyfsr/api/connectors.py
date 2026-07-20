@@ -64,6 +64,7 @@ from ..models._integration import (
     InstallJobStatus,
     IntegrationListEnvelope,
     Operation,
+    OperationParam,
 )
 from ..pagination import extract_members
 from ._solutionpacks import upload_solutionpack
@@ -851,6 +852,40 @@ class ConnectorsAPI(BaseAPI):
         """
         defn = self.definition(connector, version=version)
         return defn.operations
+
+    def action_ui_schema(
+        self,
+        connector: str,
+        operation: str,
+        *,
+        version: str | None = None,
+        required_only: bool = False,
+        selections: dict[str, Any] | None = None,
+    ) -> list[OperationParam]:
+        """The input params a UI/agent must render to stage one connector action.
+
+        Resolves ``connector``'s definition, finds ``operation`` by its api name,
+        and returns its :meth:`~pyfsr.models._integration.Operation.ui_params` —
+        the visible params, required-first, deduped across conditional groups,
+        each carrying its ``type``/``title``/``required`` and (for a ``select``)
+        its :meth:`~pyfsr.models._integration.OperationParam.select_options`.
+
+        This is the "connector action UI schema" widget and tooling authors were
+        re-deriving by hand from the raw definition.
+
+        Pass ``selections`` (a ``{param_name: chosen_value}`` map of what the
+        user has picked so far) to also include the sub-params those choices
+        reveal via each ``select``'s ``onchange`` map — so you render only the
+        fields needed for the current state. Without it, only the base form is
+        returned. Pass ``required_only=True`` for just the required inputs. See
+        :meth:`~pyfsr.models._integration.Operation.ui_params` for the reveal
+        semantics. Raises :class:`ValueError` if the operation is not found on
+        the connector.
+        """
+        for op in self.operations(connector, version=version):
+            if op.operation == operation:
+                return op.ui_params(required_only=required_only, selections=selections)
+        raise ValueError(f"connector {connector!r} has no operation {operation!r}")
 
     def config_schema(self, connector: str, *, version: str | None = None) -> list[dict[str, Any]]:
         """Return a connector's configuration field schema (its ``config_schema``).

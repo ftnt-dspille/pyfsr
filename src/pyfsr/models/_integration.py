@@ -180,6 +180,21 @@ class InstalledConnector(ApiResult):
 # ---------------------------------------------------------------------------
 
 
+class ParamOption(ApiResult):
+    """One choice of a ``select``/``multiselect`` connector-operation parameter.
+
+    Normalized from the two wire shapes an operation's ``options[]`` uses (see
+    :meth:`OperationParam.select_options`): a plain string ``"Basic"`` becomes
+    ``ParamOption(value="Basic", title="Basic")``; a ``{"value": ..., "title":
+    ...}`` dict maps straight across (either key may be absent — the other
+    fills in). ``value`` is what you send as the param; ``title`` is the label a
+    UI shows.
+    """
+
+    value: Any = None
+    title: str | None = None
+
+
 class OperationParam(ApiResult):
     """One input parameter of a connector operation, from a connector definition.
 
@@ -217,6 +232,13 @@ class OperationParam(ApiResult):
     # 1-element list ``['CN=user-name,...']``; un-coerced it's a list a SQLite
     # write can't bind, truncating the whole warm_catalog connector section).
     onchange: dict[str, list[OperationParam]] = Field(default_factory=dict)
+    # ``select``/``multiselect`` params carry their choices here. Kept
+    # ``list[Any]`` because the wire mixes plain strings and ``{value,title}``
+    # dicts within one list; :meth:`select_options` normalizes both to
+    # :class:`ParamOption`. Previously undeclared, so choices fell into
+    # ``__pydantic_extra__`` — a UI/agent staging the call couldn't reach them
+    # without re-parsing the raw definition.
+    options: list[Any] = Field(default_factory=list)
 
     @field_validator("title", "description", "tooltip", "placeholder", mode="before")
     @classmethod
@@ -225,6 +247,27 @@ class OperationParam(ApiResult):
         :class:`ConfigSchemaField`). See that function's docstring for the
         live-grounded coercion rules."""
         return _coerce_display_text(v)
+
+    def select_options(self) -> list[ParamOption]:
+        """The param's choices as normalized :class:`ParamOption`\\ s.
+
+        Empty for a non-``select`` param. Tolerates both wire shapes: a bare
+        string ``"Basic"`` yields ``ParamOption(value="Basic", title="Basic")``;
+        a ``{"value","title"}`` dict maps across, defaulting a missing ``title``
+        to ``str(value)`` (and a missing ``value`` to ``title``) so a caller
+        always has both a send-value and a label.
+        """
+        out: list[ParamOption] = []
+        for opt in self.options:
+            if isinstance(opt, dict):
+                value = opt.get("value", opt.get("title"))
+                title = opt.get("title")
+                if title is None and value is not None:
+                    title = str(value)
+                out.append(ParamOption(value=value, title=title))
+            else:
+                out.append(ParamOption(value=opt, title=str(opt)))
+        return out
 
 
 # Self-recursive ``onchange`` (dict[str, list[OperationParam]]) needs the
@@ -253,6 +296,93 @@ class Operation(ApiResult):
     enabled: bool = True
     parameters: list[OperationParam] = Field(default_factory=list)
     output_schema: Any = None
+
+    @field_validator("parameters", mode="before")
+    @classmethod
+    def _coerce_parameters(cls, v: Any) -> Any:
+        """Tolerate a param-less operation serialized as ``{}`` instead of ``[]``.
+
+        Live-grounded on box 206 (8.0.0): ``fortinet-fortiai-proxy`` ships an
+        operation whose ``parameters`` is an empty **dict**, not a list — enough
+        to fail the whole :class:`ConnectorDefinition` parse (so ``operations()``
+        raised and the connector dropped out of a warmed catalog entirely).
+        FortiSOAR treats an empty ``{}`` as "no parameters"; coerce it to ``[]``
+        so one sloppy connector can't sink the definition. A non-empty dict is
+        left as-is for pydantic to reject loudly (it's genuinely malformed)."""
+        if isinstance(v, dict) and not v:
+            return []
+        return v
+
+    def ui_params(
+        self,
+        *,
+        required_only: bool = False,
+        selections: dict[str, Any] | None = None,
+    ) -> list[OperationParam]:
+        """The params a UI/agent must render to stage this action, ordered.
+
+        Returns the operation's :attr:`parameters` filtered to the **visible**
+        ones (hidden params are platform-managed, not author-facing), ordered
+        **required-first** then by declared order, and **deduped by name** — a
+        param that appears in several conditional ``onchange`` groups (e.g.
+        ``block_ip``'s ``ip`` under each ``method`` option) collapses to its
+        first occurrence, so the list reads as one form, not a repeated field.
+
+        This is the schema every action-staging caller was re-deriving by hand
+        (the fsr-playbook-framework MCP discovery tool's ``_param_sig`` /
+        ``_required_params``). Each returned :class:`OperationParam` still
+        carries its ``type``/``title``/``required`` and — for a ``select`` — its
+        :meth:`~OperationParam.select_options`, so the caller picks valid param
+        names and valid choice values straight from the definition.
+
+        **Conditional reveal (``selections``).** A ``select`` param can gate
+        further inputs via its :attr:`~OperationParam.onchange` map (option value
+        → the sub-params that become active when it is chosen). By default those
+        sub-params are **not** returned — the base form only. Pass ``selections``
+        (a ``{param_name: chosen_value}`` map of what the user has picked so far)
+        to also include the sub-params those choices reveal, so you render only
+        the fields actually needed for the current state. On box 206, choosing
+        ``smtp/send_email_new``'s ``type`` reveals ``to``/``cc``/``bcc``::
+
+            op.ui_params()                              # base params only
+            op.ui_params(selections={"type": "Team"})   # base + to, cc, bcc
+
+        Reveal is **recursive** (a revealed sub-param may itself be a gating
+        ``select``) and matches a selection against the ``onchange`` keys by the
+        value or its string form. Revealed params fold into the same
+        visible/required-first/deduped result. Unrecognized selections (unknown
+        param, or a value with no matching branch) are ignored.
+
+        Pass ``required_only=True`` to keep just the required params.
+        """
+        selections = selections or {}
+        seen: set[str] = set()
+        collected: list[OperationParam] = []
+
+        def visit(params: list[OperationParam]) -> None:
+            for param in params:
+                if not param.visible:
+                    continue
+                key = param.name or ""
+                if key not in seen:
+                    seen.add(key)
+                    collected.append(param)
+                # Conditional reveal: descend into the branch the caller selected.
+                if param.onchange and param.name in selections:
+                    chosen = selections[param.name]
+                    revealed = param.onchange.get(chosen)
+                    if revealed is None:
+                        revealed = param.onchange.get(str(chosen))
+                    if revealed:
+                        visit(revealed)
+
+        visit(self.parameters)
+        # Stable sort keeps collection order within each required/optional group,
+        # so a revealed param stays just after the choice that surfaced it.
+        ordered = sorted(collected, key=lambda p: not p.required)
+        if required_only:
+            ordered = [p for p in ordered if p.required]
+        return ordered
 
 
 class ConnectorDefinition(ApiResult):

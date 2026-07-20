@@ -163,6 +163,13 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
    :show-inheritance:
 ```
 
+```{eval-rst}
+.. autoclass:: pyfsr.models.ParamOption
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
 ## Playbooks & runs
 
 ```{eval-rst}

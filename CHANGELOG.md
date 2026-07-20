@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Connector action UI schema — `client.connectors.action_ui_schema(connector,
+  operation)`** returns the input params a UI or agent must render to stage one
+  connector action: the operation's **visible** params, ordered **required-first**
+  then declared order, **deduped by name** across conditional `onchange` groups
+  (so a param repeated under each `method` option reads as one form field). Each
+  returned `OperationParam` now models its `select` choices (new `options` field
+  + `OperationParam.select_options()` normalizing both wire shapes — plain string
+  and `{value,title}` dict — to the new typed `ParamOption`), and `Operation`
+  grows an `ui_params(required_only=…)` method. Closes the last new gap in the
+  agent-friction sweep (#8): the fsr-playbook-framework MCP discovery tool's
+  hand-rolled `_param_sig`/`_required_params` now has a first-class pyfsr home,
+  so widget/tooling authors stop re-deriving it from the raw definition.
+  **Conditional reveal:** pass `selections={param: value}` (what the user has
+  picked so far) and the schema also includes the sub-params those choices
+  reveal via each `select`'s `onchange` map — recursively, deduped, still
+  required-first — so you render only the fields the current state needs. Without
+  it, only the base form is returned. Live-verified on box 206 (8.0.0-6034): a
+  full sweep of all 21 configured connectors ran clean — 280 operations, 179
+  select params, 585 options normalized, zero errors; and `smtp/send_email_new`'s
+  `type` selection reveals `to`/`cc`/`bcc` (with 19 recursive-reveal ops
+  confirmed across the box).
+
+### Fixed
+- **A connector operation whose `parameters` is an empty `{}` (dict) no longer
+  sinks the whole `definition()`/`operations()` parse.** Surfaced live on box
+  206: `fortinet-fortiai-proxy`'s `get_token_balance_info` ships `parameters:
+  {}` (a dict, not a list), which failed the `Operation` model's `list[...]`
+  validation and raised for the *entire connector* — dropping all 5 of its
+  operations (and the connector) out of a warmed catalog. `Operation` now
+  coerces an empty `{}` to `[]` (FortiSOAR's own "no parameters" meaning); a
+  non-empty malformed dict is still rejected loudly.
+
 - **Content Hub mirror now proxies what it doesn't host — widget `.tgz`, SP
   `.zip`, connector `.tgz` long tails via the public Fortinet repo (no FDN
   cert needed).** `deploy/content-hub-mirror/entrypoint.sh` reverse-proxies
