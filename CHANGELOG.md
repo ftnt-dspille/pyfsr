@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-20
+
 ### Added
 - **Connector action UI schema — `client.connectors.action_ui_schema(connector,
   operation)`** returns the input params a UI or agent must render to stage one
