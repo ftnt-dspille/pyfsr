@@ -128,13 +128,26 @@ exclude = [
 ]
 
 [tool.mypy]
-# Scoped to the CLI for now: it's the most user-facing surface and is already
-# ~83% annotated, so a strict gate here is enforceable without first cleaning
-# the whole codebase. `follow_imports = silent` resolves types from the rest of
-# pyfsr (and third-party) for accuracy but does NOT report errors outside the
-# CLI, keeping the gate focused. Widen `files` as other packages get typed.
+# Scoped to the CLI + the pydantic-converted modules: the CLI is the most
+# user-facing surface and was the first to be ~83% annotated; the pydantic
+# modules (config/instances/authoring/concurrency/playbook_lint/
+# playbook_match/playbook_library) were converted from dataclasses in the
+# 2026-07-20 pass-1/pass-2 sweep and cleaned to the same strict bar.
+# `follow_imports = silent` resolves types from the rest of pyfsr (and
+# third-party) for accuracy but does NOT report errors outside the gate,
+# keeping it focused. Widen `files` as other packages get typed.
 python_version = "3.10"
-files = ["src/pyfsr/cli", "src/pyfsr/appliance.py"]
+files = [
+    "src/pyfsr/cli",
+    "src/pyfsr/appliance.py",
+    "src/pyfsr/config.py",
+    "src/pyfsr/instances.py",
+    "src/pyfsr/authoring.py",
+    "src/pyfsr/concurrency.py",
+    "src/pyfsr/playbook_lint.py",
+    "src/pyfsr/playbook_match.py",
+    "src/pyfsr/playbook_library.py",
+]
 follow_imports = "silent"
 ignore_missing_imports = true
 disallow_untyped_defs = true

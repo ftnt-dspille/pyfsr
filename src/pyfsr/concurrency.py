@@ -218,10 +218,15 @@ def compute_overlap(
             if max_time is None or start_dt > max_time:
                 max_time = start_dt
 
-        # Create end event (if the run actually ended)
-        if end_val is not None:
+        # Create end event (if the run actually ended AND we parsed the timestamp).
+        # Gate on end_dt, not end_val: a malformed end_val (non-None but unparseable)
+        # is already treated as "no end time" by the elif/else above and gets an
+        # implicit end at max_time; appending a None here would crash the later
+        # event_time.isoformat() call.
+        if end_dt is not None:
             events.append((end_dt, -1, f"-1 end {run_id}"))
-        # else: run is still ongoing, will get an implicit end at max_time
+        # else: run has no usable end time (absent or malformed), gets an
+        # implicit end at max_time via ongoing_runs_indices.
 
     if run_count == 0:
         raise ValueError("No runs with valid start timestamps found")
