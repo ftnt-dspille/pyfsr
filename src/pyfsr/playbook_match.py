@@ -29,8 +29,9 @@ Example::
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from .api.playbooks import STEP_TYPE_NAMES, TRIGGER_TYPE_NAMES
 
@@ -42,26 +43,26 @@ for _alias, _raw in TRIGGER_TYPE_NAMES.items():
     _TRIGGER_RAW_TO_FRIENDLY.setdefault(_raw, _alias)
 
 
-@dataclass(frozen=True)
-class StepInfo:
+class StepInfo(BaseModel):
     """One parsed playbook step (the fields structural predicates match on)."""
+
+    model_config = ConfigDict(frozen=True)
 
     name: str | None
     step_type_raw: str | None
     connector: str | None
     operation: str | None
-    arguments: dict[str, Any] = field(default_factory=dict)
+    arguments: dict[str, Any] = Field(default_factory=dict)
 
 
-@dataclass
-class ParsedPlaybook:
+class ParsedPlaybook(BaseModel):
     """A playbook definition reduced to the shape predicates evaluate against."""
 
     name: str | None
     uuid: str | None
     trigger_type: str | None
     steps: list[StepInfo]
-    raw: dict[str, Any] = field(default_factory=dict)
+    raw: dict[str, Any] = Field(default_factory=dict)
 
     def references(self) -> list[str]:
         """UUIDs of child playbooks this playbook references (reference steps).

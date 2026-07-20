@@ -28,15 +28,15 @@ Example::
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+from pydantic import BaseModel
 
 __all__ = ["compute_overlap", "ConcurrencyResult"]
 
 
-@dataclass
-class ConcurrencyResult:
+class ConcurrencyResult(BaseModel):
     """Result of a concurrency analysis.
 
     Attributes:
@@ -52,12 +52,12 @@ class ConcurrencyResult:
     run_count: int
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to a plain dict (compatible with ApiResult)."""
-        return {
-            "max_concurrent": self.max_concurrent,
-            "events": self.events,
-            "run_count": self.run_count,
-        }
+        """Convert to a plain dict (compatible with ApiResult).
+
+        Alias for :meth:`model_dump`, kept for back-compat with callers that
+        predate the pydantic conversion.
+        """
+        return self.model_dump()
 
 
 def _parse_timestamp(ts: Any) -> datetime | None:
