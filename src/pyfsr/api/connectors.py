@@ -865,10 +865,10 @@ class ConnectorsAPI(BaseAPI):
         """The input params a UI/agent must render to stage one connector action.
 
         Resolves ``connector``'s definition, finds ``operation`` by its api name,
-        and returns its :meth:`~pyfsr.models._integration.Operation.ui_params` —
+        and returns its :meth:`~pyfsr.models.Operation.ui_params` —
         the visible params, required-first, deduped across conditional groups,
         each carrying its ``type``/``title``/``required`` and (for a ``select``)
-        its :meth:`~pyfsr.models._integration.OperationParam.select_options`.
+        its :meth:`~pyfsr.models.OperationParam.select_options`.
 
         This is the "connector action UI schema" widget and tooling authors were
         re-deriving by hand from the raw definition.
@@ -878,7 +878,7 @@ class ConnectorsAPI(BaseAPI):
         reveal via each ``select``'s ``onchange`` map — so you render only the
         fields needed for the current state. Without it, only the base form is
         returned. Pass ``required_only=True`` for just the required inputs. See
-        :meth:`~pyfsr.models._integration.Operation.ui_params` for the reveal
+        :meth:`~pyfsr.models.Operation.ui_params` for the reveal
         semantics. Raises :class:`ValueError` if the operation is not found on
         the connector.
         """
