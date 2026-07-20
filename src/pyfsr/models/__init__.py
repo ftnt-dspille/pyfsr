@@ -64,6 +64,7 @@ from ._integration import (
     LogMessage,
     Operation,
     OperationParam,
+    ParamOption,
 )
 from ._modules_admin import (
     AttributeBulkAction,
@@ -225,6 +226,7 @@ __all__ = [
     "ConnectorDefinition",
     "Operation",
     "OperationParam",
+    "ParamOption",
     "ConfigValidationResult",
     "ConfigValidationError",
     "HealthcheckResult",

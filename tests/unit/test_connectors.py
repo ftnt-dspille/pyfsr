@@ -696,6 +696,161 @@ def test_operations_returns_operation_list():
     assert [o["operation"] for o in ops] == ["get_reputation_ip", "get_reputation_url"]
 
 
+# -- action UI schema (connector action UI for widget/tooling authors) ------
+# A block_ip-shaped op: a select param (options both plain + {value,title}),
+# a required text param declared AFTER the optional one, a hidden param, and
+# the same param name repeated across conditional groups (dedup).
+_UI_DEFINITION = {
+    "name": "fortigate-firewall",
+    "version": "1.0.0",
+    "config_schema": {},
+    "operations": [
+        {
+            "operation": "block_ip",
+            "title": "Block IP",
+            "parameters": [
+                {"name": "comment", "type": "text", "title": "Comment"},
+                {
+                    "name": "method",
+                    "type": "select",
+                    "title": "Method",
+                    "required": True,
+                    "options": ["Quarantine Based", {"value": "policy", "title": "Policy Based"}],
+                },
+                {"name": "ip", "type": "text", "title": "IP", "required": True},
+                {"name": "ip", "type": "text", "title": "IP", "required": True},
+                {"name": "internal_id", "type": "text", "title": "Internal", "visible": False},
+            ],
+        },
+    ],
+}
+
+
+def test_action_ui_schema_orders_required_first_dedupes_and_hides():
+    api, _ = _api(post_resp=_UI_DEFINITION)
+    params = api.action_ui_schema("fortigate-firewall", "block_ip", version="1.0.0")
+    # required-first (method, ip), then optional (comment); hidden dropped;
+    # duplicate `ip` collapsed to one entry.
+    assert [p.name for p in params] == ["method", "ip", "comment"]
+    assert "internal_id" not in [p.name for p in params]
+
+
+def test_action_ui_schema_select_options_normalized():
+    api, _ = _api(post_resp=_UI_DEFINITION)
+    params = api.action_ui_schema("fortigate-firewall", "block_ip", version="1.0.0")
+    method = next(p for p in params if p.name == "method")
+    choices = method.select_options()
+    assert [(o.value, o.title) for o in choices] == [
+        ("Quarantine Based", "Quarantine Based"),
+        ("policy", "Policy Based"),
+    ]
+
+
+def test_action_ui_schema_required_only():
+    api, _ = _api(post_resp=_UI_DEFINITION)
+    params = api.action_ui_schema("fortigate-firewall", "block_ip", version="1.0.0", required_only=True)
+    assert [p.name for p in params] == ["method", "ip"]
+
+
+def test_action_ui_schema_unknown_operation_raises():
+    api, _ = _api(post_resp=_UI_DEFINITION)
+    with pytest.raises(ValueError, match="no operation 'nope'"):
+        api.action_ui_schema("fortigate-firewall", "nope", version="1.0.0")
+
+
+# An op with a gating select (`type`) whose onchange reveals `to`/`cc`, and a
+# nested reveal: choosing `to`'s `Advanced` mode surfaces `filter`. Mirrors the
+# live smtp/send_email_new shape (type -> to/cc/bcc), plus one nesting level.
+_ONCHANGE_DEFINITION = {
+    "name": "smtp",
+    "version": "1.0.0",
+    "config_schema": {},
+    "operations": [
+        {
+            "operation": "send",
+            "title": "Send",
+            "parameters": [
+                {"name": "from", "type": "text", "title": "From", "required": True},
+                {
+                    "name": "type",
+                    "type": "select",
+                    "title": "Type",
+                    "required": True,
+                    "options": ["Team", "User"],
+                    "onchange": {
+                        "Team": [
+                            {"name": "to", "type": "text", "title": "To", "required": True},
+                            {"name": "cc", "type": "text", "title": "Cc"},
+                        ],
+                        "User": [
+                            {"name": "to", "type": "text", "title": "To", "required": True},
+                        ],
+                    },
+                },
+            ],
+        },
+    ],
+}
+
+
+def test_action_ui_schema_no_selections_returns_base_only():
+    api, _ = _api(post_resp=_ONCHANGE_DEFINITION)
+    params = api.action_ui_schema("smtp", "send", version="1.0.0")
+    # onchange sub-params are NOT surfaced without a selection.
+    assert [p.name for p in params] == ["from", "type"]
+
+
+def test_action_ui_schema_selection_reveals_subparams():
+    api, _ = _api(post_resp=_ONCHANGE_DEFINITION)
+    params = api.action_ui_schema("smtp", "send", version="1.0.0", selections={"type": "Team"})
+    names = [p.name for p in params]
+    # revealed to/cc join; required-first (from, type, to) then optional (cc).
+    assert names == ["from", "type", "to", "cc"]
+    assert [p.required for p in params] == [True, True, True, False]
+
+
+def test_action_ui_schema_selection_only_reveals_chosen_branch():
+    api, _ = _api(post_resp=_ONCHANGE_DEFINITION)
+    params = api.action_ui_schema("smtp", "send", version="1.0.0", selections={"type": "User"})
+    # "User" branch has only `to`, not `cc`.
+    assert [p.name for p in params] == ["from", "type", "to"]
+
+
+def test_action_ui_schema_unknown_selection_value_ignored():
+    api, _ = _api(post_resp=_ONCHANGE_DEFINITION)
+    params = api.action_ui_schema("smtp", "send", version="1.0.0", selections={"type": "Nope"})
+    assert [p.name for p in params] == ["from", "type"]
+
+
+def test_action_ui_schema_reveal_respects_required_only():
+    api, _ = _api(post_resp=_ONCHANGE_DEFINITION)
+    params = api.action_ui_schema("smtp", "send", version="1.0.0", selections={"type": "Team"}, required_only=True)
+    # cc (optional) drops; revealed-and-required `to` stays.
+    assert [p.name for p in params] == ["from", "type", "to"]
+
+
+def test_operation_tolerates_empty_dict_parameters():
+    # Live-grounded: fortinet-fortiai-proxy ships an op with ``parameters: {}``
+    # (a dict, not a list) — it must not sink the whole definition parse.
+    from pyfsr.models import Operation
+
+    defn = {
+        "name": "fortinet-fortiai-proxy",
+        "version": "1.0.0",
+        "config_schema": {},
+        "operations": [
+            {"operation": "ping", "title": "Ping", "parameters": {}},
+            {"operation": "act", "title": "Act", "parameters": [{"name": "x", "type": "text"}]},
+        ],
+    }
+    api, _ = _api(post_resp=defn)
+    ops = api.operations("fortinet-fortiai-proxy", version="1.0.0")
+    assert isinstance(ops[0], Operation)
+    assert ops[0].parameters == []  # {} coerced to []
+    assert api.action_ui_schema("fortinet-fortiai-proxy", "ping", version="1.0.0") == []
+    assert [p.name for p in api.action_ui_schema("fortinet-fortiai-proxy", "act", version="1.0.0")] == ["x"]
+
+
 def test_install_from_file_uploads_tgz(tmp_path):
     bundle = tmp_path / "hello-world-1.0.0.tgz"
     bundle.write_bytes(b"\x1f\x8b\x08fake-tgz")
