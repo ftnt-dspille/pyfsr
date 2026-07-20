@@ -16,7 +16,8 @@ with an output-text check rather than trusted to the return code alone.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+
+from pydantic import BaseModel
 
 from .transport import Transport
 
@@ -31,8 +32,7 @@ _SYNC_DONE = re.compile(r"sync.*(?:complete|success|finished)", re.IGNORECASE)
 _SYNC_FAIL = re.compile(r"(could not|unable to|failed|error|refused|timed? ?out|404|not found)", re.IGNORECASE)
 
 
-@dataclass
-class SyncResult:
+class SyncResult(BaseModel):
     """Outcome of a Content Hub sync.
 
     ``ok`` folds together the exit code and an output-text signal (``csadm``'s

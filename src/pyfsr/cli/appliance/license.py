@@ -10,7 +10,7 @@ first-class, gate-able check instead of a half-session mystery.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 from ._text import kv_pairs, to_int
 from .facts import _extract_uuid
@@ -21,8 +21,7 @@ from .transport import Transport, TransportError
 _DEVICE_UUID_FILE = "/home/csadmin/device_uuid"
 
 
-@dataclass
-class LicenseDetails:
+class LicenseDetails(BaseModel):
     """Parsed ``csadm license --show-details`` identity card.
 
     ``total_users`` / ``remaining_days`` are typed ints; ``fields`` keeps every raw
@@ -97,8 +96,7 @@ def device_uuid(transport: Transport) -> str:
     return uuid
 
 
-@dataclass
-class DriftReport:
+class DriftReport(BaseModel):
     """Result of comparing the install-time UUID against csadm's entitlement UUID."""
 
     file_uuid: str | None

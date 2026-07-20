@@ -8,7 +8,8 @@ through :func:`exec_write`, which refuses without an explicit confirmation.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+
+from pydantic import BaseModel
 
 from .facts import Facts
 
@@ -98,8 +99,7 @@ def indexes(
     return target, ["table", "index"], rows
 
 
-@dataclass
-class DataClassSize:
+class DataClassSize(BaseModel):
     """One ``csadm db --getsize`` data-class footprint, normalised to MB."""
 
     data_class: str
@@ -107,8 +107,7 @@ class DataClassSize:
     size_mb: float
 
 
-@dataclass
-class DatabaseInfo:
+class DatabaseInfo(BaseModel):
     """One Postgres database: name, ``pg_size_pretty`` size, and detected role."""
 
     name: str
@@ -213,8 +212,7 @@ def find_module_tables(facts: Facts, base_table: str) -> list[str]:
 _MODULE_MARKER_SUFFIXES = ("team", "actor")
 
 
-@dataclass
-class OrphanTable:
+class OrphanTable(BaseModel):
     """A physical table left behind by a deleted module (no metadata row backs it)."""
 
     table: str  # the physical table name present in pg_tables

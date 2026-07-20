@@ -37,6 +37,8 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any
 
+from pydantic import BaseModel
+
 from ..exceptions import FortiSOARException, PicklistResolutionError
 from ..projection import project, to_jsonable
 from .archetypes import map_use_case
@@ -485,8 +487,10 @@ def _h_map_use_case(client, *, use_case) -> Any:
 
 
 def _appliance_json(obj: Any) -> Any:
-    """Coerce an appliance-verb result (often a dataclass / list / tuple) to a
-    JSON-serializable value. ``asdict`` recurses into nested dataclasses."""
+    """Coerce an appliance-verb result (pydantic model / dataclass / list / tuple) to a
+    JSON-serializable value. ``model_dump``/``asdict`` recurse into nested records."""
+    if isinstance(obj, BaseModel):
+        return obj.model_dump()
     if is_dataclass(obj) and not isinstance(obj, type):
         return asdict(obj)
     if isinstance(obj, list):

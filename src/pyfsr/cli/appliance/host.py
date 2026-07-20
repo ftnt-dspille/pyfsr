@@ -12,7 +12,8 @@ re-implements lives here, tested once.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+
+from pydantic import BaseModel, Field
 
 from .transport import Transport, TransportError
 
@@ -25,8 +26,7 @@ DEFAULT_PROC_PATTERNS: dict[str, str] = {
 }
 
 
-@dataclass
-class MemInfo:
+class MemInfo(BaseModel):
     """Memory + swap, in MB (parsed from ``free -m``)."""
 
     total_mb: int
@@ -36,8 +36,7 @@ class MemInfo:
     swap_used_mb: int
 
 
-@dataclass
-class LoadAvg:
+class LoadAvg(BaseModel):
     """1/5/15-minute load averages (from ``/proc/loadavg``)."""
 
     load1: float
@@ -45,8 +44,7 @@ class LoadAvg:
     load15: float
 
 
-@dataclass
-class ProcRss:
+class ProcRss(BaseModel):
     """Aggregate resident memory for processes whose command line matches ``pattern``."""
 
     pattern: str
@@ -55,8 +53,7 @@ class ProcRss:
     peak_mb: float
 
 
-@dataclass
-class DiskUsage:
+class DiskUsage(BaseModel):
     """Filesystem usage for a path, in MB (from ``df -Pm``)."""
 
     path: str
@@ -66,13 +63,12 @@ class DiskUsage:
     use_pct: int
 
 
-@dataclass
-class HostSnapshot:
+class HostSnapshot(BaseModel):
     """One consistent sample of host resources (see :func:`snapshot`)."""
 
     mem: MemInfo
     load: LoadAvg
-    procs: dict[str, ProcRss] = field(default_factory=dict)
+    procs: dict[str, ProcRss] = Field(default_factory=dict)
     disk: DiskUsage | None = None
 
     def summary(self) -> str:
@@ -211,13 +207,13 @@ def _parse_meminfo(out: str) -> MemInfo:
             total, used, free = int(parts[1]), int(parts[2]), int(parts[3])
         elif parts and parts[0] == "Swap:" and len(parts) >= 3:
             swt, swu = int(parts[1]), int(parts[2])
-    return MemInfo(total, used, free, swt, swu)
+    return MemInfo(total_mb=total, used_mb=used, free_mb=free, swap_total_mb=swt, swap_used_mb=swu)
 
 
 def _parse_loadavg(out: str) -> LoadAvg:
     parts = out.split()
     vals = [float(p) for p in parts[:3]] if len(parts) >= 3 else [0.0, 0.0, 0.0]
-    return LoadAvg(*vals)
+    return LoadAvg(load1=vals[0], load5=vals[1], load15=vals[2])
 
 
 def _parse_process_rss(ps_out: str, pattern: str) -> ProcRss:
@@ -237,7 +233,7 @@ def _parse_process_rss(ps_out: str, pattern: str) -> ProcRss:
         total += rss_kb
         peak = max(peak, rss_kb)
         count += 1
-    return ProcRss(pattern, count, round(total / 1024, 1), round(peak / 1024, 1))
+    return ProcRss(pattern=pattern, count=count, sum_mb=round(total / 1024, 1), peak_mb=round(peak / 1024, 1))
 
 
 def _parse_disk(out: str, path: str | None) -> DiskUsage:
@@ -251,4 +247,4 @@ def _parse_disk(out: str, path: str | None) -> DiskUsage:
                 avail_mb=int(parts[3]),
                 use_pct=int(parts[4].rstrip("%")),
             )
-    return DiskUsage(path or "?", 0, 0, 0, 0)
+    return DiskUsage(path=path or "?", size_mb=0, used_mb=0, avail_mb=0, use_pct=0)

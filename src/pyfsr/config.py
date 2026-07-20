@@ -23,9 +23,10 @@ also carries SSH/e2e knobs that don't belong in the transport SDK).
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 from .client import FortiSOAR
 
@@ -65,8 +66,7 @@ def _flag(env: dict[str, str], name: str, default: str) -> bool:
     return env.get(name, default).strip().lower() not in _FALSEY
 
 
-@dataclass
-class EnvConfig:
+class EnvConfig(BaseModel):
     """Resolved client configuration (host, auth, transport knobs).
 
     Build it with :meth:`from_env`, then call :meth:`client` for a
@@ -82,6 +82,8 @@ class EnvConfig:
     >>> type(cfg.auth).__name__          # a lone key resolves to a str
     'str'
     """
+
+    model_config = ConfigDict(frozen=True)
 
     base_url: str
     auth: str | tuple[str, str]
@@ -200,7 +202,7 @@ class EnvConfig:
             timeout=int(timeout) if timeout is not None else 30,
         )
 
-    def client(self, **overrides) -> FortiSOAR:
+    def client(self, **overrides: Any) -> FortiSOAR:
         """Construct a :class:`~pyfsr.client.FortiSOAR` from this config.
 
         Any keyword in ``overrides`` is passed through to the client constructor,
@@ -212,7 +214,7 @@ class EnvConfig:
         ``auth`` parameter, so the env/config-file convenience path doesn't trip
         the ``auth`` deprecation warning.
         """
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "base_url": self.base_url,
             "verify_ssl": self.verify_ssl,
             "suppress_insecure_warnings": self.suppress_insecure_warnings,

@@ -795,13 +795,13 @@ def cmd_host_snapshot(args: argparse.Namespace) -> int:
 
 def cmd_host_mem(args: argparse.Namespace) -> int:
     m = host_cmds.meminfo(_make_transport(args))
-    _output.kv(vars(m), fmt=args.fmt)
+    _output.kv(m.model_dump(), fmt=args.fmt)
     return 0
 
 
 def cmd_host_rss(args: argparse.Namespace) -> int:
     p = host_cmds.process_rss(_make_transport(args), args.pattern)
-    _output.kv(vars(p), fmt=args.fmt)
+    _output.kv(p.model_dump(), fmt=args.fmt)
     return 0
 
 

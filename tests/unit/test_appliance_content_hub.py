@@ -31,7 +31,7 @@ class _RecordingTransport(ReplayTransport):
         # still record the call so tests can assert on argv/sudo
         self.commands.append((argv, env, sudo))
         if argv[:4] == ["csadm", "package", "content-hub", "sync"]:
-            return CommandResult(argv, self._sync_rc, self._sync_stdout, "")
+            return CommandResult(argv=argv, returncode=self._sync_rc, stdout=self._sync_stdout, stderr="")
         return super().run(argv, input_text=input_text, env=env, timeout=timeout, sudo=sudo)
 
 

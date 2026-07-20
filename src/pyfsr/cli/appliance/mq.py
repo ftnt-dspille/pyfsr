@@ -7,7 +7,7 @@ consumers**. ``rabbitmqctl`` needs root on the appliance, so every call runs sud
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 
 from . import service
 from .transport import CommandResult, Transport
@@ -57,8 +57,7 @@ def status(transport: Transport) -> str:
     return _ctl(transport, "status").stdout.strip()
 
 
-@dataclass
-class QueueInfo:
+class QueueInfo(BaseModel):
     """One queue's depth and consumer count, with a stuck-worker ``flag``."""
 
     name: str
@@ -67,16 +66,14 @@ class QueueInfo:
     flag: str  # "" | "NO CONSUMERS" | "BACKLOG (>N)"
 
 
-@dataclass
-class Consumer:
+class Consumer(BaseModel):
     """A consumer binding (``queue_name`` ↔ ``channel_pid``)."""
 
     queue: str
     channel: str
 
 
-@dataclass
-class Permission:
+class Permission(BaseModel):
     """A user's ``configure``/``write``/``read`` regexes on a vhost."""
 
     vhost: str
@@ -163,8 +160,7 @@ def nonempty_queues(transport: Transport, *, vhost: str) -> list[tuple[str, int]
     return out
 
 
-@dataclass
-class PurgeResult:
+class PurgeResult(BaseModel):
     """Outcome of purging one queue: ``purged`` is the depth measured just before."""
 
     queue: str
@@ -189,15 +185,16 @@ def purge_queue(transport: Transport, queue: str, *, vhost: str | None = None, y
     if vhost:
         args += ["-p", vhost]
     res = _ctl(transport, *args)
-    return PurgeResult(queue, vhost or "/", max(before, 0), (res.stdout or res.stderr).strip())
+    return PurgeResult(
+        queue=queue, vhost=vhost or "/", purged=max(before, 0), output=(res.stdout or res.stderr).strip()
+    )
 
 
-@dataclass
-class WorkflowPurgeReport:
+class WorkflowPurgeReport(BaseModel):
     """Result of :func:`purge_workflows`: the service actions taken plus the purges done."""
 
-    steps: list[service.ServiceActionResult] = field(default_factory=list)
-    purges: list[PurgeResult] = field(default_factory=list)
+    steps: list[service.ServiceActionResult] = Field(default_factory=list)
+    purges: list[PurgeResult] = Field(default_factory=list)
 
     @property
     def total_purged(self) -> int:

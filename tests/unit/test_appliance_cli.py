@@ -243,7 +243,7 @@ def test_facts_device_uuid_falls_back_to_csadm_with_sudo():
     class NoFile(FakeTransport):
         def run(self, argv, **kw):
             if argv[:2] == ["cat", "/home/csadmin/device_uuid"]:
-                return CommandResult(argv, 1, "", "No such file")
+                return CommandResult(argv=argv, returncode=1, stdout="", stderr="No such file")
             return super().run(argv, **kw)
 
     facts = Facts(NoFile())
@@ -759,7 +759,7 @@ def test_host_parse_meminfo():
 def test_host_parse_loadavg():
     from pyfsr.cli.appliance import host
 
-    assert host._parse_loadavg("1.50 2.30 0.90 1/234 5678") == host.LoadAvg(1.5, 2.3, 0.9)
+    assert host._parse_loadavg("1.50 2.30 0.90 1/234 5678") == host.LoadAvg(load1=1.5, load5=2.3, load15=0.9)
 
 
 def test_host_parse_process_rss_regex():
@@ -804,10 +804,16 @@ def test_service_services_parses_ansi_and_since():
         m = service._STATUS_LINE.match(line.strip())
         assert m, line
         st = m.group("status").strip()
-        states.append(service.ServiceState(m.group("name"), st.lower() == "running", st, m.group("since")))
-    assert states[0] == service.ServiceState("rabbitmq-server", True, "Running", "Thu 2026-05-07 14:10:35 UTC")
+        states.append(
+            service.ServiceState(
+                name=m.group("name"), running=st.lower() == "running", status=st, since=m.group("since")
+            )
+        )
+    assert states[0] == service.ServiceState(
+        name="rabbitmq-server", running=True, status="Running", since="Thu 2026-05-07 14:10:35 UTC"
+    )
     assert states[1].name == "postgresql-16" and states[1].running
-    assert states[2] == service.ServiceState("celeryd", False, "Stopped", None)
+    assert states[2] == service.ServiceState(name="celeryd", running=False, status="Stopped", since=None)
 
 
 def test_ha_parse_nodes_columns():
