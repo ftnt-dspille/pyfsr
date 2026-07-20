@@ -22,6 +22,8 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from pydantic import BaseModel
+
 DEFAULT_TIMEOUT = 60.0
 
 # Marker file that means "this host *is* a FortiSOAR appliance".
@@ -44,8 +46,7 @@ def _sudo_wrap(argv: list[str], env: dict[str, str] | None) -> list[str]:
     return [*prefix, *argv]
 
 
-@dataclass
-class CommandResult:
+class CommandResult(BaseModel):
     """Outcome of a single transport command."""
 
     argv: list[str]
@@ -130,7 +131,7 @@ class LocalTransport(Transport):
             raise TransportError(f"executable not found: {cmd[0]}") from exc
         except subprocess.TimeoutExpired as exc:
             raise TransportError(f"command timed out after {timeout}s: {shlex.join(cmd)}") from exc
-        return CommandResult(cmd, proc.returncode, proc.stdout, proc.stderr)
+        return CommandResult(argv=cmd, returncode=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
 
 
 @dataclass
@@ -237,7 +238,7 @@ class SSHTransport(Transport):
             raise TransportError(f"ssh command timed out after {timeout}s") from exc
         # Don't leak SSHPASS in the echoed argv.
         echoed = [*self._ssh_prefix(), remote_cmd]
-        return CommandResult(echoed, proc.returncode, proc.stdout, proc.stderr)
+        return CommandResult(argv=echoed, returncode=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
 
 
 def is_onbox() -> bool:

@@ -9,7 +9,8 @@ a hard timeout; HTTP 000 / a hang ⇒ "active but wedged → restart".
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+
+from pydantic import BaseModel
 
 from ._text import strip_ansi
 from .transport import Transport
@@ -39,8 +40,7 @@ _PROBES: list[tuple[str, str, set[int], str]] = [
 _NO_RESPONSE = 0
 
 
-@dataclass
-class ProbeResult:
+class ProbeResult(BaseModel):
     label: str
     method: str
     path: str
@@ -48,8 +48,7 @@ class ProbeResult:
     verdict: str
 
 
-@dataclass
-class ServiceState:
+class ServiceState(BaseModel):
     """One row of ``csadm services --status``, parsed and ANSI-stripped."""
 
     name: str
@@ -130,12 +129,11 @@ def liveness(transport: Transport, *, base: str = "https://127.0.0.1", timeout: 
             verdict = "ok"
         else:
             verdict = f"unexpected ({code})"
-        results.append(ProbeResult(label, method, path, code, verdict))
+        results.append(ProbeResult(label=label, method=method, path=path, code=code, verdict=verdict))
     return results
 
 
-@dataclass
-class ServiceActionResult:
+class ServiceActionResult(BaseModel):
     """Outcome of a service control action (restart/stop/start/kill).
 
     ``ok`` is the useful field — the command exited 0. ``output`` keeps the raw
@@ -153,8 +151,7 @@ class ServiceActionResult:
         return f"{self.action} {self.service}: {verdict}{detail}"
 
 
-@dataclass
-class Listener:
+class Listener(BaseModel):
     """A listening TCP socket and its owning process (a row of ``ss -tlnp``)."""
 
     local_address: str
@@ -177,15 +174,15 @@ def _service_action(transport: Transport, action: str, name: str) -> ServiceActi
     res = transport.run(["csadm", "services", _SERVICE_FLAG[action], name], sudo=True, timeout=120)
     text = (res.stdout or res.stderr).strip()
     ok = res.ok and not _CSADM_REJECT.search(text)
-    return ServiceActionResult(name, action, ok, text)
+    return ServiceActionResult(service=name, action=action, ok=ok, output=text)
 
 
 def _all_action(transport: Transport, action: str) -> ServiceActionResult:
-    """Run a whole-stack csadm verb (``--restart``/``--stop``/``--start``)."""
+    """Run a whole-stack csadm verb (``--restart``/`--stop``/`--start``)."""
     # A full-stack bounce is serial (stop → sleep 5 → start, per service) so it can
     # run minutes; give it a generous ceiling.
     res = transport.run(["csadm", "services", _ALL_FLAG[action]], sudo=True, timeout=600)
-    return ServiceActionResult("ALL", action, res.ok, (res.stdout or res.stderr).strip())
+    return ServiceActionResult(service="ALL", action=action, ok=res.ok, output=(res.stdout or res.stderr).strip())
 
 
 def restart(transport: Transport, name: str, *, yes: bool = False) -> ServiceActionResult:
@@ -282,7 +279,7 @@ def systemctl(
     res = transport.run(argv, sudo=True, timeout=120)
     # `systemctl stop/kill` emit nothing on success; surface stderr so failures
     # (no such unit, permission denied) aren't swallowed into an empty string.
-    return ServiceActionResult(unit, action, res.ok, (res.stdout or res.stderr).strip())
+    return ServiceActionResult(service=unit, action=action, ok=res.ok, output=(res.stdout or res.stderr).strip())
 
 
 def listeners(transport: Transport) -> list[Listener]:

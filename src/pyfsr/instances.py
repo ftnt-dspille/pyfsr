@@ -78,6 +78,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
+from pydantic import BaseModel, ConfigDict
+
 from .client import FortiSOAR
 from .config import EnvConfig, _load_toml, _parse_env_text
 
@@ -118,8 +120,7 @@ def _hostname_from_base_url(base_url: str) -> str | None:
     return parsed.hostname
 
 
-@dataclass
-class ApplianceSpec:
+class ApplianceSpec(BaseModel):
     """SSH transport profile for one appliance, resolved from the config file.
 
     Built internally from an ``[instances.<alias>.appliance]`` subtable, and
@@ -128,6 +129,8 @@ class ApplianceSpec:
     when the spec resolves — :meth:`InstanceRegistry.transport` raises if it
     can't get one.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     host: str
     user: str = "csadmin"

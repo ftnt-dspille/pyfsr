@@ -6,13 +6,12 @@ The ES password is the device UUID (user ``elastic``), resolved by
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 from .facts import Facts
 
 
-@dataclass
-class ESHealth:
+class ESHealth(BaseModel):
     """Parsed output of the ES cluster-health API."""
 
     status: str  # green / yellow / red

@@ -70,12 +70,12 @@ def test_parse_meminfo_reads_mem_and_swap() -> None:
 
 def test_parse_meminfo_empty_is_all_zeros() -> None:
     # The parser itself stays a pure function: empty in → zeros out (no raising).
-    assert _parse_meminfo("") == MemInfo(0, 0, 0, 0, 0)
+    assert _parse_meminfo("") == MemInfo(total_mb=0, used_mb=0, free_mb=0, swap_total_mb=0, swap_used_mb=0)
 
 
 def test_parse_loadavg_and_empty() -> None:
-    assert _parse_loadavg(LOADAVG_RAW) == LoadAvg(1.05, 1.10, 1.20)
-    assert _parse_loadavg("") == LoadAvg(0.0, 0.0, 0.0)
+    assert _parse_loadavg(LOADAVG_RAW) == LoadAvg(load1=1.05, load5=1.10, load15=1.20)
+    assert _parse_loadavg("") == LoadAvg(load1=0.0, load5=0.0, load15=0.0)
 
 
 def test_parse_process_rss_sums_matches() -> None:
@@ -95,14 +95,16 @@ def test_split_sections_partial_bodies_are_empty() -> None:
 
 
 def test_require_captured_mem_passes_real_reading() -> None:
-    mem = MemInfo(23768, 12363, 1024, 8191, 2684)
+    mem = MemInfo(total_mb=23768, used_mb=12363, free_mb=1024, swap_total_mb=8191, swap_used_mb=2684)
     assert _require_captured_mem(mem, source="x") is mem
 
 
 @pytest.mark.parametrize("total", [0, -1])
 def test_require_captured_mem_rejects_degenerate(total: int) -> None:
     with pytest.raises(TransportError, match="captured no host metrics"):
-        _require_captured_mem(MemInfo(total, 0, 0, 0, 0), source="snapshot")
+        _require_captured_mem(
+            MemInfo(total_mb=total, used_mb=0, free_mb=0, swap_total_mb=0, swap_used_mb=0), source="snapshot"
+        )
 
 
 # --------------------------------------------------------------- snapshot()
@@ -113,7 +115,7 @@ def test_snapshot_parses_full_capture() -> None:
     assert isinstance(snap, HostSnapshot)
     assert snap.mem.total_mb == 23768
     assert snap.mem.swap_used_mb == 2684
-    assert snap.load == LoadAvg(1.05, 1.10, 1.20)
+    assert snap.load == LoadAvg(load1=1.05, load5=1.10, load15=1.20)
     assert snap.procs["integrations"].count == 2
 
 

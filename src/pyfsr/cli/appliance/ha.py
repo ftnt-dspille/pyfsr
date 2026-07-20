@@ -6,7 +6,7 @@ verbs return typed dataclasses; ``*_raw`` escape hatches give the unparsed text.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 
 from ._text import dash_columns, kv_pairs, slice_columns, strip_ansi, to_float, to_int
 from .transport import Transport
@@ -17,8 +17,7 @@ def _ha(transport: Transport, *args: str, timeout: float = 30.0) -> str:
     return transport.run(["csadm", "ha", *args], sudo=True, timeout=timeout).check().stdout.strip()
 
 
-@dataclass
-class HaNode:
+class HaNode(BaseModel):
     """One member of the HA cluster (a row of ``csadm ha list-nodes``)."""
 
     node_id: str
@@ -31,8 +30,7 @@ class HaNode:
     is_current: bool  # the node marked with '*' (the box you queried)
 
 
-@dataclass
-class ResourceUsage:
+class ResourceUsage(BaseModel):
     """Memory or swap usage from ``csadm ha show-health``."""
 
     total: str
@@ -41,8 +39,7 @@ class ResourceUsage:
     percent: float
 
 
-@dataclass
-class DiskMount:
+class DiskMount(BaseModel):
     """One filesystem row from ``csadm ha show-health``."""
 
     mountpoint: str
@@ -53,8 +50,7 @@ class DiskMount:
     percent: float
 
 
-@dataclass
-class HaHealth:
+class HaHealth(BaseModel):
     """Parsed ``csadm ha show-health`` summary."""
 
     node_name: str | None
@@ -65,7 +61,7 @@ class HaHealth:
     uptime: str | None
     memory: ResourceUsage | None = None
     swap: ResourceUsage | None = None
-    disks: list[DiskMount] = field(default_factory=list)
+    disks: list[DiskMount] = Field(default_factory=list)
 
 
 def nodes(transport: Transport) -> list[HaNode]:

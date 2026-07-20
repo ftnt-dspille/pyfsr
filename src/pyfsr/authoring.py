@@ -31,9 +31,11 @@ import os
 import shutil
 import sqlite3
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
+
+from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from .models._integration import ConnectorConfigSummary, ConnectorDefinition, InstalledConnector
@@ -667,8 +669,7 @@ def _fetch_connector_defs(client: _AuthoringClient, *, max_workers: int = 8) -> 
     return _ConnectorFetchResult(fetched=fetched, failed=len(results) - len(fetched))
 
 
-@dataclass
-class CompiledPlaybook:
+class CompiledPlaybook(BaseModel):
     """Result of compiling playbook YAML.
 
     ``fsr_json`` is the FortiSOAR export envelope ready for
@@ -680,7 +681,7 @@ class CompiledPlaybook:
     """
 
     fsr_json: dict[str, Any] | None = None
-    errors: list[dict[str, Any]] = field(default_factory=list)
+    errors: list[dict[str, Any]] = Field(default_factory=list)
     ok: bool = False
 
     @property
@@ -823,8 +824,7 @@ def _load_verify():
     return verify, CHECK_GROUPS
 
 
-@dataclass
-class VerifiedPlaybook:
+class VerifiedPlaybook(BaseModel):
     """Result of running a playbook YAML through the fsr_playbooks verify gate.
 
     ``ready`` is the single go/no-go (the gate's ``ready_to_push``). ``suppressed``
@@ -833,11 +833,11 @@ class VerifiedPlaybook:
     """
 
     ready: bool = False
-    required_fixes: list[dict[str, Any]] = field(default_factory=list)
-    warnings: list[dict[str, Any]] = field(default_factory=list)
-    suppressed: list[dict[str, Any]] = field(default_factory=list)
-    next_actions: list[str] = field(default_factory=list)
-    raw: dict[str, Any] = field(default_factory=dict)
+    required_fixes: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[dict[str, Any]] = Field(default_factory=list)
+    suppressed: list[dict[str, Any]] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+    raw: dict[str, Any] = Field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -900,8 +900,7 @@ def verify_playbook_yaml(
     )
 
 
-@dataclass
-class DeployedPlaybook:
+class DeployedPlaybook(BaseModel):
     """Outcome of :func:`build_and_deploy` — verify → compile → push, as one step."""
 
     verified: VerifiedPlaybook

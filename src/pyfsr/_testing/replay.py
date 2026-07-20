@@ -67,15 +67,15 @@ class ReplayTransport(Transport):
         # `test -f <path>` existence probe (logs.tail): a path containing
         # "missing" reports absent (returncode 1), everything else present.
         if argv[:2] == ["test", "-f"]:
-            return CommandResult(argv, 1 if "missing" in argv[-1] else 0, "", "")
+            return CommandResult(argv=argv, returncode=1 if "missing" in argv[-1] else 0, stdout="", stderr="")
         # The install-time UUID file may be absent/unreadable (drift simulation).
         if argv[:2] == ["cat", "/home/csadmin/device_uuid"] and self._file_uuid is None:
-            return CommandResult(argv, 1, "", "cat: no such file")
+            return CommandResult(argv=argv, returncode=1, stdout="", stderr="cat: no such file")
         # csadm may fail to return a UUID.
         if argv[:3] == ["csadm", "license", "--get-device-uuid"] and self._csadm_uuid is None:
-            return CommandResult(argv, 1, "", "csadm: error")
+            return CommandResult(argv=argv, returncode=1, stdout="", stderr="csadm: error")
         out = self._dispatch(argv)
-        return CommandResult(argv, 0, out, "")
+        return CommandResult(argv=argv, returncode=0, stdout=out, stderr="")
 
     def _dispatch(self, argv: list[str]) -> str:
         # --- identity / version ---
