@@ -19,8 +19,9 @@ import re as _re
 import shutil as _shutil
 import sqlite3 as _sqlite3
 import tempfile as _tempfile
-from dataclasses import dataclass
 from pathlib import Path as _Path
+
+from pydantic import BaseModel
 
 _LIBRARY_DEFAULT = _Path(__file__).resolve().parents[2] / "examples" / "playbooks" / "library"
 _FIXTURE_CONNECTORS_DEFAULT = _LIBRARY_DEFAULT / "fixture_connectors.json"
@@ -87,8 +88,7 @@ def _build_fixture_catalog_db(fixture_spec: str | _Path | None = None) -> _Path 
     return tmp_path
 
 
-@dataclass
-class LibraryEntry:
+class LibraryEntry(BaseModel):
     """One playbook in the foundational library, with retrieval facets."""
 
     slug: str
@@ -220,22 +220,10 @@ def library_manifest(library_dir: str | _Path | None = None, *, use_fixture_cata
     return {
         "library_dir": str(root),
         "count": len(entries),
-        "playbooks": [
-            {
-                "slug": e.slug,
-                "stage": e.stage,
-                "path": e.path,
-                "name": e.name,
-                "goal": e.goal,
-                "source": e.source,
-                "step_types": e.step_types,
-                "connectors": e.connectors,
-                "jinja_filters": e.jinja_filters,
-                "triggers": e.triggers,
-                "compiles_ok": e.compiles_ok,
-            }
-            for e in entries
-        ],
+        # model_dump() gives every field; subset to drop `summary` (the manifest
+        # contract has never exposed it -- pre-pydantic the dict was hand-rolled
+        # field-by-field and simply omitted it).
+        "playbooks": [{k: v for k, v in e.model_dump().items() if k != "summary"} for e in entries],
     }
 
 

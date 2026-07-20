@@ -29,8 +29,9 @@ See ``docs/plans/PLAYBOOK_LINT_DESIGN.md``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
     from .client import FortiSOAR
@@ -44,9 +45,10 @@ STEP_SEND_EMAIL = "4c0019b2-055c-44d0-968c-678a0c2d762e"
 _CONNECTOR_STEP_UUIDS = frozenset({STEP_CONNECTOR, STEP_SEND_EMAIL})
 
 
-@dataclass(frozen=True)
-class ConnectorRef:
+class ConnectorRef(BaseModel):
     """A single connector-bearing step found in a compiled playbook."""
+
+    model_config = ConfigDict(frozen=True)
 
     connector: str
     operation: str | None
@@ -56,9 +58,10 @@ class ConnectorRef:
     step: str  # step name
 
 
-@dataclass(frozen=True)
-class LintFinding:
+class LintFinding(BaseModel):
     """One warn-level connector-config problem against a live target."""
+
+    model_config = ConfigDict(frozen=True)
 
     severity: str  # always "warn" — lint never blocks a deploy
     connector: str
