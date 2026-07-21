@@ -54,7 +54,7 @@ class ConcurrencyResult(BaseModel):
     def to_dict(self) -> dict[str, Any]:
         """Convert to a plain dict (compatible with ApiResult).
 
-        Alias for :meth:`model_dump`, kept for back-compat with callers that
+        Alias for ``model_dump()``, kept for back-compat with callers that
         predate the pydantic conversion.
         """
         return self.model_dump()
