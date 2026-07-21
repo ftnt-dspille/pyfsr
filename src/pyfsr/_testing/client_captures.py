@@ -357,6 +357,73 @@ CONNECTOR_DETAIL_RESPONSE = {
 }
 
 
+# Synthesized ``POST /api/3/solutionpacks/install?$type=connector`` response
+# (no live capture for a connector tgz upload — this is shaped to match the
+# fields ``ConnectorsAPI.install_from_file`` documents: the integer ``id`` other
+# calls need, plus the connector name/version and the import-job reference for
+# wait_for_install polling). Mirrors the SolutionPack install envelope's shape
+# so callers reading either sample see the same wire structure.
+_CONNECTOR_INSTALL_RESPONSE = {
+    "@context": "/api/3/contexts/Connector",
+    "@id": "/api/3/connectors/420e8400-e29b-41d4-a716-446655440042",
+    "@type": "Connector",
+    "name": "demo-connector",
+    "label": "Demo Connector",
+    "version": "1.0.0",
+    "type": "connector",
+    "installed": True,
+    "importJob": {
+        "@id": "/api/3/import_jobs/420e8400-e29b-41d4-a716-446655440042",
+        "uuid": "420e8400-e29b-41d4-a716-446655440042",
+        "status": "import in progress",
+    },
+    "uuid": "420e8400-e29b-41d4-a716-446655440042",
+    "id": 42,
+}
+
+CONNECTOR_INSTALL_RESPONSE = _CONNECTOR_INSTALL_RESPONSE
+
+
+# Synthesized ``GET /api/integration/configuration/`` response (no live capture
+# for the dedicated configurations endpoint — this is shaped to validate the
+# ``ConnectorConfig`` model and exercise the ``name``/``connector`` filters at
+# the doctest level). Two rows mirroring the connectors in ``_CONNECTOR_ROWS``
+# (smtp id=3 and mitre-attack id=21) so a doctest filtering by either connector
+# name resolves to a believable subset.
+_CONNECTOR_CONFIGURATIONS_ROWS = [
+    {
+        "id": 1,
+        "config_id": "88c3d39c-2fa9-4731-b00d-29815008f17c",
+        "name": "localhost-postfix",
+        "default": True,
+        "status": 1,
+        "connector": 3,
+        "agent": "2215f975dd501e6f25f55568edf06af9",
+        "config": {"server": "localhost", "port": 25},
+    },
+    {
+        "id": 7,
+        "config_id": "01e4e6b4-c34e-4fc1-b692-bb08591f1fe5",
+        "name": "Demo",
+        "default": True,
+        "status": 1,
+        "connector": 21,
+        "agent": "2215f975dd501e6f25f55568edf06af9",
+        "config": {},
+    },
+]
+_CONNECTOR_CONFIGURATIONS_LIST_RESPONSE = {
+    "status": "success",
+    "totalItems": len(_CONNECTOR_CONFIGURATIONS_ROWS),
+    "itemsPerPage": 100,
+    "nextPage": None,
+    "previousPage": None,
+    "data": _CONNECTOR_CONFIGURATIONS_ROWS,
+}
+
+CONNECTOR_CONFIGURATIONS_LIST_RESPONSE = _CONNECTOR_CONFIGURATIONS_LIST_RESPONSE
+
+
 # Real ``POST /api/integration/execute/`` for the ``cisa-advisory`` connector's
 # ``get_known_exploited_vulnerability_cves`` operation — a public, read-only,
 # parameter-less feed lookup (safe to demo against a real vendor connector; the
