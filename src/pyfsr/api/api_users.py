@@ -10,16 +10,16 @@ user here (:meth:`ApiKeyUsersAPI.create`), then attach roles/teams by POSTing it
 returned by ``GET /api/3/api_keys``.
 
 Example:
-    >>> client = demo_client()  # doctest: +SKIP
-    >>> u = client.api_users.create(api_key_validity=365)  # doctest: +SKIP
-    >>> u["user_type"]  # doctest: +SKIP
+    >>> client = demo_client_jwt()
+    >>> u = client.api_users.create(api_key_validity=365)
+    >>> u["user_type"]
     9
-    >>> u["status"]  # doctest: +SKIP
+    >>> u["status"]
     1
 
-    .. note::
-        Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
-        ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
+.. note::
+    Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+    ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
 """
 
 from __future__ import annotations
@@ -127,27 +127,29 @@ class ApiKeyUsersAPI(BaseAPI):
                 of surfacing the cryptic encrypt 400.
 
         Example:
-            >>> client = demo_client()  # doctest: +SKIP
-            >>> u = client.api_users.create(api_key_validity=365)  # doctest: +SKIP
-            >>> u["uuid"]  # doctest: +SKIP
+            >>> client = demo_client_jwt()
+            >>> u = client.api_users.create(api_key_validity=365)
+            >>> u["uuid"]
             '550e8400-e29b-41d4-a716-446655440007'
-            >>> u["user_type"]  # doctest: +SKIP
+            >>> u["user_type"]
             9
-            >>> u["status"]  # doctest: +SKIP
+            >>> u["status"]
             1
 
             .. note::
                 Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
-                ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
+                ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
         """
         body = {"type": type, "status": status, "api_key_validity": api_key_validity}
         try:
-            return ApiKeyUser.model_validate(self.client.post(_BASE, data=body))
+            resp = self.client.post(_BASE, data=body)
         except APIError as exc:
             sig = f"{exc.message or ''} {exc.error_type or ''}"
             if "preserve_compatibility" in sig or "encrypt()" in sig:
                 raise ApikeyCreateUnavailable(response=exc.response, original_message=exc.message) from exc
             raise
+        members = self._members(resp)
+        return ApiKeyUser.model_validate(members[0] if members else (resp if isinstance(resp, dict) else {}))
 
     def lifecycle(
         self,
@@ -170,14 +172,14 @@ class ApiKeyUsersAPI(BaseAPI):
         …) over calling this directly.
 
         Example:
-            >>> client = demo_client()  # doctest: +SKIP
-            >>> u = client.api_users.lifecycle("550e8400-e29b-41d4-a716-446655440007", "REVOKE")  # doctest: +SKIP
-            >>> u["uuid"]  # doctest: +SKIP
+            >>> client = demo_client_jwt()
+            >>> u = client.api_users.lifecycle("550e8400-e29b-41d4-a716-446655440007", "REVOKE")
+            >>> u["uuid"]
             '550e8400-e29b-41d4-a716-446655440007'
 
             .. note::
                 Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
-                ``demo_client()``'s ``APIKeyAuth``, so this example is ``+SKIP``.
+                ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
         """
         op = operation.upper()
         if op not in _OPS:
@@ -185,7 +187,9 @@ class ApiKeyUsersAPI(BaseAPI):
         body: dict[str, Any] = {"uuid": uuid, "key_type": key_type, "operation": op}
         if api_key_validity is not None:
             body["api_key_validity"] = api_key_validity
-        return ApiKeyUser.model_validate(self.client.put(_BASE, data=body))
+        resp = self.client.put(_BASE, data=body)
+        members = self._members(resp)
+        return ApiKeyUser.model_validate(members[0] if members else (resp if isinstance(resp, dict) else {}))
 
     def revoke(self, uuid: str, *, key_type: str = "API_KEY") -> ApiKeyUser:
         """Permanently revoke an API-key user (lifecycle ``REVOKE``)."""

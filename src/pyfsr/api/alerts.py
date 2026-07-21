@@ -156,7 +156,8 @@ class AlertsAPI(BaseAPI):
         Args:
             alert_id: The unique identifier of the alert to delete
 
-        Examples:
-            >>> client.alerts.delete("alert-123")  # doctest: +SKIP
+        Example:
+            >>> client = demo_client()
+            >>> client.alerts.delete("9f0eb603-ac1e-41c3-b47b-444589beed39")
         """
         self.client.delete(f"/api/3/{self.module}/{alert_id}")
