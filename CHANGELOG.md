@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-21
+
 ### Removed
 - **`pyfsr playbook check-fresh` CLI command and the `pyfsr.playbook_freshness`
   module.** The probe (compare a cached compile catalog's provenance against a
@@ -12,7 +14,7 @@ All notable changes to this project will be documented in this file.
   fresh/drift success path had never been exercised live since the pass-2
   pydantic migration (the CLI tests mocked `compare`, so a real
   `FreshnessProbe`→`FreshnessReport` round-trip raised `ValidationError`
-  unnoticed). Removed: the `check-fresh` subcommand, `cmd_check_fresh`/`
+  unnoticed). Removed: the `check-fresh` subcommand, `cmd_check_fresh`/
   `_catalog_conn` handlers, `src/pyfsr/playbook_freshness.py`
   (`FreshnessProbe`/`FreshnessReport`/`probe_live`/`compare`), and its unit
   tests; the README/authoring-guide sections; the `autoapi` reference page; the
@@ -21,6 +23,37 @@ All notable changes to this project will be documented in this file.
   the Level-1 freshness check against a stamped catalog — it uses the pyfsr
   client + `fsr_playbooks._catalog_meta` directly, without pyfsr hosting the
   cross-package surface.
+
+### Changed
+- **23 dataclasses converted to pydantic v2 `BaseModel`** (pass 1 + pass 2 of
+  the migration plan), bringing the public data shapes in line with the
+  existing pydantic-based record/model layer. Pass 1 covered 19 high+medium-fit
+  dataclasses across 14 source files; pass 2 converted the 4 public-return-type
+  dataclasses skipped in pass 1 (`ConcurrencyResult`, `ConnectorRef`,
+  `LintFinding`, `StepInfo`, `ParsedPlaybook`, `LibraryEntry`). Frozen
+  dataclasses → `ConfigDict(frozen=True)`; dataclass field defaults →
+  `Field(default_factory=...)`. Stateful dataclasses (`InstanceRegistry`,
+  `LocalTransport`/`SSHTransport`, auth services, `Facts`, `ToolSpec`,
+  `HydraPage`, exceptions) are deliberately kept as stdlib dataclasses. Callers
+  must now use keyword-only construction (pydantic v2 rejects positional args).
+  No behavior change; `.to_dict()` aliases kept where tests call them.
+
+### Fixed
+- **`concurrency.compute_overlap` crashed on a malformed end timestamp.** A
+  non-None but unparseable end value appended `(None, -1, ...)` into the events
+  list, crashing the later `event_time.isoformat()` call. The gate now checks
+  `end_dt is not None` (the parsed result) instead of `end_val is not None`
+  (the raw input); the run is correctly treated as ongoing and gets an implicit
+  end at `max_time + 1s`. Regression test added.
+
+### Added
+- **mypy gate widened** from the CLI + appliance (23 files) to also cover the 7
+  pydantic-converted modules (now 30 files).
+- **Pydantic round-trip regression tests** (`tests/unit/test_pydantic_roundtrip.py`):
+  6 live-grounded probes that pull real captured wire shapes from the replay
+  fixture table and run each pass-2 model through `model_validate` + `model_dump`
+  round-trip, locking the conversions against future pydantic tightening or
+  field-type narrowing.
 
 ## [0.12.0] - 2026-07-20
 
