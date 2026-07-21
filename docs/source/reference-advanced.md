@@ -9,7 +9,6 @@ top-level sidebar next to `pyfsr.client` / `pyfsr.records` / etc.
 :maxdepth: 1
 
 autoapi/pyfsr/playbook_catalog/index
-autoapi/pyfsr/playbook_freshness/index
 autoapi/pyfsr/playbook_lint/index
 autoapi/pyfsr/playbook_match/index
 autoapi/pyfsr/concurrency/index

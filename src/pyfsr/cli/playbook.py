@@ -23,7 +23,6 @@ Subcommands (this group is the authoring "start here" index):
   config on the target.
 - ``deploy <file.yaml> [--replace] [--dry-run]`` — compile then import via the
   API client.
-- ``check-fresh`` — compare the cached compile catalog against a live SOAR.
 
 ``compile``/``validate``/``deploy``/``lint`` accept ``--refresh-catalog``: warm
 the reference catalog from the live instance before compiling so connector and
@@ -49,8 +48,6 @@ from typing import TYPE_CHECKING, Any, cast
 from . import _output
 
 if TYPE_CHECKING:
-    import sqlite3
-
     from ..authoring import CompiledPlaybook
     from ..client import FortiSOAR
 
@@ -202,69 +199,6 @@ def cmd_deploy(args: argparse.Namespace) -> int:
     return 0
 
 
-def _catalog_conn(args: argparse.Namespace) -> tuple[sqlite3.Connection, str]:
-    """Open the fsr_playbooks reference catalog (read/write) for freshness ops.
-
-    Honors ``--db`` then the package's own resolution (``$FSRPB_DB`` → dev DB →
-    packaged slim DB). Raises the same clear error as the compiler when the
-    optional ``fsr_playbooks`` extra is absent."""
-    import sqlite3
-
-    from ..authoring import _load_compiler  # reuses the missing-dep message
-
-    _, default_db_path = _load_compiler()
-    db = getattr(args, "db", None) or str(default_db_path())
-    conn = sqlite3.connect(db)
-    conn.row_factory = sqlite3.Row
-    return conn, db
-
-
-def cmd_check_fresh(args: argparse.Namespace) -> int:
-    """Level-1 freshness probe: compare the cached catalog's provenance against
-    a live SOAR. Exit 0 = fresh, 2 = drift detected, 1 = error / unstamped."""
-    from fsr_playbooks import _catalog_meta
-
-    from ..playbook_freshness import compare, probe_live
-
-    conn, db = _catalog_conn(args)
-    try:
-        stored = _catalog_meta.get_all(conn)
-    finally:
-        conn.close()
-    if not stored.get("base_url_hash"):
-        print(
-            f"catalog {db} carries no provenance stamp — run `warmup` against a target SOAR first.",
-            file=sys.stderr,
-        )
-        return 1
-
-    client = _make_client(args)
-    live = probe_live(client)
-    report = compare(stored, live)
-
-    _output.kv(
-        {
-            "catalog": db,
-            "instance": report.instance_label or "(unlabeled)",
-            "fsr_version": f"{stored.get('fsr_version')} -> {live.get('version')}",
-            "result": "FRESH" if report.is_fresh else "STALE",
-        },
-        fmt="table",
-        file=sys.stderr,
-    )
-    if report.drift:
-        print("drift detected:", file=sys.stderr)
-        for line in report.drift:
-            print(f"  - {line}", file=sys.stderr)
-        print(
-            "re-run `warmup` against the target to refresh the catalog.",
-            file=sys.stderr,
-        )
-        return 2
-    print("catalog is up to date with the live instance.", file=sys.stderr)
-    return 0
-
-
 def _connector_findings(client: FortiSOAR, result: CompiledPlaybook) -> list:
     """Run the live-target connector-config preflight on a compiled playbook.
 
@@ -295,9 +229,8 @@ def _print_findings(findings: list) -> None:
 def cmd_lint(args: argparse.Namespace) -> int:
     """Compile, then warn about connector steps with no config on the target.
 
-    Exit 0 = clean, 2 = warnings, 1 = compile/connection error — mirrors
-    ``check-fresh``. Never blocks: a playbook may be deployed before its
-    connector configs are created."""
+    Exit 0 = clean, 2 = warnings, 1 = compile/connection error. Never blocks:
+    a playbook may be deployed before its connector configs are created."""
     # _compile() warms the catalog itself when --refresh-catalog is set; the
     # preflight client is built only after a clean compile (so a compile failure
     # exits 1 without needing a connection).
@@ -656,14 +589,6 @@ def build_subparser(asub: argparse._SubParsersAction) -> None:
     p_lint.add_argument("file", help="playbook YAML file")
     add_refresh_catalog_arg(p_lint)
     p_lint.set_defaults(func=cmd_lint)
-
-    p_fresh = asub.add_parser(
-        "check-fresh",
-        help="compare the cached compile catalog against a live SOAR (Level-1 probe)",
-    )
-    add_connection_args(p_fresh)
-    p_fresh.add_argument("--db", help="reference catalog path (default: packaged/dev DB)")
-    p_fresh.set_defaults(func=cmd_check_fresh)
 
     # --- versions: saved-snapshot history (the editor's "Versions" tab) ---
     p_ver = asub.add_parser(

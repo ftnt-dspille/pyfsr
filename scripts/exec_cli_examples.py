@@ -19,9 +19,7 @@ What runs (no live appliance / API needed):
   posting (offline).
 
 What does NOT run here (needs a live box / API): every ``pyfsr appliance ...``
-verb (SSH), ``deploy`` (without ``--dry-run``), and ``check-fresh`` against a
-live ``--server``. ``check-fresh`` with no ``--server`` (the unstamped-catalog
-error path) IS run — it exits 1 deterministically with no network.
+verb (SSH) and ``deploy`` (without ``--dry-run``).
 
 Invoked via ``[sys.executable, '-m', 'pyfsr.cli.__main__', ...]`` so it needs no
 ``pyfsr`` binary on PATH -- only an importable install (``-e .`` in CI). Skips
@@ -168,15 +166,6 @@ def main():
             "deploy --dry-run",
             ["playbook", "deploy", fixture, "--dry-run"],
             dict(stdout_test=lambda o: "playbook" in o.lower() or len(o) > 0),
-        ),
-        # check-fresh with no --server: an unstamped catalog exits 1 with a
-        # deterministic message (needs no live box; asserted in CI). The
-        # fresh/drift success paths need --server and are shown as samples in
-        # playbook-authoring.md.
-        (
-            "check-fresh (unstamped catalog)",
-            ["playbook", "check-fresh"],
-            dict(expect_exit=1, stderr_test=lambda e: "provenance stamp" in e.lower()),
         ),
     ]
     # Validate EVERY library playbook the manifest flags compiles_ok — proves the

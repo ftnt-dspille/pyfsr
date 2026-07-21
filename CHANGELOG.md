@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Removed
+- **`pyfsr playbook check-fresh` CLI command and the `pyfsr.playbook_freshness`
+  module.** The probe (compare a cached compile catalog's provenance against a
+  live SOAR) was a script concern, not SDK surface — it read
+  `fsr_playbooks._catalog_meta` (another package's private table) and its
+  fresh/drift success path had never been exercised live since the pass-2
+  pydantic migration (the CLI tests mocked `compare`, so a real
+  `FreshnessProbe`→`FreshnessReport` round-trip raised `ValidationError`
+  unnoticed). Removed: the `check-fresh` subcommand, `cmd_check_fresh`/`
+  `_catalog_conn` handlers, `src/pyfsr/playbook_freshness.py`
+  (`FreshnessProbe`/`FreshnessReport`/`probe_live`/`compare`), and its unit
+  tests; the README/authoring-guide sections; the `autoapi` reference page; the
+  offline `exec_cli_examples.py` check-fresh entry. The probe logic survives
+  as a runnable example script, `scripts/check_fresh.py`, for whoever wants
+  the Level-1 freshness check against a stamped catalog — it uses the pyfsr
+  client + `fsr_playbooks._catalog_meta` directly, without pyfsr hosting the
+  cross-package surface.
+
 ## [0.12.0] - 2026-07-20
 
 ### Added
