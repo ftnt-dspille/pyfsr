@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-07-21
+
+### Added
+- **Three `+SKIP` doctests converted to runnable** (P2 of the doctests-for-
+  api-docs plan):
+  - `AlertsAPI.delete` — the `DELETE /api/3/alerts/{uuid}` replay fixture
+    already existed; the doctest was `+SKIP` for no reason. Un-skipped, wired
+    to `demo_client()`.
+  - `ManualInputAPI.delete` — added a `DELETE /api/wf/api/manual-wf-input/2/`
+    replay fixture (204); un-skipped, wired to `demo_client()`.
+  - `ApiKeyUsersAPI.create` / `lifecycle` — rewrote from `demo_client()` +
+    `+SKIP` to `demo_client_jwt()` (JWT-only); the `POST /api/auth/users` and
+    `PUT /api/auth/users` replay fixtures already existed. This also unlocks
+    four `api-docs` ops that had no pyfsr sample (`GET/POST/PUT /api/auth/users`
+    and `POST /api/auth/query/users`).
+
+### Fixed
+- **`ApiKeyUsersAPI.create` and `lifecycle` didn't unwrap the `usersresp`
+  envelope.** Both methods passed the raw `{"usersresp": [user]}` response
+  to `ApiKeyUser.model_validate()`, so the returned model had every field
+  as `None` (the user dict was nested inside `usersresp`, not at the top
+  level). The `get()` and `query()` methods already unwrapped via
+  `_members()`; `create()` and `lifecycle()` now do the same. The `+SKIP`
+  on their doctests had been hiding this bug — the unit-test mock returned
+  the user directly (without the `usersresp` wrapper), so the unit tests
+  passed while the real wire shape (captured in the replay fixture) would
+  have produced an empty model.
+
 ## [0.14.0] - 2026-07-21
 
 ### Added

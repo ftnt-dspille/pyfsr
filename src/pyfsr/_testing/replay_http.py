@@ -228,6 +228,9 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         # ManualInputAPI — pending manual workflow inputs.
         _entry("POST", "/api/wf/api/manual-wf-input/list_wfinput/", cap.MANUAL_INPUT_LIST_RESPONSE),
         _entry("POST", "/api/wf/api/manual-wf-input/1/retrieve_wfinput/", cap.MANUAL_INPUT_RETRIEVE_RESPONSE),
+        # delete() — DELETE on a pending input by id (204, no body). Pinned to
+        # the doctest's pk=2; the retrieve fixture above is pk=1 (different path).
+        _entry("DELETE", "/api/wf/api/manual-wf-input/2/", {}, status=204),
         _entry("POST", "/api/wf/api/workflows/1/wfinput_resume/", cap.MANUAL_INPUT_RESUME_RESPONSE),
         # AttachmentsAPI — attachment record management.
         _entry("POST", "/api/3/attachments", cap.ATTACHMENT_CREATE_RESPONSE),

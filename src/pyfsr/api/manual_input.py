@@ -503,11 +503,8 @@ class ManualInputAPI(BaseAPI):
             input_id: the manual input's integer ``id`` (from :meth:`list`).
 
         Example:
-            >>> client = demo_client()  # doctest: +SKIP
-            >>> client.manual_input.delete(2)  # doctest: +SKIP
-
-            .. note::
-                Simple delete operation; marked +SKIP as it has no output.
+            >>> client = demo_client()
+            >>> client.manual_input.delete(2)
         """
         self.client.delete(f"{_BASE}{input_id}/", params={"format": "json"})
 
