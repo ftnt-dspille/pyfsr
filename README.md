@@ -158,7 +158,6 @@ pyfsr playbook validate flow.yaml    # compile + report diagnostics (offline)
 pyfsr playbook compile flow.yaml     # emit the FSR import envelope (offline)
 pyfsr playbook lint flow.yaml        # live preflight: connector steps missing config
 pyfsr playbook deploy flow.yaml      # compile and create it on the appliance
-pyfsr playbook check-fresh           # compare the cached catalog vs a live SOAR
 ```
 
 **`pyfsr records`** — query and manage FortiSOAR records over the API:

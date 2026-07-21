@@ -418,8 +418,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  compile FILE    YAML -> FSR import envelope (offline, no network)\n"
             "  validate FILE   compile and report diagnostics (offline)\n"
             "  lint FILE       live preflight: connector steps missing config\n"
-            "  deploy FILE     compile + create on the appliance\n"
-            "  check-fresh     compare the cached compile catalog vs a live SOAR\n\n"
+            "  deploy FILE     compile + create on the appliance\n\n"
             "Runtime helpers (Python SDK): client.manual_input.answer() drives a\n"
             "paused Manual Input in one call; see guides/playbook-authoring.md."
         ),

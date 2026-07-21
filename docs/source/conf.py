@@ -143,8 +143,8 @@ nitpick_ignore = [
     ("py:class", "Actor"),
     ("py:class", "ConfigSchema"),
     # ApiResult is re-exported from pyfsr.models but documented at its canonical
-    # private module; the "Bases:" xref from public subclasses (FreshnessReport,
-    # FreshnessProbe) resolves at runtime but not under `-n`.
+    # private module; the "Bases:" xref from public subclasses resolves at
+    # runtime but not under `-n`.
     ("py:class", "pyfsr.models.ApiResult"),
     ("py:obj", "pyfsr.models.ApiResult"),
     ("py:obj", "pyfsr.models._generated"),
