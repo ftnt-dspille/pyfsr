@@ -112,10 +112,11 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         # Picklists — the two bulk calls ``_load_bulk`` makes (names + flat items).
         _entry("GET", "/api/3/picklist_names", cap.PICKLIST_NAMES_RESPONSE),
         _entry("GET", "/api/3/picklists", cap.PICKLISTS_RESPONSE),
-        # Widgets — list, upload (solutionpacks/install with $type=widget), the
-        # dev-manifest GET publish() reads, and the publish PUT response.
+        # Widgets — list, the dev-manifest GET publish() reads, and the publish
+        # PUT response. The widget upload (POST /api/3/solutionpacks/install
+        # with $type=widget) is keyed alongside the connector/SP install variants
+        # below (it shares that path, disambiguated by $type query param).
         _entry("GET", "/api/3/widgets", cap.WIDGET_LIST_RESPONSE),
-        _entry("POST", "/api/3/solutionpacks/install", cap.WIDGET_UPLOAD_RESPONSE),
         _entry(
             "GET",
             "/api/3/widgets/development/5fef77ad-8917-40c6-82a2-fdd753bdf41c",
@@ -234,6 +235,20 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("DELETE", "/api/3/attachments/770e8400-e29b-41d4-a716-446655440009", {}, status=204),
         # SolutionPackAPI — solution pack management.
         _entry("POST", "/api/3/solutionpacks/install", cap.SOLUTION_PACK_INSTALL_RESPONSE),
+        # Multipart connector/widget uploads hit the same path as the by-name
+        # solution-pack install above, distinguished only by the ``$type`` query
+        # param ($type=connector vs $type=widget). _path_and_match canonicalizes
+        # those two variants to a path-tagged key so each lands on its own
+        # fixture here — the by-name SP install keeps the bare path key above.
+        _entry("POST", "/api/3/solutionpacks/install?type=connector", cap.CONNECTOR_INSTALL_RESPONSE),
+        _entry("POST", "/api/3/solutionpacks/install?type=widget", cap.WIDGET_UPLOAD_RESPONSE),
+        # Connector lifecycle — DELETE on an installed connector (uninstall).
+        # The canonicalization in _path_and_match collapses any connector id
+        # (POST or DELETE) to the recorded id=3, so this single fixture serves
+        # both the connector_detail POST and the uninstall DELETE.
+        _entry("DELETE", "/api/integration/connectors/3/", {}, status=204),
+        # The dedicated configurations endpoint — list_configurations() GET.
+        _entry("GET", "/api/integration/configuration/", cap.CONNECTOR_CONFIGURATIONS_LIST_RESPONSE),
         # ImportConfigAPI — configuration import management.
         _entry("POST", "/api/3/import_jobs", cap.IMPORT_JOB_CREATE_RESPONSE),
         _entry("GET", "/api/3/import_jobs/aa0e8400-e29b-41d4-a716-446655440013", cap.IMPORT_JOB_GET_RESPONSE),
@@ -341,7 +356,7 @@ def _build_response(fixture: dict, url: str) -> Response:
     return resp
 
 
-def _path_and_match(method: str, url: str) -> tuple[str, str]:
+def _path_and_match(method: str, url: str, params: Any = None) -> tuple[str, str]:
     """Return the (canonical-path, raw-path) used for fixture lookup.
 
     ``canonical`` collapses volatile path segments to the recorded values so a
@@ -355,12 +370,37 @@ def _path_and_match(method: str, url: str) -> tuple[str, str]:
       ``/api/integration/connectors/healthcheck/<name>/<version>/`` collapses to
       the recorded ``mitre-attack/2.0.2`` (so ``healthcheck("mitre-attack")``
       resolves regardless of which connector the doctest names).
+    - ``POST /api/3/solutionpacks/install`` is disambiguated by the ``$type``
+      query param: by-name SP install (no ``$type``) keeps the bare path;
+      ``$type=connector``/``$type=widget`` canonicalize to ``?type=connector``
+      /``?type=widget`` keys so each upload variant lands on its own fixture
+      (SolutionPack vs Connector vs Widget record). ``params`` is the
+      ``requests``-style dict the caller passed (the replay session doesn't
+      merge params into the URL the way the real session does, so this function
+      reads the ``$type`` from ``params`` directly).
 
     ``raw`` is the literal path for the no-match error message.
     """
     parsed = urllib.parse.urlparse(url)
     path = parsed.path
     segments = path.rstrip("/").split("/")
+    # POST /api/3/solutionpacks/install  ->  disambiguate by the ``$type`` query
+    # param. The by-name Content-Hub install (SolutionPackAPI.install), the
+    # multipart connector .tgz upload (ConnectorsAPI.install_from_file), and the
+    # multipart widget .tgz upload (WidgetsAPI.upload) all hit the same path;
+    # only the ``$type`` query differs (no $type for SP, ``connector``/``widget``
+    # for the uploads). Canonicalize each upload variant to a path-tagged key so
+    # it lands on its own fixture; the bare by-name install keeps the plain path.
+    if method.upper() == "POST" and path == "/api/3/solutionpacks/install":
+        type_: str | None = None
+        if isinstance(params, dict) and "$type" in params:
+            type_ = params["$type"]
+        if type_ is None:
+            qs = urllib.parse.parse_qs(parsed.query)
+            type_ = (qs.get("$type") or [None])[0]
+        if type_ in ("connector", "widget"):
+            return f"/api/3/solutionpacks/install?type={type_}", path
+        return path, path
     # /api/3/alerts/<uuid>/comments  ->  collapse the uuid to the recorded one.
     # Must precede the 5-segment single-record rule below.
     if (
@@ -398,9 +438,20 @@ def _path_and_match(method: str, url: str) -> tuple[str, str]:
     # segments: ['', 'api', 'integration', 'connectors', 'healthcheck', name, version]
     if len(segments) == 7 and segments[1] == "api" and segments[3] == "connectors" and segments[4] == "healthcheck":
         return "/api/integration/connectors/healthcheck/mitre-attack/2.0.2/", path
-    # /api/integration/connectors/<id>/  (connector_detail POST)  ->  recorded.
-    # segments: ['', 'api', 'integration', 'connectors', id, '']
-    if len(segments) == 6 and segments[1] == "api" and segments[2] == "integration" and segments[3] == "connectors":
+    # /api/integration/connectors/<id>/  (connector_detail POST, uninstall
+    # DELETE)  ->  collapse any connector id to the recorded id=3. The trailing
+    # slash is stripped by rstrip above, so the path has 5 segments here (not 6
+    # as an earlier comment claimed — that stale count meant this rule never
+    # fired and the fixture only matched when the doctest happened to name a
+    # connector whose install id was already 3). The 7-segment healthcheck path
+    # and the 4-segment bare collection are left alone by this 5-segment rule.
+    if (
+        len(segments) == 5
+        and segments[1] == "api"
+        and segments[2] == "integration"
+        and segments[3] == "connectors"
+        and segments[4] != "healthcheck"
+    ):
         return "/api/integration/connectors/3/", path
     # /api/ai/agents/<task_id>/{status,result}  ->  collapse the task_id to the
     # recorded one (so get_investigation_result resolves regardless of which
@@ -468,7 +519,7 @@ class ReplaySession(Session):
         self._overrides: dict[tuple[str, str], dict] = dict(overrides or {})
 
     def request(self, method: str, url: str, *args: Any, **kwargs: Any) -> Response:  # type: ignore[override]
-        canonical, raw = _path_and_match(method, url)
+        canonical, raw = _path_and_match(method, url, params=kwargs.get("params"))
         key = (str(method).upper(), canonical.lstrip("/"))
         fixture = self._overrides.get(key)
         if fixture is None:

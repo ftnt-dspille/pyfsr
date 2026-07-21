@@ -325,6 +325,22 @@ class ConnectorsAPI(BaseAPI):
 
         Raises:
             FileNotFoundError: if ``path`` doesn't exist.
+
+        Example:
+            >>> import io, tarfile, tempfile
+            >>> from pathlib import Path
+            >>> client = demo_client()
+            >>> with tempfile.TemporaryDirectory() as tmp:
+            ...     tgz = Path(tmp) / "demo-connector.tgz"
+            ...     with tarfile.open(tgz, "w:gz") as tar:
+            ...         info = tarfile.TarInfo("demo-connector/info.json")
+            ...         data = b'{"name": "demo-connector", "version": "1.0.0"}'
+            ...         info.size = len(data)
+            ...         tar.addfile(info, io.BytesIO(data))
+            ...     resp = client.connectors.install_from_file(str(tgz))
+            >>> result = (resp["id"], resp["name"], resp["version"])
+            >>> result
+            (42, 'demo-connector', '1.0.0')
         """
         mime_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
         # NOTE: kept on the mimetypes-guessed content-type (unlike widgets, which
@@ -395,6 +411,10 @@ class ConnectorsAPI(BaseAPI):
         :meth:`~pyfsr.api.agents.AgentsAPI.uninstall_connector`.
 
         Raises ``ValueError`` if the connector isn't installed.
+
+        Example:
+            >>> client = demo_client()
+            >>> client.connectors.uninstall("virustotal")
         """
         connector_id = self.resolve_connector_id(connector)
         if connector_id is None:
@@ -571,6 +591,14 @@ class ConnectorsAPI(BaseAPI):
         Prefer this over :meth:`definition` when you have an installed connector
         and want exactly what the appliance reports for it. Raises ``ValueError``
         if the connector isn't installed.
+
+        Example:
+            >>> client = demo_client()
+            >>> detail = client.connectors.connector_detail("smtp")
+            >>> (detail["name"], detail["version"])
+            ('smtp', '2.6.0')
+            >>> [op["operation"] for op in detail["operations"][:2]]
+            ['send_email_new', 'send_email']
         """
         connector_id = self.resolve_connector_id(connector)
         if connector_id is None:
@@ -583,6 +611,11 @@ class ConnectorsAPI(BaseAPI):
         """Installed + configured connectors.
 
         Cached after the first call; pass ``refresh=True`` to re-fetch.
+
+        Example:
+            >>> client = demo_client()
+            >>> [c.name for c in client.connectors.list_configured()[:3]]
+            ['smtp', 'code-snippet', 'mitre-attack']
         """
         if self._configured is not None and not refresh:
             return self._configured
@@ -653,6 +686,12 @@ class ConnectorsAPI(BaseAPI):
         endpoint's ``connector`` filter is the numeric id, and a name passed
         straight through errors ("Unknown error occurred"). A not-installed
         connector yields ``[]``: it cannot have configurations.
+
+        Example:
+            >>> client = demo_client()
+            >>> configs = client.connectors.list_configurations()
+            >>> [(c.name, c.connector) for c in configs]
+            [('localhost-postfix', 3), ('Demo', 21)]
         """
         params: dict[str, Any] = {"page": page, "page_size": page_size}
         if name is not None:
@@ -768,6 +807,11 @@ class ConnectorsAPI(BaseAPI):
            :meth:`create_configuration` / :meth:`validate_config` takes the field
            **map** — one name, two types. ``config`` still works and wins nothing:
            passing both raises.
+
+        Example:
+            >>> client = demo_client()
+            >>> client.connectors.healthcheck("mitre-attack").status
+            'Available'
         """
         config_id = _resolve_config_id_kwarg(config_id, config)
         version = version or self.resolve_version(connector)

@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-07-21
+
+### Added
+- **Connector lifecycle doctests** for the six `ConnectorsAPI` operations the
+  FortiSOAR API docs site documents but had no CI-proven pyfsr sample for:
+  `install_from_file` (multipart `.tgz` upload — the regression that motivated
+  this release), `list_configured`, `healthcheck`, `connector_detail`,
+  `uninstall`, and `list_configurations`. Each method now carries a runnable
+  `>>>` doctest wired to `demo_client()` so the replay fixture fires in pyfsr's
+  CI; the api-docs site extracts these straight from the docstrings as the
+  `pyfsr` code-sample tab on the matching OpenAPI op. Closes the
+  `install_from_file` incident (the `POST /api/3/solutionpacks/install` op was
+  rendering the by-name `SolutionPackAPI.install` sample — a different use of
+  the same endpoint — and was dropped rather than shipped misleading).
+- **Replay fixtures** for the connector lifecycle surface: a synthesized
+  `CONNECTOR_INSTALL_RESPONSE` (connector-shaped record for the multipart
+  upload) and `CONNECTOR_CONFIGURATIONS_LIST_RESPONSE` (the dedicated
+  `/api/integration/configuration/` envelope), plus a `DELETE` fixture for
+  `uninstall`. The replay session now disambiguates
+  `POST /api/3/solutionpacks/install` by the `$type` query param so the
+  by-name SP install, the connector `.tgz` upload, and the widget `.tgz`
+  upload each land on their own fixture (the three callers share one path).
+
+### Fixed
+- **`replay_http._path_and_match` never collapsed `/api/integration/connectors/<id>/`**
+  to the recorded id. The rule counted 6 path segments assuming a trailing
+  empty string, but `rstrip("/")` strips the trailing slash first, leaving 5
+  segments — so the rule never fired and the fixture only matched when a
+  doctest happened to name a connector whose install id was already 3. Fixed
+  to count 5 segments (with a `healthcheck` guard so the 7-segment healthcheck
+  path still resolves to its own fixture); the `connector_detail` and
+  `uninstall` doctests now resolve any connector name to the recorded fixture.
+
 ## [0.13.0] - 2026-07-21
 
 ### Removed
