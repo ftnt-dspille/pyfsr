@@ -296,7 +296,34 @@ Options:
 | `--check` | read-only: verify the mirror is trusted + env is set, then exit (non-zero if anything is missing). Re-run any time. |
 | `--no-verify` | skip the post-trust TLS verification (NOT recommended — this is exactly the step that catches a bad trust install before the SP install path hits it) |
 | `--insecure` | don't hard-fail if the cert fetch fails AND skip the post-trust TLS verification — lets the setup proceed to the sync. The SP install path WILL still fail at runtime — only use for a quick "is the mirror up" check. |
-| `--revert` | restore the pre-mirror state (env, trust, repos, php-fpm) |
+| `--revert` | put the box back on the public Fortinet repo (see below) |
+| `--no-sync` | with `--revert`, skip the closing content-hub sync |
+
+### Going back to the public repo
+
+```bash
+sudo ./setup-appliance.sh --revert
+# remotely, on a box whose sudo needs a password (stdin is taken by the pipe,
+# so copy the script over rather than `bash -s`):
+scp setup-appliance.sh <appliance>:/tmp/ && ssh <appliance> 'sudo bash /tmp/setup-appliance.sh --revert'
+```
+
+`--revert` restores everything setup touched, from `/root/content-hub-mirror-backup/`:
+`/etc/environment`, **the php-fpm pool conf**, `/etc/yum/vars/product_yum_server`,
+the trust anchor and `fsr-mirror-connectors.repo`; then it asserts no
+`OFFLINEREPO`/mirror config survives, restarts `php-fpm`, and re-syncs Content
+Hub from upstream. Restoring the **pool conf** is the part that's easy to miss by
+hand: its `env[REPOSERVER]` overrides `/etc/environment`, so a revert that skips
+it leaves the appliance quietly still pointed at the mirror.
+
+Two things the revert deliberately does **not** do:
+
+- The sync does not delete `solutionpacks` rows the mirror inserted. Clear them
+  with `DELETE /api/3/delete/solutionpacks {"ids":[...], "nonLocalNonRepoSpClean":true}`
+  (a plain `DELETE` is a soft no-op that leaves the row in the recycle bin).
+- A row with `installed:true` reflects a **locally installed connector**, not a
+  catalog leftover — e.g. a custom `http 2.1.0` RPM keeps reappearing on every
+  sync until you `rpm -e` it. That's expected, not a failed revert.
 
 If the mirror uses a self-signed TLS cert (the default when none is mounted),
 either install `certs/server.crt` in the appliance trust store (the script does

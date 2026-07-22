@@ -30,7 +30,15 @@
 #                        before the SP install path hits it at runtime)
 #   --check              verify the mirror is trusted + env is set, then exit
 #                        (no changes; non-zero exit if anything is missing)
-#   --revert             restore the pre-mirror state (env, trust, repos, php-fpm)
+#   --revert             restore the pre-mirror state and point the box back at
+#                        the public Fortinet repo: /etc/environment, the php-fpm
+#                        pool env, /etc/yum/vars/product_yum_server, the trust
+#                        anchor and the connector repo file — then verify no
+#                        OFFLINEREPO/mirror config survives and re-sync Content
+#                        Hub from upstream. Restoring the pool conf matters: its
+#                        env[REPOSERVER] overrides /etc/environment, so a revert
+#                        that skips it leaves the box on the mirror.
+#   --no-sync            with --revert, skip the closing content-hub sync
 #   --insecure           don't hard-fail if the cert fetch fails AND skip the
 #                        post-trust TLS verification — lets the setup proceed
 #                        all the way to the content-hub sync (which itself
@@ -58,9 +66,11 @@ CERT_FILE=""
 NO_VERIFY=0
 CHECK_ONLY=0
 INSECURE=0
+NO_SYNC=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --revert)    ACTION=revert; shift;;
+    --no-sync)   NO_SYNC=1; shift;;
     --cert-file) CERT_FILE="$2"; shift 2;;
     --no-verify) NO_VERIFY=1; shift;;
     --check)    CHECK_ONLY=1; shift;;
@@ -120,15 +130,84 @@ fi
 # ---- revert ----------------------------------------------------------------
 if [[ "${ACTION:-}" == "revert" ]]; then
   echo "==> reverting Content Hub mirror config"
-  [[ -f "$BACKUP/environment" ]] && cp "$BACKUP/environment" "$ENVF" && echo "  restored $ENVF"
+  [[ -d "$BACKUP" ]] || die "no backup at $BACKUP — this box was never set up by this script,
+  or the backup was removed. Restore /etc/environment and the php-fpm pool conf by hand."
+
+  # 1. /etc/environment (product_yum_server / fsr_os_server / OFFLINEREPO)
+  if [[ -f "$BACKUP/environment" ]]; then
+    cp "$BACKUP/environment" "$ENVF"; say "restored $ENVF"
+  else
+    warn "no environment backup; stripping the mirror lines instead"
+    sed -i -E '/^(product_yum_server|fsr_os_server|OFFLINEREPO|REPOSERVER|OSSERVER)=/d' "$ENVF"
+  fi
+
+  # 2. the php-fpm pool conf. Setup appends env[REPOSERVER]/env[OSSERVER]/
+  # env[OFFLINEREPO] here; without restoring it php-fpm keeps serving the
+  # mirror even after /etc/environment is clean — the pool env wins.
+  restored_pool=0
+  for pool in /etc/php-fpm.d/*.conf; do
+    [[ -e "$pool" ]] || continue
+    if [[ -f "$BACKUP/$(basename "$pool")" ]]; then
+      cp "$BACKUP/$(basename "$pool")" "$pool"; say "restored $pool"; restored_pool=1
+    fi
+  done
+  if [[ "$restored_pool" == "0" ]]; then
+    warn "no php-fpm pool backup; stripping the mirror env lines instead"
+    sed -i -E '/^env\[(OFFLINEREPO|REPOSERVER|OSSERVER)\]/d' /etc/php-fpm.d/*.conf 2>/dev/null || true
+  fi
+
+  # 3. the yum var (connector RPM path)
+  if [[ -f "$BACKUP/yum-var-product_yum_server" ]]; then
+    cp "$BACKUP/yum-var-product_yum_server" /etc/yum/vars/product_yum_server
+    say "restored /etc/yum/vars/product_yum_server"
+  elif [[ -f /etc/yum/vars/product_yum_server ]]; then
+    # Fall back to whatever the restored /etc/environment now says.
+    orig="$(awk -F= '/^product_yum_server=/{print $2}' "$ENVF" 2>/dev/null || true)"
+    if [[ -n "$orig" ]]; then
+      echo "$orig" > /etc/yum/vars/product_yum_server
+      say "reset /etc/yum/vars/product_yum_server -> $orig (from $ENVF)"
+    else
+      warn "could not determine the original product_yum_server; check /etc/yum/vars/product_yum_server by hand"
+    fi
+  fi
+
+  # 4. trust anchor + connector repos
   if [[ -f "$CERT_BACKUP" ]]; then
-    cert=$(cat "$CERT_BACKUP"); rm -f "$cert" && echo "  removed $cert"
+    cert=$(cat "$CERT_BACKUP")
+    rm -f "$cert" "$CERT_BACKUP"; say "removed $cert"
     command -v update-ca-trust >/dev/null && update-ca-trust extract >/dev/null 2>&1 \
       || update-ca-certificates --fresh >/dev/null 2>&1 || true
   fi
-  rm -f /etc/yum.repos.d/fsr-mirror-connectors.repo && echo "  removed connector repo"
-  systemctl restart php-fpm && echo "  restarted php-fpm"
-  echo "==> reverted. Re-run 'csadm package content-hub sync --force' to repull from FortiCloud."
+  rm -f /etc/yum.repos.d/fsr-mirror-connectors.repo; say "removed connector repo"
+
+  # 5. php-fpm picks up the restored pool env
+  systemctl restart php-fpm; say "restarted php-fpm"
+
+  # 6. assert nothing still points at a mirror — a silent partial revert is the
+  # failure mode this whole block exists to prevent.
+  leftover=0
+  grep -qE '^OFFLINEREPO=true' "$ENVF" 2>/dev/null && { warn "OFFLINEREPO=true still in $ENVF"; leftover=1; }
+  grep -rqE '^env\[OFFLINEREPO\]' /etc/php-fpm.d/ 2>/dev/null && { warn "env[OFFLINEREPO] still in a php-fpm pool"; leftover=1; }
+  [[ -f /etc/yum.repos.d/fsr-mirror-connectors.repo ]] && { warn "connector repo still present"; leftover=1; }
+  [[ $leftover -eq 0 ]] || die "revert INCOMPLETE — see warnings above"
+  say "verified: no OFFLINEREPO / mirror repo left on this box"
+  say "repo host is now: $(awk -F= '/^product_yum_server=/{print $2}' "$ENVF" 2>/dev/null || echo '<unset>')"
+
+  # 7. repull the upstream catalog so Content Hub matches the restored host
+  if [[ "$NO_SYNC" == "1" ]]; then
+    warn "skipping the post-revert sync (--no-sync); run 'csadm package content-hub sync --force' yourself"
+  else
+    echo "==> re-syncing Content Hub from the restored (public) repo"
+    csadm package content-hub sync --force \
+      || die "revert applied, but the sync failed — run 'csadm package content-hub sync --force' by hand"
+  fi
+
+  echo
+  echo "==> reverted."
+  echo "NOTE: the sync does NOT remove solutionpacks rows the mirror inserted. Clear them with"
+  echo "  DELETE /api/3/delete/solutionpacks {\"ids\":[...], \"nonLocalNonRepoSpClean\":true}"
+  echo "A row with installed:true reflects a LOCALLY INSTALLED connector, not a catalog"
+  echo "leftover — it reappears on every sync until you remove that connector's RPM."
   exit 0
 fi
 
@@ -223,8 +302,12 @@ sed -i -E '/^(product_yum_server|fsr_os_server|OFFLINEREPO|REPOSERVER|OSSERVER)=
   echo "fsr_os_server=$HOSTPORT"
   echo "OFFLINEREPO=true"
 } >> "$ENVF"
-# Keep the yum var side in sync where present (RPM/connector path).
-[[ -f /etc/yum/vars/product_yum_server ]] && echo "$HOSTPORT" > /etc/yum/vars/product_yum_server || true
+# Keep the yum var side in sync where present (RPM/connector path). Back up the
+# original first so --revert can put the real host back rather than guessing.
+if [[ -f /etc/yum/vars/product_yum_server ]]; then
+  [[ -f "$BACKUP/yum-var-product_yum_server" ]] || cp /etc/yum/vars/product_yum_server "$BACKUP/yum-var-product_yum_server"
+  echo "$HOSTPORT" > /etc/yum/vars/product_yum_server
+fi
 say "set product_yum_server=$HOSTPORT, fsr_os_server=$HOSTPORT, OFFLINEREPO=true"
 
 # ---- [4/7] enable OFFLINEREPO in the php-fpm pool env ----------------------
