@@ -142,6 +142,25 @@ WIDGET_STORAGE_TYPE = DISPLAY_STORAGE_TYPE
 # visible; override per-field with grid_column=True/False. See :meth:`ModulesAdminAPI.field`.
 _NON_GRID_FORM_TYPES = frozenset({"password", "object", "json", "array", "manyToMany", "oneToMany"})
 
+
+def _friendly_label(*candidates: Any) -> str:
+    """Return the first non-empty candidate that isn't a Jinja template.
+
+    Module/field ``displayName`` on a live appliance is often a template like
+    ``{{ name }}`` rather than a human label; skip those in favour of a real
+    ``descriptions.singular`` so search and printing read nicely. Mirrors the
+    same-named helper in :mod:`pyfsr.api.modules` (kept local to avoid a private
+    cross-module import).
+    """
+    for c in candidates:
+        if c and isinstance(c, str) and "{{" not in c:
+            return c
+    for c in candidates:
+        if c:
+            return str(c)
+    return ""
+
+
 # A field's ``name`` is its immutable **API key** — it must start with a letter and contain
 # only letters, digits, or underscores (it becomes a DB column / JSON key). The appliance
 # accepts spaces/special chars into *staging* but then fails the **publish** migrate, so we
@@ -292,6 +311,149 @@ class ModulesAdminAPI(BaseAPI):
             (a for a in target_mod.get("attributes", []) if a.get("name") == inverse_name),
             None,
         )
+
+    # ----------------------------------------------------- pretty-printing
+    @staticmethod
+    def format_condition(value: Any, *, default: Any) -> str:
+        """Render a ``required``/``visibility`` value compactly for a table cell.
+
+        The ``default`` (``False`` for ``required``, ``True`` for ``visibility``) is
+        suppressed to ``""`` — it's the common, uninteresting case — so only the
+        meaningful rows show content. The non-default bool renders as
+        ``"yes"``/``"no"`` (the column header — REQUIRED or VISIBLE — carries the
+        semantic). A condition dict renders as ``cond: <field> <op> <value>
+        [AND/OR ...]`` — the same shape FortiSOAR's module editor shows as
+        "Required/Visible by condition".
+
+        Example::
+
+            >>> ModulesAdminAPI.format_condition(True, default=False)
+            'yes'
+            >>> ModulesAdminAPI.format_condition(True, default=True)
+            ''
+            >>> ModulesAdminAPI.format_condition(
+            ...     {"logic": "AND",
+            ...      "filters": [{"field": "status", "operator": "eq", "value": "Closed"}]},
+            ...     default=False,
+            ... )
+            "cond: status eq 'Closed'"
+        """
+        if value is None or value == default:
+            return ""
+        if value is True:
+            return "yes"
+        if value is False:
+            return "no"
+        if isinstance(value, dict):
+            logic = str(value.get("logic", "AND")).upper()
+            filters = value.get("filters") or []
+            parts = []
+            for f in filters:
+                field = f.get("field", "?")
+                op = f.get("operator", "?")
+                val = f.get("value")
+                val_s = repr(val) if isinstance(val, str) else str(val)
+                parts.append(f"{field} {op} {val_s}")
+            sep = " OR " if logic == "OR" else " AND "
+            body = sep.join(parts) if parts else "(no filters)"
+            return f"cond: {body}"
+        return str(value)
+
+    @staticmethod
+    def format_module_record(record: dict[str, Any], *, show_visibility: bool = True) -> str:
+        """Pretty-print one module metadata record's fields as an aligned table.
+
+        ``record`` is the dict returned by :meth:`get_published` or
+        :meth:`get_staging`. Columns: NAME (field API key), TYPE (storage type),
+        FORM (formType / display widget), REQUIRED, VISIBLE, TITLE (friendly
+        label). REQUIRED and VISIBLE show the **full condition** — ``yes``/``no``
+        for plain bools, ``cond: <field> <op> <value> ...`` for "Required/Visible
+        by condition" — with the default (not required / visible) suppressed to
+        keep the table readable. Pass ``show_visibility=False`` to drop the
+        VISIBLE column.
+
+        Unlike :meth:`ModulesAPI.format_module <pyfsr.api.modules.ModulesAPI.format_module>`,
+        which collapses ``required`` to a bool, this reads the raw
+        ``visibility`` payloads, so conditions are visible.
+        """
+        mod_type = record.get("type") or record.get("module") or "?"
+        label = _friendly_label(
+            record.get("displayName"),
+            (record.get("descriptions") or {}).get("singular"),
+            record.get("module"),
+            record.get("type"),
+        )
+        attrs = [a for a in (record.get("attributes") or []) if isinstance(a, dict) and a.get("name")]
+
+        rows: list[list[str]] = []
+        for a in attrs:
+            name = str(a.get("name"))
+            db_type = str(a.get("type") or "?")
+            form = str(a.get("formType") or db_type)
+            validation = a.get("validation") or {}
+            required = ModulesAdminAPI.format_condition(validation.get("required", False), default=False)
+            title = _friendly_label(
+                a.get("title"),
+                (a.get("descriptions") or {}).get("singular"),
+                a.get("displayName"),
+                a.get("name"),
+            )
+            row = [name, db_type, form, required]
+            if show_visibility:
+                visibility = ModulesAdminAPI.format_condition(a.get("visibility", True), default=True)
+                row.append(visibility)
+            row.append(title)
+            rows.append(row)
+
+        headers = ["NAME", "TYPE", "FORM", "REQUIRED"]
+        if show_visibility:
+            headers.append("VISIBLE")
+        headers.append("TITLE")
+        widths = [len(h) for h in headers]
+        for row in rows:
+            for i, cell in enumerate(row):
+                widths[i] = max(widths[i], len(cell))
+
+        def fmt_row(cells: list[str]) -> str:
+            line = "  " + "  ".join((cells[i] if i < len(cells) else "").ljust(widths[i]) for i in range(len(widths)))
+            return line.rstrip()
+
+        lines = [
+            f"Module: {label}  (type={mod_type}, fields={len(rows)})",
+            fmt_row(headers),
+            fmt_row(["-" * w for w in widths]),
+        ]
+        for row in rows:
+            lines.append(fmt_row(row))
+        return "\n".join(lines)
+
+    def format_module(self, module: str, *, staging: bool = False, show_visibility: bool = True) -> str:
+        """Pretty-print ``module``'s fields with type, required-ness, and conditions.
+
+        Fetches the raw metadata record (:meth:`get_published` by default,
+        :meth:`get_staging` when ``staging=True``) and renders it via
+        :meth:`format_module_record`. The REQUIRED and VISIBLE columns show the
+        full "Required/Visible by condition" payload (``cond: <field> <op>
+        <value> ...``), not just the bool collapse that
+        :meth:`ModulesAPI.format_module <pyfsr.api.modules.ModulesAPI.format_module>` gives. Returns
+        ``"module <name> not found in <staging|published>"`` if absent.
+
+        Example::
+
+            >>> client = demo_client()
+            >>> out = client.modules_admin.format_module("alerts")
+            >>> "Module: Alert" in out and "severity" in out
+            True
+        """
+        record = (self.get_staging if staging else self.get_published)(module)
+        if not record:
+            where = "staging" if staging else "published"
+            return f"module {module!r} not found in {where}"
+        return self.format_module_record(record, show_visibility=show_visibility)
+
+    def print_module(self, module: str, *, staging: bool = False, show_visibility: bool = True) -> None:
+        """Print :meth:`format_module` to stdout."""
+        print(self.format_module(module, staging=staging, show_visibility=show_visibility))
 
     def _reverse_attr_for(self, source_module: str, field: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
         """Compute the reverse-side attribute pyfsr should create on the target module.

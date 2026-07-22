@@ -1482,3 +1482,138 @@ def test_grid_column_default_is_per_type():
     # an explicit grid_column always wins, in either direction
     assert ModulesAdminAPI.text_field("x", grid_column=False)["gridColumn"] is False
     assert ModulesAdminAPI.password_field("y", grid_column=True)["gridColumn"] is True
+
+
+# ---------------------------------------------------------------------------
+# format_condition / format_module_record / format_module
+# ---------------------------------------------------------------------------
+
+
+def test_format_condition_bools_and_default():
+    # default suppressed to "" (the uninteresting common case)
+    assert ModulesAdminAPI.format_condition(False, default=False) == ""
+    assert ModulesAdminAPI.format_condition(True, default=True) == ""
+    # non-default bools render as yes/no
+    assert ModulesAdminAPI.format_condition(True, default=False) == "yes"
+    assert ModulesAdminAPI.format_condition(False, default=True) == "no"
+    # None is treated as the default for both axes
+    assert ModulesAdminAPI.format_condition(None, default=False) == ""
+
+
+def test_format_condition_renders_condition_dict():
+    cond = {
+        "logic": "AND",
+        "filters": [{"field": "status", "operator": "eq", "value": "Closed"}],
+    }
+    assert ModulesAdminAPI.format_condition(cond, default=False) == "cond: status eq 'Closed'"
+
+
+def test_format_condition_renders_or_logic_and_non_string_values():
+    cond = {
+        "logic": "OR",
+        "filters": [
+            {"field": "count", "operator": "gt", "value": 5},
+            {"field": "name", "operator": "like", "value": "bot%"},
+        ],
+    }
+    out = ModulesAdminAPI.format_condition(cond, default=False)
+    assert out.startswith("cond: ") and " OR " in out
+    assert "count gt 5" in out and "name like 'bot%'" in out
+
+
+def test_format_module_record_renders_header_and_conditions():
+    record = {
+        "type": "widgets",
+        "module": "widgets",
+        "displayName": "{{ name }}",
+        "descriptions": {"singular": "Widget", "plural": "Widgets"},
+        "attributes": [
+            {
+                "name": "name",
+                "type": "string",
+                "formType": "text",
+                "descriptions": {"singular": "Name"},
+                "validation": {"required": True},
+            },
+            {
+                "name": "status",
+                "type": "picklists",
+                "formType": "picklist",
+                "descriptions": {"singular": "Status"},
+                "validation": {"required": False},
+                "visibility": False,
+            },
+            {
+                "name": "closed_reason",
+                "type": "string",
+                "formType": "text",
+                "descriptions": {"singular": "Closed Reason"},
+                "validation": {
+                    "required": {
+                        "logic": "AND",
+                        "filters": [{"field": "status", "operator": "eq", "value": "Closed"}],
+                    }
+                },
+                "visibility": {
+                    "logic": "AND",
+                    "filters": [{"field": "status", "operator": "ne", "value": "Open"}],
+                },
+            },
+        ],
+    }
+    out = ModulesAdminAPI.format_module_record(record)
+    # header line uses the friendly singular label, not the Jinja template
+    assert "Module: Widget  (type=widgets, fields=3)" in out
+    # required bool shows
+    assert "name" in out and "yes" in out
+    # hidden field shows 'no' in the VISIBLE column
+    assert "no" in out
+    # conditions render on closed_reason
+    assert "cond: status eq 'Closed'" in out
+    assert "cond: status ne 'Open'" in out
+    # dropping visibility removes the column
+    out_no_vis = ModulesAdminAPI.format_module_record(record, show_visibility=False)
+    assert "VISIBLE" not in out_no_vis
+    assert "cond: status eq 'Closed'" in out_no_vis  # REQUIRED still present
+
+
+def test_format_module_record_skips_non_attribute_entries():
+    record = {
+        "type": "widgets",
+        "attributes": [
+            {"name": "a", "type": "string", "formType": "text"},
+            {"not_an_attribute": True},  # no 'name' key — skipped
+            "garbage",  # not a dict — skipped
+        ],
+    }
+    out = ModulesAdminAPI.format_module_record(record)
+    assert "fields=1" in out
+    assert "a" in out
+
+
+def test_format_module_not_found_returns_message():
+    class C:
+        def get(self, endpoint, params=None, **kw):
+            return {"hydra:member": []}
+
+    admin = ModulesAdminAPI(C())
+    assert "not found in published" in admin.format_module("nope")
+    assert "not found in staging" in admin.format_module("nope", staging=True)
+
+
+def test_format_module_uses_demo_client_alerts_fixture():
+    from pyfsr._testing.replay_http import demo_client
+
+    out = demo_client().modules_admin.format_module("alerts")
+    assert "Module: Alert  (type=alerts" in out
+    # the alerts fixture has 4 attributes (name, description, severity, status)
+    assert "fields=4" in out
+    assert "severity" in out and "status" in out
+
+
+def test_print_module_writes_to_stdout(capsys):
+    from pyfsr._testing.replay_http import demo_client
+
+    demo_client().modules_admin.print_module("alerts")
+    captured = capsys.readouterr()
+    assert "Module: Alert" in captured.out
