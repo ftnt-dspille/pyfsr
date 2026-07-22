@@ -34,7 +34,10 @@ Example:
         >>> record.draft, record.installed, record.published
         (False, True, True)
 
-    ``upload``/``deploy`` need a real ``.tgz`` on disk plus a live appliance::
+    ``upload`` is runnable against the replay fixture too — it builds a minimal
+    ``.tgz`` in a ``tempfile`` and posts it (see :meth:`WidgetsAPI.upload`'s doctest).
+    ``deploy`` chains upload + publish + a settle-poll that needs the published
+    widget to land in the live list — not exercised offline::
 
         record = client.widgets.deploy("my-widget-1.2.0.tgz")
         assert record.published
@@ -115,6 +118,21 @@ class WidgetsAPI(BaseAPI):
             FileNotFoundError: if ``path`` doesn't exist.
             WidgetUploadConflict: that name+version is already staged and
                 ``replace=False``.
+
+        Example:
+            >>> import io, tarfile, tempfile
+            >>> from pathlib import Path
+            >>> client = demo_client()
+            >>> with tempfile.TemporaryDirectory() as tmp:
+            ...     tgz = Path(tmp) / "jinjaEditorWidget-1.1.3.tgz"
+            ...     with tarfile.open(tgz, "w:gz") as tar:
+            ...         info = tarfile.TarInfo("jinjaEditorWidget-1.1.3/info.json")
+            ...         data = b'{"name": "jinjaEditorWidget", "version": "1.1.3"}'
+            ...         info.size = len(data)
+            ...         tar.addfile(info, io.BytesIO(data))
+            ...     record = client.widgets.upload(str(tgz))
+            >>> (record.name, record.version, record.draft, record.installed)
+            ('jinjaEditorWidget', '1.1.3', True, False)
         """
         try:
             resp = upload_solutionpack(self.client, path, type_="widget", replace=replace)

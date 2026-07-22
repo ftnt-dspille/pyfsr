@@ -35,8 +35,14 @@ __all__ = ["ReplaySession", "demo_client"]
 # The dispatch table — keyed by (METHOD, path-without-/api/3-prefix...). Paths
 # are matched as stored (leading slash stripped, trailing uuid ignored for the
 # single-record GET/DELETE so any uuid resolves to the one Alert capture).
-def _entry(method: str, path: str, body: Any, status: int = 200) -> tuple[tuple[str, str], dict]:
-    return (method.upper(), path.lstrip("/")), {"status": status, "body": body}
+def _entry(
+    method: str,
+    path: str,
+    body: Any,
+    status: int = 200,
+    content_type: str = "application/json",
+) -> tuple[tuple[str, str], dict]:
+    return (method.upper(), path.lstrip("/")), {"status": status, "body": body, "content_type": content_type}
 
 
 _FIXTURES: dict[tuple[str, str], dict] = dict(
@@ -256,6 +262,29 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("POST", "/api/3/import_jobs", cap.IMPORT_JOB_CREATE_RESPONSE),
         _entry("GET", "/api/3/import_jobs/aa0e8400-e29b-41d4-a716-446655440013", cap.IMPORT_JOB_GET_RESPONSE),
         _entry("GET", "/api/import/aa0e8400-e29b-41d4-a716-446655440013", {"status": "generating"}),
+        # FileOperations — ``client.files.upload`` multipart POST. The response
+        # is a FileRecord; the canonicalization below collapses any /api/3/files
+        # GET by uuid (the export download) onto the recorded file.
+        _entry("POST", "/api/3/files", cap.FILE_UPLOAD_RESPONSE),
+        # ExportConfigAPI — the four-step export lifecycle:
+        #   1. create_template  -> POST /api/3/export_templates
+        #   2. export_by_template_name's name lookup -> GET /api/3/export_templates
+        #   3. trigger          -> PUT /api/export (any fileName/template query string)
+        #   4. poll             -> GET /api/3/export_jobs/<uuid> (collapsed below)
+        #   5. download         -> GET /api/3/files/<uuid> (collapsed below; octet-stream)
+        # The DELETE on /api/3/export_templates/<uuid> (cleanup_template path of
+        # export_record_data) is collapsed below onto the recorded template uuid.
+        _entry("POST", "/api/3/export_templates", cap.EXPORT_TEMPLATE_CREATE_RESPONSE),
+        _entry("GET", "/api/3/export_templates", cap.EXPORT_TEMPLATE_LIST_RESPONSE),
+        _entry("PUT", "/api/export", cap.EXPORT_TRIGGER_RESPONSE),
+        _entry("GET", f"/api/3/export_jobs/{cap._EXPORT_JOB_UUID}", cap.EXPORT_JOB_COMPLETE_RESPONSE),
+        _entry(
+            "GET",
+            f"/api/3/files/{cap._EXPORT_FILE_UUID}",
+            cap.EXPORT_FILE_BYTES,
+            content_type="application/octet-stream",
+        ),
+        _entry("DELETE", f"/api/3/export_templates/{cap._EXPORT_TEMPLATE_UUID}", {}, status=204),
         # PlaybooksAPI — playbook run history and manual input management.
         _entry("GET", "/api/wf/api/workflows/", cap.EXECUTION_HISTORY_RESPONSE),
         # get_execution — single run (any pk resolves to one of the run records).
@@ -347,13 +376,28 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
 
 
 def _build_response(fixture: dict, url: str) -> Response:
-    """Build a :class:`requests.Response` from a recorded fixture."""
+    """Build a :class:`requests.Response` from a recorded fixture.
+
+    JSON fixtures (the default) serialize their body via ``json.dumps``; a
+    fixture carrying raw ``bytes`` (e.g. the octet-stream archive download)
+    passes them through untouched. ``content_type`` defaults to
+    ``application/json`` so existing fixtures behave exactly as before; a
+    binary fixture sets ``application/octet-stream`` so
+    :meth:`pyfsr.client.FortiSOAR.get` returns the bytes (its content-type
+    dispatch keys on this header).
+    """
     resp = Response()
     resp.status_code = fixture["status"]
     resp.url = url
-    resp.headers["Content-Type"] = "application/json"
+    content_type = fixture.get("content_type", "application/json")
+    resp.headers["Content-Type"] = content_type
     body = fixture.get("body")
-    raw = b"" if body in (None, b"") else json.dumps(body).encode()
+    if body is None:
+        raw = b""
+    elif isinstance(body, (bytes, bytearray)):
+        raw = bytes(body)
+    else:
+        raw = json.dumps(body).encode()
     resp._content = raw
     resp.encoding = "utf-8"
     return resp
@@ -494,6 +538,21 @@ def _path_and_match(method: str, url: str, params: Any = None) -> tuple[str, str
     # /api/3/import_jobs/<uuid>  (get / put)  ->  collapse to the recorded uuid.
     if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "import_jobs":
         return "/api/3/import_jobs/aa0e8400-e29b-41d4-a716-446655440013", path
+    # /api/3/export_jobs/<uuid>  (export status poll)  ->  collapse to the
+    # recorded export-job uuid so export_by_template_* / export_record_data
+    # resolve regardless of the jobUuid the trigger step returned.
+    if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "export_jobs":
+        return f"/api/3/export_jobs/{cap._EXPORT_JOB_UUID}", path
+    # /api/3/files/<uuid>  (binary download)  ->  collapse to the recorded
+    # file uuid so the export-archive download (and any GET against /api/3/files
+    # by uuid) resolves to the octet-stream fixture.
+    if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "files":
+        return f"/api/3/files/{cap._EXPORT_FILE_UUID}", path
+    # /api/3/export_templates/<uuid>  (delete)  ->  collapse to the recorded
+    # template uuid so export_record_data's cleanup_template DELETE resolves
+    # regardless of the @id the create step returned.
+    if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "export_templates":
+        return f"/api/3/export_templates/{cap._EXPORT_TEMPLATE_UUID}", path
     # /api/import/<uuid>  (generate options / trigger)  ->  collapse to the recorded uuid.
     if len(segments) == 4 and segments[1] == "api" and segments[2] == "import":
         return "/api/import/aa0e8400-e29b-41d4-a716-446655440013", path
