@@ -64,14 +64,17 @@ WHITELIST = [
     "pyfsr.api.user_settings",
     "pyfsr.api.view_templates",
     "pyfsr.api.feeds",
+    "pyfsr.api.users",
     "pyfsr.api.api_users",
     "pyfsr.api.api_keys",
     "pyfsr.api.manual_input",
     "pyfsr.api.attachments",
     "pyfsr.api.solution_packs",
     "pyfsr.api.import_config",
+    "pyfsr.api.export_config",
     "pyfsr.api.playbooks",
     "pyfsr.api.agents",
+    "pyfsr.utils.file_operations",
     "pyfsr.pagination",
 ]
 

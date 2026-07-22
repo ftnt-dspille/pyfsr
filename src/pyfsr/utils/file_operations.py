@@ -38,6 +38,19 @@ class FileOperations:
             FileRecord: The created ``/api/3/files`` record. Stays
             dict-compatible (``rec["@id"]``) while exposing typed fields
             (``rec.iri``, ``rec.filename``).
+
+        Example:
+            >>> import tempfile
+            >>> from pathlib import Path
+            >>> client = demo_client()
+            >>> with tempfile.TemporaryDirectory() as tmp:
+            ...     p = Path(tmp) / "report.csv"
+            ...     _ = p.write_text("a,b\\n1,2\\n")
+            ...     record = client.files.upload(str(p))
+            >>> record.filename
+            'report.csv'
+            >>> record["@id"]
+            '/api/3/files/880e8400-e29b-41d4-a716-446655440010'
         """
         file_path = Path(filename)
         if not file_path.exists():

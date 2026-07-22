@@ -4,6 +4,94 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-07-21
+
+### Added
+- **Export/import doctests** (P3 of the doctests-for-api-docs plan): the four
+  `ExportConfigAPI` methods that previously had only a fake-host or `+SKIP`
+  doctest now carry CI-runnable `>>>` examples wired to `demo_client_jwt()`
+  (config export needs JWT — API keys are rejected by `OPERATION_CONFIG_EXPORT`):
+  - `create_template` — `POST /api/3/export_templates` (was `+SKIP`; rewritten
+    to use `demo_client()` and offline-only `ExportTemplate` categories so no
+    live lookups fire).
+  - `export_by_template_uuid` — `PUT /api/export` (was fake-host; now builds a
+    tempfile, runs the trigger→poll→download flow, asserts the archive bytes).
+  - `export_by_template_name` — same (the name lookup hits the new
+    `GET /api/3/export_templates` list fixture).
+  - `export_record_data` — same (exercises the full create→export→download→
+    cleanup lifecycle).
+- **Widget + file upload doctests** (P4 of the same plan):
+  - `WidgetsAPI.upload` — `POST /api/3/solutionpacks/install?$type=widget`
+    (the module docstring's illustrative `::` block is now backed by a runnable
+    `>>>` doctest that builds a minimal `jinjaEditorWidget-1.1.3.tgz` in a
+    tempfile and asserts the staged dev-workspace record).
+  - `FileOperations.upload` — `POST /api/3/files` (the upload primitive
+    import/export/widgets all build on; new doctest writes a `report.csv` in a
+    tempfile, uploads it, asserts the `FileRecord`).
+- **`UsersAPI.list` doctest now CI-enforced** — `pyfsr.api.users` added to the
+  doctest WHITELIST. The `list()` doctest (the natural pyfsr sample for
+  `GET /api/3/people`) was already runnable via `demo_client()`; it is now
+  executed by `tests/unit/test_docstring_doctests.py` so it can't drift.
+- **Replay fixtures** for the export/file surface: `FILE_UPLOAD_RESPONSE`
+  (multipart POST reply shaped as a `FileRecord`), `EXPORT_TEMPLATE_CREATE_
+  RESPONSE` + `EXPORT_TEMPLATE_LIST_RESPONSE` (the create + name-lookup
+  replies), `EXPORT_TRIGGER_RESPONSE` (the `PUT /api/export` jobUuid), and
+  `EXPORT_JOB_COMPLETE_RESPONSE` (the polled job with `status: "Export
+  Complete"` + the file IRI). The download fixture `EXPORT_FILE_BYTES`
+  carries raw bytes with `Content-Type: application/octet-stream` so
+  `client.get()` returns bytes (matching the live wire).
+- **Replay session binary support** — `replay_http._entry` and `_build_response`
+  now accept a `content_type` parameter (default `application/json`); a bytes
+  body is passed through untouched. The octet-stream file-download fixture is
+  the first consumer. New `_path_and_match` collapse rules for
+  `/api/3/export_jobs/<uuid>`, `/api/3/files/<uuid>`, and
+  `/api/3/export_templates/<uuid>` so the export flow resolves regardless of
+  the uuids the trigger/create step returned.
+- **`ModulesAdminAPI` pretty-printers** — `format_condition`,
+  `format_module_record`, `format_module`, and `print_module` render a module's
+  fields with the full REQUIRED/VISIBLE picture (incl. "Required/Visible by
+  condition" payloads as `cond: <field> <op> <value> ...`), not just the bool
+  collapse that `ModulesAPI.format_module` gives. `examples/describe_module.py`
+  drives both an offline tour (synthetic record, no appliance) and a live tour
+  (`--module SUBSTRING`, `--staging`).
+
+### Changed
+- **`ExportConfigAPI.create_simplified_template` docstring** — the illustrative
+  `>>>` block (which constructed a live `FortiSOAR('fortisoar.company.com', ...)`
+  client and would fail in doctest CI) is now a `::` literal block, matching the
+  pattern `pyfsr.api.connectors` uses for its illustrative examples. The method
+  is a convenience wrapper, not a direct spec-op wrapper; the canonical
+  `POST /api/3/export_templates` sample is `create_template`'s doctest.
+- **`pyfsr.api.widgets` module docstring** — the note that `upload`/`deploy`
+  both need a live appliance is corrected: `upload` is now runnable against
+  the replay fixture (it builds a `.tgz` in a tempfile), while `deploy` still
+  needs the published widget to land in the live list (the settle-poll isn't
+  exercised offline).
+
+### Fixed
+- **P5 path-mismatch investigation (Category D)** — both items reconciled as
+  "pyfsr is correct; spec needs fixing" (no pyfsr code change required):
+  - `UsersAPI.list` (`/api/3/people` vs `/api/auth/users`): confirmed the two
+    are genuinely different endpoints, not aliases. `/api/3/people` is the
+    People module collection (Hydra `hydra:member` of Person records — human
+    profiles); `/api/auth/users` is the API-key user surface
+    (`{"usersresp": [...]}` envelope with key material), already wrapped by
+    `ApiKeyUsersAPI` (`client.api_users`) with P2's doctests. The spec's
+    `/api/auth/users` op correctly describes API-key users; the gap is that
+    the spec doesn't document `GET /api/3/people` as a collection op at all
+    (it only references `/api/3/people/<uuid>` as an IRI format in response
+    schemas). Added a `.. note::` to `users.py`'s module docstring
+    distinguishing the two surfaces, mirroring the existing `feeds.py:170`
+    note pattern.
+  - `FeedsAPI.insert` (`/api/ingest-feeds/` vs `/api/insert-feeds/`): the
+    spec documents `/api/insert-feeds/{recordType}` (no "g") as the generic
+    feed insert, but `feeds.py:170` (already in the code) live-verifies that
+    path 404s at the router level on 8.0.0-6034. pyfsr uses
+    `/api/ingest-feeds/{record_type}` (with "g") which works; the spec is
+    inconsistent (specific paths use "g", the generic path doesn't). The
+    fix is spec-side: rename `/api/insert-feeds/{recordType}` to
+    `/api/ingest-feeds/{recordType}`.
+
 ## [0.15.0] - 2026-07-21
 
 ### Added

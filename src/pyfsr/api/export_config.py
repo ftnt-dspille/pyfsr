@@ -771,11 +771,18 @@ class ExportConfigAPI(BaseAPI):
                 configuration export
 
         Example:
-            >>> client = FortiSOAR('fortisoar.company.com', token='<your-api-token>')
-            >>> output_file = client.export_config.export_by_template_uuid(
-            ...     template_uuid="123e4567-e89b-12d3-a456-426655440000",
-            ...     output_path="exports/config.zip"
-            ... )
+            >>> import tempfile
+            >>> from pathlib import Path
+            >>> client = demo_client_jwt()   # config export needs JWT (API keys are rejected)
+            >>> with tempfile.TemporaryDirectory() as tmp:
+            ...     out = client.export_config.export_by_template_uuid(
+            ...         template_uuid="123e4567-e89b-12d3-a456-426655440000",
+            ...         output_path=str(Path(tmp) / "config.zip"),
+            ...         poll_interval=0,
+            ...     )
+            ...     archive = Path(out).read_bytes()
+            >>> archive
+            b'ZIPBYTES'
         """
         self._check_auth_support(operation=BaseAuth.OPERATION_CONFIG_EXPORT)
         return self._export_with_template(
@@ -801,11 +808,18 @@ class ExportConfigAPI(BaseAPI):
                 configuration export
 
         Example:
-            >>> client = FortiSOAR('fortisoar.company.com', token='<your-api-token>')
-            >>> output_file = client.export_config.export_by_template_name(
-            ...     template_name="Alert Configuration",
-            ...     output_path="exports/alert_config.zip"
-            ... )
+            >>> import tempfile
+            >>> from pathlib import Path
+            >>> client = demo_client_jwt()   # config export needs JWT (API keys are rejected)
+            >>> with tempfile.TemporaryDirectory() as tmp:
+            ...     out = client.export_config.export_by_template_name(
+            ...         template_name="Alert Configuration",
+            ...         output_path=str(Path(tmp) / "alert_config.zip"),
+            ...         poll_interval=0,
+            ...     )
+            ...     archive = Path(out).read_bytes()
+            >>> archive
+            b'ZIPBYTES'
         """
         self._check_auth_support(operation=BaseAuth.OPERATION_CONFIG_EXPORT)
         template_uuid = self._get_template_uuid(template_name)
@@ -843,21 +857,22 @@ class ExportConfigAPI(BaseAPI):
         Returns:
             Dict containing the created export template details
 
-        Example:
-            >>> from pyfsr import FortiSOAR
-            >>> client = FortiSOAR('fortisoar.company.com', token='<your-api-token>')
+        Example::
 
-            >>> # Simple configuration with automatic lookup
-            >>> template = client.export_config.create_simplified_template(
-            ...     name="Alert Export",
-            ...     modules=["alerts"],
-            ...     module_attributes={
-            ...         "alerts": ["name", "status", "severity", "description"]
-            ...     },
-            ...     picklists=["AlertStatus", "AlertSeverity"],
-            ...     connectors=["OpenAI", "FortiEDR"],
-            ...     playbook_collections=["Incident Response"]
-            ... )
+            from pyfsr import FortiSOAR
+            client = FortiSOAR('fortisoar.company.com', token='<your-api-token>')
+
+            # Simple configuration with automatic lookup
+            template = client.export_config.create_simplified_template(
+                name="Alert Export",
+                modules=["alerts"],
+                module_attributes={
+                    "alerts": ["name", "status", "severity", "description"]
+                },
+                picklists=["AlertStatus", "AlertSeverity"],
+                connectors=["OpenAI", "FortiEDR"],
+                playbook_collections=["Incident Response"]
+            )
         """
         # Build modules configuration
         modules_config = []
@@ -958,14 +973,17 @@ class ExportConfigAPI(BaseAPI):
         Example:
             >>> from pyfsr import Query
             >>> from pyfsr.api.export_config import ExportTemplate
+            >>> client = demo_client()
             >>> tmpl = (
             ...     ExportTemplate("Alert backup")
-            ...     .add_record_set("alerts", query=Query(module="alerts").eq("status", "Open"))
-            ...     .add_picklist("AlertStatus")
-            ...     .add_connector("OpenAI")
-            ...     .add_playbook_collection("Incident Response")
+            ...     .add_module("alerts", fields=["name", "status", "severity"])
+            ...     .add_record_set("alerts", query=Query(module="alerts").eq("status", "Open"), limit=5000)
             ... )
-            >>> created = client.export_config.create_template(tmpl)  # doctest: +SKIP
+            >>> created = client.export_config.create_template(tmpl)
+            >>> created["name"]
+            'Alert backup'
+            >>> created["@id"]
+            '/api/3/export_templates/880e8400-e29b-41d4-a716-446655440022'
         """
         options = self._resolve_template_options(template)
         return self.create_export_template(name=template.name, options=options, metadata=template.metadata)
@@ -1260,14 +1278,20 @@ class ExportConfigAPI(BaseAPI):
             Path to the downloaded ``.zip``.
 
         Example:
+            >>> import tempfile
+            >>> from pathlib import Path
             >>> from pyfsr import Query
-            >>> path = client.export_config.export_record_data(  # doctest: +SKIP
-            ...     "alerts",
-            ...     query=Query(module="alerts").eq("status", "Open"),
-            ...     limit=5000,
-            ...     include_correlations=True,
-            ...     output_path="open_alerts.zip",
-            ... )
+            >>> client = demo_client_jwt()   # config export needs JWT (API keys are rejected)
+            >>> with tempfile.TemporaryDirectory() as tmp:
+            ...     out = client.export_config.export_record_data(
+            ...         "alerts",
+            ...         query=Query(module="alerts").eq("status", "Open"),
+            ...         output_path=str(Path(tmp) / "alerts.zip"),
+            ...         poll_interval=0,
+            ...     )
+            ...     archive = Path(out).read_bytes()
+            >>> archive
+            b'ZIPBYTES'
         """
         self._check_auth_support(operation=BaseAuth.OPERATION_CONFIG_EXPORT)
 

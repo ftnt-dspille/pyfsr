@@ -5,6 +5,15 @@ Each user is two linked records — a **People** profile and an internal **auth
 user** — which ``/api/3/people`` creates atomically when the ``user`` and
 ``roles`` keys are supplied. Roles and teams may be given as UUIDs or friendly
 names; names are resolved via a per-instance cache populated on first use.
+
+.. note::
+    Not to be confused with ``/api/auth/users`` — that is the **API-key user**
+    surface (key material + lifecycle, wrapped by
+    :class:`~pyfsr.api.api_users.ApiKeyUsersAPI` as ``client.api_users``).
+    ``/api/3/people`` here is the **People module**: a Hydra collection of
+    Person records (human profiles with name, email, department, roles,
+    teams). The two are not aliases — different paths, different record
+    shapes (Hydra vs ``{"usersresp": [...]}``), different concepts.
 """
 
 from __future__ import annotations

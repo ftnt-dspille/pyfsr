@@ -1827,6 +1827,124 @@ IMPORT_JOB_CREATE_RESPONSE = _IMPORT_JOB_RESPONSE
 IMPORT_JOB_GET_RESPONSE = _IMPORT_JOB_RESPONSE
 
 # ---------------------------------------------------------------------------
+# FileOperations — client.files (POST /api/3/files multipart upload)
+# ---------------------------------------------------------------------------
+# The /api/3/files endpoint accepts a multipart file upload and returns the
+# created FileRecord. Shaped to match the nested ``file`` block on the live
+# attachment capture (same uuid tail) so attachment/import/export flows that
+# reference the file IRI line up. ``mimeType`` (camelCase) populates the typed
+# FileRecord field; the live wire uses lowercase ``mimetype`` (kept in extra).
+
+_FILE_UPLOAD_RESPONSE = {
+    "@context": "/api/3/contexts/FileRecord",
+    "@id": "/api/3/files/880e8400-e29b-41d4-a716-446655440010",
+    "@type": "FileRecord",
+    "filename": "report.csv",
+    "mimeType": "text/csv",
+    "size": 9,
+    "uuid": "880e8400-e29b-41d4-a716-446655440010",
+    "id": 10,
+}
+
+FILE_UPLOAD_RESPONSE = _FILE_UPLOAD_RESPONSE
+
+# ---------------------------------------------------------------------------
+# ExportConfigAPI — client.export_config (configuration export lifecycle)
+# ---------------------------------------------------------------------------
+# The export surface threads through four endpoints: create/list templates
+# (POST/GET /api/3/export_templates), trigger an export (PUT /api/export),
+# poll the job (GET /api/3/export_jobs/<uuid>), and download the produced
+# archive (GET /api/3/files/<uuid> with Accept: application/octet-stream).
+# Synthesized to exercise every step of the export_by_template_* and
+# export_record_data doctests; the trigger and poll both resolve on the first
+# call so the doctest never blocks on time.sleep. The download fixture carries
+# raw bytes and an octet-stream Content-Type so client.get() returns bytes
+# (matching the live wire) — see replay_http._build_response for bytes handling.
+
+_EXPORT_TEMPLATE_UUID = "880e8400-e29b-41d4-a716-446655440022"
+
+_EXPORT_TEMPLATE_CREATE_RESPONSE = {
+    "@context": "/api/3/contexts/ExportTemplate",
+    "@id": f"/api/3/export_templates/{_EXPORT_TEMPLATE_UUID}",
+    "@type": "ExportTemplate",
+    "name": "Alert backup",
+    "options": {
+        "modules": [{"value": "alerts", "includedAttributes": ["name", "status", "severity"]}],
+        "recordSets": [
+            {
+                "type": "alerts",
+                "label": "alerts",
+                "query": {
+                    "logic": "AND",
+                    "filters": [{"field": "status", "operator": "eq", "value": "Open"}],
+                    "limit": 5000,
+                },
+                "include": True,
+                "includeCorrelations": False,
+            }
+        ],
+    },
+    "metadata": {"autoSelectPicklists": True},
+    "type": "Export Wizard",
+    "uuid": _EXPORT_TEMPLATE_UUID,
+    "id": 22,
+}
+
+EXPORT_TEMPLATE_CREATE_RESPONSE = _EXPORT_TEMPLATE_CREATE_RESPONSE
+
+# GET /api/3/export_templates?name=... — the template list lookup
+# ``_get_template_uuid`` runs to resolve a template name to its uuid before
+# triggering the export. One row whose ``name`` matches what the
+# ``export_by_template_name`` doctest passes; ``createDate`` makes the
+# "most recent by createDate" sort deterministic.
+_EXPORT_TEMPLATE_LIST_ROW = {
+    "@id": f"/api/3/export_templates/{_EXPORT_TEMPLATE_UUID}",
+    "@type": "ExportTemplate",
+    "name": "Alert Configuration",
+    "uuid": _EXPORT_TEMPLATE_UUID,
+    "createDate": 1752400000,
+    "type": "Export Wizard",
+}
+
+EXPORT_TEMPLATE_LIST_RESPONSE = {
+    "@context": "/api/3/contexts/ExportTemplate",
+    "@id": "/api/3/export_templates",
+    "@type": "hydra:Collection",
+    "hydra:totalItems": 1,
+    "hydra:member": [_EXPORT_TEMPLATE_LIST_ROW],
+}
+
+# PUT /api/export?fileName=...&template=... — kicks off an export job; the
+# response carries the job uuid the poll step then reads.
+_EXPORT_JOB_UUID = "880e8400-e29b-41d4-a716-446655440021"
+
+EXPORT_TRIGGER_RESPONSE = {"jobUuid": _EXPORT_JOB_UUID}
+
+# GET /api/3/export_jobs/<uuid> — the polled export job. ``status == "Export
+# Complete"`` makes the doctest's first poll return immediately (no time.sleep),
+# and ``file.@id`` points at the binary-download fixture below.
+_EXPORT_FILE_UUID = "880e8400-e29b-41d4-a716-446655440020"
+
+_EXPORT_JOB_COMPLETE_RESPONSE = {
+    "@context": "/api/3/contexts/ExportJob",
+    "@id": f"/api/3/export_jobs/{_EXPORT_JOB_UUID}",
+    "@type": "ExportJob",
+    "uuid": _EXPORT_JOB_UUID,
+    "status": "Export Complete",
+    "file": {"@id": f"/api/3/files/{_EXPORT_FILE_UUID}"},
+    "jobUuid": _EXPORT_JOB_UUID,
+    "id": 21,
+}
+
+EXPORT_JOB_COMPLETE_RESPONSE = _EXPORT_JOB_COMPLETE_RESPONSE
+
+# GET /api/3/files/<file-uuid> with Accept: application/octet-stream — the
+# produced archive bytes. The fixture is registered with content_type
+# "application/octet-stream" so client.get() returns the raw bytes (matching
+# the live wire), and ``_download_export`` writes them straight to disk.
+EXPORT_FILE_BYTES = b"ZIPBYTES"
+
+# ---------------------------------------------------------------------------
 # PlaybooksAPI — client.playbooks (playbook run history and manual input)
 # ---------------------------------------------------------------------------
 # Playbook run and execution endpoints. Simplified fixtures representing
