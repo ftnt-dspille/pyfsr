@@ -6,16 +6,20 @@ from pyfsr.playbook_match import (
     count,
     has,
     join_parent_child,
+    manual_on,
     none_of,
     parse_playbook,
     step,
     trigger,
+    trigger_label,
+    trigger_resources,
+    trigger_step,
 )
 
 
-def _wf(name, trigger_raw, steps, uuid="u-" + "x"):
+def _wf(name, trigger_raw, steps, uuid="u-" + "x", trigger_args=None):
     """Build a workflow-definition dict like /api/3/workflows returns."""
-    full_steps = [{"name": "Start", "stepType": {"name": trigger_raw}, "arguments": {}}]
+    full_steps = [{"name": "Start", "stepType": {"name": trigger_raw}, "arguments": trigger_args or {}}]
     for s in steps:
         full_steps.append(
             {
@@ -127,3 +131,58 @@ def test_count_requires_a_bound():
 
     with pytest.raises(ValueError):
         count(step(step_type="set_variable"))
+
+
+# ----------------------------------------------------------- trigger metadata
+def test_trigger_step_extracts_start_step():
+    pb = parse_playbook(_wf("PB", "cybersponse.action", [], trigger_args={"resources": ["alerts"], "title": "Run Me"}))
+    ts = trigger_step(pb)
+    assert ts is not None
+    assert ts.step_type_raw == "cybersponse.action"
+    assert ts.arguments["resources"] == ["alerts"]
+    assert ts.arguments["title"] == "Run Me"
+
+
+def test_trigger_step_none_when_no_cybersponse_step():
+    # A definition fetched without relationships has no stepType dicts.
+    pb = parse_playbook({"name": "x", "uuid": "u", "steps": []})
+    assert trigger_step(pb) is None
+
+
+def test_trigger_label_uses_title_then_name():
+    titled = parse_playbook(
+        _wf("Get IP Reputation", "cybersponse.action", [], trigger_args={"title": "VirusTotal: Get IP Reputation"})
+    )
+    assert trigger_label(titled) == "VirusTotal: Get IP Reputation"
+    # No title -> falls back to the playbook name (live shape: "Get Industry List").
+    untitled = parse_playbook(_wf("Get Industry List", "cybersponse.action", []))
+    assert trigger_label(untitled) == "Get Industry List"
+
+
+def test_trigger_resources_returns_module_slugs():
+    pb = parse_playbook(_wf("x", "cybersponse.action", [], trigger_args={"resources": ["alerts", "incidents"]}))
+    assert trigger_resources(pb) == ["alerts", "incidents"]
+    # no resources key -> []
+    assert trigger_resources(parse_playbook(_wf("y", "cybersponse.action", []))) == []
+    # non-string entries filtered out
+    pb2 = parse_playbook(_wf("z", "cybersponse.action", [], trigger_args={"resources": ["alerts", 7]}))
+    assert trigger_resources(pb2) == ["alerts"]
+
+
+def test_manual_on_matches_module_case_insensitively():
+    pb = parse_playbook(_wf("PB", "cybersponse.action", [], trigger_args={"resources": ["alerts"]}))
+    assert manual_on("alerts")(pb)
+    assert manual_on("Alerts")(pb)  # case-insensitive
+    assert not manual_on("incidents")(pb)
+
+
+def test_manual_on_rejects_non_manual_trigger():
+    # An on_create trigger tied to alerts is NOT a manual playbook.
+    pb = parse_playbook(_wf("PB", "cybersponse.post_create", [], trigger_args={"resources": ["alerts"]}))
+    assert not manual_on("alerts")(pb)
+
+
+def test_manual_on_rejects_manual_without_resources():
+    # A manual playbook started only from the playbook page has no resources.
+    pb = parse_playbook(_wf("PB", "cybersponse.action", []))
+    assert not manual_on("alerts")(pb)

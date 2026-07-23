@@ -21,6 +21,7 @@ Example:
 
 from __future__ import annotations
 
+import builtins
 import json
 import time
 import urllib.parse
@@ -33,6 +34,8 @@ from pydantic import ValidationError
 from ..models import (
     CreatePlaybookRequest,
     CreateVersionRequest,
+    ManualInput,
+    ManualInputOption,
     ManualInputResume,
     PlaybookVersion,
     ResumeRequest,
@@ -57,7 +60,10 @@ from ..utils.validation import is_uuid
 from .base import BaseAPI
 
 
-def _pick_approval_option(options: list[dict[str, Any]], decision: str) -> dict[str, Any]:
+def _pick_approval_option(
+    options: list[dict[str, Any]] | list[ManualInputOption],
+    decision: str,
+) -> dict[str, Any] | ManualInputOption:
     """Map an approval ``decision`` to a ``response_mapping`` option dict.
 
     ``"approve"`` selects the primary option (``primary: true``, else the first);
@@ -88,7 +94,7 @@ def _pick_approval_option(options: list[dict[str, Any]], decision: str) -> dict[
     )
 
 
-def _build(model_cls, op: str, **kwargs):
+def _build(model_cls: Any, op: str, **kwargs: Any) -> Any:
     """Construct a typed request model, re-raising pydantic errors as a friendly
     ``ValueError`` so the SDK keeps its single, predictable exception type."""
     try:
@@ -191,7 +197,7 @@ def _trim_result_preview(result: Any, *, limit: int = _STEP_PREVIEW_LIMIT) -> st
     return text[:limit] + "…"
 
 
-def _step_snapshots(full: dict[str, Any]) -> list[RunStepSnapshot]:
+def _step_snapshots(full: Any) -> list[RunStepSnapshot]:
     """Build slim :class:`RunStepSnapshot`s from a ``step_detail=True`` run record.
 
     Mirrors :meth:`run_env`'s step extraction (name resolution fallback to
@@ -448,11 +454,13 @@ class PlaybooksAPI(BaseAPI):
     #: ``pb.status(tid) in pb.TERMINAL_STATUSES``.
     TERMINAL_STATUSES = _TERMINAL_STATUSES
 
-    def __init__(self, client):
+    def __init__(self, client: Any) -> None:
         super().__init__(client)
 
     # --------------------------------------------------------------- helpers
-    def _resolve_uuid(self, playbook: str) -> str | None:
+    def _resolve_uuid(self, playbook: str | None) -> str | None:
+        if playbook is None:
+            return None
         qs = urllib.parse.urlencode({"name": playbook, "$limit": 5})
         resp = self.client.get(f"{_WORKFLOWS}?{qs}")
         members = extract_members(resp)
@@ -477,7 +485,7 @@ class PlaybooksAPI(BaseAPI):
         limit: int = 50,
         relationships: bool = False,
         params: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         """List playbook **definitions** (``GET /api/3/workflows``), newest table order.
 
         These are the playbook templates, not run history (see :meth:`runs`). Filter by
@@ -518,7 +526,7 @@ class PlaybooksAPI(BaseAPI):
         limit: int = 50,
         relationships: bool = False,
         params: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         """Search playbook definitions across the most useful dimensions at once.
 
         A thin, ergonomic layer over the FortiSOAR API-Platform deep-relationship
@@ -611,17 +619,17 @@ class PlaybooksAPI(BaseAPI):
             q.update(params)
         return self.list(name=name, collection=collection, limit=limit, relationships=relationships, params=q)
 
-    def find_with_step_type(self, step_type: str, **kwargs: Any) -> list[dict[str, Any]]:
+    def find_with_step_type(self, step_type: str, **kwargs: Any) -> builtins.list[dict[str, Any]]:
         """Playbooks containing at least one step of ``step_type`` (see :meth:`find`)."""
         return self.find(step_type=step_type, **kwargs)
 
-    def find_by_trigger_type(self, trigger_type: str, **kwargs: Any) -> list[dict[str, Any]]:
+    def find_by_trigger_type(self, trigger_type: str, **kwargs: Any) -> builtins.list[dict[str, Any]]:
         """Playbooks whose start step is ``trigger_type`` (see :meth:`find`)."""
         return self.find(trigger_type=trigger_type, **kwargs)
 
     def find_using_connector(
         self, connector: str, *, operation: str | None = None, **kwargs: Any
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         """Playbooks with a step that invokes ``connector`` (optionally a specific
         ``operation``). Matched as a substring of the step ``arguments`` — pass the
         connector slug as it appears on the wire (e.g. ``"fortigate"``,
@@ -631,11 +639,11 @@ class PlaybooksAPI(BaseAPI):
             return self.find(uses_operation=operation, **kwargs)
         return self.find(uses_connector=connector, **kwargs)
 
-    def find_referencing(self, playbook: str, **kwargs: Any) -> list[dict[str, Any]]:
+    def find_referencing(self, playbook: str, **kwargs: Any) -> builtins.list[dict[str, Any]]:
         """Playbooks that reference ``playbook`` (by name) via a reference step."""
         return self.find(references=playbook, **kwargs)
 
-    def find_by_route(self, route: str, **kwargs: Any) -> list[dict[str, Any]]:
+    def find_by_route(self, route: str, **kwargs: Any) -> builtins.list[dict[str, Any]]:
         """Playbooks exposing the API-endpoint ``route`` (``POST /api/triggers/1/<route>``)."""
         return self.find(route=route, **kwargs)
 
@@ -645,7 +653,7 @@ class PlaybooksAPI(BaseAPI):
         *,
         prefilter: dict[str, Any] | None = None,
         limit: int = 2000,
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         """Structural search the server filter language can't express.
 
         Fetches playbook definitions **with steps inlined**, parses each into a
@@ -678,7 +686,7 @@ class PlaybooksAPI(BaseAPI):
         child_predicate: Callable[[Any], bool],
         *,
         limit: int = 2000,
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         """Parent/child join: parents matching ``parent_predicate`` that reference a
         child matching ``child_predicate``.
 
@@ -696,6 +704,87 @@ class PlaybooksAPI(BaseAPI):
         corpus = [parse_playbook(d) for d in self.find(limit=limit, relationships=True)]
         matched = join_parent_child(corpus, parent_predicate, child_predicate)
         return [pb.raw for pb in matched]
+
+    def manual_on_module(
+        self,
+        module: str,
+        *,
+        active: bool | None = None,
+        limit: int = 2000,
+    ) -> builtins.list[dict[str, Any]]:
+        """Manual-trigger playbooks tied to ``module``, with their UI button labels.
+
+        A *manual* trigger (the right-click / Execute menu on a module's records)
+        carries the modules it's tied to in its trigger step's
+        ``arguments.resources`` list (live-verified -- module name-slugs like
+        ``"alerts"``, not IRIs). This finds every manual playbook whose resources
+        include ``module`` and returns the label the UI shows for it -- the trigger
+        step's ``title`` when set, else the playbook ``name`` -- plus the
+        manual-input dialog's ``executeButtonText`` and every module the trigger
+        is tied to.
+
+        Filtering is done **server-side** via a JSON containment query
+        (``triggerStep.arguments contains {"resources": ["<module>"]}``) on the
+        POST query endpoint, so only matching playbooks are transferred -- not the
+        full corpus. (The URL-param ``$contains`` returns 0 for this shape;
+        containment only works via the POST payload -- live-verified.)
+
+        Args:
+            module: a module name-slug (``"alerts"``, ``"incidents"``,
+                ``"threat_intel_feeds"``), matched as a JSON containment value
+                against the trigger step's ``resources`` list.
+            active: ``True`` to restrict to active playbooks, ``False`` for
+                disabled only; ``None`` (default) for both.
+            limit: max playbooks to return (default 2000 covers most instances).
+
+        Returns:
+            One dict per matching playbook -- ``name``, ``uuid``, ``label`` (the
+            Execute-menu button label), ``execute_button_text`` (the manual-input
+            dialog button, e.g. ``"Execute"``), and ``resources`` (every tied
+            module).
+
+        Example:
+            >>> for pb in client.playbooks.manual_on_module("alerts"):  # doctest: +SKIP
+            ...     print(pb["label"], "—", pb["name"])
+            VirusTotal: Get IP Reputation — Get IP Reputation
+            Get Industry List — Get Industry List
+        """
+        from ..playbook_match import (
+            parse_playbook,
+            trigger_label,
+            trigger_resources,
+            trigger_step,
+        )
+        from ..query import Query
+
+        if not isinstance(module, str) or not module.strip():
+            raise ValueError("manual_on_module() requires a non-empty module name")
+        module = module.strip()
+
+        q = Query(logic="AND").eq("triggerStep.stepType.name", TRIGGER_TYPE_NAMES["manual"])
+        q = q.contains("triggerStep.arguments", {"resources": [module]})
+        if active is not None:
+            q = q.eq("isActive", active)
+        q = q.limit(limit)
+        # The query returns Workflow objects (dict-compatible); parse each to
+        # extract the trigger step's label / button text from the inlined steps.
+        members = self.query(q, relationships=True, raw=True).members
+        out: builtins.list[dict[str, Any]] = []
+        for m in members:
+            d = m.to_dict(by_alias=True) if hasattr(m, "to_dict") else m
+            pb = parse_playbook(d)
+            ts = trigger_step(pb)
+            ts_args = ts.arguments if (ts is not None and isinstance(ts.arguments, dict)) else {}
+            out.append(
+                {
+                    "name": d.get("name"),
+                    "uuid": d.get("uuid"),
+                    "label": trigger_label(pb),
+                    "execute_button_text": ts_args.get("executeButtonText"),
+                    "resources": trigger_resources(pb),
+                }
+            )
+        return out
 
     def get_definition(
         self,
@@ -715,6 +804,7 @@ class PlaybooksAPI(BaseAPI):
         uuid = _require_uuid(uuid, "get_definition")
         params = {"$relationships": "true"} if relationships else None
         resp = self.client.get(f"{_WORKFLOWS}/{uuid}", params=params)
+        assert isinstance(resp, dict)
         return Workflow(**resp)
 
     def create_playbook(
@@ -857,7 +947,9 @@ class PlaybooksAPI(BaseAPI):
             record = playbook
         else:
             uuid = self._resolve_playbook_uuid(playbook, "ensure_active")
-            record = self.client.get(f"{_WORKFLOWS}/{uuid}")
+            fetched = self.client.get(f"{_WORKFLOWS}/{uuid}")
+            assert isinstance(fetched, dict)
+            record = fetched
         if bool(record.get("isActive", False)) == active:
             return record
         return self.update(uuid, isActive=active)
@@ -904,7 +996,7 @@ class PlaybooksAPI(BaseAPI):
         *,
         include_data: bool = True,
         limit: int = 100,
-    ) -> list[PlaybookVersion]:
+    ) -> builtins.list[PlaybookVersion]:
         """List a playbook's saved snapshots (``GET /api/3/workflow_versions``).
 
         Snapshots are returned newest-first by ``modifyDate`` (the editor's sort).
@@ -1016,6 +1108,7 @@ class PlaybooksAPI(BaseAPI):
         payload["uuid"] = uuid
         prepared = _prepare_version_body(payload)
         resp = self.client.put(f"{_WORKFLOWS}/{uuid}", data=prepared)
+        assert isinstance(resp, dict)
         return Workflow(**resp)
 
     def delete_version(self, version: str) -> None:
@@ -1065,7 +1158,7 @@ class PlaybooksAPI(BaseAPI):
             return self.get_version(vid)
         return self.get_version(version)
 
-    def create_playbooks(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    def create_playbooks(self, rows: builtins.list[dict[str, Any]]) -> dict[str, Any]:
         """Create or re-push many playbook definitions (``POST /api/3/bulkupsert/workflows``).
 
         Pass the workflow rows exactly as they would appear in a collection payload.
@@ -1078,7 +1171,8 @@ class PlaybooksAPI(BaseAPI):
         *,
         page: int = 1,
         raw: bool = False,
-        fields: list[str] | tuple[str, ...] | None = None,
+        relationships: bool = False,
+        fields: builtins.list[str] | tuple[str, ...] | None = None,
         summary: bool = False,
         show_deleted: bool = False,
     ) -> Any:
@@ -1089,6 +1183,10 @@ class PlaybooksAPI(BaseAPI):
         ``raw=True`` returns the whole :class:`~pyfsr.pagination.HydraPage` instead of
         just its members, and ``fields``/``summary`` apply a token-efficient
         projection (returning trimmed dicts) for agent reads.
+
+        ``relationships=True`` inlines each workflow's ``steps``/``routes``/
+        ``groups`` (heavier, but needed when inspecting step-level shape — e.g.
+        :meth:`manual_on_module` uses it to read the trigger step's label).
         """
         body = query.to_body() if isinstance(query, Query) else dict(query)
         params: dict[str, Any] = {"$page": page}
@@ -1098,6 +1196,8 @@ class PlaybooksAPI(BaseAPI):
         search = body.pop("search", None)
         if search is not None:
             params["$search"] = search
+        if relationships:
+            params["$relationships"] = "true"
         if show_deleted:
             params["$showDeleted"] = "true"
             body["showDeleted"] = True
@@ -1110,7 +1210,7 @@ class PlaybooksAPI(BaseAPI):
 
     def _fetch_runs_both(
         self, *, limit: int, extra_qs: str = "", parent_filter: str = "parent_wf__isnull=True"
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         """Fetch + merge ``/workflows/`` and ``/historical-workflows/``.
 
         ``parent_filter`` is the run-tree scope clause appended to the query.
@@ -1118,7 +1218,7 @@ class PlaybooksAPI(BaseAPI):
         async sub-playbook children are excluded. Pass ``parent_wf=<pk>`` to
         fetch the children of one run, or ``""`` for an unscoped list.
         """
-        out: list[dict[str, Any]] = []
+        out: builtins.list[dict[str, Any]] = []
         seen: set[str] = set()
         for path in _RUN_PATHS:
             scope = f"&{parent_filter}" if parent_filter else ""
@@ -1144,7 +1244,7 @@ class PlaybooksAPI(BaseAPI):
         playbook: str | None = None,
         playbook_uuid: str | None = None,
         limit: int = 20,
-    ) -> list[RunSummary]:
+    ) -> builtins.list[RunSummary]:
         """List recent playbook executions, newest first (live + historical merged).
 
         Scope to one playbook by ``playbook`` (name, resolved to uuid) or
@@ -1178,7 +1278,7 @@ class PlaybooksAPI(BaseAPI):
         parent: str | int,
         *,
         limit: int = 100,
-    ) -> list[RunSummary]:
+    ) -> builtins.list[RunSummary]:
         """List the child executions spawned by one parent run, newest first.
 
         A loop step with ``parallel`` + ``apply_async`` (or any ``apply_async``
@@ -1293,15 +1393,15 @@ class PlaybooksAPI(BaseAPI):
         self,
         query: str | None = None,
         *,
-        tags_include: str | list[str] | None = None,
-        tags_exclude: str | list[str] | None = None,
+        tags_include: str | builtins.list[str] | None = None,
+        tags_exclude: str | builtins.list[str] | None = None,
         status: str | None = None,
         playbook: str | None = None,
         playbook_uuid: str | None = None,
         limit: int = 20,
         offset: int = 0,
         ordering: str = "-modified",
-    ) -> list[RunSummary]:
+    ) -> builtins.list[RunSummary]:
         """Search playbook execution history with human-friendly filters.
 
         Queries ``POST /api/wf/api/workflows/log_list/`` and returns shaped run
@@ -1569,7 +1669,7 @@ class PlaybooksAPI(BaseAPI):
         task_id = str(run) if _looks_like_uuid(str(run)) else None
         if pk is None:
             return RunNode(pk=None, task_id=task_id)
-        step_snapshots: list[RunStepSnapshot] = []
+        step_snapshots: builtins.list[RunStepSnapshot] = []
         try:
             full = self.get_execution(str(pk), step_detail=steps)
             name, status = full.get("name"), full.get("status")
@@ -1663,7 +1763,7 @@ class PlaybooksAPI(BaseAPI):
         from ..playbook_match import parse_playbook
 
         parsed = parse_playbook(dict(wf))
-        defined: list[dict[str, Any]] = []
+        defined: builtins.list[dict[str, Any]] = []
         defined_names: set[str] = set()
         for s in parsed.steps:
             nm = s.name
@@ -1711,7 +1811,7 @@ class PlaybooksAPI(BaseAPI):
             run_meta["status"] = run_status
 
         # Per-defined-step: did the run record an outcome for it, and what?
-        not_reached: list[str] = []
+        not_reached: builtins.list[str] = []
         for d in defined:
             nm = d["name"]
             st = executed[nm].status if nm and nm in executed else None
@@ -1776,7 +1876,7 @@ class PlaybooksAPI(BaseAPI):
         self,
         playbook: str,
         *,
-        records: list[str] | str | None = None,
+        records: builtins.list[str] | str | None = None,
         inputs: dict[str, Any] | None = None,
         env: dict[str, Any] | None = None,
         follow: bool = False,
@@ -1864,7 +1964,7 @@ class PlaybooksAPI(BaseAPI):
         if not uuid:
             raise ValueError(f"playbook {playbook!r} not found")
         req = _build(TriggerRequest, "trigger", records=records, inputs=inputs, env=env or {})
-        post_kwargs = {} if request_timeout is None else {"timeout": request_timeout}
+        post_kwargs: dict[str, Any] = {} if request_timeout is None else {"timeout": request_timeout}
         resp = self.client.post(f"/api/triggers/1/notrigger/{uuid}", data=req.to_body(), **post_kwargs)
         if follow:
             task_id = resp.get("task_id") if isinstance(resp, dict) else None
@@ -2179,8 +2279,12 @@ class PlaybooksAPI(BaseAPI):
         input_id = int(rows[0]["id"])
         user_iri = user or mi_api._resolve_user_iri()
         full = mi_api.retrieve(input_id, owners=user_iri)
-        options = (full.response_mapping or {}).get("options") or []
+        if not isinstance(full, ManualInput):
+            raise TypeError(f"expected ManualInput from retrieve(), got {type(full).__name__}")
+        options = (full.response_mapping.options if full.response_mapping else None) or []
         opt = _pick_approval_option(options, decision)
+        assert full.workflow is not None  # retrieve always populates the numeric run id
+        assert full.step_id is not None
         return mi_api.resume(
             full.workflow,
             step_iri=opt["step_iri"],
@@ -2202,7 +2306,9 @@ class PlaybooksAPI(BaseAPI):
             >>> result["count"]
             42
         """
-        return self.client.get("/api/wf/api/workflows/count/", params={"logs": logs})
+        resp = self.client.get("/api/wf/api/workflows/count/", params={"logs": logs})
+        assert isinstance(resp, dict)
+        return resp
 
     def log_list(
         self,
@@ -2238,11 +2344,11 @@ class PlaybooksAPI(BaseAPI):
     def query_logs(
         self,
         *,
-        filters: list[dict[str, Any]] | None = None,
+        filters: builtins.list[dict[str, Any]] | None = None,
         logic: str = "AND",
         limit: int | None = None,
-        sort: list[dict[str, Any]] | None = None,
-        aggregates: list[dict[str, Any]] | None = None,
+        sort: builtins.list[dict[str, Any]] | None = None,
+        aggregates: builtins.list[dict[str, Any]] | None = None,
         logs: str = "all",
     ) -> dict[str, Any]:
         """Query the playbook log store by body filter (``POST .../query/workflow_logs/``).
@@ -2272,7 +2378,7 @@ class PlaybooksAPI(BaseAPI):
         return self.client.post("/api/wf/api/query/workflow_logs/", data=body, params={"logs": logs})
 
     # ----------------------------------------------------------- manual inputs
-    def manual_inputs(self) -> list[dict[str, Any]]:
+    def manual_inputs(self) -> builtins.list[dict[str, Any]]:
         """List runs awaiting manual input (``POST .../manual-wf-input/list_wfinput/``).
 
         .. deprecated::
@@ -2362,7 +2468,7 @@ class PlaybooksAPI(BaseAPI):
         if not isinstance(name, str) or not name.strip():
             raise ValueError("trigger_by_name() requires a non-empty name")
         prefix = "/api/triggers/1/deferred/" if deferred else "/api/triggers/1/"
-        post_kwargs = {} if request_timeout is None else {"timeout": request_timeout}
+        post_kwargs: dict[str, Any] = {} if request_timeout is None else {"timeout": request_timeout}
         resp = self.client.post(
             f"{prefix}{name.strip('/ ')}",
             data=body or {},
@@ -2426,7 +2532,7 @@ class PlaybooksAPI(BaseAPI):
             playbook_uuid=playbook_uuid,
             env=env or {},
         )
-        post_kwargs = {} if request_timeout is None else {"timeout": request_timeout}
+        post_kwargs: dict[str, Any] = {} if request_timeout is None else {"timeout": request_timeout}
         resp = self.client.post(f"/api/triggers/1/action/{route_uuid.strip()}", data=req.to_body(), **post_kwargs)
         return TriggerResponse(**resp) if isinstance(resp, dict) else resp
 
@@ -2438,7 +2544,7 @@ class PlaybooksAPI(BaseAPI):
         limit: int = 200,
         status: str | None = None,
         name: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         """Fetch per-step execution records for a run from ``/api/wf/api/historical-steps/``.
 
         Keyed by ``task_id`` (what :meth:`trigger` returns). Steps are ordered

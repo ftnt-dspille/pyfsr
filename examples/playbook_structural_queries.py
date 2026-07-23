@@ -128,6 +128,14 @@ def live_tour() -> None:
     for p in cross[:5]:
         print("   -", p.get("name"))
 
+    # TIER 3d: manual playbooks tied to a module — the Execute-menu buttons.
+    # A manual trigger's `arguments.resources` lists the modules it surfaces on
+    # (right-click / Execute menu); `title` is the button label (else playbook
+    # name). manual_on_module() filters by resource and surfaces both labels.
+    print("\n[tier 3] manual playbooks tied to the alerts module:")
+    for hit in pb.manual_on_module("alerts", active=True)[:10]:
+        print(f"   - {hit['label']!r}  (playbook: {hit['name']}, btn: {hit['execute_button_text']!r})")
+
 
 if __name__ == "__main__":
     offline_tour()

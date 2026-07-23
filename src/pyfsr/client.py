@@ -383,7 +383,14 @@ class FortiSOAR:
         self.system: SystemAPI = SystemAPI(self)
         self.search: SearchAPI = SearchAPI(self)
 
-    def _log_request(self, method: str, url: str, params: dict, data: dict, headers: dict) -> None:  # pragma: no cover
+    def _log_request(
+        self,
+        method: str,
+        url: str,
+        params: dict | None,
+        data: dict | list | None,
+        headers: dict | None,
+    ) -> None:  # pragma: no cover
         """Log request details when verbose mode is enabled."""
         if not self.verbose:
             return
@@ -528,12 +535,12 @@ class FortiSOAR:
         method: str,
         endpoint: str,
         params: dict | None = None,
-        data: dict | None = None,
+        data: dict | list | None = None,
         files: dict | None = None,
         headers: dict | None = None,
         *,
         raise_on_status: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> requests.Response:
         """
         Make a request to the FortiSOAR API.
@@ -709,7 +716,13 @@ class FortiSOAR:
         except ValueError:
             raise ResponseParseError(response, preview=response.text) from None
 
-    def _dry_run_response(self, method: str, url: str, params: dict | None, data: dict | None) -> requests.Response:
+    def _dry_run_response(
+        self,
+        method: str,
+        url: str,
+        params: dict | None,
+        data: dict | list | None,
+    ) -> requests.Response:
         """Build a synthetic 200 response for a suppressed dry-run write.
 
         The body echoes the would-be request so callers that read ``.json()``
@@ -738,13 +751,31 @@ class FortiSOAR:
         response.encoding = "utf-8"
         return response
 
+    @overload
+    def get(
+        self,
+        endpoint: str,
+        params: dict | None = ...,
+        *,
+        raise_on_status: Literal[True] = ...,
+        **kwargs: Any,
+    ) -> dict[str, Any] | bytes: ...
+    @overload
+    def get(
+        self,
+        endpoint: str,
+        params: dict | None = ...,
+        *,
+        raise_on_status: Literal[False],
+        **kwargs: Any,
+    ) -> requests.Response: ...
     def get(
         self,
         endpoint: str,
         params: dict | None = None,
         *,
         raise_on_status: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> dict[str, Any] | bytes | requests.Response:
         """
         Perform GET request and return response based on content type.
@@ -766,15 +797,48 @@ class FortiSOAR:
             # Default to JSON if content type is not explicitly specified
             return self._safe_json(response)
 
+    @overload
     def post(
         self,
         endpoint: str,
-        data: dict | None = None,
+        data: dict | list | None = ...,
+        files: dict | None = ...,
+        params: dict | None = ...,
+        *,
+        raise_on_status: Literal[True] = ...,
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+    @overload
+    def post(
+        self,
+        endpoint: str,
+        data: dict | list | None = ...,
+        files: dict | None = ...,
+        params: dict | None = ...,
+        *,
+        raise_on_status: Literal[False],
+        **kwargs: Any,
+    ) -> requests.Response: ...
+    @overload
+    def post(
+        self,
+        endpoint: str,
+        data: dict | list | None = ...,
+        files: dict | None = ...,
+        params: dict | None = ...,
+        *,
+        raise_on_status: bool,
+        **kwargs: Any,
+    ) -> dict[str, Any] | requests.Response: ...
+    def post(
+        self,
+        endpoint: str,
+        data: dict | list | None = None,
         files: dict | None = None,
         params: dict | None = None,
         *,
         raise_on_status: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> dict[str, Any] | requests.Response:
         """Perform POST request and return JSON response.
 
@@ -792,6 +856,26 @@ class FortiSOAR:
         )
         return response if not raise_on_status else self._safe_json(response)
 
+    @overload
+    def put(
+        self,
+        endpoint: str,
+        data: dict | None = ...,
+        params: dict | None = ...,
+        *,
+        raise_on_status: Literal[True] = ...,
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+    @overload
+    def put(
+        self,
+        endpoint: str,
+        data: dict | None = ...,
+        params: dict | None = ...,
+        *,
+        raise_on_status: Literal[False],
+        **kwargs: Any,
+    ) -> requests.Response: ...
     def put(
         self,
         endpoint: str,
@@ -799,7 +883,7 @@ class FortiSOAR:
         params: dict | None = None,
         *,
         raise_on_status: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> dict[str, Any] | requests.Response:
         """Perform PUT request and return JSON response.
 
@@ -815,13 +899,31 @@ class FortiSOAR:
         )
         return response if not raise_on_status else self._safe_json(response)
 
+    @overload
+    def delete(
+        self,
+        endpoint: str,
+        params: dict | None = ...,
+        *,
+        raise_on_status: Literal[True] = ...,
+        **kwargs: Any,
+    ) -> None: ...
+    @overload
+    def delete(
+        self,
+        endpoint: str,
+        params: dict | None = ...,
+        *,
+        raise_on_status: Literal[False],
+        **kwargs: Any,
+    ) -> requests.Response: ...
     def delete(
         self,
         endpoint: str,
         params: dict | None = None,
         *,
         raise_on_status: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> None | requests.Response:
         """Perform DELETE request.
 
