@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-07-23
+
+### Changed
+- **Unified `config=` param on `connectors.execute()` / `healthcheck()`** —
+  live-verified on FortiSOAR 8.0.0 that the server resolves both a configuration
+  UUID and a display name in the wire `config` field, so one param replaces two:
+  - `config=` is canonical — accepts either a config UUID or a name, passed
+    straight to the wire (the server resolves both).
+  - `config_id=` and `config_name=` are deprecated aliases that warn and funnel
+    into `config=`. They still work but gain nothing.
+  - Passing more than one raises `ValueError`; passing a dict (the field-map
+    sense on `create_configuration`/`upsert_configuration`/`validate_config`)
+    raises `TypeError` — catches the footgun that motivated the original
+    `config_id` split.
+  - Default-config fallback still works: `execute(conn, op)` with no `config`
+    resolves the connector's default configuration from the cached listing.
+  - Agent tool schema/handler updated to use `config=` instead of `config_name=`.
+
+## [0.16.1] - 2026-07-22
+
+### Added
+- **`playbooks.manual_on_module`** + server-side resource filtering for
+  playbook-step resource lookups.
+
+### Fixed
+- **74 mypy errors** across the pydantic-converted modules — the typed CLI
+  surface now passes `mypy` clean.
+
+## [0.16.0] - 2026-07-22
+
+### Added
+- **FortiSOAR 8.0 AI service** — agent config, LLM config, triage, enrichment,
+  insight, and MCP gateway support across the `ai` API surface.
+
+### Fixed
+- **`content-hub-mirror` setup-appliance.sh `--revert`** now actually completes
+  (was leaving the appliance in a half-reverted state).
+
+### Changed
+- **README examples synced** with actual scripts — removed 6 deleted, added 5
+  missing.
+
 ## [0.15.1] - 2026-07-21
 
 ### Added
