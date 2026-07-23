@@ -179,7 +179,7 @@ def main() -> int:
             print()
             continue
         try:
-            r = conn.execute(name, op, config_name=label, params=params)
+            r = conn.execute(name, op, config=label, params=params)
             msg = r.message or ""
             print(f"  smoke {op} -> status={r.status} msg={msg!r}")
             print(f"    output preview: {_show(r.data)}")

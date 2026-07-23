@@ -144,11 +144,10 @@ def test_healthcheck_resolves_version_and_hits_path():
     assert hc[0] == "/api/integration/connectors/healthcheck/virustotal/3.1.0/"
 
 
-def test_healthcheck_with_config_id_param():
+def test_healthcheck_with_config_param():
     api, client = _api()
-    api.healthcheck("virustotal", config_id="vt-default")
+    api.healthcheck("virustotal", config="vt-default")
     hc = [c for c in client.get_calls if "healthcheck" in c[0]][0]
-    # the wire param stays "config" — the rename is client-side only
     assert hc[1] == {"config": "vt-default"}
 
 
@@ -215,7 +214,7 @@ def test_execute_builds_body_and_resolves_version():
 
 def test_execute_explicit_version_and_config_no_resolution():
     api, client = _api()
-    api.execute("acme", "op", version="9.9", config_id="cfg-1")
+    api.execute("acme", "op", version="9.9", config="cfg-1")
     _, body = client.post_calls[0]
     assert (body["version"], body["config"]) == ("9.9", "cfg-1")
     # no list_configured fetch needed when both are explicit
@@ -230,11 +229,12 @@ def test_execute_defaults_empty_params_and_config():
     assert body["config"] == ""  # not resolved, no cache primed
 
 
-def test_execute_config_name_selects_named():
+def test_execute_config_accepts_name_passthrough():
+    """config= accepts a display NAME — passed straight to the wire (server resolves)."""
     api, _client = _api()
-    api.execute("virustotal", "op", config_name="Alt")
+    api.execute("virustotal", "op", config="Alt")
     _, body = _client.post_calls[0]
-    assert body["config"] == "vt-alt"
+    assert body["config"] == "Alt"  # name, not a UUID — server resolves it
 
 
 # -- install / import-job helpers -------------------------------------------
@@ -1724,48 +1724,71 @@ def test_ensure_version_no_auto_fetch_reraises(monkeypatch):
     assert calls["downloaded"] == []
 
 
-# -- config -> config_id rename ---------------------------------------------
-# `config` meant a configuration UUID on execute/healthcheck but the config FIELD
-# MAP on create/update/upsert_configuration + validate_config — one name, two
-# types, and nothing caught the mix-up (a dict where a UUID belonged just became a
-# bad query param). The UUID sense is now `config_id`; `config` still works.
+# -- config_id= / config_name= deprecated aliases for config= ----------------
+# The server resolves both UUIDs and names in the wire `config` field, so one
+# param (config=) replaces both. config_id= and config_name= still work but warn.
 
 
-def test_execute_config_kwarg_still_works_but_warns():
+def test_execute_config_id_kwarg_warns():
     api, client = _api()
-    with pytest.deprecated_call(match="config_id"):
-        api.execute("acme", "op", version="9.9", config="cfg-1")
+    with pytest.deprecated_call(match="config="):
+        api.execute("acme", "op", version="9.9", config_id="cfg-1")
     _, body = client.post_calls[0]
-    assert body["config"] == "cfg-1"  # same wire body as before the rename
+    assert body["config"] == "cfg-1"  # same wire body
 
 
-def test_healthcheck_config_kwarg_still_works_but_warns():
+def test_execute_config_name_kwarg_warns():
     api, client = _api()
-    with pytest.deprecated_call(match="config_id"):
-        api.healthcheck("virustotal", config="vt-default")
+    with pytest.deprecated_call(match="config="):
+        api.execute("acme", "op", version="9.9", config_name="my-config")
+    _, body = client.post_calls[0]
+    assert body["config"] == "my-config"  # name passed through
+
+
+def test_healthcheck_config_id_kwarg_warns():
+    api, client = _api()
+    with pytest.deprecated_call(match="config="):
+        api.healthcheck("virustotal", config_id="vt-default")
     hc = [c for c in client.get_calls if "healthcheck" in c[0]][0]
     assert hc[1] == {"config": "vt-default"}
 
 
-@pytest.mark.parametrize(
-    "call",
-    [
-        lambda api: api.execute("acme", "op", version="9.9", config_id="a", config="b"),
-        lambda api: api.healthcheck("virustotal", config_id="a", config="b"),
-    ],
-)
-def test_passing_both_config_and_config_id_raises(call):
-    api, _ = _api()
-    with pytest.raises(ValueError, match="not both"):
-        call(api)
-
-
-def test_config_id_is_the_quiet_path():
-    """The new spelling must not warn — otherwise callers can't get clean."""
+def test_execute_config_kwarg_is_canonical_no_warning():
+    """config= is the canonical param — it must NOT warn."""
     import warnings as _w
 
     api, _ = _api()
     with _w.catch_warnings():
         _w.simplefilter("error", DeprecationWarning)
-        api.execute("acme", "op", version="9.9", config_id="cfg-1")
-        api.healthcheck("virustotal", config_id="vt-default")
+        api.execute("acme", "op", version="9.9", config="cfg-1")
+
+
+def test_healthcheck_config_kwarg_is_canonical_no_warning():
+    import warnings as _w
+
+    api, _ = _api()
+    with _w.catch_warnings():
+        _w.simplefilter("error", DeprecationWarning)
+        api.healthcheck("virustotal", config="vt-default")
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda api: api.execute("acme", "op", version="9.9", config="a", config_id="b"),
+        lambda api: api.execute("acme", "op", version="9.9", config="a", config_name="b"),
+        lambda api: api.execute("acme", "op", version="9.9", config_id="a", config_name="b"),
+        lambda api: api.healthcheck("virustotal", config="a", config_id="b"),
+    ],
+)
+def test_passing_multiple_config_params_raises(call):
+    api, _ = _api()
+    with pytest.raises(ValueError, match="deprecated aliases"):
+        call(api)
+
+
+def test_execute_config_rejects_dict():
+    """A dict passed as config= is the field-map sense — catch it loudly."""
+    api, _ = _api()
+    with pytest.raises(TypeError, match="field-map"):
+        api.execute("acme", "op", version="9.9", config={"server": "x"})

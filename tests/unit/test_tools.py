@@ -60,7 +60,7 @@ class FakeConnectors:
     def healthcheck(self, connector, config=None):
         return {"name": connector, "status": "Available"}
 
-    def execute(self, connector, operation, params=None, config_name=None):
+    def execute(self, connector, operation, params=None, config=None):
         return {"operation": operation, "status": "Success", "data": {"params": params}}
 
     def default_config(self, connector, version=None):
