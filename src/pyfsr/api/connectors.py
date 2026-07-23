@@ -71,27 +71,59 @@ from ._solutionpacks import upload_solutionpack
 from .base import BaseAPI
 
 
-def _resolve_config_id_kwarg(config_id: str | None, config: str | None) -> str | None:
-    """Fold the deprecated ``config=`` UUID keyword into ``config_id=``.
+def _resolve_config_kwarg(
+    config: str | None,
+    config_id: str | None,
+    config_name: str | None,
+) -> str | None:
+    """Resolve the configuration argument for :meth:`ConnectorsAPI.execute` /
+    :meth:`ConnectorsAPI.healthcheck`.
 
-    ``config`` means two different things across this API — a configuration UUID
-    on :meth:`ConnectorsAPI.execute` / :meth:`ConnectorsAPI.healthcheck`, but the
-    configuration **field map** on ``create``/``update``/``upsert_configuration``
-    and ``validate_config``. Same name, different types, and nothing catches the
-    mix-up: a dict passed where a UUID was meant just becomes a bad query param.
-    The UUID sense is being renamed to ``config_id``; ``config`` still works.
+    ``config=`` is canonical — it accepts either a configuration **UUID** or a
+    display **name**; the FortiSOAR server resolves both in the wire ``config``
+    field (live-verified on 8.0.0: a name and a UUID both select the right
+    configuration). ``config_id=`` and ``config_name=`` are deprecated aliases
+    that funnel into ``config=`` with a warning. Passing more than one raises.
     """
-    if config is None:
-        return config_id
+    given = [
+        (k, v)
+        for k, v in (
+            ("config", config),
+            ("config_id", config_id),
+            ("config_name", config_name),
+        )
+        if v is not None
+    ]
+    if len(given) > 1:
+        names = ", ".join(k for k, _ in given)
+        raise ValueError(
+            "Pass a configuration UUID or name as config= — not together with "
+            f"config_id= or config_name= (those are deprecated aliases). Got: {names}"
+        )
+    for label, value in given:
+        if not isinstance(value, str):
+            raise TypeError(
+                f"{label!r} on execute/healthcheck takes a configuration UUID or name "
+                f"(str), got {type(value).__name__} — the field-map 'config=' on "
+                "create_configuration/upsert_configuration is a dict; use config= "
+                "for the UUID or name here."
+            )
     if config_id is not None:
-        raise ValueError("Pass the configuration UUID as config_id= or config= — not both.")
-    warnings.warn(
-        "The 'config' keyword is deprecated; use config_id= for a configuration "
-        "UUID. ('config' elsewhere in this API means the configuration field map, "
-        "not a UUID — the rename removes that collision.)",
-        DeprecationWarning,
-        stacklevel=3,  # 3: caller -> public method -> here
-    )
+        warnings.warn(
+            "The 'config_id' keyword is deprecated; use config= (it accepts a "
+            "UUID or a name — the server resolves both).",
+            DeprecationWarning,
+            stacklevel=3,  # 3: caller -> public method -> here
+        )
+        return config_id
+    if config_name is not None:
+        warnings.warn(
+            "The 'config_name' keyword is deprecated; use config= (it accepts a "
+            "UUID or a name — the server resolves both).",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return config_name
     return config
 
 
@@ -787,33 +819,30 @@ class ConnectorsAPI(BaseAPI):
         connector: str,
         *,
         version: str | None = None,
-        config_id: str | None = None,
         config: str | None = None,
+        config_id: str | None = None,
     ) -> HealthcheckResult:
         """Live-check whether a connector configuration is reachable.
 
         ``status="Available"`` is green. A 404 is normalized to
         ``status="no-config"`` meaning the connector isn't configured.
 
-        ``config_id`` is a configuration **UUID** — the ``config_id`` of the
-        :class:`~pyfsr.models.ConnectorConfig` that :meth:`upsert_configuration`
-        returns. Omit it to check the connector's *default* configuration; pass it
-        for any non-default config, or the call fails with a "Could not find a
-        configuration matching the id get_default_config" error.
+        ``config`` selects which configuration to check. It accepts either a
+        configuration **UUID** or a display **name** — the FortiSOAR server
+        resolves both (live-verified on 8.0.0). Omit it to check the connector's
+        *default* configuration.
 
         .. deprecated::
-           The ``config`` keyword is deprecated in favour of ``config_id``. It
-           took a UUID, while ``config`` on :meth:`upsert_configuration` /
-           :meth:`create_configuration` / :meth:`validate_config` takes the field
-           **map** — one name, two types. ``config`` still works and wins nothing:
-           passing both raises.
+           ``config_id=`` is a deprecated alias for ``config=``. It still works
+           (and emits a warning) but gains nothing — ``config=`` accepts both a
+           UUID and a name. Passing both raises.
 
         Example:
             >>> client = demo_client()
             >>> client.connectors.healthcheck("mitre-attack").status
             'Available'
         """
-        config_id = _resolve_config_id_kwarg(config_id, config)
+        config = _resolve_config_kwarg(config, config_id, None)
         version = version or self.resolve_version(connector)
         if not version:
             return HealthcheckResult(
@@ -822,7 +851,7 @@ class ConnectorsAPI(BaseAPI):
                 message=f"{connector!r} is not configured on this instance",
             )
         path = f"/api/integration/connectors/healthcheck/{connector}/{version}/"
-        params = {"config": config_id} if config_id else None
+        params = {"config": config} if config else None
         try:
             return HealthcheckResult.model_validate(self.client.get(path, params=params))
         except Exception as e:  # noqa: BLE001 - normalize "not configured" to data
@@ -1674,25 +1703,26 @@ class ConnectorsAPI(BaseAPI):
         operation: str,
         *,
         version: str | None = None,
+        config: str | None = None,
+        params: dict[str, Any] | None = None,
         config_id: str | None = None,
         config_name: str | None = None,
-        params: dict[str, Any] | None = None,
-        config: str | None = None,
     ) -> ExecuteResult:
         """Run a single connector operation via ``POST /api/integration/execute/``.
 
-        ``version`` and ``config_id`` are resolved from the configured connector
-        when omitted (``config_name`` selects a non-default configuration by
-        name). ``config_id`` is a configuration **UUID** — the ``config_id`` of
-        the :class:`~pyfsr.models.ConnectorConfig` that
-        :meth:`upsert_configuration` returns.
+        ``config`` selects which connector configuration to run against. It
+        accepts either a configuration **UUID** or a display **name** — the
+        FortiSOAR server resolves both in the wire ``config`` field
+        (live-verified on 8.0.0). Omit it to use the connector's *default*
+        configuration (resolved client-side from the cached connector listing).
 
         .. deprecated::
-           The ``config`` keyword is deprecated in favour of ``config_id``. It
-           took a UUID, while ``config`` on :meth:`upsert_configuration` /
-           :meth:`create_configuration` / :meth:`validate_config` takes the field
-           **map** — one name, two types. ``config`` still works; passing both
+           ``config_id=`` and ``config_name=`` are deprecated aliases for
+           ``config=``. They still work (and emit a warning) but gain nothing —
+           ``config=`` accepts both a UUID and a name. Passing more than one
            raises.
+
+        ``version`` is resolved from the configured connector when omitted.
 
         Returns a typed :class:`~pyfsr.models.ExecuteResult` — dict-compatible
         (``result["data"]`` still works), with a ``.ok`` property for the
@@ -1717,16 +1747,15 @@ class ConnectorsAPI(BaseAPI):
             >>> result.data["vulnerabilities"][0]["cveID"]
             'CVE-2026-45659'
         """
-        config_id = _resolve_config_id_kwarg(config_id, config)
+        config = _resolve_config_kwarg(config, config_id, config_name)
         version = version or self.resolve_version(connector)
-        if config_id is None and (config_name is not None or self._configured is not None):
-            config_id = self.resolve_config(connector, config_name)
+        if config is None and self._configured is not None:
+            config = self.resolve_config(connector)
         body = {
             "connector": connector,
             "operation": operation,
             "version": version or "",
-            # The wire field stays "config" — this rename is client-side only.
-            "config": config_id or "",
+            "config": config or "",
             "params": params or {},
         }
         resp = self.client.post("/api/integration/execute/", data=body)

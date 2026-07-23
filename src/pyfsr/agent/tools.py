@@ -190,8 +190,8 @@ def _h_healthcheck_connector(client, *, connector, config=None) -> Any:
     return client.connectors.healthcheck(connector, config=config)
 
 
-def _h_run_connector_operation(client, *, connector, operation, params=None, config_name=None) -> Any:
-    return client.connectors.execute(connector, operation, params=params or {}, config_name=config_name)
+def _h_run_connector_operation(client, *, connector, operation, params=None, config=None) -> Any:
+    return client.connectors.execute(connector, operation, params=params or {}, config=config)
 
 
 #: The FortiAI Agentic Assistant connector that owns the chat-session store.
@@ -847,9 +847,9 @@ _TOOLS: tuple[ToolSpec, ...] = (
                         "connector's operation schema for the exact field names."
                     ),
                 },
-                "config_name": {
+                "config": {
                     "type": "string",
-                    "description": "Select a non-default configuration by name.",
+                    "description": "Configuration UUID or display name; omit for the default config.",
                 },
             },
             ["connector", "operation"],
