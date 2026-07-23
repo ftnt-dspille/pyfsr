@@ -1,0 +1,1060 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="AI &amp; Agents" href="ai-agents.html"><link rel="prev" title="Playbook Authoring &amp; Deployment" href="playbook-authoring.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Playbook YAML Syntax Reference - pyfsr 0.16.1</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #c8102e;
+  --color-brand-content: #c8102e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">pyfsr 0.16.1</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <span class="sidebar-brand-text">pyfsr 0.16.1</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Guides</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting-started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="authentication.html">Authentication</a></li>
+<li class="toctree-l1"><a class="reference internal" href="records.html">Working with Records</a></li>
+<li class="toctree-l1"><a class="reference internal" href="querying.html">Querying</a></li>
+<li class="toctree-l1"><a class="reference internal" href="module-admin.html">Module Editor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="module-field-schema.html">Module &amp; Field Schema Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="connectors.html">Connectors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="export-import.html">Configuration Export &amp; Import</a></li>
+<li class="toctree-l1"><a class="reference internal" href="playbook-authoring.html">Playbook Authoring &amp; Deployment</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Playbook YAML Syntax Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ai-agents.html">AI &amp; Agents</a></li>
+<li class="toctree-l1"><a class="reference internal" href="appliance-cli.html">Appliance Administration CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="repo-cli.html">Content Repository CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content-hub-mirror.html">Self-hosted Content Hub mirror</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference.html">API Reference</a><input aria-label="Toggle navigation of API Reference" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/client/index.html">pyfsr.client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/records/index.html">pyfsr.records</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/query/index.html">pyfsr.query</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/pagination/index.html">pyfsr.pagination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/fields/index.html">pyfsr.fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/config/index.html">pyfsr.config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/instances/index.html">pyfsr.instances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/exceptions/index.html">pyfsr.exceptions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/api/index.html">pyfsr.api</a><input aria-label="Toggle navigation of pyfsr.api" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/actors/index.html">pyfsr.api.actors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/agents/index.html">pyfsr.api.agents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/ai/index.html">pyfsr.api.ai</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/alerts/index.html">pyfsr.api.alerts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/api_keys/index.html">pyfsr.api.api_keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/api_users/index.html">pyfsr.api.api_users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/app_config/index.html">pyfsr.api.app_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/attachments/index.html">pyfsr.api.attachments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/audit/index.html">pyfsr.api.audit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/auth_config/index.html">pyfsr.api.auth_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/base/index.html">pyfsr.api.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/comments/index.html">pyfsr.api.comments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/connectors/index.html">pyfsr.api.connectors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/content_hub/index.html">pyfsr.api.content_hub</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/export_config/index.html">pyfsr.api.export_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/export_templates/index.html">pyfsr.api.export_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/feeds/index.html">pyfsr.api.feeds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/import_config/index.html">pyfsr.api.import_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/incidents/index.html">pyfsr.api.incidents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/manual_input/index.html">pyfsr.api.manual_input</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/modules/index.html">pyfsr.api.modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/modules_admin/index.html">pyfsr.api.modules_admin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/native_mcp/index.html">pyfsr.api.native_mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/notifications/index.html">pyfsr.api.notifications</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/picklists/index.html">pyfsr.api.picklists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/playbooks/index.html">pyfsr.api.playbooks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/reporting/index.html">pyfsr.api.reporting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/roles/index.html">pyfsr.api.roles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/routers/index.html">pyfsr.api.routers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/rules/index.html">pyfsr.api.rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/schedules/index.html">pyfsr.api.schedules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/search/index.html">pyfsr.api.search</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/solution_packs/index.html">pyfsr.api.solution_packs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/system/index.html">pyfsr.api.system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/system_queries/index.html">pyfsr.api.system_queries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/system_settings/index.html">pyfsr.api.system_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/tags/index.html">pyfsr.api.tags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/tasks/index.html">pyfsr.api.tasks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/taxii/index.html">pyfsr.api.taxii</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/teams/index.html">pyfsr.api.teams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/user_settings/index.html">pyfsr.api.user_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/users/index.html">pyfsr.api.users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/view_templates/index.html">pyfsr.api.view_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/views/index.html">pyfsr.api.views</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/wf_tools/index.html">pyfsr.api.wf_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/widgets/index.html">pyfsr.api.widgets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/workflow_collections/index.html">pyfsr.api.workflow_collections</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/models/index.html">pyfsr.models</a><input aria-label="Toggle navigation of pyfsr.models" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/models/base/index.html">pyfsr.models.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/models/types/index.html">pyfsr.models.types</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/auth/index.html">pyfsr.auth</a><input aria-label="Toggle navigation of pyfsr.auth" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/auth/api_key/index.html">pyfsr.auth.api_key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/auth/base/index.html">pyfsr.auth.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/auth/user_pass/index.html">pyfsr.auth.user_pass</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/authoring/index.html">pyfsr.authoring</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/agent/index.html">pyfsr.agent</a><input aria-label="Toggle navigation of pyfsr.agent" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/index.html">pyfsr.agent.archetypes</a><input aria-label="Toggle navigation of pyfsr.agent.archetypes" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/harvest/index.html">pyfsr.agent.archetypes.harvest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/record/index.html">pyfsr.agent.archetypes.record</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/router/index.html">pyfsr.agent.archetypes.router</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/store/index.html">pyfsr.agent.archetypes.store</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/agent/mcp/index.html">pyfsr.agent.mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/agent/tools/index.html">pyfsr.agent.tools</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/cli/index.html">pyfsr.cli</a><input aria-label="Toggle navigation of pyfsr.cli" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/index.html">pyfsr.cli.appliance</a><input aria-label="Toggle navigation of pyfsr.cli.appliance" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/certs/index.html">pyfsr.cli.appliance.certs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/content_hub/index.html">pyfsr.cli.appliance.content_hub</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/db/index.html">pyfsr.cli.appliance.db</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/diagnose/index.html">pyfsr.cli.appliance.diagnose</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/es/index.html">pyfsr.cli.appliance.es</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/facts/index.html">pyfsr.cli.appliance.facts</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/ha/index.html">pyfsr.cli.appliance.ha</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/host/index.html">pyfsr.cli.appliance.host</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/info/index.html">pyfsr.cli.appliance.info</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/license/index.html">pyfsr.cli.appliance.license</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/logs/index.html">pyfsr.cli.appliance.logs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/mq/index.html">pyfsr.cli.appliance.mq</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/service/index.html">pyfsr.cli.appliance.service</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/transport/index.html">pyfsr.cli.appliance.transport</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/cli/playbook/index.html">pyfsr.cli.playbook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/cli/repo/index.html">pyfsr.cli.repo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/cli/widget/index.html">pyfsr.cli.widget</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/appliance/index.html">pyfsr.appliance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/repo/index.html">pyfsr.repo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/content_catalog/index.html">pyfsr.content_catalog</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference-advanced.html">Advanced &amp; internal</a><input aria-label="Toggle navigation of Advanced &amp; internal" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/playbook_catalog/index.html">pyfsr.playbook_catalog</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/playbook_lint/index.html">pyfsr.playbook_lint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/playbook_match/index.html">pyfsr.playbook_match</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/concurrency/index.html">pyfsr.concurrency</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/projection/index.html">pyfsr.projection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/query_models/index.html">pyfsr.query_models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/spec/index.html">pyfsr.spec</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../autoapi/pyfsr/utils/index.html">pyfsr.utils</a><input aria-label="Toggle navigation of pyfsr.utils" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/utils/file_operations/index.html">pyfsr.utils.file_operations</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/utils/iri/index.html">pyfsr.utils.iri</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/utils/validation/index.html">pyfsr.utils.validation</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../reference-models.html">Typed models</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/guides/playbook-yaml-reference.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="playbook-yaml-syntax-reference">
+<h1>Playbook YAML Syntax Reference<a class="headerlink" href="#playbook-yaml-syntax-reference" title="Link to this heading">¶</a></h1>
+<p>This is the authoring reference for the <strong>YAML playbook DSL</strong> that the
+<code class="docutils literal notranslate"><span class="pre">fsr_playbooks</span></code> compiler (the <code class="docutils literal notranslate"><span class="pre">pyfsr[playbooks]</span></code> extra) accepts. It is the
+companion to the narrative <a class="reference internal" href="playbook-authoring.html"><span class="doc">Playbook Authoring &amp; Deployment</span></a> guide: that page shows the
+<em>workflow</em> (write → compile → deploy); this page is the <em>syntax</em> — every
+top-level key, every step <code class="docutils literal notranslate"><span class="pre">type</span></code>, and the friendly fields each step accepts.</p>
+<p>The DSL is a thin, friendly layer over FortiSOAR’s wire format: you write short
+<code class="docutils literal notranslate"><span class="pre">type:</span></code> names and friendly keys like <code class="docutils literal notranslate"><span class="pre">module:</span></code> / <code class="docutils literal notranslate"><span class="pre">vars:</span></code> / <code class="docutils literal notranslate"><span class="pre">when:</span></code>, and the
+compiler expands them into the canonical workflow/step/route JSON the import API
+expects. Anything you don’t recognise on the wire, you can usually still set by
+its canonical key — the compiler only rejects <em>unknown</em> keys, never canonical
+ones.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The step catalogue is owned by the compiler and validated against a packaged
+reference DB of real FortiSOAR step types. When in doubt, <code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">playbook</span> <span class="pre">validate</span> <span class="pre">&lt;file&gt;</span></code> is the source of truth — it reports unknown keys, missing
+fields, and wrong shapes with a <code class="docutils literal notranslate"><span class="pre">path:</span></code> into your YAML.</p>
+</div>
+<section id="what-the-compiler-turns-a-step-into">
+<h2>What the compiler turns a step into<a class="headerlink" href="#what-the-compiler-turns-a-step-into" title="Link to this heading">¶</a></h2>
+<p>The friendly <code class="docutils literal notranslate"><span class="pre">type:</span></code> / <code class="docutils literal notranslate"><span class="pre">vars:</span></code> / <code class="docutils literal notranslate"><span class="pre">next:</span></code> you write expand into the canonical
+workflow/step/route JSON the import API expects. Compiling is offline (no
+network), so you can inspect exactly what gets sent before deploying:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr.authoring</span><span class="w"> </span><span class="kn">import</span> <span class="n">compile_playbook_yaml</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">compile_playbook_yaml</span><span class="p">(</span><span class="s1">&#39;&#39;&#39;</span>
+<span class="gp">... </span><span class="s1">name: wire-shape-demo</span>
+<span class="gp">... </span><span class="s1">description: show one step&#39;s canonical JSON</span>
+<span class="gp">... </span><span class="s1">playbooks:</span>
+<span class="gp">... </span><span class="s1">  - name: Demo</span>
+<span class="gp">... </span><span class="s1">    steps:</span>
+<span class="gp">... </span><span class="s1">      - name: Start</span>
+<span class="gp">... </span><span class="s1">        type: start</span>
+<span class="gp">... </span><span class="s1">        next: Set Greeting</span>
+<span class="gp">... </span><span class="s1">      - name: Set Greeting</span>
+<span class="gp">... </span><span class="s1">        type: set_variable</span>
+<span class="gp">... </span><span class="s1">        vars:</span>
+<span class="gp">... </span><span class="s1">          greeting: hello from pyfsr</span>
+<span class="gp">... </span><span class="s1">          count: 3</span>
+<span class="gp">... </span><span class="s1">&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span><span class="o">.</span><span class="n">ok</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">wf</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">fsr_json</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;workflows&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">step</span> <span class="o">=</span> <span class="n">wf</span><span class="p">[</span><span class="s2">&quot;steps&quot;</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">step</span><span class="p">[</span><span class="s2">&quot;@type&quot;</span><span class="p">],</span> <span class="n">step</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">step</span><span class="p">[</span><span class="s2">&quot;arguments&quot;</span><span class="p">]</span>
+<span class="go">(&#39;WorkflowStep&#39;, &#39;Set Greeting&#39;, {&#39;greeting&#39;: &#39;hello from pyfsr&#39;, &#39;count&#39;: 3})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">wf</span><span class="p">[</span><span class="s2">&quot;routes&quot;</span><span class="p">]]</span>
+<span class="go">[&#39;Start -&gt; Set Greeting&#39;]</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">set_variable</span></code> step type maps to a fixed <code class="docutils literal notranslate"><span class="pre">stepType</span></code> IRI (a UUID the
+compiler resolves from its catalog); the friendly <code class="docutils literal notranslate"><span class="pre">vars:</span></code> mapping lands verbatim
+in <code class="docutils literal notranslate"><span class="pre">arguments</span></code>, and <code class="docutils literal notranslate"><span class="pre">next:</span></code> becomes a <code class="docutils literal notranslate"><span class="pre">WorkflowRoute</span></code> whose <code class="docutils literal notranslate"><span class="pre">name</span></code> is
+<code class="docutils literal notranslate"><span class="pre">&quot;&lt;source&gt;</span> <span class="pre">-&gt;</span> <span class="pre">&lt;target&gt;&quot;</span></code>. The volatile fields ��� <code class="docutils literal notranslate"><span class="pre">uuid</span></code>, <code class="docutils literal notranslate"><span class="pre">top</span></code>/<code class="docutils literal notranslate"><span class="pre">left</span></code> (canvas
+position), and the <code class="docutils literal notranslate"><span class="pre">/api/3/workflow_steps/&lt;uuid&gt;</span></code> IRIs in each route — are
+compiler-generated and stable across runs, so you only need to author the
+friendly shape on the left.</p>
+</section>
+<section id="file-structure">
+<h2>File structure<a class="headerlink" href="#file-structure" title="Link to this heading">¶</a></h2>
+<p>A playbook file describes <strong>one collection</strong> and the <strong>workflows</strong> (playbooks)
+inside it:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">collection</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">My Collection</span><span class="w">          </span><span class="c1"># required — the collection name</span>
+<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">What this does</span><span class="w">         </span><span class="c1"># optional</span>
+<span class="nt">visible</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">                       </span><span class="c1"># optional — show in the UI (default true)</span>
+
+<span class="nt">playbooks</span><span class="p">:</span><span class="w">                          </span><span class="c1"># required — one or more workflows</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">My Playbook</span><span class="w">               </span><span class="c1"># required — workflow name</span>
+<span class="w">    </span><span class="nt">is_active</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">                </span><span class="c1"># optional — live trigger? (default false)</span>
+<span class="w">    </span><span class="nt">trigger</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start</span><span class="w">                  </span><span class="c1"># optional — trigger step type (default &quot;start&quot;)</span>
+<span class="w">    </span><span class="nt">parameters</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">                  </span><span class="c1"># optional — referenced-playbook input params</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span><span class="w">                          </span><span class="c1"># required — the step list</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Start</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start</span>
+<span class="w">        </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Do Something</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Do Something</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">set_variable</span>
+<span class="w">        </span><span class="nt">vars</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">greeting</span><span class="p">:</span><span class="w"> </span><span class="nv">hello</span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Top-level key</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">collection</span></code></p></td>
+<td><p>Collection display name.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">description</span></code></p></td>
+<td><p>Free-text description.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">visible</span></code></p></td>
+<td><p>Whether the collection shows in the UI (default <code class="docutils literal notranslate"><span class="pre">true</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">playbooks</span></code></p></td>
+<td><p>List of workflows; each is one playbook.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Playbook key</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>Workflow name (required).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>If <code class="docutils literal notranslate"><span class="pre">true</span></code>, the playbook is <strong>live</strong> and its trigger fires. Leave <code class="docutils literal notranslate"><span class="pre">false</span></code> for manual/referenced playbooks.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">trigger</span></code></p></td>
+<td><p>Short-name of the trigger step type; defaults to <code class="docutils literal notranslate"><span class="pre">start</span></code>. Usually inferred from the first <code class="docutils literal notranslate"><span class="pre">start*</span></code> step instead.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">parameters</span></code></p></td>
+<td><p>Input parameters for a referenced playbook (<code class="docutils literal notranslate"><span class="pre">vars.input.params.&lt;name&gt;</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">steps</span></code></p></td>
+<td><p>The step list (see below).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="steps-common-shape">
+<h2>Steps: common shape<a class="headerlink" href="#steps-common-shape" title="Link to this heading">¶</a></h2>
+<p>Every step has a <code class="docutils literal notranslate"><span class="pre">name</span></code>, a <code class="docutils literal notranslate"><span class="pre">type</span></code>, and (except terminals/decisions) a <code class="docutils literal notranslate"><span class="pre">next:</span></code>
+pointing at the next step’s <code class="docutils literal notranslate"><span class="pre">name</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Enrich IP</span><span class="w">          </span><span class="c1"># unique within the playbook; also the jinja slug</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">connector</span>
+<span class="w">  </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Decide</span><span class="w">             </span><span class="c1"># name of the next step</span>
+<span class="w">  </span><span class="nt">arguments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nv">...</span><span class="p p-Indicator">}</span><span class="w">         </span><span class="c1"># type-specific (many types have friendlier keys)</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">name</span></code></strong> is also how you reference a step’s output downstream:
+<code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">vars.steps.Enrich_IP.data</span> <span class="pre">}}</span></code> (spaces become underscores).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">next</span></code></strong> wires the linear flow. <code class="docutils literal notranslate"><span class="pre">decision</span></code> / <code class="docutils literal notranslate"><span class="pre">manual_input</span></code> steps put <code class="docutils literal notranslate"><span class="pre">next:</span></code>
+on each branch instead (see those types).</p></li>
+<li><p>Terminal steps (<code class="docutils literal notranslate"><span class="pre">stop</span></code> / <code class="docutils literal notranslate"><span class="pre">end</span></code>) omit <code class="docutils literal notranslate"><span class="pre">next</span></code>.</p></li>
+</ul>
+</section>
+<section id="step-types">
+<h2>Step types<a class="headerlink" href="#step-types" title="Link to this heading">¶</a></h2>
+<p>Friendly <code class="docutils literal notranslate"><span class="pre">type:</span></code> → canonical FortiSOAR step type (from the compiler’s alias
+table). Use the friendly name on the left:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">type:</span></code></p></th>
+<th class="head"><p>FortiSOAR step</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">start</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cybersponse.abstract_trigger</span></code></p></td>
+<td><p>Manual / referenced trigger (the default Start).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">start_on_create</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cybersponse.post_create</span></code></p></td>
+<td><p><strong>Auto-fire when a record is created</strong> in a module.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">start_on_update</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cybersponse.post_update</span></code></p></td>
+<td><p>Auto-fire when a record is updated.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">set_variable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SetVariable</span></code></p></td>
+<td><p>Define <code class="docutils literal notranslate"><span class="pre">vars.*</span></code> values.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">decision</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Decision</span></code></p></td>
+<td><p>Branch on conditions.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">connector</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Connectors</span></code></p></td>
+<td><p>Run a connector operation.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">find_record</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">FindRecords</span></code></p></td>
+<td><p>Query records of a module.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">create_record</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">InsertData</span></code></p></td>
+<td><p>Create a record.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">update_record</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">UpdateRecord</span></code></p></td>
+<td><p>Update a record.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ingest_bulk_feed</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">IngestBulkFeed</span></code></p></td>
+<td><p>Bulk feed insert (bypasses on-create triggers).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">delay</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Delay</span></code></p></td>
+<td><p>Wait.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">manual_input</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ManualInput</span></code></p></td>
+<td><p>Pause for human input.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">approval</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Approval</span></code></p></td>
+<td><p>Approval gate.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">code_snippet</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">CodeSnippet</span></code></p></td>
+<td><p>Run a Python snippet.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">workflow_reference</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">WorkflowReference</span></code></p></td>
+<td><p>Call another playbook.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">stop</span></code> / <code class="docutils literal notranslate"><span class="pre">end</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Connectors</span></code> (<code class="docutils literal notranslate"><span class="pre">cyops_utilities.no_op</span></code>)</p></td>
+<td><p>First-class no-op terminal.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<section id="start-manual-trigger">
+<h3><code class="docutils literal notranslate"><span class="pre">start</span></code> — manual trigger<a class="headerlink" href="#start-manual-trigger" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Start</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start</span>
+<span class="w">  </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">First Step</span>
+</pre></div>
+</div>
+<p>Bind a <code class="docutils literal notranslate"><span class="pre">module:</span></code> to make it a manual Execute-menu trigger on that module’s
+records:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Start</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start</span>
+<span class="w">  </span><span class="nt">module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">alerts</span>
+<span class="w">  </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">First Step</span>
+</pre></div>
+</div>
+</section>
+<section id="start-on-create-start-on-update-record-triggers">
+<h3><code class="docutils literal notranslate"><span class="pre">start_on_create</span></code> / <code class="docutils literal notranslate"><span class="pre">start_on_update</span></code> — record triggers<a class="headerlink" href="#start-on-create-start-on-update-record-triggers" title="Link to this heading">¶</a></h3>
+<p>Auto-fire when a record is created (or updated) in <code class="docutils literal notranslate"><span class="pre">module:</span></code>. Set the
+playbook’s <code class="docutils literal notranslate"><span class="pre">is_active:</span> <span class="pre">true</span></code> for it to actually fire.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Start</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start_on_create</span>
+<span class="w">  </span><span class="nt">module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">heists</span><span class="w">                 </span><span class="c1"># required — the module to watch</span>
+<span class="w">  </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Stamp Status</span>
+</pre></div>
+</div>
+<p>Add a <code class="docutils literal notranslate"><span class="pre">when:</span></code> field-based filter to fire only on records matching a query
+(<code class="docutils literal notranslate"><span class="pre">logic</span></code> + <code class="docutils literal notranslate"><span class="pre">filters</span></code>, each <code class="docutils literal notranslate"><span class="pre">{field,</span> <span class="pre">op,</span> <span class="pre">value}</span></code>):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Start</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start_on_create</span>
+<span class="w">  </span><span class="nt">module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">heists</span>
+<span class="w">  </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">logic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AND</span>
+<span class="w">    </span><span class="nt">filters</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">field</span><span class="p">:</span><span class="w"> </span><span class="nv">takeUsd</span><span class="p p-Indicator">,</span><span class="nt"> op</span><span class="p">:</span><span class="w"> </span><span class="nv">gt</span><span class="p p-Indicator">,</span><span class="nt"> value</span><span class="p">:</span><span class="w"> </span><span class="nv">1000000</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Stamp Status</span>
+</pre></div>
+</div>
+<p>For <code class="docutils literal notranslate"><span class="pre">start_on_update</span></code>, <code class="docutils literal notranslate"><span class="pre">op:</span> <span class="pre">changed</span></code> (no <code class="docutils literal notranslate"><span class="pre">value</span></code>) fires when the listed field
+changes. The compiler expands <code class="docutils literal notranslate"><span class="pre">when:</span></code> into the canonical <code class="docutils literal notranslate"><span class="pre">fieldbasedtrigger</span></code>
+envelope (<code class="docutils literal notranslate"><span class="pre">resource</span></code>/<code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">step_variables</span></code>, <code class="docutils literal notranslate"><span class="pre">triggerOnSource</span></code>, …) for
+you.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">start_on_create</span></code> / <code class="docutils literal notranslate"><span class="pre">start_on_update</span></code> playbook only fires when the workflow is
+<code class="docutils literal notranslate"><span class="pre">is_active:</span> <span class="pre">true</span></code>. The triggering record arrives as
+<code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">vars.input.records[0]</span> <span class="pre">}}</span></code>.</p>
+</div>
+</section>
+<section id="set-variable">
+<h3><code class="docutils literal notranslate"><span class="pre">set_variable</span></code><a class="headerlink" href="#set-variable" title="Link to this heading">¶</a></h3>
+<p>Write a top-level <code class="docutils literal notranslate"><span class="pre">vars:</span></code> mapping (not <code class="docutils literal notranslate"><span class="pre">arguments:</span></code>):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Set Inputs</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">set_variable</span>
+<span class="w">  </span><span class="nt">vars</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">greeting</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hello from pyfsr</span>
+<span class="w">    </span><span class="nt">source_ip</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">vars.input.records[0].sourceIp</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">  </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Next Step</span>
+</pre></div>
+</div>
+</section>
+<section id="decision">
+<h3><code class="docutils literal notranslate"><span class="pre">decision</span></code><a class="headerlink" href="#decision" title="Link to this heading">¶</a></h3>
+<p>Branches carry their own <code class="docutils literal notranslate"><span class="pre">next:</span></code> per condition entry — there is no step-level
+<code class="docutils literal notranslate"><span class="pre">next:</span></code> or <code class="docutils literal notranslate"><span class="pre">branches:</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Big Score?</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">decision</span>
+<span class="w">  </span><span class="nt">conditions</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">vars.input.records[0].takeUsd</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">1000000</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">      </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">big</span>
+<span class="w">      </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Alert The Boss</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<span class="w">      </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Log It</span>
+</pre></div>
+</div>
+</section>
+<section id="connector">
+<h3><code class="docutils literal notranslate"><span class="pre">connector</span></code><a class="headerlink" href="#connector" title="Link to this heading">¶</a></h3>
+<p>Connector op, operation name, and params go <strong>under <code class="docutils literal notranslate"><span class="pre">arguments:</span></code></strong>. Resolve the
+exact <code class="docutils literal notranslate"><span class="pre">connector</span></code> / <code class="docutils literal notranslate"><span class="pre">operation</span></code> / param names with the discovery tools
+(<code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">playbook</span></code> MCP / <code class="docutils literal notranslate"><span class="pre">find_operation</span></code>) — don’t guess them:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Enrich IP</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">connector</span>
+<span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">connector</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">virustotal</span>
+<span class="w">    </span><span class="nt">operation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">get_ip_reputation</span>
+<span class="w">    </span><span class="nt">ip</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">vars.input.records[0].sourceIp</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">  </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Decide</span>
+</pre></div>
+</div>
+</section>
+<section id="find-record-create-record-update-record">
+<h3><code class="docutils literal notranslate"><span class="pre">find_record</span></code> / <code class="docutils literal notranslate"><span class="pre">create_record</span></code> / <code class="docutils literal notranslate"><span class="pre">update_record</span></code><a class="headerlink" href="#find-record-create-record-update-record" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Find Open Heists</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">find_record</span>
+<span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">heists</span>
+<span class="w">    </span><span class="nt">query</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">logic</span><span class="p">:</span><span class="w"> </span><span class="nv">AND</span><span class="p p-Indicator">,</span><span class="nt"> filters</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[{</span><span class="nt">field</span><span class="p">:</span><span class="w"> </span><span class="nv">status</span><span class="p p-Indicator">,</span><span class="nt"> operator</span><span class="p">:</span><span class="w"> </span><span class="nv">eq</span><span class="p p-Indicator">,</span><span class="nt"> value</span><span class="p">:</span><span class="w"> </span><span class="nv">Open</span><span class="p p-Indicator">}]}</span>
+
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Log It</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">create_record</span>
+<span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">heist_logs</span>
+<span class="w">    </span><span class="nt">resource</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">note</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;triggered</span><span class="nv"> </span><span class="s">by</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">vars.input.records[0].codename</span><span class="nv"> </span><span class="s">}}&quot;</span><span class="p p-Indicator">}</span>
+
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Stamp Status</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">update_record</span>
+<span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">heists</span><span class="w">                                     </span><span class="c1"># → collectionType</span>
+<span class="w">    </span><span class="nt">collection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">vars.input.records[0][&#39;@id&#39;]</span><span class="nv"> </span><span class="s">}}&quot;</span><span class="w">   </span><span class="c1"># the record IRI to update</span>
+<span class="w">    </span><span class="nt">resource</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">status</span><span class="p">:</span><span class="w"> </span><span class="nv">Briefed</span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">module:</span></code> is friendly-expanded: on <code class="docutils literal notranslate"><span class="pre">create_record</span></code> it becomes the target
+<code class="docutils literal notranslate"><span class="pre">collection</span></code> IRI; on <code class="docutils literal notranslate"><span class="pre">update_record</span></code> it becomes <code class="docutils literal notranslate"><span class="pre">collectionType</span></code> (and
+<code class="docutils literal notranslate"><span class="pre">collection:</span></code> stays the <em>record</em> IRI you’re updating). Bare picklist labels
+(e.g. <code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">Briefed</span></code>) are auto-resolved to picklist IRIs.</p>
+</section>
+<section id="delay-approval">
+<h3><code class="docutils literal notranslate"><span class="pre">delay</span></code>, <code class="docutils literal notranslate"><span class="pre">approval</span></code><a class="headerlink" href="#delay-approval" title="Link to this heading">¶</a></h3>
+<p>These accept their canonical <code class="docutils literal notranslate"><span class="pre">arguments:</span></code> (see <code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">playbook</span> <span class="pre">validate</span></code> /
+<code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">playbook</span> <span class="pre">step-help</span> <span class="pre">&lt;type&gt;</span></code>).</p>
+</section>
+<section id="code-snippet-run-a-python-snippet">
+<h3><code class="docutils literal notranslate"><span class="pre">code_snippet</span></code> — run a Python snippet<a class="headerlink" href="#code-snippet-run-a-python-snippet" title="Link to this heading">¶</a></h3>
+<p>The Python source goes under <code class="docutils literal notranslate"><span class="pre">arguments.code:</span></code> (a friendly shorthand the
+compiler maps to the canonical <code class="docutils literal notranslate"><span class="pre">arguments.params.python_function</span></code>). The snippet
+runs through the <code class="docutils literal notranslate"><span class="pre">code-snippet</span></code> connector, so a configured connector is
+required (set <code class="docutils literal notranslate"><span class="pre">allow_imports</span></code> on it to <code class="docutils literal notranslate"><span class="pre">import</span></code> anything):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Reconcile</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">code_snippet</span>
+<span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">code</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">      </span><span class="no">import json</span>
+<span class="w">      </span><span class="no">print(json.dumps({&quot;risk&quot;: &quot;high&quot; if ... else &quot;low&quot;}))</span>
+<span class="w">  </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Decide</span>
+</pre></div>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">code-snippet</span></code> sandbox execs the snippet at <strong>module level</strong> (a top-level
+<code class="docutils literal notranslate"><span class="pre">return</span></code> is a <code class="docutils literal notranslate"><span class="pre">SyntaxError</span></code>) and restricts <code class="docutils literal notranslate"><span class="pre">open</span></code>. Surface a result with
+<code class="docutils literal notranslate"><span class="pre">print(json.dumps(...))</span></code> — the connector auto-deserializes it into a
+<code class="docutils literal notranslate"><span class="pre">code_output</span></code> dict read downstream at <code class="docutils literal notranslate"><span class="pre">vars.steps.&lt;name&gt;.data.code_output.*</span></code>.
+See <a class="reference internal" href="playbook-authoring.html"><span class="doc">Playbook Authoring &amp; Deployment</span></a> for the full sandbox-compatible pattern, the
+upstream-output jinja paths, and the unrestricted-python escape hatch.</p>
+</div>
+</section>
+<section id="manual-input-pause-for-human-input">
+<h3><code class="docutils literal notranslate"><span class="pre">manual_input</span></code> — pause for human input<a class="headerlink" href="#manual-input-pause-for-human-input" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">manual_input</span></code> keys (<code class="docutils literal notranslate"><span class="pre">title</span></code>, <code class="docutils literal notranslate"><span class="pre">description</span></code>, <code class="docutils literal notranslate"><span class="pre">options</span></code>, <code class="docutils literal notranslate"><span class="pre">inputs</span></code>) go at the
+<strong>step level</strong>, not under <code class="docutils literal notranslate"><span class="pre">arguments:</span></code>. <code class="docutils literal notranslate"><span class="pre">options</span></code>, like <code class="docutils literal notranslate"><span class="pre">decision</span></code> conditions,
+carry a per-entry <code class="docutils literal notranslate"><span class="pre">next:</span></code> for branching; <code class="docutils literal notranslate"><span class="pre">inputs</span></code> declare the fields the human
+fills in. A submitted field is read downstream as
+<code class="docutils literal notranslate"><span class="pre">vars.steps.&lt;thisStep&gt;.input.&lt;field&gt;</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AskNumber</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">manual_input</span>
+<span class="w">  </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Enter a six digit number</span>
+<span class="w">  </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Please enter a number that is exactly 6 digits long.</span>
+<span class="w">  </span><span class="nt">inputs</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">my_number</span><span class="p p-Indicator">,</span><span class="nt"> kind</span><span class="p">:</span><span class="w"> </span><span class="nv">integer</span><span class="p p-Indicator">,</span><span class="nt"> label</span><span class="p">:</span><span class="w"> </span><span class="nv">My Number</span><span class="p p-Indicator">,</span><span class="nt"> required</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">options</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">option</span><span class="p">:</span><span class="w"> </span><span class="nv">Submit</span><span class="p p-Indicator">,</span><span class="nt"> primary</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Validate</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">description:</span></code> is optional: when omitted the compiler falls back to the step’s
+<code class="docutils literal notranslate"><span class="pre">title:</span></code> (the FortiSOAR runtime rejects a genuinely empty description body, so
+the fallback keeps a description-less prompt runnable). Set an explicit
+<code class="docutils literal notranslate"><span class="pre">description:</span></code> when you want prompt text distinct from the title.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When driving a paused prompt with <code class="docutils literal notranslate"><span class="pre">client.manual_input</span></code>, a pending input’s
+<code class="docutils literal notranslate"><span class="pre">.title</span></code> field is the <strong>step name</strong> (<code class="docutils literal notranslate"><span class="pre">AskNumber</span></code> above), not the schema title.
+The one-call <code class="docutils literal notranslate"><span class="pre">client.manual_input.answer(value,</span> <span class="pre">by_step=...)</span></code> hides this and the
+list-token-vs-numeric-id gotcha.</p>
+</div>
+</section>
+<section id="workflow-reference-call-another-playbook">
+<h3><code class="docutils literal notranslate"><span class="pre">workflow_reference</span></code> — call another playbook<a class="headerlink" href="#workflow-reference-call-another-playbook" title="Link to this heading">¶</a></h3>
+<p>Name the target playbook under <code class="docutils literal notranslate"><span class="pre">arguments:</span></code> as <code class="docutils literal notranslate"><span class="pre">target:</span></code> (a friendly alias the
+compiler resolves to the wire <code class="docutils literal notranslate"><span class="pre">workflowReference:</span></code> IRI — prefer <code class="docutils literal notranslate"><span class="pre">target:</span></code>).
+<code class="docutils literal notranslate"><span class="pre">apply_async:</span> <span class="pre">false</span></code> makes the parent wait synchronously so it can read the
+child’s output:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CallChild</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workflow_reference</span>
+<span class="w">  </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">StampResult</span>
+<span class="w">  </span><span class="nt">apply_async</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Validate Six Digit Number</span>
+</pre></div>
+</div>
+<p><strong>Cross-playbook output contract.</strong> The child’s output is whatever its <em>last</em>
+<code class="docutils literal notranslate"><span class="pre">set_variable</span></code> step sets. The parent reads it as <code class="docutils literal notranslate"><span class="pre">vars.steps.&lt;refStep&gt;.&lt;childVar&gt;</span></code>
+— so if the child ends with <code class="docutils literal notranslate"><span class="pre">set_variable</span></code> writing <code class="docutils literal notranslate"><span class="pre">is_valid_number</span></code>, the parent
+reads <code class="docutils literal notranslate"><span class="pre">vars.steps.CallChild.is_valid_number</span></code>. (In Jinja, spaces in a step name
+become underscores.)</p>
+</section>
+<section id="do-until-retry-loop-a-step-until-a-condition-holds">
+<h3><code class="docutils literal notranslate"><span class="pre">do_until</span></code> / <code class="docutils literal notranslate"><span class="pre">retry:</span></code> — loop a step until a condition holds<a class="headerlink" href="#do-until-retry-loop-a-step-until-a-condition-holds" title="Link to this heading">¶</a></h3>
+<p>Attach a <code class="docutils literal notranslate"><span class="pre">retry:</span></code> block (<code class="docutils literal notranslate"><span class="pre">until</span></code> / <code class="docutils literal notranslate"><span class="pre">times</span></code> / <code class="docutils literal notranslate"><span class="pre">delay</span></code>) to re-run a step until the
+Jinja <code class="docutils literal notranslate"><span class="pre">until</span></code> evaluates true. On a <code class="docutils literal notranslate"><span class="pre">workflow_reference</span></code> this re-launches the
+child each turn — e.g. re-popping a <code class="docutils literal notranslate"><span class="pre">manual_input</span></code> until the answer validates:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CallChild</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workflow_reference</span>
+<span class="w">  </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">StampResult</span>
+<span class="w">  </span><span class="nt">apply_async</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Validate Six Digit Number</span>
+<span class="w">  </span><span class="nt">retry</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">until</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">vars.steps.CallChild.is_valid_number</span><span class="nv"> </span><span class="s">==</span><span class="nv"> </span><span class="s">true</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">    </span><span class="nt">times</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<span class="w">    </span><span class="nt">delay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Each <code class="docutils literal notranslate"><span class="pre">retry:</span></code> turn produces its own child run linked to the parent by
+<code class="docutils literal notranslate"><span class="pre">parent_wf</span></code>; the parent itself may also span several run records. Locate the
+real parent as the top-level run (<code class="docutils literal notranslate"><span class="pre">parent_wf</span></code> null) and enumerate loop turns
+with <code class="docutils literal notranslate"><span class="pre">client.playbooks.child_runs(parent_pk)</span></code> (or <code class="docutils literal notranslate"><span class="pre">run_tree</span></code>) rather than
+counting runs by name. The full worked example is
+<code class="docutils literal notranslate"><span class="pre">examples/playbooks/do_until_validation_demo.yaml</span></code> (driver:
+<code class="docutils literal notranslate"><span class="pre">examples/do_until_validation_loop.py</span></code>).</p>
+</div>
+</section>
+<section id="stop-end">
+<h3><code class="docutils literal notranslate"><span class="pre">stop</span></code> / <code class="docutils literal notranslate"><span class="pre">end</span></code><a class="headerlink" href="#stop-end" title="Link to this heading">¶</a></h3>
+<p>First-class no-op terminals — use them on a branch that should do nothing
+rather than leaving it dangling:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Done</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">end</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="jinja-value-transforms-filters">
+<h2>Jinja value transforms (filters)<a class="headerlink" href="#jinja-value-transforms-filters" title="Link to this heading">¶</a></h2>
+<p>FortiSOAR evaluates <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">…</span> <span class="pre">}}</span></code> with Jinja2, so every standard Jinja filter is
+available for reshaping an upstream step’s output before the next step reads it.
+These are the transforms you reach for most on a list of records
+(<code class="docutils literal notranslate"><span class="pre">vars.input.records</span></code>, a <code class="docutils literal notranslate"><span class="pre">find_record</span></code> result at <code class="docutils literal notranslate"><span class="pre">vars.steps.&lt;Step&gt;.data</span></code>, etc.).
+All are chainable with <code class="docutils literal notranslate"><span class="pre">|</span></code>.</p>
+<ul>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">selectattr</span></code> / <code class="docutils literal notranslate"><span class="pre">rejectattr</span></code></strong> — keep (or drop) items whose attribute passes a
+test. Filter a record set down to the ones that matter:</p>
+<div class="highlight-jinja notranslate"><div class="highlight"><pre><span></span><span class="c">{# open, high-severity alerts only #}</span>
+<span class="cp">{{</span> <span class="nv">vars.steps.Find_Alerts.data</span> <span class="o">|</span> <span class="nf">selectattr</span><span class="o">(</span><span class="s1">&#39;status&#39;</span><span class="o">,</span> <span class="s1">&#39;equalto&#39;</span><span class="o">,</span> <span class="s1">&#39;Open&#39;</span><span class="o">)</span>
+                               <span class="o">|</span> <span class="nf">selectattr</span><span class="o">(</span><span class="s1">&#39;severity&#39;</span><span class="o">,</span> <span class="s1">&#39;equalto&#39;</span><span class="o">,</span> <span class="s1">&#39;High&#39;</span><span class="o">)</span> <span class="o">|</span> <span class="nf">list</span> <span class="cp">}}</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">selectattr</span></code>/<code class="docutils literal notranslate"><span class="pre">sort</span></code> reach attributes with dotted access, which works on objects
+but not plain dicts. When a step hands you a list of <strong>dicts</strong>, the common idiom
+is to normalize first (e.g. run it through a <code class="docutils literal notranslate"><span class="pre">code_snippet</span></code>, or use the FortiSOAR
+custom <code class="docutils literal notranslate"><span class="pre">json_query</span></code> filter) before <code class="docutils literal notranslate"><span class="pre">selectattr</span></code>.</p>
+</div>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">select</span></code> / <code class="docutils literal notranslate"><span class="pre">reject</span></code></strong> — same idea on scalars in a list (no attribute):
+<code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">some_list</span> <span class="pre">|</span> <span class="pre">reject('equalto',</span> <span class="pre">'')</span> <span class="pre">|</span> <span class="pre">list</span> <span class="pre">}}</span></code> drops empty strings.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">map</span></code></strong> — pluck one attribute from every item: <code class="docutils literal notranslate"><span class="pre">map(attribute='sourceIp')</span></code>.
+Pair with <code class="docutils literal notranslate"><span class="pre">unique</span></code>/<code class="docutils literal notranslate"><span class="pre">join</span></code> to build a deduped, comma-joined string:</p>
+<div class="highlight-jinja notranslate"><div class="highlight"><pre><span></span><span class="cp">{{</span> <span class="nv">vars.input.records</span> <span class="o">|</span> <span class="nf">map</span><span class="o">(</span><span class="nv">attribute</span><span class="o">=</span><span class="s1">&#39;sourceIp&#39;</span><span class="o">)</span> <span class="o">|</span> <span class="nf">unique</span> <span class="o">|</span> <span class="nf">join</span><span class="o">(</span><span class="s1">&#39;, &#39;</span><span class="o">)</span> <span class="cp">}}</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">unique</span></code></strong> — de-duplicate a list (order-preserving).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">sort</span></code></strong> — order a list; <code class="docutils literal notranslate"><span class="pre">sort(attribute='severity',</span> <span class="pre">reverse=True)</span></code> for records.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">groupby</span></code></strong> — bucket records by an attribute into <code class="docutils literal notranslate"><span class="pre">(grouper,</span> <span class="pre">items)</span></code> pairs,
+e.g. count alerts per status:</p>
+<div class="highlight-jinja notranslate"><div class="highlight"><pre><span></span><span class="cp">{%</span> <span class="k">for</span> <span class="nv">status</span><span class="o">,</span> <span class="nv">items</span> <span class="k">in</span> <span class="nv">vars.input.records</span> <span class="o">|</span> <span class="nf">groupby</span><span class="o">(</span><span class="s1">&#39;status&#39;</span><span class="o">)</span> -<span class="cp">%}</span>
+<span class="cp">{{</span> <span class="nv">status</span> <span class="cp">}}</span><span class="x">: </span><span class="cp">{{</span> <span class="nv">items</span> <span class="o">|</span> <span class="nf">length</span> <span class="cp">}}</span>
+<span class="cp">{%</span> <span class="k">endfor</span> <span class="cp">%}</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">join</span></code></strong> — flatten a list to a string with a separator: <code class="docutils literal notranslate"><span class="pre">|</span> <span class="pre">join(',</span> <span class="pre">')</span></code>.</p></li>
+</ul>
+<div class="admonition caution">
+<p class="admonition-title">Caution</p>
+<p>There is <strong>no <code class="docutils literal notranslate"><span class="pre">split</span></code> filter</strong> in Jinja. To split a string, call the Python
+<code class="docutils literal notranslate"><span class="pre">.split()</span></code> method on it instead — <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">device.split(':')[0]</span> <span class="pre">}}</span></code>,
+<code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">vars.record_metadata.get('tags').split(',')</span> <span class="pre">}}</span></code>. (FortiSOAR also ships a
+custom <code class="docutils literal notranslate"><span class="pre">np_split</span></code> filter, but that batches a list into chunks — a different job.)</p>
+</div>
+<p>Beyond the built-ins, FortiSOAR adds ~30 custom filters/globals (date math,
+<code class="docutils literal notranslate"><span class="pre">picklist</span></code>, <code class="docutils literal notranslate"><span class="pre">extract_artifacts</span></code>, <code class="docutils literal notranslate"><span class="pre">toJSON</span></code>, <code class="docutils literal notranslate"><span class="pre">json_query</span></code>, …); consult your
+appliance’s Dynamic Values picker for the full, version-exact list.</p>
+</section>
+<section id="compile-validate-deploy">
+<h2>Compile, validate, deploy<a class="headerlink" href="#compile-validate-deploy" title="Link to this heading">¶</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pyfsr<span class="w"> </span>playbook<span class="w"> </span>validate<span class="w"> </span>heist_intake.yaml<span class="w">      </span><span class="c1"># diagnostics only, no network</span>
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>compile<span class="w">  </span>heist_intake.yaml<span class="w"> </span>-o<span class="w"> </span>envelope.json
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>deploy<span class="w">   </span>heist_intake.yaml<span class="w"> </span>--replace
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">validate</span></code> compiles offline and prints one line per diagnostic to stderr
+(nonzero exit on any error). Each diagnostic carries a stable <code class="docutils literal notranslate"><span class="pre">code</span></code>, a <code class="docutils literal notranslate"><span class="pre">path</span></code>
+into your YAML, a human <code class="docutils literal notranslate"><span class="pre">message</span></code>, and a <code class="docutils literal notranslate"><span class="pre">severity</span></code> (<code class="docutils literal notranslate"><span class="pre">error</span></code> or <code class="docutils literal notranslate"><span class="pre">warning</span></code>):</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr.authoring</span><span class="w"> </span><span class="kn">import</span> <span class="n">compile_playbook_yaml</span><span class="p">,</span> <span class="n">format_diagnostic</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bad</span> <span class="o">=</span> <span class="n">compile_playbook_yaml</span><span class="p">(</span><span class="s1">&#39;&#39;&#39;</span>
+<span class="gp">... </span><span class="s1">name: bad-demo</span>
+<span class="gp">... </span><span class="s1">playbooks:</span>
+<span class="gp">... </span><span class="s1">  - name: P</span>
+<span class="gp">... </span><span class="s1">    steps:</span>
+<span class="gp">... </span><span class="s1">      - name: S</span>
+<span class="gp">... </span><span class="s1">        type: not_a_real_type</span>
+<span class="gp">... </span><span class="s1">&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bad</span><span class="o">.</span><span class="n">ok</span><span class="p">,</span> <span class="n">bad</span><span class="o">.</span><span class="n">fsr_json</span>
+<span class="go">(False, None)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">d</span><span class="p">[</span><span class="s2">&quot;code&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">bad</span><span class="o">.</span><span class="n">errors</span><span class="p">]</span>
+<span class="go">[&#39;unknown_step_type&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">diag</span> <span class="o">=</span> <span class="n">bad</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">diag</span><span class="p">[</span><span class="s2">&quot;severity&quot;</span><span class="p">],</span> <span class="n">diag</span><span class="p">[</span><span class="s2">&quot;path&quot;</span><span class="p">])</span>
+<span class="go">(&#39;error&#39;, &#39;playbooks[0].steps[0].type&#39;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">format_diagnostic</span><span class="p">(</span><span class="n">diag</span><span class="p">)</span>              <span class="c1"># the line `validate` prints</span>
+<span class="go">&quot;[ERROR] unknown_step_type at playbooks[0].steps[0].type: unknown step type: &#39;not_a_real_type&#39;&quot;</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">code</span></code> is the stable machine identifier to branch on (e.g.
+<code class="docutils literal notranslate"><span class="pre">unknown_step_type</span></code>, <code class="docutils literal notranslate"><span class="pre">missing_field</span></code>, <code class="docutils literal notranslate"><span class="pre">no_trigger</span></code>); <code class="docutils literal notranslate"><span class="pre">path</span></code> is the
+YAML-location you fix. <code class="docutils literal notranslate"><span class="pre">format_diagnostic</span></code> renders the same <code class="docutils literal notranslate"><span class="pre">[SEVERITY]</span> <span class="pre">code</span> <span class="pre">at</span> <span class="pre">path:</span> <span class="pre">message</span></code> line the CLI emits, so in-process checks and the CLI stay in
+sync.</p>
+<p>…or from Python with
+<a class="reference internal" href="../autoapi/pyfsr/api/workflow_collections/index.html#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_yaml" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_yaml"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_from_yaml()</span></code></a>.
+See <a class="reference internal" href="playbook-authoring.html"><span class="doc">Playbook Authoring &amp; Deployment</span></a> for the full deploy flow and the compile-result
+object.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p>Sample file:
+<a class="reference external" href="https://github.com/ftnt-dspille/pyfsr/blob/main/examples/playbooks/yaml_demo.yaml"><code class="docutils literal notranslate"><span class="pre">examples/playbooks/yaml_demo.yaml</span></code></a>
+and the end-to-end
+<a class="reference external" href="https://github.com/ftnt-dspille/pyfsr/blob/main/examples/heist_tracker.py"><code class="docutils literal notranslate"><span class="pre">examples/heist_tracker.py</span></code></a>
+(modules → permissions → on-create playbook → triggering record).</p>
+</div>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="ai-agents.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">AI &amp; Agents</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="playbook-authoring.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Playbook Authoring &amp; Deployment</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Dylan Spille
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/ftnt-dspille/pyfsr" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Playbook YAML Syntax Reference</a><ul>
+<li><a class="reference internal" href="#what-the-compiler-turns-a-step-into">What the compiler turns a step into</a></li>
+<li><a class="reference internal" href="#file-structure">File structure</a></li>
+<li><a class="reference internal" href="#steps-common-shape">Steps: common shape</a></li>
+<li><a class="reference internal" href="#step-types">Step types</a><ul>
+<li><a class="reference internal" href="#start-manual-trigger"><code class="docutils literal notranslate"><span class="pre">start</span></code> — manual trigger</a></li>
+<li><a class="reference internal" href="#start-on-create-start-on-update-record-triggers"><code class="docutils literal notranslate"><span class="pre">start_on_create</span></code> / <code class="docutils literal notranslate"><span class="pre">start_on_update</span></code> — record triggers</a></li>
+<li><a class="reference internal" href="#set-variable"><code class="docutils literal notranslate"><span class="pre">set_variable</span></code></a></li>
+<li><a class="reference internal" href="#decision"><code class="docutils literal notranslate"><span class="pre">decision</span></code></a></li>
+<li><a class="reference internal" href="#connector"><code class="docutils literal notranslate"><span class="pre">connector</span></code></a></li>
+<li><a class="reference internal" href="#find-record-create-record-update-record"><code class="docutils literal notranslate"><span class="pre">find_record</span></code> / <code class="docutils literal notranslate"><span class="pre">create_record</span></code> / <code class="docutils literal notranslate"><span class="pre">update_record</span></code></a></li>
+<li><a class="reference internal" href="#delay-approval"><code class="docutils literal notranslate"><span class="pre">delay</span></code>, <code class="docutils literal notranslate"><span class="pre">approval</span></code></a></li>
+<li><a class="reference internal" href="#code-snippet-run-a-python-snippet"><code class="docutils literal notranslate"><span class="pre">code_snippet</span></code> — run a Python snippet</a></li>
+<li><a class="reference internal" href="#manual-input-pause-for-human-input"><code class="docutils literal notranslate"><span class="pre">manual_input</span></code> — pause for human input</a></li>
+<li><a class="reference internal" href="#workflow-reference-call-another-playbook"><code class="docutils literal notranslate"><span class="pre">workflow_reference</span></code> — call another playbook</a></li>
+<li><a class="reference internal" href="#do-until-retry-loop-a-step-until-a-condition-holds"><code class="docutils literal notranslate"><span class="pre">do_until</span></code> / <code class="docutils literal notranslate"><span class="pre">retry:</span></code> — loop a step until a condition holds</a></li>
+<li><a class="reference internal" href="#stop-end"><code class="docutils literal notranslate"><span class="pre">stop</span></code> / <code class="docutils literal notranslate"><span class="pre">end</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#jinja-value-transforms-filters">Jinja value transforms (filters)</a></li>
+<li><a class="reference internal" href="#compile-validate-deploy">Compile, validate, deploy</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=56c55dd0"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=fd10adb8"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

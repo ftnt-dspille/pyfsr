@@ -1,0 +1,245 @@
+pyfsr.cli.appliance.transport
+=============================
+
+.. py:module:: pyfsr.cli.appliance.transport
+
+.. autoapi-nested-parse::
+
+   Command transport for the ``pyfsr appliance`` CLI.
+
+   Two impls share one API (:meth:`Transport.run`):
+
+   * :class:`LocalTransport` — exec directly when the CLI runs *on* the appliance.
+   * :class:`SSHTransport` — wrap each command in ``ssh`` when run from a laptop.
+
+   Auto-detect with :func:`make_transport`: ``/opt/cyops`` present locally → local,
+   otherwise an SSH host is required.
+
+   Secret hygiene (plan §Safety): secrets (the device UUID used as DB/ES password)
+   are passed via environment, never via argv — so they never show in ``ps`` and are
+   not part of the command string a transport logs.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.transport.DEFAULT_TIMEOUT
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.transport.TransportError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.transport.CommandResult
+   pyfsr.cli.appliance.transport.Transport
+   pyfsr.cli.appliance.transport.LocalTransport
+   pyfsr.cli.appliance.transport.SSHTransport
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.transport.is_onbox
+   pyfsr.cli.appliance.transport.make_transport
+   pyfsr.cli.appliance.transport.transport_from_env
+
+
+Module Contents
+---------------
+
+.. py:data:: DEFAULT_TIMEOUT
+   :value: 60.0
+
+
+.. py:class:: CommandResult(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Outcome of a single transport command.
+
+
+   .. py:attribute:: argv
+      :type:  list[str]
+
+
+   .. py:attribute:: returncode
+      :type:  int
+
+
+   .. py:attribute:: stdout
+      :type:  str
+
+
+   .. py:attribute:: stderr
+      :type:  str
+
+
+   .. py:property:: ok
+      :type: bool
+
+
+
+   .. py:method:: check() -> CommandResult
+
+      Raise :class:`TransportError` unless the command exited 0.
+
+
+
+.. py:exception:: TransportError
+
+   Bases: :py:obj:`RuntimeError`
+
+
+   A transport command failed or could not be dispatched.
+
+
+.. py:class:: Transport
+
+   Abstract command runner. Subclasses implement :meth:`run`.
+
+
+   .. py:attribute:: target
+      :type:  str
+      :value: '<unknown>'
+
+
+
+   .. py:method:: run(argv: list[str], *, input_text: str | None = None, env: dict[str, str] | None = None, timeout: float = DEFAULT_TIMEOUT, sudo: bool = False) -> CommandResult
+      :abstractmethod:
+
+
+
+.. py:class:: LocalTransport
+
+   Bases: :py:obj:`Transport`
+
+
+   Run commands directly on the local appliance.
+
+   ``sudo=True`` uses ``sudo -S`` and pipes ``sudo_password`` on stdin (the
+   appliance convention) unless passwordless sudo is configured.
+
+
+   .. py:attribute:: sudo_password
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: target
+      :type:  str
+      :value: 'localhost'
+
+
+
+   .. py:method:: run(argv: list[str], *, input_text: str | None = None, env: dict[str, str] | None = None, timeout: float = DEFAULT_TIMEOUT, sudo: bool = False) -> CommandResult
+
+
+.. py:class:: SSHTransport
+
+   Bases: :py:obj:`Transport`
+
+
+   Run commands on a remote appliance over ``ssh``.
+
+   Uses key-based auth by default. If ``password`` is set, ``sshpass`` is used
+   when available (and required if no key is loaded). Each command is sent as a
+   single remote shell string; ``env`` vars are exported remotely (never placed
+   in local argv) so secrets stay off the local process table.
+
+
+   .. py:attribute:: host
+      :type:  str
+      :value: ''
+
+
+
+   .. py:attribute:: user
+      :type:  str
+      :value: 'csadmin'
+
+
+
+   .. py:attribute:: password
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: port
+      :type:  int
+      :value: 22
+
+
+
+   .. py:attribute:: key_path
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: sudo_password
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: insecure_skip_host_key_check
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: extra_ssh_opts
+      :type:  list[str]
+      :value: []
+
+
+
+   .. py:method:: run(argv: list[str], *, input_text: str | None = None, env: dict[str, str] | None = None, timeout: float = DEFAULT_TIMEOUT, sudo: bool = False) -> CommandResult
+
+
+.. py:function:: is_onbox() -> bool
+
+   True if the local host looks like a FortiSOAR appliance.
+
+
+.. py:function:: make_transport(*, host: str | None = None, user: str = 'csadmin', password: str | None = None, port: int = 22, key_path: str | None = None, sudo_password: str | None = None, insecure_skip_host_key_check: bool = False) -> Transport
+
+   Pick a transport: explicit ``host`` → SSH; else local if on-box.
+
+   Env fallbacks (used when the matching arg is None): ``PYFSR_APPLIANCE_HOST``,
+   ``PYFSR_APPLIANCE_USER``, ``PYFSR_APPLIANCE_PASSWORD``.
+
+
+.. py:function:: transport_from_env(env: dict[str, str] | None = None) -> Transport
+
+   Build an appliance :class:`Transport` from ``PYFSR_APPLIANCE_*`` env vars.
+
+   Mirrors :func:`pyfsr.agent.mcp.client_from_env` but for the SSH/local
+   command transport the appliance verbs use (not the REST client). Recognized
+   vars: ``PYFSR_APPLIANCE_HOST`` (required for SSH; absent → local if on-box),
+   ``PYFSR_APPLIANCE_USER`` (default ``csadmin``), ``PYFSR_APPLIANCE_PASSWORD``,
+   ``PYFSR_APPLIANCE_PORT`` (default 22), ``PYFSR_APPLIANCE_KEY_PATH``,
+   ``PYFSR_APPLIANCE_SUDO_PASSWORD``, ``PYFSR_APPLIANCE_INSECURE_SKIP_HOST_KEY_CHECK``.
+
+   Pass an explicit ``env`` dict for tests; otherwise ``os.environ`` is used.
+   Raises :class:`TransportError` when no host is configured and this process
+   isn't running on a FortiSOAR appliance.
+
+

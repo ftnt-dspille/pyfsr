@@ -1,0 +1,362 @@
+pyfsr.exceptions
+================
+
+.. py:module:: pyfsr.exceptions
+
+.. autoapi-nested-parse::
+
+   Custom exceptions for the FortiSOAR API client.
+
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   pyfsr.exceptions.FortiSOARException
+   pyfsr.exceptions.ValidationError
+   pyfsr.exceptions.ConfigValidationError
+   pyfsr.exceptions.ConfigurationExistsError
+   pyfsr.exceptions.PicklistResolutionError
+   pyfsr.exceptions.AuthenticationError
+   pyfsr.exceptions.ResourceNotFoundError
+   pyfsr.exceptions.PermissionError
+   pyfsr.exceptions.APIError
+   pyfsr.exceptions.ResponseParseError
+   pyfsr.exceptions.ApikeyCreateUnavailable
+   pyfsr.exceptions.UnsupportedAuthOperationError
+   pyfsr.exceptions.RepoError
+   pyfsr.exceptions.RepoUnreachableError
+   pyfsr.exceptions.RepoArtifactNotFoundError
+   pyfsr.exceptions.WidgetError
+   pyfsr.exceptions.WidgetUploadConflict
+   pyfsr.exceptions.WidgetPublishError
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.exceptions.is_migrate_transient
+   pyfsr.exceptions.describe_migrate_failure
+   pyfsr.exceptions.handle_api_error
+
+
+Module Contents
+---------------
+
+.. py:exception:: FortiSOARException(message: str = None, response=None, *, error_type: str | None = None)
+
+   Bases: :py:obj:`Exception`
+
+
+   Base exception for FortiSOAR API errors.
+
+   Carries the originating ``response`` plus, when available, the HTTP
+   ``status_code`` and the FortiSOAR error ``error_type`` (the ``type`` field
+   of the error body) so callers — and agents — can branch on them without
+   re-parsing the response.
+
+
+   .. py:attribute:: message
+      :value: None
+
+
+
+   .. py:attribute:: response
+      :value: None
+
+
+
+   .. py:attribute:: error_type
+      :value: None
+
+
+
+   .. py:attribute:: status_code
+      :value: None
+
+
+
+.. py:exception:: ValidationError(message: str = None, response=None, *, error_type: str | None = None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Raised when API request validation fails.
+
+
+.. py:exception:: ConfigValidationError(message: str = None, response=None, *, error_type: str | None = None, errors: list[dict[str, Any]] | None = None)
+
+   Bases: :py:obj:`ValidationError`
+
+
+   Raised when a connector configuration fails structural validation.
+
+   Carries field-level problems from :meth:`~pyfsr.api.connectors.ConnectorsAPI.validate_config`
+   so callers see exactly which field failed and why, without needing a server roundtrip.
+
+
+   .. py:attribute:: errors
+      :value: []
+
+
+
+.. py:exception:: ConfigurationExistsError(connector: str, name: str, message: str = None, response=None, *, error_type: str | None = None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Raised when creating a configuration with a name that already exists.
+
+   Raised by :meth:`~pyfsr.api.connectors.ConnectorsAPI.create_configuration`
+   when ``exist_ok=False`` (the default) and the server rejects the write with
+   a unique constraint violation on ``(name, connector, agent)``. Includes a
+   helpful hint about using ``exist_ok=True`` or ``upsert_configuration()``.
+
+
+   .. py:attribute:: connector
+
+
+   .. py:attribute:: name
+
+
+.. py:exception:: PicklistResolutionError(field: str, value, picklist: str, valid_values: list[str])
+
+   Bases: :py:obj:`ValidationError`
+
+
+   Raised when a friendly picklist value can't be mapped to an IRI.
+
+   Carries the offending field/value, the picklist name, and the valid options
+   so callers (and AIs) get an actionable message instead of a server 400.
+
+
+   .. py:attribute:: field
+
+
+   .. py:attribute:: value
+
+
+   .. py:attribute:: picklist
+
+
+   .. py:attribute:: valid_values
+
+
+.. py:exception:: AuthenticationError(message: str = None, response=None, *, error_type: str | None = None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Raised when authentication fails.
+
+
+.. py:exception:: ResourceNotFoundError(message: str = None, response=None, *, error_type: str | None = None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Raised when a requested resource is not found.
+
+
+.. py:exception:: PermissionError(message: str = None, response=None, *, error_type: str | None = None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Raised when the user lacks required permissions.
+
+
+.. py:exception:: APIError(message: str = None, response=None, *, error_type: str | None = None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Generic API error.
+
+
+.. py:exception:: ResponseParseError(response=None, *, preview: str | None = None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Raised when a 2xx response body isn't valid JSON.
+
+   A success status code with an unparseable body (HTML from a proxy/load
+   balancer, a truncated stream, an empty body where JSON was expected) used
+   to surface as a raw ``json.JSONDecodeError`` pointing at ``client.py``, not
+   at the caller's actual problem. This carries the status code and a text
+   preview so the real cause — usually "the request never reached FortiSOAR
+   at all" — is visible without re-running with a debugger.
+
+
+.. py:exception:: ApikeyCreateUnavailable(response=None, original_message: str | None = None)
+
+   Bases: :py:obj:`APIError`
+
+
+   API-key creation is blocked by the FortiSOAR ``encrypt(preserve_compatibility)`` bug.
+
+   A 7.6.5 / 8.0.0 product bug: when the global ``API-KEYS.retrievable_mode``
+   flag is on, ``POST /api/auth/users`` hits a broken ``apikeys_helper.so``
+   branch that calls ``PasswordModule.encrypt(..., preserve_compatibility=...)``,
+   but the shipped ``PasswordModule.so`` has no such parameter → HTTP 400
+   ``encrypt() got an unexpected keyword argument 'preserve_compatibility'``.
+   pyfsr no longer toggles ``retrievable_mode`` on (the trigger), but it can
+   still be on for other reasons (manual toggle, another tool, a prior pyfsr
+   version) — so ``api_users.create()`` detects the signature and raises this
+   so the caller gets the workaround instead of a cryptic encrypt traceback.
+
+   Fix: ``client.auth_config.set_api_key_retrievable(False)``, then retry.
+
+
+.. py:exception:: UnsupportedAuthOperationError(operation: str, auth_type: str, message: str | None = None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Operation not supported with current authentication method
+
+
+   .. py:attribute:: operation
+
+
+   .. py:attribute:: auth_type
+
+
+.. py:exception:: RepoError(message: str = None, response=None, *, error_type: str | None = None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Base for content-repository (``repo.fortisoar.fortinet.com``) errors.
+
+
+.. py:exception:: RepoUnreachableError(message: str | None = None, *, url: str | None = None)
+
+   Bases: :py:obj:`RepoError`
+
+
+   The public content repository could not be reached.
+
+   Raised by the :mod:`pyfsr.repo` download helpers when a connectivity
+   preflight (or the download itself) fails with a connection/timeout error —
+   i.e. no FDN access, an air-gapped box, or a firewall — as opposed to the
+   repo being reachable but not having the requested artifact
+   (:class:`RepoArtifactNotFoundError`). Callers can branch on the two to tell
+   "can't reach the repo" from "that version doesn't exist".
+
+
+   .. py:attribute:: url
+      :value: None
+
+
+
+.. py:exception:: RepoArtifactNotFoundError(message: str | None = None, *, url: str | None = None)
+
+   Bases: :py:obj:`RepoError`
+
+
+   The repo is reachable but has no artifact at the requested name/version.
+
+   A genuine 404 — the host answered, the path just doesn't exist (bad slug or
+   a version that was never published / has been pulled).
+
+
+   .. py:attribute:: url
+      :value: None
+
+
+
+.. py:exception:: WidgetError(message: str = None, response=None, *, error_type: str | None = None)
+
+   Bases: :py:obj:`FortiSOARException`
+
+
+   Base for ``client.widgets`` upload/publish errors.
+
+
+.. py:exception:: WidgetUploadConflict(message: str | None = None, *, name: str | None = None, version: str | None = None)
+
+   Bases: :py:obj:`WidgetError`
+
+
+   Upload rejected because that exact name+version is already staged.
+
+   Raised when ``POST /api/3/solutionpacks/install?$type=widget`` 400s with
+   ``"Widget with Name - <n> Version - <v> already exists in widget
+   workspace."`` — i.e. ``upload(..., replace=False)`` against a version
+   that's already sitting in the development workspace. Retry with
+   ``replace=True`` to overwrite it.
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: version
+      :value: None
+
+
+
+.. py:exception:: WidgetPublishError(message: str | None = None, *, host: str | None = None, name: str | None = None, version: str | None = None)
+
+   Bases: :py:obj:`WidgetError`
+
+
+   A widget publish did not settle live (``draft:false, installed:true``).
+
+   Raised by :meth:`~pyfsr.api.widgets.WidgetsAPI.deploy` when the post-publish
+   settle-poll times out without observing the target version live — either
+   the publish silently reverted or the asset extraction lagged past
+   ``timeout``. Includes the target host and the last-observed record so
+   callers can tell "never went live" from "stuck on an old version".
+
+
+   .. py:attribute:: host
+      :value: None
+
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: version
+      :value: None
+
+
+
+.. py:function:: is_migrate_transient(exc: Exception) -> bool
+
+   True if ``exc`` is a transient state surfaced while a migrate is in flight.
+
+   Both a publish and an import that carries schema changes drive the appliance
+   through a backup + DB migrate + cache-rebuild cycle. During that window the
+   API is briefly down, returning 5xx and/or state strings like "System Backup"
+   / "Clearing Cache" / "Schema Update" rather than a real error. We treat any
+   5xx, plus any error message matching a known migrate-cycle marker, as "still
+   working" so pollers keep waiting instead of failing.
+
+
+.. py:function:: describe_migrate_failure(status, message) -> str
+
+   Build an actionable message for a failed publish/import migrate.
+
+   ``status`` / ``message`` come from the failure's source of truth — an import
+   job record (``status``/``errorMessage``) or a ``/api/publish/error`` body
+   (``status``/``message``). For the half-applied-migration wedge (Postgres
+   ``42P07`` / "already exists" / "Duplicate table") it appends remediation
+   guidance, since pyfsr cannot repair appliance DB state over the API.
+
+
+.. py:function:: handle_api_error(response)
+
+   Convert API error responses to appropriate exceptions.
+
+

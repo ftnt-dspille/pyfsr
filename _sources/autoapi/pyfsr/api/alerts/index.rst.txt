@@ -1,0 +1,175 @@
+pyfsr.api.alerts
+================
+
+.. py:module:: pyfsr.api.alerts
+
+.. autoapi-nested-parse::
+
+   The alerts module — ``client.alerts``.
+
+   A typed shortcut over :class:`~pyfsr.records.RecordSet` for the alerts module:
+   create/read/update alerts with friendly picklist values (``severity``,
+   ``status``, ``type``) resolved to IRIs automatically. Reads return raw Hydra
+   dicts rather than typed models — see :doc:`/guides/records` for the
+   dict-vs-model distinction and when to reach for each.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.alerts.AlertsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: AlertsAPI(client)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Typed shortcut for the alerts module.
+
+   ``client.alerts`` is a thin wrapper over :class:`~pyfsr.records.RecordSet`
+   that returns raw dicts (Hydra envelopes) instead of typed models — see
+   :doc:`/guides/records` for the dict-vs-model distinction.
+
+   >>> client = demo_client()
+   >>> alert = client.alerts.get("9f0eb603-ac1e-41c3-b47b-444589beed39")
+   >>> (alert["@type"], alert["name"])
+   ('Alert', 'Response Capture Test Alert')
+
+
+   .. py:attribute:: module
+      :value: 'alerts'
+
+
+
+   .. py:method:: create(*, resolve_picklists: bool = True, **data: Any) -> dict[str, Any]
+
+      Create a new alert in FortiSOAR.
+
+      :param resolve_picklists: When True (default), friendly picklist
+                                values (e.g. ``severity="High"``) are mapped to the IRIs the API
+                                stores before sending. Pass ``resolve_picklists=False`` to skip
+                                that (and the metadata lookup it needs) when every value is
+                                already an IRI.
+      :type resolve_picklists: bool
+      :param \*\*data: Keyword arguments containing alert configuration.
+                       The following keys are expected:
+
+                       - **name** (*str*): Name of the alert.
+                       - **description** (*str, optional*): Description of the alert.
+                       - **severity** (*str*): Alert severity level, one of:
+                           'Critical', 'High', 'Medium', or 'Low'.
+      :type \*\*data: Any
+
+      :returns: The created alert object.
+      :rtype: Dict[str, Any]
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          # Friendly picklist values are resolved automatically.
+          response = client.alerts.create(
+              name="Test Alert",
+              description="This is a test alert",
+              severity="High",
+          )
+
+
+
+   .. py:method:: list(params: dict | None = None) -> dict[str, Any]
+
+      List all alerts with optional filtering.
+
+      .. note::
+
+          This returns the raw hydra envelope (``{"hydra:member": [...], ...}``),
+          so callers index ``["hydra:member"]`` by hand. Prefer the modern
+          :meth:`client.records("alerts") <pyfsr.client.FortiSOAR.records>`
+          surface, which unpacks the envelope, returns typed (dict-compatible)
+          :class:`~pyfsr.models.Alert` records, and offers ``.first()`` /
+          ``.list()`` / iteration::
+
+              from pyfsr import Query
+
+              latest = client.records("alerts").first(
+                  Query().sort("createDate", "DESC")
+              )
+
+      :param params: Optional query parameters for filtering results
+
+      :returns: List of alerts matching the criteria
+      :rtype: Dict[str, Any]
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          # List all alerts
+          alerts = client.alerts.list()
+
+          # List with filtering
+          filtered = client.alerts.list({"severity": "High"})
+
+
+
+   .. py:method:: get(alert_id: str) -> dict[str, Any]
+
+      Get a specific alert by ID.
+
+      :param alert_id: The unique identifier of the alert
+
+      :returns: The alert object
+      :rtype: Dict[str, Any]
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          alert = client.alerts.get("alert-123")
+          print(alert['name'])
+
+
+
+   .. py:method:: update(alert_id: str, data: dict[str, Any], *, resolve_picklists: bool = True) -> dict[str, Any]
+
+      Update an existing alert.
+
+      :param alert_id: The unique identifier of the alert
+      :param data: Updated alert properties
+      :param resolve_picklists: When True (default), friendly picklist values are
+                                mapped to IRIs before sending; pass False to skip that.
+
+      :returns: The updated alert object
+      :rtype: Dict[str, Any]
+
+      .. rubric:: Examples
+
+      .. code-block:: python
+
+          client.alerts.update("alert-123", {
+              "severity": "Critical",
+              "description": "Updated description",
+          })
+
+
+
+   .. py:method:: delete(alert_id: str) -> None
+
+      Delete an alert.
+
+      :param alert_id: The unique identifier of the alert to delete
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.alerts.delete("9f0eb603-ac1e-41c3-b47b-444589beed39")
+
+
+

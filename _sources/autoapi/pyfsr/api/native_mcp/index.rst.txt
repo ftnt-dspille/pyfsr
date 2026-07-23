@@ -1,0 +1,224 @@
+pyfsr.api.native_mcp
+====================
+
+.. py:module:: pyfsr.api.native_mcp
+
+.. autoapi-nested-parse::
+
+   Client for the appliance's own native MCP tool gateway (FortiSOAR 8.0+).
+
+   FortiSOAR 8.0 ships an on-appliance ``mcp-server`` service (nginx-fronted at
+   ``/mcp/*``, real Streamable-HTTP MCP transport) that auto-exposes FortiSOAR's
+   own modules/playbooks/SOC tools *and* every installed connector as MCP tools:
+
+   - ``/mcp/modules/`` — record CRUD (``fetch_record``, ``get_alert``, ...)
+   - ``/mcp/playbooks/`` — ``list_playbooks``, ``trigger_playbook``, ...
+   - ``/mcp/soc/`` — bundled SOC-investigator tools (``get_alert``,
+     ``enrich_indicator``, ``block_indicator``, ``hunt_ioc_siem``, ...)
+   - ``/mcp/utility/`` — ``get_current_datetime``, ...
+   - ``/mcp/connector/NAME/`` — one auto-generated server per *installed* connector
+
+   This is the thing an agentic AI stack (fsr-ai, or your own agent) calls into —
+   **not** the same as:
+
+   - :class:`pyfsr.api.ai.AIApi` (``client.ai``) — manages *external* MCP
+     servers (e.g. FortiSIEM's own MCP) that FortiSOAR's agents are allowed to
+     call. That's registration/allowlisting; this module is the appliance
+     answering as an MCP server itself.
+   - :mod:`pyfsr.agent.mcp` — the reverse direction: makes *pyfsr* act as an MCP
+     server, exposing its own CRUD/schema tool registry to an external agent.
+
+   Auth passes through the caller's own FortiSOAR credential: the gateway
+   validates the ``Authorization`` header against ``/api/3`` and every tool call
+   then runs with that identity's real RBAC — no service account, no separate
+   credential to manage. This module reuses the client's ``auth`` object for
+   that header, including its 401/403 refresh-and-retry behavior (see
+   :meth:`pyfsr.auth.base.BaseAuth.refresh`) so a long-lived client survives a
+   stale session the same way its REST calls already do.
+
+   Requires the optional dependency: ``pip install 'pyfsr[mcp]'``.
+
+   Accessed as ``client.mcp``.
+
+   .. rubric:: Example
+
+   >>> client = FortiSOAR("soar.example.com", token=api_key)
+   >>> [t["name"] for t in client.mcp.list_tools("soc")]
+   ['get_alert', 'enrich_indicator', 'block_indicator', ...]
+   >>> client.mcp.call_tool("soc", "get_alert", {"uuid": ["<alert-uuid>"]})
+   {'status': 'success', 'result': {...}}
+
+   Calling a connector's own auto-generated server (e.g. a SIEM connector
+   installed on the appliance) uses the same ``server`` argument with a
+   ``connector:`` prefix:
+
+       >>> client.mcp.list_tools("connector:fortisiem")
+
+   Note the per-connector servers are feature-gated on the appliance: a connector
+   that isn't exposed as an MCP server answers ``/mcp/connector/<name>/`` with
+   ``404 "Connector not found"``, which surfaces here as an ``McpError("Session
+   terminated")`` during ``initialize`` (the stream closes before the handshake
+   completes). The four fixed servers (``modules``, ``playbooks``, ``soc``,
+   ``utility``) are always present. ``<name>`` is the connector's install name
+   (e.g. ``virustotal``), not its display label.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.native_mcp.MCPSession
+   pyfsr.api.native_mcp.NativeMCPApi
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.api.native_mcp.build_mcp_auth_headers
+
+
+Module Contents
+---------------
+
+.. py:function:: build_mcp_auth_headers(auth: dict[str, Any] | None) -> dict[str, str]
+
+   Map a registered MCP server's ``authentication`` dict to request headers.
+
+   Mirrors FortiSOAR fsr-ai's own ``mcp_auth.py`` builders so a registered
+   server is reached the same way the product's agent reaches it: ``BEARER``/
+   ``FSR`` → ``Authorization: <prefix> <value>`` (``prefix``/``header_name``
+   overridable), ``API_KEY`` → ``<header_name>: <value>``, ``BASIC`` →
+   base64, ``NONE`` → no header.
+
+
+.. py:class:: MCPSession(api: NativeMCPApi, server: str)
+
+   One open MCP session, for batching several calls without re-handshaking.
+
+   ``NativeMCPApi.list_tools``/``call_tool`` each open a fresh MCP session
+   (connect, ``initialize``, one request, disconnect) — simple and safe as a
+   one-off, but a script calling several tools in a row pays a full
+   handshake every time. Get one from :meth:`NativeMCPApi.session` instead::
+
+       with client.mcp.session("soc") as s:
+           alert = s.call_tool("get_alert", {"uuid": [alert_uuid]})
+           s.call_tool("enrich_indicator", {"indicator": ip})
+
+   Unlike the one-off calls, a session does **not** retry on a stale
+   (401/403) auth token mid-batch — it authenticates once on entry. For a
+   short-lived batch of calls right after opening (the intended use) that's
+   not a real constraint; for a long-running session, catch the error and
+   open a new one.
+
+   Implementation note: the MCP SDK's session/transport use ``anyio`` cancel
+   scopes internally, which must be entered *and exited in the same asyncio
+   Task* — so ``__enter__``/each call/``__exit__`` can't each be their own
+   ``loop.run_until_complete(...)`` (that puts every one in a fresh Task and
+   anyio raises "Attempted to exit cancel scope in a different task than it
+   was entered in", caught live against a real appliance 2026-07-05). A
+   background thread runs one continuous coroutine that opens the
+   connection, then pulls call requests off a queue until told to stop —
+   the whole MCP session lives in that single task for its entire life;
+   sync calls just hand off work to it and block for the answer.
+
+
+   .. py:method:: list_tools() -> list[pyfsr.models._ai.MCPTool]
+
+      Same shape as :meth:`NativeMCPApi.list_tools`, on the open session.
+
+
+
+   .. py:method:: call_tool(name: str, arguments: dict[str, Any] | None = None) -> Any
+
+      Same shape as :meth:`NativeMCPApi.call_tool`, on the open session.
+
+
+
+   .. py:method:: call_tool_result(name: str, arguments: dict[str, Any] | None = None) -> pyfsr.models._ai.MCPToolResult
+
+      Same as :meth:`NativeMCPApi.call_tool_result`, on the open session.
+
+
+
+.. py:class:: NativeMCPApi(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Call tools on FortiSOAR's own native MCP gateway (``/mcp/*``).
+
+   See the module docstring for the full path table and how this differs
+   from :class:`~pyfsr.api.ai.AIApi`'s MCP-server *registration* surface.
+
+
+   .. py:method:: list_tools_at(url: str, headers: dict[str, str], *, verify: Any = None) -> list[pyfsr.models._ai.MCPTool]
+
+      List tools of *any* MCP server at ``url`` (auth already in ``headers``).
+
+      Lower-level than :meth:`list_tools` (which targets the appliance's own
+      ``/mcp/*`` gateway with the client's credential). Used by
+      :meth:`~pyfsr.api.ai.AIApi.call_registered_tool` to reach a registered
+      external server; ``verify`` defaults to the client's ``verify_ssl``.
+
+
+
+   .. py:method:: call_tool_at(url: str, headers: dict[str, str], name: str, arguments: dict[str, Any] | None = None, *, verify: Any = None) -> Any
+
+      Call ``name`` on *any* MCP server at ``url`` (auth already in ``headers``).
+
+      Lower-level companion to :meth:`call_tool`; see :meth:`list_tools_at`.
+      Returns the raw decoded payload; use :meth:`call_tool_result` for a typed
+      :class:`~pyfsr.models.MCPToolResult`.
+
+
+
+   .. py:method:: list_tools(server: str = 'soc') -> list[pyfsr.models._ai.MCPTool]
+
+      Return ``[{"name", "description", "input_schema"}, ...]`` for ``server``.
+
+      ``server`` is one of the fixed paths (``"modules"``, ``"playbooks"``,
+      ``"soc"``, ``"utility"``) or ``"connector:<name>"`` for an installed
+      connector's auto-generated server.
+
+
+
+   .. py:method:: call_tool(server: str, name: str, arguments: dict[str, Any] | None = None) -> Any
+
+      Call tool ``name`` on ``server`` and return its result.
+
+      Each MCP content block is text (FortiSOAR's native tools return
+      JSON-encoded text). Concatenates them and JSON-decodes the result;
+      falls back to the raw string if it isn't valid JSON, and returns
+      ``None`` for an empty response.
+
+
+
+   .. py:method:: call_tool_result(server: str, name: str, arguments: dict[str, Any] | None = None) -> pyfsr.models._ai.MCPToolResult
+
+      Like :meth:`call_tool`, but always return a typed :class:`~pyfsr.models.MCPToolResult`.
+
+      Native tools reply with a ``{"status", "result", "error"}`` envelope on
+      success; this wraps it into the model (``r.ok``, ``r.result``, ``r.error``,
+      plus dict-style ``r["result"]``). An in-band failure that comes back as a
+      bare string (or any non-dict payload) is wrapped as
+      ``MCPToolResult(status=None, result=<raw>)`` so callers get one stable
+      type regardless of outcome. Use :meth:`call_tool` when you want the raw
+      decoded payload untouched.
+
+
+
+   .. py:method:: session(server: str = 'soc') -> MCPSession
+
+      Open a reusable :class:`MCPSession` against ``server`` for a batch
+      of calls without re-handshaking per call::
+
+          with client.mcp.session("soc") as s:
+              s.list_tools()
+              s.call_tool("get_alert", {"uuid": [alert_uuid]})
+
+
+

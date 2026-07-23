@@ -1,0 +1,58 @@
+pyfsr.cli.widget
+================
+
+.. py:module:: pyfsr.cli.widget
+
+.. autoapi-nested-parse::
+
+   ``pyfsr widget`` command group — upload + publish widgets on a live appliance.
+
+   Every command prints the **target host** it acted on before doing anything
+   mutating, so a wrong-target deploy can't quietly look successful.
+
+   Subcommands:
+
+   - ``list [--installed] [--name N]`` — list widget records.
+   - ``upload <tgz> [--no-replace]`` — stage a widget in the dev workspace (not live).
+   - ``publish <uuid> [--as-draft] [--no-replace]`` — flip a staged widget live.
+   - ``deploy <tgz> [--no-replace] [--timeout N]`` — upload + publish + settle, the
+     common path.
+   - ``export <uuid> <dest.tgz> [--development]`` — download a widget archive.
+   - ``rm <uuid>`` — delete a widget record.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.widget.cmd_list
+   pyfsr.cli.widget.cmd_upload
+   pyfsr.cli.widget.cmd_publish
+   pyfsr.cli.widget.cmd_deploy
+   pyfsr.cli.widget.cmd_export
+   pyfsr.cli.widget.cmd_rm
+   pyfsr.cli.widget.build_subparser
+
+
+Module Contents
+---------------
+
+.. py:function:: cmd_list(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_upload(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_publish(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_deploy(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_export(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_rm(args: argparse.Namespace) -> int
+
+.. py:function:: build_subparser(sub: argparse._SubParsersAction) -> None
+
+   Wire the ``widget`` subcommands onto an existing subparsers object.
+
+

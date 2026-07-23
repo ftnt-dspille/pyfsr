@@ -1,0 +1,1050 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Connectors" href="connectors.html"><link rel="prev" title="Module Editor" href="module-admin.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Module &amp; Field Schema Reference - pyfsr 0.16.1</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #c8102e;
+  --color-brand-content: #c8102e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">pyfsr 0.16.1</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <span class="sidebar-brand-text">pyfsr 0.16.1</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Guides</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting-started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="authentication.html">Authentication</a></li>
+<li class="toctree-l1"><a class="reference internal" href="records.html">Working with Records</a></li>
+<li class="toctree-l1"><a class="reference internal" href="querying.html">Querying</a></li>
+<li class="toctree-l1"><a class="reference internal" href="module-admin.html">Module Editor</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Module &amp; Field Schema Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="connectors.html">Connectors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="export-import.html">Configuration Export &amp; Import</a></li>
+<li class="toctree-l1"><a class="reference internal" href="playbook-authoring.html">Playbook Authoring &amp; Deployment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="playbook-yaml-reference.html">Playbook YAML Syntax Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ai-agents.html">AI &amp; Agents</a></li>
+<li class="toctree-l1"><a class="reference internal" href="appliance-cli.html">Appliance Administration CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="repo-cli.html">Content Repository CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content-hub-mirror.html">Self-hosted Content Hub mirror</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference.html">API Reference</a><input aria-label="Toggle navigation of API Reference" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/client/index.html">pyfsr.client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/records/index.html">pyfsr.records</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/query/index.html">pyfsr.query</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/pagination/index.html">pyfsr.pagination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/fields/index.html">pyfsr.fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/config/index.html">pyfsr.config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/instances/index.html">pyfsr.instances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/exceptions/index.html">pyfsr.exceptions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/api/index.html">pyfsr.api</a><input aria-label="Toggle navigation of pyfsr.api" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/actors/index.html">pyfsr.api.actors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/agents/index.html">pyfsr.api.agents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/ai/index.html">pyfsr.api.ai</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/alerts/index.html">pyfsr.api.alerts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/api_keys/index.html">pyfsr.api.api_keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/api_users/index.html">pyfsr.api.api_users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/app_config/index.html">pyfsr.api.app_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/attachments/index.html">pyfsr.api.attachments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/audit/index.html">pyfsr.api.audit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/auth_config/index.html">pyfsr.api.auth_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/base/index.html">pyfsr.api.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/comments/index.html">pyfsr.api.comments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/connectors/index.html">pyfsr.api.connectors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/content_hub/index.html">pyfsr.api.content_hub</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/export_config/index.html">pyfsr.api.export_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/export_templates/index.html">pyfsr.api.export_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/feeds/index.html">pyfsr.api.feeds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/import_config/index.html">pyfsr.api.import_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/incidents/index.html">pyfsr.api.incidents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/manual_input/index.html">pyfsr.api.manual_input</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/modules/index.html">pyfsr.api.modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/modules_admin/index.html">pyfsr.api.modules_admin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/native_mcp/index.html">pyfsr.api.native_mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/notifications/index.html">pyfsr.api.notifications</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/picklists/index.html">pyfsr.api.picklists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/playbooks/index.html">pyfsr.api.playbooks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/reporting/index.html">pyfsr.api.reporting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/roles/index.html">pyfsr.api.roles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/routers/index.html">pyfsr.api.routers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/rules/index.html">pyfsr.api.rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/schedules/index.html">pyfsr.api.schedules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/search/index.html">pyfsr.api.search</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/solution_packs/index.html">pyfsr.api.solution_packs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/system/index.html">pyfsr.api.system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/system_queries/index.html">pyfsr.api.system_queries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/system_settings/index.html">pyfsr.api.system_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/tags/index.html">pyfsr.api.tags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/tasks/index.html">pyfsr.api.tasks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/taxii/index.html">pyfsr.api.taxii</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/teams/index.html">pyfsr.api.teams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/user_settings/index.html">pyfsr.api.user_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/users/index.html">pyfsr.api.users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/view_templates/index.html">pyfsr.api.view_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/views/index.html">pyfsr.api.views</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/wf_tools/index.html">pyfsr.api.wf_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/widgets/index.html">pyfsr.api.widgets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/workflow_collections/index.html">pyfsr.api.workflow_collections</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/models/index.html">pyfsr.models</a><input aria-label="Toggle navigation of pyfsr.models" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/models/base/index.html">pyfsr.models.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/models/types/index.html">pyfsr.models.types</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/auth/index.html">pyfsr.auth</a><input aria-label="Toggle navigation of pyfsr.auth" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/auth/api_key/index.html">pyfsr.auth.api_key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/auth/base/index.html">pyfsr.auth.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/auth/user_pass/index.html">pyfsr.auth.user_pass</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/authoring/index.html">pyfsr.authoring</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/agent/index.html">pyfsr.agent</a><input aria-label="Toggle navigation of pyfsr.agent" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/index.html">pyfsr.agent.archetypes</a><input aria-label="Toggle navigation of pyfsr.agent.archetypes" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/harvest/index.html">pyfsr.agent.archetypes.harvest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/record/index.html">pyfsr.agent.archetypes.record</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/router/index.html">pyfsr.agent.archetypes.router</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/store/index.html">pyfsr.agent.archetypes.store</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/agent/mcp/index.html">pyfsr.agent.mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/agent/tools/index.html">pyfsr.agent.tools</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/cli/index.html">pyfsr.cli</a><input aria-label="Toggle navigation of pyfsr.cli" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/index.html">pyfsr.cli.appliance</a><input aria-label="Toggle navigation of pyfsr.cli.appliance" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/certs/index.html">pyfsr.cli.appliance.certs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/content_hub/index.html">pyfsr.cli.appliance.content_hub</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/db/index.html">pyfsr.cli.appliance.db</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/diagnose/index.html">pyfsr.cli.appliance.diagnose</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/es/index.html">pyfsr.cli.appliance.es</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/facts/index.html">pyfsr.cli.appliance.facts</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/ha/index.html">pyfsr.cli.appliance.ha</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/host/index.html">pyfsr.cli.appliance.host</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/info/index.html">pyfsr.cli.appliance.info</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/license/index.html">pyfsr.cli.appliance.license</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/logs/index.html">pyfsr.cli.appliance.logs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/mq/index.html">pyfsr.cli.appliance.mq</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/service/index.html">pyfsr.cli.appliance.service</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/transport/index.html">pyfsr.cli.appliance.transport</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/cli/playbook/index.html">pyfsr.cli.playbook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/cli/repo/index.html">pyfsr.cli.repo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/cli/widget/index.html">pyfsr.cli.widget</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/appliance/index.html">pyfsr.appliance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/repo/index.html">pyfsr.repo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/content_catalog/index.html">pyfsr.content_catalog</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference-advanced.html">Advanced &amp; internal</a><input aria-label="Toggle navigation of Advanced &amp; internal" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/playbook_catalog/index.html">pyfsr.playbook_catalog</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/playbook_lint/index.html">pyfsr.playbook_lint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/playbook_match/index.html">pyfsr.playbook_match</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/concurrency/index.html">pyfsr.concurrency</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/projection/index.html">pyfsr.projection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/query_models/index.html">pyfsr.query_models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/spec/index.html">pyfsr.spec</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../autoapi/pyfsr/utils/index.html">pyfsr.utils</a><input aria-label="Toggle navigation of pyfsr.utils" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/utils/file_operations/index.html">pyfsr.utils.file_operations</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/utils/iri/index.html">pyfsr.utils.iri</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/utils/validation/index.html">pyfsr.utils.validation</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../reference-models.html">Typed models</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/guides/module-field-schema.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="module-field-schema-reference">
+<h1>Module &amp; Field Schema Reference<a class="headerlink" href="#module-field-schema-reference" title="Link to this heading">¶</a></h1>
+<p>This is the <strong>authoring reference</strong> for FortiSOAR modules and fields: every field type
+you can create, the properties each carries, and how relationship fields wire to other
+modules. It is the companion to <a class="reference internal" href="module-admin.html"><span class="doc">Module Editor</span></a> (which covers the staging → publish
+<em>workflow</em>); this page is the <strong>data model</strong> you build with — and is written so an LLM can
+generate valid field definitions from it.</p>
+<p>Everything here was extracted from a live FortiSOAR appliance (its 64 modules and ~1,500
+real fields) and verified by creating and publishing test modules.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference external" href="https://github.com/dylanspille/pyfsr/blob/main/examples/all_field_types_module.py"><code class="docutils literal notranslate"><span class="pre">examples/all_field_types_module.py</span></code></a>
+builds a module exercising every field type described here.</p>
+</div>
+<section id="the-two-axes-of-a-field-type-vs-formtype">
+<h2>The two axes of a field: <code class="docutils literal notranslate"><span class="pre">type</span></code> vs <code class="docutils literal notranslate"><span class="pre">formType</span></code><a class="headerlink" href="#the-two-axes-of-a-field-type-vs-formtype" title="Link to this heading">¶</a></h2>
+<p>Every field (an <em>attribute</em> in the metadata) has <strong>two</strong> type axes, and they are not the
+same thing:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Axis</p></th>
+<th class="head"><p>Metadata key</p></th>
+<th class="head"><p>What it is</p></th>
+<th class="head"><p>Allowed values</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Storage type</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">type</span></code></p></td>
+<td><p>the Postgres column type the platform stores</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code>, <code class="docutils literal notranslate"><span class="pre">integer</span></code>, <code class="docutils literal notranslate"><span class="pre">boolean</span></code>, <code class="docutils literal notranslate"><span class="pre">picklists</span></code>, <code class="docutils literal notranslate"><span class="pre">object</span></code>, <code class="docutils literal notranslate"><span class="pre">array</span></code>, or a <strong>module type name</strong> (for relationships)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Display type</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">formType</span></code></p></td>
+<td><p>the kind of field shown/edited in the editor</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">text</span></code>, <code class="docutils literal notranslate"><span class="pre">textarea</span></code>, <code class="docutils literal notranslate"><span class="pre">richtext</span></code>, <code class="docutils literal notranslate"><span class="pre">html</span></code>, <code class="docutils literal notranslate"><span class="pre">integer</span></code>, <code class="docutils literal notranslate"><span class="pre">datetime</span></code>, <code class="docutils literal notranslate"><span class="pre">checkbox</span></code>, <code class="docutils literal notranslate"><span class="pre">email</span></code>, <code class="docutils literal notranslate"><span class="pre">url</span></code>, <code class="docutils literal notranslate"><span class="pre">phone</span></code>, <code class="docutils literal notranslate"><span class="pre">password</span></code>, <code class="docutils literal notranslate"><span class="pre">filehash</span></code>, <code class="docutils literal notranslate"><span class="pre">ipv4</span></code>, <code class="docutils literal notranslate"><span class="pre">file</span></code>, <code class="docutils literal notranslate"><span class="pre">picklist</span></code>, <code class="docutils literal notranslate"><span class="pre">multiselectpicklist</span></code>, <code class="docutils literal notranslate"><span class="pre">lookup</span></code>, <code class="docutils literal notranslate"><span class="pre">manyToMany</span></code>, <code class="docutils literal notranslate"><span class="pre">oneToMany</span></code>, <code class="docutils literal notranslate"><span class="pre">object</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p><strong>There is no <code class="docutils literal notranslate"><span class="pre">text</span></code> storage type.</strong> Text-like fields (<code class="docutils literal notranslate"><span class="pre">text</span></code>, <code class="docutils literal notranslate"><span class="pre">textarea</span></code>, <code class="docutils literal notranslate"><span class="pre">richtext</span></code>,
+<code class="docutils literal notranslate"><span class="pre">email</span></code>, …) all store <code class="docutils literal notranslate"><span class="pre">string</span></code>. Setting <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">&quot;text&quot;</span></code> <em>looks</em> fine in staging but
+<strong>fails at publish</strong> with:</p>
+<blockquote>
+<div><p><code class="docutils literal notranslate"><span class="pre">Attribute</span> <span class="pre">type</span> <span class="pre">'text'</span> <span class="pre">does</span> <span class="pre">not</span> <span class="pre">exist</span> <span class="pre">as</span> <span class="pre">core</span> <span class="pre">or</span> <span class="pre">custom</span> <span class="pre">model</span> <span class="pre">metadata.</span></code></p>
+</div></blockquote>
+<p>This is the single most common authoring mistake. Always pair the display type with its
+correct storage type — or let the typed builders do it for you (see below).</p>
+</div>
+<p>The display type → storage mapping is exposed in code as
+<a class="reference internal" href="../autoapi/pyfsr/api/modules_admin/index.html#pyfsr.api.modules_admin.DISPLAY_STORAGE_TYPE" title="pyfsr.api.modules_admin.DISPLAY_STORAGE_TYPE"><code class="xref py py-data docutils literal notranslate"><span class="pre">pyfsr.api.modules_admin.DISPLAY_STORAGE_TYPE</span></code></a>:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">formType</span></code> (display type)</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">type</span></code> (storage)</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">text</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>single-line</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">textarea</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>multi-line plain text</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">richtext</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>WYSIWYG rich text</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">html</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>raw HTML</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">email</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>email-format validation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">url</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>URL field</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">phone</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>phone field</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">password</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>masked input; pair with <code class="docutils literal notranslate"><span class="pre">encrypted=True</span></code> to store encrypted</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">filehash</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>hash field (MD5/SHA)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ipv4</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>IP field</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">file</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>file attachment (<code class="docutils literal notranslate"><span class="pre">dataSource.model</span> <span class="pre">=</span> <span class="pre">&quot;files&quot;</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">integer</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">integer</span></code></p></td>
+<td><p>whole number</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">datetime</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">integer</span></code></p></td>
+<td><p><strong>stored as epoch-millis integer</strong> — not a bug</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">checkbox</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">boolean</span></code></p></td>
+<td><p>true/false</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">object</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">object</span></code></p></td>
+<td><p>arbitrary JSON object</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">picklist</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">picklists</span></code></p></td>
+<td><p>single-select — see <a class="reference internal" href="#picklist-fields">Picklist fields</a></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">multiselectpicklist</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">picklists</span></code></p></td>
+<td><p>multi-select (a collection)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">lookup</span></code></p></td>
+<td><p><em>target module</em></p></td>
+<td><p>single reference (many-to-one)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">manyToMany</span></code></p></td>
+<td><p><em>target module</em></p></td>
+<td><p>collection relationship</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">oneToMany</span></code></p></td>
+<td><p><em>target module</em></p></td>
+<td><p>collection relationship</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="building-fields-typed-builders-vs-field">
+<h2>Building fields: typed builders vs. <code class="docutils literal notranslate"><span class="pre">field()</span></code><a class="headerlink" href="#building-fields-typed-builders-vs-field" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">client.modules_admin</span></code> gives you <strong>typed builders</strong> that set both axes correctly. Prefer
+them — they make the <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">&quot;text&quot;</span></code> mistake impossible:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">admin</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">modules_admin</span>
+
+<span class="n">fields</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">text_field</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>          <span class="c1"># string / text</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">text_field</span><span class="p">(</span><span class="s2">&quot;summary&quot;</span><span class="p">,</span> <span class="n">area</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>            <span class="c1"># string / textarea</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">text_field</span><span class="p">(</span><span class="s2">&quot;writeup&quot;</span><span class="p">,</span> <span class="n">rich</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>            <span class="c1"># string / richtext</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">integer_field</span><span class="p">(</span><span class="s2">&quot;score&quot;</span><span class="p">),</span>                      <span class="c1"># integer / integer</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">datetime_field</span><span class="p">(</span><span class="s2">&quot;detectedOn&quot;</span><span class="p">),</span>                <span class="c1"># integer / datetime</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">checkbox_field</span><span class="p">(</span><span class="s2">&quot;isExternal&quot;</span><span class="p">),</span>                <span class="c1"># boolean / checkbox</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">email_field</span><span class="p">(</span><span class="s2">&quot;reporter&quot;</span><span class="p">),</span>                     <span class="c1"># string / email</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">url_field</span><span class="p">(</span><span class="s2">&quot;reference&quot;</span><span class="p">),</span>                      <span class="c1"># string / url</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">object_field</span><span class="p">(</span><span class="s2">&quot;rawPayload&quot;</span><span class="p">),</span>                  <span class="c1"># object / object</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">picklist_field</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">,</span> <span class="s2">&quot;AlertStatus&quot;</span><span class="p">),</span>     <span class="c1"># picklists / picklist</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">lookup_field</span><span class="p">(</span><span class="s2">&quot;owner&quot;</span><span class="p">,</span> <span class="s2">&quot;people&quot;</span><span class="p">),</span>             <span class="c1"># people / lookup  (many-to-one)</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">relationship_field</span><span class="p">(</span><span class="s2">&quot;relatedAlerts&quot;</span><span class="p">,</span> <span class="s2">&quot;alerts&quot;</span><span class="p">),</span>  <span class="c1"># alerts / manyToMany</span>
+<span class="p">]</span>
+<span class="n">admin</span><span class="o">.</span><span class="n">create_module</span><span class="p">(</span><span class="s2">&quot;widgets&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Widget&quot;</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="n">fields</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">admin.typed_field(name,</span> <span class="pre">display_type,</span> <span class="pre">...)</span></code> is the generic form for any scalar display
+type in the table above (e.g. <code class="docutils literal notranslate"><span class="pre">admin.typed_field(&quot;md5&quot;,</span> <span class="pre">&quot;filehash&quot;)</span></code>). For the low-level
+escape hatch where you set both axes yourself, use
+<a class="reference internal" href="../autoapi/pyfsr/api/modules_admin/index.html#pyfsr.api.modules_admin.ModulesAdminAPI.field" title="pyfsr.api.modules_admin.ModulesAdminAPI.field"><code class="xref py py-meth docutils literal notranslate"><span class="pre">field()</span></code></a> directly.</p>
+<section id="field-properties-the-editor-s-properties-panel">
+<h3>Field properties (the editor’s Properties panel)<a class="headerlink" href="#field-properties-the-editor-s-properties-panel" title="Link to this heading">¶</a></h3>
+<p>Every builder accepts these keyword options (they map 1:1 to the in-product editor):</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Builder kwarg</p></th>
+<th class="head"><p>Metadata</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">label</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">descriptions.singular</span></code></p></td>
+<td><p>Field <strong>Title</strong> (human-readable). <code class="docutils literal notranslate"><span class="pre">name</span></code> is the immutable <strong>API Key</strong>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">required</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">validation.required</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code>/<code class="docutils literal notranslate"><span class="pre">False</span></code>, or a <strong>condition dict</strong> for “Required by condition”.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">searchable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">searchable</span></code></p></td>
+<td><p>Indexed for search. <strong>Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">encrypted</span></code>.</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">editable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">writeable</span></code></p></td>
+<td><p>Editable in the UI.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">grid_column</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gridColumn</span></code></p></td>
+<td><p>Shown as a default column in the list/grid view. <strong>Defaults <code class="docutils literal notranslate"><span class="pre">True</span></code></strong> (visible) for scalar/lookup/picklist fields; <strong><code class="docutils literal notranslate"><span class="pre">False</span></code></strong> for <code class="docutils literal notranslate"><span class="pre">password</span></code>, <code class="docutils literal notranslate"><span class="pre">object</span></code>/<code class="docutils literal notranslate"><span class="pre">json</span></code>/<code class="docutils literal notranslate"><span class="pre">array</span></code>, <code class="docutils literal notranslate"><span class="pre">manyToMany</span></code>/<code class="docutils literal notranslate"><span class="pre">oneToMany</span></code>. Override per field.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">encrypted</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">encrypted</span></code></p></td>
+<td><p>Stored encrypted at rest. Cannot be searchable.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">visibility</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">visibility</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code>/<code class="docutils literal notranslate"><span class="pre">False</span></code>, or a <strong>condition dict</strong> for “Visible by condition”.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">default_value</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">defaultValue</span></code></p></td>
+<td><p>Pre-filled value on new records.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tooltip</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">tooltip</span></code></p></td>
+<td><p>Help text shown next to the field.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">minlength</span></code> / <code class="docutils literal notranslate"><span class="pre">maxlength</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">validation.*</span></code></p></td>
+<td><p>Length constraints (default max <code class="docutils literal notranslate"><span class="pre">10485760</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">enable_range</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">validation._enableRange</span></code></p></td>
+<td><p>Enables the min/max numeric range UI.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bulk_edit</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">bulkAction.allow</span></code></p></td>
+<td><p>Allow editing this field in bulk actions.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Conditional <code class="docutils literal notranslate"><span class="pre">required</span></code>/<code class="docutils literal notranslate"><span class="pre">visibility</span></code> take a condition. Pass a <a class="reference internal" href="../autoapi/pyfsr/query/index.html#pyfsr.query.Query" title="pyfsr.query.Query"><code class="xref py py-class docutils literal notranslate"><span class="pre">Query</span></code></a>
+and pyfsr renders the FortiSOAR filter shape for you — e.g. “require <code class="docutils literal notranslate"><span class="pre">emailFrom</span></code> only
+when <code class="docutils literal notranslate"><span class="pre">type</span></code> is Phishing”:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr</span><span class="w"> </span><span class="kn">import</span> <span class="n">Query</span>
+
+<span class="n">admin</span><span class="o">.</span><span class="n">email_field</span><span class="p">(</span><span class="s2">&quot;emailFrom&quot;</span><span class="p">,</span>
+    <span class="n">required</span><span class="o">=</span><span class="n">Query</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="s2">&quot;alerts&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;Phishing&quot;</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>Because the <code class="docutils literal notranslate"><span class="pre">Query</span></code> is module-bound, the picklist field auto-resolves to
+<code class="docutils literal notranslate"><span class="pre">type.itemValue</span></code> and you compare by the friendly name instead of hunting down
+<code class="docutils literal notranslate"><span class="pre">/api/3/picklists/&lt;uuid&gt;</span></code>. A pre-built condition <code class="docutils literal notranslate"><span class="pre">dict</span></code> (or a plain <code class="docutils literal notranslate"><span class="pre">True</span></code>/<code class="docutils literal notranslate"><span class="pre">False</span></code>)
+still works if you’d rather assemble it yourself.</p>
+</section>
+</section>
+<section id="picklist-fields">
+<h2>Picklist fields<a class="headerlink" href="#picklist-fields" title="Link to this heading">¶</a></h2>
+<p>Picklists store <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">&quot;picklists&quot;</span></code> and bind to a named picklist via <code class="docutils literal notranslate"><span class="pre">dataSource</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">admin</span><span class="o">.</span><span class="n">picklist_field</span><span class="p">(</span><span class="s2">&quot;severity&quot;</span><span class="p">,</span> <span class="s2">&quot;AlertSeverity&quot;</span><span class="p">)</span>             <span class="c1"># single-select</span>
+<span class="n">admin</span><span class="o">.</span><span class="n">picklist_field</span><span class="p">(</span><span class="s2">&quot;threatTypes&quot;</span><span class="p">,</span> <span class="s2">&quot;ThreatType&quot;</span><span class="p">,</span> <span class="n">multi</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># multi-select (collection)</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">picklist_name</span></code> is the picklist’s <strong>list name</strong> (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;AlertSeverity&quot;</span></code>), discoverable
+via <code class="docutils literal notranslate"><span class="pre">client.picklists</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">multi=True</span></code> switches the display type to <code class="docutils literal notranslate"><span class="pre">multiselectpicklist</span></code> and sets <code class="docutils literal notranslate"><span class="pre">collection=True</span></code>.</p></li>
+<li><p>The builder writes the <code class="docutils literal notranslate"><span class="pre">dataSource</span></code> query that filters <code class="docutils literal notranslate"><span class="pre">picklists</span></code> by
+<code class="docutils literal notranslate"><span class="pre">listName__name</span> <span class="pre">==</span> <span class="pre">&lt;picklist_name&gt;</span></code>, sorted by <code class="docutils literal notranslate"><span class="pre">orderIndex</span></code>.</p></li>
+</ul>
+<p>To create the picklist <em>values</em> themselves, manage <code class="docutils literal notranslate"><span class="pre">/api/3/picklist_names</span></code> and
+<code class="docutils literal notranslate"><span class="pre">/api/3/picklists</span></code> separately — fields only <em>reference</em> an existing picklist.</p>
+</section>
+<section id="relationships">
+<h2>Relationships<a class="headerlink" href="#relationships" title="Link to this heading">¶</a></h2>
+<p>Three relationship display types, distinguished by cardinality and which side owns the join:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Display type</p></th>
+<th class="head"><p>Cardinality</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">collection</span></code></p></th>
+<th class="head"><p>Owns join?</p></th>
+<th class="head"><p>Reverse field on target</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">lookup</span></code></p></td>
+<td><p>many-to-one</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
+<td><p>no</p></td>
+<td><p>none — one-directional pointer</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">manyToMany</span></code></p></td>
+<td><p>many-to-many</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>yes</p></td>
+<td><p>always exists (see below)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">oneToMany</span></code></p></td>
+<td><p>one-to-many</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>yes</p></td>
+<td><p>a <code class="docutils literal notranslate"><span class="pre">lookup</span></code> on the target</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Wiring keys on a relationship attribute:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">type</span></code></strong> — the target module type (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;alerts&quot;</span></code>), not <code class="docutils literal notranslate"><span class="pre">string</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">inversedField</span></code></strong> — name of the field on the target that points back.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">ownsRelationship</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">True</span></code> on the side that owns the join table.</p></li>
+</ul>
+<p><strong>pyfsr keeps both sides valid for you.</strong>
+<a class="reference internal" href="../autoapi/pyfsr/api/modules_admin/index.html#pyfsr.api.modules_admin.ModulesAdminAPI.add_field" title="pyfsr.api.modules_admin.ModulesAdminAPI.add_field"><code class="xref py py-meth docutils literal notranslate"><span class="pre">add_field()</span></code></a> creates the reverse side on the
+target whenever the platform won’t, so you only declare the relationship once. Pass
+<code class="docutils literal notranslate"><span class="pre">create_reverse=False</span></code> to opt out and manage the target side yourself.</p>
+<section id="lookup-many-to-one">
+<h3>Lookup (many-to-one)<a class="headerlink" href="#lookup-many-to-one" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">admin</span><span class="o">.</span><span class="n">add_field</span><span class="p">(</span><span class="s2">&quot;incidents&quot;</span><span class="p">,</span> <span class="n">admin</span><span class="o">.</span><span class="n">lookup_field</span><span class="p">(</span><span class="s2">&quot;owner&quot;</span><span class="p">,</span> <span class="s2">&quot;people&quot;</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>A single pointer to one target record — not a collection, owns nothing, and intentionally
+has <strong>no</strong> reverse field. Two modules can each look up <code class="docutils literal notranslate"><span class="pre">people</span></code> independently. Use it
+whenever a record just references one X.</p>
+</section>
+<section id="many-to-many">
+<h3>Many-to-many<a class="headerlink" href="#many-to-many" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Default inverse — FortiSOAR mirrors the reverse field itself:</span>
+<span class="n">admin</span><span class="o">.</span><span class="n">add_field</span><span class="p">(</span><span class="s2">&quot;incidents&quot;</span><span class="p">,</span> <span class="n">admin</span><span class="o">.</span><span class="n">relationship_field</span><span class="p">(</span><span class="s2">&quot;relatedAlerts&quot;</span><span class="p">,</span> <span class="s2">&quot;alerts&quot;</span><span class="p">))</span>
+
+<span class="c1"># Custom inverse name — pyfsr adds the matching reverse field to the target:</span>
+<span class="n">admin</span><span class="o">.</span><span class="n">add_field</span><span class="p">(</span><span class="s2">&quot;incidents&quot;</span><span class="p">,</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">relationship_field</span><span class="p">(</span><span class="s2">&quot;relatedAlerts&quot;</span><span class="p">,</span> <span class="s2">&quot;alerts&quot;</span><span class="p">,</span> <span class="n">inversed_field</span><span class="o">=</span><span class="s2">&quot;parentIncidents&quot;</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>A many-to-many always ends up two-directional. With the <strong>default</strong> inverse the platform
+creates the reverse field (named after the source module) at staging time. With a <strong>custom</strong>
+<code class="docutils literal notranslate"><span class="pre">inversed_field</span></code> the platform does not — so <code class="docutils literal notranslate"><span class="pre">add_field</span></code> adds the mirror <code class="docutils literal notranslate"><span class="pre">manyToMany</span></code>
+(<code class="docutils literal notranslate"><span class="pre">ownsRelationship=False</span></code>, <code class="docutils literal notranslate"><span class="pre">inversedField</span></code> pointing back) to the target for you.</p>
+</section>
+<section id="one-to-many">
+<h3>One-to-many<a class="headerlink" href="#one-to-many" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">admin</span><span class="o">.</span><span class="n">add_field</span><span class="p">(</span><span class="s2">&quot;incidents&quot;</span><span class="p">,</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">relationship_field</span><span class="p">(</span><span class="s2">&quot;relatedAlerts&quot;</span><span class="p">,</span> <span class="s2">&quot;alerts&quot;</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">inversed_field</span><span class="o">=</span><span class="s2">&quot;incident&quot;</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>A <code class="docutils literal notranslate"><span class="pre">oneToMany</span></code> requires a matching <code class="docutils literal notranslate"><span class="pre">lookup</span></code> (many-to-one) on the target whose name equals
+<code class="docutils literal notranslate"><span class="pre">inversed_field</span></code> — without it, publish fails with <em>“there is no lookup field present in
+‘<target>’”</em>. <code class="docutils literal notranslate"><span class="pre">add_field</span></code> creates that lookup on the target automatically, so the single
+call above leaves both modules publishable. (The target module must already exist.)</p>
+</section>
+</section>
+<section id="verifying-publishing">
+<h2>Verifying &amp; publishing<a class="headerlink" href="#verifying-publishing" title="Link to this heading">¶</a></h2>
+<p>After publish, confirm the reverse attribute the platform actually stored with
+<a class="reference internal" href="../autoapi/pyfsr/api/modules_admin/index.html#pyfsr.api.modules_admin.ModulesAdminAPI.reverse_field" title="pyfsr.api.modules_admin.ModulesAdminAPI.reverse_field"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reverse_field()</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">admin</span><span class="o">.</span><span class="n">create_module</span><span class="p">(</span><span class="s2">&quot;widgets&quot;</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="n">admin</span><span class="o">.</span><span class="n">text_field</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)])</span>
+<span class="n">admin</span><span class="o">.</span><span class="n">add_field</span><span class="p">(</span><span class="s2">&quot;widgets&quot;</span><span class="p">,</span> <span class="n">admin</span><span class="o">.</span><span class="n">relationship_field</span><span class="p">(</span><span class="s2">&quot;relatedAlerts&quot;</span><span class="p">,</span> <span class="s2">&quot;alerts&quot;</span><span class="p">))</span>
+<span class="n">admin</span><span class="o">.</span><span class="n">publish</span><span class="p">()</span>                       <span class="c1"># appliance-wide; blocks until committed</span>
+
+<span class="n">rev</span> <span class="o">=</span> <span class="n">admin</span><span class="o">.</span><span class="n">reverse_field</span><span class="p">(</span><span class="s2">&quot;widgets&quot;</span><span class="p">,</span> <span class="s2">&quot;relatedAlerts&quot;</span><span class="p">,</span> <span class="n">published</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Reverse field:&quot;</span><span class="p">,</span> <span class="n">rev</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">rev</span><span class="p">[</span><span class="s2">&quot;formType&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><strong>A publish that reports “started” is not a publish that committed.</strong> <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/api/publish</span></code>
+only <em>kicks off</em> an asynchronous backup + migrate + commit, during which the <strong>entire API
+(<code class="docutils literal notranslate"><span class="pre">/api/3</span></code>) returns 503</strong> for ~30–60s. The default
+<a class="reference internal" href="../autoapi/pyfsr/api/modules_admin/index.html#pyfsr.api.modules_admin.ModulesAdminAPI.publish" title="pyfsr.api.modules_admin.ModulesAdminAPI.publish"><code class="xref py py-meth docutils literal notranslate"><span class="pre">publish()</span></code></a> waits out that outage and confirms
+the outcome via <code class="docutils literal notranslate"><span class="pre">/api/publish/error</span></code> (a fresh <code class="docutils literal notranslate"><span class="pre">last_publish_time</span></code> with <code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">&quot;Success&quot;</span></code>),
+raising the appliance’s reported error on any other state. Test reverse-field behavior
+end-to-end on a real publish — staging shows the <em>intended</em> wiring, but only a committed
+publish creates the physical join.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Schema validation errors are synchronous.</strong> A bad field — a <code class="docutils literal notranslate"><span class="pre">type</span></code> that does not exist,
+or a <code class="docutils literal notranslate"><span class="pre">oneToMany</span></code> whose target has no matching lookup — is rejected on the <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/api/publish</span></code>
+itself (HTTP 400) <em>before</em> any migrate runs, raised as an
+<a class="reference internal" href="../autoapi/pyfsr/exceptions/index.html#pyfsr.exceptions.APIError" title="pyfsr.exceptions.APIError"><code class="xref py py-class docutils literal notranslate"><span class="pre">APIError</span></code></a> whose message is the appliance’s own, e.g.:</p>
+<blockquote>
+<div><p><code class="docutils literal notranslate"><span class="pre">For</span> <span class="pre">many-to-one</span> <span class="pre">'brokenRel'</span> <span class="pre">field</span> <span class="pre">in</span> <span class="pre">'widgets'</span> <span class="pre">module</span> <span class="pre">there</span> <span class="pre">is</span> <span class="pre">no</span> <span class="pre">lookup</span> <span class="pre">field</span> <span class="pre">present</span> <span class="pre">in</span> <span class="pre">'alerts'</span> <span class="pre">module.</span></code></p>
+</div></blockquote>
+<p>Surface that message verbatim — it names the offending field and module. (Each error line
+is prefixed with internal <code class="docutils literal notranslate"><span class="pre">modelMetadatas[uuid].attributes[uuid].formtype:</span></code> ids you can
+strip for end users.) Because validation fails before the migrate, <code class="docutils literal notranslate"><span class="pre">/api/publish/error</span></code> is
+untouched and nothing on the appliance changes.</p>
+</div>
+</section>
+<section id="validation-caught-early-vs-caught-at-publish">
+<h2>Validation: caught early vs. caught at publish<a class="headerlink" href="#validation-caught-early-vs-caught-at-publish" title="Link to this heading">¶</a></h2>
+<p>The appliance accepts a lot of <em>invalid</em> schema into <strong>staging</strong> and only rejects it during
+the slow, appliance-wide <strong>publish</strong> — or worse, publishes a broken module. To avoid that
+round-trip, the builders reject the known-bad inputs <strong>client-side</strong>, raising <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>
+before anything is sent:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Bad input</p></th>
+<th class="head"><p>Where the appliance catches it</p></th>
+<th class="head"><p>pyfsr guard</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">db_type=&quot;text&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;json&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;datetime&quot;</span></code></p></td>
+<td><p>publish (<em>“Attribute type ‘text’ does not exist”</em>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">field()</span></code> raises — use the typed builder</p></td>
+</tr>
+<tr class="row-odd"><td><p>field name with spaces / punctuation / leading digit</p></td>
+<td><p>publish (bad SQL column)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">field()</span></code> raises — must match <code class="docutils literal notranslate"><span class="pre">^[A-Za-z][A-Za-z0-9_]*$</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">encrypted</span></code> <strong>and</strong> <code class="docutils literal notranslate"><span class="pre">searchable</span></code> both set</p></td>
+<td><p>silently broken</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">field()</span></code> raises (mutually exclusive)</p></td>
+</tr>
+<tr class="row-odd"><td><p>module name with uppercase / spaces / leading digit</p></td>
+<td><p>publish / broken table</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">create_module()</span></code> raises — must match <code class="docutils literal notranslate"><span class="pre">^[a-z][a-z0-9_]*$</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>empty <code class="docutils literal notranslate"><span class="pre">fields=[]</span></code></p></td>
+<td><p>invalid module</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">create_module()</span></code> raises</p></td>
+</tr>
+<tr class="row-odd"><td><p>name longer than 63 chars</p></td>
+<td><p>publish (Postgres identifier limit)</p></td>
+<td><p>both raise</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>duplicate field name</strong> in a module</p></td>
+<td><p><strong>staging POST</strong> (fast)</p></td>
+<td><p>appliance already rejects — <em>“Duplicate field ‘x’… names are case-insensitive”</em></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>reserved key</strong> <code class="docutils literal notranslate"><span class="pre">id</span></code></p></td>
+<td><p><strong>staging POST</strong> (fast)</p></td>
+<td><p>appliance already rejects — <em>“‘id’ is a reserved keyword”</em></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>duplicate module</strong> type</p></td>
+<td><p><strong>staging POST</strong> (fast)</p></td>
+<td><p>appliance already rejects (uniqueness constraint)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">oneToMany</span></code> with no lookup on target</p></td>
+<td><p>publish</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">add_field</span></code> creates the target lookup for you (see Relationships)</p></td>
+</tr>
+<tr class="row-even"><td><p>relationship to a non-existent target module</p></td>
+<td><p>publish</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">add_field</span></code> raises a clear error naming the missing target</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The last group is <em>not</em> guarded client-side because the appliance already fails fast (at
+the cheap staging <code class="docutils literal notranslate"><span class="pre">POST</span></code>, not at publish) with a clear message — surface it as-is. Only the
+checks that would otherwise slip through to the expensive publish are enforced in pyfsr.</p>
+</div>
+<section id="a-bad-draft-anywhere-wedges-the-whole-publish">
+<h3>A bad draft anywhere wedges the whole publish<a class="headerlink" href="#a-bad-draft-anywhere-wedges-the-whole-publish" title="Link to this heading">¶</a></h3>
+<p>Publish is <strong>appliance-wide</strong>, so a single illegally-named draft created outside pyfsr (in
+the in-product editor, or by another tool) makes <em>every</em> publish fail mid-migrate with a
+cryptic Postgres error and no module name:</p>
+<blockquote>
+<div><p><code class="docutils literal notranslate"><span class="pre">syntax</span> <span class="pre">error,</span> <span class="pre">unexpected</span> <span class="pre">integer</span> <span class="pre">&quot;9&quot;,</span> <span class="pre">expecting</span> <span class="pre">identifier</span></code></p>
+</div></blockquote>
+<p>Worse, <code class="docutils literal notranslate"><span class="pre">/api/publish/error</span></code> can still report <code class="docutils literal notranslate"><span class="pre">Success</span></code> while nothing actually commits. To
+prevent this, <a class="reference internal" href="../autoapi/pyfsr/api/modules_admin/index.html#pyfsr.api.modules_admin.ModulesAdminAPI.publish" title="pyfsr.api.modules_admin.ModulesAdminAPI.publish"><code class="xref py py-meth docutils literal notranslate"><span class="pre">publish()</span></code></a> runs
+<a class="reference internal" href="../autoapi/pyfsr/api/modules_admin/index.html#pyfsr.api.modules_admin.ModulesAdminAPI.find_invalid_drafts" title="pyfsr.api.modules_admin.ModulesAdminAPI.find_invalid_drafts"><code class="xref py py-meth docutils literal notranslate"><span class="pre">find_invalid_drafts()</span></code></a> first and refuses with
+a named error before the destructive PUT:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">admin</span><span class="o">.</span><span class="n">find_invalid_drafts</span><span class="p">()</span>
+<span class="c1"># [{&#39;module&#39;: &#39;9probe&#39;, &#39;uuid&#39;: &#39;...&#39;, &#39;problem&#39;: &#39;invalid module name&#39;}]</span>
+
+<span class="n">admin</span><span class="o">.</span><span class="n">publish</span><span class="p">()</span>
+<span class="c1"># ValueError: refusing to publish: invalid staged draft(s) would fail the</span>
+<span class="c1"># appliance-wide migrate: &#39;9probe&#39; (invalid module name). Fix or discard them...</span>
+
+<span class="n">admin</span><span class="o">.</span><span class="n">discard_staging_draft</span><span class="p">(</span><span class="s2">&quot;9probe&quot;</span><span class="p">)</span>   <span class="c1"># remove the offender, then publish cleanly</span>
+<span class="n">admin</span><span class="o">.</span><span class="n">publish</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Use <code class="docutils literal notranslate"><span class="pre">find_invalid_drafts(deep=True)</span></code> to also scan every draft’s <strong>field</strong> names (one read
+per module). Pass <code class="docutils literal notranslate"><span class="pre">publish(precheck=False)</span></code> only if you deliberately want to skip the check.</p>
+</section>
+<section id="recommended-authoring-workflow">
+<h3>Recommended authoring workflow<a class="headerlink" href="#recommended-authoring-workflow" title="Link to this heading">¶</a></h3>
+<ol class="arabic simple">
+<li><p>Build all fields with the <strong>typed builders</strong> (correct <code class="docutils literal notranslate"><span class="pre">type</span></code>/<code class="docutils literal notranslate"><span class="pre">formType</span></code> guaranteed).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">create_module(...)</span></code> / <code class="docutils literal notranslate"><span class="pre">add_field(...)</span></code> → stages the draft; <code class="docutils literal notranslate"><span class="pre">add_field</span></code> also stages the
+reverse side of relationships on the target (the <code class="docutils literal notranslate"><span class="pre">oneToMany</span></code> target lookup, the
+custom-inverse <code class="docutils literal notranslate"><span class="pre">manyToMany</span></code> mirror).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pending_changes()</span></code> / <code class="docutils literal notranslate"><span class="pre">find_invalid_drafts()</span></code> → confirm only your modules are pending and
+nothing staged (by you or anyone) would wedge the appliance-wide publish.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">publish()</span></code> → prechecks for invalid drafts, commits, and <strong>waits for the real commit</strong>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reverse_field(...,</span> <span class="pre">published=True)</span></code> → confirm each relationship’s reverse landed.</p></li>
+</ol>
+</section>
+</section>
+<section id="module-level-settings">
+<h2>Module-level settings<a class="headerlink" href="#module-level-settings" title="Link to this heading">¶</a></h2>
+<p>When you <code class="docutils literal notranslate"><span class="pre">create_module(...)</span></code> (or <code class="docutils literal notranslate"><span class="pre">set_module_settings(...)</span></code>), these flags map to the
+editor’s <strong>Additional Settings</strong>:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Builder kwarg</p></th>
+<th class="head"><p>Metadata</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ownable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ownable</span></code> + <code class="docutils literal notranslate"><span class="pre">userOwnable</span></code></p></td>
+<td><p>Team/user record ownership.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">trackable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">trackable</span></code></p></td>
+<td><p>Record-level change history.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">indexable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">indexable</span></code></p></td>
+<td><p>Full-text indexing.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">taggable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">taggable</span></code></p></td>
+<td><p>Allow tags on records.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">queueable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">queueable</span></code></p></td>
+<td><p>Eligible for queue management.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">recycle_bin</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">softDeleteable</span></code></p></td>
+<td><p>Soft-delete / recycle bin.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">multi_tenancy</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">peerReplicable</span></code></p></td>
+<td><p>Replicate across tenants.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">display_template</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">displayName</span></code></p></td>
+<td><p>Jinja record title, e.g. <code class="docutils literal notranslate"><span class="pre">&quot;{{</span> <span class="pre">name</span> <span class="pre">}}&quot;</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">record_uniqueness</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">uniqueConstraint</span></code></p></td>
+<td><p>List of field names enforcing uniqueness.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">default_sort</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">defaultSort</span></code></p></td>
+<td><p>e.g. <code class="docutils literal notranslate"><span class="pre">[{&quot;field&quot;:</span> <span class="pre">&quot;createDate&quot;,</span> <span class="pre">&quot;direction&quot;:</span> <span class="pre">&quot;DESC&quot;}]</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>There is <strong>no delete-module API</strong>. An unpublished draft can be removed with
+<a class="reference internal" href="../autoapi/pyfsr/api/modules_admin/index.html#pyfsr.api.modules_admin.ModulesAdminAPI.discard_staging_draft" title="pyfsr.api.modules_admin.ModulesAdminAPI.discard_staging_draft"><code class="xref py py-meth docutils literal notranslate"><span class="pre">discard_staging_draft()</span></code></a>; a <em>published</em>
+module and its Postgres table persist even after the draft is discarded.</p>
+</div>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="connectors.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Connectors</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="module-admin.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Module Editor</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Dylan Spille
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/ftnt-dspille/pyfsr" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Module &amp; Field Schema Reference</a><ul>
+<li><a class="reference internal" href="#the-two-axes-of-a-field-type-vs-formtype">The two axes of a field: <code class="docutils literal notranslate"><span class="pre">type</span></code> vs <code class="docutils literal notranslate"><span class="pre">formType</span></code></a></li>
+<li><a class="reference internal" href="#building-fields-typed-builders-vs-field">Building fields: typed builders vs. <code class="docutils literal notranslate"><span class="pre">field()</span></code></a><ul>
+<li><a class="reference internal" href="#field-properties-the-editor-s-properties-panel">Field properties (the editor’s Properties panel)</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#picklist-fields">Picklist fields</a></li>
+<li><a class="reference internal" href="#relationships">Relationships</a><ul>
+<li><a class="reference internal" href="#lookup-many-to-one">Lookup (many-to-one)</a></li>
+<li><a class="reference internal" href="#many-to-many">Many-to-many</a></li>
+<li><a class="reference internal" href="#one-to-many">One-to-many</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#verifying-publishing">Verifying &amp; publishing</a></li>
+<li><a class="reference internal" href="#validation-caught-early-vs-caught-at-publish">Validation: caught early vs. caught at publish</a><ul>
+<li><a class="reference internal" href="#a-bad-draft-anywhere-wedges-the-whole-publish">A bad draft anywhere wedges the whole publish</a></li>
+<li><a class="reference internal" href="#recommended-authoring-workflow">Recommended authoring workflow</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-level-settings">Module-level settings</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=56c55dd0"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=fd10adb8"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

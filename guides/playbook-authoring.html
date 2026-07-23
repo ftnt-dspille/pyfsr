@@ -1,0 +1,943 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Playbook YAML Syntax Reference" href="playbook-yaml-reference.html"><link rel="prev" title="Configuration Export &amp; Import" href="export-import.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Playbook Authoring &amp; Deployment - pyfsr 0.16.1</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #c8102e;
+  --color-brand-content: #c8102e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">pyfsr 0.16.1</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <span class="sidebar-brand-text">pyfsr 0.16.1</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Guides</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting-started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="authentication.html">Authentication</a></li>
+<li class="toctree-l1"><a class="reference internal" href="records.html">Working with Records</a></li>
+<li class="toctree-l1"><a class="reference internal" href="querying.html">Querying</a></li>
+<li class="toctree-l1"><a class="reference internal" href="module-admin.html">Module Editor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="module-field-schema.html">Module &amp; Field Schema Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="connectors.html">Connectors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="export-import.html">Configuration Export &amp; Import</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Playbook Authoring &amp; Deployment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="playbook-yaml-reference.html">Playbook YAML Syntax Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ai-agents.html">AI &amp; Agents</a></li>
+<li class="toctree-l1"><a class="reference internal" href="appliance-cli.html">Appliance Administration CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="repo-cli.html">Content Repository CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content-hub-mirror.html">Self-hosted Content Hub mirror</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference.html">API Reference</a><input aria-label="Toggle navigation of API Reference" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/client/index.html">pyfsr.client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/records/index.html">pyfsr.records</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/query/index.html">pyfsr.query</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/pagination/index.html">pyfsr.pagination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/fields/index.html">pyfsr.fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/config/index.html">pyfsr.config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/instances/index.html">pyfsr.instances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/exceptions/index.html">pyfsr.exceptions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/api/index.html">pyfsr.api</a><input aria-label="Toggle navigation of pyfsr.api" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/actors/index.html">pyfsr.api.actors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/agents/index.html">pyfsr.api.agents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/ai/index.html">pyfsr.api.ai</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/alerts/index.html">pyfsr.api.alerts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/api_keys/index.html">pyfsr.api.api_keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/api_users/index.html">pyfsr.api.api_users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/app_config/index.html">pyfsr.api.app_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/attachments/index.html">pyfsr.api.attachments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/audit/index.html">pyfsr.api.audit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/auth_config/index.html">pyfsr.api.auth_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/base/index.html">pyfsr.api.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/comments/index.html">pyfsr.api.comments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/connectors/index.html">pyfsr.api.connectors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/content_hub/index.html">pyfsr.api.content_hub</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/export_config/index.html">pyfsr.api.export_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/export_templates/index.html">pyfsr.api.export_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/feeds/index.html">pyfsr.api.feeds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/import_config/index.html">pyfsr.api.import_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/incidents/index.html">pyfsr.api.incidents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/manual_input/index.html">pyfsr.api.manual_input</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/modules/index.html">pyfsr.api.modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/modules_admin/index.html">pyfsr.api.modules_admin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/native_mcp/index.html">pyfsr.api.native_mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/notifications/index.html">pyfsr.api.notifications</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/picklists/index.html">pyfsr.api.picklists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/playbooks/index.html">pyfsr.api.playbooks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/reporting/index.html">pyfsr.api.reporting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/roles/index.html">pyfsr.api.roles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/routers/index.html">pyfsr.api.routers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/rules/index.html">pyfsr.api.rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/schedules/index.html">pyfsr.api.schedules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/search/index.html">pyfsr.api.search</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/solution_packs/index.html">pyfsr.api.solution_packs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/system/index.html">pyfsr.api.system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/system_queries/index.html">pyfsr.api.system_queries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/system_settings/index.html">pyfsr.api.system_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/tags/index.html">pyfsr.api.tags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/tasks/index.html">pyfsr.api.tasks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/taxii/index.html">pyfsr.api.taxii</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/teams/index.html">pyfsr.api.teams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/user_settings/index.html">pyfsr.api.user_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/users/index.html">pyfsr.api.users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/view_templates/index.html">pyfsr.api.view_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/views/index.html">pyfsr.api.views</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/wf_tools/index.html">pyfsr.api.wf_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/widgets/index.html">pyfsr.api.widgets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/workflow_collections/index.html">pyfsr.api.workflow_collections</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/models/index.html">pyfsr.models</a><input aria-label="Toggle navigation of pyfsr.models" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/models/base/index.html">pyfsr.models.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/models/types/index.html">pyfsr.models.types</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/auth/index.html">pyfsr.auth</a><input aria-label="Toggle navigation of pyfsr.auth" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/auth/api_key/index.html">pyfsr.auth.api_key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/auth/base/index.html">pyfsr.auth.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/auth/user_pass/index.html">pyfsr.auth.user_pass</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/authoring/index.html">pyfsr.authoring</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/agent/index.html">pyfsr.agent</a><input aria-label="Toggle navigation of pyfsr.agent" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/index.html">pyfsr.agent.archetypes</a><input aria-label="Toggle navigation of pyfsr.agent.archetypes" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/harvest/index.html">pyfsr.agent.archetypes.harvest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/record/index.html">pyfsr.agent.archetypes.record</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/router/index.html">pyfsr.agent.archetypes.router</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/store/index.html">pyfsr.agent.archetypes.store</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/agent/mcp/index.html">pyfsr.agent.mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/agent/tools/index.html">pyfsr.agent.tools</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/cli/index.html">pyfsr.cli</a><input aria-label="Toggle navigation of pyfsr.cli" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/index.html">pyfsr.cli.appliance</a><input aria-label="Toggle navigation of pyfsr.cli.appliance" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/certs/index.html">pyfsr.cli.appliance.certs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/content_hub/index.html">pyfsr.cli.appliance.content_hub</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/db/index.html">pyfsr.cli.appliance.db</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/diagnose/index.html">pyfsr.cli.appliance.diagnose</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/es/index.html">pyfsr.cli.appliance.es</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/facts/index.html">pyfsr.cli.appliance.facts</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/ha/index.html">pyfsr.cli.appliance.ha</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/host/index.html">pyfsr.cli.appliance.host</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/info/index.html">pyfsr.cli.appliance.info</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/license/index.html">pyfsr.cli.appliance.license</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/logs/index.html">pyfsr.cli.appliance.logs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/mq/index.html">pyfsr.cli.appliance.mq</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/service/index.html">pyfsr.cli.appliance.service</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/transport/index.html">pyfsr.cli.appliance.transport</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/cli/playbook/index.html">pyfsr.cli.playbook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/cli/repo/index.html">pyfsr.cli.repo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/cli/widget/index.html">pyfsr.cli.widget</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/appliance/index.html">pyfsr.appliance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/repo/index.html">pyfsr.repo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/content_catalog/index.html">pyfsr.content_catalog</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference-advanced.html">Advanced &amp; internal</a><input aria-label="Toggle navigation of Advanced &amp; internal" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/playbook_catalog/index.html">pyfsr.playbook_catalog</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/playbook_lint/index.html">pyfsr.playbook_lint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/playbook_match/index.html">pyfsr.playbook_match</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/concurrency/index.html">pyfsr.concurrency</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/projection/index.html">pyfsr.projection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/query_models/index.html">pyfsr.query_models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/spec/index.html">pyfsr.spec</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../autoapi/pyfsr/utils/index.html">pyfsr.utils</a><input aria-label="Toggle navigation of pyfsr.utils" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/utils/file_operations/index.html">pyfsr.utils.file_operations</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/utils/iri/index.html">pyfsr.utils.iri</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/utils/validation/index.html">pyfsr.utils.validation</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../reference-models.html">Typed models</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/guides/playbook-authoring.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="playbook-authoring-deployment">
+<h1>Playbook Authoring &amp; Deployment<a class="headerlink" href="#playbook-authoring-deployment" title="Link to this heading">¶</a></h1>
+<p>pyfsr can author FortiSOAR playbooks from <strong>YAML</strong> and deploy them through the
+same import path the UI uses. You write a collection as readable YAML, an
+optional compiler turns it into the FortiSOAR export envelope, and pyfsr pushes
+it to the appliance — no hand-building of workflow/step/route JSON.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p>Runnable examples:
+<a class="reference external" href="https://github.com/dylanspille/pyfsr/blob/main/examples/deploy_playbook_from_yaml.py"><code class="docutils literal notranslate"><span class="pre">examples/deploy_playbook_from_yaml.py</span></code></a>
+(YAML → compile → deploy),
+<a class="reference external" href="https://github.com/dylanspille/pyfsr/blob/main/examples/create_safe_playbook.py"><code class="docutils literal notranslate"><span class="pre">examples/create_safe_playbook.py</span></code></a>
+(hand-built JSON), and the sample
+<a class="reference external" href="https://github.com/dylanspille/pyfsr/blob/main/examples/playbooks/yaml_demo.yaml"><code class="docutils literal notranslate"><span class="pre">examples/playbooks/yaml_demo.yaml</span></code></a>.</p>
+</div>
+<section id="the-compiler-is-an-optional-extra">
+<h2>The compiler is an optional extra<a class="headerlink" href="#the-compiler-is-an-optional-extra" title="Link to this heading">¶</a></h2>
+<p>The YAML→JSON compiler ships separately from core pyfsr. Install it with the
+<code class="docutils literal notranslate"><span class="pre">playbooks</span></code> extra:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;pyfsr[playbooks]&quot;</span>
+</pre></div>
+</div>
+<p>Core pyfsr never imports it. Until it’s installed, the compile/deploy entry
+points raise <a class="reference internal" href="../autoapi/pyfsr/authoring/index.html#pyfsr.authoring.PlaybooksExtraNotInstalled" title="pyfsr.authoring.PlaybooksExtraNotInstalled"><code class="xref py py-class docutils literal notranslate"><span class="pre">PlaybooksExtraNotInstalled</span></code></a> with that exact
+hint. The non-authoring collection methods
+(<a class="reference internal" href="../autoapi/pyfsr/api/workflow_collections/index.html#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_file" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_file"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_from_file()</span></code></a>,
+<code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">delete</span></code>, …) work without it.</p>
+</section>
+<section id="writing-a-playbook-in-yaml">
+<h2>Writing a playbook in YAML<a class="headerlink" href="#writing-a-playbook-in-yaml" title="Link to this heading">¶</a></h2>
+<p>A playbook file describes one collection and its workflows. The smallest useful
+shape (see the sample for the full file):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">collection</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pyfsr YAML Demo</span>
+<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Authored in YAML, deployed with pyfsr.</span>
+<span class="nt">visible</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="nt">playbooks</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pyfsr YAML Demo - Stamp Result</span>
+<span class="w">    </span><span class="nt">is_active</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Start</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start</span>
+<span class="w">        </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Set Result</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Set Result</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">set_variable</span>
+<span class="w">        </span><span class="nt">vars</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">greeting</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hello from pyfsr</span>
+<span class="w">          </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">yaml</span>
+</pre></div>
+</div>
+<p>The YAML schema (step types, their arguments, routing) is owned by the
+<code class="docutils literal notranslate"><span class="pre">fsr_playbooks</span></code> compiler. The compiler validates every step against a reference
+catalog of FortiSOAR step types and emits diagnostics (with <code class="docutils literal notranslate"><span class="pre">code</span></code>, <code class="docutils literal notranslate"><span class="pre">path</span></code>,
+<code class="docutils literal notranslate"><span class="pre">message</span></code>, and often a <code class="docutils literal notranslate"><span class="pre">suggestion</span></code>) when something won’t import.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>For the <strong>full DSL</strong> — every top-level key, every step <code class="docutils literal notranslate"><span class="pre">type</span></code>, the friendly
+fields each accepts, and the <code class="docutils literal notranslate"><span class="pre">start_on_create</span></code> / <code class="docutils literal notranslate"><span class="pre">start_on_update</span></code> record
+triggers — see the <a class="reference internal" href="playbook-yaml-reference.html"><span class="doc">Playbook YAML Syntax Reference</span></a>.</p>
+</div>
+</section>
+<section id="deploying-from-python">
+<h2>Deploying from Python<a class="headerlink" href="#deploying-from-python" title="Link to this heading">¶</a></h2>
+<p>The high-level path lives on <code class="docutils literal notranslate"><span class="pre">client.workflow_collections</span></code>. Compile and import
+in one call:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr</span><span class="w"> </span><span class="kn">import</span> <span class="n">FortiSOAR</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">FortiSOAR</span><span class="p">(</span><span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;https://fortisoar.example.com&quot;</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="s2">&quot;&lt;api-key&gt;&quot;</span><span class="p">)</span>
+
+<span class="n">created</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">import_from_yaml</span><span class="p">(</span>
+    <span class="s2">&quot;alert_triage.yaml&quot;</span><span class="p">,</span>
+    <span class="n">replace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>            <span class="c1"># hard-delete + recreate a same-uuid collection</span>
+<span class="p">)</span>
+<span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">created</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">col</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">col</span><span class="p">[</span><span class="s2">&quot;uuid&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>To inspect diagnostics before pushing anything, compile first (offline, no
+network) and check the result:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">compile_yaml</span><span class="p">(</span><span class="s2">&quot;alert_triage.yaml&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">result</span><span class="o">.</span><span class="n">ok</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr.authoring</span><span class="w"> </span><span class="kn">import</span> <span class="n">format_diagnostic</span>
+    <span class="k">for</span> <span class="n">diag</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">blocking</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">format_diagnostic</span><span class="p">(</span><span class="n">diag</span><span class="p">))</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;collections:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">collection_names</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;playbooks:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">playbook_names</span><span class="p">)</span>
+    <span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">import_export</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">fsr_json</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">CompiledPlaybook</span></code> shape is doctested (compilation is offline, no network).
+<code class="docutils literal notranslate"><span class="pre">ok</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> only when there are no blocking errors; <code class="docutils literal notranslate"><span class="pre">collection_names</span></code> and
+<code class="docutils literal notranslate"><span class="pre">playbook_names</span></code> read off the produced envelope:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr.authoring</span><span class="w"> </span><span class="kn">import</span> <span class="n">compile_playbook_yaml</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">yaml</span> <span class="o">=</span> <span class="s1">&#39;&#39;&#39;</span>
+<span class="gp">... </span><span class="s1">name: demo-triage</span>
+<span class="gp">... </span><span class="s1">description: Doctested example playbook</span>
+<span class="gp">... </span><span class="s1">playbooks:</span>
+<span class="gp">... </span><span class="s1">  - name: Triage Alert</span>
+<span class="gp">... </span><span class="s1">    description: one step</span>
+<span class="gp">... </span><span class="s1">    steps:</span>
+<span class="gp">... </span><span class="s1">      - name: Start</span>
+<span class="gp">... </span><span class="s1">        type: start</span>
+<span class="gp">... </span><span class="s1">        next: Set Note</span>
+<span class="gp">... </span><span class="s1">      - name: Set Note</span>
+<span class="gp">... </span><span class="s1">        type: set_variable</span>
+<span class="gp">... </span><span class="s1">        manual_input:</span>
+<span class="gp">... </span><span class="s1">          - name: note</span>
+<span class="gp">... </span><span class="s1">            type: text</span>
+<span class="gp">... </span><span class="s1">            value: hello</span>
+<span class="gp">... </span><span class="s1">&#39;&#39;&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">compile_playbook_yaml</span><span class="p">(</span><span class="n">yaml</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span><span class="o">.</span><span class="n">ok</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">collection_names</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">playbook_names</span>
+<span class="go">(True, [&#39;00 - FSR Studio&#39;], [&#39;Triage Alert&#39;])</span>
+</pre></div>
+</div>
+<p>A blocking error keeps <code class="docutils literal notranslate"><span class="pre">ok</span></code> <code class="docutils literal notranslate"><span class="pre">False</span></code> and leaves <code class="docutils literal notranslate"><span class="pre">fsr_json</span></code> <code class="docutils literal notranslate"><span class="pre">None</span></code> — <code class="docutils literal notranslate"><span class="pre">errors</span></code>
+holds every diagnostic so you can surface <em>why</em> before anything is deployed:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">bad</span> <span class="o">=</span> <span class="n">compile_playbook_yaml</span><span class="p">(</span><span class="s2">&quot;name: x</span><span class="se">\n</span><span class="s2">playbooks:</span><span class="se">\n</span><span class="s2">  - name: P</span><span class="se">\n</span><span class="s2">    steps: []&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bad</span><span class="o">.</span><span class="n">ok</span><span class="p">,</span> <span class="n">bad</span><span class="o">.</span><span class="n">fsr_json</span>
+<span class="go">(False, None)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">e</span><span class="p">[</span><span class="s2">&quot;code&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">bad</span><span class="o">.</span><span class="n">errors</span><span class="p">]</span>
+<span class="go">[&#39;no_trigger&#39;]</span>
+</pre></div>
+</div>
+<p><a class="reference internal" href="../autoapi/pyfsr/api/workflow_collections/index.html#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_yaml" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_yaml"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_from_yaml()</span></code></a>
+options:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Effect</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">replace=True</span></code></p></td>
+<td><p>Hard-delete any existing collection whose uuid matches, then recreate (the UI’s “Replace existing playbook collection” flow). Without it a duplicate uuid raises <code class="docutils literal notranslate"><span class="pre">409</span> <span class="pre">UniqueConstraintViolationException</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strict_warnings=True</span></code></p></td>
+<td><p>Treat compiler <strong>warnings</strong> as blocking, not just errors.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">db_path=...</span></code></p></td>
+<td><p>Override the reference catalog (defaults to the packaged one).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Compilation that produces blocking errors raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> with the formatted
+diagnostics; a missing compiler raises <code class="docutils literal notranslate"><span class="pre">PlaybooksExtraNotInstalled</span></code>.</p>
+<section id="the-compile-result">
+<h3>The compile result<a class="headerlink" href="#the-compile-result" title="Link to this heading">¶</a></h3>
+<p><a class="reference internal" href="../autoapi/pyfsr/api/workflow_collections/index.html#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.compile_yaml" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.compile_yaml"><code class="xref py py-meth docutils literal notranslate"><span class="pre">compile_yaml()</span></code></a>
+returns a <a class="reference internal" href="../autoapi/pyfsr/authoring/index.html#pyfsr.authoring.CompiledPlaybook" title="pyfsr.authoring.CompiledPlaybook"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompiledPlaybook</span></code></a>:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Attribute</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ok</span></code></p></td>
+<td><p>True only when there are no blocking errors and an envelope was produced.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fsr_json</span></code></p></td>
+<td><p>The <code class="docutils literal notranslate"><span class="pre">{&quot;type&quot;:</span> <span class="pre">&quot;workflow_collections&quot;,</span> <span class="pre">&quot;data&quot;:</span> <span class="pre">[...]}</span></code> envelope, ready for <code class="docutils literal notranslate"><span class="pre">import_export</span></code> (<code class="docutils literal notranslate"><span class="pre">None</span></code> on blocking errors).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">errors</span></code></p></td>
+<td><p>Every diagnostic (errors <strong>and</strong> warnings) as dicts.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">blocking</span></code> / <code class="docutils literal notranslate"><span class="pre">warnings</span></code></p></td>
+<td><p>The error-only and warning-only subsets.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">collection_names</span></code> / <code class="docutils literal notranslate"><span class="pre">playbook_names</span></code></p></td>
+<td><p>Convenience name lists from the envelope.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+<section id="deploying-from-the-cli">
+<h2>Deploying from the CLI<a class="headerlink" href="#deploying-from-the-cli" title="Link to this heading">¶</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">playbook</span></code> command group offers the same flow without writing Python.
+Unlike <code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">appliance</span></code> (which uses SSH), these talk to the FortiSOAR <strong>API</strong>
+and read connection details from the <code class="docutils literal notranslate"><span class="pre">FSR_*</span></code> environment (see
+<a class="reference internal" href="../autoapi/pyfsr/config/index.html#pyfsr.config.EnvConfig" title="pyfsr.config.EnvConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvConfig</span></code></a>), with optional flag overrides.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Compile only — emit the envelope JSON, diagnostics to stderr (no network)</span>
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>compile<span class="w"> </span>alert_triage.yaml<span class="w"> </span>-o<span class="w"> </span>envelope.json
+
+<span class="c1"># Validate — compile and report a diagnostics summary; nonzero exit on errors</span>
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>validate<span class="w"> </span>alert_triage.yaml
+
+<span class="c1"># Deploy — compile then import via the API client</span>
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>deploy<span class="w"> </span>alert_triage.yaml<span class="w"> </span>--replace
+
+<span class="c1"># See what deploy would create without posting anything</span>
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>deploy<span class="w"> </span>alert_triage.yaml<span class="w"> </span>--dry-run
+</pre></div>
+</div>
+<p>Connection overrides (any omitted value falls back to <code class="docutils literal notranslate"><span class="pre">FSR_*</span></code> env):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pyfsr<span class="w"> </span>playbook<span class="w"> </span>deploy<span class="w"> </span>alert_triage.yaml<span class="w"> </span>--replace<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--server<span class="w"> </span>fortisoar.example.com<span class="w"> </span>--username<span class="w"> </span>csadmin<span class="w"> </span>--password<span class="w"> </span><span class="s1">&#39;...&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--port<span class="w"> </span><span class="m">13002</span><span class="w"> </span>--no-verify-ssl
+</pre></div>
+</div>
+</section>
+<section id="discovering-step-types">
+<h2>Discovering step types<a class="headerlink" href="#discovering-step-types" title="Link to this heading">¶</a></h2>
+<p>You don’t have to memorize the friendly <code class="docutils literal notranslate"><span class="pre">type:</span></code> keywords or their keys. The
+<code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">playbook</span></code> group is the authoring index — <code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">playbook</span> <span class="pre">--help</span></code> lists
+every affordance, and two offline commands enumerate the step catalog:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List every friendly step type with its canonical FSR name + purpose</span>
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>steps
+
+<span class="c1"># Keys, pitfalls, the typed-args schema, and a real compiling example for one type</span>
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>step-help<span class="w"> </span>manual_input
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>step-help<span class="w"> </span>decision<span class="w"> </span>--schema
+</pre></div>
+</div>
+<p>The same data is available from Python via <code class="docutils literal notranslate"><span class="pre">pyfsr.playbook_catalog.list_step_types</span></code>
+and <code class="docutils literal notranslate"><span class="pre">pyfsr.playbook_catalog.step_help</span></code>.</p>
+</section>
+<section id="worked-examples-the-foundational-library">
+<h2>Worked examples — the foundational library<a class="headerlink" href="#worked-examples-the-foundational-library" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">step-help</span></code> shows one <em>atom</em> (one step type). The <strong>foundational playbook library</strong>
+shows whole <em>molecules</em>: complete, compiling, use-case-shaped playbooks you retrieve
+by intent and adapt — the layer an agent few-shots on when translating a goal to
+SOAR operations. It lives at <code class="docutils literal notranslate"><span class="pre">examples/playbooks/library/</span></code>, grouped by SOC stage
+(triggers / enrichment / decision / action / notify / control).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List every library playbook with its stage, intent, step types, and compile status</span>
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>examples
+
+<span class="c1"># Filter by intent or stage</span>
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>examples<span class="w"> </span>--intent<span class="w"> </span>incident
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>examples<span class="w"> </span>--stage<span class="w"> </span>action
+
+<span class="c1"># Print one playbook&#39;s metadata + the full friendly YAML to adapt</span>
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>show<span class="w"> </span>create-incident-from-alert
+
+<span class="c1"># Emit the retrieval manifest (intent + facets per playbook) for NL-&gt;playbook tooling</span>
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>examples<span class="w"> </span>--manifest
+</pre></div>
+</div>
+<p>Every library playbook compiles and carries a <code class="docutils literal notranslate"><span class="pre">goal</span></code> / <code class="docutils literal notranslate"><span class="pre">trigger</span></code> / <code class="docutils literal notranslate"><span class="pre">inputs</span></code> /
+<code class="docutils literal notranslate"><span class="pre">outputs</span></code> / <code class="docutils literal notranslate"><span class="pre">connectors</span></code> / <code class="docutils literal notranslate"><span class="pre">adapts-to</span></code> front-matter block. <code class="docutils literal notranslate"><span class="pre">cold*</span></code> in the compile
+column means it compiles but references connectors the offline slim catalog
+doesn’t carry — run <code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">playbook</span> <span class="pre">deploy</span> <span class="pre">&lt;file&gt;</span> <span class="pre">--refresh-catalog</span></code> to resolve
+them against a live instance. The manifest and listing are available from Python
+via <code class="docutils literal notranslate"><span class="pre">pyfsr.playbook_library.list_library</span></code>,
+<code class="docutils literal notranslate"><span class="pre">pyfsr.playbook_library.library_manifest</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">pyfsr.playbook_library.library_show</span></code> (repo-internal, not part of the
+installed-package API).</p>
+</section>
+<section id="testing-interactive-playbooks-inspecting-runs">
+<h2>Testing interactive playbooks &amp; inspecting runs<a class="headerlink" href="#testing-interactive-playbooks-inspecting-runs" title="Link to this heading">¶</a></h2>
+<p>A playbook that pauses on a <strong>Manual Input</strong> / <strong>Approval</strong> step can be driven
+end to end from Python. <a class="reference internal" href="../autoapi/pyfsr/api/manual_input/index.html#pyfsr.api.manual_input.ManualInputAPI.answer" title="pyfsr.api.manual_input.ManualInputAPI.answer"><code class="xref py py-meth docutils literal notranslate"><span class="pre">answer()</span></code></a>
+finds the pending prompt, resolves the numeric run id / submit option / user, and
+resumes — in one call:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">.</span><span class="n">playbooks</span><span class="o">.</span><span class="n">trigger</span><span class="p">(</span><span class="s2">&quot;Loop Until Six Digits&quot;</span><span class="p">)</span>
+<span class="c1"># by_title matches the prompt&#39;s *schema title* — the step&#39;s `title:` — and NOT</span>
+<span class="c1"># the step name, which here is &quot;AskNumber&quot;:</span>
+<span class="n">client</span><span class="o">.</span><span class="n">manual_input</span><span class="o">.</span><span class="n">answer</span><span class="p">(</span><span class="mi">654321</span><span class="p">,</span> <span class="n">by_title</span><span class="o">=</span><span class="s2">&quot;Enter a six digit number&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>A pending prompt’s <code class="docutils literal notranslate"><span class="pre">.title</span></code> is the manual_input step’s <code class="docutils literal notranslate"><span class="pre">title:</span></code>, mirrored from
+<code class="docutils literal notranslate"><span class="pre">input.schema.title</span></code> — <strong>not</strong> the step name. The two coincide only when the step
+declares no <code class="docutils literal notranslate"><span class="pre">title:</span></code>, in which case the schema title defaults to the step name.</p>
+<p>Titles are also not unique: the same step paused in two runs yields two
+identically-titled rows, and <code class="docutils literal notranslate"><span class="pre">answer()</span></code> refuses an ambiguous match rather than
+resuming an arbitrary run. When you hold the trigger’s <code class="docutils literal notranslate"><span class="pre">task_id</span></code>, prefer the
+run-scoped <a class="reference internal" href="../autoapi/pyfsr/api/manual_input/index.html#pyfsr.api.manual_input.ManualInputAPI.pending_for_run" title="pyfsr.api.manual_input.ManualInputAPI.pending_for_run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pending_for_run()</span></code></a>, whose
+rows carry the full prompt and the numeric run id.</p>
+</div>
+<p>To inspect what ran, <a class="reference internal" href="../autoapi/pyfsr/api/playbooks/index.html#pyfsr.api.playbooks.PlaybooksAPI.run_tree" title="pyfsr.api.playbooks.PlaybooksAPI.run_tree"><code class="xref py py-meth docutils literal notranslate"><span class="pre">run_tree()</span></code></a> resolves a
+<code class="docutils literal notranslate"><span class="pre">task_id</span></code> to the run <strong>plus its child runs</strong> (no finding the parent by name), and
+<a class="reference internal" href="../autoapi/pyfsr/api/playbooks/index.html#pyfsr.api.playbooks.PlaybooksAPI.step_status" title="pyfsr.api.playbooks.PlaybooksAPI.step_status"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step_status()</span></code></a> reads a step’s outcome:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">resp</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">playbooks</span><span class="o">.</span><span class="n">trigger</span><span class="p">(</span><span class="s2">&quot;Loop Until Six Digits&quot;</span><span class="p">)</span>
+<span class="n">tree</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">playbooks</span><span class="o">.</span><span class="n">run_tree</span><span class="p">(</span><span class="n">resp</span><span class="p">[</span><span class="s2">&quot;task_id&quot;</span><span class="p">])</span>   <span class="c1"># parent + child runs, with pks</span>
+<span class="n">client</span><span class="o">.</span><span class="n">playbooks</span><span class="o">.</span><span class="n">step_status</span><span class="p">(</span><span class="n">tree</span><span class="o">.</span><span class="n">pk</span><span class="p">,</span> <span class="s2">&quot;StampResult&quot;</span><span class="p">)</span>  <span class="c1"># -&gt; &quot;finished&quot;</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>FortiSOAR only records runtime <code class="docutils literal notranslate"><span class="pre">set_variable</span></code> / jinja values in the retrievable
+run record when <strong>global workflow debug logging is enabled</strong>; with it off (the
+default) <code class="docutils literal notranslate"><span class="pre">run_env(...).env</span></code> is empty for them. Either enable debug logging on the
+appliance to inspect env, or assert on a step’s <strong>status</strong> (via <code class="docutils literal notranslate"><span class="pre">step_status</span></code>),
+which is always recorded.</p>
+</div>
+<p>A complete worked example lives in <code class="docutils literal notranslate"><span class="pre">examples/do_until_validation_loop.py</span></code>.</p>
+</section>
+<section id="playbook-version-control-saved-snapshots">
+<h2>Playbook version control (saved snapshots)<a class="headerlink" href="#playbook-version-control-saved-snapshots" title="Link to this heading">¶</a></h2>
+<p>FortiSOAR keeps a <strong>snapshot history</strong> for each playbook — the editor’s
+“Versions” tab — backed by the <code class="docutils literal notranslate"><span class="pre">workflow_versions</span></code> module. (This is <em>not</em> a
+revision/diff resource; the word “revision” appears nowhere on the wire.) Each
+snapshot freezes the playbook definition at a point in time into a stringified
+<code class="docutils literal notranslate"><span class="pre">json</span></code> field, capped at 20 per playbook. pyfsr exposes it as
+<a class="reference internal" href="../autoapi/pyfsr/api/playbooks/index.html#pyfsr.api.playbooks.PlaybooksAPI.list_versions" title="pyfsr.api.playbooks.PlaybooksAPI.list_versions"><code class="xref py py-meth docutils literal notranslate"><span class="pre">list_versions()</span></code></a> /
+<code class="docutils literal notranslate"><span class="pre">get_version</span></code> / <code class="docutils literal notranslate"><span class="pre">create_version</span></code> / <code class="docutils literal notranslate"><span class="pre">restore_version</span></code> / <code class="docutils literal notranslate"><span class="pre">delete_version</span></code> /
+<code class="docutils literal notranslate"><span class="pre">diff_versions</span></code>:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">demo_client</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">vers</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">playbooks</span><span class="o">.</span><span class="n">list_versions</span><span class="p">(</span><span class="s2">&quot;Block IP (test fixture)&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">v</span><span class="o">.</span><span class="n">note</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">vers</span><span class="p">]</span>
+<span class="go">[&#39;v2&#39;, &#39;v1&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">v1</span><span class="p">,</span> <span class="n">v2</span> <span class="o">=</span> <span class="n">vers</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">vers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">v1</span><span class="o">.</span><span class="n">note</span><span class="p">,</span> <span class="n">v1</span><span class="o">.</span><span class="n">autosave</span>
+<span class="go">(&#39;v1&#39;, False)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">create_version</span></code> captures the playbook as it is now (the server doesn’t echo the
+large <code class="docutils literal notranslate"><span class="pre">json</span></code> blob back on the POST — re-<code class="docutils literal notranslate"><span class="pre">get_version</span></code> to read it):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">.</span><span class="n">playbooks</span><span class="o">.</span><span class="n">create_version</span><span class="p">(</span><span class="s2">&quot;Block IP&quot;</span><span class="p">,</span> <span class="n">note</span><span class="o">=</span><span class="s2">&quot;before-change&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">diff_versions</span></code> is <strong>client-side</strong> (FortiSOAR has no diff endpoint) — it compares
+two snapshots’ step graphs by <code class="docutils literal notranslate"><span class="pre">uuid</span></code>, surfacing added/removed/changed steps:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">d</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">playbooks</span><span class="o">.</span><span class="n">diff_versions</span><span class="p">(</span><span class="n">v1</span><span class="p">,</span> <span class="n">v2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">d</span><span class="o">.</span><span class="n">is_clean</span><span class="p">,</span> <span class="p">[(</span><span class="n">c</span><span class="o">.</span><span class="n">step</span><span class="p">[:</span><span class="mi">8</span><span class="p">],</span> <span class="n">c</span><span class="o">.</span><span class="n">field</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">changed</span><span class="p">]</span>
+<span class="go">(False, [(&#39;bbbb2222&#39;, &#39;arguments&#39;)])</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">restore_version</span></code> overwrites the live playbook with a snapshot’s content (the
+editor’s flow: fetch the snapshot, parse its <code class="docutils literal notranslate"><span class="pre">json</span></code>, PUT it back) — call
+<code class="docutils literal notranslate"><span class="pre">create_version</span></code> first if you want a rollback point. It’s destructive, so the
+CLI gates it behind <code class="docutils literal notranslate"><span class="pre">--yes</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">.</span><span class="n">playbooks</span><span class="o">.</span><span class="n">restore_version</span><span class="p">(</span><span class="s2">&quot;Block IP&quot;</span><span class="p">,</span> <span class="s2">&quot;&lt;version-uuid&gt;&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The CLI mirrors all six verbs under <code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">playbook</span> <span class="pre">versions</span></code> (<code class="docutils literal notranslate"><span class="pre">list</span></code> / <code class="docutils literal notranslate"><span class="pre">get</span></code> /
+<code class="docutils literal notranslate"><span class="pre">create</span></code> / <code class="docutils literal notranslate"><span class="pre">restore</span></code> / <code class="docutils literal notranslate"><span class="pre">delete</span></code> / <code class="docutils literal notranslate"><span class="pre">diff</span></code>):</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>pyfsr<span class="w"> </span>playbook<span class="w"> </span>versions<span class="w"> </span>list<span class="w"> </span><span class="s2">&quot;Block IP&quot;</span>
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>versions<span class="w"> </span>diff<span class="w"> </span>&lt;v1-uuid&gt;<span class="w"> </span>&lt;v2-uuid&gt;
+pyfsr<span class="w"> </span>playbook<span class="w"> </span>versions<span class="w"> </span>restore<span class="w"> </span><span class="s2">&quot;Block IP&quot;</span><span class="w"> </span>&lt;version-uuid&gt;<span class="w"> </span>--yes
+</pre></div>
+</div>
+</section>
+<section id="code-snippet-sandbox-writing-python-that-runs">
+<h2>Code-snippet sandbox: writing Python that runs<a class="headerlink" href="#code-snippet-sandbox-writing-python-that-runs" title="Link to this heading">¶</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">code_snippet</span></code> step runs a Python snippet through the <code class="docutils literal notranslate"><span class="pre">code-snippet</span></code>
+connector. The source goes under <code class="docutils literal notranslate"><span class="pre">arguments.code:</span></code> (a friendly shorthand the
+compiler maps to the canonical <code class="docutils literal notranslate"><span class="pre">arguments.params.python_function</span></code>). Two sandbox
+constraints shape every snippet you write — both confirmed against a live box —
+so they’re worth knowing up front:</p>
+<ol class="arabic simple">
+<li><p><strong>The connector execs the snippet at module level.</strong> A top-level <code class="docutils literal notranslate"><span class="pre">return</span></code> is a
+<code class="docutils literal notranslate"><span class="pre">SyntaxError</span></code>. Put logic inside <code class="docutils literal notranslate"><span class="pre">def</span></code> functions and call them, or run
+statements inline — but never <code class="docutils literal notranslate"><span class="pre">return</span></code> from the top level of the snippet.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">open</span></code> (and the other filesystem builtins) are restricted.</strong> A snippet
+cannot read or write files. To produce a document a later step emails, embed
+the content inline in that step’s <code class="docutils literal notranslate"><span class="pre">body:</span></code> rather than writing a file the
+snippet can’t open.</p></li>
+</ol>
+<section id="surfacing-output-print-json-dumps-code-output">
+<h3>Surfacing output: <code class="docutils literal notranslate"><span class="pre">print(json.dumps(...))</span></code> → <code class="docutils literal notranslate"><span class="pre">code_output</span></code><a class="headerlink" href="#surfacing-output-print-json-dumps-code-output" title="Link to this heading">¶</a></h3>
+<p>There’s no <code class="docutils literal notranslate"><span class="pre">return</span></code> to receive a result. Instead, <code class="docutils literal notranslate"><span class="pre">print</span></code> a JSON document: the
+connector captures stdout and auto-deserializes the JSON into a structured
+<code class="docutils literal notranslate"><span class="pre">code_output</span></code> dict. Downstream steps read it at
+<code class="docutils literal notranslate"><span class="pre">vars.steps.&lt;name&gt;.data.code_output.*</span></code> — note <code class="docutils literal notranslate"><span class="pre">data.code_output</span></code>, not
+<code class="docutils literal notranslate"><span class="pre">output.data</span></code>, and it’s already a dict, so <strong>no <code class="docutils literal notranslate"><span class="pre">|</span> <span class="pre">from_json</span></code> filter</strong> is needed.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Reconcile</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">code_snippet</span>
+<span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">code</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">      </span><span class="no">import json</span>
+<span class="w">      </span><span class="no">take = int(&quot;{{ vars.take }}&quot; or 0)</span>
+<span class="w">      </span><span class="no">crew = int(&quot;{{ vars.crew_count }}&quot; or 1)</span>
+<span class="w">      </span><span class="no">print(json.dumps({</span>
+<span class="w">          </span><span class="no">&quot;cut_per_member&quot;: take // max(crew, 1),</span>
+<span class="w">          </span><span class="no">&quot;risk&quot;: &quot;high&quot; if take &gt; 1000000 else &quot;low&quot;,</span>
+<span class="w">      </span><span class="no">}))</span>
+<span class="w">  </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Decide</span>
+
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Decide</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">decision</span>
+<span class="w">  </span><span class="nt">conditions</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">vars.steps.Reconcile.data.code_output.risk</span><span class="nv"> </span><span class="s">==</span><span class="nv"> </span><span class="s">&#39;high&#39;</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">      </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">big</span>
+<span class="w">      </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Alert</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<span class="w">      </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Log</span>
+</pre></div>
+</div>
+</section>
+<section id="reading-upstream-step-output">
+<h3>Reading upstream step output<a class="headerlink" href="#reading-upstream-step-output" title="Link to this heading">¶</a></h3>
+<p>A connector step’s result lives at <code class="docutils literal notranslate"><span class="pre">vars.steps.&lt;name&gt;.data</span></code> — that IS the
+step-result dict (<code class="docutils literal notranslate"><span class="pre">{data,</span> <span class="pre">status,</span> <span class="pre">...}</span></code>); there is no separate <code class="docutils literal notranslate"><span class="pre">.output</span></code> level.
+For a <code class="docutils literal notranslate"><span class="pre">code_snippet</span></code>, <code class="docutils literal notranslate"><span class="pre">.data.code_output</span></code> is the deserialized dict; for a
+<code class="docutils literal notranslate"><span class="pre">connector</span></code> step, <code class="docutils literal notranslate"><span class="pre">.data</span></code> holds the operation’s response (e.g.
+<code class="docutils literal notranslate"><span class="pre">vars.steps.FetchServiceNow.data.result</span></code>). You can render these inline in the
+snippet as Python literals, which is how a code_snippet consumes upstream
+connector data without an API call:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Diff</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">code_snippet</span>
+<span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">code</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">      </span><span class="no">import json</span>
+<span class="w">      </span><span class="no">a = {{ vars.steps.FetchFortiCloud.data.assets }}</span>
+<span class="w">      </span><span class="no">b = {{ vars.steps.FetchServiceNow.data.result }}</span>
+<span class="w">      </span><span class="no"># ...diff a vs b by join key...</span>
+<span class="w">      </span><span class="no">print(json.dumps({&quot;findings&quot;: findings, &quot;matched&quot;: matched}))</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>A step’s display name with spaces is referenced in Jinja with the spaces
+replaced by underscores: a step named <code class="docutils literal notranslate"><span class="pre">Apply</span> <span class="pre">Quarantine</span> <span class="pre">on</span> <span class="pre">FGT</span></code> is
+<code class="docutils literal notranslate"><span class="pre">vars.steps.Apply_Quarantine_on_FGT.status</span></code>. Use a single-word step name (as
+above) to avoid the rewrite entirely.</p>
+</div>
+</section>
+<section id="imports-and-the-connector-config">
+<h3>Imports and the connector config<a class="headerlink" href="#imports-and-the-connector-config" title="Link to this heading">¶</a></h3>
+<p>By default the sandbox restricts imports. To <code class="docutils literal notranslate"><span class="pre">import</span></code> from a package, the
+<code class="docutils literal notranslate"><span class="pre">code-snippet</span></code> connector’s configuration must allow it — set <code class="docutils literal notranslate"><span class="pre">allow_imports</span></code> on
+the config (true, or a restrictive list):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">.</span><span class="n">connectors</span><span class="o">.</span><span class="n">upsert_configuration</span><span class="p">(</span>
+    <span class="s2">&quot;code-snippet&quot;</span><span class="p">,</span>
+    <span class="p">{</span><span class="s2">&quot;allow_imports&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;default&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">validate</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><a class="reference internal" href="../autoapi/pyfsr/api/connectors/index.html#pyfsr.api.connectors.ConnectorsAPI.default_config" title="pyfsr.api.connectors.ConnectorsAPI.default_config"><code class="xref py py-meth docutils literal notranslate"><span class="pre">default_config()</span></code></a> shows the config
+schema for any connector (for <code class="docutils literal notranslate"><span class="pre">code-snippet</span></code> it surfaces <code class="docutils literal notranslate"><span class="pre">allow_imports</span></code> /
+<code class="docutils literal notranslate"><span class="pre">restrict_imports</span></code>). The whole step is also gated by the appliance’s <em>Custom Code
+Execution</em> system setting
+(<a class="reference internal" href="../autoapi/pyfsr/api/system_settings/index.html#pyfsr.api.system_settings.SystemSettingsAPI.set_custom_code_execution" title="pyfsr.api.system_settings.SystemSettingsAPI.set_custom_code_execution"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_custom_code_execution()</span></code></a>)
+— with it off, a <code class="docutils literal notranslate"><span class="pre">code_snippet</span></code> step won’t run at all.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>If a snippet genuinely needs a top-level <code class="docutils literal notranslate"><span class="pre">return</span></code>, unrestricted file access, or
+imports the sandbox forbids, <strong>escape the sandbox</strong>: run the Python through a
+custom unrestricted-python connector (a <code class="docutils literal notranslate"><span class="pre">connector</span></code> step pointing at, e.g., a
+<code class="docutils literal notranslate"><span class="pre">code-runner</span></code> connector) instead of the stock <code class="docutils literal notranslate"><span class="pre">code_snippet</span></code> step. The trade-off
+is a connector you must install and configure separately.</p>
+</div>
+</section>
+</section>
+<section id="importing-an-existing-export">
+<h2>Importing an existing export<a class="headerlink" href="#importing-an-existing-export" title="Link to this heading">¶</a></h2>
+<p>If you already have a <code class="docutils literal notranslate"><span class="pre">*.json</span></code> export from the UI’s <strong>Export</strong> button (no
+compiler needed), import it directly:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">import_from_file</span><span class="p">(</span><span class="s2">&quot;exported_playbooks.json&quot;</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="playbook-yaml-reference.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Playbook YAML Syntax Reference</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="export-import.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Configuration Export &amp; Import</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Dylan Spille
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/ftnt-dspille/pyfsr" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Playbook Authoring &amp; Deployment</a><ul>
+<li><a class="reference internal" href="#the-compiler-is-an-optional-extra">The compiler is an optional extra</a></li>
+<li><a class="reference internal" href="#writing-a-playbook-in-yaml">Writing a playbook in YAML</a></li>
+<li><a class="reference internal" href="#deploying-from-python">Deploying from Python</a><ul>
+<li><a class="reference internal" href="#the-compile-result">The compile result</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#deploying-from-the-cli">Deploying from the CLI</a></li>
+<li><a class="reference internal" href="#discovering-step-types">Discovering step types</a></li>
+<li><a class="reference internal" href="#worked-examples-the-foundational-library">Worked examples — the foundational library</a></li>
+<li><a class="reference internal" href="#testing-interactive-playbooks-inspecting-runs">Testing interactive playbooks &amp; inspecting runs</a></li>
+<li><a class="reference internal" href="#playbook-version-control-saved-snapshots">Playbook version control (saved snapshots)</a></li>
+<li><a class="reference internal" href="#code-snippet-sandbox-writing-python-that-runs">Code-snippet sandbox: writing Python that runs</a><ul>
+<li><a class="reference internal" href="#surfacing-output-print-json-dumps-code-output">Surfacing output: <code class="docutils literal notranslate"><span class="pre">print(json.dumps(...))</span></code> → <code class="docutils literal notranslate"><span class="pre">code_output</span></code></a></li>
+<li><a class="reference internal" href="#reading-upstream-step-output">Reading upstream step output</a></li>
+<li><a class="reference internal" href="#imports-and-the-connector-config">Imports and the connector config</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#importing-an-existing-export">Importing an existing export</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=56c55dd0"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=fd10adb8"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

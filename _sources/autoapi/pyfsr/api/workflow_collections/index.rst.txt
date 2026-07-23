@@ -1,0 +1,278 @@
+pyfsr.api.workflow_collections
+==============================
+
+.. py:module:: pyfsr.api.workflow_collections
+
+.. autoapi-nested-parse::
+
+   Workflow-collection CRUD (``/api/3/workflow_collections``).
+
+   A *workflow collection* is the container FortiSOAR groups playbooks (workflows) under — the
+   top-level rows in **Automation → Playbooks**. This wraps the lifecycle operations so callers
+   (notably a playbook compiler/emitter) stop hand-rolling raw ``client.*`` calls and stepping on
+   the load-bearing gotchas below. Accessed as ``client.workflow_collections``.
+
+   Key behaviours that match the appliance (and differ from naive expectations):
+
+   - **create / update** POSTs or PUTs a **bare collection object** directly to
+     ``/api/3/workflow_collections``. The nested ``workflows`` array is accepted inline.
+   - **upsert / bulk_upsert** hit the appliance's true re-push path and avoid the recycle-bin
+     duplicate problem by restoring soft-deleted rows when needed.
+   - **delete** must send **no body** and ``$hardDelete=true&$showDeleted=true``. A ``{}`` body
+     silently no-ops and leaks the collection.
+
+   Use :meth:`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export` to replay a
+   FortiSOAR export file (the ``{"type": "workflow_collections", "data": [...]}`` envelope produced
+   by the UI's Export button) — it extracts the inner collection objects and posts each bare.
+   Pass ``replace=True`` to hard-delete any existing collection with the same uuid first.
+
+   Example::
+
+       cols = client.workflow_collections.list()                 # all collections
+       col  = client.workflow_collections.get("<uuid>")
+       client.workflow_collections.create_collection("My Pack", workflows=[...])
+       client.workflow_collections.upsert({...})                 # re-push one collection
+       client.workflow_collections.create_collections([...])            # re-push many
+       client.workflow_collections.import_export(data)           # replay an export dict
+       client.workflow_collections.import_from_file("export.json")
+       client.workflow_collections.import_from_yaml("pb.yaml")    # compile YAML then import
+       client.workflow_collections.update("<uuid>", name="Renamed")
+       client.workflow_collections.delete("<uuid>")              # hard delete, no recycle bin
+
+   ``import_from_yaml`` (optional ``pyfsr[playbooks]`` compiler) authors a playbook
+   from YAML: it compiles the YAML to the same export envelope and replays it through
+   ``import_export``. Use ``compile_yaml`` to compile without deploying.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.workflow_collections.WorkflowCollectionsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: WorkflowCollectionsAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   CRUD for playbook (workflow) collections.
+
+
+   .. py:method:: list(*, limit: int = 2147483647, relationships: bool = False) -> list[pyfsr.models.WorkflowCollection]
+
+      List workflow collections (the ``hydra:member`` array).
+
+      ``relationships=True`` adds ``$relationships=true`` so each collection's nested
+      ``workflows`` come back inline (heavier; off by default). Returns typed,
+      dict-compatible :class:`~pyfsr.models.WorkflowCollection` records.
+
+
+
+   .. py:method:: list_reusable_blocks(*, limit: int = 2147483647) -> list[pyfsr.models.ReusableBlock]
+
+      List **reusable playbook blocks** (``workflow_groups`` with ``reusable=true``).
+
+      These are the saved, re-droppable step groups the playbook editor and the
+      Configuration Export wizard's *Playbook Blocks* category work with. Returns
+      typed, dict-compatible :class:`~pyfsr.models.ReusableBlock` records from
+      ``GET /api/3/workflow_groups?reusable=true`` (live-verified 8.0).
+
+
+
+   .. py:method:: get(uuid: str, *, relationships: bool = True) -> pyfsr.models.WorkflowCollection
+
+      Fetch one collection by uuid. ``relationships=True`` (default) inlines its
+      ``workflows`` — the usual reason to fetch a single collection.
+
+      Returns a typed, dict-compatible :class:`~pyfsr.models.WorkflowCollection`.
+
+
+
+   .. py:method:: export_to_yaml(collection: str, *, db_path: str | pathlib.Path | None = None) -> str
+
+      Decompile a live collection into authored-style playbook YAML.
+
+      The inverse of :meth:`import_from_yaml` — pull a playbook collection off
+      the appliance and get back the friendly YAML source, so live edits made
+      in the UI can be captured into version control. ``collection`` is the
+      collection's uuid, or its name (resolved against :meth:`list`).
+
+      Catalog resolution is seamless (warmed from this client) so connector,
+      team, and picklist IRIs render back as friendly names — including custom
+      connectors like ``code-runner``. Pass ``db_path`` to use a specific
+      pre-warmed catalog instead.
+
+      Requires the compiler extra (``pip install "pyfsr[playbooks]"``).
+
+
+
+   .. py:method:: create_collection(name: str, *, description: str = '', visible: bool = True, workflows: list[dict[str, Any]] | None = None, uuid: str | None = None, record_tags: list[str] | None = None, image: str | None = None) -> pyfsr.models.WorkflowCollection
+
+      Create a collection, optionally with workflows (``POST /api/3/workflow_collections``).
+
+      Nested ``workflows`` (full Workflow objects with ``steps``/``routes``) are accepted
+      inline. ``uuid`` is generated if omitted. Returns the created collection record
+      as a typed :class:`~pyfsr.models.WorkflowCollection`.
+
+
+
+   .. py:method:: upsert(data: dict[str, Any]) -> pyfsr.models.WorkflowCollection
+
+      Insert-or-update one collection via ``POST /api/3/upsert/workflow_collections``.
+
+      FortiSOAR matches on the collection's natural key, restoring a soft-deleted row
+      instead of creating a duplicate. This is the safest write path when a collection
+      may already exist in the recycle bin. Returns the persisted
+      :class:`~pyfsr.models.WorkflowCollection`.
+
+
+
+   .. py:method:: create_collections(rows: list[dict[str, Any]]) -> dict[str, Any]
+
+      Create or re-push many collections (``POST /api/3/bulkupsert/workflow_collections``).
+
+
+
+   .. py:method:: import_export(data: dict[str, Any], *, replace: bool = False) -> list[pyfsr.models.WorkflowCollection]
+
+      Import a FortiSOAR export envelope, preserving original UUIDs and structure.
+
+      Accepts the ``{"type": "workflow_collections", "data": [...]}`` envelope produced
+      by the UI's Export button. Each ``WorkflowCollection`` object in ``data["data"]``
+      (with its nested ``workflows``) is posted as a bare object to
+      ``POST /api/3/workflow_collections`` — mirroring the second call the UI makes
+      during an import. Returns a list with one response dict per imported collection.
+
+      ``replace=True`` hard-deletes any existing collection whose uuid matches an item
+      in the export before re-importing it (the UI's "Replace existing playbook
+      collection" flow: ``DELETE /api/3/workflow_collections/<uuid>?$hardDelete=true``
+      then ``POST /api/3/workflow_collections``). Without ``replace=True`` the POST
+      raises a ``409 UniqueConstraintViolationException`` if the collection already
+      exists.
+
+      :raises ValueError: if ``data`` is not a dict or is missing the ``"data"`` key.
+
+      :returns: List of created collection records (one per entry in ``data["data"]``).
+
+
+
+   .. py:method:: import_from_file(path: str | pathlib.Path, *, replace: bool = False) -> list[pyfsr.models.WorkflowCollection]
+
+      Load a FortiSOAR export JSON file and import it via :meth:`import_export`.
+
+      ``path`` points to a ``*.json`` file produced by the UI's Export button. Pass
+      ``replace=True`` to hard-delete any collection whose uuid already exists before
+      re-creating it (the "Replace existing playbook collection" UI flow).
+
+      :raises FileNotFoundError: if ``path`` does not exist.
+      :raises ValueError: if the file is not valid JSON or lacks the ``"data"`` key.
+
+      :returns: List of created collection records.
+
+
+
+   .. py:method:: compile_yaml(source: str | pathlib.Path, *, db_path: str | pathlib.Path | None = None, refresh_catalog: bool = True, lax_codes: set | None = None)
+
+      Compile playbook YAML into the FortiSOAR import envelope.
+
+      ``source`` is either YAML text or a path (``str``/``Path``) to a ``.yaml``/
+      ``.yml`` file. Returns a :class:`~pyfsr.authoring.CompiledPlaybook` whose
+      ``fsr_json`` is ready for :meth:`import_export`; inspect ``ok``/``errors``/
+      ``warnings`` before deploying.
+
+      ``refresh_catalog`` (default ``True``) re-warms the local reference
+      catalog from **this** appliance before compiling, so connector / operation
+      / team / picklist tokens resolve against what is *currently* installed —
+      including a connector you just imported that the cached catalog has never
+      seen. Without a fresh warm, a connector step compiles with no
+      ``name``/``version``/``operationTitle`` and the playbook editor renders it
+      as "undefined". Set it to ``False`` to skip the network round-trip and
+      compile offline (against ``db_path`` if given, else the packaged slim
+      catalog) — faster, but it won't know about connectors added since the last
+      warm. ``db_path`` always wins: an explicit catalog is used verbatim with no
+      warm regardless of this flag.
+
+      ``lax_codes`` downgrades the given diagnostic codes from error to warning
+      so they don't block emission — accepts the friendly code string
+      (``{"unknown_param"}``), the enum name, or the ``ErrorCode`` enum. Use it
+      for known false-positives (e.g. a conditional connector param the catalog
+      can't model) when you've verified the value is valid at runtime.
+
+      Requires the optional compiler — install with ``pip install
+      "pyfsr[playbooks]"`` (raises
+      :class:`~pyfsr.authoring.PlaybooksExtraNotInstalled` otherwise).
+
+
+
+   .. py:method:: import_from_yaml(source: str | pathlib.Path, *, replace: bool = False, db_path: str | pathlib.Path | None = None, strict_warnings: bool = False, refresh_catalog: bool = True, lax_codes: set | None = None) -> list[pyfsr.models.WorkflowCollection]
+
+      Compile playbook YAML and import the result onto the appliance.
+
+      Compiles ``source`` (YAML text or a ``.yaml`` path) via :meth:`compile_yaml`
+      then hands the envelope to :meth:`import_export` — the same write path the
+      UI's import uses, with its recycle-bin and clean-key handling.
+
+      ``replace=True`` hard-deletes any existing collection whose uuid matches
+      before re-creating it. ``strict_warnings=True`` treats compiler warnings as
+      blocking. ``db_path`` overrides the reference catalog.
+
+      ``refresh_catalog`` (default ``True``, forwarded to :meth:`compile_yaml`)
+      re-warms the local catalog from this appliance before compiling so a
+      just-imported connector is known and connector steps don't render as
+      "undefined" in the editor. Set ``False`` to compile offline (skip the warm)
+      when you know the cached catalog is current. ``lax_codes`` (forwarded too)
+      downgrades specific diagnostic codes from error to warning so a known
+      false-positive doesn't block the import.
+
+      :raises ValueError: if compilation produces blocking errors (or warnings when
+          ``strict_warnings`` is set).
+      :raises pyfsr.authoring.PlaybooksExtraNotInstalled: if the compiler extra is
+          not installed.
+
+      :returns: List of created collection records (one per compiled collection).
+
+
+
+   .. py:method:: restore(uuid: str) -> pyfsr.models.WorkflowCollection
+
+      Restore a soft-deleted collection from the recycle bin.
+
+      This mirrors :meth:`pyfsr.records.RecordSet.restore` but keeps the collection-specific
+      API self-contained. Returns the restored :class:`~pyfsr.models.WorkflowCollection`.
+
+
+
+   .. py:method:: exists(uuid: str) -> bool
+
+      Return True if a collection with ``uuid`` exists on the appliance.
+
+      Useful as a pre-flight check before :meth:`import_from_file` to avoid
+      re-importing a collection that is already present.
+
+
+
+   .. py:method:: update(uuid: str, **fields: Any) -> pyfsr.models.WorkflowCollection
+
+      Partially update a collection (``PUT``); pass only the keys you want changed
+      (e.g. ``name=...``, ``visible=False``, ``description=...``).
+
+      Returns the updated :class:`~pyfsr.models.WorkflowCollection`.
+
+
+
+   .. py:method:: delete(uuid: str, *, hard: bool = True) -> None
+
+      Delete a collection. ``hard=True`` (default) bypasses the recycle bin.
+
+      Sends **no request body** — the appliance silently no-ops a delete with a ``{}``
+      body and leaks the collection, so this never passes one. ``hard=False`` does a soft
+      (recycle-bin) delete.
+
+
+

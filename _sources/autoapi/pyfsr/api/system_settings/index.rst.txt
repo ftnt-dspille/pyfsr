@@ -1,0 +1,151 @@
+pyfsr.api.system_settings
+=========================
+
+.. py:module:: pyfsr.api.system_settings
+
+.. autoapi-nested-parse::
+
+   System Settings — the single ``/api/3/system_settings`` configuration blob.
+
+   FortiSOAR keeps almost every appliance-wide UI/behaviour toggle in one root
+   ``SystemSettings`` record whose ``publicValues`` is a deeply-nested dict
+   (playbook-log filters, recycle-bin TTL, workflow-log config, themes, …). The
+   GUI re-PUTs the *entire* object on every save; this wrapper instead does a
+   read / deep-merge / minimal-PUT so callers only specify the keys they want to
+   change.
+
+   Accessed as ``client.system_settings``.
+
+   .. rubric:: Example
+
+   >>> # Exclude "test"-tagged runs from the playbook execution-log view
+   >>> client.system_settings.set_workflow_log_filter(["test"])
+   >>> # Or merge an arbitrary patch into publicValues
+   >>> client.system_settings.update({"recycleBin": {"enabled": True}})
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.system_settings.SystemSettingsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: SystemSettingsAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Read and minimally update the root ``SystemSettings`` record.
+
+
+   .. py:method:: get_root() -> dict[str, Any]
+
+      Return the root settings record (the one whose ``parent`` is null).
+
+      ``GET /api/3/system_settings?$relationships=true`` returns the root plus
+      its ``sections`` (TAXII, iframe, …); this picks out the root object.
+
+
+
+   .. py:method:: get_public_values() -> dict[str, Any]
+
+      Return just the root record's ``publicValues`` dict.
+
+
+
+   .. py:method:: get_named(name: str) -> dict[str, Any]
+
+      Return a ``SystemSettings`` record by its ``name``.
+
+      Some settings live in their own named records rather than the root blob
+      (e.g. ``"Advanced Development Settings"``). Raises ``ValueError`` if no
+      record with that name is returned.
+
+
+
+   .. py:method:: update(public_values_patch: dict[str, Any] | None = None, *, private_values_patch: dict[str, Any] | None = None) -> dict[str, Any]
+
+      Deep-merge patches into the root record and PUT the minimal body.
+
+      Only ``publicValues`` / ``privateValues`` are sent (not the bulky
+      ``sections`` array), which is all the API needs. Returns the updated
+      root record.
+
+      :param public_values_patch: keys to merge into ``publicValues``.
+      :param private_values_patch: keys to merge into ``privateValues``.
+
+
+
+   .. py:method:: get_development_mode() -> dict[str, bool]
+
+      Return the current dev-edit toggles as ``{connectors, widgets, agents}``.
+
+      Reads the *Advanced Development Settings* record (System Settings →
+      Application Editor → *Advanced Development Settings* in the UI).
+
+
+
+   .. py:method:: set_development_mode(*, connectors: bool | None = None, widgets: bool | None = None, agents: bool | None = None) -> dict[str, Any]
+
+      Enable/disable editing custom connectors, widgets, and AI agents.
+
+      Flips the *Advanced Development Settings* flags that gate the in-product
+      editors — ``allowCustomConnector`` / ``allowCustomWidget`` /
+      ``allow_ai_agent`` — which live in their own named ``SystemSettings``
+      record (``privateValues.values[0]``), not the root blob. Each argument is
+      tri-state: ``True``/``False`` to set, ``None`` (default) to leave as-is.
+
+      .. rubric:: Example
+
+      >>> client.system_settings.set_development_mode(
+      ...     connectors=True, widgets=True, agents=True)
+
+      Returns the updated record. Raises ``ValueError`` if no flag is given.
+
+
+
+   .. py:method:: set_custom_code_execution(enabled: bool = True) -> dict[str, Any]
+
+      Enable/disable *Custom Code Execution* (the ``code_snippet`` gate).
+
+      Convenience wrapper over :meth:`set_development_mode`: in FortiSOAR the
+      "Custom Code Execution" toggle in *System Settings → Advanced Development
+      Features* is the SAME flag as the custom-**connector** toggle
+      (``allowCustomConnector``) — its in-product notice/risk strings are the
+      ``..._CUSTOM_CODE_EXECUTION`` ones. With it off, a ``code_snippet`` step
+      fails at runtime with *"Custom Code Execution is disabled. Enable this
+      feature in Settings"*.
+
+      Equivalent to ``set_development_mode(connectors=enabled)``; creates the
+      *Advanced Development Settings* record on a fresh appliance where it has
+      never been saved. Returns the updated record.
+
+
+
+   .. py:method:: set_workflow_log_filter(tags: list[str], operation: str = 'exclude') -> dict[str, Any]
+
+      Set the playbook execution-log tag filter (Settings → Playbooks → Logs).
+
+      ``operation`` is ``"exclude"`` or ``"include"``. Note the FortiSOAR key
+      is the (misspelled) ``filterOpration`` — handled here so callers don't
+      have to reproduce the typo.
+
+
+
+   .. py:method:: set_playbook_debug_logging(enabled: bool = True, *, allow_playbook_override: bool = False) -> dict[str, Any]
+
+      Set the global playbook execution-log verbosity (Settings → Playbooks).
+
+      ``enabled`` turns on full debug logging for every run;
+      ``allow_playbook_override=False`` forces individual playbooks to use the
+      global setting (they can't opt out). Maps to
+      ``publicValues.workflow_log_config``.
+
+
+

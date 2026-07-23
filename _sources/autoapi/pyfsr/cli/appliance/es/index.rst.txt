@@ -1,0 +1,83 @@
+pyfsr.cli.appliance.es
+======================
+
+.. py:module:: pyfsr.cli.appliance.es
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance es`` — Elasticsearch health and shard verbs.
+
+   The ES password is the device UUID (user ``elastic``), resolved by
+   :class:`.facts.Facts` so it's never re-derived per-session.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.es.ESHealth
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.es.health
+   pyfsr.cli.appliance.es.shards
+
+
+Module Contents
+---------------
+
+.. py:class:: ESHealth(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Parsed output of the ES cluster-health API.
+
+
+   .. py:attribute:: status
+      :type:  str
+
+
+   .. py:attribute:: cluster_name
+      :type:  str
+
+
+   .. py:attribute:: num_nodes
+      :type:  int
+
+
+   .. py:attribute:: num_data_nodes
+      :type:  int
+
+
+   .. py:attribute:: active_shards
+      :type:  int
+
+
+   .. py:attribute:: unassigned_shards
+      :type:  int
+
+
+   .. py:attribute:: raw
+      :type:  str
+
+
+.. py:function:: health(facts: pyfsr.cli.appliance.facts.Facts) -> ESHealth
+
+   Cluster health (``GET /_cluster/health``).
+
+
+.. py:function:: shards(facts: pyfsr.cli.appliance.facts.Facts) -> tuple[list[str], list[list[str]]]
+
+   Unassigned-shard explain (``GET /_cluster/allocation/explain``).
+
+   Returns ``(headers, rows)``. If all shards are assigned, returns an empty
+   row list (not an error).
+
+

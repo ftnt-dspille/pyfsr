@@ -1,0 +1,279 @@
+pyfsr.agent.archetypes.record
+=============================
+
+.. py:module:: pyfsr.agent.archetypes.record
+
+.. autoapi-nested-parse::
+
+   The archetype record -- a parameterized use-case shape.
+
+   An **archetype** is the reusable shape of an operational use case (reconcile-and-report,
+   ingest-enrich-notify, ...): the module schema it needs, the connectors + operations it uses,
+   and a playbook skeleton, plus the ``{{param}}`` slots a router fills to instantiate it.
+
+   This module holds only the record types -- pure stdlib dataclasses (no I/O), mirroring
+   :class:`pyfsr.authoring.CompiledPlaybook`'s style so ``archetypes`` stays core-pyfsr
+   with no new dependencies. Records are JSON-serializable so :class:`~pyfsr.agent.archetypes.store.ArchetypeStore`
+   can persist them as a blob. (Pydantic is a hard dep of pyfsr as of 2026-07-20, but
+   these records deliberately stay stdlib dataclasses: they round-trip through
+   ``asdict()``/``from_dict()``/JSON for SQLite storage with manual field-by-field
+   reconstruction in every ``from_dict``, so a pydantic conversion would be cosmetic
+   churn for no validation gain. Skip unless archetypes grow validation needs.)
+
+   A record produced by the harvester (:mod:`pyfsr.agent.archetypes.harvest`) is a **draft**:
+   ``when_to_use`` is empty and ``parameters`` is unset -- an operator (or agent) curates those
+   during step 3. The harvested ``module_schema`` / ``connector_manifest`` / ``playbook_skeletons``
+   are honest extractions from a real solution pack, not guesses.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.agent.archetypes.record.ModuleField
+   pyfsr.agent.archetypes.record.ConnectorUse
+   pyfsr.agent.archetypes.record.StepSkeleton
+   pyfsr.agent.archetypes.record.PlaybookSkeleton
+   pyfsr.agent.archetypes.record.Archetype
+
+
+Module Contents
+---------------
+
+.. py:class:: ModuleField
+
+   One field of an archetype's module schema, extracted from a pack's ``mmd.json``.
+
+   ``picklist`` is the list name (e.g. ``"IncidentStatus"``) for picklist fields, resolved
+   from ``dataSource.query.filters``; ``relationship`` is the related module (e.g. ``"alerts"``)
+   from ``dataSource.model`` for relationship fields. Both are ``None`` for plain scalars.
+
+
+   .. py:attribute:: module
+      :type:  str
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: type
+      :type:  str
+
+
+   .. py:attribute:: form_type
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: required
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: display_name
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: picklist
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: relationship
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:method:: from_dict(d: dict[str, Any]) -> ModuleField
+      :classmethod:
+
+
+
+.. py:class:: ConnectorUse
+
+   A connector + operation the archetype's playbook skeleton invokes.
+
+   ``step_name`` is the harvesting step's human label (the step's ``name``), kept for
+   traceability. ``role`` is the use-case role this connector plays in a *curated* archetype
+   (``source_a`` / ``source_b`` / ``notify`` / ...) -- empty on a harvested draft (the harvester
+   sees connector+operation pairs, not their semantic role) and assigned during curation (step 3).
+
+
+   .. py:attribute:: connector
+      :type:  str
+
+
+   .. py:attribute:: operation
+      :type:  str
+
+
+   .. py:attribute:: step_name
+      :type:  str
+
+
+   .. py:attribute:: role
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:method:: from_dict(d: dict[str, Any]) -> ConnectorUse
+      :classmethod:
+
+
+
+.. py:class:: StepSkeleton
+
+   One step of a harvested playbook skeleton.
+
+   ``step_type`` is the ``stepType`` UUID tail (kept for traceability only -- the harvester
+   does not resolve it to a step-type name, since that mapping lives in the optional
+   ``fsr_playbooks`` extra). ``connector``/``operation`` are present for connector steps.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: step_type
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: connector
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: operation
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:method:: from_dict(d: dict[str, Any]) -> StepSkeleton
+      :classmethod:
+
+
+
+.. py:class:: PlaybookSkeleton
+
+   A generalized view of one harvested playbook (``playbooks/**/*.json``).
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: description
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: steps
+      :type:  list[StepSkeleton]
+      :value: []
+
+
+
+   .. py:method:: from_dict(d: dict[str, Any]) -> PlaybookSkeleton
+      :classmethod:
+
+
+
+.. py:class:: Archetype
+
+   A use-case archetype record -- the unit the companion store persists.
+
+   :param name: the archetype's stable key (slug).
+   :param when_to_use: one-line intent used by the router to classify a use case; empty on a
+                       harvested draft (curated in step 3).
+   :param description: free-text description -- on harvest, the pack's ``info.json`` description.
+   :param module_schema: the module fields the use case's target module needs.
+   :param connector_manifest: the connector + operation pairs the skeleton uses (deduped).
+   :param playbook_skeletons: one per harvested playbook.
+   :param parameters: the ``{{param}}`` slots the router/agent fills; empty on a draft.
+   :param source: provenance -- ``{pack_name, pack_version, pack_label, harvested_at}`` on harvest.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: when_to_use
+      :type:  str
+      :value: ''
+
+
+
+   .. py:attribute:: description
+      :type:  str
+      :value: ''
+
+
+
+   .. py:attribute:: module_schema
+      :type:  list[ModuleField]
+      :value: []
+
+
+
+   .. py:attribute:: connector_manifest
+      :type:  list[ConnectorUse]
+      :value: []
+
+
+
+   .. py:attribute:: playbook_skeletons
+      :type:  list[PlaybookSkeleton]
+      :value: []
+
+
+
+   .. py:attribute:: parameters
+      :type:  list[dict[str, Any]]
+      :value: []
+
+
+
+   .. py:attribute:: source
+      :type:  dict[str, Any]
+
+
+   .. py:method:: to_dict() -> dict[str, Any]
+
+      Return a JSON-safe dict (nested dataclasses expanded).
+
+
+
+   .. py:method:: to_json() -> str
+
+      Serialize to a JSON string (stable, human-readable).
+
+
+
+   .. py:method:: from_dict(d: dict[str, Any]) -> Archetype
+      :classmethod:
+
+
+
+   .. py:method:: from_json(s: str) -> Archetype
+      :classmethod:
+
+
+      Deserialize from a JSON string produced by :meth:`to_json`.
+
+
+

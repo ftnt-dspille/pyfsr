@@ -1,0 +1,25 @@
+pyfsr.playbook_catalog
+======================
+
+.. py:module:: pyfsr.playbook_catalog
+
+.. autoapi-nested-parse::
+
+   Step-type catalog for playbook authoring -- the data behind ``pyfsr playbook
+   steps`` / ``step-help``.
+
+   The catalog itself lives in the compiler package (``fsr_playbooks.catalog``),
+   which owns every data source it composes (the resolver's friendly->canonical
+   table, the typed-arg schemas, the packaged ``fsr_reference.db``, and the
+   decompiler). This module is a thin re-export so existing pyfsr callers and the
+   ``pyfsr playbook steps`` / ``step-help`` CLI keep importing from
+   ``pyfsr.playbook_catalog`` -- and so the ``pyfsr[playbooks]`` extra's
+   missing-dependency error surfaces with a pyfsr-flavored message.
+
+   The foundational playbook library index (``list_library`` / ``library_manifest``
+   / ``library_show``) is a separate, pyfsr-repo-specific concern -- see
+   ``pyfsr.playbook_library`` (repo-internal, not part of the installed-package
+   API).
+
+
+

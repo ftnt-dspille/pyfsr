@@ -1,0 +1,77 @@
+pyfsr.api.reporting
+===================
+
+.. py:module:: pyfsr.api.reporting
+
+.. autoapi-nested-parse::
+
+   The reporting module — ``client.reporting``.
+
+   Read the report definitions behind the SOAR UI's *Reports* section
+   (``/api/3/reporting``).
+
+   **The display name is ``displayName``, not ``name``** — there is no ``name`` field
+   on a :class:`~pyfsr.models.Report`, so lookups here match on ``displayName``. That
+   is the name the export wizard's *Reports* category shows and the one
+   ``ExportTemplate.add_report()`` takes.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.reporting.ReportingAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: ReportingAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   List and resolve report definitions (``/api/3/reporting``).
+
+   .. rubric:: Example
+
+   .. code-block:: python
+
+       for report in client.reporting.list():
+           print(report.displayName, report.templateType)
+
+       soc = client.reporting.get("SOC Summary Report")
+
+
+   .. py:method:: list(params: dict[str, Any] | None = None, *, typed: bool = True) -> list[pyfsr.models.Report] | list[dict[str, Any]]
+
+      List report definitions.
+
+      :param params: optional query params passed through to the collection.
+      :param typed: parse into :class:`~pyfsr.models.Report` (default) or return dicts.
+
+      Doctest:
+
+          >>> from pyfsr._testing import demo_client
+          >>> client = demo_client()
+          >>> reports = client.reporting.list()
+          >>> len(reports)
+          2
+          >>> reports[0].displayName  # doctest: +ELLIPSIS
+          'Weekly Alert Report'
+
+
+
+   .. py:method:: get(name: str, *, typed: bool = True) -> pyfsr.models.Report | dict[str, Any]
+
+      Resolve a single report by its **display name**.
+
+      :param name: the report's ``displayName`` (e.g. ``"SOC Summary Report"``).
+      :param typed: parse into :class:`~pyfsr.models.Report` (default) or return a dict.
+
+      :raises ValueError: if no report carries that display name.
+
+
+

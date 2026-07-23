@@ -1,0 +1,120 @@
+pyfsr.api.views
+===============
+
+.. py:module:: pyfsr.api.views
+
+.. autoapi-nested-parse::
+
+   The views module — ``client.views``.
+
+   Resolve a module's **active** system view template (SVT) — the ``list``,
+   ``detail``, or ``form`` layout the platform actually renders. A module can carry
+   several SVT rows for the same layout (duplicates both flagged ``isDefault``), so
+   the active layout must never be picked by name or flag; these methods resolve the
+   single live template. To enumerate or write the raw SVT rows instead, use
+   ``client.modules_admin.get_view_templates(module)``.
+
+   Also serves the one view that isn't a module layout: :meth:`ViewsAPI.app` returns
+   the left-hand **navigation** view, whose section titles drive the ``views`` export
+   category.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.views.ViewsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: ViewsAPI(client)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Resolve a module's **active** system view template (SVT) layout.
+
+   A module can carry several SVT rows for the same layout — duplicates, both
+   flagged ``isDefault: true`` — so the live layout must never be picked by name
+   or flag. ``GET /api/views/1/modules-<module>-<kind>`` resolves the single
+   active template the platform actually renders; that is what these methods
+   return. To enumerate (or write) the raw SVT rows instead, use
+   ``client.modules_admin.get_view_templates(module)``.
+
+   .. rubric:: Example
+
+   .. code-block:: python
+
+       svt = client.views.detail("alerts")
+       print(svt["uuid"], svt["type"])  # active detail layout
+
+       # Walk the tabs of the detail layout to place a widget, etc.
+       tabs = svt["config"].get("tabs", [])
+
+
+   .. py:method:: resolve(module: str, kind: str = 'detail') -> dict[str, Any]
+
+      Return the active SVT for ``module`` and layout ``kind``.
+
+      :param module: Module name (e.g. ``"alerts"``).
+      :param kind: One of ``"list"``, ``"detail"`` (default), or ``"form"``.
+
+      :returns: The resolved active system view template (a ``type: "rows"`` layout
+                for list/detail, ``type: "form"`` for form), including its ``uuid``,
+                ``config``, ``module``, and ``isDefault``.
+
+      :raises ValueError: if ``kind`` is not one of the three layout kinds.
+
+
+
+   .. py:method:: detail(module: str) -> dict[str, Any]
+
+      Return the active **detail** (View Panel) layout SVT for ``module``.
+
+
+
+   .. py:method:: listing(module: str) -> dict[str, Any]
+
+      Return the active **list** (grid) layout SVT for ``module``.
+
+
+
+   .. py:method:: form(module: str) -> dict[str, Any]
+
+      Return the active **form** (add/edit) layout SVT for ``module``.
+
+
+
+   .. py:method:: app(*, typed: bool = True) -> pyfsr.models.NavigationView | dict[str, Any]
+
+      Return the **"app" navigation view** (``GET /api/views/1/app``).
+
+      Not a module layout: this is the single view record describing the
+      left-hand navigation. ``config["navigation"]`` holds the top-level
+      sections, whose titles are what the ``views`` export category ships.
+
+      :param typed: parse into :class:`~pyfsr.models.NavigationView` (default) or
+                    return the raw dict.
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          nav = client.views.app()
+          print(nav.section_titles)  # ['Dashboard', 'AI', ...]
+
+
+
+   .. py:method:: navigation_sections() -> list[str]
+
+      Return the top-level navigation section titles, in display order.
+
+      Convenience over :meth:`app` for the common case — validating or
+      enumerating the sections available to the ``views`` export category.
+
+
+

@@ -1,0 +1,214 @@
+pyfsr.api.schedules
+===================
+
+.. py:module:: pyfsr.api.schedules
+
+.. autoapi-nested-parse::
+
+   Scheduled (periodic) Celery tasks -- ``/api/wf/api/scheduled/``.
+
+   The workflow engine's recurring jobs (Reclaim Disk Space, Purge Executed
+   Playbook Logs, Archive Data, plus user-created playbook schedules) are
+   django-celery-beat ``PeriodicTask`` rows. This wrapper lists them, toggles
+   their ``enabled`` flag, creates new ones, and force-triggers a schedule
+   out-of-band of its cron.
+
+   Accessed as ``client.schedules``.
+
+   A scheduled task is a ``PeriodicTask`` with a nested ``crontab``
+   (``minute``/``hour``/``day_of_week``/``day_of_month``/``month_of_year``/
+   ``timezone``) and ``kwargs`` carrying ``wf_iri`` (the workflow the schedule
+   runs), ``exit_if_running``, ``timezone``/``utcOffset``. The server fills in
+   ``task`` (``workflow.tasks.periodic_task``), ``schedule_id``, ``crontab.id``,
+   and ``kwargs.name``/``description``/``auth``/``schedule_entry_name``.
+
+   Note: each row's ``id`` is a per-request Fernet token that decrypts to a stable
+   primary key, so always look the task up by ``name`` (the id from one GET is
+   fine to PUT back immediately, which is what :meth:`SchedulesAPI.set_enabled`
+   does, and to POST to ``trigger-now/``, which is what :meth:`SchedulesAPI.trigger_now` does).
+
+   .. rubric:: Example
+
+   >>> [t["name"] for t in client.schedules.list() if t["enabled"]]
+   ['Reclaim disk space periodically', ...]
+   >>> client.schedules.disable("Reclaim disk space periodically")
+   >>> iri = client.playbooks.resolve_iri("Nightly Recon")
+   >>> task = client.schedules.create("nightly-recon", iri, "7 2 * * *")
+   >>> client.schedules.trigger_now(name="nightly-recon")
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.schedules.SchedulesAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: SchedulesAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   List, enable/disable, create, and trigger workflow-engine periodic tasks.
+
+
+   .. py:method:: list(*, typed: bool = True) -> list[pyfsr.models.ScheduledTask] | list[dict[str, Any]]
+
+      Return all scheduled periodic tasks.
+
+      :param typed: parse rows into :class:`~pyfsr.models.ScheduledTask`
+                    (default); pass ``False`` for raw dicts.
+
+
+
+   .. py:method:: get(name: str, *, typed: bool = True) -> pyfsr.models.ScheduledTask | dict[str, Any] | None
+
+      Return one scheduled task by exact ``name`` (``None`` if absent).
+
+      :param typed: parse the result into a :class:`~pyfsr.models.ScheduledTask`
+                    (default); pass ``False`` for the raw dict.
+
+
+
+   .. py:method:: set_enabled(name: str, enabled: bool) -> dict[str, Any]
+
+      Enable/disable the task named ``name`` and return the updated record.
+
+      The wf API only accepts a full-record ``PUT`` (no PATCH), so this reads
+      the current row, flips ``enabled``, and PUTs it back.
+
+
+
+   .. py:method:: disable(name: str) -> dict[str, Any]
+
+      Disable the task named ``name``.
+
+
+
+   .. py:method:: enable(name: str) -> dict[str, Any]
+
+      Enable the task named ``name``.
+
+
+
+   .. py:method:: delete(name: str) -> None
+
+      Delete the periodic task named ``name``.
+
+      Resolves the task's current ``id`` (a per-request Fernet token, so it
+      is looked up fresh immediately before the DELETE) and removes it via
+      ``DELETE /api/wf/api/scheduled/{id}/``. The task is gone entirely -- to
+      merely pause it, use :meth:`disable`.
+
+      :param name: the schedule display name.
+
+      .. rubric:: Example
+
+      >>> client.schedules.delete("nightly-recon")
+
+
+
+   .. py:method:: create(name: str, workflow_iri: str, cron: str, *, timezone: str = 'UTC', enabled: bool = True, exit_if_running: bool = True, create_user: str | None = None, priority: dict[str, Any] | None = None, typed: bool = True) -> pyfsr.models.ScheduledTask | dict[str, Any]
+
+      Create a periodic task that runs ``workflow_iri`` on a cron schedule.
+
+      Mirrors what FortiSOAR's scheduler UI sends to
+      ``POST /api/wf/api/scheduled/``: a django-celery-beat ``PeriodicTask``
+      with a nested ``crontab`` and a ``kwargs.wf_iri`` pointing at the
+      workflow. The server fills the rest (``task``, ``schedule_id``,
+      ``crontab.id``, ``kwargs.name``/``description``/``auth``).
+
+      :param name: schedule display name (the server also uses it as the
+                   task's ``description``).
+      :param workflow_iri: the workflow IRI, ``/api/3/workflows/<uuid>`` --
+                           resolve a playbook name with ``client.playbooks.resolve_iri(name)``.
+      :param cron: 5-field cron expression ``"minute hour day_of_month
+                   month_of_year day_of_week"`` (e.g. ``"7 2 * * *"`` for 02:07
+                   daily, ``"0 0 * * 1"`` for midnight Mondays).
+      :param timezone: IANA timezone for the crontab (default ``"UTC"``).
+      :param enabled: create the task enabled (default ``True``).
+      :param exit_if_running: skip a fire if the previous run is still active
+                              (default ``True`` -- prevents overlap for long-running playbooks).
+      :param create_user: optional ``/api/3/people/<uuid>`` IRI; the server
+                          normally derives this from the auth context, so omit unless a
+                          create is rejected without it.
+      :param priority: optional task-priority picklist object; omitted by
+                       default (the server applies its own default -- the UI's Medium
+                       picklist is instance-specific and not assumed).
+      :param typed: parse the result into a :class:`~pyfsr.models.ScheduledTask`
+                    (default); pass ``False`` for the raw dict.
+
+      :returns: The created periodic-task record, with the server-generated
+                ``id`` (Fernet token) and ``schedule_id``.
+
+      .. rubric:: Example
+
+      >>> iri = client.playbooks.resolve_iri("Nightly Recon")
+      >>> task = client.schedules.create("nightly-recon", iri, "7 2 * * *")
+
+
+
+   .. py:method:: get_or_create(name: str, workflow_iri: str, cron: str, *, timezone: str = 'UTC', enabled: bool = True, exit_if_running: bool = True, create_user: str | None = None, priority: dict[str, Any] | None = None, update_if_exists: bool = False, typed: bool = True) -> tuple[pyfsr.models.ScheduledTask | dict[str, Any], bool]
+
+      Idempotently ensure a schedule named ``name`` exists; return ``(task, created)``.
+
+      If a schedule with that name already exists, it is returned unchanged
+      (``created=False``). When ``update_if_exists=True`` and the schedule
+      exists, its ``workflow_iri``/``cron``/``timezone`` are updated in place
+      via :meth:`set_enabled`-style PUT; otherwise the existing record is
+      returned as-is. Returns ``created=True`` only when the schedule was
+      newly created.
+
+      :param name: schedule display name (the lookup key).
+      :param workflow_iri: the workflow IRI — used on create (and on update if
+                           ``update_if_exists=True``).
+      :param cron: 5-field cron expression — used on create (and on update if
+                   ``update_if_exists=True``).
+      :param timezone: IANA timezone (default ``"UTC"``).
+      :param enabled: create the task enabled (default ``True``).
+      :param exit_if_running: skip a fire if the previous run is still active.
+      :param create_user: optional ``/api/3/people/<uuid>`` IRI.
+      :param priority: optional task-priority picklist object.
+      :param update_if_exists: when ``True`` and the schedule exists, replace its
+                               cron/workflow/timezone with the new values. Default ``False``
+                               (leave the existing schedule untouched).
+      :param typed: parse the result into a :class:`~pyfsr.models.ScheduledTask`.
+
+      :returns: ``(ScheduledTask, created)`` — the existing task with
+                ``created=False``, or the newly-created task with ``created=True``.
+
+
+
+   .. py:method:: trigger_now(*, name: str | None = None, task_id: str | None = None) -> dict[str, Any]
+
+      Force-trigger a scheduled task immediately (``POST .../trigger-now/``).
+
+      Identifies the task by ``name`` (resolved to its ``id`` via
+      :meth:`get`) or by its ``task_id`` (the Fernet-token ``id`` from
+      :meth:`list`/:meth:`get`/:meth:`create`). The fire is asynchronous --
+      the response confirms the trigger was accepted; use
+      ``client.playbooks.wait_for_run`` to track the resulting playbook run.
+      Fires regardless of the task's ``enabled`` flag (``enabled`` governs the
+      cron scheduler, not manual triggers).
+
+      Prefer ``name=`` over ``task_id``: the schedule ``id`` is a per-request
+      Fernet token that rotates, so a ``task_id`` captured from an earlier
+      :meth:`create`/:meth:`list` call can be stale by the time it is used.
+      ``name=`` re-resolves a fresh id each call.
+
+      :param name: schedule display name (resolved to its id).
+      :param task_id: the schedule's ``id`` (Fernet token) instead of name. Only
+                      reliable when used immediately after the call that produced it.
+
+      .. rubric:: Example
+
+      >>> client.schedules.trigger_now(name="nightly-recon")
+      {'message': 'The associated workflow is successfully triggered'}
+
+
+

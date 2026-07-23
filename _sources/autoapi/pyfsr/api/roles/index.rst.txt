@@ -1,0 +1,175 @@
+pyfsr.api.roles
+===============
+
+.. py:module:: pyfsr.api.roles
+
+.. autoapi-nested-parse::
+
+   Role CRUD and module-permission management (``/api/3/roles``).
+
+   A FortiSOAR **role** bundles a set of ``ModulePermission`` records (one per module) that
+   together define what a user assigned that role can read, write, create, delete, and execute.
+   This API wraps the lifecycle operations that matter most for automation:
+
+   - **list / get / create** — discover roles by name or uuid, and create new ones.
+   - **grant_module_permissions** — the primary write operation. Module-level permissions
+     live on ``/api/3/module_permissions`` but that collection is GET-only; the only write
+     path is ``PUT /api/3/roles/{uuid}`` with a ``modulePermissions`` array. This method
+     handles resolution (module type → IRI, role name → uuid) and merges new permissions
+     with any that already exist on the role.
+   - **module_permissions** — list the ``ModulePermission`` records currently assigned to
+     one role.
+
+   Typical use after creating a custom module::
+
+       # Grant all CRUD+execute on a new module to all roles that need it
+       client.roles.grant_module_permissions(
+           "Full App Permissions",
+           module="oguraly_test_processes",
+       )
+
+       # Or scope to specific permissions
+       client.roles.grant_module_permissions(
+           "SOC Analyst",
+           module="oguraly_test_processes",
+           can_read=True, can_create=False, can_update=False,
+           can_delete=False, can_execute=False,
+       )
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.roles.RolesAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: RolesAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Role discovery and module-permission management.
+
+
+   .. py:method:: role_map() -> dict[str, str]
+
+      Return ``{name: uuid}`` for all roles, cached for the instance lifetime.
+
+
+
+   .. py:method:: role_uuid_by_name(name: str) -> str | None
+
+      Look up a role UUID by display name (case-sensitive); ``None`` if absent.
+
+
+
+   .. py:method:: list(*, limit: int = 2147483647, params: dict[str, Any] | None = None) -> list[pyfsr.models.Role]
+
+      List all roles (``GET /api/3/roles``) as typed :class:`~pyfsr.models.Role` records.
+
+      ``params`` adds/overrides query params (e.g. ``{"$page": 1}``); ``$limit``
+      defaults to ``limit`` unless ``params`` supplies one.
+
+      Doctest:
+
+          >>> from pyfsr._testing import demo_client
+          >>> client = demo_client()
+          >>> roles = client.roles.list()
+          >>> len(roles)  # doctest: +ELLIPSIS
+          3
+          >>> roles[0].name
+          'Agentic AI'
+          >>> roles[1].name
+          'SOC Analyst'
+
+
+
+   .. py:method:: get(role: str, *, relationships: bool = False) -> pyfsr.models.Role
+
+      Fetch one role by uuid or name as a :class:`~pyfsr.models.Role`.
+
+      ``relationships=True`` inlines ``modulePermissions`` (parsed into
+      :class:`~pyfsr.models.ModulePermission`) — useful for inspecting what
+      a role currently has before modifying it.
+
+
+
+   .. py:method:: module_permissions(role: str) -> list[pyfsr.models.ModulePermission]
+
+      Return the :class:`~pyfsr.models.ModulePermission` records on ``role``.
+
+      ``role`` may be a uuid or friendly name. Equivalent to
+      ``roles.get(role, relationships=True).modulePermissions`` but returns
+      ``[]`` (not ``None``) when the role has none.
+
+
+
+   .. py:method:: create(name: str, *, description: str | None = None) -> pyfsr.models.Role
+
+      Create a role (``POST /api/3/roles``).
+
+      Only ``name`` is required; ``description`` is optional. The returned
+      :class:`~pyfsr.models.Role` starts with an empty ``modulePermissions``
+      list — use :meth:`grant_module_permissions` to attach module grants.
+
+      :param name: Role name (must be unique).
+      :param description: Optional role description.
+
+
+
+   .. py:method:: get_or_create(name: str, *, description: str | None = None) -> tuple[pyfsr.models.Role, bool]
+
+      Idempotently ensure role ``name`` exists; return ``(role, created)``.
+
+      If a role with that name already exists, it is returned unchanged (its
+      ``description`` is **not** modified — only presence is ensured). Returns
+      ``created=True`` only when the role was newly created.
+
+
+
+   .. py:method:: update(role: str, *, name: str | None = None, description: str | None = None) -> pyfsr.models.Role
+
+      Update a role's ``name`` and/or ``description`` (``PUT /api/3/roles/<uuid>``).
+
+      ``role`` is a uuid or current name. Pass at least one of ``name`` /
+      ``description``; only the given fields are sent (a partial update that
+      leaves ``modulePermissions`` untouched), and the full updated
+      :class:`~pyfsr.models.Role` is returned. To change module grants use
+      :meth:`grant_module_permissions` instead.
+
+
+
+   .. py:method:: delete(role: str) -> None
+
+      Delete a role (``DELETE /api/3/roles/<uuid>``). ``role`` is a uuid or name.
+
+
+
+   .. py:method:: grant_module_permissions(role: str, *, module: str, can_read: bool = True, can_create: bool = True, can_update: bool = True, can_delete: bool = True, can_execute: bool = True) -> pyfsr.models.Role
+
+      Add or replace module-level permissions on a role.
+
+      Resolves ``role`` (uuid or name) and ``module`` (module type like ``'alerts'`` or
+      a full ``/api/3/modules/<uuid>`` IRI), then PUTs the role with a merged
+      ``modulePermissions`` array — the only write path the FSR API exposes
+      (``POST /api/3/module_permissions`` is GET-only).
+
+      If the role already has a permission record for ``module``, it is replaced;
+      otherwise the new record is appended. Returns the updated role record.
+
+      :param role: Role uuid or friendly name (e.g. ``"Full App Permissions"``).
+      :param module: Module type (e.g. ``"oguraly_test_processes"``) or full module IRI.
+      :param can_read: Read permission flag (defaults to ``True``).
+      :param can_create: Create permission flag (defaults to ``True``).
+      :param can_update: Update permission flag (defaults to ``True``).
+      :param can_delete: Delete permission flag (defaults to ``True``).
+      :param can_execute: Execute permission flag (defaults to ``True``).
+
+
+

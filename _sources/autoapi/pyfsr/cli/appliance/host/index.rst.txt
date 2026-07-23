@@ -1,0 +1,228 @@
+pyfsr.cli.appliance.host
+========================
+
+.. py:module:: pyfsr.cli.appliance.host
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance host`` — OS-level resource metrics (mem / swap / load / RSS / disk).
+
+   Typed wrappers over ``free`` / ``ps`` / ``/proc/loadavg`` / ``df`` so callers get
+   structured values instead of awk-ing command output. None of these need sudo.
+
+   The headline call is :func:`snapshot`, which gathers mem, swap, load, per-pattern
+   process RSS, and (optionally) disk in **one** SSH round-trip and returns a typed
+   :class:`HostSnapshot` — the parsing every troubleshooting script otherwise
+   re-implements lives here, tested once.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.host.DEFAULT_PROC_PATTERNS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.host.MemInfo
+   pyfsr.cli.appliance.host.LoadAvg
+   pyfsr.cli.appliance.host.ProcRss
+   pyfsr.cli.appliance.host.DiskUsage
+   pyfsr.cli.appliance.host.HostSnapshot
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.host.meminfo
+   pyfsr.cli.appliance.host.loadavg
+   pyfsr.cli.appliance.host.process_rss
+   pyfsr.cli.appliance.host.disk
+   pyfsr.cli.appliance.host.snapshot
+
+
+Module Contents
+---------------
+
+.. py:data:: DEFAULT_PROC_PATTERNS
+   :type:  dict[str, str]
+
+.. py:class:: MemInfo(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Memory + swap, in MB (parsed from ``free -m``).
+
+
+   .. py:attribute:: total_mb
+      :type:  int
+
+
+   .. py:attribute:: used_mb
+      :type:  int
+
+
+   .. py:attribute:: free_mb
+      :type:  int
+
+
+   .. py:attribute:: swap_total_mb
+      :type:  int
+
+
+   .. py:attribute:: swap_used_mb
+      :type:  int
+
+
+.. py:class:: LoadAvg(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   1/5/15-minute load averages (from ``/proc/loadavg``).
+
+
+   .. py:attribute:: load1
+      :type:  float
+
+
+   .. py:attribute:: load5
+      :type:  float
+
+
+   .. py:attribute:: load15
+      :type:  float
+
+
+.. py:class:: ProcRss(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Aggregate resident memory for processes whose command line matches ``pattern``.
+
+
+   .. py:attribute:: pattern
+      :type:  str
+
+
+   .. py:attribute:: count
+      :type:  int
+
+
+   .. py:attribute:: sum_mb
+      :type:  float
+
+
+   .. py:attribute:: peak_mb
+      :type:  float
+
+
+.. py:class:: DiskUsage(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Filesystem usage for a path, in MB (from ``df -Pm``).
+
+
+   .. py:attribute:: path
+      :type:  str
+
+
+   .. py:attribute:: size_mb
+      :type:  int
+
+
+   .. py:attribute:: used_mb
+      :type:  int
+
+
+   .. py:attribute:: avail_mb
+      :type:  int
+
+
+   .. py:attribute:: use_pct
+      :type:  int
+
+
+.. py:class:: HostSnapshot(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One consistent sample of host resources (see :func:`snapshot`).
+
+
+   .. py:attribute:: mem
+      :type:  MemInfo
+
+
+   .. py:attribute:: load
+      :type:  LoadAvg
+
+
+   .. py:attribute:: procs
+      :type:  dict[str, ProcRss]
+      :value: None
+
+
+
+   .. py:attribute:: disk
+      :type:  DiskUsage | None
+      :value: None
+
+
+
+   .. py:method:: summary() -> str
+
+      A compact one-line human summary (the ``fmt()`` every script hand-rolls).
+
+
+
+.. py:function:: meminfo(transport: pyfsr.cli.appliance.transport.Transport) -> MemInfo
+
+   Memory + swap usage in MB.
+
+   Raises :class:`~pyfsr.cli.appliance.transport.TransportError` if the command
+   produced no usable output (a real host always reports a non-zero total).
+
+
+.. py:function:: loadavg(transport: pyfsr.cli.appliance.transport.Transport) -> LoadAvg
+
+   1/5/15-minute load averages.
+
+
+.. py:function:: process_rss(transport: pyfsr.cli.appliance.transport.Transport, pattern: str) -> ProcRss
+
+   Summed/peak RSS (MB) and count for processes whose command line matches ``pattern``.
+
+   ``pattern`` is a Python regex matched against each process's full argv (e.g.
+   ``r"celery\b.*worker"``). Far less brittle than the ``ps | awk '/[c]elery/'``
+   one-liners scripts copy around.
+
+
+.. py:function:: disk(transport: pyfsr.cli.appliance.transport.Transport, path: str = '/opt/cyops') -> DiskUsage
+
+   Filesystem usage (MB) for ``path``.
+
+
+.. py:function:: snapshot(transport: pyfsr.cli.appliance.transport.Transport, *, procs: dict[str, str] | None = None, disk_path: str | None = None) -> HostSnapshot
+
+   One consistent sample of mem, swap, load, per-pattern process RSS, and disk.
+
+   Gathers everything in a **single** SSH round-trip (so the numbers are coherent)
+   and returns a typed :class:`HostSnapshot`. ``procs`` maps a label → regex
+   (defaults to :data:`DEFAULT_PROC_PATTERNS`: ``celeryd`` and ``integrations``);
+   pass ``disk_path`` to include a filesystem.
+
+

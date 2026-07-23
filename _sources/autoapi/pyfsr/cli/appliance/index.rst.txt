@@ -1,0 +1,43 @@
+pyfsr.cli.appliance
+===================
+
+.. py:module:: pyfsr.cli.appliance
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance`` — generic FortiSOAR appliance commands (shell / DB / csadm).
+
+   P1 surface: transport (local + SSH), fact resolution (device UUID / content DB /
+   version), and the ``db`` verbs incl. ``db exec --write`` and module-table cleanup.
+   See ``docs/plans/APPLIANCE_CLI_PLAN.md`` for the full intended surface.
+
+   The transport classes (``Transport``, ``SSHTransport``, ``make_transport``, …)
+   live in :mod:`pyfsr.cli.appliance.transport` and are intentionally **not**
+   re-exported here — users should construct an :class:`pyfsr.Appliance` with
+   connection kwargs instead.  Import from ``pyfsr.cli.appliance.transport`` only
+   when you need the low-level transport directly (e.g. for testing).
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/pyfsr/cli/appliance/certs/index
+   /autoapi/pyfsr/cli/appliance/content_hub/index
+   /autoapi/pyfsr/cli/appliance/db/index
+   /autoapi/pyfsr/cli/appliance/diagnose/index
+   /autoapi/pyfsr/cli/appliance/es/index
+   /autoapi/pyfsr/cli/appliance/facts/index
+   /autoapi/pyfsr/cli/appliance/ha/index
+   /autoapi/pyfsr/cli/appliance/host/index
+   /autoapi/pyfsr/cli/appliance/info/index
+   /autoapi/pyfsr/cli/appliance/license/index
+   /autoapi/pyfsr/cli/appliance/logs/index
+   /autoapi/pyfsr/cli/appliance/mq/index
+   /autoapi/pyfsr/cli/appliance/service/index
+   /autoapi/pyfsr/cli/appliance/transport/index
+
+

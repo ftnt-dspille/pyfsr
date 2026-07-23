@@ -1,0 +1,405 @@
+pyfsr.authoring
+===============
+
+.. py:module:: pyfsr.authoring
+
+.. autoapi-nested-parse::
+
+   Compile playbook YAML to the FortiSOAR import envelope.
+
+   This is the bridge between the **fsr_playbooks** compiler (YAML → IR → FSR JSON)
+   and pyfsr's write path. It deliberately does **no** network I/O — it turns YAML
+   text into the ``{"type": "workflow_collections", "data": [...]}`` envelope that
+   :meth:`pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export`
+   already knows how to push. The deploy step lives next to the client; this module
+   only compiles.
+
+   The compiler is an **optional** dependency: core pyfsr never imports it. Install
+   it with ``pip install "pyfsr[playbooks]"``. Until then, :func:`compile_playbook_yaml`
+   raises :class:`PlaybooksExtraNotInstalled` with that hint.
+
+   Example::
+
+       from pyfsr.authoring import compile_playbook_yaml
+
+       result = compile_playbook_yaml(open("alert.yaml").read())
+       if result.ok:
+           client.workflow_collections.import_export(result.fsr_json)
+       else:
+           for diag in result.errors:
+               print(diag)
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.authoring.logger
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   pyfsr.authoring.PlaybooksExtraNotInstalled
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.authoring.CompiledPlaybook
+   pyfsr.authoring.VerifiedPlaybook
+   pyfsr.authoring.DeployedPlaybook
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.authoring.decompile_playbook_yaml
+   pyfsr.authoring.warm_catalog
+   pyfsr.authoring.compile_playbook_yaml
+   pyfsr.authoring.verify_playbook_yaml
+   pyfsr.authoring.build_and_deploy
+   pyfsr.authoring.find_operation
+   pyfsr.authoring.format_diagnostic
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:exception:: PlaybooksExtraNotInstalled(original: Exception | None = None)
+
+   Bases: :py:obj:`ImportError`
+
+
+   Raised when the optional ``fsr_playbooks`` compiler is not installed.
+
+
+   .. py:attribute:: original
+      :value: None
+
+
+
+.. py:function:: decompile_playbook_yaml(fsr_json: dict[str, Any], *, client: _AuthoringClient | None = None, db_path: str | pathlib.Path | None = None) -> str
+
+   Decompile a FortiSOAR WorkflowCollection export envelope into authored YAML.
+
+   The inverse of :func:`compile_playbook_yaml` — turns the JSON a live playbook
+   exports as back into the friendly YAML shape (so you can pull a playbook off
+   an appliance and edit/version it as source). Catalog resolution mirrors
+   compile: explicit ``db_path`` > warm-from-``client`` > packaged slim catalog,
+   so connector/team/picklist IRIs render back as friendly names.
+
+   :param fsr_json: the export envelope (``{"type": "workflow_collections",
+                    "data": [<collection>]}``), e.g. from
+                    :meth:`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI.get`.
+   :param client: optional connected client to warm the catalog from (recommended,
+                  so custom connectors like ``code-runner`` decompile by name).
+   :param db_path: explicit reference catalog path (overrides ``client``).
+
+   :returns: The authored-style YAML as a string.
+
+
+.. py:function:: warm_catalog(client: _AuthoringClient, db_path: str | pathlib.Path, *, connectors: bool = True, max_age: float | None = None) -> dict[str, int]
+
+   Warm a reference catalog DB with the target SOAR's per-install data.
+
+   The ``fsr_playbooks`` compiler resolves author-friendly tokens (team
+   names, picklist values, tags) to IRIs against a local SQLite catalog. The
+   stable tables (step types, handlers, jinja) ship populated in the wheel;
+   the **per-install** tables (``teams``/``picklists``/``tags``) are empty
+   until warmed. This function fills them from a live client — the native
+   equivalent of the dev-only ``fsrpb probe modules`` warmup, callable from
+   the installed wheel.
+
+   If ``db_path`` does not exist, it is bootstrapped by copying the packaged
+   slim catalog (so stable tables are present) and then the per-install
+   tables are created + populated. Pass a writable path you own (e.g. a temp
+   file or ``~/.cache/pyfsr/fsr_reference.db``); the packaged catalog in
+   site-packages is read-only and must not be warmed in place.
+
+   With ``connectors=True`` (default) it also syncs the **installed connector
+   catalog** — ``connectors``/``operations``/``operation_params`` — from the live
+   box, so the compiler validates connector/operation/param tokens against what
+   is actually installed, INCLUDING custom connectors the packaged catalog can
+   never know (e.g. a locally built ``code-runner``). Each installed connector is
+   upserted from its live definition; other catalog connectors are left intact.
+
+   Each section is synced independently — a failure in one (e.g. an empty
+   picklists response) does not abort the others, mirroring the probe.
+
+   :param client: a connected :class:`pyfsr.FortiSOAR` client.
+   :param db_path: writable path to warm (created from the slim catalog if absent).
+   :param connectors: also sync the installed connector catalog (default True);
+                      set False to warm only teams/picklists/tags (faster, no per-connector
+                      definition fetches).
+   :param max_age: incremental warm. When set (seconds), a section whose last warm
+                   (recorded in the ``_catalog_meta`` table) is younger than ``max_age``
+                   is **skipped** — its existing rows are kept and no HTTP is done, so
+                   repeated warms in a session cost nothing for unchanged surfaces. The
+                   default ``None`` always re-pulls every section (so freshly-created
+                   teams/tags are picked up immediately). A skipped section reports its
+                   cached row count and ``<section>_skipped=1`` in the summary.
+
+   :returns: A ``{table: row_count}`` summary of what was written (``connectors``/
+             ``operations``/``operation_params`` included when ``connectors=True``),
+             plus per-section wall-clock under ``<section>_ms`` keys
+             (``teams_ms``/``picklists_ms``/``tags_ms``/``connectors_ms``) and the
+             overall ``total_ms`` — so a caller can see where warm time goes (the
+             connector-definition fan-out is almost always the dominant cost).
+
+   :raises PlaybooksExtraNotInstalled: if the ``pyfsr[playbooks]`` extra is missing.
+
+
+.. py:class:: CompiledPlaybook(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Result of compiling playbook YAML.
+
+   ``fsr_json`` is the FortiSOAR export envelope ready for
+   :meth:`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export`
+   (``None`` when compilation produced blocking errors). ``errors`` holds every
+   diagnostic (both ``error`` and ``warning`` severities) as dicts; ``warnings``
+   is the warning-only subset. ``ok`` is True only when there are no blocking
+   errors and an envelope was produced.
+
+
+   .. py:attribute:: fsr_json
+      :type:  dict[str, Any] | None
+      :value: None
+
+
+
+   .. py:attribute:: errors
+      :type:  list[dict[str, Any]]
+      :value: None
+
+
+
+   .. py:attribute:: ok
+      :type:  bool
+      :value: False
+
+
+
+   .. py:property:: warnings
+      :type: list[dict[str, Any]]
+
+
+      The non-blocking diagnostics (``severity == "warning"``).
+
+
+   .. py:property:: blocking
+      :type: list[dict[str, Any]]
+
+
+      The diagnostics that block deployment (everything not a warning).
+
+
+   .. py:property:: collection_names
+      :type: list[str]
+
+
+      Names of the workflow collections in the compiled output.
+
+
+   .. py:property:: playbook_names
+      :type: list[str]
+
+
+      Names of every playbook across all compiled collections.
+
+
+.. py:function:: compile_playbook_yaml(text: str, *, client: _AuthoringClient | None = None, db_path: str | pathlib.Path | None = None, lax_codes: set[str] | None = None) -> CompiledPlaybook
+
+   Compile playbook YAML text into a :class:`CompiledPlaybook`.
+
+   By default this is **offline** — it compiles against the packaged slim
+   catalog (no network I/O), which resolves the stable token set (step types,
+   handlers) but not per-install tokens (team names, picklist values, tags).
+
+   Pass ``client`` to make warming **seamless**: a per-user cache catalog is
+   warmed from the live instance (teams/picklists/tags) before compiling, so
+   author-friendly tokens like ``owners: ["TeamA"]`` resolve to IRIs without
+   the caller ever touching SQLite or a ``db_path``. The cache is refreshed
+   on every call with a client so freshly-created teams are picked up.
+
+   :param text: the playbook YAML source.
+   :param client: optional connected :class:`pyfsr.FortiSOAR` client. When given,
+                  the reference catalog is warmed from the instance before compiling
+                  (overrides nothing — pass ``db_path`` to use a specific catalog).
+   :param db_path: explicit path to a reference catalog. Takes precedence over
+                   ``client``/the default. Use this to compile against a pre-warmed or
+                   custom catalog without a live client.
+   :param lax_codes: optional set of diagnostic codes to downgrade from error to
+                     warning. Accepts the friendly code string (``"unknown_param"``), the
+                     ``ErrorCode`` enum, or the enum name (``"UNKNOWN_PARAM"``) — all are
+                     normalized to the enum the compiler matches on (see
+                     ``_normalize_lax_codes``).
+
+   :raises PlaybooksExtraNotInstalled: if the ``pyfsr[playbooks]`` extra is missing.
+
+   :returns: A :class:`CompiledPlaybook` with the export envelope and diagnostics.
+
+
+.. py:class:: VerifiedPlaybook(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Result of running a playbook YAML through the fsr_playbooks verify gate.
+
+   ``ready`` is the single go/no-go (the gate's ``ready_to_push``). ``suppressed``
+   holds any diagnostics silenced via ``skip=`` — never dropped silently.
+   Truthy iff ``ready``.
+
+
+   .. py:attribute:: ready
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: required_fixes
+      :type:  list[dict[str, Any]]
+      :value: None
+
+
+
+   .. py:attribute:: warnings
+      :type:  list[dict[str, Any]]
+      :value: None
+
+
+
+   .. py:attribute:: suppressed
+      :type:  list[dict[str, Any]]
+      :value: None
+
+
+
+   .. py:attribute:: next_actions
+      :type:  list[str]
+      :value: None
+
+
+
+   .. py:attribute:: raw
+      :type:  dict[str, Any]
+      :value: None
+
+
+
+   .. py:property:: ok
+      :type: bool
+
+
+      Alias for :attr:`ready` — ``True`` when the playbook has no blocking issues.
+
+
+   .. py:method:: summary() -> str
+
+      A one-line human summary: readiness plus blocking/warning/suppressed counts.
+
+
+
+.. py:function:: verify_playbook_yaml(text: str, *, client: _AuthoringClient | None = None, db_path: str | pathlib.Path | None = None, live_probe: bool = False, skip: list[str] | None = None, playbook: str | None = None) -> VerifiedPlaybook
+
+   Run playbook YAML through the fsr_playbooks **verify gate** — the single
+   forcing-function pre-submit check (compile → typed walk → per-step schema →
+   optional live probe). This is the method to call before showing or pushing a
+   playbook.
+
+   ``skip`` disables check groups or individual diagnostic codes (e.g.
+   ``skip=["jinja", "type_mismatch"]``); the available groups are
+   ``fsr_playbooks.CHECK_GROUPS``. Skipped diagnostics are surfaced under
+   ``VerifiedPlaybook.suppressed``, never dropped silently. Pass ``client`` to
+   warm a per-user catalog from the live instance (so record/op/config checks
+   have real facts); pass ``live_probe=True`` to additionally probe safe ops on
+   the target.
+
+   Returns a :class:`VerifiedPlaybook` (truthy iff ready to push).
+
+
+.. py:class:: DeployedPlaybook(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Outcome of :func:`build_and_deploy` — verify → compile → push, as one step.
+
+
+   .. py:attribute:: verified
+      :type:  VerifiedPlaybook
+
+
+   .. py:attribute:: compiled
+      :type:  CompiledPlaybook | None
+      :value: None
+
+
+
+   .. py:attribute:: deployed
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: response
+      :type:  Any
+      :value: None
+
+
+
+   .. py:attribute:: stopped_at
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:property:: ok
+      :type: bool
+
+
+      ``True`` when the playbook made it all the way through and was deployed.
+
+
+.. py:function:: build_and_deploy(text: str, *, client: _AuthoringClient, db_path: str | pathlib.Path | None = None, skip: list[str] | None = None, live_probe: bool = False, force: bool = False, replace: bool = False) -> DeployedPlaybook
+
+   Build-then-push in one call: **verify → compile → import**. Stops (without
+   pushing) at the first hard failure and tells you where via ``stopped_at``.
+
+   The verify gate is the guard rail: a not-ready playbook is *not* pushed
+   unless ``force=True``. ``skip`` forwards to the gate (same groups/codes as
+   :func:`verify_playbook_yaml`). The catalog is warmed once from ``client`` and
+   reused for both verify and compile. ``replace=True`` overwrites an existing
+   collection on import.
+
+
+.. py:function:: find_operation(connector: str, query: str = '', *, client: _AuthoringClient | None = None, db_path: str | pathlib.Path | None = None, limit: int = 10) -> dict[str, Any]
+
+   Discover a connector's operations from the reference catalog — the
+   fastest way to find *what to call* when authoring a connector step.
+
+   Wraps the fsr_playbooks discovery surface (``find_operation``) against the
+   same catalog the compiler uses; pass ``client`` to warm it from the live
+   instance. On a single match the result embeds the op's parameter schema, so
+   you can drop straight into a step without a follow-up call.
+
+
+.. py:function:: format_diagnostic(diag: dict[str, Any]) -> str
+
+   Render one diagnostic dict as a single human-readable line.
+
+

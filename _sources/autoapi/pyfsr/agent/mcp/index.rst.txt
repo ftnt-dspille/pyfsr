@@ -1,0 +1,118 @@
+pyfsr.agent.mcp
+===============
+
+.. py:module:: pyfsr.agent.mcp
+
+.. autoapi-nested-parse::
+
+   Generic Model Context Protocol server over the pyfsr tool registry.
+
+   Point an MCP-capable agent at *any* FortiSOAR with one command::
+
+       FSR_BASE_URL=soar.example.com FSR_API_KEY=... python -m pyfsr.agent.mcp
+
+   This is a deliberately thin, generic consumer of :mod:`pyfsr.agent.tools`: it exposes
+   the same 16 core operations (record CRUD, schema discovery, picklists,
+   connectors, playbook runs) as MCP tools, listing them from
+   :func:`pyfsr.agent.tools.tool_schemas` and executing them through
+   :func:`pyfsr.agent.tools.dispatch`. It is intentionally distinct from fsrpb's
+   authoring/domain MCP and the connector's on-platform MCP — no YAML compiler, no
+   agent UX, just raw FortiSOAR access.
+
+   Requires the optional dependency: ``pip install 'pyfsr[mcp]'``.
+
+   **Multi-instance.** With a ``~/.pyfsr/instances.toml`` (or ``$PYFSR_INSTANCES``)
+   the server targets several appliances at once: every tool gains an optional
+   ``instance`` argument (e.g. ``instance="206"``) and a ``list_instances`` meta-tool
+   lists the configured aliases. See :class:`pyfsr.instances.InstanceRegistry` for the
+   config shape. Without that file it falls back to a single instance from the
+   environment, exactly as before:
+
+   Configuration is read from the environment (see :func:`client_from_env`):
+
+   - ``FSR_BASE_URL`` — appliance host or URL (required; ``FSR_HOST`` also accepted).
+   - ``FSR_API_KEY`` — API-key auth, or use ``FSR_USERNAME`` + ``FSR_PASSWORD``.
+   - ``FSR_PORT`` — optional port override.
+   - ``FSR_VERIFY_SSL`` — ``false``/``0``/``no`` to disable TLS verification.
+   - ``FSR_SUPPRESS_INSECURE_WARNINGS`` — silence urllib3 warnings when SSL is off.
+
+   The ``appliance_*`` tools reach the box over SSH (not the REST API), so they
+   read a separate set of vars via :func:`pyfsr.cli.appliance.transport.transport_from_env`:
+   ``PYFSR_APPLIANCE_HOST``/``USER``/``PASSWORD``/``PORT``/``KEY_PATH``/
+   ``SUDO_PASSWORD``/``INSECURE_SKIP_HOST_KEY_CHECK``. On-box (``/opt/cyops``
+   present) the local transport is used and only the sudo password is needed.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.agent.mcp.SERVER_NAME
+   pyfsr.agent.mcp.LIST_INSTANCES
+   pyfsr.agent.mcp.MAX_TOOL_OUTPUT_CHARS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.agent.mcp.client_from_env
+   pyfsr.agent.mcp.build_server
+   pyfsr.agent.mcp.serve
+   pyfsr.agent.mcp.main
+
+
+Module Contents
+---------------
+
+.. py:data:: SERVER_NAME
+   :value: 'pyfsr'
+
+
+.. py:data:: LIST_INSTANCES
+   :value: 'list_instances'
+
+
+.. py:data:: MAX_TOOL_OUTPUT_CHARS
+   :value: 4000
+
+
+.. py:function:: client_from_env(env: dict[str, str] | None = None) -> pyfsr.client.FortiSOAR
+
+   Build a :class:`~pyfsr.client.FortiSOAR` client from ``FSR_*`` env vars.
+
+   Thin wrapper over :meth:`pyfsr.config.EnvConfig.from_env` →
+   :meth:`~pyfsr.config.EnvConfig.client`; see :mod:`pyfsr.config` for the full
+   list of recognized variables. Raises ``ValueError`` when host/auth is missing.
+
+
+.. py:function:: build_server(target: Any) -> mcp.server.lowlevel.Server
+
+   Create an MCP :class:`~mcp.server.lowlevel.Server` bound to ``target``.
+
+   ``target`` is an :class:`~pyfsr.instances.InstanceRegistry` (multi-instance) or
+   a single :class:`~pyfsr.client.FortiSOAR` (back-compat). Registers ``list_tools``
+   and ``call_tool`` handlers; errors are surfaced as structured JSON content by
+   :func:`pyfsr.agent.tools.dispatch`, so a tool call never crashes the session.
+
+
+.. py:function:: serve(registry: pyfsr.instances.InstanceRegistry | None = None, *, client: pyfsr.client.FortiSOAR | None = None) -> None
+   :async:
+
+
+   Run the MCP server over stdio until the client disconnects.
+
+   With no arguments, loads an :class:`~pyfsr.instances.InstanceRegistry` from
+   ``$PYFSR_INSTANCES``/``~/.pyfsr/instances.toml`` (multi-instance), falling back
+   to a single instance from the ``FSR_*`` environment. Pass ``client=`` to bind
+   one pre-built client (back-compat).
+
+
+.. py:function:: main() -> None
+
+   Console entry point: ``python -m pyfsr.agent.mcp`` / ``pyfsr-mcp``.
+
+

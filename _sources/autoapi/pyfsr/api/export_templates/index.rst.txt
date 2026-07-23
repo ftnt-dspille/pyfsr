@@ -1,0 +1,85 @@
+pyfsr.api.export_templates
+==========================
+
+.. py:module:: pyfsr.api.export_templates
+
+.. autoapi-nested-parse::
+
+   Export templates (``/api/3/export_templates``).
+
+   An export template names a reusable selection of modules / picklists / records to
+   include in a configuration export. This wrapper covers the basic CRUD so callers
+   stop hand-posting to the raw endpoint. Accessed as ``client.export_templates``.
+
+   Example::
+
+       tmpl = client.export_templates.create(
+           "Nightly alerts",
+           options={"modules": ["alerts"], "picklistNames": ["/api/3/picklist_names/alert-severity"]},
+       )
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.export_templates.ExportTemplatesAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: ExportTemplatesAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Create, list, fetch, and delete export templates.
+
+
+   .. py:method:: create(name: str, *, options: dict[str, Any] | None = None, **fields: Any) -> pyfsr.models.ExportTemplate
+
+      Create an export template.
+
+      ``options`` is the selection payload (e.g.
+      ``{"modules": ["alerts"], "picklistNames": [...]}``). Extra ``fields`` are
+      merged into the body. Returns a typed :class:`~pyfsr.models.ExportTemplate`.
+
+
+
+   .. py:method:: list(params: dict[str, Any] | None = None) -> list[pyfsr.models.ExportTemplate]
+
+      List export templates as typed :class:`~pyfsr.models.ExportTemplate` records.
+
+
+
+   .. py:method:: get(ref: str) -> pyfsr.models.ExportTemplate
+
+      Fetch an export template by uuid or IRI (typed).
+
+
+
+   .. py:method:: find_by_name(name: str) -> pyfsr.models.ExportTemplate | None
+
+      Return the export template named ``name``, or ``None`` if absent.
+
+
+
+   .. py:method:: get_or_create(name: str, *, options: dict[str, Any] | None = None, **fields: Any) -> tuple[pyfsr.models.ExportTemplate, bool]
+
+      Idempotently ensure an export template ``name`` exists; return ``(template, created)``.
+
+      If a template with that name already exists, it is returned unchanged (its
+      ``options``/``fields`` are **not** modified). Returns ``created=True`` only
+      when the template was newly created.
+
+
+
+   .. py:method:: delete(ref: str) -> None
+
+      Delete an export template by uuid or IRI.
+
+
+

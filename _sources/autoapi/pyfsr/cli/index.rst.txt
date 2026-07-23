@@ -1,0 +1,23 @@
+pyfsr.cli
+=========
+
+.. py:module:: pyfsr.cli
+
+.. autoapi-nested-parse::
+
+   pyfsr command-line interface. Entry point: :func:`pyfsr.cli.__main__.main`.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/pyfsr/cli/appliance/index
+   /autoapi/pyfsr/cli/playbook/index
+   /autoapi/pyfsr/cli/repo/index
+   /autoapi/pyfsr/cli/widget/index
+
+

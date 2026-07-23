@@ -1,0 +1,314 @@
+pyfsr.api.manual_input
+======================
+
+.. py:module:: pyfsr.api.manual_input
+
+.. autoapi-nested-parse::
+
+   Pending manual workflow inputs -- ``/api/wf/api/manual-wf-input/``.
+
+   The playbooks paused on a Manual Input / Approval step, waiting on a human.
+   Accessed as ``client.manual_input``.
+
+   This is a ``wf`` API entity, not a ``/api/3`` module: the listing is fetched
+   with ``POST`` to ``list_wfinput/`` (the assignment scope travels in the request
+   *body* -- ``{"assigned_to": "me"|"myTeams"|"all", "is_approval": bool}``), returns
+   a hydra envelope, and each row is a :class:`~pyfsr.models.ManualInput`. Rows are
+   removed with ``DELETE .../manual-wf-input/<id>/`` (204).
+
+   To drive a paused prompt in one call (find + fill + resume), use
+   :meth:`~ManualInputAPI.answer`; :meth:`~ManualInputAPI.list` /
+   :meth:`~ManualInputAPI.retrieve` / :meth:`~ManualInputAPI.resume` are the
+   low-level pieces it composes.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> pending = client.manual_input.list(assigned_to="all")
+   >>> pending[0].title  # the prompt's schema title, not the step name
+   'Enter a six digit number'
+   >>> pending[0].is_approval
+   False
+   >>> pending[0].response_mapping is None  # list rows omit it; retrieve() has it
+   True
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.api.manual_input.AssignedTo
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.manual_input.ManualInputAPI
+
+
+Module Contents
+---------------
+
+.. py:data:: AssignedTo
+
+.. py:class:: ManualInputAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   List and delete pending manual workflow inputs (Manual Input / Approval steps).
+
+
+   .. py:method:: list(*, assigned_to: AssignedTo = ..., is_approval: bool | None = ..., unauthenticated_input: bool = ..., ordering: str = ..., limit: int | None = ..., offset: int = ..., typed: Literal[True] = ...) -> list[pyfsr.models._system.ManualInput]
+                  list(*, assigned_to: AssignedTo = ..., is_approval: bool | None = ..., unauthenticated_input: bool = ..., ordering: str = ..., limit: int | None = ..., offset: int = ..., typed: Literal[False]) -> list[dict[str, Any]]
+                  list(*, assigned_to: AssignedTo = ..., is_approval: bool | None = ..., unauthenticated_input: bool = ..., ordering: str = ..., limit: int | None = ..., offset: int = ..., typed: bool = ...) -> list[pyfsr.models._system.ManualInput] | list[dict[str, Any]]
+
+      Return pending manual inputs in the given assignment scope.
+
+      :param assigned_to: assignment scope, sent in the POST body -- ``"me"``
+                          (default, inputs assigned to the caller), ``"myTeams"`` (caller's
+                          teams), or ``"all"``.
+      :param is_approval: ``True`` for approval gates only, ``False`` for plain
+                          data-input prompts only, ``None`` (default) for both. Sent in the
+                          POST body.
+      :param unauthenticated_input: include inputs that accept unauthenticated
+                                    submission (default ``False``).
+      :param ordering: sort field (default ``"-id"``, newest first).
+      :param limit: page size. ``None`` (default) fetches every page (following
+                    ``hydra:nextPage``); pass an int for a single page.
+      :param offset: starting offset for a single-page fetch.
+      :param typed: parse rows into :class:`~pyfsr.models.ManualInput` (default);
+                    pass ``False`` for raw dicts.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> pending = client.manual_input.list(assigned_to="all")
+      >>> len(pending)
+      1
+      >>> pending[0].title  # schema title (step "AskNumber" sets title:)
+      'Enter a six digit number'
+
+
+
+   .. py:method:: pending_for_run(task_id: str, *, is_approval: bool | None = None, ordering: str = '-id', limit: int | None = None, offset: int = 0, typed: bool = True) -> list[pyfsr.models._system.ManualInput] | list[dict[str, Any]]
+
+      Pending manual inputs for one playbook run, keyed by its ``task_id``.
+
+      Resolves ``task_id`` -> the run's primary key, then lists the
+      manual-wf-input queue scoped to that run via the ``workflow`` query
+      filter -- the same filter the FortiSOAR UI uses to show a run's pending
+      inputs in its execution history. This is the reliable run -> pending-
+      input join: :meth:`list` returns every pending input instance-wide and
+      each row's ``workflow`` field is an opaque Fernet token, so it cannot be
+      filtered by task_id client-side.
+
+      Unlike :meth:`list` (whose ``list_wfinput/`` rows are summary-only),
+      these rows carry the full prompt the UI renders -- ``input.schema``
+      (title/description/``inputVariables``), ``response_mapping``'s buttons,
+      and the **numeric** run id in ``workflow`` -- so a row from here has
+      everything :meth:`resume` needs without a second :meth:`retrieve` call.
+      Live-verified on 8.0.0.
+
+      Each row's ``title`` is the prompt's schema title (the Manual Input
+      step's ``title:``), not the step name.
+
+      An approval gate -- a Manual Input step with ``is_approval: true``,
+      which the wire reports as ``type: "ApprovalManualInput"`` -- surfaces
+      here with ``is_approval=True`` even though it does NOT appear in the
+      ``approvals`` module. (This is distinct from the legacy ``approval``
+      step type, which writes to the ``approvals`` module and never reaches
+      this queue.) This is how you find the ``manual_input_id`` to pass to
+      :meth:`resume` to drive the gate: the modern approval step resumes via
+      ``wfinput_resume``, not the ``/approval/`` endpoint.
+
+      :param task_id: the ``task_id`` returned by
+                      :meth:`~pyfsr.api.playbooks.PlaybooksAPI.trigger`.
+      :param is_approval: client-side filter -- ``True`` for approval gates only,
+                          ``False`` for plain data-input prompts only, ``None`` (default)
+                          for both.
+      :param ordering: sort field (default ``"-id"``, newest first).
+      :param limit: page size. ``None`` (default) fetches every page (following
+                    ``hydra:nextPage``); pass an int for a single page.
+      :param offset: starting offset for a single-page fetch.
+      :param typed: parse rows into :class:`~pyfsr.models.ManualInput` (default);
+                    pass ``False`` for raw dicts.
+
+      :returns: The run's pending inputs (empty if the run has none -- it has
+                already finished or is not paused on a manual input/approval step).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()  # doctest: +SKIP
+      >>> run = client.playbooks.trigger("Triage Alert", follow=False)  # doctest: +SKIP
+      >>> pending = client.manual_input.pending_for_run(run.task_id)  # doctest: +SKIP
+      >>> pending[0].input["schema"]["title"]  # doctest: +SKIP
+      'Approve ingestion of the fetched indicators?'
+
+      .. note::
+          Requires playbook/run state setup, so this example is ``+SKIP``.
+
+
+
+   .. py:method:: count(*, assigned_to: AssignedTo = 'me', is_approval: bool | None = None, unauthenticated_input: bool = False) -> int
+
+      Total pending-input count (``hydra:totalItems``) for the given scope.
+
+
+
+   .. py:method:: retrieve(input_id: int | str, *, owners: str | list[str] | None = ..., unauthenticated_input: bool = ..., typed: Literal[True] = ...) -> pyfsr.models._system.ManualInput
+                  retrieve(input_id: int | str, *, owners: str | list[str] | None = ..., unauthenticated_input: bool = ..., typed: Literal[False]) -> dict[str, Any]
+                  retrieve(input_id: int | str, *, owners: str | list[str] | None = ..., unauthenticated_input: bool = ..., typed: bool = ...) -> pyfsr.models._system.ManualInput | dict[str, Any]
+
+      Open one manual input (``POST .../<id>/retrieve_wfinput/``).
+
+      Returns the full prompt the UI renders when a user opens the item: the
+      list shape plus ``input`` (the input ``schema`` -- title/description/
+      ``inputVariables``), ``response_mapping`` (approval/button options and
+      messages), and ``custom_fields`` (custom email overrides). Here
+      ``workflow`` is the numeric run id rather than the list's encrypted token.
+
+      :param input_id: the manual input's ``id`` (from :meth:`list`).
+      :param owners: the owner IRI(s) to claim/scope the retrieve with -- a single
+                     ``/api/3/people/<uuid>`` or ``/api/3/teams/<uuid>`` IRI, or a list
+                     (sent as repeated ``owners`` query params, as the UI does).
+      :param unauthenticated_input: pass ``True`` for an unauthenticated-input item.
+      :param typed: return a :class:`~pyfsr.models.ManualInput` (default); pass
+                    ``False`` for the raw dict.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> mi = client.manual_input.retrieve(1)
+      >>> mi.title  # the row's title IS the schema title, mirrored
+      'Enter a six digit number'
+      >>> mi.input["schema"]["title"]
+      'Enter a six digit number'
+      >>> mi.workflow  # numeric run id here, encrypted token on list()
+      1
+
+
+
+   .. py:method:: resume(workflow_id: int | str, *, step_iri: str, step_id: int, manual_input_id: int, user: str, input: dict[str, Any] | None = None) -> pyfsr.models._system.ManualInputResume
+
+      Submit a manual input and resume its paused playbook.
+
+      ``POST /api/wf/api/workflows/<workflow_id>/wfinput_resume/`` with the
+      chosen button (``step_iri``) and any collected input values. Returns a
+      :class:`~pyfsr.models.ManualInputResume` (``task_id`` + ``message``); the
+      resume is asynchronous.
+
+      :param workflow_id: the numeric run id -- the ``workflow`` field from
+                          :meth:`retrieve` (not the list's encrypted token).
+      :param step_iri: the selected response option's ``step_iri`` (from
+                       ``retrieve(...).response_mapping["options"]``); picks which branch
+                       the playbook resumes down.
+      :param step_id: the paused step's ``step_id`` (from :meth:`retrieve`/:meth:`list`).
+      :param manual_input_id: the manual input ``id``.
+      :param user: the submitting user's IRI (``/api/3/people/<uuid>``).
+      :param input: collected input values keyed by variable name, e.g.
+                    ``{"test": "def"}`` -- omit for an approval/button-only step.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> result = client.manual_input.resume(
+      ...     workflow_id=1,
+      ...     step_iri="/api/wf/api/workflows/1/steps/100",
+      ...     step_id=100,
+      ...     manual_input_id=1,
+      ...     user="/api/3/people/00000000-0000-0000-0000-000000000001",
+      ...     input={"test_var": "test_value"}
+      ... )
+      >>> result["message"]
+      'Awaiting Playbook resumed successfully.'
+
+      .. seealso::
+
+         :meth:`answer` -- finds the pending input, resolves the numeric run
+         id / ``step_iri`` / user IRI, and resumes in a single call.
+
+
+
+   .. py:method:: answer(value: Any = None, *, by_title: str | None = None, input_id: int | str | None = None, inputs: dict[str, Any] | None = None, user: str | None = None, option: int | str = 0, assigned_to: AssignedTo = 'all') -> pyfsr.models._system.ManualInputResume
+
+      Find a pending manual input, fill it, and resume its playbook -- one call.
+
+      This is the high-level twin of :meth:`list` + :meth:`retrieve` +
+      :meth:`resume`. It hides the foot-guns those three expose when wired by
+      hand:
+
+      * a pending input's ``.title`` is the prompt's **schema title** (the
+        Manual Input step's ``title:``), not the step name -- ``by_title=``
+        matches that, and only falls back to the step name for a step that
+        declares no ``title:``;
+      * :meth:`list` returns an encrypted ``workflow`` token while
+        :meth:`resume` needs the **numeric** run id -- this pulls the numeric
+        id from :meth:`retrieve` for you;
+      * the submit button is a ``response_mapping`` option with a ``step_iri``
+        -- this resolves ``option`` (index or label) to that ``step_iri``;
+      * ``resume`` needs a submitting-user IRI -- if ``user`` is omitted this
+        resolves one from ``/api/3/people`` (preferring an admin).
+
+      :param value: a scalar answer for a **single**-variable input prompt; mapped
+                    to the input's declared variable name automatically. For an
+                    approval/button-only step, omit it. For a multi-variable prompt,
+                    use ``inputs=`` instead.
+      :param by_title: select the pending input whose ``title`` -- the prompt's
+                       schema title, i.e. the Manual Input step's ``title:`` -- matches
+                       exactly. Titles are not unique (the same step pausing in two
+                       runs yields two identically-titled rows), so an ambiguous match
+                       raises rather than guessing; pass ``input_id=`` or use
+                       :meth:`pending_for_run` to disambiguate. Mutually exclusive with
+                       ``input_id``.
+      :param input_id: select the pending input by its numeric ``id`` directly.
+      :param inputs: collected values keyed by variable name, e.g.
+                     ``{"my_number": 654321}`` -- use instead of ``value`` when the
+                     prompt declares more than one variable.
+      :param user: submitting user's IRI (``/api/3/people/<uuid>``); auto-resolved
+                   when omitted.
+      :param option: which response option to submit -- an index (default ``0``,
+                     the primary button) or the option's ``label``.
+      :param assigned_to: assignment scope to search for the pending input
+                          (default ``"all"``).
+
+      :returns: the :class:`~pyfsr.models.ManualInputResume` ack (``task_id`` +
+                ``message``); the resume is asynchronous.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()  # doctest: +SKIP
+      >>> # by_title is the step's `title:`, not its name ("AskNumber"):
+      >>> client.manual_input.answer(654321, by_title="Enter a six digit number")  # doctest: +SKIP
+      {'task_id': '...', 'message': 'Awaiting Playbook resumed successfully.'}
+
+      .. note::
+          Requires playbook state setup, so this example is ``+SKIP``.
+
+      .. seealso::
+
+         :meth:`resume` for the low-level form when you already hold the
+         ``step_iri`` / numeric run id.
+
+
+
+   .. py:method:: delete(input_id: int | str) -> None
+
+      Delete a pending manual input by its ``id`` (``DELETE .../<id>/``, 204).
+
+      Removes the waiting input -- the paused playbook step is abandoned. There
+      is no undo.
+
+      :param input_id: the manual input's integer ``id`` (from :meth:`list`).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.manual_input.delete(2)
+
+
+

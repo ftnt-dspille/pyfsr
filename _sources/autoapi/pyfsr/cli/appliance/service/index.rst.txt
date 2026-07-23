@@ -1,0 +1,269 @@
+pyfsr.cli.appliance.service
+===========================
+
+.. py:module:: pyfsr.cli.appliance.service
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance service`` — systemd / cyops service verbs.
+
+   Wraps ``csadm services`` plus a **liveness** probe that catches the failure
+   ``systemctl status`` misses: a service that is *active* but **wedged** (accepting
+   connections but never responding). The probe curls canonical endpoints on-box with
+   a hard timeout; HTTP 000 / a hang ⇒ "active but wedged → restart".
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.service.ProbeResult
+   pyfsr.cli.appliance.service.ServiceState
+   pyfsr.cli.appliance.service.ServiceActionResult
+   pyfsr.cli.appliance.service.Listener
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.service.status
+   pyfsr.cli.appliance.service.services
+   pyfsr.cli.appliance.service.liveness
+   pyfsr.cli.appliance.service.restart
+   pyfsr.cli.appliance.service.stop
+   pyfsr.cli.appliance.service.start
+   pyfsr.cli.appliance.service.restart_all
+   pyfsr.cli.appliance.service.stop_all
+   pyfsr.cli.appliance.service.start_all
+   pyfsr.cli.appliance.service.systemctl
+   pyfsr.cli.appliance.service.listeners
+
+
+Module Contents
+---------------
+
+.. py:class:: ProbeResult(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   !!! abstract "Usage Documentation"
+       [Models](../concepts/models.md)
+
+   A base class for creating Pydantic models.
+
+   :ivar __class_vars__: The names of the class variables defined on the model.
+   :ivar __private_attributes__: Metadata about the private attributes of the model.
+   :ivar __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.
+
+   :ivar __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.
+   :ivar __pydantic_core_schema__: The core schema of the model.
+   :ivar __pydantic_custom_init__: Whether the model has a custom `__init__` function.
+   :ivar __pydantic_decorators__: Metadata containing the decorators defined on the model.
+                                  This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.
+   :ivar __pydantic_generic_metadata__: A dictionary containing metadata about generic Pydantic models.
+                                        The `origin` and `args` items map to the [`__origin__`][genericalias.__origin__]
+                                        and [`__args__`][genericalias.__args__] attributes of [generic aliases][types-genericalias],
+                                        and the `parameter` item maps to the `__parameter__` attribute of generic classes.
+   :ivar __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.
+   :ivar __pydantic_post_init__: The name of the post-init method for the model, if defined.
+   :ivar __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].
+   :ivar __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.
+   :ivar __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.
+
+   :ivar __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.
+   :ivar __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.
+
+   :ivar __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]
+                             is set to `'allow'`.
+   :ivar __pydantic_fields_set__: The names of fields explicitly set during instantiation.
+   :ivar __pydantic_private__: Values of private attributes set on the model instance.
+
+
+
+   .. py:attribute:: label
+      :type:  str
+
+
+   .. py:attribute:: method
+      :type:  str
+
+
+   .. py:attribute:: path
+      :type:  str
+
+
+   .. py:attribute:: code
+      :type:  int
+
+
+   .. py:attribute:: verdict
+      :type:  str
+
+
+.. py:class:: ServiceState(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One row of ``csadm services --status``, parsed and ANSI-stripped.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: running
+      :type:  bool
+
+
+   .. py:attribute:: status
+      :type:  str
+
+
+   .. py:attribute:: since
+      :type:  str | None
+
+
+.. py:function:: status(transport: pyfsr.cli.appliance.transport.Transport, name: str | None = None) -> str
+
+   Raw ``csadm services --status`` output (optionally for one service).
+
+   Free-form, ANSI-coloured text — for a typed result use :func:`services`.
+
+   NB: ``csadm services --status`` has **no** ``--name`` flag; passing one is
+   silently ignored and the full list comes back (live-verified). So ``name``
+   filters the lines client-side here rather than being handed to csadm.
+
+
+.. py:function:: services(transport: pyfsr.cli.appliance.transport.Transport, name: str | None = None) -> list[ServiceState]
+
+   Parsed ``csadm services --status`` — a typed :class:`ServiceState` per service.
+
+   ``running`` is the useful boolean (``status == "Running"``); ``since`` is the
+   start time when present. Filter to one service with ``name``.
+
+
+.. py:function:: liveness(transport: pyfsr.cli.appliance.transport.Transport, *, base: str = 'https://127.0.0.1', timeout: float = 6.0) -> list[ProbeResult]
+
+   Probe canonical endpoints; flag *active-but-wedged* services.
+
+   Returns a list of :class:`ProbeResult`. ``code == 0`` (curl's ``000``) means
+   no HTTP response within the timeout — the wedge signal.
+
+
+.. py:class:: ServiceActionResult(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Outcome of a service control action (restart/stop/start/kill).
+
+   ``ok`` is the useful field — the command exited 0. ``output`` keeps the raw
+   csadm/systemctl text (often empty on success) for diagnostics.
+
+
+   .. py:attribute:: service
+      :type:  str
+
+
+   .. py:attribute:: action
+      :type:  str
+
+
+   .. py:attribute:: ok
+      :type:  bool
+
+
+   .. py:attribute:: output
+      :type:  str
+
+
+.. py:class:: Listener(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A listening TCP socket and its owning process (a row of ``ss -tlnp``).
+
+
+   .. py:attribute:: local_address
+      :type:  str
+
+
+   .. py:attribute:: process
+      :type:  str
+
+
+.. py:function:: restart(transport: pyfsr.cli.appliance.transport.Transport, name: str, *, yes: bool = False) -> ServiceActionResult
+
+   Restart a single cyops service via ``csadm services --restart-service``. Gated by ``yes``.
+
+   Use this — NOT :func:`restart_all` — for one service. The bare ``--restart``
+   flag (``restart_all``) bounces the WHOLE stack in order; ``--restart-service``
+   touches just ``name`` (stop → sleep 5 → start, per csadm).
+
+   csadm exits 0 even when it refuses an unknown/unmodifiable name (it prints an
+   ``ERROR: ... can not be modified`` hint and no-ops), so the returned ``ok``
+   folds that rejection text in — a typo'd name yields ``ok=False``, not a false
+   success. (live-verified, see ``_CSADM_REJECT``.)
+
+
+.. py:function:: stop(transport: pyfsr.cli.appliance.transport.Transport, name: str, *, yes: bool = False) -> ServiceActionResult
+
+   Stop a single cyops service via ``csadm services --stop-service``. Gated by ``yes``.
+
+   Used to quiesce a worker (e.g. ``celeryd``) so a queue can be purged without it
+   re-draining mid-operation — see :func:`pyfsr.cli.appliance.mq.purge_workflows`.
+   Like :func:`restart`, a rejected name surfaces as ``ok=False`` despite csadm's
+   exit 0.
+
+
+.. py:function:: start(transport: pyfsr.cli.appliance.transport.Transport, name: str) -> ServiceActionResult
+
+   Start a single cyops service via ``csadm services --start-service`` (recovery — not gated).
+
+
+.. py:function:: restart_all(transport: pyfsr.cli.appliance.transport.Transport, *, yes: bool = False) -> ServiceActionResult
+
+   Restart the WHOLE service stack in order via ``csadm services --restart``. Gated by ``yes``.
+
+   This is the full-stack bounce (stop-all → start-all), distinct from
+   :func:`restart` which restarts a single named service. Disruptive — every
+   service drops — so it is gated behind ``yes``.
+
+
+.. py:function:: stop_all(transport: pyfsr.cli.appliance.transport.Transport, *, yes: bool = False) -> ServiceActionResult
+
+   Stop the WHOLE service stack in order via ``csadm services --stop``. Gated by ``yes``.
+
+
+.. py:function:: start_all(transport: pyfsr.cli.appliance.transport.Transport) -> ServiceActionResult
+
+   Start the WHOLE service stack in order via ``csadm services --start`` (recovery — not gated).
+
+
+.. py:function:: systemctl(transport: pyfsr.cli.appliance.transport.Transport, action: str, unit: str, *, signal: str | None = None, yes: bool = False) -> ServiceActionResult
+
+   Drive systemd directly: ``systemctl <action> <unit>`` (sudo).
+
+   This is the forceful path that bypasses ``csadm`` orchestration — use it when a
+   unit is wedged and the graceful :func:`stop`/:func:`restart` won't take. ``kill``
+   sends ``SIGTERM`` by default; pass ``signal`` (e.g. ``"SIGKILL"``, ``"9"``) to
+   escalate. Mutating actions are gated by ``yes``; read-only ones (``status``,
+   ``is-active``, ``show``) run unconditionally.
+
+   Returns a :class:`ServiceActionResult`; for read-only actions ``output`` carries
+   the queried value (e.g. ``"active"`` from ``is-active``). Note ``unit`` is the
+   *systemd* unit name (e.g. ``celeryd.service``), not always the csadm label.
+
+
+.. py:function:: listeners(transport: pyfsr.cli.appliance.transport.Transport) -> list[Listener]
+
+   Listening TCP sockets with the owning process (parsed ``ss -tlnp``).
+
+

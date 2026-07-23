@@ -1,0 +1,1093 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html"><link rel="next" title="pyfsr.repo" href="../repo/index.html"><link rel="prev" title="pyfsr.cli.widget" href="../cli/widget/index.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>pyfsr.appliance - pyfsr 0.16.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/custom.css" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #c8102e;
+  --color-brand-content: #c8102e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">pyfsr 0.16.1</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">pyfsr 0.16.1</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Guides</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting-started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/authentication.html">Authentication</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/records.html">Working with Records</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/querying.html">Querying</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/module-admin.html">Module Editor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/module-field-schema.html">Module &amp; Field Schema Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/connectors.html">Connectors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/export-import.html">Configuration Export &amp; Import</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/playbook-authoring.html">Playbook Authoring &amp; Deployment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/playbook-yaml-reference.html">Playbook YAML Syntax Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/ai-agents.html">AI &amp; Agents</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/appliance-cli.html">Appliance Administration CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/repo-cli.html">Content Repository CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../guides/content-hub-mirror.html">Self-hosted Content Hub mirror</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="current">
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../../../reference.html">API Reference</a><input aria-label="Toggle navigation of API Reference" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../client/index.html">pyfsr.client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../records/index.html">pyfsr.records</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../query/index.html">pyfsr.query</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pagination/index.html">pyfsr.pagination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../fields/index.html">pyfsr.fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/index.html">pyfsr.config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../instances/index.html">pyfsr.instances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../exceptions/index.html">pyfsr.exceptions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../api/index.html">pyfsr.api</a><input aria-label="Toggle navigation of pyfsr.api" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../api/actors/index.html">pyfsr.api.actors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/agents/index.html">pyfsr.api.agents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/ai/index.html">pyfsr.api.ai</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/alerts/index.html">pyfsr.api.alerts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/api_keys/index.html">pyfsr.api.api_keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/api_users/index.html">pyfsr.api.api_users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/app_config/index.html">pyfsr.api.app_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/attachments/index.html">pyfsr.api.attachments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/audit/index.html">pyfsr.api.audit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/auth_config/index.html">pyfsr.api.auth_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/base/index.html">pyfsr.api.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/comments/index.html">pyfsr.api.comments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/connectors/index.html">pyfsr.api.connectors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/content_hub/index.html">pyfsr.api.content_hub</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/export_config/index.html">pyfsr.api.export_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/export_templates/index.html">pyfsr.api.export_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/feeds/index.html">pyfsr.api.feeds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/import_config/index.html">pyfsr.api.import_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/incidents/index.html">pyfsr.api.incidents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/manual_input/index.html">pyfsr.api.manual_input</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/modules/index.html">pyfsr.api.modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/modules_admin/index.html">pyfsr.api.modules_admin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/native_mcp/index.html">pyfsr.api.native_mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/notifications/index.html">pyfsr.api.notifications</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/picklists/index.html">pyfsr.api.picklists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/playbooks/index.html">pyfsr.api.playbooks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/reporting/index.html">pyfsr.api.reporting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/roles/index.html">pyfsr.api.roles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/routers/index.html">pyfsr.api.routers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/rules/index.html">pyfsr.api.rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/schedules/index.html">pyfsr.api.schedules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/search/index.html">pyfsr.api.search</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/solution_packs/index.html">pyfsr.api.solution_packs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/system/index.html">pyfsr.api.system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/system_queries/index.html">pyfsr.api.system_queries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/system_settings/index.html">pyfsr.api.system_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/tags/index.html">pyfsr.api.tags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/tasks/index.html">pyfsr.api.tasks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/taxii/index.html">pyfsr.api.taxii</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/teams/index.html">pyfsr.api.teams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/user_settings/index.html">pyfsr.api.user_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/users/index.html">pyfsr.api.users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/view_templates/index.html">pyfsr.api.view_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/views/index.html">pyfsr.api.views</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/wf_tools/index.html">pyfsr.api.wf_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/widgets/index.html">pyfsr.api.widgets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/workflow_collections/index.html">pyfsr.api.workflow_collections</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../models/index.html">pyfsr.models</a><input aria-label="Toggle navigation of pyfsr.models" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../models/base/index.html">pyfsr.models.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../models/types/index.html">pyfsr.models.types</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../auth/index.html">pyfsr.auth</a><input aria-label="Toggle navigation of pyfsr.auth" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../auth/api_key/index.html">pyfsr.auth.api_key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../auth/base/index.html">pyfsr.auth.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../auth/user_pass/index.html">pyfsr.auth.user_pass</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../authoring/index.html">pyfsr.authoring</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../agent/index.html">pyfsr.agent</a><input aria-label="Toggle navigation of pyfsr.agent" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../agent/archetypes/index.html">pyfsr.agent.archetypes</a><input aria-label="Toggle navigation of pyfsr.agent.archetypes" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../agent/archetypes/harvest/index.html">pyfsr.agent.archetypes.harvest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../agent/archetypes/record/index.html">pyfsr.agent.archetypes.record</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../agent/archetypes/router/index.html">pyfsr.agent.archetypes.router</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../agent/archetypes/store/index.html">pyfsr.agent.archetypes.store</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../agent/mcp/index.html">pyfsr.agent.mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../agent/tools/index.html">pyfsr.agent.tools</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../cli/index.html">pyfsr.cli</a><input aria-label="Toggle navigation of pyfsr.cli" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../cli/appliance/index.html">pyfsr.cli.appliance</a><input aria-label="Toggle navigation of pyfsr.cli.appliance" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/certs/index.html">pyfsr.cli.appliance.certs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/content_hub/index.html">pyfsr.cli.appliance.content_hub</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/db/index.html">pyfsr.cli.appliance.db</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/diagnose/index.html">pyfsr.cli.appliance.diagnose</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/es/index.html">pyfsr.cli.appliance.es</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/facts/index.html">pyfsr.cli.appliance.facts</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/ha/index.html">pyfsr.cli.appliance.ha</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/host/index.html">pyfsr.cli.appliance.host</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/info/index.html">pyfsr.cli.appliance.info</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/license/index.html">pyfsr.cli.appliance.license</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/logs/index.html">pyfsr.cli.appliance.logs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/mq/index.html">pyfsr.cli.appliance.mq</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/service/index.html">pyfsr.cli.appliance.service</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../cli/appliance/transport/index.html">pyfsr.cli.appliance.transport</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../cli/playbook/index.html">pyfsr.cli.playbook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../cli/repo/index.html">pyfsr.cli.repo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../cli/widget/index.html">pyfsr.cli.widget</a></li>
+</ul>
+</li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">pyfsr.appliance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../repo/index.html">pyfsr.repo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../content_catalog/index.html">pyfsr.content_catalog</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../reference-advanced.html">Advanced &amp; internal</a><input aria-label="Toggle navigation of Advanced &amp; internal" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../playbook_catalog/index.html">pyfsr.playbook_catalog</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../playbook_lint/index.html">pyfsr.playbook_lint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../playbook_match/index.html">pyfsr.playbook_match</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../concurrency/index.html">pyfsr.concurrency</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../projection/index.html">pyfsr.projection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../query_models/index.html">pyfsr.query_models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../spec/index.html">pyfsr.spec</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../utils/index.html">pyfsr.utils</a><input aria-label="Toggle navigation of pyfsr.utils" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../utils/file_operations/index.html">pyfsr.utils.file_operations</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../utils/iri/index.html">pyfsr.utils.iri</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../utils/validation/index.html">pyfsr.utils.validation</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference-models.html">Typed models</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributing.html">Contributing</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../../../_sources/autoapi/pyfsr/appliance/index.rst.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="module-pyfsr.appliance">
+<span id="pyfsr-appliance"></span><h1>pyfsr.appliance<a class="headerlink" href="#module-pyfsr.appliance" title="Link to this heading">¶</a></h1>
+<p>Ergonomic Python facade for the <code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">appliance</span></code> operations.</p>
+<p>The appliance verbs (DB queries, service control, queue management, log tails,
+Elasticsearch/HA health, …) are implemented as plain functions under
+<a class="reference internal" href="../cli/appliance/index.html#module-pyfsr.cli.appliance" title="pyfsr.cli.appliance"><code class="xref py py-mod docutils literal notranslate"><span class="pre">pyfsr.cli.appliance</span></code></a>, grouped per module — fine for the CLI, awkward to
+call by hand.</p>
+<p><a class="reference internal" href="#pyfsr.appliance.Appliance" title="pyfsr.appliance.Appliance"><code class="xref py py-class docutils literal notranslate"><span class="pre">Appliance</span></code></a> wraps a single connection and exposes those verbs as grouped
+methods (<code class="docutils literal notranslate"><span class="pre">appliance.db.query(...)</span></code>, <code class="docutils literal notranslate"><span class="pre">appliance.service.status()</span></code>,
+<code class="docutils literal notranslate"><span class="pre">appliance.mq.queues()</span></code>) so the Python API mirrors the CLI:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr</span><span class="w"> </span><span class="kn">import</span> <span class="n">Appliance</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">box</span> <span class="o">=</span> <span class="n">Appliance</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">&quot;10.0.0.1&quot;</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="s2">&quot;csadmin&quot;</span><span class="p">,</span> <span class="n">key_path</span><span class="o">=</span><span class="s2">&quot;~/.ssh/id_rsa&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">box</span><span class="o">.</span><span class="n">info</span><span class="p">()</span>
+<span class="go">{&#39;target&#39;: &#39;csadmin@10.0.0.1&#39;, &#39;fsr_version&#39;: &#39;7.6.0&#39;, &#39;content_db&#39;: &#39;venom&#39;,</span>
+<span class="go"> &#39;device_uuid&#39;: &#39;0123…cdef&#39;, &#39;db_user&#39;: &#39;cyberpgsql&#39;}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dbname</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="n">rows</span> <span class="o">=</span> <span class="n">box</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s2">&quot;SELECT count(*) FROM alerts&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">dbname</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="n">rows</span><span class="p">)</span>
+<span class="go">(&#39;venom&#39;, [&#39;count&#39;], [[&#39;42&#39;]])</span>
+</pre></div>
+</div>
+<p>Or reuse a client’s host (SSH still needs its own credentials):</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr</span><span class="w"> </span><span class="kn">import</span> <span class="n">FortiSOAR</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">FortiSOAR</span><span class="p">(</span><span class="s2">&quot;https://10.0.0.1&quot;</span><span class="p">,</span> <span class="n">token</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">box</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">appliance</span><span class="p">(</span><span class="n">key_path</span><span class="o">=</span><span class="s2">&quot;~/.ssh/id_rsa&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The same <code class="docutils literal notranslate"><span class="pre">--yes</span></code> / <code class="docutils literal notranslate"><span class="pre">--write</span></code> gating as the CLI applies: mutating methods
+take <code class="docutils literal notranslate"><span class="pre">yes=True</span></code> and SQL writes go through <code class="docutils literal notranslate"><span class="pre">box.db.execute(...,</span> <span class="pre">yes=True)</span></code>.
+For any command not surfaced as a named method, <a class="reference internal" href="#pyfsr.appliance.Appliance.run" title="pyfsr.appliance.Appliance.run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Appliance.run()</span></code></a> is the
+escape hatch.</p>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#pyfsr.appliance.DbNamespace" title="pyfsr.appliance.DbNamespace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DbNamespace</span></code></a></p></td>
+<td><p>Postgres verbs (<code class="docutils literal notranslate"><span class="pre">appliance.db</span></code>). Reads are open; writes need <code class="docutils literal notranslate"><span class="pre">yes=True</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace" title="pyfsr.appliance.ServiceNamespace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ServiceNamespace</span></code></a></p></td>
+<td><p>systemd / cyops service verbs (<code class="docutils literal notranslate"><span class="pre">appliance.service</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#pyfsr.appliance.MqNamespace" title="pyfsr.appliance.MqNamespace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MqNamespace</span></code></a></p></td>
+<td><p>RabbitMQ verbs (<code class="docutils literal notranslate"><span class="pre">appliance.mq</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#pyfsr.appliance.HostNamespace" title="pyfsr.appliance.HostNamespace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HostNamespace</span></code></a></p></td>
+<td><p>OS resource metrics (<code class="docutils literal notranslate"><span class="pre">appliance.host</span></code>). All read-only, no sudo.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#pyfsr.appliance.LicenseNamespace" title="pyfsr.appliance.LicenseNamespace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LicenseNamespace</span></code></a></p></td>
+<td><p>Licensing / identity (<code class="docutils literal notranslate"><span class="pre">appliance.license</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#pyfsr.appliance.LogsNamespace" title="pyfsr.appliance.LogsNamespace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LogsNamespace</span></code></a></p></td>
+<td><p>Log tail / error scan (<code class="docutils literal notranslate"><span class="pre">appliance.logs</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#pyfsr.appliance.EsNamespace" title="pyfsr.appliance.EsNamespace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EsNamespace</span></code></a></p></td>
+<td><p>Elasticsearch health / shards (<code class="docutils literal notranslate"><span class="pre">appliance.es</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#pyfsr.appliance.HaNamespace" title="pyfsr.appliance.HaNamespace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HaNamespace</span></code></a></p></td>
+<td><p>HA cluster verbs (<code class="docutils literal notranslate"><span class="pre">appliance.ha</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#pyfsr.appliance.CertsNamespace" title="pyfsr.appliance.CertsNamespace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CertsNamespace</span></code></a></p></td>
+<td><p>Appliance TLS certificate verbs (<code class="docutils literal notranslate"><span class="pre">appliance.certs</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#pyfsr.appliance.Appliance" title="pyfsr.appliance.Appliance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Appliance</span></code></a></p></td>
+<td><p>A connection to a FortiSOAR appliance, exposing the <code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">appliance</span></code> verbs.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="pyfsr.appliance.DbNamespace">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pyfsr.appliance.</span></span><span class="sig-name descname"><span class="pre">DbNamespace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">facts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../cli/appliance/facts/index.html#pyfsr.cli.appliance.facts.Facts" title="pyfsr.cli.appliance.facts.Facts"><span class="pre">pyfsr.cli.appliance.facts.Facts</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#DbNamespace"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.DbNamespace" title="Link to this definition">¶</a></dt>
+<dd><p>Postgres verbs (<code class="docutils literal notranslate"><span class="pre">appliance.db</span></code>). Reads are open; writes need <code class="docutils literal notranslate"><span class="pre">yes=True</span></code>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.DbNamespace.query">
+<span class="sig-name descname"><span class="pre">query</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sql</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">role</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#DbNamespace.query"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.DbNamespace.query" title="Link to this definition">¶</a></dt>
+<dd><p>Run a <strong>read-only</strong> SELECT. Returns <code class="docutils literal notranslate"><span class="pre">(dbname,</span> <span class="pre">headers,</span> <span class="pre">rows)</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.DbNamespace.execute">
+<span class="sig-name descname"><span class="pre">execute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sql</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">role</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#DbNamespace.execute"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.DbNamespace.execute" title="Link to this definition">¶</a></dt>
+<dd><p>Run a mutating statement (<code class="docutils literal notranslate"><span class="pre">UPDATE</span></code>/<code class="docutils literal notranslate"><span class="pre">DELETE</span></code>/<code class="docutils literal notranslate"><span class="pre">DROP</span></code>…). Refuses unless <code class="docutils literal notranslate"><span class="pre">yes=True</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.DbNamespace.tables">
+<span class="sig-name descname"><span class="pre">tables</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pattern</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">role</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#DbNamespace.tables"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.DbNamespace.tables" title="Link to this definition">¶</a></dt>
+<dd><p>List tables, optionally filtered by a <code class="docutils literal notranslate"><span class="pre">LIKE</span></code>/glob pattern. Returns <code class="docutils literal notranslate"><span class="pre">(dbname,</span> <span class="pre">headers,</span> <span class="pre">rows)</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.DbNamespace.indexes">
+<span class="sig-name descname"><span class="pre">indexes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pattern</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">role</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#DbNamespace.indexes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.DbNamespace.indexes" title="Link to this definition">¶</a></dt>
+<dd><p>List indexes, optionally filtered by a <code class="docutils literal notranslate"><span class="pre">LIKE</span></code>/glob pattern. Returns <code class="docutils literal notranslate"><span class="pre">(dbname,</span> <span class="pre">headers,</span> <span class="pre">rows)</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.DbNamespace.sizes">
+<span class="sig-name descname"><span class="pre">sizes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">60.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../cli/appliance/db/index.html#pyfsr.cli.appliance.db.DataClassSize" title="pyfsr.cli.appliance.db.DataClassSize"><span class="pre">pyfsr.cli.appliance.db.DataClassSize</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#DbNamespace.sizes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.DbNamespace.sizes" title="Link to this definition">¶</a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">csadm</span> <span class="pre">db</span> <span class="pre">--getsize</span></code> — footprint by data class.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.DbNamespace.databases">
+<span class="sig-name descname"><span class="pre">databases</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../cli/appliance/db/index.html#pyfsr.cli.appliance.db.DatabaseInfo" title="pyfsr.cli.appliance.db.DatabaseInfo"><span class="pre">pyfsr.cli.appliance.db.DatabaseInfo</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#DbNamespace.databases"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.DbNamespace.databases" title="Link to this definition">¶</a></dt>
+<dd><p>Enumerate databases with sizes and roles.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.DbNamespace.find_module_tables">
+<span class="sig-name descname"><span class="pre">find_module_tables</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#DbNamespace.find_module_tables"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.DbNamespace.find_module_tables" title="Link to this definition">¶</a></dt>
+<dd><p>Find the physical tables belonging to a module’s <code class="docutils literal notranslate"><span class="pre">base_table</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.DbNamespace.drop_module_tables">
+<span class="sig-name descname"><span class="pre">drop_module_tables</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">yes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#DbNamespace.drop_module_tables"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.DbNamespace.drop_module_tables" title="Link to this definition">¶</a></dt>
+<dd><p>Drop orphaned module tables (<code class="docutils literal notranslate"><span class="pre">DROP</span> <span class="pre">...</span> <span class="pre">CASCADE</span></code>). Refuses unless <code class="docutils literal notranslate"><span class="pre">yes=True</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.DbNamespace.find_orphan_module_tables">
+<span class="sig-name descname"><span class="pre">find_orphan_module_tables</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../cli/appliance/db/index.html#pyfsr.cli.appliance.db.OrphanTable" title="pyfsr.cli.appliance.db.OrphanTable"><span class="pre">pyfsr.cli.appliance.db.OrphanTable</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#DbNamespace.find_orphan_module_tables"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.DbNamespace.find_orphan_module_tables" title="Link to this definition">¶</a></dt>
+<dd><p>Sweep the content DB for physical tables left behind by deleted modules.</p>
+<p>Non-destructive. Reclaim a reported base with <a class="reference internal" href="#pyfsr.appliance.DbNamespace.drop_module_tables" title="pyfsr.appliance.DbNamespace.drop_module_tables"><code class="xref py py-meth docutils literal notranslate"><span class="pre">drop_module_tables()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.DbNamespace.resolve_db">
+<span class="sig-name descname"><span class="pre">resolve_db</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">role</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#DbNamespace.resolve_db"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.DbNamespace.resolve_db" title="Link to this definition">¶</a></dt>
+<dd><p>Resolve the target DB name from an explicit name or a logical role.</p>
+<p><code class="docutils literal notranslate"><span class="pre">db_name</span></code> wins outright. A fixed role (<code class="docutils literal notranslate"><span class="pre">das</span></code>, <code class="docutils literal notranslate"><span class="pre">gateway</span></code>, …) maps
+directly. The default <code class="docutils literal notranslate"><span class="pre">content</span></code> role is discovered by fingerprinting
+for <code class="docutils literal notranslate"><span class="pre">model_metadatas</span></code>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pyfsr.appliance.ServiceNamespace">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pyfsr.appliance.</span></span><span class="sig-name descname"><span class="pre">ServiceNamespace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../cli/appliance/transport/index.html#pyfsr.cli.appliance.transport.Transport" title="pyfsr.cli.appliance.transport.Transport"><span class="pre">pyfsr.cli.appliance.transport.Transport</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#ServiceNamespace"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.ServiceNamespace" title="Link to this definition">¶</a></dt>
+<dd><p>systemd / cyops service verbs (<code class="docutils literal notranslate"><span class="pre">appliance.service</span></code>).</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.ServiceNamespace.status">
+<span class="sig-name descname"><span class="pre">status</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#ServiceNamespace.status"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.ServiceNamespace.status" title="Link to this definition">¶</a></dt>
+<dd><p>Parsed <code class="docutils literal notranslate"><span class="pre">csadm</span> <span class="pre">services</span> <span class="pre">--status</span></code> (optionally one service).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.ServiceNamespace.services">
+<span class="sig-name descname"><span class="pre">services</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceState" title="pyfsr.cli.appliance.service.ServiceState"><span class="pre">pyfsr.cli.appliance.service.ServiceState</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#ServiceNamespace.services"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.ServiceNamespace.services" title="Link to this definition">¶</a></dt>
+<dd><p>Typed per-service states (name, running, status, since).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.ServiceNamespace.liveness">
+<span class="sig-name descname"><span class="pre">liveness</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">base</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'https://127.0.0.1'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">6.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.ProbeResult" title="pyfsr.cli.appliance.service.ProbeResult"><span class="pre">pyfsr.cli.appliance.service.ProbeResult</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#ServiceNamespace.liveness"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.ServiceNamespace.liveness" title="Link to this definition">¶</a></dt>
+<dd><p>Probe endpoints for active-but-wedged services.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.ServiceNamespace.restart">
+<span class="sig-name descname"><span class="pre">restart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">yes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceActionResult" title="pyfsr.cli.appliance.service.ServiceActionResult"><span class="pre">pyfsr.cli.appliance.service.ServiceActionResult</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#ServiceNamespace.restart"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.ServiceNamespace.restart" title="Link to this definition">¶</a></dt>
+<dd><p>Restart one cyops service. Refuses unless <code class="docutils literal notranslate"><span class="pre">yes=True</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.ServiceNamespace.start">
+<span class="sig-name descname"><span class="pre">start</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceActionResult" title="pyfsr.cli.appliance.service.ServiceActionResult"><span class="pre">pyfsr.cli.appliance.service.ServiceActionResult</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#ServiceNamespace.start"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.ServiceNamespace.start" title="Link to this definition">¶</a></dt>
+<dd><p>Start one cyops service.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.ServiceNamespace.stop">
+<span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">yes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceActionResult" title="pyfsr.cli.appliance.service.ServiceActionResult"><span class="pre">pyfsr.cli.appliance.service.ServiceActionResult</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#ServiceNamespace.stop"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.ServiceNamespace.stop" title="Link to this definition">¶</a></dt>
+<dd><p>Stop one cyops service. Refuses unless <code class="docutils literal notranslate"><span class="pre">yes=True</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.ServiceNamespace.restart_all">
+<span class="sig-name descname"><span class="pre">restart_all</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">yes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceActionResult" title="pyfsr.cli.appliance.service.ServiceActionResult"><span class="pre">pyfsr.cli.appliance.service.ServiceActionResult</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#ServiceNamespace.restart_all"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.ServiceNamespace.restart_all" title="Link to this definition">¶</a></dt>
+<dd><p>Restart the whole service stack in order. Refuses unless <code class="docutils literal notranslate"><span class="pre">yes=True</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.ServiceNamespace.start_all">
+<span class="sig-name descname"><span class="pre">start_all</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceActionResult" title="pyfsr.cli.appliance.service.ServiceActionResult"><span class="pre">pyfsr.cli.appliance.service.ServiceActionResult</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#ServiceNamespace.start_all"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.ServiceNamespace.start_all" title="Link to this definition">¶</a></dt>
+<dd><p>Start the whole service stack in order.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.ServiceNamespace.stop_all">
+<span class="sig-name descname"><span class="pre">stop_all</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">yes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceActionResult" title="pyfsr.cli.appliance.service.ServiceActionResult"><span class="pre">pyfsr.cli.appliance.service.ServiceActionResult</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#ServiceNamespace.stop_all"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.ServiceNamespace.stop_all" title="Link to this definition">¶</a></dt>
+<dd><p>Stop the whole service stack in order. Refuses unless <code class="docutils literal notranslate"><span class="pre">yes=True</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.ServiceNamespace.listeners">
+<span class="sig-name descname"><span class="pre">listeners</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.Listener" title="pyfsr.cli.appliance.service.Listener"><span class="pre">pyfsr.cli.appliance.service.Listener</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#ServiceNamespace.listeners"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.ServiceNamespace.listeners" title="Link to this definition">¶</a></dt>
+<dd><p>Listening TCP ports + owning process (<code class="docutils literal notranslate"><span class="pre">ss</span> <span class="pre">-tlnp</span></code>).</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pyfsr.appliance.MqNamespace">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pyfsr.appliance.</span></span><span class="sig-name descname"><span class="pre">MqNamespace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../cli/appliance/transport/index.html#pyfsr.cli.appliance.transport.Transport" title="pyfsr.cli.appliance.transport.Transport"><span class="pre">pyfsr.cli.appliance.transport.Transport</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#MqNamespace"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.MqNamespace" title="Link to this definition">¶</a></dt>
+<dd><p>RabbitMQ verbs (<code class="docutils literal notranslate"><span class="pre">appliance.mq</span></code>).</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.MqNamespace.status">
+<span class="sig-name descname"><span class="pre">status</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#MqNamespace.status"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.MqNamespace.status" title="Link to this definition">¶</a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">rabbitmqctl</span> <span class="pre">status</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.MqNamespace.queues">
+<span class="sig-name descname"><span class="pre">queues</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../cli/appliance/mq/index.html#pyfsr.cli.appliance.mq.QueueInfo" title="pyfsr.cli.appliance.mq.QueueInfo"><span class="pre">pyfsr.cli.appliance.mq.QueueInfo</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#MqNamespace.queues"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.MqNamespace.queues" title="Link to this definition">¶</a></dt>
+<dd><p>Queues with depth + consumer counts.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.MqNamespace.consumers">
+<span class="sig-name descname"><span class="pre">consumers</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../cli/appliance/mq/index.html#pyfsr.cli.appliance.mq.Consumer" title="pyfsr.cli.appliance.mq.Consumer"><span class="pre">pyfsr.cli.appliance.mq.Consumer</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#MqNamespace.consumers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.MqNamespace.consumers" title="Link to this definition">¶</a></dt>
+<dd><p>List consumers (queue ↔ channel).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.MqNamespace.vhosts">
+<span class="sig-name descname"><span class="pre">vhosts</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#MqNamespace.vhosts"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.MqNamespace.vhosts" title="Link to this definition">¶</a></dt>
+<dd><p>List virtual hosts.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.MqNamespace.permissions">
+<span class="sig-name descname"><span class="pre">permissions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_vhosts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../cli/appliance/mq/index.html#pyfsr.cli.appliance.mq.Permission" title="pyfsr.cli.appliance.mq.Permission"><span class="pre">pyfsr.cli.appliance.mq.Permission</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#MqNamespace.permissions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.MqNamespace.permissions" title="Link to this definition">¶</a></dt>
+<dd><p>Per-vhost permissions (default vhost <code class="docutils literal notranslate"><span class="pre">/</span></code>, or all).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.MqNamespace.purge_queue">
+<span class="sig-name descname"><span class="pre">purge_queue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">vhost</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/mq/index.html#pyfsr.cli.appliance.mq.PurgeResult" title="pyfsr.cli.appliance.mq.PurgeResult"><span class="pre">pyfsr.cli.appliance.mq.PurgeResult</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#MqNamespace.purge_queue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.MqNamespace.purge_queue" title="Link to this definition">¶</a></dt>
+<dd><p>Purge all messages from a queue (irreversible). Refuses unless <code class="docutils literal notranslate"><span class="pre">yes=True</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.MqNamespace.purge_workflows">
+<span class="sig-name descname"><span class="pre">purge_workflows</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">graceful</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sweep_data_queues</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/mq/index.html#pyfsr.cli.appliance.mq.WorkflowPurgeReport" title="pyfsr.cli.appliance.mq.WorkflowPurgeReport"><span class="pre">pyfsr.cli.appliance.mq.WorkflowPurgeReport</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#MqNamespace.purge_workflows"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.MqNamespace.purge_workflows" title="Link to this definition">¶</a></dt>
+<dd><p>Clear the stuck-worker backlog: purge queues + recycle celeryd. Refuses unless <code class="docutils literal notranslate"><span class="pre">yes=True</span></code>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pyfsr.appliance.HostNamespace">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pyfsr.appliance.</span></span><span class="sig-name descname"><span class="pre">HostNamespace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../cli/appliance/transport/index.html#pyfsr.cli.appliance.transport.Transport" title="pyfsr.cli.appliance.transport.Transport"><span class="pre">pyfsr.cli.appliance.transport.Transport</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#HostNamespace"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.HostNamespace" title="Link to this definition">¶</a></dt>
+<dd><p>OS resource metrics (<code class="docutils literal notranslate"><span class="pre">appliance.host</span></code>). All read-only, no sudo.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.HostNamespace.meminfo">
+<span class="sig-name descname"><span class="pre">meminfo</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/host/index.html#pyfsr.cli.appliance.host.MemInfo" title="pyfsr.cli.appliance.host.MemInfo"><span class="pre">pyfsr.cli.appliance.host.MemInfo</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#HostNamespace.meminfo"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.HostNamespace.meminfo" title="Link to this definition">¶</a></dt>
+<dd><p>Memory + swap usage (MB).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.HostNamespace.loadavg">
+<span class="sig-name descname"><span class="pre">loadavg</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/host/index.html#pyfsr.cli.appliance.host.LoadAvg" title="pyfsr.cli.appliance.host.LoadAvg"><span class="pre">pyfsr.cli.appliance.host.LoadAvg</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#HostNamespace.loadavg"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.HostNamespace.loadavg" title="Link to this definition">¶</a></dt>
+<dd><p>System load averages.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.HostNamespace.process_rss">
+<span class="sig-name descname"><span class="pre">process_rss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pattern</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/host/index.html#pyfsr.cli.appliance.host.ProcRss" title="pyfsr.cli.appliance.host.ProcRss"><span class="pre">pyfsr.cli.appliance.host.ProcRss</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#HostNamespace.process_rss"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.HostNamespace.process_rss" title="Link to this definition">¶</a></dt>
+<dd><p>Summed/peak RSS for processes matching <code class="docutils literal notranslate"><span class="pre">pattern</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.HostNamespace.disk">
+<span class="sig-name descname"><span class="pre">disk</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'/opt/cyops'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/host/index.html#pyfsr.cli.appliance.host.DiskUsage" title="pyfsr.cli.appliance.host.DiskUsage"><span class="pre">pyfsr.cli.appliance.host.DiskUsage</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#HostNamespace.disk"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.HostNamespace.disk" title="Link to this definition">¶</a></dt>
+<dd><p>Disk usage for <code class="docutils literal notranslate"><span class="pre">path</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.HostNamespace.snapshot">
+<span class="sig-name descname"><span class="pre">snapshot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">disk_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'/opt/cyops'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/host/index.html#pyfsr.cli.appliance.host.HostSnapshot" title="pyfsr.cli.appliance.host.HostSnapshot"><span class="pre">pyfsr.cli.appliance.host.HostSnapshot</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#HostNamespace.snapshot"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.HostNamespace.snapshot" title="Link to this definition">¶</a></dt>
+<dd><p>One coherent sample: mem, swap, load, worker RSS, disk.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pyfsr.appliance.LicenseNamespace">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pyfsr.appliance.</span></span><span class="sig-name descname"><span class="pre">LicenseNamespace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../cli/appliance/transport/index.html#pyfsr.cli.appliance.transport.Transport" title="pyfsr.cli.appliance.transport.Transport"><span class="pre">pyfsr.cli.appliance.transport.Transport</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#LicenseNamespace"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.LicenseNamespace" title="Link to this definition">¶</a></dt>
+<dd><p>Licensing / identity (<code class="docutils literal notranslate"><span class="pre">appliance.license</span></code>).</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.LicenseNamespace.show">
+<span class="sig-name descname"><span class="pre">show</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#LicenseNamespace.show"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.LicenseNamespace.show" title="Link to this definition">¶</a></dt>
+<dd><p>Raw <code class="docutils literal notranslate"><span class="pre">csadm</span> <span class="pre">license</span> <span class="pre">--show-details</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.LicenseNamespace.details">
+<span class="sig-name descname"><span class="pre">details</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/license/index.html#pyfsr.cli.appliance.license.LicenseDetails" title="pyfsr.cli.appliance.license.LicenseDetails"><span class="pre">pyfsr.cli.appliance.license.LicenseDetails</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#LicenseNamespace.details"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.LicenseNamespace.details" title="Link to this definition">¶</a></dt>
+<dd><p>Parsed license details.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.LicenseNamespace.device_uuid">
+<span class="sig-name descname"><span class="pre">device_uuid</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#LicenseNamespace.device_uuid"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.LicenseNamespace.device_uuid" title="Link to this definition">¶</a></dt>
+<dd><p>Resolved device UUID (file first, csadm fallback).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.LicenseNamespace.drift">
+<span class="sig-name descname"><span class="pre">drift</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/license/index.html#pyfsr.cli.appliance.license.DriftReport" title="pyfsr.cli.appliance.license.DriftReport"><span class="pre">pyfsr.cli.appliance.license.DriftReport</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#LicenseNamespace.drift"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.LicenseNamespace.drift" title="Link to this definition">¶</a></dt>
+<dd><p>File vs csadm entitlement-UUID drift report.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pyfsr.appliance.LogsNamespace">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pyfsr.appliance.</span></span><span class="sig-name descname"><span class="pre">LogsNamespace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../cli/appliance/transport/index.html#pyfsr.cli.appliance.transport.Transport" title="pyfsr.cli.appliance.transport.Transport"><span class="pre">pyfsr.cli.appliance.transport.Transport</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#LogsNamespace"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.LogsNamespace" title="Link to this definition">¶</a></dt>
+<dd><p>Log tail / error scan (<code class="docutils literal notranslate"><span class="pre">appliance.logs</span></code>).</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.LogsNamespace.tail">
+<span class="sig-name descname"><span class="pre">tail</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">service_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">lines</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#LogsNamespace.tail"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.LogsNamespace.tail" title="Link to this definition">¶</a></dt>
+<dd><p>Tail a cyops service log.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.LogsNamespace.scan">
+<span class="sig-name descname"><span class="pre">scan</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">minutes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#LogsNamespace.scan"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.LogsNamespace.scan" title="Link to this definition">¶</a></dt>
+<dd><p>Roll up recent journal errors.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.LogsNamespace.bundle">
+<span class="sig-name descname"><span class="pre">bundle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">300.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#LogsNamespace.bundle"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.LogsNamespace.bundle" title="Link to this definition">¶</a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">csadm</span> <span class="pre">log</span> <span class="pre">--collect</span></code> → tarball path (slow).</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pyfsr.appliance.EsNamespace">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pyfsr.appliance.</span></span><span class="sig-name descname"><span class="pre">EsNamespace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">facts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../cli/appliance/facts/index.html#pyfsr.cli.appliance.facts.Facts" title="pyfsr.cli.appliance.facts.Facts"><span class="pre">pyfsr.cli.appliance.facts.Facts</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#EsNamespace"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.EsNamespace" title="Link to this definition">¶</a></dt>
+<dd><p>Elasticsearch health / shards (<code class="docutils literal notranslate"><span class="pre">appliance.es</span></code>).</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.EsNamespace.health">
+<span class="sig-name descname"><span class="pre">health</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/es/index.html#pyfsr.cli.appliance.es.ESHealth" title="pyfsr.cli.appliance.es.ESHealth"><span class="pre">pyfsr.cli.appliance.es.ESHealth</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#EsNamespace.health"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.EsNamespace.health" title="Link to this definition">¶</a></dt>
+<dd><p>Cluster health (green/yellow/red + shard counts).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.EsNamespace.shards">
+<span class="sig-name descname"><span class="pre">shards</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#EsNamespace.shards"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.EsNamespace.shards" title="Link to this definition">¶</a></dt>
+<dd><p>Unassigned-shard allocation explain.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pyfsr.appliance.HaNamespace">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pyfsr.appliance.</span></span><span class="sig-name descname"><span class="pre">HaNamespace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../cli/appliance/transport/index.html#pyfsr.cli.appliance.transport.Transport" title="pyfsr.cli.appliance.transport.Transport"><span class="pre">pyfsr.cli.appliance.transport.Transport</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#HaNamespace"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.HaNamespace" title="Link to this definition">¶</a></dt>
+<dd><p>HA cluster verbs (<code class="docutils literal notranslate"><span class="pre">appliance.ha</span></code>).</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.HaNamespace.nodes">
+<span class="sig-name descname"><span class="pre">nodes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../cli/appliance/ha/index.html#pyfsr.cli.appliance.ha.HaNode" title="pyfsr.cli.appliance.ha.HaNode"><span class="pre">pyfsr.cli.appliance.ha.HaNode</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#HaNamespace.nodes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.HaNamespace.nodes" title="Link to this definition">¶</a></dt>
+<dd><p>HA nodes (current node marked).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.HaNamespace.health">
+<span class="sig-name descname"><span class="pre">health</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../cli/appliance/ha/index.html#pyfsr.cli.appliance.ha.HaHealth" title="pyfsr.cli.appliance.ha.HaHealth"><span class="pre">pyfsr.cli.appliance.ha.HaHealth</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#HaNamespace.health"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.HaNamespace.health" title="Link to this definition">¶</a></dt>
+<dd><p>HA cluster health.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.HaNamespace.replication">
+<span class="sig-name descname"><span class="pre">replication</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#HaNamespace.replication"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.HaNamespace.replication" title="Link to this definition">¶</a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">csadm</span> <span class="pre">ha</span> <span class="pre">get-replication-stat</span></code>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pyfsr.appliance.CertsNamespace">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pyfsr.appliance.</span></span><span class="sig-name descname"><span class="pre">CertsNamespace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../cli/appliance/transport/index.html#pyfsr.cli.appliance.transport.Transport" title="pyfsr.cli.appliance.transport.Transport"><span class="pre">pyfsr.cli.appliance.transport.Transport</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#CertsNamespace"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.CertsNamespace" title="Link to this definition">¶</a></dt>
+<dd><p>Appliance TLS certificate verbs (<code class="docutils literal notranslate"><span class="pre">appliance.certs</span></code>).</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.CertsNamespace.regenerate">
+<span class="sig-name descname"><span class="pre">regenerate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hostname</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">yes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">120.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#CertsNamespace.regenerate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.CertsNamespace.regenerate" title="Link to this definition">¶</a></dt>
+<dd><p>Regenerate the self-signed cert (restart services afterward). Refuses unless <code class="docutils literal notranslate"><span class="pre">yes=True</span></code>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pyfsr.appliance.</span></span><span class="sig-name descname"><span class="pre">Appliance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'csadmin'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">22</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sudo_password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">insecure_skip_host_key_check</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_facts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../cli/appliance/facts/index.html#pyfsr.cli.appliance.facts.Facts" title="pyfsr.cli.appliance.facts.Facts"><span class="pre">pyfsr.cli.appliance.facts.Facts</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance" title="Link to this definition">¶</a></dt>
+<dd><p>A connection to a FortiSOAR appliance, exposing the <code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">appliance</span></code> verbs.</p>
+<p>Construct it with SSH connection details (or run it on-box with no <code class="docutils literal notranslate"><span class="pre">host</span></code> to
+use a local transport), then reach the grouped verbs:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#pyfsr.appliance.Appliance.db" title="pyfsr.appliance.Appliance.db"><code class="xref py py-attr docutils literal notranslate"><span class="pre">db</span></code></a> — Postgres queries, table cleanup</p></li>
+<li><p><a class="reference internal" href="#pyfsr.appliance.Appliance.service" title="pyfsr.appliance.Appliance.service"><code class="xref py py-attr docutils literal notranslate"><span class="pre">service</span></code></a> — start/stop/restart, liveness</p></li>
+<li><p><a class="reference internal" href="#pyfsr.appliance.Appliance.mq" title="pyfsr.appliance.Appliance.mq"><code class="xref py py-attr docutils literal notranslate"><span class="pre">mq</span></code></a> — RabbitMQ queues, purges</p></li>
+<li><p><a class="reference internal" href="#pyfsr.appliance.Appliance.host" title="pyfsr.appliance.Appliance.host"><code class="xref py py-attr docutils literal notranslate"><span class="pre">host</span></code></a> — memory/load/disk/RSS</p></li>
+<li><p><a class="reference internal" href="#pyfsr.appliance.Appliance.license" title="pyfsr.appliance.Appliance.license"><code class="xref py py-attr docutils literal notranslate"><span class="pre">license</span></code></a> — device UUID, drift</p></li>
+<li><p><a class="reference internal" href="#pyfsr.appliance.Appliance.logs" title="pyfsr.appliance.Appliance.logs"><code class="xref py py-attr docutils literal notranslate"><span class="pre">logs</span></code></a> — tail, scan, bundle</p></li>
+<li><p><a class="reference internal" href="#pyfsr.appliance.Appliance.es" title="pyfsr.appliance.Appliance.es"><code class="xref py py-attr docutils literal notranslate"><span class="pre">es</span></code></a> — Elasticsearch health/shards</p></li>
+<li><p><a class="reference internal" href="#pyfsr.appliance.Appliance.ha" title="pyfsr.appliance.Appliance.ha"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ha</span></code></a> — cluster nodes/health/replication</p></li>
+<li><p><a class="reference internal" href="#pyfsr.appliance.Appliance.certs" title="pyfsr.appliance.Appliance.certs"><code class="xref py py-attr docutils literal notranslate"><span class="pre">certs</span></code></a> — TLS cert regeneration</p></li>
+</ul>
+<p>plus <a class="reference internal" href="#pyfsr.appliance.Appliance.info" title="pyfsr.appliance.Appliance.info"><code class="xref py py-meth docutils literal notranslate"><span class="pre">info()</span></code></a>, <a class="reference internal" href="#pyfsr.appliance.Appliance.diagnose" title="pyfsr.appliance.Appliance.diagnose"><code class="xref py py-meth docutils literal notranslate"><span class="pre">diagnose()</span></code></a>, and <a class="reference internal" href="#pyfsr.appliance.Appliance.run" title="pyfsr.appliance.Appliance.run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">run()</span></code></a> (the escape hatch for
+arbitrary shell commands).</p>
+<p>Connection args fall back to <code class="docutils literal notranslate"><span class="pre">PYFSR_APPLIANCE_HOST</span></code> / <code class="docutils literal notranslate"><span class="pre">_USER</span></code> / <code class="docutils literal notranslate"><span class="pre">_PASSWORD</span></code>
+when omitted. Pass <code class="docutils literal notranslate"><span class="pre">instance=&quot;&lt;alias&gt;&quot;</span></code> to resolve a named SSH profile from
+<code class="docutils literal notranslate"><span class="pre">~/.pyfsr/instances.toml</span></code> (the same file
+<a class="reference internal" href="../instances/index.html#pyfsr.instances.InstanceRegistry" title="pyfsr.instances.InstanceRegistry"><code class="xref py py-class docutils literal notranslate"><span class="pre">InstanceRegistry</span></code></a> uses for the REST client) — this
+takes precedence over the explicit host/user/password kwargs and is the SDK
+counterpart of <code class="docutils literal notranslate"><span class="pre">pyfsr</span> <span class="pre">appliance</span> <span class="pre">--instance</span> <span class="pre">&lt;alias&gt;</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Each grouped verb returns a typed result defined in the corresponding
+<code class="docutils literal notranslate"><span class="pre">pyfsr.cli.appliance</span></code> submodule rather than here, so those dataclasses
+are documented on their own pages, not under this module’s contents:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../cli/appliance/db/index.html#module-pyfsr.cli.appliance.db" title="pyfsr.cli.appliance.db"><code class="xref py py-mod docutils literal notranslate"><span class="pre">pyfsr.cli.appliance.db</span></code></a> — <a class="reference internal" href="../cli/appliance/db/index.html#pyfsr.cli.appliance.db.DatabaseInfo" title="pyfsr.cli.appliance.db.DatabaseInfo"><code class="xref py py-class docutils literal notranslate"><span class="pre">DatabaseInfo</span></code></a>,
+<a class="reference internal" href="../cli/appliance/db/index.html#pyfsr.cli.appliance.db.DataClassSize" title="pyfsr.cli.appliance.db.DataClassSize"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataClassSize</span></code></a>, <a class="reference internal" href="../cli/appliance/db/index.html#pyfsr.cli.appliance.db.OrphanTable" title="pyfsr.cli.appliance.db.OrphanTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrphanTable</span></code></a></p></li>
+<li><p><a class="reference internal" href="../cli/appliance/service/index.html#module-pyfsr.cli.appliance.service" title="pyfsr.cli.appliance.service"><code class="xref py py-mod docutils literal notranslate"><span class="pre">pyfsr.cli.appliance.service</span></code></a> — <a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceState" title="pyfsr.cli.appliance.service.ServiceState"><code class="xref py py-class docutils literal notranslate"><span class="pre">ServiceState</span></code></a>,
+<a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.Listener" title="pyfsr.cli.appliance.service.Listener"><code class="xref py py-class docutils literal notranslate"><span class="pre">Listener</span></code></a>, <a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.ProbeResult" title="pyfsr.cli.appliance.service.ProbeResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbeResult</span></code></a>,
+<a class="reference internal" href="../cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceActionResult" title="pyfsr.cli.appliance.service.ServiceActionResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">ServiceActionResult</span></code></a></p></li>
+<li><p><a class="reference internal" href="../cli/appliance/mq/index.html#module-pyfsr.cli.appliance.mq" title="pyfsr.cli.appliance.mq"><code class="xref py py-mod docutils literal notranslate"><span class="pre">pyfsr.cli.appliance.mq</span></code></a> — <a class="reference internal" href="../cli/appliance/mq/index.html#pyfsr.cli.appliance.mq.QueueInfo" title="pyfsr.cli.appliance.mq.QueueInfo"><code class="xref py py-class docutils literal notranslate"><span class="pre">QueueInfo</span></code></a>,
+<a class="reference internal" href="../cli/appliance/mq/index.html#pyfsr.cli.appliance.mq.Consumer" title="pyfsr.cli.appliance.mq.Consumer"><code class="xref py py-class docutils literal notranslate"><span class="pre">Consumer</span></code></a>, <a class="reference internal" href="../cli/appliance/mq/index.html#pyfsr.cli.appliance.mq.Permission" title="pyfsr.cli.appliance.mq.Permission"><code class="xref py py-class docutils literal notranslate"><span class="pre">Permission</span></code></a>,
+<a class="reference internal" href="../cli/appliance/mq/index.html#pyfsr.cli.appliance.mq.PurgeResult" title="pyfsr.cli.appliance.mq.PurgeResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">PurgeResult</span></code></a>, <a class="reference internal" href="../cli/appliance/mq/index.html#pyfsr.cli.appliance.mq.WorkflowPurgeReport" title="pyfsr.cli.appliance.mq.WorkflowPurgeReport"><code class="xref py py-class docutils literal notranslate"><span class="pre">WorkflowPurgeReport</span></code></a></p></li>
+<li><p><a class="reference internal" href="../cli/appliance/host/index.html#module-pyfsr.cli.appliance.host" title="pyfsr.cli.appliance.host"><code class="xref py py-mod docutils literal notranslate"><span class="pre">pyfsr.cli.appliance.host</span></code></a> — <a class="reference internal" href="../cli/appliance/host/index.html#pyfsr.cli.appliance.host.MemInfo" title="pyfsr.cli.appliance.host.MemInfo"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemInfo</span></code></a>,
+<a class="reference internal" href="../cli/appliance/host/index.html#pyfsr.cli.appliance.host.LoadAvg" title="pyfsr.cli.appliance.host.LoadAvg"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoadAvg</span></code></a>, <a class="reference internal" href="../cli/appliance/host/index.html#pyfsr.cli.appliance.host.ProcRss" title="pyfsr.cli.appliance.host.ProcRss"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProcRss</span></code></a>,
+<a class="reference internal" href="../cli/appliance/host/index.html#pyfsr.cli.appliance.host.DiskUsage" title="pyfsr.cli.appliance.host.DiskUsage"><code class="xref py py-class docutils literal notranslate"><span class="pre">DiskUsage</span></code></a>, <a class="reference internal" href="../cli/appliance/host/index.html#pyfsr.cli.appliance.host.HostSnapshot" title="pyfsr.cli.appliance.host.HostSnapshot"><code class="xref py py-class docutils literal notranslate"><span class="pre">HostSnapshot</span></code></a></p></li>
+<li><p><a class="reference internal" href="../cli/appliance/license/index.html#module-pyfsr.cli.appliance.license" title="pyfsr.cli.appliance.license"><code class="xref py py-mod docutils literal notranslate"><span class="pre">pyfsr.cli.appliance.license</span></code></a> — <a class="reference internal" href="../cli/appliance/license/index.html#pyfsr.cli.appliance.license.LicenseDetails" title="pyfsr.cli.appliance.license.LicenseDetails"><code class="xref py py-class docutils literal notranslate"><span class="pre">LicenseDetails</span></code></a>,
+<a class="reference internal" href="../cli/appliance/license/index.html#pyfsr.cli.appliance.license.DriftReport" title="pyfsr.cli.appliance.license.DriftReport"><code class="xref py py-class docutils literal notranslate"><span class="pre">DriftReport</span></code></a></p></li>
+<li><p><a class="reference internal" href="../cli/appliance/es/index.html#module-pyfsr.cli.appliance.es" title="pyfsr.cli.appliance.es"><code class="xref py py-mod docutils literal notranslate"><span class="pre">pyfsr.cli.appliance.es</span></code></a> — <a class="reference internal" href="../cli/appliance/es/index.html#pyfsr.cli.appliance.es.ESHealth" title="pyfsr.cli.appliance.es.ESHealth"><code class="xref py py-class docutils literal notranslate"><span class="pre">ESHealth</span></code></a></p></li>
+<li><p><a class="reference internal" href="../cli/appliance/ha/index.html#module-pyfsr.cli.appliance.ha" title="pyfsr.cli.appliance.ha"><code class="xref py py-mod docutils literal notranslate"><span class="pre">pyfsr.cli.appliance.ha</span></code></a> — <a class="reference internal" href="../cli/appliance/ha/index.html#pyfsr.cli.appliance.ha.HaNode" title="pyfsr.cli.appliance.ha.HaNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">HaNode</span></code></a>,
+<a class="reference internal" href="../cli/appliance/ha/index.html#pyfsr.cli.appliance.ha.HaHealth" title="pyfsr.cli.appliance.ha.HaHealth"><code class="xref py py-class docutils literal notranslate"><span class="pre">HaHealth</span></code></a></p></li>
+</ul>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance.db">
+<span class="sig-name descname"><span class="pre">db</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#pyfsr.appliance.DbNamespace" title="pyfsr.appliance.DbNamespace"><span class="pre">DbNamespace</span></a></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance.db"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance.db" title="Link to this definition">¶</a></dt>
+<dd><p>Postgres verbs — queries, table listings, orphan-table cleanup. See <a class="reference internal" href="#pyfsr.appliance.DbNamespace" title="pyfsr.appliance.DbNamespace"><code class="xref py py-class docutils literal notranslate"><span class="pre">DbNamespace</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance.service">
+<span class="sig-name descname"><span class="pre">service</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace" title="pyfsr.appliance.ServiceNamespace"><span class="pre">ServiceNamespace</span></a></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance.service"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance.service" title="Link to this definition">¶</a></dt>
+<dd><p>systemd / cyops service verbs — status, liveness, start/stop/restart. See <a class="reference internal" href="#pyfsr.appliance.ServiceNamespace" title="pyfsr.appliance.ServiceNamespace"><code class="xref py py-class docutils literal notranslate"><span class="pre">ServiceNamespace</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance.mq">
+<span class="sig-name descname"><span class="pre">mq</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#pyfsr.appliance.MqNamespace" title="pyfsr.appliance.MqNamespace"><span class="pre">MqNamespace</span></a></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance.mq"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance.mq" title="Link to this definition">¶</a></dt>
+<dd><p>RabbitMQ verbs — queues, consumers, permissions, purges. See <a class="reference internal" href="#pyfsr.appliance.MqNamespace" title="pyfsr.appliance.MqNamespace"><code class="xref py py-class docutils literal notranslate"><span class="pre">MqNamespace</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance.host">
+<span class="sig-name descname"><span class="pre">host</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#pyfsr.appliance.HostNamespace" title="pyfsr.appliance.HostNamespace"><span class="pre">HostNamespace</span></a></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance.host"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance.host" title="Link to this definition">¶</a></dt>
+<dd><p>OS resource metrics — memory, load, disk, process RSS. See <a class="reference internal" href="#pyfsr.appliance.HostNamespace" title="pyfsr.appliance.HostNamespace"><code class="xref py py-class docutils literal notranslate"><span class="pre">HostNamespace</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance.license">
+<span class="sig-name descname"><span class="pre">license</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#pyfsr.appliance.LicenseNamespace" title="pyfsr.appliance.LicenseNamespace"><span class="pre">LicenseNamespace</span></a></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance.license"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance.license" title="Link to this definition">¶</a></dt>
+<dd><p>Licensing / identity — device UUID, license details, entitlement drift. See <a class="reference internal" href="#pyfsr.appliance.LicenseNamespace" title="pyfsr.appliance.LicenseNamespace"><code class="xref py py-class docutils literal notranslate"><span class="pre">LicenseNamespace</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance.logs">
+<span class="sig-name descname"><span class="pre">logs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#pyfsr.appliance.LogsNamespace" title="pyfsr.appliance.LogsNamespace"><span class="pre">LogsNamespace</span></a></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance.logs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance.logs" title="Link to this definition">¶</a></dt>
+<dd><p>Log verbs — tail a service log, scan recent errors, collect a bundle. See <a class="reference internal" href="#pyfsr.appliance.LogsNamespace" title="pyfsr.appliance.LogsNamespace"><code class="xref py py-class docutils literal notranslate"><span class="pre">LogsNamespace</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance.es">
+<span class="sig-name descname"><span class="pre">es</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#pyfsr.appliance.EsNamespace" title="pyfsr.appliance.EsNamespace"><span class="pre">EsNamespace</span></a></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance.es"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance.es" title="Link to this definition">¶</a></dt>
+<dd><p>Elasticsearch verbs — cluster health, unassigned-shard explain. See <a class="reference internal" href="#pyfsr.appliance.EsNamespace" title="pyfsr.appliance.EsNamespace"><code class="xref py py-class docutils literal notranslate"><span class="pre">EsNamespace</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance.ha">
+<span class="sig-name descname"><span class="pre">ha</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#pyfsr.appliance.HaNamespace" title="pyfsr.appliance.HaNamespace"><span class="pre">HaNamespace</span></a></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance.ha"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance.ha" title="Link to this definition">¶</a></dt>
+<dd><p>HA cluster verbs — nodes, health, replication status. See <a class="reference internal" href="#pyfsr.appliance.HaNamespace" title="pyfsr.appliance.HaNamespace"><code class="xref py py-class docutils literal notranslate"><span class="pre">HaNamespace</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance.certs">
+<span class="sig-name descname"><span class="pre">certs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#pyfsr.appliance.CertsNamespace" title="pyfsr.appliance.CertsNamespace"><span class="pre">CertsNamespace</span></a></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance.certs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance.certs" title="Link to this definition">¶</a></dt>
+<dd><p>Appliance TLS certificate verbs — regenerate the self-signed cert. See <a class="reference internal" href="#pyfsr.appliance.CertsNamespace" title="pyfsr.appliance.CertsNamespace"><code class="xref py py-class docutils literal notranslate"><span class="pre">CertsNamespace</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance.info">
+<span class="sig-name descname"><span class="pre">info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance.info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance.info" title="Link to this definition">¶</a></dt>
+<dd><p>Identity card: host, FortiSOAR version, content DB, device UUID.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance.diagnose">
+<span class="sig-name descname"><span class="pre">diagnose</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">120.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance.diagnose"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance.diagnose" title="Link to this definition">¶</a></dt>
+<dd><p>Run <code class="docutils literal notranslate"><span class="pre">fsr_diagnose.sh</span></code> on the appliance; returns its output.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.appliance.Appliance.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">60.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sudo</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../_modules/pyfsr/appliance.html#Appliance.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.appliance.Appliance.run" title="Link to this definition">¶</a></dt>
+<dd><p>Run an arbitrary command on the appliance; returns <code class="docutils literal notranslate"><span class="pre">stdout</span></code>.</p>
+<p>Raises <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> on non-zero exit.  Use this as the escape hatch
+for commands not covered by a namespace method.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">box</span> <span class="o">=</span> <span class="n">Appliance</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">&quot;10.0.0.1&quot;</span><span class="p">,</span> <span class="n">key_path</span><span class="o">=</span><span class="s2">&quot;~/.ssh/id_rsa&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">box</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="s2">&quot;uname&quot;</span><span class="p">,</span> <span class="s2">&quot;-r&quot;</span><span class="p">])</span>
+<span class="go">&#39;5.15.0-101-generic\n&#39;</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="../repo/index.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">pyfsr.repo</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="../cli/widget/index.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">pyfsr.cli.widget</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Dylan Spille
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/ftnt-dspille/pyfsr" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">pyfsr.appliance</a><ul>
+<li><a class="reference internal" href="#classes">Classes</a></li>
+<li><a class="reference internal" href="#module-contents">Module Contents</a><ul>
+<li><a class="reference internal" href="#pyfsr.appliance.DbNamespace"><code class="docutils literal notranslate"><span class="pre">DbNamespace</span></code></a><ul>
+<li><a class="reference internal" href="#pyfsr.appliance.DbNamespace.query"><code class="docutils literal notranslate"><span class="pre">DbNamespace.query()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.DbNamespace.execute"><code class="docutils literal notranslate"><span class="pre">DbNamespace.execute()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.DbNamespace.tables"><code class="docutils literal notranslate"><span class="pre">DbNamespace.tables()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.DbNamespace.indexes"><code class="docutils literal notranslate"><span class="pre">DbNamespace.indexes()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.DbNamespace.sizes"><code class="docutils literal notranslate"><span class="pre">DbNamespace.sizes()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.DbNamespace.databases"><code class="docutils literal notranslate"><span class="pre">DbNamespace.databases()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.DbNamespace.find_module_tables"><code class="docutils literal notranslate"><span class="pre">DbNamespace.find_module_tables()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.DbNamespace.drop_module_tables"><code class="docutils literal notranslate"><span class="pre">DbNamespace.drop_module_tables()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.DbNamespace.find_orphan_module_tables"><code class="docutils literal notranslate"><span class="pre">DbNamespace.find_orphan_module_tables()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.DbNamespace.resolve_db"><code class="docutils literal notranslate"><span class="pre">DbNamespace.resolve_db()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace"><code class="docutils literal notranslate"><span class="pre">ServiceNamespace</span></code></a><ul>
+<li><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace.status"><code class="docutils literal notranslate"><span class="pre">ServiceNamespace.status()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace.services"><code class="docutils literal notranslate"><span class="pre">ServiceNamespace.services()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace.liveness"><code class="docutils literal notranslate"><span class="pre">ServiceNamespace.liveness()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace.restart"><code class="docutils literal notranslate"><span class="pre">ServiceNamespace.restart()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace.start"><code class="docutils literal notranslate"><span class="pre">ServiceNamespace.start()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace.stop"><code class="docutils literal notranslate"><span class="pre">ServiceNamespace.stop()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace.restart_all"><code class="docutils literal notranslate"><span class="pre">ServiceNamespace.restart_all()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace.start_all"><code class="docutils literal notranslate"><span class="pre">ServiceNamespace.start_all()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace.stop_all"><code class="docutils literal notranslate"><span class="pre">ServiceNamespace.stop_all()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.ServiceNamespace.listeners"><code class="docutils literal notranslate"><span class="pre">ServiceNamespace.listeners()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#pyfsr.appliance.MqNamespace"><code class="docutils literal notranslate"><span class="pre">MqNamespace</span></code></a><ul>
+<li><a class="reference internal" href="#pyfsr.appliance.MqNamespace.status"><code class="docutils literal notranslate"><span class="pre">MqNamespace.status()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.MqNamespace.queues"><code class="docutils literal notranslate"><span class="pre">MqNamespace.queues()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.MqNamespace.consumers"><code class="docutils literal notranslate"><span class="pre">MqNamespace.consumers()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.MqNamespace.vhosts"><code class="docutils literal notranslate"><span class="pre">MqNamespace.vhosts()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.MqNamespace.permissions"><code class="docutils literal notranslate"><span class="pre">MqNamespace.permissions()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.MqNamespace.purge_queue"><code class="docutils literal notranslate"><span class="pre">MqNamespace.purge_queue()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.MqNamespace.purge_workflows"><code class="docutils literal notranslate"><span class="pre">MqNamespace.purge_workflows()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#pyfsr.appliance.HostNamespace"><code class="docutils literal notranslate"><span class="pre">HostNamespace</span></code></a><ul>
+<li><a class="reference internal" href="#pyfsr.appliance.HostNamespace.meminfo"><code class="docutils literal notranslate"><span class="pre">HostNamespace.meminfo()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.HostNamespace.loadavg"><code class="docutils literal notranslate"><span class="pre">HostNamespace.loadavg()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.HostNamespace.process_rss"><code class="docutils literal notranslate"><span class="pre">HostNamespace.process_rss()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.HostNamespace.disk"><code class="docutils literal notranslate"><span class="pre">HostNamespace.disk()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.HostNamespace.snapshot"><code class="docutils literal notranslate"><span class="pre">HostNamespace.snapshot()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#pyfsr.appliance.LicenseNamespace"><code class="docutils literal notranslate"><span class="pre">LicenseNamespace</span></code></a><ul>
+<li><a class="reference internal" href="#pyfsr.appliance.LicenseNamespace.show"><code class="docutils literal notranslate"><span class="pre">LicenseNamespace.show()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.LicenseNamespace.details"><code class="docutils literal notranslate"><span class="pre">LicenseNamespace.details()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.LicenseNamespace.device_uuid"><code class="docutils literal notranslate"><span class="pre">LicenseNamespace.device_uuid()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.LicenseNamespace.drift"><code class="docutils literal notranslate"><span class="pre">LicenseNamespace.drift()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#pyfsr.appliance.LogsNamespace"><code class="docutils literal notranslate"><span class="pre">LogsNamespace</span></code></a><ul>
+<li><a class="reference internal" href="#pyfsr.appliance.LogsNamespace.tail"><code class="docutils literal notranslate"><span class="pre">LogsNamespace.tail()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.LogsNamespace.scan"><code class="docutils literal notranslate"><span class="pre">LogsNamespace.scan()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.LogsNamespace.bundle"><code class="docutils literal notranslate"><span class="pre">LogsNamespace.bundle()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#pyfsr.appliance.EsNamespace"><code class="docutils literal notranslate"><span class="pre">EsNamespace</span></code></a><ul>
+<li><a class="reference internal" href="#pyfsr.appliance.EsNamespace.health"><code class="docutils literal notranslate"><span class="pre">EsNamespace.health()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.EsNamespace.shards"><code class="docutils literal notranslate"><span class="pre">EsNamespace.shards()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#pyfsr.appliance.HaNamespace"><code class="docutils literal notranslate"><span class="pre">HaNamespace</span></code></a><ul>
+<li><a class="reference internal" href="#pyfsr.appliance.HaNamespace.nodes"><code class="docutils literal notranslate"><span class="pre">HaNamespace.nodes()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.HaNamespace.health"><code class="docutils literal notranslate"><span class="pre">HaNamespace.health()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.HaNamespace.replication"><code class="docutils literal notranslate"><span class="pre">HaNamespace.replication()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#pyfsr.appliance.CertsNamespace"><code class="docutils literal notranslate"><span class="pre">CertsNamespace</span></code></a><ul>
+<li><a class="reference internal" href="#pyfsr.appliance.CertsNamespace.regenerate"><code class="docutils literal notranslate"><span class="pre">CertsNamespace.regenerate()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance"><code class="docutils literal notranslate"><span class="pre">Appliance</span></code></a><ul>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance.db"><code class="docutils literal notranslate"><span class="pre">Appliance.db</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance.service"><code class="docutils literal notranslate"><span class="pre">Appliance.service</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance.mq"><code class="docutils literal notranslate"><span class="pre">Appliance.mq</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance.host"><code class="docutils literal notranslate"><span class="pre">Appliance.host</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance.license"><code class="docutils literal notranslate"><span class="pre">Appliance.license</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance.logs"><code class="docutils literal notranslate"><span class="pre">Appliance.logs</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance.es"><code class="docutils literal notranslate"><span class="pre">Appliance.es</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance.ha"><code class="docutils literal notranslate"><span class="pre">Appliance.ha</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance.certs"><code class="docutils literal notranslate"><span class="pre">Appliance.certs</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance.info"><code class="docutils literal notranslate"><span class="pre">Appliance.info()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance.diagnose"><code class="docutils literal notranslate"><span class="pre">Appliance.diagnose()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.appliance.Appliance.run"><code class="docutils literal notranslate"><span class="pre">Appliance.run()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=56c55dd0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=fd10adb8"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

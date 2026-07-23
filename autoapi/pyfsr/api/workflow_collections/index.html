@@ -1,0 +1,758 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../../../genindex.html"><link rel="search" title="Search" href="../../../../search.html"><link rel="next" title="pyfsr.models" href="../../models/index.html"><link rel="prev" title="pyfsr.api.widgets" href="../widgets/index.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>pyfsr.api.workflow_collections - pyfsr 0.16.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/custom.css" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #c8102e;
+  --color-brand-content: #c8102e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../../index.html"><div class="brand">pyfsr 0.16.1</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../../index.html">
+  
+  <span class="sidebar-brand-text">pyfsr 0.16.1</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Guides</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting-started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/authentication.html">Authentication</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/records.html">Working with Records</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/querying.html">Querying</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/module-admin.html">Module Editor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/module-field-schema.html">Module &amp; Field Schema Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/connectors.html">Connectors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/export-import.html">Configuration Export &amp; Import</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/playbook-authoring.html">Playbook Authoring &amp; Deployment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/playbook-yaml-reference.html">Playbook YAML Syntax Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/ai-agents.html">AI &amp; Agents</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/appliance-cli.html">Appliance Administration CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/repo-cli.html">Content Repository CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/content-hub-mirror.html">Self-hosted Content Hub mirror</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="current">
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../../../../reference.html">API Reference</a><input aria-label="Toggle navigation of API Reference" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../../client/index.html">pyfsr.client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../records/index.html">pyfsr.records</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../query/index.html">pyfsr.query</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../pagination/index.html">pyfsr.pagination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../fields/index.html">pyfsr.fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../config/index.html">pyfsr.config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../instances/index.html">pyfsr.instances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../exceptions/index.html">pyfsr.exceptions</a></li>
+<li class="toctree-l2 current has-children"><a class="reference internal" href="../index.html">pyfsr.api</a><input aria-label="Toggle navigation of pyfsr.api" checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../actors/index.html">pyfsr.api.actors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../agents/index.html">pyfsr.api.agents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../ai/index.html">pyfsr.api.ai</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../alerts/index.html">pyfsr.api.alerts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api_keys/index.html">pyfsr.api.api_keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api_users/index.html">pyfsr.api.api_users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../app_config/index.html">pyfsr.api.app_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../attachments/index.html">pyfsr.api.attachments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../audit/index.html">pyfsr.api.audit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../auth_config/index.html">pyfsr.api.auth_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../base/index.html">pyfsr.api.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../comments/index.html">pyfsr.api.comments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../connectors/index.html">pyfsr.api.connectors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../content_hub/index.html">pyfsr.api.content_hub</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../export_config/index.html">pyfsr.api.export_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../export_templates/index.html">pyfsr.api.export_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../feeds/index.html">pyfsr.api.feeds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../import_config/index.html">pyfsr.api.import_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../incidents/index.html">pyfsr.api.incidents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../manual_input/index.html">pyfsr.api.manual_input</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../modules/index.html">pyfsr.api.modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../modules_admin/index.html">pyfsr.api.modules_admin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../native_mcp/index.html">pyfsr.api.native_mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../notifications/index.html">pyfsr.api.notifications</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../picklists/index.html">pyfsr.api.picklists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../playbooks/index.html">pyfsr.api.playbooks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reporting/index.html">pyfsr.api.reporting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../roles/index.html">pyfsr.api.roles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../routers/index.html">pyfsr.api.routers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../rules/index.html">pyfsr.api.rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../schedules/index.html">pyfsr.api.schedules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../search/index.html">pyfsr.api.search</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../solution_packs/index.html">pyfsr.api.solution_packs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../system/index.html">pyfsr.api.system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../system_queries/index.html">pyfsr.api.system_queries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../system_settings/index.html">pyfsr.api.system_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../tags/index.html">pyfsr.api.tags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../tasks/index.html">pyfsr.api.tasks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../taxii/index.html">pyfsr.api.taxii</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../teams/index.html">pyfsr.api.teams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../user_settings/index.html">pyfsr.api.user_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../users/index.html">pyfsr.api.users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../view_templates/index.html">pyfsr.api.view_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../views/index.html">pyfsr.api.views</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../wf_tools/index.html">pyfsr.api.wf_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../widgets/index.html">pyfsr.api.widgets</a></li>
+<li class="toctree-l3 current current-page"><a class="current reference internal" href="#">pyfsr.api.workflow_collections</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../models/index.html">pyfsr.models</a><input aria-label="Toggle navigation of pyfsr.models" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../models/base/index.html">pyfsr.models.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../models/types/index.html">pyfsr.models.types</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../auth/index.html">pyfsr.auth</a><input aria-label="Toggle navigation of pyfsr.auth" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../auth/api_key/index.html">pyfsr.auth.api_key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../auth/base/index.html">pyfsr.auth.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../auth/user_pass/index.html">pyfsr.auth.user_pass</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../authoring/index.html">pyfsr.authoring</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../agent/index.html">pyfsr.agent</a><input aria-label="Toggle navigation of pyfsr.agent" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../agent/archetypes/index.html">pyfsr.agent.archetypes</a><input aria-label="Toggle navigation of pyfsr.agent.archetypes" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../agent/archetypes/harvest/index.html">pyfsr.agent.archetypes.harvest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../agent/archetypes/record/index.html">pyfsr.agent.archetypes.record</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../agent/archetypes/router/index.html">pyfsr.agent.archetypes.router</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../agent/archetypes/store/index.html">pyfsr.agent.archetypes.store</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../agent/mcp/index.html">pyfsr.agent.mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../agent/tools/index.html">pyfsr.agent.tools</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../cli/index.html">pyfsr.cli</a><input aria-label="Toggle navigation of pyfsr.cli" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../cli/appliance/index.html">pyfsr.cli.appliance</a><input aria-label="Toggle navigation of pyfsr.cli.appliance" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/certs/index.html">pyfsr.cli.appliance.certs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/content_hub/index.html">pyfsr.cli.appliance.content_hub</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/db/index.html">pyfsr.cli.appliance.db</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/diagnose/index.html">pyfsr.cli.appliance.diagnose</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/es/index.html">pyfsr.cli.appliance.es</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/facts/index.html">pyfsr.cli.appliance.facts</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/ha/index.html">pyfsr.cli.appliance.ha</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/host/index.html">pyfsr.cli.appliance.host</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/info/index.html">pyfsr.cli.appliance.info</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/license/index.html">pyfsr.cli.appliance.license</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/logs/index.html">pyfsr.cli.appliance.logs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/mq/index.html">pyfsr.cli.appliance.mq</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/service/index.html">pyfsr.cli.appliance.service</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/appliance/transport/index.html">pyfsr.cli.appliance.transport</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../cli/playbook/index.html">pyfsr.cli.playbook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../cli/repo/index.html">pyfsr.cli.repo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../cli/widget/index.html">pyfsr.cli.widget</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../appliance/index.html">pyfsr.appliance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../repo/index.html">pyfsr.repo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../content_catalog/index.html">pyfsr.content_catalog</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../../reference-advanced.html">Advanced &amp; internal</a><input aria-label="Toggle navigation of Advanced &amp; internal" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../playbook_catalog/index.html">pyfsr.playbook_catalog</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../playbook_lint/index.html">pyfsr.playbook_lint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../playbook_match/index.html">pyfsr.playbook_match</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../concurrency/index.html">pyfsr.concurrency</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../projection/index.html">pyfsr.projection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../query_models/index.html">pyfsr.query_models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../spec/index.html">pyfsr.spec</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../utils/index.html">pyfsr.utils</a><input aria-label="Toggle navigation of pyfsr.utils" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/file_operations/index.html">pyfsr.utils.file_operations</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/iri/index.html">pyfsr.utils.iri</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/validation/index.html">pyfsr.utils.validation</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference-models.html">Typed models</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributing.html">Contributing</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../../../../_sources/autoapi/pyfsr/api/workflow_collections/index.rst.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="module-pyfsr.api.workflow_collections">
+<span id="pyfsr-api-workflow-collections"></span><h1>pyfsr.api.workflow_collections<a class="headerlink" href="#module-pyfsr.api.workflow_collections" title="Link to this heading">¶</a></h1>
+<p>Workflow-collection CRUD (<code class="docutils literal notranslate"><span class="pre">/api/3/workflow_collections</span></code>).</p>
+<p>A <em>workflow collection</em> is the container FortiSOAR groups playbooks (workflows) under — the
+top-level rows in <strong>Automation → Playbooks</strong>. This wraps the lifecycle operations so callers
+(notably a playbook compiler/emitter) stop hand-rolling raw <code class="docutils literal notranslate"><span class="pre">client.*</span></code> calls and stepping on
+the load-bearing gotchas below. Accessed as <code class="docutils literal notranslate"><span class="pre">client.workflow_collections</span></code>.</p>
+<p>Key behaviours that match the appliance (and differ from naive expectations):</p>
+<ul class="simple">
+<li><p><strong>create / update</strong> POSTs or PUTs a <strong>bare collection object</strong> directly to
+<code class="docutils literal notranslate"><span class="pre">/api/3/workflow_collections</span></code>. The nested <code class="docutils literal notranslate"><span class="pre">workflows</span></code> array is accepted inline.</p></li>
+<li><p><strong>upsert / bulk_upsert</strong> hit the appliance’s true re-push path and avoid the recycle-bin
+duplicate problem by restoring soft-deleted rows when needed.</p></li>
+<li><p><strong>delete</strong> must send <strong>no body</strong> and <code class="docutils literal notranslate"><span class="pre">$hardDelete=true&amp;$showDeleted=true</span></code>. A <code class="docutils literal notranslate"><span class="pre">{}</span></code> body
+silently no-ops and leaks the collection.</p></li>
+</ul>
+<p>Use <a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_export()</span></code></a> to replay a
+FortiSOAR export file (the <code class="docutils literal notranslate"><span class="pre">{&quot;type&quot;:</span> <span class="pre">&quot;workflow_collections&quot;,</span> <span class="pre">&quot;data&quot;:</span> <span class="pre">[...]}</span></code> envelope produced
+by the UI’s Export button) — it extracts the inner collection objects and posts each bare.
+Pass <code class="docutils literal notranslate"><span class="pre">replace=True</span></code> to hard-delete any existing collection with the same uuid first.</p>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cols</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">list</span><span class="p">()</span>                 <span class="c1"># all collections</span>
+<span class="n">col</span>  <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;&lt;uuid&gt;&quot;</span><span class="p">)</span>
+<span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">create_collection</span><span class="p">(</span><span class="s2">&quot;My Pack&quot;</span><span class="p">,</span> <span class="n">workflows</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">])</span>
+<span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">upsert</span><span class="p">({</span><span class="o">...</span><span class="p">})</span>                 <span class="c1"># re-push one collection</span>
+<span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">create_collections</span><span class="p">([</span><span class="o">...</span><span class="p">])</span>            <span class="c1"># re-push many</span>
+<span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">import_export</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>           <span class="c1"># replay an export dict</span>
+<span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">import_from_file</span><span class="p">(</span><span class="s2">&quot;export.json&quot;</span><span class="p">)</span>
+<span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">import_from_yaml</span><span class="p">(</span><span class="s2">&quot;pb.yaml&quot;</span><span class="p">)</span>    <span class="c1"># compile YAML then import</span>
+<span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s2">&quot;&lt;uuid&gt;&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Renamed&quot;</span><span class="p">)</span>
+<span class="n">client</span><span class="o">.</span><span class="n">workflow_collections</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s2">&quot;&lt;uuid&gt;&quot;</span><span class="p">)</span>              <span class="c1"># hard delete, no recycle bin</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">import_from_yaml</span></code> (optional <code class="docutils literal notranslate"><span class="pre">pyfsr[playbooks]</span></code> compiler) authors a playbook
+from YAML: it compiles the YAML to the same export envelope and replays it through
+<code class="docutils literal notranslate"><span class="pre">import_export</span></code>. Use <code class="docutils literal notranslate"><span class="pre">compile_yaml</span></code> to compile without deploying.</p>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI</span></code></a></p></td>
+<td><p>CRUD for playbook (workflow) collections.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pyfsr.api.workflow_collections.</span></span><span class="sig-name descname"><span class="pre">WorkflowCollectionsAPI</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../client/index.html#pyfsr.client.FortiSOAR" title="pyfsr.client.FortiSOAR"><span class="pre">pyfsr.client.FortiSOAR</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="../base/index.html#pyfsr.api.base.BaseAPI" title="pyfsr.api.base.BaseAPI"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pyfsr.api.base.BaseAPI</span></code></a></p>
+<p>CRUD for playbook (workflow) collections.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.list">
+<span class="sig-name descname"><span class="pre">list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2147483647</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relationships</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><span class="pre">pyfsr.models.WorkflowCollection</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.list" title="Link to this definition">¶</a></dt>
+<dd><p>List workflow collections (the <code class="docutils literal notranslate"><span class="pre">hydra:member</span></code> array).</p>
+<p><code class="docutils literal notranslate"><span class="pre">relationships=True</span></code> adds <code class="docutils literal notranslate"><span class="pre">$relationships=true</span></code> so each collection’s nested
+<code class="docutils literal notranslate"><span class="pre">workflows</span></code> come back inline (heavier; off by default). Returns typed,
+dict-compatible <a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><code class="xref py py-class docutils literal notranslate"><span class="pre">WorkflowCollection</span></code></a> records.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.list_reusable_blocks">
+<span class="sig-name descname"><span class="pre">list_reusable_blocks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2147483647</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../../../reference-models.html#pyfsr.models.ReusableBlock" title="pyfsr.models.ReusableBlock"><span class="pre">pyfsr.models.ReusableBlock</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.list_reusable_blocks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.list_reusable_blocks" title="Link to this definition">¶</a></dt>
+<dd><p>List <strong>reusable playbook blocks</strong> (<code class="docutils literal notranslate"><span class="pre">workflow_groups</span></code> with <code class="docutils literal notranslate"><span class="pre">reusable=true</span></code>).</p>
+<p>These are the saved, re-droppable step groups the playbook editor and the
+Configuration Export wizard’s <em>Playbook Blocks</em> category work with. Returns
+typed, dict-compatible <a class="reference internal" href="../../../../reference-models.html#pyfsr.models.ReusableBlock" title="pyfsr.models.ReusableBlock"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReusableBlock</span></code></a> records from
+<code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/api/3/workflow_groups?reusable=true</span></code> (live-verified 8.0).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.get">
+<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">uuid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">relationships</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><span class="pre">pyfsr.models.WorkflowCollection</span></a></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.get"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.get" title="Link to this definition">¶</a></dt>
+<dd><p>Fetch one collection by uuid. <code class="docutils literal notranslate"><span class="pre">relationships=True</span></code> (default) inlines its
+<code class="docutils literal notranslate"><span class="pre">workflows</span></code> — the usual reason to fetch a single collection.</p>
+<p>Returns a typed, dict-compatible <a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><code class="xref py py-class docutils literal notranslate"><span class="pre">WorkflowCollection</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.export_to_yaml">
+<span class="sig-name descname"><span class="pre">export_to_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">db_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">pathlib.Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.export_to_yaml"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.export_to_yaml" title="Link to this definition">¶</a></dt>
+<dd><p>Decompile a live collection into authored-style playbook YAML.</p>
+<p>The inverse of <a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_yaml" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_yaml"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_from_yaml()</span></code></a> — pull a playbook collection off
+the appliance and get back the friendly YAML source, so live edits made
+in the UI can be captured into version control. <code class="docutils literal notranslate"><span class="pre">collection</span></code> is the
+collection’s uuid, or its name (resolved against <a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.list" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.list"><code class="xref py py-meth docutils literal notranslate"><span class="pre">list()</span></code></a>).</p>
+<p>Catalog resolution is seamless (warmed from this client) so connector,
+team, and picklist IRIs render back as friendly names — including custom
+connectors like <code class="docutils literal notranslate"><span class="pre">code-runner</span></code>. Pass <code class="docutils literal notranslate"><span class="pre">db_path</span></code> to use a specific
+pre-warmed catalog instead.</p>
+<p>Requires the compiler extra (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">&quot;pyfsr[playbooks]&quot;</span></code>).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.create_collection">
+<span class="sig-name descname"><span class="pre">create_collection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">visible</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">workflows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">uuid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">record_tags</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><span class="pre">pyfsr.models.WorkflowCollection</span></a></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.create_collection"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.create_collection" title="Link to this definition">¶</a></dt>
+<dd><p>Create a collection, optionally with workflows (<code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/3/workflow_collections</span></code>).</p>
+<p>Nested <code class="docutils literal notranslate"><span class="pre">workflows</span></code> (full Workflow objects with <code class="docutils literal notranslate"><span class="pre">steps</span></code>/<code class="docutils literal notranslate"><span class="pre">routes</span></code>) are accepted
+inline. <code class="docutils literal notranslate"><span class="pre">uuid</span></code> is generated if omitted. Returns the created collection record
+as a typed <a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><code class="xref py py-class docutils literal notranslate"><span class="pre">WorkflowCollection</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.upsert">
+<span class="sig-name descname"><span class="pre">upsert</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><span class="pre">pyfsr.models.WorkflowCollection</span></a></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.upsert"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.upsert" title="Link to this definition">¶</a></dt>
+<dd><p>Insert-or-update one collection via <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/3/upsert/workflow_collections</span></code>.</p>
+<p>FortiSOAR matches on the collection’s natural key, restoring a soft-deleted row
+instead of creating a duplicate. This is the safest write path when a collection
+may already exist in the recycle bin. Returns the persisted
+<a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><code class="xref py py-class docutils literal notranslate"><span class="pre">WorkflowCollection</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.create_collections">
+<span class="sig-name descname"><span class="pre">create_collections</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.create_collections"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.create_collections" title="Link to this definition">¶</a></dt>
+<dd><p>Create or re-push many collections (<code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/3/bulkupsert/workflow_collections</span></code>).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export">
+<span class="sig-name descname"><span class="pre">import_export</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">replace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><span class="pre">pyfsr.models.WorkflowCollection</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.import_export"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export" title="Link to this definition">¶</a></dt>
+<dd><p>Import a FortiSOAR export envelope, preserving original UUIDs and structure.</p>
+<p>Accepts the <code class="docutils literal notranslate"><span class="pre">{&quot;type&quot;:</span> <span class="pre">&quot;workflow_collections&quot;,</span> <span class="pre">&quot;data&quot;:</span> <span class="pre">[...]}</span></code> envelope produced
+by the UI’s Export button. Each <code class="docutils literal notranslate"><span class="pre">WorkflowCollection</span></code> object in <code class="docutils literal notranslate"><span class="pre">data[&quot;data&quot;]</span></code>
+(with its nested <code class="docutils literal notranslate"><span class="pre">workflows</span></code>) is posted as a bare object to
+<code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/3/workflow_collections</span></code> — mirroring the second call the UI makes
+during an import. Returns a list with one response dict per imported collection.</p>
+<p><code class="docutils literal notranslate"><span class="pre">replace=True</span></code> hard-deletes any existing collection whose uuid matches an item
+in the export before re-importing it (the UI’s “Replace existing playbook
+collection” flow: <code class="docutils literal notranslate"><span class="pre">DELETE</span> <span class="pre">/api/3/workflow_collections/&lt;uuid&gt;?$hardDelete=true</span></code>
+then <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/3/workflow_collections</span></code>). Without <code class="docutils literal notranslate"><span class="pre">replace=True</span></code> the POST
+raises a <code class="docutils literal notranslate"><span class="pre">409</span> <span class="pre">UniqueConstraintViolationException</span></code> if the collection already
+exists.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">data</span></code> is not a dict or is missing the <code class="docutils literal notranslate"><span class="pre">&quot;data&quot;</span></code> key.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of created collection records (one per entry in <code class="docutils literal notranslate"><span class="pre">data[&quot;data&quot;]</span></code>).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_file">
+<span class="sig-name descname"><span class="pre">import_from_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">pathlib.Path</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">replace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><span class="pre">pyfsr.models.WorkflowCollection</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.import_from_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_file" title="Link to this definition">¶</a></dt>
+<dd><p>Load a FortiSOAR export JSON file and import it via <a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_export()</span></code></a>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">path</span></code> points to a <code class="docutils literal notranslate"><span class="pre">*.json</span></code> file produced by the UI’s Export button. Pass
+<code class="docutils literal notranslate"><span class="pre">replace=True</span></code> to hard-delete any collection whose uuid already exists before
+re-creating it (the “Replace existing playbook collection” UI flow).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">path</span></code> does not exist.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – if the file is not valid JSON or lacks the <code class="docutils literal notranslate"><span class="pre">&quot;data&quot;</span></code> key.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of created collection records.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.compile_yaml">
+<span class="sig-name descname"><span class="pre">compile_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">pathlib.Path</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">db_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">pathlib.Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">refresh_catalog</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lax_codes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#set" title="(in Python v3.14)"><span class="pre">set</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.compile_yaml"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.compile_yaml" title="Link to this definition">¶</a></dt>
+<dd><p>Compile playbook YAML into the FortiSOAR import envelope.</p>
+<p><code class="docutils literal notranslate"><span class="pre">source</span></code> is either YAML text or a path (<code class="docutils literal notranslate"><span class="pre">str</span></code>/<code class="docutils literal notranslate"><span class="pre">Path</span></code>) to a <code class="docutils literal notranslate"><span class="pre">.yaml</span></code>/
+<code class="docutils literal notranslate"><span class="pre">.yml</span></code> file. Returns a <a class="reference internal" href="../../authoring/index.html#pyfsr.authoring.CompiledPlaybook" title="pyfsr.authoring.CompiledPlaybook"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompiledPlaybook</span></code></a> whose
+<code class="docutils literal notranslate"><span class="pre">fsr_json</span></code> is ready for <a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_export()</span></code></a>; inspect <code class="docutils literal notranslate"><span class="pre">ok</span></code>/<code class="docutils literal notranslate"><span class="pre">errors</span></code>/
+<code class="docutils literal notranslate"><span class="pre">warnings</span></code> before deploying.</p>
+<p><code class="docutils literal notranslate"><span class="pre">refresh_catalog</span></code> (default <code class="docutils literal notranslate"><span class="pre">True</span></code>) re-warms the local reference
+catalog from <strong>this</strong> appliance before compiling, so connector / operation
+/ team / picklist tokens resolve against what is <em>currently</em> installed —
+including a connector you just imported that the cached catalog has never
+seen. Without a fresh warm, a connector step compiles with no
+<code class="docutils literal notranslate"><span class="pre">name</span></code>/<code class="docutils literal notranslate"><span class="pre">version</span></code>/<code class="docutils literal notranslate"><span class="pre">operationTitle</span></code> and the playbook editor renders it
+as “undefined”. Set it to <code class="docutils literal notranslate"><span class="pre">False</span></code> to skip the network round-trip and
+compile offline (against <code class="docutils literal notranslate"><span class="pre">db_path</span></code> if given, else the packaged slim
+catalog) — faster, but it won’t know about connectors added since the last
+warm. <code class="docutils literal notranslate"><span class="pre">db_path</span></code> always wins: an explicit catalog is used verbatim with no
+warm regardless of this flag.</p>
+<p><code class="docutils literal notranslate"><span class="pre">lax_codes</span></code> downgrades the given diagnostic codes from error to warning
+so they don’t block emission — accepts the friendly code string
+(<code class="docutils literal notranslate"><span class="pre">{&quot;unknown_param&quot;}</span></code>), the enum name, or the <code class="docutils literal notranslate"><span class="pre">ErrorCode</span></code> enum. Use it
+for known false-positives (e.g. a conditional connector param the catalog
+can’t model) when you’ve verified the value is valid at runtime.</p>
+<p>Requires the optional compiler — install with <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span>
+<span class="pre">&quot;pyfsr[playbooks]&quot;</span></code> (raises
+<a class="reference internal" href="../../authoring/index.html#pyfsr.authoring.PlaybooksExtraNotInstalled" title="pyfsr.authoring.PlaybooksExtraNotInstalled"><code class="xref py py-class docutils literal notranslate"><span class="pre">PlaybooksExtraNotInstalled</span></code></a> otherwise).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_yaml">
+<span class="sig-name descname"><span class="pre">import_from_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">pathlib.Path</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">replace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">pathlib.Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict_warnings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">refresh_catalog</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lax_codes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#set" title="(in Python v3.14)"><span class="pre">set</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><span class="pre">pyfsr.models.WorkflowCollection</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.import_from_yaml"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_yaml" title="Link to this definition">¶</a></dt>
+<dd><p>Compile playbook YAML and import the result onto the appliance.</p>
+<p>Compiles <code class="docutils literal notranslate"><span class="pre">source</span></code> (YAML text or a <code class="docutils literal notranslate"><span class="pre">.yaml</span></code> path) via <a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.compile_yaml" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.compile_yaml"><code class="xref py py-meth docutils literal notranslate"><span class="pre">compile_yaml()</span></code></a>
+then hands the envelope to <a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_export()</span></code></a> — the same write path the
+UI’s import uses, with its recycle-bin and clean-key handling.</p>
+<p><code class="docutils literal notranslate"><span class="pre">replace=True</span></code> hard-deletes any existing collection whose uuid matches
+before re-creating it. <code class="docutils literal notranslate"><span class="pre">strict_warnings=True</span></code> treats compiler warnings as
+blocking. <code class="docutils literal notranslate"><span class="pre">db_path</span></code> overrides the reference catalog.</p>
+<p><code class="docutils literal notranslate"><span class="pre">refresh_catalog</span></code> (default <code class="docutils literal notranslate"><span class="pre">True</span></code>, forwarded to <a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.compile_yaml" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.compile_yaml"><code class="xref py py-meth docutils literal notranslate"><span class="pre">compile_yaml()</span></code></a>)
+re-warms the local catalog from this appliance before compiling so a
+just-imported connector is known and connector steps don’t render as
+“undefined” in the editor. Set <code class="docutils literal notranslate"><span class="pre">False</span></code> to compile offline (skip the warm)
+when you know the cached catalog is current. <code class="docutils literal notranslate"><span class="pre">lax_codes</span></code> (forwarded too)
+downgrades specific diagnostic codes from error to warning so a known
+false-positive doesn’t block the import.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – if compilation produces blocking errors (or warnings when
+<code class="docutils literal notranslate"><span class="pre">strict_warnings</span></code> is set).</p></li>
+<li><p><a class="reference internal" href="../../authoring/index.html#pyfsr.authoring.PlaybooksExtraNotInstalled" title="pyfsr.authoring.PlaybooksExtraNotInstalled"><strong>pyfsr.authoring.PlaybooksExtraNotInstalled</strong></a> – if the compiler extra is
+not installed.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of created collection records (one per compiled collection).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.restore">
+<span class="sig-name descname"><span class="pre">restore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">uuid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><span class="pre">pyfsr.models.WorkflowCollection</span></a></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.restore"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.restore" title="Link to this definition">¶</a></dt>
+<dd><p>Restore a soft-deleted collection from the recycle bin.</p>
+<p>This mirrors <a class="reference internal" href="../../records/index.html#pyfsr.records.RecordSet.restore" title="pyfsr.records.RecordSet.restore"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pyfsr.records.RecordSet.restore()</span></code></a> but keeps the collection-specific
+API self-contained. Returns the restored <a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><code class="xref py py-class docutils literal notranslate"><span class="pre">WorkflowCollection</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.exists">
+<span class="sig-name descname"><span class="pre">exists</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">uuid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.exists"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.exists" title="Link to this definition">¶</a></dt>
+<dd><p>Return True if a collection with <code class="docutils literal notranslate"><span class="pre">uuid</span></code> exists on the appliance.</p>
+<p>Useful as a pre-flight check before <a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_file" title="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_file"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_from_file()</span></code></a> to avoid
+re-importing a collection that is already present.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">uuid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">fields</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><span class="pre">pyfsr.models.WorkflowCollection</span></a></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.update" title="Link to this definition">¶</a></dt>
+<dd><p>Partially update a collection (<code class="docutils literal notranslate"><span class="pre">PUT</span></code>); pass only the keys you want changed
+(e.g. <code class="docutils literal notranslate"><span class="pre">name=...</span></code>, <code class="docutils literal notranslate"><span class="pre">visible=False</span></code>, <code class="docutils literal notranslate"><span class="pre">description=...</span></code>).</p>
+<p>Returns the updated <a class="reference internal" href="../../../../reference-models.html#pyfsr.models.WorkflowCollection" title="pyfsr.models.WorkflowCollection"><code class="xref py py-class docutils literal notranslate"><span class="pre">WorkflowCollection</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pyfsr.api.workflow_collections.WorkflowCollectionsAPI.delete">
+<span class="sig-name descname"><span class="pre">delete</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">uuid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">hard</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../../../_modules/pyfsr/api/workflow_collections.html#WorkflowCollectionsAPI.delete"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.delete" title="Link to this definition">¶</a></dt>
+<dd><p>Delete a collection. <code class="docutils literal notranslate"><span class="pre">hard=True</span></code> (default) bypasses the recycle bin.</p>
+<p>Sends <strong>no request body</strong> — the appliance silently no-ops a delete with a <code class="docutils literal notranslate"><span class="pre">{}</span></code>
+body and leaks the collection, so this never passes one. <code class="docutils literal notranslate"><span class="pre">hard=False</span></code> does a soft
+(recycle-bin) delete.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="../../models/index.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">pyfsr.models</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="../widgets/index.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">pyfsr.api.widgets</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Dylan Spille
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/ftnt-dspille/pyfsr" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">pyfsr.api.workflow_collections</a><ul>
+<li><a class="reference internal" href="#classes">Classes</a></li>
+<li><a class="reference internal" href="#module-contents">Module Contents</a><ul>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI</span></code></a><ul>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.list"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.list()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.list_reusable_blocks"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.list_reusable_blocks()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.get"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.get()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.export_to_yaml"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.export_to_yaml()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.create_collection"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.create_collection()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.upsert"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.upsert()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.create_collections"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.create_collections()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.import_export()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_file"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.import_from_file()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.compile_yaml"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.compile_yaml()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_from_yaml"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.import_from_yaml()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.restore"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.restore()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.exists"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.exists()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.update"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.update()</span></code></a></li>
+<li><a class="reference internal" href="#pyfsr.api.workflow_collections.WorkflowCollectionsAPI.delete"><code class="docutils literal notranslate"><span class="pre">WorkflowCollectionsAPI.delete()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../../_static/documentation_options.js?v=56c55dd0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../../_static/copybutton.js?v=fd10adb8"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

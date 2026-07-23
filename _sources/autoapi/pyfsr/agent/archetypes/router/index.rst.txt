@@ -1,0 +1,85 @@
+pyfsr.agent.archetypes.router
+=============================
+
+.. py:module:: pyfsr.agent.archetypes.router
+
+.. autoapi-nested-parse::
+
+   The map router -- classify a use case to an archetype and fill its parameter slots.
+
+   The router is the tractable core of the use-case -> FortiSOAR-artifacts mapping (Form-1
+   plan, section C -- the "no use-case -> artifacts mapping" gap). Given a free-text use case
+   it:
+
+   1. **Classifies** the use case to the best-scoring archetype in
+      :class:`~pyfsr.agent.archetypes.store.ArchetypeStore` -- a bounded, deterministic
+      keyword/intent match (NOT an LLM call), so the result is reproducible and unit-testable.
+   2. **Fills** the matched archetype's ``{{param}}`` slots: infers what it can from the use
+      case text plus the archetype's own connector manifest and module schema, applies shipped
+      defaults, and lists the slots still pending agent/user input.
+
+   The router only reads -- it never writes the appliance -- so it is safe to call against any
+   store, including a ``tmp_path`` store in tests.
+
+   Example::
+
+       from pyfsr.agent.archetypes import map_use_case
+
+       result = map_use_case("compare FortiCloud assets vs ServiceNow CMDB, email a CSV")
+       result["archetype"]                         # "reconcile-and-report"
+       result["parameters"]["source_a_label"]["value"]  # "FortiCloud assets" (inferred)
+       result["pending"]                           # ["recipients"]  (still needs a value)
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.agent.archetypes.router.map_use_case
+
+
+Module Contents
+---------------
+
+.. py:function:: map_use_case(use_case: str, store: pyfsr.agent.archetypes.store.ArchetypeStore | None = None) -> dict[str, Any]
+
+   Classify a use case to an archetype and fill its parameter slots.
+
+   Reads (never writes) the appliance: ``store`` defaults to the per-user
+   :class:`~pyfsr.agent.archetypes.store.ArchetypeStore` (seeded from the shipped
+   ``reconcile-and-report`` archetype on first use); pass ``store=ArchetypeStore(db_path=...)``
+   for a hermetic test. The classifier is a bounded keyword match, not an LLM call, so the
+   result is reproducible.
+
+   :param use_case: free-text description of the operational use case (e.g.
+                    ``"compare FortiCloud assets vs ServiceNow CMDB, email a CSV on mismatches"``).
+   :param store: archetype store to classify against. Defaults to the shared per-user store,
+                 seeded from the shipped ``reconcile-and-report`` archetype on first use. Pass an
+                 explicit store to classify against a custom or hermetic library -- it is used
+                 as-is and never mutated (so an empty store yields a no-fit, not a re-seed).
+
+   :returns:
+
+             A JSON-safe dict. On a confident match::
+
+                 {"archetype": "<name>", "confidence": 0.0-1.0, "rationale": "matched: ...",
+                  "parameters": {<name>: {"value", "source", "required", "prompt"?}},
+                  "pending": [<names still needing input>], "notes": "..."}
+
+             ``source`` is ``inferred`` (derived from the use case/archetype), ``default`` (a
+             shipped default was applied), or ``pending`` (the agent/user must supply a value).
+             On no confident match, returns ``{"archetype": None, "candidates": [{name, score,
+             matched}], "notes": "..."}`` so an agent can fall back to manual/harvesting.
+
+   Example::
+
+       from pyfsr.agent.archetypes import map_use_case
+
+       r = map_use_case("compare FortiCloud assets vs ServiceNow CMDB, email a CSV")
+       r["archetype"]                              # "reconcile-and-report"
+       r["parameters"]["source_a_label"]["value"]  # "FortiCloud assets"
+       r["pending"]                                 # ["recipients"]
+
+

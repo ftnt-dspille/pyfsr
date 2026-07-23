@@ -1,0 +1,981 @@
+pyfsr.api.modules_admin
+=======================
+
+.. py:module:: pyfsr.api.modules_admin
+
+.. autoapi-nested-parse::
+
+   Module editor: create modules, add/alter fields, publish.
+
+   Where :class:`~pyfsr.api.modules.ModulesAPI` is read-only *discovery*, this is the
+   *write* surface for the Application/Module Editor. It drives the same endpoints the
+   in-product editor and the "Clone Module" playbook use:
+
+   - **Staging** lives at ``/api/3/staging_model_metadatas`` — the editable draft. Creating
+     a module or changing a field edits staging only; nothing is live yet.
+   - **Published** lives at ``/api/3/model_metadatas`` — the committed schema records read.
+   - **Publish** is a single global ``PUT /api/publish`` that promotes *all* pending staged
+     changes on the appliance to live. It is **appliance-wide**, not per-module — see
+     :meth:`ModulesAdminAPI.publish`.
+
+   A module is a staging record with an ``attributes`` list; each attribute (field) carries a
+   **storage type** (``type``) and a **display type** (``formType``). These are two different
+   axes and a correct field needs both:
+
+   - ``type`` is the Postgres column type the platform actually stores:
+     ``string`` / ``integer`` / ``float`` / ``boolean`` / ``picklists`` / ``object`` /
+     ``array`` or a *module type name* for a relationship (e.g. ``alerts``). **There is no
+     ``text`` storage type** — text-like fields store ``string``. Publishing a field whose
+     ``type`` is ``text`` fails validation ("Attribute type 'text' does not exist").
+   - ``formType`` is the display type (the field kind shown in the editor): ``text`` /
+     ``textarea`` / ``richtext`` / ``html`` / ``email`` / ``url`` / ``phone`` / ``domain`` /
+     ``filehash`` / ``ipv4`` / ``ipv6`` / ``password`` / ``integer`` / ``decimal`` /
+     ``datetime`` / ``checkbox`` / ``file`` / ``json`` / ``object`` / ``picklist`` /
+     ``multiselectpicklist`` / ``lookup`` / ``manyToMany`` / ``oneToMany``.
+
+   Use the **typed builders** (:meth:`ModulesAdminAPI.text_field`,
+   :meth:`~ModulesAdminAPI.integer_field`, :meth:`~ModulesAdminAPI.datetime_field`,
+   :meth:`~ModulesAdminAPI.lookup_field`, ...) which set the right storage type for each
+   display type for you. :meth:`~ModulesAdminAPI.field` is the low-level escape hatch where you
+   pass both axes yourself. See :data:`DISPLAY_STORAGE_TYPE` for the full display-type→storage
+   map.
+
+   For the field-type catalogue and relationship/reverse-field semantics from an authoring
+   perspective, see ``docs/source/guides/module-field-schema.md``.
+
+   Read-only schema introspection is doctested against captured responses:
+
+       >>> client = demo_client()
+       >>> admin = client.modules_admin
+       >>> admin.is_published("alerts")
+       True
+       >>> admin.pending_changes()          # fully-published box: nothing staged
+       []
+
+   Example::
+
+       admin = client.modules_admin
+       admin.create_module("widgets", label="Widget", fields=[
+           admin.text_field("name", required=True),
+           admin.text_field("payload", area=True),
+           admin.integer_field("score"),
+           admin.picklist_field("status", "WidgetStatus"),
+           admin.relationship_field("relatedAlerts", "alerts"),  # many-to-many
+       ])
+       admin.publish()                      # appliance-wide commit
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.api.modules_admin.DISPLAY_STORAGE_TYPE
+   pyfsr.api.modules_admin.WIDGET_STORAGE_TYPE
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.modules_admin.ModulesAdminAPI
+
+
+Module Contents
+---------------
+
+.. py:data:: DISPLAY_STORAGE_TYPE
+   :type:  dict[str, str]
+
+.. py:data:: WIDGET_STORAGE_TYPE
+
+.. py:class:: ModulesAdminAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Create modules, add/alter fields, and publish schema changes.
+
+
+   .. py:method:: get_staging(module: str, *, typed: bool = False) -> dict[str, Any] | pyfsr.models.StagingModelMetadata | None
+
+      Return the full staging metadata record (incl. ``attributes``) for ``module``.
+
+      ``module`` is the module ``type`` (or plural ``module`` name). Returns None if no
+      staging record exists. Pass ``typed=True`` for a
+      :class:`~pyfsr.models.StagingModelMetadata`.
+
+
+
+   .. py:method:: get_published(module: str, *, typed: bool = False) -> dict[str, Any] | pyfsr.models.PublishedModelMetadata | None
+
+      Return the full *published* metadata record for ``module``, or None.
+
+      None means the module has never been published (it may still exist in staging).
+      Pass ``typed=True`` for a :class:`~pyfsr.models.PublishedModelMetadata`.
+
+
+
+   .. py:method:: is_published(module: str) -> bool
+
+      True if ``module`` exists in the published schema (``model_metadatas``).
+
+      Note: on appliances that auto-mirror staging into ``model_metadatas`` on every
+      write (e.g. the dev-mode schema toggle), this can read ``True`` for a module you
+      have not explicitly :meth:`publish`-ed. Use :meth:`pending_changes` to see what is
+      genuinely uncommitted.
+
+
+
+   .. py:method:: get_field(module: str, field: str, *, typed: bool = False) -> dict[str, Any] | pyfsr.models.AttributeMetadata | None
+
+      Return one staged attribute (field) dict by ``name``, or None.
+
+      Pass ``typed=True`` for an :class:`~pyfsr.models.AttributeMetadata`.
+
+
+
+   .. py:method:: reverse_field(source_module: str, source_field: str, *, published: bool = False) -> dict[str, Any] | None
+
+      Resolve the reverse (inverse) attribute on the *target* of a relationship.
+
+      Given ``source_field`` on ``source_module`` (a ``manyToMany`` / ``oneToMany`` /
+      ``lookup``), return the matching attribute on the target module that points back —
+      or ``None`` if the platform did not create one. Use this to confirm whether a
+      relationship's reverse field was auto-created (it is **not** always — see
+      :meth:`relationship_field`). Reads staging by default; pass ``published=True`` to
+      check the live schema after :meth:`publish`.
+
+      Resolution: the source field's ``type`` is the target module; its ``inversedField``
+      (or, for an un-customised many-to-many, this module's name) is the expected reverse
+      field name.
+
+
+
+   .. py:method:: format_condition(value: Any, *, default: Any) -> str
+      :staticmethod:
+
+
+      Render a ``required``/``visibility`` value compactly for a table cell.
+
+      The ``default`` (``False`` for ``required``, ``True`` for ``visibility``) is
+      suppressed to ``""`` — it's the common, uninteresting case — so only the
+      meaningful rows show content. The non-default bool renders as
+      ``"yes"``/``"no"`` (the column header — REQUIRED or VISIBLE — carries the
+      semantic). A condition dict renders as ``cond: <field> <op> <value>
+      [AND/OR ...]`` — the same shape FortiSOAR's module editor shows as
+      "Required/Visible by condition".
+
+      Example::
+
+          >>> ModulesAdminAPI.format_condition(True, default=False)
+          'yes'
+          >>> ModulesAdminAPI.format_condition(True, default=True)
+          ''
+          >>> ModulesAdminAPI.format_condition(
+          ...     {"logic": "AND",
+          ...      "filters": [{"field": "status", "operator": "eq", "value": "Closed"}]},
+          ...     default=False,
+          ... )
+          "cond: status eq 'Closed'"
+
+
+
+   .. py:method:: format_module_record(record: dict[str, Any], *, show_visibility: bool = True) -> str
+      :staticmethod:
+
+
+      Pretty-print one module metadata record's fields as an aligned table.
+
+      ``record`` is the dict returned by :meth:`get_published` or
+      :meth:`get_staging`. Columns: NAME (field API key), TYPE (storage type),
+      FORM (formType / display widget), REQUIRED, VISIBLE, TITLE (friendly
+      label). REQUIRED and VISIBLE show the **full condition** — ``yes``/``no``
+      for plain bools, ``cond: <field> <op> <value> ...`` for "Required/Visible
+      by condition" — with the default (not required / visible) suppressed to
+      keep the table readable. Pass ``show_visibility=False`` to drop the
+      VISIBLE column.
+
+      Unlike :meth:`ModulesAPI.format_module <pyfsr.api.modules.ModulesAPI.format_module>`,
+      which collapses ``required`` to a bool, this reads the raw
+      ``visibility`` payloads, so conditions are visible.
+
+
+
+   .. py:method:: format_module(module: str, *, staging: bool = False, show_visibility: bool = True) -> str
+
+      Pretty-print ``module``'s fields with type, required-ness, and conditions.
+
+      Fetches the raw metadata record (:meth:`get_published` by default,
+      :meth:`get_staging` when ``staging=True``) and renders it via
+      :meth:`format_module_record`. The REQUIRED and VISIBLE columns show the
+      full "Required/Visible by condition" payload (``cond: <field> <op>
+      <value> ...``), not just the bool collapse that
+      :meth:`ModulesAPI.format_module <pyfsr.api.modules.ModulesAPI.format_module>` gives. Returns
+      ``"module <name> not found in <staging|published>"`` if absent.
+
+      Example::
+
+          >>> client = demo_client()
+          >>> out = client.modules_admin.format_module("alerts")
+          >>> "Module: Alert" in out and "severity" in out
+          True
+
+
+
+   .. py:method:: print_module(module: str, *, staging: bool = False, show_visibility: bool = True) -> None
+
+      Print :meth:`format_module` to stdout.
+
+
+
+   .. py:method:: field(name: str, *, db_type: str = 'string', form_type: str | None = None, label: str | None = None, required: bool | dict[str, Any] | pyfsr.query.Query = False, searchable: bool = False, editable: bool = True, grid_column: bool | None = None, encrypted: bool = False, visibility: bool | dict[str, Any] | pyfsr.query.Query = True, default_value: Any = None, tooltip: str | None = None, minlength: int = 0, maxlength: int = 10485760, enable_range: bool = False, bulk_edit: bool = False, **extra: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build an attribute (field) with sane defaults for create/add.
+
+      Returns a typed :class:`~pyfsr.models.AttributeMetadata` (dict-compatible
+      for reads — ``f["type"]`` / ``f.get(...)`` / ``"type" in f`` all work — so
+      existing code that treated the result as a dict keeps working).
+
+      Mirrors the Field **Properties** panel of the in-product editor:
+
+      - ``db_type`` — **storage** type (``string``/``integer``/``float``/``boolean``/
+        ``picklists``/``object``/``array`` or a target module type); ``form_type`` is the
+        display type (defaults to ``db_type``). Prefer the typed builders (:meth:`text_field`
+        etc.) — they pick the right pair; ``"text"``/``"json"`` are display types, not storage
+        types, and are rejected here.
+      - ``label`` — the **Field Title** (``name`` is the immutable **Field API Key**).
+      - ``editable`` — UI "Editable" (maps to ``writeable``).
+      - ``searchable`` / ``grid_column`` / ``encrypted`` — the **Field Options** row.
+        ``grid_column`` (Default Grid Column) is **on by default** for scalar, lookup and
+        picklist fields (visible in the list/grid view) and **off** for ``password``,
+        ``object``/``json``/``array`` and collection relationships (``manyToMany``/
+        ``oneToMany``) — the types that are never grid columns in practice. Override
+        either way with ``grid_column=True/False``. Note: encrypted fields can't be
+        searchable and vice-versa.
+      - ``required`` — ``False`` / ``True``, a **condition** for "Required by condition",
+        or a :class:`~pyfsr.query.Query` that pyfsr renders to the condition shape.
+      - ``visibility`` — ``True`` (Visible) / ``False`` (Hidden), a **condition** for
+        "Visible by Condition", or a :class:`~pyfsr.query.Query`.
+      - ``default_value`` / ``tooltip`` — the Default Value and Tooltip inputs.
+      - ``minlength`` / ``maxlength`` / ``enable_range`` — **Length Constraints**
+        ("Add minimum/maximum range" sets ``enable_range``).
+      - ``bulk_edit`` — UI "Allow Bulk Edit" (maps to ``bulkAction.allow``).
+
+      Extra keys override the defaults (e.g. ``collection=True``, ``dataSource={...}``).
+
+      :raises ValueError: if ``name`` is not a valid API key, if ``db_type`` is a non-existent
+          storage type (e.g. ``"text"``), or if ``encrypted`` and ``searchable`` are
+          both set — all of which the appliance would only reject at publish time.
+
+
+
+   .. py:method:: picklist_field(name: str, picklist_name: str, *, multi: bool = False, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a single- or multi-select **picklist** field bound to ``picklist_name``.
+
+      ``picklist_name`` is the picklist's *list name* (e.g. ``"AlertStatus"``). ``multi``
+      switches between ``picklist`` and ``multiselectpicklist`` (a collection). Pass
+      through any :meth:`field` option (``required``, ``grid_column``, ...).
+
+
+
+   .. py:method:: typed_field(name: str, display_type: str | None = None, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a scalar field by **display type**, deriving the storage ``type`` for you.
+
+      ``display_type`` is the kind of field as shown in the editor — any key of
+      :data:`DISPLAY_STORAGE_TYPE` (``text``, ``datetime``, ``checkbox``, ``email``, ...).
+      This is the recommended way to build non-relationship fields: it guarantees the
+      storage ``type`` and ``formType`` agree, avoiding the "Attribute type 'text' does not
+      exist" publish error you get from hand-setting ``db_type``. For relationships and
+      picklists use the dedicated builders instead.
+
+      (The argument was formerly named ``form_type``; ``display_type`` is the clearer name,
+      and the legacy ``form_type=`` keyword is still accepted.)
+
+
+
+   .. py:method:: text_field(name: str, *, area: bool = False, rich: bool = False, html: bool = False, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a string field: single-line (default), ``textarea``, ``richtext`` or
+      ``html``. ``area``/``rich``/``html`` pick the display type (all store ``string``).
+
+
+
+   .. py:method:: integer_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build an integer field (stores ``integer``).
+
+
+
+   .. py:method:: decimal_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a Decimal field (stores ``float``) for fractional numbers — the
+      floating-point counterpart of :meth:`integer_field`.
+
+
+
+   .. py:method:: datetime_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a date/time field. Stored as an epoch-millis ``integer`` — that storage
+      type is intentional, not a bug.
+
+
+
+   .. py:method:: checkbox_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a boolean checkbox field (stores ``boolean``).
+
+
+
+   .. py:attribute:: boolean_field
+
+
+   .. py:method:: email_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build an email field (stores ``string``, with email-format validation).
+
+
+
+   .. py:method:: url_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a URL field (stores ``string``).
+
+
+
+   .. py:method:: phone_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a phone field (stores ``string``).
+
+
+
+   .. py:method:: domain_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a Domain field (stores ``string``).
+
+
+
+   .. py:method:: ipv4_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build an IPv4 field (stores ``string``).
+
+
+
+   .. py:method:: ipv6_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build an IPv6 field (stores ``string``).
+
+
+
+   .. py:method:: filehash_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a FileHash field (stores ``string``).
+
+
+
+   .. py:method:: file_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a file-attachment field (stores ``string``).
+
+
+
+   .. py:method:: password_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a masked password field. Pass ``encrypted=True`` to store it encrypted
+      at rest (encrypted fields cannot be ``searchable``).
+
+
+
+   .. py:method:: json_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a JSON field (stores ``object``) — the editor's "JSON" type with a JSON
+      editor control. See also :meth:`object_field` (the raw ``object`` type): both store
+      ``object`` and differ only in the editor control.
+
+
+
+   .. py:method:: object_field(name: str, *, label: str | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a raw object field (stores ``object``). For the editor's "JSON" field type
+      (a JSON editor control) use :meth:`json_field` instead.
+
+
+
+   .. py:method:: lookup_field(name: str, target_module: str, *, label: str | None = None, ownable_filter: bool = False, owning_module: str | None = None, team_scope: list[str] | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a **lookup** (many-to-one) field: a *single* reference to one record of
+      ``target_module``.
+
+      Unlike :meth:`relationship_field`, a lookup is **not a collection** and does **not**
+      own a relationship, so the platform creates **no reverse field** on the target
+      module — it is a one-directional pointer. Two lookups from different modules to the
+      same target are independent.
+
+      A lookup is also what a ``oneToMany`` relationship needs on its *target* side: a
+      ``oneToMany`` field will not publish unless a matching lookup already exists on the
+      target module (see :meth:`relationship_field`).
+
+      ``ownable_filter`` adds the ``isOwnable``/``modulePermissions`` ``dataSourceFilters``
+      the in-product editor sets for team-ownable lookups (``owning_module`` defaults to
+      the module being edited; set it when building fields ahead of the module).
+
+      ``team_scope`` (FortiSOAR **8.0+ only**, for ``target_module="people"``) is the
+      editor's "Only show users from selected teams": pass the teams whose members may be
+      picked — by name, bare uuid, or IRI — and the lookup only offers users on those teams.
+      It sets ``dataSourceFilters.showTeams``/``teams``; :meth:`add_field` /
+      :meth:`create_module` resolve the team identifiers to IRIs and **refuse to stage it on
+      an appliance older than 8.0** (7.6.x has no equivalent). See :meth:`scope_field_to_teams`.
+
+
+
+   .. py:method:: relationship_field(name: str, target_module: str, *, many: bool = True, label: str | None = None, inversed_field: str | None = None, owns_relationship: bool = True, team_scope: list[str] | None = None, **opts: Any) -> pyfsr.models.AttributeMetadata
+      :classmethod:
+
+
+      Build a **collection** relationship to ``target_module`` (its module ``type``).
+
+      ``many`` selects ``manyToMany`` (default) vs ``oneToMany``; both are collections.
+
+      ``team_scope`` (FortiSOAR **8.0+ only**, for ``target_module="people"``) is the
+      editor's "Only show users from selected teams" — restrict the pickable users to members
+      of the given teams (name, uuid, or IRI). It sets ``dataSourceFilters.showTeams``/
+      ``teams``; :meth:`add_field`/:meth:`create_module` resolve the teams to IRIs and refuse
+      to stage it on an appliance older than 8.0 (7.6.x has no equivalent).
+
+      This is a pure builder — it returns the owning-side attribute only. Add it with
+      :meth:`add_field`, which **creates the reverse side on the target for you** so the
+      relationship is valid on publish:
+
+      - ``manyToMany`` with the **default** inverse (``inversed_field=None``): FortiSOAR
+        itself mirrors a reverse field onto ``target_module``; :meth:`add_field` leaves
+        the target untouched to avoid duplicating it.
+      - ``manyToMany`` with a **custom** ``inversed_field``: :meth:`add_field` adds the
+        matching reverse ``manyToMany`` (named ``inversed_field``) to the target.
+      - ``oneToMany``: :meth:`add_field` adds the required **lookup** (many-to-one) to the
+        target (a ``oneToMany`` will not publish without it).
+
+      Pass ``create_reverse=False`` to :meth:`add_field` to stage only this side, then
+      confirm whatever landed with :meth:`reverse_field`.
+
+      ``owns_relationship`` (default True) marks this as the owning side of the join.
+      Pass ``owns_relationship=False`` for the non-owning mirror of an existing relation.
+
+
+
+   .. py:method:: get_view_templates(module: str) -> list[dict[str, Any]]
+
+      Return the ``system_view_templates`` (list/detail/form layouts) for ``module``.
+
+
+
+   .. py:method:: create_view_templates(module: str) -> dict[str, Any]
+
+      Create the default list/detail/form layouts for ``module`` (idempotent upsert).
+
+
+
+   .. py:method:: pending_changes() -> list[pyfsr.models.PendingChange]
+
+      Modules with **uncommitted** schema changes (staged but not yet published).
+
+      Both ``staging_model_metadatas`` and ``model_metadatas`` mirror every module;
+      a module has a pending change when its staging record differs from its
+      published one (or exists in only one store). Returns one entry per changed
+      module::
+
+          [{"module": "alerts", "change": "modified"},
+           {"module": "widgets", "change": "created"},
+           {"module": "legacy",  "change": "deleted"}]
+
+      An empty list means the appliance is fully published — nothing for
+      :meth:`publish` to commit. Use this before a (appliance-wide) publish to see
+      exactly what would be promoted.
+
+
+
+   .. py:method:: find_invalid_drafts(*, deep: bool = False) -> list[pyfsr.models.InvalidDraft]
+
+      Scan **staging** for drafts whose names would break the next publish.
+
+      Because :meth:`publish` is appliance-wide, a single staged module or field with an
+      illegal identifier (e.g. a module ``9probe`` or a field ``"bad name"`` added through
+      the UI) makes the whole publish fail mid-migrate with a cryptic Postgres error like
+      ``syntax error, unexpected integer "9", expecting identifier`` — and the error does
+      **not** name the offender. Run this first to find it.
+
+      Returns one entry per problem: ``{"module", "uuid", "problem"}`` (and ``"field"`` for
+      a bad attribute). ``deep=False`` (default) checks only module names — one cheap list
+      read; ``deep=True`` also fetches every draft's attributes to validate field names
+      (one read per module). An empty list means nothing staged would fail name validation.
+
+      pyfsr's own builders reject these inputs up front, so a hit here is typically a draft
+      created in the in-product editor or by another tool.
+
+
+
+   .. py:method:: create_module(module: str, *, label: str | None = None, plural: str | None = None, fields: list[dict[str, Any] | pyfsr.models.AttributeMetadata] | None = None, display_template: str | None = None, ownable: bool = True, trackable: bool = True, indexable: bool = True, taggable: bool = False, queueable: bool = False, recycle_bin: bool = False, multi_tenancy: bool = False, record_uniqueness: list[str] | None = None, default_sort: list[dict[str, Any]] | None = None, create_view_templates: bool = True, grant_to: list[str] | str | None = None, add_to_nav: bool = False, nav_title: str | None = None, nav_icon: str | None = None, nav_parent: str | None = None, nav_position: Literal['top', 'bottom'] = 'bottom', facts: Any | None = None, **opts: Any) -> dict[str, Any]
+
+      Create a new module in **staging** (not yet live — call :meth:`publish`).
+
+      ``module`` is the type/table name. ``fields`` is a list of attribute dicts (use
+      :meth:`field`); if omitted, a single required ``name`` text field is created so the
+      module is valid. Returns the created staging record.
+
+      ``display_template`` is the module's **Display Template** — the Jinja expression
+      used to render a record's title throughout the UI. It must reference a field, e.g.
+      ``"{{ name }}"`` (this is the top-level ``displayName`` on the metadata record, NOT
+      the human label, which lives in ``descriptions``). If omitted it defaults to the
+      first field, preferring a field literally named ``name``.
+
+      ``create_view_templates`` (default True) also creates the default list/detail/form
+      ``system_view_templates`` — the in-product editor makes these on Save, and without
+      them the module has no UI layout to render. Set False for an API-only module.
+
+      The remaining flags map to the editor's **Additional Settings**:
+      ``ownable`` (Team Ownable), ``trackable``, ``indexable``, ``taggable``,
+      ``queueable``, ``recycle_bin`` (Enable Recycle Bin → ``softDeleteable``),
+      ``multi_tenancy`` (Enable Multi-Tenancy → ``peerReplicable``).
+      ``record_uniqueness`` is a list of field names whose combined value must be
+      unique per record (the editor's "Make Records Unique"). Pass plain field names
+      (e.g. ``["name"]`` or ``["sourceIp", "sourcePort"]``); pyfsr builds the platform's
+      ``uniqueConstraint`` object shape for you. The unique index is created when the
+      module is **published** (it is a DB migration), not at staging time.
+      ``default_sort`` is the default sort spec (e.g. ``[{"field": "createDate",
+      "direction": "DESC"}]``).
+
+      ``grant_to`` (optional) grants full CRUD+execute permissions on the new module to
+      one or more roles. Pass a single role name (string) or a list of role names. **This is
+      explicit opt-in** — no roles are auto-granted unless you specify them, ensuring RBAC
+      changes are intentional. The grant is **deferred until the next** :meth:`publish`: a
+      brand-new module lives only in staging, and role grants resolve the module via
+      ``/api/3/modules`` (published only), so granting at create time would fail with "module
+      not found … call publish() first". ``publish()`` applies the pending grants once the
+      module is live. If you never publish (or grant manually), the module exists but its
+      records cannot be accessed until a role is granted via
+      :meth:`~pyfsr.api.roles.RolesAPI.grant_module_permissions`.
+
+      ``add_to_nav`` (optional, default False) adds the module to the application
+      navigation bar so it is reachable in the UI. Like ``grant_to`` it is **deferred
+      until the next** :meth:`publish` (the nav entry's ``require`` gate and route only
+      resolve once the module is live). By default it appends a **new top-level section
+      at the bottom** of the navigation, gated by ``read`` permission on the module and
+      routing to the module's record list. Customize with ``nav_title`` (defaults to the
+      module label), ``nav_icon`` (defaults to a generic icon), ``nav_parent`` (a group
+      title/module to nest under instead of top-level), and ``nav_position``
+      (``"top"``/``"bottom"``). For full control, edit navigation directly via
+      :class:`~pyfsr.api.app_config.AppConfigAPI` (``client.app_config``).
+
+      Example::
+
+          admin.create_module(
+              "custom_alerts",
+              fields=[admin.text_field("name")],
+              grant_to=["Full App Permissions", "SOC Analyst"],
+              add_to_nav=True,  # new section at the bottom of the nav bar
+          )
+
+      ``facts`` (optional :class:`pyfsr.cli.appliance.Facts`) enables a **create-side
+      collision precheck**: a previously-deleted module of the same name leaves orphaned
+      physical tables behind (FortiSOAR cannot ``DROP`` them over the API — see
+      :meth:`delete_module`), and reusing that ``tableName`` wedges the next
+      :meth:`publish` on a Postgres ``42P07`` index-name collision. With ``facts`` given,
+      this refuses up front (before staging anything) if leftover tables exist for
+      ``module`` while no live module backs them, pointing you at the reclaim path. This
+      is symmetric with :meth:`find_invalid_drafts` (which catches bad *names*); here we
+      catch leftover *tables*.
+
+
+
+   .. py:method:: get_or_create_module(module: str, *, publish: bool = True, publish_kwargs: dict[str, Any] | None = None, **create_kwargs: Any) -> tuple[dict[str, Any], bool]
+
+      Idempotently ensure ``module`` exists; return ``(metadata, created)``.
+
+      The structural-object analogue of
+      :meth:`~pyfsr.records.RecordSet.get_or_create`, returning the same Django-style
+      ``(obj, created)`` tuple:
+
+      - If ``module`` already exists (published **or** staging), return its current
+        metadata with ``created=False`` and make **no** changes — nothing is created,
+        nothing is published.
+      - Otherwise call :meth:`create_module` with ``create_kwargs`` (``fields=``,
+        ``grant_to=``, ``label=``, etc.) and, when ``publish`` is True (default),
+        :meth:`publish` so the module goes live (which also flushes any ``grant_to``).
+        Return the resulting metadata with ``created=True``.
+
+      Because :meth:`publish` is appliance-wide, an existing staging-only module is
+      returned as-is rather than force-published — re-publishing is left to the caller.
+      Pass ``publish_kwargs`` to forward options (e.g. ``{"timeout": 420}``) to
+      :meth:`publish`.
+
+      Example::
+
+          meta, created = admin.get_or_create_module(
+              "reconciliation_result",
+              fields=[admin.text_field("name", required=True)],
+              grant_to=["Security Administrator"],
+          )
+
+
+
+   .. py:method:: get_staging_typed(module: str) -> pyfsr.models.StagingModelMetadata | None
+
+      Typed convenience wrapper for :meth:`get_staging` — always returns
+      a :class:`~pyfsr.models.StagingModelMetadata` (or None).
+
+
+
+   .. py:method:: get_published_typed(module: str) -> pyfsr.models.PublishedModelMetadata | None
+
+      Typed convenience wrapper for :meth:`get_published` — always returns
+      a :class:`~pyfsr.models.PublishedModelMetadata` (or None).
+
+
+
+   .. py:method:: set_module_settings(module: str, **settings: Any) -> dict[str, Any]
+
+      Edit a staged module's **Additional Settings** (and display template / sort).
+
+      Accepts the same friendly names as :meth:`create_module` — ``ownable``,
+      ``trackable``, ``indexable``, ``taggable``, ``queueable``, ``recycle_bin``,
+      ``multi_tenancy``, ``display_template``, ``default_sort``, ``record_uniqueness``
+      — and PUTs the changed keys to staging. ``ownable`` also syncs ``userOwnable``.
+      Change is staged until :meth:`publish`.
+
+      ``record_uniqueness`` takes plain field names (e.g. ``["name"]``) and is converted
+      to the platform's ``uniqueConstraint`` object shape via the ``_unique_constraint`` helper.
+      ⚠️ Note: changing record-uniqueness on an **already-published** module requires a
+      DB migration that only runs on :meth:`publish`; the staging PUT records the intent
+      but the unique index is (re)built at publish time, and removing an existing
+      constraint may not drop the live index without backend action.
+
+      Verification note: on appliances that auto-mirror staging to ``model_metadatas``
+      on every write, the PUT's *response* may surface a sync error even though the
+      staging row updated. This method therefore confirms the result by **re-reading
+      staging** and only raises if a requested value did not actually take.
+
+
+
+   .. py:method:: scope_field_to_teams(field: dict[str, Any] | pyfsr.models.AttributeMetadata, teams: list[str]) -> pyfsr.models.AttributeMetadata
+
+      Restrict a People lookup/relationship ``field``'s pickable users to members of ``teams``.
+
+      The in-product "Only show users from selected teams" option (FortiSOAR **8.0+**). Takes a
+      field (built with :meth:`lookup_field`/:meth:`relationship_field`) and returns a typed
+      :class:`~pyfsr.models.AttributeMetadata` with the team-scope option applied::
+
+          f = admin.relationship_field("approvers", "people")
+          f = admin.scope_field_to_teams(f, ["SOC Team", "TeamA"])
+
+      Equivalent to passing ``team_scope=`` to :meth:`lookup_field`/:meth:`relationship_field`.
+      Version-gating + team→IRI resolution still happen when the field is staged via
+      :meth:`add_field`/:meth:`create_module`.
+
+
+
+   .. py:method:: add_field(module: str, field: dict[str, Any] | pyfsr.models.AttributeMetadata, *, create_reverse: bool = True) -> dict[str, Any]
+
+      Append a field (build it with :meth:`field`) to ``module`` in staging.
+
+      When ``field`` is a relationship whose reverse side FortiSOAR does **not**
+      auto-create, pyfsr creates it for you so the relationship is valid on publish
+      (``create_reverse=True``, the default):
+
+      - ``oneToMany`` → a matching ``lookup`` (many-to-one) is added to the target
+        module (a ``oneToMany`` will not publish without it).
+      - ``manyToMany`` with a **custom** ``inversedField`` → the mirror ``manyToMany``
+        is added to the target.
+
+      A plain ``lookup`` (one-directional) and a default-inverse ``manyToMany`` (which
+      the platform mirrors itself) add no extra field. Pass ``create_reverse=False`` to
+      stage only this side. The reverse is created in **staging** too, so publishing the
+      modules commits both sides.
+
+      Raises ``ValueError`` if the reverse is needed but the target module does not
+      exist, or already has a *different* field under the reverse name.
+
+
+
+   .. py:method:: ensure_field(module: str, field: dict[str, Any] | pyfsr.models.AttributeMetadata, *, create_reverse: bool = True) -> dict[str, Any] | None
+
+      Append ``field`` to ``module`` in staging if it isn't there yet.
+
+      Idempotent wrapper around :meth:`add_field`: if a field with the same
+      ``name`` already exists (in staging **or** published), this is a no-op
+      returning ``None``; otherwise it calls :meth:`add_field` and returns the
+      staged module metadata. A re-run from a deploy script won't duplicate
+      the field. When the field is absent and is created, the ``create_reverse``
+      semantics are identical to :meth:`add_field`.
+
+      Returns ``None`` when the field was already present; the staged module
+      metadata dict when it was newly added.
+
+
+
+   .. py:method:: set_field_type(module: str, field: str, *, db_type: str, form_type: str | None = None) -> dict[str, Any]
+
+      Change a staged field's storage ``type`` (and ``formType``).
+
+      Edits go through a PUT of the whole staging record — individual
+      ``attribute_metadatas`` are read-only on the platform. Change is staged until
+      :meth:`publish`.
+
+
+
+   .. py:method:: remove_field(module: str, field: str, *, missing_ok: bool = False) -> dict[str, Any]
+
+      Remove a field from ``module`` in **staging** (staged until :meth:`publish`).
+
+      The inverse of :meth:`add_field`. Removing a **relationship** field also removes its
+      join behaviour on publish; removing the field that another module's relationship was
+      *inverse* to is the first step of :meth:`delete_module` (a dangling reverse field
+      fails the publish validator with "Attribute type '<module>' does not exist").
+
+      Raises ``ValueError`` if the field is absent, unless ``missing_ok`` is True.
+
+
+
+   .. py:method:: find_relationship_referrers(module: str) -> list[tuple[str, list[str]]]
+
+      Return every *staged* module that has a relationship field pointing **at**
+      ``module``, as ``[(referrer_type, [field_names]), ...]``.
+
+      A relationship attribute stores its target module in ``type``; this scans all staged
+      modules for attributes whose ``type`` equals ``module``. These are the reverse fields
+      (e.g. the ``alerts`` field auto-created on a many-to-many target) that must be removed
+      **before** the module can be deleted — otherwise :meth:`publish` rejects the delete
+      synchronously ("Attribute type '<module>' does not exist as core or custom model
+      metadata"). Used by :meth:`delete_module`.
+
+
+
+   .. py:method:: delete_module(module: str, *, detach_relationships: bool = False, publish: bool = True, drop_view_templates: bool = True, drop_orphan_tables: Any | None = None, remove_from_nav: bool = False, timeout: float = 600.0, poll_interval: float = 10.0) -> dict[str, Any]
+
+      Delete a module — the **only** API path that actually removes one, verified live.
+
+      FortiSOAR exposes **no** ``DELETE`` on the published endpoint
+      (``DELETE /api/3/model_metadatas/{uuid}`` → 405 *Method Not Allowed, Allow: GET*).
+      The real mechanism, confirmed against a live appliance, is:
+
+      1. **Detach reverse relationships.** Any other module with a relationship field
+         pointing at ``module`` (see :meth:`find_relationship_referrers`) must have that
+         field removed first, or the publish below fails synchronously with
+         "Attribute type '<module>' does not exist as core or custom model metadata".
+      2. **Discard the module's own staging draft** (``DELETE`` on staging), leaving a
+         *published-without-staging* record.
+      3. **Publish.** The appliance-wide migrate then drops the module: its
+         ``model_metadatas`` / ``staging_model_metadatas`` rows and ``attribute_metadatas``
+         (including the reverse fields detached in step 1) all disappear and the module
+         vanishes from the API.
+
+      ⚠️ **The physical Postgres tables are NOT dropped.** Verified: after the module is
+      gone from the API, its base table and its relationship/ownership **join** tables
+      (e.g. ``<table>``, ``<table>_<target>``, ``<table>_team``, ``<table>_actor``) remain
+      as orphans. pyfsr cannot drop them over the API. They are harmless **except** that a
+      future module reusing the same ``tableName`` collides on the leftover index names
+      (Postgres ``42P07``) and wedges that publish — reclaim them with a backend
+      ``DROP TABLE ... CASCADE`` if you intend to recreate the module. The returned
+      ``orphan_table`` names the base table for this cleanup.
+
+      :param detach_relationships: If reverse fields point at this module, remove them first.
+                                   Defaults to **False** — with referrers present the method **refuses** (raising
+                                   with the list) rather than silently editing other modules. Set True to proceed.
+      :param publish: If True (default) run the appliance-wide :meth:`publish` to commit the
+                      delete. If False, the staging changes are staged but the module is not yet
+                      gone (you must publish later).
+      :param drop_view_templates: Also delete the module's ``system_view_templates``.
+      :param remove_from_nav: If True, also remove the module's navigation entry (the inverse
+                              of ``create_module(add_to_nav=True)``) via
+                              :meth:`~pyfsr.api.app_config.AppConfigAPI.remove_navigation_item`. Done after
+                              the publish commits the delete; a no-op if the module has no nav entry.
+      :param drop_orphan_tables: Optional :class:`pyfsr.cli.appliance.Facts` (an
+                                 appliance transport context). When given **and** ``publish`` is
+                                 True, the orphaned physical Postgres tables (base + join tables)
+                                 are dropped with ``DROP TABLE ... CASCADE`` after the publish
+                                 commits the delete — the only way to fully reclaim a module's
+                                 ``tableName`` so a future module can reuse it. Left None, the
+                                 tables are reported in ``orphan_table`` but not dropped (the API
+                                 cannot touch them; see the warning above).
+      :param timeout: Passed to :meth:`publish`.
+      :param poll_interval: Passed to :meth:`publish`.
+
+      :returns: A dict with keys ``module``, ``detached`` (list), ``orphan_table``
+                (``str`` or ``None``), ``published`` (publish result or ``None``),
+                ``dropped_tables`` (``list`` or ``None``), and ``nav_removed``
+                (``True`` if a nav entry was removed, else ``None``).
+
+      :raises ValueError: if the module is not found.
+      :raises FortiSOARException: if referrers exist and ``detach_relationships`` is False.
+
+
+
+   .. py:method:: discard_staging_draft(module: str, *, drop_view_templates: bool = True) -> bool
+
+      Discard a module's editable **staging draft** (``DELETE`` on staging). Returns
+      False if no draft existed.
+
+      This is the same call the in-product editor's "Revert" fires for an unpublished
+      module (``DELETE /api/3/staging_model_metadatas/{uuid}``).
+
+      ⚠️ **This only undoes the draft — on its own it is not a module delete.**
+
+      - If the module was **never published**, this effectively removes it (no table was
+        ever created).
+      - If the module **was published**, discarding the draft leaves a
+        *published-without-staging* record. On the **next** :meth:`publish` that record is
+        deleted (the module disappears from the API) — so discarding a published module's
+        draft and then publishing **does** delete it. To do this safely (detach reverse
+        relationships first, and understand that the physical Postgres tables are left
+        orphaned), use :meth:`delete_module` rather than calling this directly.
+
+      For a clean throwaway, do NOT publish it; then discarding the draft removes it.
+
+      ``drop_view_templates`` (default True) also deletes the module's
+      ``system_view_templates``. The UI's own revert leaves these orphaned; pyfsr cleans
+      them so a discarded module leaves nothing behind.
+
+
+
+   .. py:method:: publish(*, timeout: float = 600.0, poll_interval: float = 10.0, precheck: bool = True) -> dict[str, Any]
+
+      Commit **all** pending staged schema changes to live (``PUT /api/publish``).
+
+      ⚠️ Appliance-wide: this publishes every pending change in staging across the whole
+      instance, not just modules you touched. On a shared appliance, confirm nothing else
+      is mid-edit before calling.
+
+      Because it is appliance-wide, **one** illegally-named staged draft anywhere (e.g. a
+      module ``9probe`` created in the UI) makes the whole publish fail mid-migrate with a
+      cryptic Postgres error (``syntax error, unexpected integer "9", expecting identifier``)
+      — and ``/api/publish/error`` may even still report ``Success`` while nothing actually
+      commits. To avoid that, ``precheck`` (default True) runs
+      :meth:`find_invalid_drafts` first and raises a clear, named ``ValueError`` *before*
+      the destructive PUT. Set ``precheck=False`` to skip it.
+
+      **Always synchronous.** The PUT only *starts* the publish (the response is
+      ``{"status": "started"}``); the backup + DB migrate + commit then runs server-side,
+      during which some or all of the API may be unavailable. This method blocks until the
+      migrate finishes and confirms the result via ``/api/publish/error``, returning only
+      once the schema is actually live (or raising).
+
+      **Blast radius is version- and change-dependent** (measured, not assumed):
+
+      - On **7.6.x** every publish — even a no-op — runs the full backup + migrate + cache
+        rebuild, during which the **entire ``/api/3`` surface returns 503** for the whole
+        window (~50–57s observed on 7.6.5).
+      - On **8.0+** the impact is greatly reduced. Minor field-only edits (toggling
+        *visibility* or setting *required-by-condition*) commit in **~3s with no observable
+        outage** on any read surface. A **structural** change (adding a field/module) takes
+        longer (~30s) and disrupts only the *record/query/auth* layer: record-list endpoints
+        (``GET /api/3/<module>``) return transient **404** for ~13s and ``/api/query`` returns
+        **400/401** for ~2.5s while the migrate runs — *not* a global 503. Module-metadata,
+        view-resolve, app-config and picklist surfaces stay available throughout.
+
+        That record-layer blip is **instance-wide, not scoped to the changed module**:
+        reads on *unrelated* modules (measured: ``alerts``/``incidents``/``indicators``) go
+        down for the same window as the module being altered, because the migrate cycles the
+        shared ORM/query services. So a structural publish briefly breaks record reads across
+        the whole appliance, while leaving the metadata-serving layer up.
+
+      See ``Miscellaneous/fortisoar/repro/publish_blast_radius_repro.py`` and
+      the ``PublishProbe`` helper in ``scripts/publish_probe.py`` for the per-surface
+      measurement.
+
+      **No-op publishes return immediately.** If :meth:`pending_changes` is empty there is
+      nothing to migrate — the PUT returns 200 but no backup/migrate runs and
+      ``last_publish_time`` never advances — so this returns right after the PUT instead of
+      blocking for the full ``timeout`` waiting for an outage that will never happen.
+
+      Note ``/api/publish/error`` returns **HTTP 400** (with a usable JSON body) whenever the
+      appliance has a prior publish error on record; the poller reads that body
+      status-agnostically (see ``_publish_status``) rather than treating the 400 as an
+      outage. A box whose error record stays stale across a successful publish can therefore
+      report a misleading ``status`` — trust :meth:`pending_changes` / a schema check to
+      confirm the live state.
+
+      Note that *schema validation* errors (e.g. a relationship with no matching lookup on
+      the target, or a field whose ``type`` does not exist) are returned **synchronously**
+      as an :class:`~pyfsr.exceptions.APIError` on the PUT itself, before any migrate runs.
+      A :class:`~pyfsr.exceptions.FortiSOARException` from :meth:`publish` therefore carries
+      the appliance's own validation message — surface it verbatim to the user.
+
+      :param timeout: Max seconds to wait for the publish to complete.
+      :param poll_interval: Seconds between readiness probes.
+      :param precheck: If True (default), refuse to publish when any staged draft has an
+                       invalid module name (see :meth:`find_invalid_drafts`).
+
+      :returns: The final ``/api/publish/error`` body
+                (``{"status": "Success", "last_publish_time": ...}``).
+
+      :raises ValueError: if ``precheck`` finds an invalid staged draft that would wedge the
+          appliance-wide migrate.
+      :raises FortiSOARException: if the PUT is rejected by schema validation, or if the
+          publish finishes in any state other than ``Success``.
+      :raises TimeoutError: if the publish does not complete within ``timeout``.
+
+
+
+   .. py:method:: revert() -> dict[str, Any]
+
+      Discard **all** pending staged schema changes (``PUT /api/publish/revert``).
+
+      The inverse of :meth:`publish`: rather than committing staging to live, this
+      drops every uncommitted draft so staging matches the currently-published
+      schema again. Use it to abandon a half-built change, or to clear a wedged
+      staged draft (e.g. an illegally-named module that :meth:`find_invalid_drafts`
+      flags) so a subsequent :meth:`publish` can succeed.
+
+      ⚠️ Appliance-wide: like publish, this is **not** scoped to modules you
+      touched — it discards every pending staged change across the whole instance.
+      On a shared appliance, confirm nothing else is mid-edit before calling.
+
+      Unlike publish there is no DB migrate, so this returns synchronously without
+      the 503 outage window.
+
+      :returns: The decoded API response (commonly ``{"status": ...}``), or an empty
+                dict if the endpoint returns no body.
+
+
+

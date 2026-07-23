@@ -1,0 +1,73 @@
+pyfsr.api
+=========
+
+.. py:module:: pyfsr.api
+
+.. autoapi-nested-parse::
+
+   Module-specific API shortcuts reached from the client.
+
+   Each ``client.<module>`` attribute (``client.alerts``, ``client.incidents``,
+   ``client.tasks``, ``client.users``, ``client.content_hub``, …) is a small typed
+   wrapper over the generic record layer, adding module-aware conveniences such as
+   picklist-name resolution and parent-record linking. They all share
+   :class:`~pyfsr.api.base.BaseAPI`. For generic CRUD over any module, use
+   :class:`~pyfsr.records.RecordSet` via ``client.records(<module>)`` instead.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/pyfsr/api/actors/index
+   /autoapi/pyfsr/api/agents/index
+   /autoapi/pyfsr/api/ai/index
+   /autoapi/pyfsr/api/alerts/index
+   /autoapi/pyfsr/api/api_keys/index
+   /autoapi/pyfsr/api/api_users/index
+   /autoapi/pyfsr/api/app_config/index
+   /autoapi/pyfsr/api/attachments/index
+   /autoapi/pyfsr/api/audit/index
+   /autoapi/pyfsr/api/auth_config/index
+   /autoapi/pyfsr/api/base/index
+   /autoapi/pyfsr/api/comments/index
+   /autoapi/pyfsr/api/connectors/index
+   /autoapi/pyfsr/api/content_hub/index
+   /autoapi/pyfsr/api/export_config/index
+   /autoapi/pyfsr/api/export_templates/index
+   /autoapi/pyfsr/api/feeds/index
+   /autoapi/pyfsr/api/import_config/index
+   /autoapi/pyfsr/api/incidents/index
+   /autoapi/pyfsr/api/manual_input/index
+   /autoapi/pyfsr/api/modules/index
+   /autoapi/pyfsr/api/modules_admin/index
+   /autoapi/pyfsr/api/native_mcp/index
+   /autoapi/pyfsr/api/notifications/index
+   /autoapi/pyfsr/api/picklists/index
+   /autoapi/pyfsr/api/playbooks/index
+   /autoapi/pyfsr/api/reporting/index
+   /autoapi/pyfsr/api/roles/index
+   /autoapi/pyfsr/api/routers/index
+   /autoapi/pyfsr/api/rules/index
+   /autoapi/pyfsr/api/schedules/index
+   /autoapi/pyfsr/api/search/index
+   /autoapi/pyfsr/api/solution_packs/index
+   /autoapi/pyfsr/api/system/index
+   /autoapi/pyfsr/api/system_queries/index
+   /autoapi/pyfsr/api/system_settings/index
+   /autoapi/pyfsr/api/tags/index
+   /autoapi/pyfsr/api/tasks/index
+   /autoapi/pyfsr/api/taxii/index
+   /autoapi/pyfsr/api/teams/index
+   /autoapi/pyfsr/api/user_settings/index
+   /autoapi/pyfsr/api/users/index
+   /autoapi/pyfsr/api/view_templates/index
+   /autoapi/pyfsr/api/views/index
+   /autoapi/pyfsr/api/wf_tools/index
+   /autoapi/pyfsr/api/widgets/index
+   /autoapi/pyfsr/api/workflow_collections/index
+
+

@@ -1,0 +1,150 @@
+pyfsr.api.audit
+===============
+
+.. py:module:: pyfsr.api.audit
+
+.. autoapi-nested-parse::
+
+   Audit-log gateway (``/api/gateway/audit``).
+
+   Query FortiSOAR's audit activity store by time window + filters, count matches,
+   fetch a single record, and list the valid operation values. Also exposes the two
+   documented retention controls (disable TTL auto-purge, and the risky wholesale
+   purge). Accessed as ``client.audit``.
+
+   The activities store uses **slice pagination**: responses carry no
+   ``totalElements``/``totalPages`` — walk pages until one comes back empty.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> result = client.audit.activities("2026-06-01T00:00:00Z", "2026-06-18T00:00:00Z",
+   ...                                   operation="login", limit=100)
+   >>> result["content"][0]["operation"]
+   'create'
+   >>> count = client.audit.count("2026-06-01T00:00:00Z", "2026-06-18T00:00:00Z")
+   >>> count["count"]
+   42
+   >>> ops = client.audit.operations()
+   >>> "login" in ops
+   True
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.audit.AuditAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: AuditAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Query and manage FortiSOAR audit activity records.
+
+
+   .. py:method:: activities(start_date: Any, end_date: Any, *, page: int | None = None, limit: int | None = None, operation: Any = None, component: str | None = None, user_id: str | None = None, entity_type: str | None = None, search: str | None = None) -> dict[str, Any]
+
+      Query a slice of audit records (``POST /api/gateway/audit/activities``).
+
+      ``start_date``/``end_date`` bound the window (required). Optional filters:
+      ``operation`` (see :meth:`operations`), ``component``, ``user_id``,
+      ``entity_type``, free-text ``search``, plus ``page``/``limit``. Slice
+      pagination — keep paging until the result is empty (no total is returned).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> result = client.audit.activities("2026-06-01T00:00:00Z", "2026-06-18T00:00:00Z")
+      >>> len(result["content"])
+      1
+      >>> result["content"][0]["user"]
+      'admin'
+
+
+
+   .. py:method:: count(start_date: Any, end_date: Any, *, operation: Any = None, component: str | None = None, user_id: str | None = None, entity_type: str | None = None, search: str | None = None) -> dict[str, Any]
+
+      Total audit-record count for a window + filters.
+
+      ``POST /api/gateway/audit/activities/count`` — same filter body as
+      :meth:`activities` (without paging).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> result = client.audit.count("2026-06-01T00:00:00Z", "2026-06-18T00:00:00Z")
+      >>> result["count"]
+      42
+
+
+
+   .. py:method:: get(audit_id: str) -> dict[str, Any]
+
+      Fetch a single audit record by id
+      (``GET /api/gateway/audit/activities/{audit_id}``).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> record = client.audit.get("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+      >>> record["operation"]
+      'create'
+      >>> record["component"]
+      'alerts'
+
+
+
+   .. py:method:: operations() -> Any
+
+      List the valid ``operation`` values (``GET /api/gateway/audit/operations``).
+
+      The picklist to feed :meth:`activities`/:meth:`count` ``operation=``.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> ops = client.audit.operations()
+      >>> "login" in ops
+      True
+      >>> "create" in ops
+      True
+
+
+
+   .. py:method:: disable_ttl() -> None
+
+      Stop automatic purging of audit logs (``DELETE .../activities/ttl``).
+
+      The documented Fortinet recipe to disable the audit-log TTL auto-purge.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.audit.disable_ttl()
+
+
+
+   .. py:method:: purge(filters: dict[str, Any] | None = None) -> None
+
+      Mass-delete audit records by body filter (``DELETE .../activities``).
+
+      .. warning::
+          Destructive and effectively irreversible — deletes audit history
+          matching ``filters`` (an unfiltered call may purge everything). The
+          server's exact filter semantics are unverified; use with caution.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.audit.purge(filters={"operation": "login"})
+
+
+

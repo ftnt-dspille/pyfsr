@@ -1,0 +1,240 @@
+pyfsr.api.agents
+================
+
+.. py:module:: pyfsr.api.agents
+
+.. autoapi-nested-parse::
+
+   Execution-agent lifecycle + installer (``/api/3/agents`` and ``/api/integration``).
+
+   FortiSOAR *agents* are the remote/tenant execution nodes that proxy connector actions. This
+   wraps the agent **lifecycle** (list/get/create/delete), the **agent-installer** bundle
+   download, and **pushing a connector onto a specific agent**. The ``agentId`` of an active
+   agent is what feeds agent-scoped connector lookups
+   (``/api/integration/connector_details/?agent=<id>&active=true``). Accessed as
+   ``client.agents``; the sibling **router** records an agent needs at create time are
+   ``client.routers`` (see :class:`~pyfsr.api.routers.RoutersAPI`).
+
+   Creating a working agent is a two-step dance, mirroring the product:
+
+   1. ``create()`` registers the agent record (returns its ``uuid``/``agentId``).
+   2. ``installer()`` downloads the per-agent install bundle (a binary ``.bin``) that you then
+      run on the agent host. Connectors can be baked into that bundle, or pushed later with
+      ``install_connector()``.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> router = "/api/3/routers/3a2b1c0d-9e8f-4a7b-6c5d-4e3f2a1b0c9d"
+   >>> agent = client.agents.create("edge-1", router=router, installer_type="docker")
+   >>> agent.agentId
+   'edge-1'
+   >>> client.agents.install_connector(agent.agentId, name="cyops_utilities", version="3.7.1")
+   {'result': 'Success'}
+   >>> client.agents.delete(agent.uuid)
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.agents.AgentsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: AgentsAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   List, create, delete execution agents; download installers; push connectors.
+
+
+   .. py:method:: list(*, active_only: bool = False, limit: int = _ALL_LIMIT) -> list[pyfsr.models._agents.Agent]
+
+      Return agent records (the ``hydra:member`` array).
+
+      ``active_only=True`` filters to agents whose ``active`` flag is truthy. Each record
+      carries at least ``uuid``, ``agentId``, and ``active``.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> agents = client.agents.list()
+      >>> agents[0].agentId
+      'edge-1'
+
+
+
+   .. py:method:: get(uuid: str) -> pyfsr.models._agents.Agent
+
+      Fetch a single agent record by ``uuid`` (``GET /api/3/agents/{uuid}``).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.agents.get("6f5e4d3c-2b1a-4c9d-8e7f-1a2b3c4d5e6f").name
+      'edge-1'
+
+
+
+   .. py:method:: create(name: str, *, router: str | dict[str, Any], installer_type: str = 'docker', description: str = '') -> pyfsr.models._agents.Agent
+
+      Register a new agent (``POST /api/3/agents``); returns the created record.
+
+      ``router`` is the secure-message-exchange router the agent connects through — pass a
+      router record (from :meth:`~pyfsr.api.routers.RoutersAPI.first`/``list``), its ``@id``
+      IRI, or its bare uuid. ``installer_type`` is ``"docker"`` (default) or ``"bash"``, or a
+      full picklist IRI. Creating the record does **not** install anything; follow with
+      :meth:`installer`.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> router = "/api/3/routers/3a2b1c0d-9e8f-4a7b-6c5d-4e3f2a1b0c9d"
+      >>> client.agents.create("edge-1", router=router).agentId
+      'edge-1'
+
+
+
+   .. py:method:: get_or_create(name: str, *, router: str | dict[str, Any], installer_type: str = 'docker', description: str = '') -> tuple[pyfsr.models._agents.Agent, bool]
+
+      Idempotently ensure agent ``name`` exists; return ``(agent, created)``.
+
+      If an agent with that ``name`` already exists, it is returned unchanged
+      (its router/installer_type/description are **not** modified — only
+      presence is ensured). Returns ``created=True`` only when the agent was
+      newly created. ``router`` is required for the create path but ignored
+      when the agent already exists.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> router = "/api/3/routers/3a2b1c0d-9e8f-4a7b-6c5d-4e3f2a1b0c9d"
+      >>> agent, created = client.agents.get_or_create("edge-1", router=router)
+      >>> created
+      False
+
+
+
+   .. py:method:: delete(uuid: str) -> None
+
+      Delete an agent record (``DELETE /api/3/agents/{uuid}``). Sends no body.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.agents.delete("6f5e4d3c-2b1a-4c9d-8e7f-1a2b3c4d5e6f")
+
+
+
+   .. py:method:: installer(agent_id: str, *, connectors: list[Any] | None = None, include_last_known_configurations: bool = False) -> bytes
+
+      Download the per-agent install bundle (a binary ``.bin``) as ``bytes``.
+
+      ``POST /api/integration/agent-installer/?format=json``. ``agent_id`` is the agent's
+      ``agentId`` (not its record uuid). ``connectors`` is an optional list of connectors to
+      bake into the bundle; ``include_last_known_configurations`` ships the agent's last
+      known connector configs. Returns the raw bytes — write them to a ``.bin`` and run it
+      on the agent host.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> blob = client.agents.installer("edge-1")
+      >>> isinstance(blob, bytes)
+      True
+
+
+
+   .. py:method:: install_connector(agent_id: str, *, name: str, version: str, label: str | None = None, category: list[str] | None = None, description: str = '', publisher: str = 'Fortinet', rpm_full_name: str = '') -> dict[str, Any]
+
+      Register/activate a connector on a specific agent.
+
+      ``POST /api/integration/install-connector/?format=json`` — the call the FSoC *Agents →
+      Connectors* view makes so the connector shows as installed on ``agent_id``. ``name``
+      and ``version`` **must match the appliance's connector catalog** (look it up via
+      ``GET /api/integration/connectors/?name=<name>&format=json``); a version the catalog
+      doesn't know returns a bare 500. Poll :meth:`connector_install_status` for progress.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.agents.install_connector("edge-1", name="cyops_utilities", version="3.7.1")
+      {'result': 'Success'}
+
+
+
+   .. py:method:: upgrade_connector(agent_id: str, *, name: str, version: str) -> dict[str, Any]
+
+      Upgrade an installed connector on a remote agent to ``version``.
+
+      ``PUT /api/integration/install-connector/`` — same body shape the install
+      proxy uses (``{name, version, agent_id}``). The appliance proxies the
+      upgrade to ``agent_id`` over SME; poll :meth:`connector_install_status`
+      for progress. To go the other way (downgrade/reinstall) pass the target
+      ``version`` explicitly.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.agents.upgrade_connector("edge-1", name="cyops_utilities", version="3.8.0")
+      {'result': 'Success'}
+
+
+
+   .. py:method:: uninstall_connector(agent_id: str, *, name: str, version: str) -> dict[str, Any]
+
+      Uninstall a connector from a remote agent.
+
+      ``DELETE /api/integration/install-connector/`` with ``{name, version,
+      agent_id}``. Distinct from the appliance-level
+      :meth:`~pyfsr.api.connectors.ConnectorsAPI.uninstall`, which removes a
+      connector from the appliance's self-agent by integer id.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.agents.uninstall_connector("edge-1", name="cyops_utilities", version="3.7.1")
+      {'result': 'Success'}
+
+
+
+   .. py:method:: heartbeat(agent_id: str) -> dict[str, Any]
+
+      Probe a remote agent's liveness over the secure-message bus.
+
+      ``GET /api/integration/agent-heartbeat/{agent}/`` — round-trips a
+      heartbeat to the named agent and returns its response. This reflects the
+      *current* SME-bus state, independent of the agent record's asynchronously
+      updated ``configurationHealth.itemValue`` field.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.agents.heartbeat("edge-1")["status"]
+      'alive'
+
+
+
+   .. py:method:: connector_install_status(connector: str, version: str, *, agent_id: str | None = None, active: bool = True) -> list[pyfsr.models._agents.AgentConnectorStatus]
+
+      Per-agent connector install status rows (awaiting → in-progress → Completed).
+
+      ``POST /api/integration/connectors/agents/<connector>/<version>/?format=json`` — this
+      endpoint is **POST-only** (a GET is forbidden) and an empty body is enough. Returns
+      the list of agent×version rows; pass ``agent_id`` to keep only that agent's row.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> rows = client.agents.connector_install_status("cyops_utilities", "3.7.1")
+      >>> rows[0].status
+      'Completed'
+
+
+

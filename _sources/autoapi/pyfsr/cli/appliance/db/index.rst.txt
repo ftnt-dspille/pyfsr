@@ -1,0 +1,215 @@
+pyfsr.cli.appliance.db
+======================
+
+.. py:module:: pyfsr.cli.appliance.db
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance db`` — Postgres verbs, multi-DB aware.
+
+   Every verb resolves its target DB via :class:`Facts` (``--role`` or ``--db``) and
+   echoes the resolved name before running. Reads use a read-only path; writes go
+   through :func:`exec_write`, which refuses without an explicit confirmation.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.db.DataClassSize
+   pyfsr.cli.appliance.db.DatabaseInfo
+   pyfsr.cli.appliance.db.OrphanTable
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.db.is_write_sql
+   pyfsr.cli.appliance.db.query
+   pyfsr.cli.appliance.db.exec_write
+   pyfsr.cli.appliance.db.tables
+   pyfsr.cli.appliance.db.indexes
+   pyfsr.cli.appliance.db.getsize
+   pyfsr.cli.appliance.db.getsize_raw
+   pyfsr.cli.appliance.db.list_databases
+   pyfsr.cli.appliance.db.find_module_tables
+   pyfsr.cli.appliance.db.live_module_tables
+   pyfsr.cli.appliance.db.find_orphan_module_tables
+   pyfsr.cli.appliance.db.drop_module_tables
+
+
+Module Contents
+---------------
+
+.. py:function:: is_write_sql(sql: str) -> bool
+
+   True if ``sql`` looks like a mutating statement.
+
+
+.. py:function:: query(facts: pyfsr.cli.appliance.facts.Facts, sql: str, *, role: str | None = None, db: str | None = None) -> tuple[str, list[str], list[list[str]]]
+
+   Run a **read-only** query. Rejects mutating SQL (use ``db exec --write``).
+
+   Returns ``(dbname, headers, rows)``.
+
+
+.. py:function:: exec_write(facts: pyfsr.cli.appliance.facts.Facts, sql: str, *, role: str | None = None, db: str | None = None, yes: bool = False) -> tuple[str, str]
+
+   Run a mutating statement. Refuses unless ``yes=True``.
+
+   Returns ``(dbname, status_line)`` where ``status_line`` is psql's command tag
+   (e.g. ``DROP TABLE``). Caller is responsible for having printed the plan.
+
+
+.. py:function:: tables(facts: pyfsr.cli.appliance.facts.Facts, pattern: str | None = None, *, role: str | None = None, db: str | None = None) -> tuple[str, list[str], list[list[str]]]
+
+   List tables (optionally name-filtered) in the target DB.
+
+
+.. py:function:: indexes(facts: pyfsr.cli.appliance.facts.Facts, pattern: str | None = None, *, role: str | None = None, db: str | None = None) -> tuple[str, list[str], list[list[str]]]
+
+   List indexes (optionally name-filtered) in the target DB — the lookup used
+   to diagnose ``42P07`` index-name collisions.
+
+
+.. py:class:: DataClassSize(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One ``csadm db --getsize`` data-class footprint, normalised to MB.
+
+
+   .. py:attribute:: data_class
+      :type:  str
+
+
+   .. py:attribute:: size
+      :type:  str
+
+
+   .. py:attribute:: size_mb
+      :type:  float
+
+
+.. py:class:: DatabaseInfo(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One Postgres database: name, ``pg_size_pretty`` size, and detected role.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: size
+      :type:  str
+
+
+   .. py:attribute:: role
+      :type:  str
+
+
+.. py:function:: getsize(facts: pyfsr.cli.appliance.facts.Facts, *, timeout: float = 60.0) -> list[DataClassSize]
+
+   Parse ``csadm db --getsize`` into a typed per-data-class footprint.
+
+   csadm breaks the database footprint out by data class (primary / audit /
+   workflow, plus archived data on newer releases) — the size view to check
+   before an upgrade or when storage-pressure symptoms appear. Distinct from
+   :func:`list_databases`, which sizes each Postgres DB via ``pg_database_size``;
+   this is csadm's own class-level rollup. Needs root, so it runs under sudo.
+
+   The real output (verified live on FSR 7.6.x / csadm) is a short report::
+
+       Reading postgres details from db_config.yml file
+       Following is the current database usage:
+       Primary Data  : 7354 MB
+       Audit Logs    : 1089 MB
+       Workflow Logs : 1138 MB
+       Archived Data : 8396 kB
+
+   ``size_mb`` normalises the mixed kB/MB units. Empty result means the format
+   changed — fall back to :func:`getsize_raw`.
+
+
+.. py:function:: getsize_raw(facts: pyfsr.cli.appliance.facts.Facts, *, timeout: float = 60.0) -> str
+
+   The unparsed ``csadm db --getsize`` output (escape hatch for :func:`getsize`).
+
+
+.. py:function:: list_databases(facts: pyfsr.cli.appliance.facts.Facts) -> list[DatabaseInfo]
+
+   Enumerate appliance DBs with sizes and detected content-DB role.
+
+
+.. py:function:: find_module_tables(facts: pyfsr.cli.appliance.facts.Facts, base_table: str) -> list[str]
+
+   All physical tables left orphaned by a module delete: the base table and
+   its join tables (``<base>_<x>``), discovered from ``pg_tables`` in the content DB.
+
+   Matches ``base_table`` exactly plus any ``base_table_*`` (relationship,
+   ``_team``, ``_actor``, etc.). Returns the actual table names present.
+
+
+.. py:class:: OrphanTable(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A physical table left behind by a deleted module (no metadata row backs it).
+
+
+   .. py:attribute:: table
+      :type:  str
+
+
+   .. py:attribute:: base
+      :type:  str
+
+
+   .. py:attribute:: kind
+      :type:  str
+
+
+.. py:function:: live_module_tables(facts: pyfsr.cli.appliance.facts.Facts) -> set[str]
+
+   Base table names backing every *live* module — published (``model_metadatas``)
+   UNION staging (``staging_model_metadatas``). The complement of this set, over the
+   physical tables, is what :func:`find_orphan_module_tables` reasons about.
+
+
+.. py:function:: find_orphan_module_tables(facts: pyfsr.cli.appliance.facts.Facts) -> list[OrphanTable]
+
+   Sweep the content DB for physical tables left behind by deleted modules.
+
+   A module delete over the API discards the module's metadata but the FortiSOAR
+   API cannot ``DROP`` the physical tables, so ``<base>`` and its join tables linger
+   (see :func:`drop_module_tables`). This finds them appliance-wide without needing
+   the deleted module's name:
+
+   1. ``live`` = every base table still backed by a metadata row (:func:`live_module_tables`).
+   2. Any table named ``<base>_team`` / ``<base>_actor`` whose ``<base>`` is **not** live
+      marks ``<base>`` as a deleted module (these join tables are auto-created for every
+      module, so they are an unambiguous orphan fingerprint — system tables never have them).
+   3. The orphan family is ``<base>`` plus every ``<base>_*`` physical table present.
+
+   Non-destructive: returns the candidate list; use ``drop_module_tables(base, yes=True)``
+   (or the CLI ``--drop``) to reclaim. Returns ``OrphanTable`` rows sorted by base then table.
+
+
+.. py:function:: drop_module_tables(facts: pyfsr.cli.appliance.facts.Facts, base_table: str, *, yes: bool = False) -> dict
+
+   Drop the orphaned physical tables for a deleted module (``DROP TABLE ... CASCADE``).
+
+   Discovers the table set with :func:`find_module_tables`, then drops each with
+   CASCADE in the content DB. Refuses without ``yes=True``. Returns
+   ``{"db", "dropped": [...], "planned": [...]}``.
+
+

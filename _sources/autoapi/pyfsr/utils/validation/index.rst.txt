@@ -1,0 +1,42 @@
+pyfsr.utils.validation
+======================
+
+.. py:module:: pyfsr.utils.validation
+
+.. autoapi-nested-parse::
+
+   Shared validation helpers used across ``api/*.py`` modules.
+
+   ``is_uuid`` was independently reimplemented (identically) in ``roles.py``,
+   ``teams.py``, ``playbooks.py``, ``modules_admin.py``, and
+   ``workflow_collections.py`` -- a classic "two copies drift apart" risk. This is
+   the one copy.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.utils.validation.UUID_RE
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.utils.validation.is_uuid
+
+
+Module Contents
+---------------
+
+.. py:data:: UUID_RE
+
+.. py:function:: is_uuid(value: str) -> bool
+
+   Whether ``value`` looks like a bare UUID (as opposed to a name).
+
+

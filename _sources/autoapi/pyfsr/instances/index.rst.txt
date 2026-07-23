@@ -1,0 +1,269 @@
+pyfsr.instances
+===============
+
+.. py:module:: pyfsr.instances
+
+.. autoapi-nested-parse::
+
+   Named, multi-instance FortiSOAR client registry.
+
+   A single process often needs to reach several FortiSOAR appliances — a lab box,
+   a GA instance, a customer's demo box — without re-wiring host/auth each time.
+   :class:`InstanceRegistry` maps a short alias (``"206"``, ``"ga"``) to a resolved
+   :class:`~pyfsr.config.EnvConfig`, and hands out cached
+   :class:`~pyfsr.client.FortiSOAR` clients on demand::
+
+       from pyfsr.instances import InstanceRegistry
+       reg = InstanceRegistry.load()          # ~/.pyfsr/instances.toml, or FSR_* env
+       client = reg.client("206")             # cached per alias
+       client_ga = reg.client("ga")
+
+   It is the multi-instance counterpart of :class:`~pyfsr.config.EnvConfig` (which
+   resolves exactly one appliance) and is what the bundled MCP server
+   (:mod:`pyfsr.agent.mcp`) uses to route a tool call's ``instance`` argument to the
+   right box.
+
+   Config file (TOML, default ``~/.pyfsr/instances.toml``)::
+
+       default = "206"
+
+       [instances.206]
+       # Point at an existing KEY=VALUE env file (FSR_* keys). Relative paths
+       # resolve against the config file's directory. Creds stay in that file.
+       env_file = "/path/to/.env.206"
+
+       [instances.ga]
+       # Or inline the same [fortisoar] shape EnvConfig.from_config_file understands.
+       base_url = "https://ga.example.com"
+       verify_ssl = false
+       [instances.ga.auth]
+       type = "api_key"
+       key = "..."
+
+   When no config file is present, :meth:`InstanceRegistry.load` falls back to a
+   single ``"default"`` instance built from the ``FSR_*`` environment, so existing
+   single-box callers keep working unchanged.
+
+   Appliance SSH profiles
+   ----------------------
+
+   Each ``[instances.<alias>]`` table may optionally carry an ``[instances.<alias>.
+   appliance]`` subtable with SSH transport fields, so the ``pyfsr appliance`` CLI
+   (and :meth:`InstanceRegistry.transport`) can reach the same box over SSH
+   without re-stating host/auth on every call::
+
+       [instances.206]
+       base_url = "https://10.0.0.206"
+       [instances.206.auth]
+       type = "api_key"
+       key = "..."
+
+       [instances.206.appliance]
+       # host defaults to the hostname parsed from instances.206.base_url
+       user = "csadmin"
+       password = "..."                # or use env_file / key_path
+       port = 22
+       key_path = "~/.ssh/id_ed25519"
+       sudo_password = "..."
+       insecure_skip_host_key_check = false
+
+       # Or keep SSH creds in a separate file (PYFSR_APPLIANCE_* keys):
+       # env_file = ".env.206.ssh"
+
+   ``host`` defaults to the hostname parsed from the instance's ``base_url`` so a
+   box whose REST and SSH endpoints share an IP needs no repetition. The subtable
+   is optional — an instance without one still resolves REST clients; the
+   appliance CLI simply has no named SSH profile for it (fall back to
+   ``--host``/``PYFSR_APPLIANCE_*`` env).
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.instances.ApplianceSpec
+   pyfsr.instances.InstanceRegistry
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.instances.default_search_path
+
+
+Module Contents
+---------------
+
+.. py:function:: default_search_path() -> pathlib.Path
+
+   Return the config path to try: ``$PYFSR_INSTANCES`` or ``~/.pyfsr/instances.toml``.
+
+
+.. py:class:: ApplianceSpec(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   SSH transport profile for one appliance, resolved from the config file.
+
+   Built internally from an ``[instances.<alias>.appliance]`` subtable, and
+   handed to :meth:`InstanceRegistry.transport`, which turns it into a
+   :class:`~pyfsr.cli.appliance.transport.Transport`. ``host`` is always set
+   when the spec resolves — :meth:`InstanceRegistry.transport` raises if it
+   can't get one.
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: host
+      :type:  str
+
+
+   .. py:attribute:: user
+      :type:  str
+      :value: 'csadmin'
+
+
+
+   .. py:attribute:: password
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: port
+      :type:  int
+      :value: 22
+
+
+
+   .. py:attribute:: key_path
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: sudo_password
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: insecure_skip_host_key_check
+      :type:  bool
+      :value: False
+
+
+
+.. py:class:: InstanceRegistry
+
+   A set of named :class:`~pyfsr.config.EnvConfig`, with lazy client caching.
+
+   Build it with :meth:`load` (the usual entry point), :meth:`from_config_file`,
+   or :meth:`from_single_env`. :meth:`client` resolves an alias to a live client,
+   constructing it once and reusing it thereafter. :meth:`transport` resolves an
+   alias to an SSH :class:`~pyfsr.cli.appliance.transport.Transport` when the
+   instance carries an ``[instances.<alias>.appliance]`` subtable.
+
+
+   .. py:attribute:: configs
+      :type:  dict[str, pyfsr.config.EnvConfig]
+
+
+   .. py:attribute:: default
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: appliance_specs
+      :type:  dict[str, ApplianceSpec]
+
+
+   .. py:method:: load(path: str | pathlib.Path | None = None, env: dict[str, str] | None = None) -> InstanceRegistry
+      :classmethod:
+
+
+      Load from a config file if one exists, else a single ``FSR_*`` env instance.
+
+      ``path`` defaults to :func:`default_search_path`. This is the entry point
+      the MCP server uses: multi-instance when configured, single-box otherwise.
+
+
+
+   .. py:method:: from_config_file(path: str | pathlib.Path) -> InstanceRegistry
+      :classmethod:
+
+
+      Parse a TOML instances file into a registry.
+
+      Each ``[instances.<alias>]`` table is either an ``env_file`` indirection
+      (a ``KEY=VALUE`` file of ``FSR_*`` vars, read in isolation from the process
+      environment) or an inline ``[fortisoar]``-shaped mapping. A relative
+      ``env_file`` resolves against the config file's directory.
+
+
+
+   .. py:method:: from_single_env(env: dict[str, str] | None = None) -> InstanceRegistry
+      :classmethod:
+
+
+      Build a one-instance registry named ``"default"`` from ``FSR_*`` env vars.
+
+
+
+   .. py:method:: names() -> list[str]
+
+      Configured instance aliases, sorted.
+
+
+
+   .. py:method:: describe() -> list[dict[str, Any]]
+
+      Non-secret summary of each instance (alias, base_url, verify_ssl, default).
+
+
+
+   .. py:method:: resolve(alias: str | None) -> str
+
+      Resolve ``alias`` (or ``None`` → the default) to a known instance name.
+
+      Raises ``ValueError`` naming the valid instances when the alias is unknown
+      or when no default exists and none was given.
+
+
+
+   .. py:method:: client(alias: str | None = None) -> pyfsr.client.FortiSOAR
+
+      Return a cached :class:`~pyfsr.client.FortiSOAR` for ``alias`` (or the default).
+
+
+
+   .. py:method:: appliance_names() -> list[str]
+
+      Aliases that carry an ``[instances.<alias>.appliance]`` SSH subtable.
+
+
+
+   .. py:method:: transport(alias: str | None = None) -> pyfsr.cli.appliance.transport.Transport
+
+      Return an SSH :class:`~pyfsr.cli.appliance.transport.Transport` for ``alias``.
+
+      Requires the instance to carry an ``[instances.<alias>.appliance]`` subtable
+      in the config file (inline fields or an ``env_file`` of ``PYFSR_APPLIANCE_*``
+      vars). Raises :class:`ValueError` if the alias is unknown or has no appliance
+      subtable — callers without a named SSH profile should fall back to
+      :func:`~pyfsr.cli.appliance.transport.transport_from_env` / ``--host`` flags.
+
+      ``alias=None`` resolves to the registry's ``default`` (same rule as
+      :meth:`client`); the default must have an appliance subtable for this to work.
+
+
+

@@ -1,0 +1,61 @@
+pyfsr.cli.appliance.logs
+========================
+
+.. py:module:: pyfsr.cli.appliance.logs
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance logs`` — log tail / error scan for cyops services.
+
+   Encodes the log paths so the caller doesn't re-derive them, and rolls up recent
+   application errors + the journal for a quick "what just broke" view.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.logs.LOG_PATHS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.logs.tail
+   pyfsr.cli.appliance.logs.bundle
+   pyfsr.cli.appliance.logs.scan
+
+
+Module Contents
+---------------
+
+.. py:data:: LOG_PATHS
+   :type:  dict[str, str]
+
+.. py:function:: tail(transport: pyfsr.cli.appliance.transport.Transport, service: str, *, lines: int = 100) -> str
+
+   Tail the log for ``service`` (alias from :data:`LOG_PATHS`) or a raw path.
+
+   Raises ``FileNotFoundError`` if the target log does not exist on the box,
+   rather than returning an empty string — a missing path is almost always a
+   stale alias or a version mismatch, not a genuinely empty log.
+
+
+.. py:function:: bundle(transport: pyfsr.cli.appliance.transport.Transport, *, timeout: float = 300.0) -> str
+
+   Run ``csadm log --collect`` and return the path of the resulting tarball.
+
+   ``csadm log --collect`` bundles all cyops logs into a single
+   ``fortisoar-logs.tar.gz`` under ``/tmp/``. The function returns the path
+   printed by csadm (or the whole output if the path cannot be parsed).
+
+
+.. py:function:: scan(transport: pyfsr.cli.appliance.transport.Transport, *, minutes: int = 30) -> str
+
+   Roll up recent errors from the cyops units' journals (last ``minutes``).
+
+

@@ -1,0 +1,134 @@
+pyfsr.api.modules
+=================
+
+.. py:module:: pyfsr.api.modules
+
+.. autoapi-nested-parse::
+
+   Module (schema) discovery: list modules and describe their fields.
+
+   A runtime discovery surface so a caller — or an agent — can learn the appliance's
+   schema before reading/writing records: which modules exist (and the
+   plural-vs-singular name that bites on FortiCloud), and each module's fields with
+   type, required-ness, and the picklist a field binds to.
+
+   Both read FortiSOAR's ``staging_model_metadatas`` (the same source
+   :class:`~pyfsr.api.picklists.PicklistsAPI` uses); results are cached in-process.
+   Accessed as ``client.modules`` (or the ``client.list_modules()`` /
+   ``client.describe_module()`` shortcuts).
+
+   .. rubric:: Example
+
+   >>> client.list_modules()[:3]
+   [{'type': 'agents', 'label': 'Agent', 'plural': 'agents'}, ...]
+   >>> client.describe_module("incidents")["fields"][0]
+   {'name': 'name', 'title': 'Name', 'type': 'text', 'required': True,
+    'picklist_name': None}
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.api.modules.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.modules.ModulesAPI
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: ModulesAPI(client)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Live module + field schema discovery (cached in-process).
+
+
+   .. py:method:: clear_cache() -> None
+
+      Drop the cached module list and per-module descriptions.
+
+
+
+   .. py:method:: list(*, refresh: bool = False) -> list[dict[str, Any]]
+
+      Return every module as ``[{type, label, plural}, ...]`` (sorted).
+
+      ``type`` is the singular module type used in record IRIs; ``plural`` is
+      the collection name (they differ on some appliances). Cached after the
+      first call; pass ``refresh=True`` to re-fetch.
+
+
+
+   .. py:method:: describe(module: str, *, refresh: bool = False, with_values: bool = False) -> dict[str, Any]
+
+      Describe one module's fields.
+
+      Returns ``{module, label, plural, field_count, fields}`` where each field
+      is ``{name, title, type, required, picklist_name}``. If the module isn't
+      found, returns ``{error, available}`` listing the known module types.
+      Cached per module.
+
+      ``with_values=True`` additionally resolves each picklist-backed field's
+      valid friendly values into ``picklist_values`` — so an AI authoring a
+      record knows exactly which friendly strings are accepted (e.g. the
+      ``AlertType`` options) before it submits.
+
+
+
+   .. py:method:: search(query: str, *, refresh: bool = False) -> list[dict[str, Any]]
+
+      Return modules whose type, label, or plural contains ``query`` (case-insensitive).
+
+      >>> client.modules.search("incid")
+      [{'type': 'incidents', 'label': 'Incident', 'plural': 'incidents'}]
+
+
+
+   .. py:method:: fields(module: str, *, refresh: bool = False) -> list[dict[str, Any]]
+
+      Shortcut for ``describe(module)['fields']`` (empty list if not found).
+
+
+
+   .. py:method:: find_field(name: str | None = None, *, type: str | None = None, required: bool | None = None, refresh: bool = False) -> list[dict[str, Any]]
+
+      Search fields across **all** modules.
+
+      Filters (all optional, AND-combined): ``name`` substring (case-insensitive),
+      exact field ``type``, and ``required``. Returns ``[{module, field}, ...]``.
+
+      >>> client.modules.find_field(type="json")          # every JSON field, any module
+      >>> client.modules.find_field(name="severity")      # where does 'severity' live
+
+
+
+   .. py:method:: format_module(module: str, *, refresh: bool = False, with_values: bool = True) -> str
+
+      Return a human-readable description of a module and its fields.
+
+      Handy for a quick "print one module as a sample" — e.g.
+      ``print(client.modules.format_module("alerts"))``. By default it also
+      lists the valid friendly values of each picklist field so an AI can see
+      what to use.
+
+
+
+   .. py:method:: print_module(module: str, *, refresh: bool = False) -> None
+
+      Print :meth:`format_module` to stdout.
+
+
+

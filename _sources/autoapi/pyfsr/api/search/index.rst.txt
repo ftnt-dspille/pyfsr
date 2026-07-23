@@ -1,0 +1,80 @@
+pyfsr.api.search
+================
+
+.. py:module:: pyfsr.api.search
+
+.. autoapi-nested-parse::
+
+   Global search + persisted queries (``/api/search``, ``/api/query/{collection}/{queryId}``).
+
+   Cross-module Elasticsearch text search and execution of saved queries. Accessed
+   as ``client.search``. (Ad-hoc per-module queries are built with
+   :class:`~pyfsr.query.Query` and run via ``client.query``/record sets.)
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> results = client.search.search("8.8.8.8", index=["alerts", "incidents"])
+   >>> results["hits"]["total"]
+   1
+   >>> qid = "6f1c9e2a-6b7a-4b0a-9a1e-2f6a5c9b3d10"
+   >>> client.search.run_persisted("alerts", qid, limit=50)["hydra:totalItems"]
+   1
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.search.SearchAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: SearchAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Global ES search and persisted-query execution.
+
+
+   .. py:method:: search(q: str, *, index: list[str], size: int | None = None, offset: int | None = None, sort: str | None = None, search_type: str | None = None, modify_date_gte: int | None = None, modify_date_lte: int | None = None) -> dict[str, Any]
+
+      Cross-module text search (``POST /api/search``), Elasticsearch-backed.
+
+      ``q`` is the query string (**min 3 chars**, enforced server-side);
+      ``index`` is the list of module api names to search. Results are RBAC/team
+      scoped automatically. Optional: ``size``/``offset`` paging, ``sort``,
+      ``search_type``, and ``modify_date_gte``/``modify_date_lte`` (epoch ms).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> results = client.search.search("8.8.8.8", index=["alerts"])
+      >>> results["hits"]["hits"][0]["_source"]["severity"]
+      'Low'
+
+
+
+   .. py:method:: run_persisted(collection: str, query_id: str, *, limit: int | None = None, page: int | None = None, orderby: str | None = None) -> dict[str, Any]
+
+      Execute a saved query (``POST /api/query/{collection}/{query_id}``).
+
+      Runs a Query previously saved via ``POST /api/3/user_queries`` (or a
+      system query under ``/api/3/system_queries``). ``collection`` is the
+      module the query targets. Override paging with ``limit``/``page`` and
+      ordering with ``orderby`` (e.g. ``"+name"``).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> qid = "6f1c9e2a-6b7a-4b0a-9a1e-2f6a5c9b3d10"
+      >>> client.search.run_persisted("alerts", qid, limit=50)["hydra:totalItems"]
+      1
+
+
+

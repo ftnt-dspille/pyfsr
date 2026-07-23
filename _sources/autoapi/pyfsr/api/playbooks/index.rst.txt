@@ -1,0 +1,1240 @@
+pyfsr.api.playbooks
+===================
+
+.. py:module:: pyfsr.api.playbooks
+
+.. autoapi-nested-parse::
+
+   Playbook run history and manual-input resume.
+
+   Wraps FortiSOAR's workflow-run surface (``/api/wf/api``). Accessed as
+   ``client.playbooks``.
+
+   Run history lives in two tables: ``/workflows/`` holds recent/live runs, but
+   FortiSOAR purges them to ``/historical-workflows/`` every ~30-60 min (the
+   historical table also carries richer inline fields). ``execution_history()``
+   queries both and merges them, deduped by IRI and sorted newest-first.
+
+   .. rubric:: Example
+
+   >>> client.playbooks.list(limit=10)                                    # doctest: +SKIP
+   >>> client.playbooks.get_definition("<uuid>")                          # doctest: +SKIP
+   >>> client.playbooks.create_playbooks([payload])                      # doctest: +SKIP
+   >>> client.playbooks.execution_history(playbook="Block IP", limit=5)  # doctest: +SKIP
+   >>> client.playbooks.last_run(playbook="Block IP")                    # doctest: +SKIP
+   >>> client.playbooks.why_failed(playbook="Block IP")                  # doctest: +SKIP
+   >>> client.playbooks.get_execution("<run-pk>")                         # doctest: +SKIP
+   >>> client.playbooks.search_executions("High Risk", status="failed")  # doctest: +SKIP
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.api.playbooks.STEP_TYPE_NAMES
+   pyfsr.api.playbooks.TRIGGER_TYPE_NAMES
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.playbooks.PlaybooksAPI
+
+
+Module Contents
+---------------
+
+.. py:data:: STEP_TYPE_NAMES
+   :type:  dict[str, str]
+
+.. py:data:: TRIGGER_TYPE_NAMES
+   :type:  dict[str, str]
+
+.. py:class:: PlaybooksAPI(client: Any)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Live playbook-run history and resume.
+
+
+   .. py:attribute:: TERMINAL_STATUSES
+
+
+   .. py:method:: resolve_iri(playbook: str) -> str | None
+
+      Resolve a playbook name to its workflow IRI (``/api/3/workflows/<uuid>``).
+
+      Returns ``None`` if no playbook with that name exists. Use when an
+      operation needs the IRI rather than the uuid -- e.g. scheduling a
+      periodic task whose ``kwargs.wf_iri`` points at the workflow.
+
+
+
+   .. py:method:: list(*, name: str | None = None, collection: str | None = None, limit: int = 50, relationships: bool = False, params: dict[str, Any] | None = None) -> list[dict[str, Any]]
+
+      List playbook **definitions** (``GET /api/3/workflows``), newest table order.
+
+      These are the playbook templates, not run history (see :meth:`runs`). Filter by
+      ``name`` (exact) or ``collection`` (a collection uuid; the bare uuid or a full
+      ``/api/3/workflow_collections/<uuid>`` IRI both work). ``relationships=True`` adds
+      ``$relationships=true`` so each workflow's ``steps``/``routes`` come back inline
+      (heavier). Pass ``params=`` to forward additional API-Platform filters such as
+      ``triggerStep.stepType.name=...`` or ``$fields=...``. Returns the ``hydra:member``
+      array.
+
+
+
+   .. py:method:: find(*, name: str | None = None, name_contains: str | None = None, collection: str | None = None, tag: str | None = None, active: bool | None = None, private: bool | None = None, trigger_type: str | None = None, step_type: str | None = None, uses_connector: str | None = None, uses_operation: str | None = None, route: str | None = None, references: str | None = None, remote_executable: bool | None = None, single_record: bool | None = None, limit: int = 50, relationships: bool = False, params: dict[str, Any] | None = None) -> list[dict[str, Any]]
+
+      Search playbook definitions across the most useful dimensions at once.
+
+      A thin, ergonomic layer over the FortiSOAR API-Platform deep-relationship
+      filter language (all filters are ANDed; each maps to a ``/api/3/workflows``
+      query param). Every argument is optional; pass only what you want to
+      constrain. All values are **live-verified** against the query API.
+
+      :param name: exact playbook name.
+      :param name_contains: case-insensitive substring of the name (``name$like``).
+      :param collection: collection uuid or ``/api/3/workflow_collections/<uuid>`` IRI.
+      :param tag: a tag substring (``tag$like``).
+      :param active: ``True`` for active playbooks only, ``False`` for disabled.
+      :param private: ``True`` for private (owner-scoped) playbooks, ``False`` for public.
+      :param trigger_type: filter on the **start step** — a friendly alias from
+                           ``TRIGGER_TYPE_NAMES`` (``manual``, ``on_create``, ``on_update``,
+                           ``referenced``, ``api_endpoint``) or a raw ``cybersponse.*`` name.
+      :param step_type: playbooks **containing** a step of this type — a friendly
+                        alias from ``STEP_TYPE_NAMES`` (``connector``, ``decision``,
+                        ``manual_input``, ``approval``, ``reference``, ``code_snippet``,
+                        …) or a raw API step-type name.
+      :param uses_connector: playbooks with a step invoking this connector (matched
+                             as a substring of step ``arguments``, e.g. ``"fortigate"``).
+      :param uses_operation: playbooks with a step calling this connector operation
+                             (substring of ``arguments``, e.g. ``"block_ip"``).
+      :param route: playbooks exposing this API-endpoint route (implies an
+                    ``api_endpoint`` trigger; substring of ``arguments``).
+      :param references: playbooks that reference another playbook by name (implies
+                         a ``reference`` step; substring of ``arguments``).
+      :param remote_executable: agent/remote-executable playbooks only.
+      :param single_record: single-record-execution playbooks only.
+      :param limit: max results (default 50).
+      :param relationships: inline each playbook's ``steps``/``routes`` (heavier).
+      :param params: extra raw query params, merged last (escape hatch).
+
+      :returns: The matching playbook-definition records (``hydra:member``).
+
+      .. note::
+
+         ``arguments``-substring filters (``uses_connector``, ``uses_operation``,
+         ``route``, ``references``) all target the same JSON column, so at most
+         **one** may be combined with the others per call — passing two raises
+         ``ValueError``. For richer boolean logic use :meth:`query` with a
+         :class:`~pyfsr.query.Query`.
+
+
+
+   .. py:method:: find_with_step_type(step_type: str, **kwargs: Any) -> list[dict[str, Any]]
+
+      Playbooks containing at least one step of ``step_type`` (see :meth:`find`).
+
+
+
+   .. py:method:: find_by_trigger_type(trigger_type: str, **kwargs: Any) -> list[dict[str, Any]]
+
+      Playbooks whose start step is ``trigger_type`` (see :meth:`find`).
+
+
+
+   .. py:method:: find_using_connector(connector: str, *, operation: str | None = None, **kwargs: Any) -> list[dict[str, Any]]
+
+      Playbooks with a step that invokes ``connector`` (optionally a specific
+      ``operation``). Matched as a substring of the step ``arguments`` — pass the
+      connector slug as it appears on the wire (e.g. ``"fortigate"``,
+      ``"fortinet-fortimanager"``). ``operation`` and ``connector`` can't both be
+      used here (same JSON column); pass whichever is more selective.
+
+
+
+   .. py:method:: find_referencing(playbook: str, **kwargs: Any) -> list[dict[str, Any]]
+
+      Playbooks that reference ``playbook`` (by name) via a reference step.
+
+
+
+   .. py:method:: find_by_route(route: str, **kwargs: Any) -> list[dict[str, Any]]
+
+      Playbooks exposing the API-endpoint ``route`` (``POST /api/triggers/1/<route>``).
+
+
+
+   .. py:method:: match(predicate: collections.abc.Callable[[Any], bool], *, prefilter: dict[str, Any] | None = None, limit: int = 2000) -> list[dict[str, Any]]
+
+      Structural search the server filter language can't express.
+
+      Fetches playbook definitions **with steps inlined**, parses each into a
+      :class:`~pyfsr.playbook_match.ParsedPlaybook`, and returns the raw
+      definitions whose parse satisfies ``predicate`` (built from
+      :mod:`pyfsr.playbook_match` helpers — ``step``/``count``/``has``/
+      ``trigger``/``all_of``/``any_of``/``none_of``).
+
+      Use this for same-step precision ("fortigate AND block_ip on one step"),
+      quantities ("exactly 2 set-variable steps"), or any boolean mix. Pass
+      ``prefilter`` (a :meth:`find` kwargs dict) to narrow server-side first and
+      avoid pulling every playbook — e.g. ``prefilter={"trigger_type": "manual"}``.
+
+      .. rubric:: Example
+
+      >>> from pyfsr.playbook_match import step, count, all_of
+      >>> pred = all_of(count(step(step_type="set_variable"), n=2),
+      ...               count(step(step_type="code_snippet"), n=1))
+      >>> client.playbooks.match(pred)  # doctest: +SKIP
+
+
+
+   .. py:method:: match_across(parent_predicate: collections.abc.Callable[[Any], bool], child_predicate: collections.abc.Callable[[Any], bool], *, limit: int = 2000) -> list[dict[str, Any]]
+
+      Parent/child join: parents matching ``parent_predicate`` that reference a
+      child matching ``child_predicate``.
+
+      Pulls the playbook corpus once (with steps), resolves each parent's
+      reference steps to children by name, and returns the raw parent
+      definitions. Answers questions like "a manual playbook whose referenced
+      child blocks an IP"::
+
+          from pyfsr.playbook_match import trigger, has, step
+          client.playbooks.match_across(
+              trigger("manual"), has(step(operation="block_ip")))
+
+
+
+   .. py:method:: manual_on_module(module: str, *, active: bool | None = None, limit: int = 2000) -> list[dict[str, Any]]
+
+      Manual-trigger playbooks tied to ``module``, with their UI button labels.
+
+      A *manual* trigger (the right-click / Execute menu on a module's records)
+      carries the modules it's tied to in its trigger step's
+      ``arguments.resources`` list (live-verified -- module name-slugs like
+      ``"alerts"``, not IRIs). This finds every manual playbook whose resources
+      include ``module`` and returns the label the UI shows for it -- the trigger
+      step's ``title`` when set, else the playbook ``name`` -- plus the
+      manual-input dialog's ``executeButtonText`` and every module the trigger
+      is tied to.
+
+      Filtering is done **server-side** via a JSON containment query
+      (``triggerStep.arguments contains {"resources": ["<module>"]}``) on the
+      POST query endpoint, so only matching playbooks are transferred -- not the
+      full corpus. (The URL-param ``$contains`` returns 0 for this shape;
+      containment only works via the POST payload -- live-verified.)
+
+      :param module: a module name-slug (``"alerts"``, ``"incidents"``,
+                     ``"threat_intel_feeds"``), matched as a JSON containment value
+                     against the trigger step's ``resources`` list.
+      :param active: ``True`` to restrict to active playbooks, ``False`` for
+                     disabled only; ``None`` (default) for both.
+      :param limit: max playbooks to return (default 2000 covers most instances).
+
+      :returns: One dict per matching playbook -- ``name``, ``uuid``, ``label`` (the
+                Execute-menu button label), ``execute_button_text`` (the manual-input
+                dialog button, e.g. ``"Execute"``), and ``resources`` (every tied
+                module).
+
+      .. rubric:: Example
+
+      >>> for pb in client.playbooks.manual_on_module("alerts"):  # doctest: +SKIP
+      ...     print(pb["label"], "—", pb["name"])
+      VirusTotal: Get IP Reputation — Get IP Reputation
+      Get Industry List — Get Industry List
+
+
+
+   .. py:method:: get_definition(uuid: str, *, relationships: bool = True) -> pyfsr.models.Workflow
+
+      Fetch one playbook definition by uuid (``GET /api/3/workflows/{uuid}``).
+
+      Returns a typed :class:`~pyfsr.models.Workflow`. It stays dict-compatible
+      (``wf["name"]`` / ``wf.get(...)``) and round-trips to a plain dict via
+      ``wf.to_dict()`` when a JSON-serializable copy is needed (e.g. by
+      :meth:`clone`). ``relationships=True`` (default) inlines the workflow's
+      steps/routes/groups, which is the usual shape callers want when inspecting
+      or cloning a playbook.
+
+
+
+   .. py:method:: create_playbook(name: str, collection: str, *, is_active: bool = True, remote_executable: bool = False, priority: str | None = None, origin: str | None = None, **fields: Any) -> dict[str, Any]
+
+      Create a single playbook definition (``POST /api/3/workflows``).
+
+      :param name: display name of the playbook.
+      :param collection: the collection to place it in — a uuid or full
+                         ``/api/3/workflow_collections/<uuid>`` IRI.
+      :param is_active: whether the playbook is active (default ``True``).
+      :param remote_executable: allow remote agent execution (default ``False``).
+      :param priority: priority picklist IRI (e.g.
+                       ``/api/3/picklists/<uuid>``). Omit to let the appliance use
+                       its default.
+      :param origin: playbookOrigin picklist IRI. Omit for the appliance default.
+      :param \*\*fields: any additional fields to merge into the POST body verbatim.
+
+      :returns: The created playbook definition record.
+
+
+
+   .. py:method:: clone(uuid: str, new_name: str, *, collection: str | None = None, is_active: bool = False, transform: collections.abc.Callable[[dict[str, Any]], dict[str, Any] | None] | None = None) -> dict[str, Any]
+
+      Clone an existing playbook definition under a new name.
+
+      Fetches the source playbook with its steps/routes/groups inlined, then
+      **remaps every owned UUID** (the workflow itself plus each step, route,
+      and group — never the shared ``stepType``) to a fresh one, rewiring all
+      the internal references — route ``sourceStep``/``targetStep``, the
+      workflow's ``triggerStep``, and each step's ``group`` — so the copy is
+      fully self-contained and never collides with the original. Server-managed
+      fields (``@id``/``id``/create+modify stamps, ``deletedAt``, ``versions``)
+      are dropped at the top level, and the nested ``@id``/``@type``/``id`` of
+      every step/route/group is stripped so the appliance creates them fresh
+      (otherwise an inlined child carrying an ``@id`` is read as a reference to
+      a now-nonexistent row and the POST fails with ``EntityNotFoundException``).
+      POSTs the result to ``/api/3/workflows``.
+
+      :param uuid: source playbook uuid.
+      :param new_name: display name for the clone (required — a clone must be
+                       distinguishable from its source).
+      :param collection: optionally re-home the clone into a different collection
+                         (uuid or IRI). Defaults to the source's collection.
+      :param is_active: whether the clone is active. Defaults to ``False`` so a
+                        copy never starts firing on triggers before it's been reviewed.
+      :param transform: optional callback to mutate the prepared POST body
+                        **before** it is sent — receives the body dict (already remapped,
+                        stripped, and renamed) and may edit it in place or return a
+                        replacement. Use it to tweak a cloned definition at create time,
+                        e.g. rename a Set-Variable arg, so the change is part of the same
+                        save the appliance validates.
+
+      :returns: The created clone's playbook definition record.
+
+
+
+   .. py:method:: update(uuid: str, **fields: Any) -> dict[str, Any]
+
+      Partially update a playbook definition (``PUT /api/3/workflows/{uuid}``).
+
+      Pass only the keys to change, e.g. ``debug=True``, ``isActive=False``,
+      ``name=...``.
+
+
+
+   .. py:method:: ensure_active(playbook: str | dict[str, Any], *, active: bool = True) -> dict[str, Any]
+
+      Idempotently ensure a playbook's ``isActive`` flag is set; no-op if already correct.
+
+      Resolves ``playbook`` (a uuid, IRI, name, or a playbook dict carrying
+      ``uuid``/``@id``) to its definition record. If the ``isActive`` field
+      already matches ``active``, returns the record unchanged; otherwise PUTs
+      ``{"isActive": active}`` and returns the updated record.
+
+      This is the idempotent alternative to :meth:`update` when the only goal
+      is to flip activation state — re-running a deploy script that activates
+      a playbook won't issue a redundant PUT.
+
+      :param playbook: uuid, ``/api/3/workflows/<uuid>`` IRI, playbook name, or a
+                       playbook dict (e.g. from :meth:`list` / :meth:`find`).
+      :param active: the desired ``isActive`` value (default ``True`` — activate).
+
+      :returns: The playbook definition record (current state after any update).
+
+      :raises ValueError: if ``playbook`` can't be resolved to a definition.
+
+
+
+   .. py:method:: delete(uuid: str, *, hard: bool = True) -> None
+
+      Delete a playbook definition. ``hard=True`` (default) bypasses the recycle bin.
+
+      Sends **no request body** — the appliance silently no-ops a delete carrying a ``{}``
+      body and leaks the row, so this never passes one. ``hard=False`` does a soft
+      (recycle-bin) delete.
+
+
+
+   .. py:method:: list_versions(playbook: str, *, include_data: bool = True, limit: int = 100) -> list[pyfsr.models.PlaybookVersion]
+
+      List a playbook's saved snapshots (``GET /api/3/workflow_versions``).
+
+      Snapshots are returned newest-first by ``modifyDate`` (the editor's sort).
+      ``include_data=True`` (default) inlines each snapshot's ``json`` payload;
+      pass ``False`` for a lighter metadata-only listing. ``playbook`` accepts a
+      uuid, a ``/api/3/workflows/<uuid>`` IRI, or a name (resolved to the first
+      matching playbook).
+
+      Returns typed :class:`~pyfsr.models.PlaybookVersion` records (also
+      dict-compatible). Example:
+
+          >>> client = demo_client()
+          >>> versions = client.playbooks.list_versions("Block IP")
+          >>> len(versions)
+          2
+
+
+
+   .. py:method:: get_version(version: str, *, include_data: bool = True) -> pyfsr.models.PlaybookVersion
+
+      Fetch one saved snapshot (``GET /api/3/workflow_versions/{id}``).
+
+      ``version`` accepts a uuid or ``/api/3/workflow_versions/<uuid>`` IRI. The
+      snapshot's ``json`` (the stringified workflow) is always present on GET —
+      use :meth:`PlaybookVersion.parsed_json` to decode it, e.g. before a
+      :meth:`restore_version`. ``include_data`` is kept for wire-faithfulness
+      but the server returns ``json`` either way.
+
+          >>> client.playbooks.get_version("<uuid>").note  # doctest: +SKIP
+
+
+
+   .. py:method:: create_version(playbook: str, *, note: str = '') -> pyfsr.models.PlaybookVersion
+
+      Save a snapshot of the current playbook definition (``POST /api/3/workflow_versions``).
+
+      Mirrors the editor's ``saveSnapshot``: fetches the live workflow, strips
+      server-managed fields (``versions``/``collection``/``modifyUser``/
+      ``modifyDate``), stringifies it into ``json``, and POSTs the bundle
+      ``{note, json, workflow, modifyDate}``. The snapshot captures the playbook
+      **as it currently is** on the appliance.
+
+      The server does **not** echo the large ``json`` blob back on the create
+      response (it comes back ``None``); call :meth:`get_version` on the
+      returned record to read ``json``. FortiSOAR caps snapshots at 20 per
+      playbook — beyond that the server rejects the POST (delete an old one
+      first). Returns the created :class:`~pyfsr.models.PlaybookVersion`.
+
+          >>> v = client.playbooks.create_version("Block IP", note="v2")  # doctest: +SKIP
+
+
+
+   .. py:method:: restore_version(playbook: str, version: str) -> pyfsr.models.Workflow
+
+      Overwrite a playbook with a saved snapshot's content (client-side restore).
+
+      FortiSOAR has no restore endpoint: the editor's flow is
+      ``loadVersion -> JSON.parse(.json) -> PUT /api/3/workflows/{id}``. This
+      method does the same — it fetches the snapshot, decodes its ``json``, and
+      PUTs the workflow definition back onto ``playbook``.
+
+      .. warning::
+          This **overwrites the live playbook** with the snapshot's steps/routes
+          (the snapshot's step uuids must already belong to this playbook, which
+          they do for a snapshot taken from it). It does not create a new
+          snapshot first; call :meth:`create_version` beforehand if you want a
+          rollback point.
+
+      ``playbook`` accepts a uuid/IRI/name; ``version`` accepts a uuid/IRI.
+      Returns the updated :class:`~pyfsr.models.Workflow`.
+
+          >>> client.playbooks.restore_version("Block IP", "<ver-uuid>")  # doctest: +SKIP
+
+
+
+   .. py:method:: delete_version(version: str) -> None
+
+      Delete a saved snapshot (``DELETE /api/3/workflow_versions/{id}``).
+
+      ``version`` accepts a uuid or ``/api/3/workflow_versions/<uuid>`` IRI.
+      This deletes the snapshot record only — the playbook itself is untouched.
+
+
+
+   .. py:method:: diff_versions(a: str | pyfsr.models.PlaybookVersion, b: str | pyfsr.models.PlaybookVersion) -> pyfsr.models.VersionDiff
+
+      Compare two snapshots' step graphs (client-side; no server diff API).
+
+      ``a``/``b`` accept a :class:`PlaybookVersion` or a uuid/IRI (fetched via
+      :meth:`get_version`). Each snapshot's ``json`` is decoded and the steps
+      (keyed by ``uuid``), routes, and groups are compared: ``added``/``removed``
+      are uuids present on only one side; ``changed`` holds per-step field deltas
+      (``arguments``/``name``/``stepType``…). Useful to see what a restore would
+      change before running :meth:`restore_version`.
+
+          >>> d = client.playbooks.diff_versions("<v1>", "<v2>")  # doctest: +SKIP
+          >>> d.is_clean, d.added, d.removed  # doctest: +SKIP
+
+
+
+   .. py:method:: create_playbooks(rows: list[dict[str, Any]]) -> dict[str, Any]
+
+      Create or re-push many playbook definitions (``POST /api/3/bulkupsert/workflows``).
+
+      Pass the workflow rows exactly as they would appear in a collection payload.
+
+
+
+   .. py:method:: query(query: pyfsr.query.Query | dict[str, Any], *, page: int = 1, raw: bool = False, relationships: bool = False, fields: list[str] | tuple[str, Ellipsis] | None = None, summary: bool = False, show_deleted: bool = False) -> Any
+
+      Run a structured query against ``/api/query/workflows``.
+
+      Mirrors :meth:`pyfsr.records.RecordSet.query` for the workflow-definition
+      surface. Members come back as typed :class:`~pyfsr.models.Workflow` objects;
+      ``raw=True`` returns the whole :class:`~pyfsr.pagination.HydraPage` instead of
+      just its members, and ``fields``/``summary`` apply a token-efficient
+      projection (returning trimmed dicts) for agent reads.
+
+      ``relationships=True`` inlines each workflow's ``steps``/``routes``/
+      ``groups`` (heavier, but needed when inspecting step-level shape — e.g.
+      :meth:`manual_on_module` uses it to read the trigger step's label).
+
+
+
+   .. py:method:: execution_history(*, playbook: str | None = None, playbook_uuid: str | None = None, limit: int = 20) -> list[pyfsr.models.RunSummary]
+
+      List recent playbook executions, newest first (live + historical merged).
+
+      Scope to one playbook by ``playbook`` (name, resolved to uuid) or
+      ``playbook_uuid``. Returns typed :class:`~pyfsr.models.RunSummary` objects
+      — the curated fields (``task_id``/``status``/``error_message``/``pk``/…) as
+      typed attributes, with the full raw run record preserved in ``extra`` and
+      reachable by item access (``run["created"]``).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> runs = client.playbooks.execution_history(limit=1)
+      >>> len(runs)
+      1
+      >>> runs[0].status
+      'finished'
+      >>> runs[0]["uuid"]
+      'a0afba58-9dbe-44dd-a6e6-7227e33990db'
+
+
+
+   .. py:method:: child_runs(parent: str | int, *, limit: int = 100) -> list[pyfsr.models.RunSummary]
+
+      List the child executions spawned by one parent run, newest first.
+
+      A loop step with ``parallel`` + ``apply_async`` (or any ``apply_async``
+      workflow_reference) records each sub-playbook invocation as its OWN
+      execution, linked to the parent by ``parent_wf``. :meth:`execution_history`
+      filters these out (it scopes to ``parent_wf__isnull=True``), so this is the
+      method to retrieve them — e.g. to measure loop max-parallel concurrency by
+      feeding the returned runs (``created``/``modified`` timestamps) to
+      :func:`pyfsr.concurrency.compute_overlap`.
+
+      The parent run is tagged ``#has_async_childwf_cyops`` when it has async
+      children; see :meth:`has_async_children`.
+
+      :param parent: the parent run — a numeric run pk (``210`` / ``"210"``), a run
+                     ``@id``/path (``"/wf/api/workflows/210/"``), or a ``task_id`` uuid
+                     (resolved to its pk via the live log).
+      :param limit: maximum number of children to return (default 100).
+
+      :returns: A list of typed :class:`~pyfsr.models.RunSummary` children, newest
+                first. Empty if the parent has no async children (or isn't found).
+
+
+
+   .. py:method:: has_async_children(parent: str | int) -> bool
+
+      Whether a run dispatched async sub-playbook children.
+
+      Checks for the ``#has_async_childwf_cyops`` tag FortiSOAR stamps on a run
+      once it launches an ``apply_async`` child — the same signal the UI uses to
+      decide whether to offer a child-run drill-down. ``parent`` accepts the same
+      forms as :meth:`child_runs`.
+
+
+
+   .. py:method:: get_execution(run_pk: str, *, step_detail: bool = False) -> pyfsr.models.RunSummary
+
+      Fetch one playbook execution by its pk.
+
+      The pk is the trailing segment of a run's ``@id`` URL. Tries the live
+      table first, then historical. Returns a typed
+      :class:`~pyfsr.models.RunSummary` — curated fields as attributes, the full
+      raw record preserved in ``extra`` (so ``run["result"]`` etc. still work).
+
+      Pass ``step_detail=True`` to include the per-step execution trace; the
+      per-step results then ride in the model's ``extra`` under ``steps``/``env``
+      (see :meth:`run_env` for a reshaped view of them).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> run = client.playbooks.get_execution("1")
+      >>> run.status
+      'finished'
+      >>> run.task_id
+      'a0afba58-9dbe-44dd-a6e6-7227e33990db'
+
+
+
+   .. py:method:: search_executions(query: str | None = None, *, tags_include: str | list[str] | None = None, tags_exclude: str | list[str] | None = None, status: str | None = None, playbook: str | None = None, playbook_uuid: str | None = None, limit: int = 20, offset: int = 0, ordering: str = '-modified') -> list[pyfsr.models.RunSummary]
+
+      Search playbook execution history with human-friendly filters.
+
+      Queries ``POST /api/wf/api/workflows/log_list/`` and returns shaped run
+      dicts. All filters are optional and combinable.
+
+      :param query: free-text search across playbook name / run metadata
+                    (forwarded as ``search=``).
+      :param tags_include: tag name(s) a run must have (comma-joined string or
+                           list of strings).
+      :param tags_exclude: tag name(s) to exclude (same format).
+      :param status: execution status filter, e.g. ``"finished"``, ``"failed"``,
+                     ``"Running"``.
+      :param playbook: playbook name — resolved to a uuid and forwarded as
+                       ``template_iri``.
+      :param playbook_uuid: playbook uuid (use instead of ``playbook`` when you
+                            already have it).
+      :param limit: max results (default 20).
+      :param offset: page offset.
+      :param ordering: sort field (default ``"-modified"`` = newest first).
+
+      :returns: List of shaped run dicts
+                (``{task_id, name, status, error_message, modified, uuid, pk, source}``).
+
+
+
+   .. py:method:: last_run(playbook: str | None = None, *, playbook_uuid: str | None = None) -> pyfsr.models.RunSummary | None
+
+      Return the most recent run for a playbook as a typed :class:`~pyfsr.models.RunSummary`.
+
+      Fetches the most recent execution (merged from live + historical tables,
+      newest first) for the specified playbook. The playbook may be identified
+      by ``playbook`` (name, resolved to uuid) or ``playbook_uuid``. The full raw
+      run record is preserved in the model's ``extra`` (e.g. ``run["@id"]``).
+
+      :param playbook: the playbook name — resolved to uuid internally.
+      :param playbook_uuid: the playbook uuid (use instead of ``playbook`` when
+                            you already have it).
+
+      :returns: The :class:`~pyfsr.models.RunSummary` for the most recent execution,
+                or ``None`` if the playbook has no runs or does not exist.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> run = client.playbooks.last_run(playbook="Block IP")
+      >>> if run:
+      ...     print(f"{run.name}: {run.status} ({run.pk})")
+      Example Playbook: finished (1)
+
+
+
+   .. py:method:: why_failed(playbook: str | None = None, *, playbook_uuid: str | None = None) -> pyfsr.models.RunFailure | None
+
+      Find the most recent run and return its error details as a typed :class:`~pyfsr.models.RunFailure`.
+
+      Locates the most recent execution for the specified playbook, then
+      calls :meth:`get_execution` with ``step_detail=True`` to retrieve the
+      full record (error_message and step results are only fully populated
+      there). The playbook may be identified by ``playbook`` (name, resolved
+      to uuid) or ``playbook_uuid``. For the full run record (all steps/env),
+      call :meth:`get_execution` with the returned ``pk``.
+
+      :param playbook: the playbook name — resolved to uuid internally.
+      :param playbook_uuid: the playbook uuid (use instead of ``playbook`` when
+                            you already have it).
+
+      :returns: A :class:`~pyfsr.models.RunFailure` with ``status`` (the run's terminal
+                status), ``error_message`` (from the run result or first failing step;
+                ``None`` if it succeeded), ``failing_step`` (name of the first non-success
+                step, ``None`` if it succeeded), and ``pk``. Returns ``None`` if the
+                playbook has no runs or does not exist.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> failure = client.playbooks.why_failed(playbook="Block IP")
+      >>> if failure and failure.failing_step:
+      ...     print(f"{failure.pk} failed at {failure.failing_step}")
+
+
+
+   .. py:method:: run_failure(run: str | int) -> pyfsr.models.RunFailure | None
+
+      Failure projection for a SPECIFIC run — by pk, ``@id`` path, or task_id.
+
+      The by-run counterpart to :meth:`why_failed` (which locates the most
+      recent run for a *playbook*). Resolves ``run`` the same way as
+      :meth:`run_env`/:meth:`step_status`, fetches the full record with
+      ``step_detail=True``, and returns a typed :class:`~pyfsr.models.RunFailure`
+      (``status``, ``failing_step``, ``error_message``, ``pk``). Returns
+      ``None`` if the run pk can't be resolved.
+
+      Use this when you already have a run in hand (e.g. from
+      :meth:`trigger`/:meth:`search_executions`) and want its failure detail
+      without a second name→run lookup.
+
+
+
+   .. py:method:: run_env(run: str | int) -> pyfsr.models.RunEnv
+
+      Return a run's execution environment + per-step results.
+
+      ``run`` may be a run pk, an ``@id`` path, or a ``task_id`` (what
+      :meth:`trigger`/:meth:`trigger_by_name` return) — it is resolved the
+      same way as :meth:`step_status`/:meth:`child_runs`, so you can pass a
+      ``task_id`` straight through without resolving the pk yourself.
+
+      Fetches the run with ``step_detail=true`` and reshapes it into the
+      Jinja-context view used when authoring/debugging a playbook::
+
+          {
+            "env":   {...},                      # the run's top-level env dict
+                                                 # (input, request, resources, …)
+            "status": "finished",
+            "steps": {                           # keyed by step display name
+              "Step Name": {"status": ..., "result": {...}},
+              ...
+            },
+          }
+
+      Step names are returned verbatim; in Jinja they are referenced as
+      ``vars.steps.<name with spaces replaced by underscores>``.
+
+      .. note::
+          Runtime ``set_variable`` / jinja values are only captured in the
+          retrievable run record when the appliance has **global workflow debug
+          logging enabled**; with it off (the default), ``env`` and a step's
+          ``result`` come back empty for them. So unless you've turned debug
+          logging on, assert on the *verifiable* signal -- the step's
+          ``status`` -- via :meth:`step_status` rather than a value that may not
+          be recorded.
+
+
+
+   .. py:method:: step_status(run: str | int, step_name: str) -> str | None
+
+      The status of one step in a run (or ``None`` if the step isn't found).
+
+      Use this to assert on a step's *verifiable* outcome rather than chasing a
+      runtime value: FortiSOAR only records ``set_variable`` / jinja values in
+      the retrievable run record when **global workflow debug logging is
+      enabled**, so ``run_env(...).env`` is empty for them with debug logging
+      off (the default). A step's ``status`` (``"finished"``, ``"failed"``, …)
+      always survives — assert on that instead.
+
+      :param run: a run pk / ``@id`` path / ``task_id`` (resolved like
+                  :meth:`child_runs`).
+      :param step_name: the step's display ``name``.
+
+
+
+   .. py:method:: run_tree(run: str | int, *, depth: int = 3, limit: int = 100, steps: bool = False) -> pyfsr.models.RunNode
+
+      Resolve a run to its execution tree: the run plus its child runs.
+
+      Returns a :class:`~pyfsr.models.RunNode` (``pk``/``name``/``status`` +
+      nested ``children``), walking ``parent_wf`` links down to ``depth``. This
+      encodes the trigger->run->child linkage so you don't have to locate a
+      parent/child by name in the raw ``/api/wf/api/workflows`` listing.
+
+      A ``task_id`` from :meth:`trigger` resolves to the run it directly started;
+      any sub-playbooks that run launches (``workflow_reference`` /
+      ``apply_async`` loop children, linked by ``parent_wf``) appear as
+      ``children``. Synchronous references whose children the platform links by
+      ``parent_wf`` are included too.
+
+      :param run: a run pk / ``@id`` path / ``task_id`` (same forms as
+                  :meth:`child_runs`).
+      :param depth: how many generations to descend (default 3; ``1`` = the run and
+                    its immediate children only, ``0`` = just the run).
+      :param limit: max children fetched per node (default 100).
+      :param steps: when ``True``, enrich the root node with a slim per-step
+                    snapshot (``RunStepSnapshot``: name/status/result_preview) so an
+                    agent can drill into the root run's step outcomes without a
+                    separate :meth:`run_env` call. Each step's ``result`` is
+                    JSON-capped to ~500 chars (a preview, not the full blob). Children
+                    stay slim regardless (call ``run_env(child_pk)`` for a child's
+                    full detail). Default ``False`` (cheaper — no ``step_detail``
+                    fetch).
+
+      :returns: the root :class:`~pyfsr.models.RunNode`. ``pk`` is ``None`` if ``run``
+                can't be resolved (the node still carries the original ``task_id``).
+
+
+
+   .. py:method:: diagnose_run(playbook: str | None = None, *, playbook_uuid: str | None = None, run: str | int | None = None) -> dict[str, Any]
+
+      Diff a playbook's **definition** (step graph) against a **run** (executed steps).
+
+      Answers the agent question "did my playbook run do what I defined?" without
+      making the agent cross-reference :meth:`get_definition`, :meth:`run_env`, and
+      :meth:`why_failed` by hand. Resolves the playbook, fetches its step graph,
+      resolves a run (the latest for the playbook, or the ``run`` pk/``@id``/
+      ``task_id`` you pass), and returns a structured comparison:
+
+        - each **defined step** with the status the run recorded for it (or
+          ``None`` if the engine never reached it),
+        - steps the run recorded that the current definition doesn't have
+          (drift, e.g. after a re-publish changed the graph),
+        - the run's overall status + the first failing step + its error,
+        - a one-word ``verdict`` (``completed``/``failed``/``running``/
+          ``no_run``/``no_definition``) and a one-line ``summary``.
+
+      Step names are matched by display name (how :meth:`run_env` keys them); a
+      step that appears in the definition but not in the run either was skipped
+      by a decision branch (normal) or never reached because the run stopped
+      early (the ``failing_step`` then names where it stopped). This method
+      reports the facts; the agent judges whether the reached/skipped set
+      matches intent.
+
+      :param playbook: the playbook name — resolved to uuid internally.
+      :param playbook_uuid: the playbook uuid (use instead of ``playbook`` when you
+                            already have it).
+      :param run: a run pk / ``@id`` path / ``task_id`` (resolved like
+                  :meth:`run_env`). When ``None`` (default), uses the most recent run
+                  for the playbook.
+
+      :returns: A structured dict (see above). ``verdict`` is ``"no_definition"`` if
+                the playbook can't be resolved, ``"no_run"`` if it has no executions.
+
+
+
+   .. py:method:: trigger(playbook: str, *, records: list[str] | str | None = None, inputs: dict[str, Any] | None = None, env: dict[str, Any] | None = None, follow: bool = False, timeout: float = 300, interval: float = 3, request_timeout: float | None = None) -> pyfsr.models.TriggerResponse | pyfsr.models.RunSummary
+
+      Manually trigger a playbook and return its run handle.
+
+      POSTs to ``/api/triggers/1/notrigger/<playbook_uuid>`` — the route the
+      FortiSOAR UI uses for the *Execute* button on a manual-trigger playbook —
+      and returns ``{"task_id": ...}`` for the started run. The ``task_id`` is a
+      **query-only** key: pass it to :meth:`get_execution` / :meth:`wait` (which
+      resolve it server-side via ``log_list(task_id=...)``) to track the run. Note
+      the run *log records do not echo* ``task_id`` — it is a filter parameter, not
+      a field on the returned run, so matching it against a listed run's fields will
+      not work; query *by* it instead.
+
+      :param playbook: the playbook to run — a uuid, or a name resolved to its
+                       uuid (the playbook must have a *manual* trigger step).
+      :param records: **rejected — raises ValueError.** The ``notrigger`` route
+                      cannot deliver record context: the run starts but
+                      ``vars.input.records`` stays empty, so a step reading
+                      ``{{ vars.input.records[0]['@id'] }}`` fails with *CS-WF-35:
+                      Record IRI is empty*. Live-verified as a property of the route,
+                      not the body (the full action envelope does not help). Use
+                      :meth:`trigger_action` for a record-scoped run. The parameter is
+                      kept only to fail loudly rather than start a silently
+                      record-blind run.
+      :param inputs: sent as the request body's ``inputs`` key. **Caveat
+                     (live-verified):** this lands in the run env as top-level
+                     ``vars.inputs`` — it does NOT populate ``vars.input.params``,
+                     which stays ``{}`` on this route. The notrigger handler
+                     array_merges the body into the trigger step's arguments and only
+                     interprets a fixed key set (``env``/``priority``/``parent_wf``/
+                     ``step_id``/``runtime_tags``/``force_debug``/
+                     ``_eval_input_params_from_env``/``inputVariables``); ``inputs``
+                     is not one of them. So read it as ``{{ vars.inputs.<name> }}``,
+                     and note a playbook whose trigger declares ``inputVariables``
+                     expects those values as **top-level** body keys (pass them via
+                     ``env=``), not nested under ``inputs``.
+      :param env: keys merged into the POST body verbatim — live-verified to
+                  arrive as top-level ``vars.<key>``.
+      :param follow: if ``True``, block until the run completes and return the
+                     shaped run dict instead of the raw trigger response. Equivalent
+                     to calling :meth:`wait` on the returned ``task_id``.
+      :param timeout: seconds to wait when ``follow=True`` (default 300).
+      :param interval: poll interval in seconds when ``follow=True`` (default 3).
+
+      :returns: the trigger response, typically
+                ``{"task_id": "<run-uuid>"}``. When ``follow=True``: the shaped run
+                dict after completion (same shape as :meth:`wait`).
+      :rtype: When ``follow=False`` (default)
+
+      Args (timeouts):
+          request_timeout: seconds to bound the trigger **POST itself** (default
+              ``None`` = the client's configured timeout). Distinct from
+              ``timeout``, which only bounds the completion poll when
+              ``follow=True``. Set this when firing triggers against an
+              appliance that may stall mid-request (e.g. during a schema
+              publish) so a hung submit is raised quickly instead of blocking.
+
+      .. seealso::
+
+         :meth:`run_tree` resolves the returned ``task_id`` to the run **plus
+         its child runs** (so you don't find a referenced child by name);
+         :meth:`step_status` asserts a step finished without relying on
+         ``set_variable`` values (only recorded with debug logging on).
+
+
+
+   .. py:method:: wait(task_id: str, *, timeout: float = 300, interval: float = 3) -> pyfsr.models.RunSummary
+
+      Poll until a run reaches a terminal status and return the shaped run dict.
+
+      Uses :meth:`log_list` (keyed by ``task_id``) rather than the heavier
+      per-run fetch, so it works even before the run appears in the live table.
+      Raises :exc:`TimeoutError` if ``timeout`` seconds elapse before completion.
+
+      :param task_id: the ``task_id`` returned by :meth:`trigger` or
+                      :meth:`trigger_by_name`.
+      :param timeout: seconds to wait before raising (default 300).
+      :param interval: seconds between polls (default 3).
+
+      :returns: A shaped run dict (``{task_id, name, status, error_message, ...}``).
+
+
+
+   .. py:method:: status(task_id: str) -> str | None
+
+      Return a run's current status by ``task_id``, without blocking.
+
+      The cheap, non-raising counterpart to :meth:`wait`: one
+      :meth:`log_list` read keyed by ``task_id`` (what :meth:`trigger`
+      returns), returning the lowercased status string — ``"running"``,
+      ``"finished"``, ``"failed"``, ``"error"``, ``"cancelled"``,
+      ``"aborted"`` — or ``None`` if no run has appeared for this ``task_id``
+      yet (just triggered, or unknown id). Use it to poll many runs on your
+      own cadence, or to read a last-known status after :meth:`wait` times
+      out. Compare against :attr:`TERMINAL_STATUSES` to test for completion.
+
+      :param task_id: the ``task_id`` returned by :meth:`trigger` /
+                      :meth:`trigger_by_name`.
+
+      :returns: The current status (lowercased), or ``None`` if the run is not yet
+                queryable.
+
+
+
+   .. py:method:: wait_for_run(playbook: str | None = None, *, playbook_uuid: str | None = None, since: str | float | None = None, timeout: float = 120, poll_interval: float = 3) -> pyfsr.models.RunSummary
+
+      Poll until the most recent run of a playbook reaches a terminal status.
+
+      Queries :meth:`execution_history` (merged from live + historical tables,
+      newest first) and polls until the most recent run *newer than* ``since``
+      reaches a terminal state (status in finished/failed/error/cancelled/aborted).
+
+      This is useful for verifying that a triggered playbook has completed —
+      more ergonomic than manually tracking ``task_id`` when the playbook's
+      definition (by name) is the natural reference.
+
+      :param playbook: the playbook name — resolved to uuid internally.
+      :param playbook_uuid: the playbook uuid (use instead of ``playbook`` when
+                            you already have it).
+      :param since: an optional timestamp (ISO string or UNIX float) — only polls
+                    runs *newer* than this. Useful when the playbook may have old
+                    runs already in a terminal state. Default ``None`` (polls the
+                    absolute newest run, which is often still running).
+      :param timeout: seconds to wait before raising :exc:`TimeoutError`
+                      (default 120).
+      :param poll_interval: seconds between polls (default 3).
+
+      :returns: A shaped run dict (``{task_id, name, status, error_message, modified,
+                uuid, pk, source}``) for the completed run.
+
+      :raises TimeoutError: if no terminal run newer than ``since`` is found within
+          ``timeout`` seconds.
+      :raises ValueError: if the playbook does not exist or is not found.
+
+      Example (illustrative only, requires trigger fixtures):
+          >>> result = client.playbooks.trigger("AI Investigation")  # doctest: +SKIP
+          >>> task_id = result["task_id"]  # doctest: +SKIP
+          >>> run = client.playbooks.wait_for_run(playbook="AI Investigation", timeout=120)  # doctest: +SKIP
+          >>> print(f"Run {run['pk']}: {run['status']}")  # doctest: +SKIP
+          >>> if run["error_message"]:  # doctest: +SKIP
+          ...     print(f"Error: {run['error_message']}")  # doctest: +SKIP
+
+
+
+   .. py:method:: resume(run_pk: str, *, manual_input_id: int, input: Any = None, step_iri: str | None = None, step_id: str | None = None, approved: bool | None = None) -> dict[str, Any]
+
+      Resume a run waiting on manual input / approval.
+
+      POSTs to ``/api/wf/api/workflows/<pk>/wfinput_resume/``. ``input`` is the
+      manual-input value payload; ``approved`` (when set) drives an approval
+      step. The other args identify which waiting step to resume.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> result = client.playbooks.resume("2", manual_input_id=2, step_id="200")
+      >>> result["task_id"]
+      'b0afba58-9dbe-44dd-a6e6-7227e33990dc'
+      >>> result["message"]
+      'Awaiting Playbook resumed successfully.'
+
+
+
+   .. py:method:: start(run_pk: str) -> dict[str, Any]
+
+      Manually queue a workflow run (``POST .../workflows/{pk}/start/``).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> result = client.playbooks.start("1")
+      >>> result.get("status")
+      'started'
+
+
+
+   .. py:method:: retry(run_pk: str) -> dict[str, Any]
+
+      Retry a failed run from its failed step (``POST .../workflows/{pk}/retry/``).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> result = client.playbooks.retry("3")
+      >>> result.get("status")
+      'started'
+
+
+
+   .. py:method:: approval(run_pk: str, *, decision: str = 'approve', comment: str | None = None, user: str | None = None) -> pyfsr.models.ManualInputResume
+
+      Drive an approval / manual-input gate on a paused run to a decision.
+
+      Resolves the run's pending manual-wf-input (the modern, resumable
+      approval gate -- a ``manual_input`` step, optionally with
+      ``is_approval: true``), picks the response option matching ``decision``,
+      and resumes via ``wfinput_resume`` -- the canonical resume path the
+      FortiSOAR UI uses (per ``app.unmin.js`` + ``data/MANUAL_INPUT.md``).
+
+      ``decision`` maps to a response option: ``"approve"`` (default) selects
+      the primary option; ``"reject"`` selects the first non-primary option;
+      any other string is matched against an option label case-insensitively.
+
+      **Legacy ``type: approval`` (ApprovalManualInput) is NOT resumable here.**
+      That step creates an ``approvals``-module record but NO
+      ``manual-wf-input``, so ``wfinput_resume`` has no ``manual_input_id`` to
+      target (the old ``POST .../approval/`` endpoint only *lists* approvals,
+      it does not resume them). Author the gate as a ``manual_input`` step
+      (optionally ``is_approval: true``) instead. This raises :class:`ValueError`
+      with that guidance when the run has no pending manual-wf-input.
+
+      :param run_pk: the paused run's primary key (the trailing segment of its
+                     ``@id`` -- what :meth:`get_execution` takes).
+      :param decision: ``"approve"`` (default), ``"reject"``, or an option label.
+      :param comment: advisory note (not currently sent on the wire for the modern
+                      resume; reserved for approval-audit use).
+      :param user: submitting user IRI (``/api/3/people/<uuid>``); auto-resolved
+                   to an admin when omitted.
+
+      :returns: The :class:`~pyfsr.models.ManualInputResume` ack (``task_id`` +
+                ``message``); the resume is asynchronous.
+
+      :raises ValueError: the run has no pending manual-wf-input (it already
+          finished, or it is paused on a legacy ``type: approval`` step).
+      :raises LookupError: ``decision`` does not match any response option.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()  # doctest: +SKIP
+      >>> result = client.playbooks.approval("2", decision="Approve")  # doctest: +SKIP
+      >>> result["task_id"]  # doctest: +SKIP
+      'b0afba58-9dbe-44dd-a6e6-7227e33990dc'
+      >>> result.message  # doctest: +SKIP
+      'Awaiting Playbook resumed successfully.'
+
+      .. note::
+          Approval is a complex multi-call flow. The doctest is skipped
+          pending a complete hydra response fixture for the people endpoint.
+
+
+
+   .. py:method:: count(*, logs: str = 'all') -> dict[str, Any]
+
+      Total run count (``GET .../workflows/count/``).
+
+      ``logs`` is ``"all"`` (recent + historical, default), ``"recent"``, or
+      ``"historical"``. The trailing slash matters (the slashless path 403s).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> result = client.playbooks.count()
+      >>> result["count"]
+      42
+
+
+
+   .. py:method:: log_list(*, task_id: str | None = None, status: str | None = None, limit: int = 30, **filters: Any) -> dict[str, Any]
+
+      Status lookup for executing playbooks (``POST .../workflows/log_list/``).
+
+      Primarily keyed by ``task_id`` (what :meth:`trigger`/:meth:`trigger_by_name`
+      return). Other query filters (``status``, ``template_iri``, ``records``,
+      ``created_after``, ``tags_include``, …) pass through verbatim as
+      ``filters``; ``limit`` caps the page.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> result = client.playbooks.log_list(limit=1)
+      >>> members = result.get("hydra:member", [])
+      >>> len(members)
+      1
+      >>> members[0]["status"]
+      'finished'
+
+
+
+   .. py:method:: query_logs(*, filters: list[dict[str, Any]] | None = None, logic: str = 'AND', limit: int | None = None, sort: list[dict[str, Any]] | None = None, aggregates: list[dict[str, Any]] | None = None, logs: str = 'all') -> dict[str, Any]
+
+      Query the playbook log store by body filter (``POST .../query/workflow_logs/``).
+
+      ``filters`` is a list of filter dicts combined by ``logic`` (``"AND"``/
+      ``"OR"``); ``sort``/``aggregates`` follow the engine's query shape. ``logs``
+      restricts the source (``"all"``/``"recent"``/``"historical"``).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> result = client.playbooks.query_logs()
+      >>> members = result.get("hydra:member", [])
+      >>> len(members)
+      1
+      >>> members[0].get("status")
+      'finished'
+
+
+
+   .. py:method:: manual_inputs() -> list[dict[str, Any]]
+
+      List runs awaiting manual input (``POST .../manual-wf-input/list_wfinput/``).
+
+      .. deprecated::
+          Use :meth:`client.manual_input.list <pyfsr.api.manual_input.ManualInputAPI.list>`
+          — the same endpoint, but typed, filterable (``is_approval=``), paginated,
+          and assignment-scoped. This raw-dict form is retained as a thin delegate.
+
+      Each entry carries ``id`` (the ``manual_input_id`` for :meth:`resume`) and
+      ``step_id``. Buttons/options are omitted here — fetch them per-record with
+      :meth:`retrieve_manual_input`. (POST-only; GET 405s.)
+
+
+
+   .. py:method:: retrieve_manual_input(pk: str) -> dict[str, Any]
+
+      Fetch one manual-input record with its buttons/options.
+
+      .. deprecated::
+          Use :meth:`client.manual_input.retrieve <pyfsr.api.manual_input.ManualInputAPI.retrieve>`
+          — the same endpoint, but typed and able to scope the retrieve with
+          ``owners=``. This raw-dict form is retained as a thin delegate.
+
+      ``POST .../manual-wf-input/{pk}/retrieve_wfinput/``. Returns the full
+      record including ``response_mapping.options[]`` (each option's label and
+      ``step_iri``) — which :meth:`manual_inputs` omits, so you need this to know
+      what to send when resuming via :meth:`resume`.
+
+
+
+   .. py:method:: update_manual_input(pk: str, **fields: Any) -> dict[str, Any]
+
+      Update a manual-input record (``PUT .../manual-wf-input/{pk}/``).
+
+      .. warning::
+          This updates the record but does **not** advance an ``awaiting`` run.
+          To actually resume, use :meth:`resume`.
+
+
+
+   .. py:method:: trigger_by_name(name: str, *, body: dict[str, Any] | None = None, deferred: bool = False, raise_on_status: bool = True, request_timeout: float | None = None) -> pyfsr.models.TriggerResponse | Any
+
+      Fire a playbook by its trigger's endpoint name.
+
+      ``POST /api/triggers/1/{name}`` (or ``/api/triggers/1/deferred/{name}``
+      when ``deferred=True``, which always 202s and runs on a worker). This is
+      the named-webhook trigger route — distinct from :meth:`trigger`, which
+      uses the manual-execute (``notrigger``) route by playbook uuid. Returns
+      the trigger response (typically ``{"task_id": ...}``).
+
+      With ``raise_on_status=False`` returns the raw
+      :class:`requests.Response` (``.status_code`` / ``.json()``) instead of a
+      :class:`~pyfsr.models.TriggerResponse` — for access-control probes that need to
+      distinguish a permit (200) from a denial (401/403) without catching.
+
+      ``request_timeout`` bounds the POST itself (default ``None`` = the client's
+      configured timeout) — set it to fail fast on a stalled submit.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.playbooks.trigger_by_name("my-hook").task_id
+      'c0afba58-9dbe-44dd-a6e6-7227e33990dd'
+      >>> client.playbooks.trigger_by_name("my-hook", deferred=True).task_id
+      'c0afba58-9dbe-44dd-a6e6-7227e33990dd'
+
+
+
+   .. py:method:: trigger_action(route_uuid: str, *, module: str, record_uuid: str, playbook_uuid: str | None = None, env: dict[str, Any] | None = None, request_timeout: float | None = None) -> pyfsr.models.TriggerResponse | Any
+
+      Fire a record-context action trigger (``POST /api/triggers/1/action/{route_uuid}``).
+
+      This is the route FortiSOAR uses for playbooks with a *record-action*
+      (``cybersponse.action``) trigger step — distinct from :meth:`trigger`, which
+      uses the manual-execute (``notrigger``) route. The ``route_uuid`` is the
+      trigger step's ``route`` field on the playbook definition; retrieve it via
+      ``client.playbooks.get_definition(uuid, relationships=True)`` and look under
+      ``triggerStep.arguments.route``.
+
+      :param route_uuid: the trigger step's route uuid.
+      :param module: the module name (e.g. ``"alerts"``).
+      :param record_uuid: uuid of the record to run against.
+      :param playbook_uuid: if provided, added to the body as ``__uuid`` (the playbook
+                            being triggered). Some appliance versions require it.
+      :param env: extra keys merged into the POST body verbatim.
+
+      :returns: The trigger response. Live-verified — **this route answers**
+                ``{"task_ids": [...]}`` — plural, a list — where :meth:`trigger`'s
+                ``notrigger`` route answers a scalar ``{"task_id": ...}``.
+                :class:`~pyfsr.models.TriggerResponse` folds the plural key into
+                ``task_id``, so :attr:`~pyfsr.models.TriggerResponse.task_ids` is the
+                uniform accessor across both routes.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> route = "2b6a1e8e-6f0a-4c6b-9e29-6c2f6a1d8b30"
+      >>> client.playbooks.trigger_action(
+      ...     route, module="alerts", record_uuid="9f0eb603-ac1e-41c3-b47b-444589beed39"
+      ... ).task_ids
+      ['c0afba58-9dbe-44dd-a6e6-7227e33990dd']
+
+
+
+   .. py:method:: historical_steps(task_id: str, *, limit: int = 200, status: str | None = None, name: str | None = None) -> list[dict[str, Any]]
+
+      Fetch per-step execution records for a run from ``/api/wf/api/historical-steps/``.
+
+      Keyed by ``task_id`` (what :meth:`trigger` returns). Steps are ordered
+      by creation time (oldest first). This endpoint only populates after a run
+      reaches a terminal state — on a live run, check :meth:`get` with
+      ``step_detail=True`` instead.
+
+      Supported filters beyond ``task_id``: ``status``, ``name`` (step display
+      name), ``func`` (step function key). Pass additional filters as keyword
+      args via the ``name``/``status`` params or extend with ``**params`` if
+      you need others.
+
+      Returns the ``hydra:member`` list; each item carries ``name``, ``status``,
+      ``func``, ``result``, ``input``, ``created``, ``modified``.
+
+
+
+   .. py:method:: render_jinja(template: str, values: dict[str, Any] | None = None) -> str
+
+      Render a Jinja2 template against a context via ``POST /api/wf/api/jinja-editor/``.
+
+      Sends ``template`` + ``values`` (the Jinja context, typically a run's
+      ``env`` dict) to FortiSOAR's built-in Jinja editor endpoint and returns
+      the rendered string. Useful for testing playbook Jinja expressions against
+      real run data without triggering a full run.
+
+      :param template: the Jinja2 template string to render.
+      :param values: the context dict (e.g. from :meth:`run_env`'s ``"env"`` key).
+
+      :returns: The rendered output as a string.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> output = client.playbooks.render_jinja("Hello {{ name }}", {"name": "World"})
+      >>> output
+      'Rendered Jinja output'
+
+
+

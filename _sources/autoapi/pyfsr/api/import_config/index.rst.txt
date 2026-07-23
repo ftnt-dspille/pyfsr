@@ -1,0 +1,361 @@
+pyfsr.api.import_config
+=======================
+
+.. py:module:: pyfsr.api.import_config
+
+.. autoapi-nested-parse::
+
+   Configuration *import* — the other half of the Export Wizard.
+
+   Wraps FortiSOAR's ``/api/import`` + ``/api/3/import_jobs`` surface so callers can
+   re-apply a Configuration-Export ``.zip`` (the kind :class:`~pyfsr.api.export_config.ExportConfigAPI`
+   produces) without hand-driving the four-step job lifecycle. Accessed as
+   ``client.import_config``.
+
+   The import is an **upsert keyed by ``config_id``**: re-importing a connector's
+   configs restores any that were deleted with their original UUIDs (so playbook
+   steps that reference a config by id keep working) and leaves existing ones in
+   place rather than duplicating them. Connector *secrets* travel in the export
+   encrypted with the appliance's key, so a same-appliance round-trip restores
+   them intact; importing onto a different appliance only decrypts if its
+   ``PASSWORD_ENCRYPTION_KEY`` matches.
+
+   Lifecycle (each step verified live on 7.6.5):
+
+   1. ``POST /api/3/files`` — upload the ``.zip`` (via ``client.files.upload``).
+   2. ``POST /api/3/import_jobs`` ``{status:"InProgress", file:"/api/3/files/<uuid>"}``.
+   3. ``GET /api/import/<job>`` — kicks off **async** option generation; its body is
+      a progress log, *not* the options. Poll ``GET /api/3/import_jobs/<job>`` until
+      ``options`` is populated (status becomes ``"Reviewing"``).
+   4. Optionally ``PUT /api/3/import_jobs/<job>`` ``{options:...}`` to tweak, then
+      ``PUT /api/import/<job>`` to trigger. Poll until ``status == "Import Complete"``.
+
+   An import that carries **module/schema** changes drives the appliance through the
+   same backup + DB migrate + cache-rebuild cycle a publish does, so — like
+   :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.publish` — the pollers here ride
+   through the transient 5xx / "System Backup" / "Clearing Cache" / "Schema Update"
+   states instead of failing on them, and :meth:`~ImportConfigAPI.import_file`
+   settles on a responsive schema cache before returning (see
+   :meth:`~ImportConfigAPI.wait_until_ready`).
+
+   .. rubric:: Example
+
+   >>> client = demo_client()  # doctest: +SKIP
+   >>> result = client.import_config.import_file("config-backup.zip", wait=False)  # doctest: +SKIP
+   >>> result.status  # doctest: +SKIP
+   'Import Complete'
+
+   .. note::
+       Requires file upload capability and complex state setup, so this example is ``+SKIP``.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.import_config.ImportConfigAPI
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.api.import_config.connectors_only
+   pyfsr.api.import_config.connector_flags
+   pyfsr.api.import_config.merge_mode
+   pyfsr.api.import_config.overwrite_all
+   pyfsr.api.import_config.keep_existing
+   pyfsr.api.import_config.skip_schema_changes
+   pyfsr.api.import_config.inspect_changes
+
+
+Module Contents
+---------------
+
+.. py:class:: ImportConfigAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Apply a Configuration-Export ``.zip`` back onto the appliance.
+
+
+   .. py:method:: create_job(file_iri: str) -> str
+
+      Create an import job for an already-uploaded file; return its uuid.
+
+      ``file_iri`` is the ``@id`` of a ``/api/3/files`` record (what
+      ``client.files.upload`` returns under ``@id``).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> job_uuid = client.import_config.create_job("/api/3/files/880e8400-e29b-41d4-a716-446655440010")
+      >>> job_uuid
+      'aa0e8400-e29b-41d4-a716-446655440013'
+
+
+
+   .. py:method:: generate_options(job_uuid: str) -> None
+
+      Trigger option generation for an import job (async; returns immediately).
+
+      ``GET /api/import/<job>`` starts the server walking the bundle to build
+      the per-section ``options``. The response is a progress log — the options
+      themselves land on the job record, so follow this with
+      :meth:`wait_for_options`.
+
+
+
+   .. py:method:: get_job(job_uuid: str) -> pyfsr.models._integration.ImportJobResult
+
+      Fetch the full import-job record (``options``, ``status``, ``log``).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> job = client.import_config.get_job("aa0e8400-e29b-41d4-a716-446655440013")
+      >>> job.status
+      'Import Complete'
+
+
+
+   .. py:method:: set_options(job_uuid: str, options: dict[str, Any]) -> dict[str, Any]
+
+      Overwrite an import job's ``options`` (``PUT /api/3/import_jobs/<job>``).
+
+
+
+   .. py:method:: wait_for_options(job_uuid: str, *, interval: float = 2.0, timeout: float = 120.0) -> dict[str, Any]
+
+      Poll the job until option generation has populated ``options``.
+
+      Returns the populated ``options`` dict. Raises ``TimeoutError`` if the
+      options never appear within ``timeout`` seconds. Migrate-cycle outages
+      (5xx / "System Backup" / "Clearing Cache" / "Schema Update") are ridden
+      through as "still working" rather than surfaced.
+
+
+
+   .. py:method:: trigger(job_uuid: str) -> dict[str, Any]
+
+      Start the import run (``PUT /api/import/<job>``; async).
+
+
+
+   .. py:method:: wait_for_import(job_uuid: str, *, interval: float = 3.0, timeout: float = 600.0) -> pyfsr.models._integration.ImportJobResult
+
+      Poll the import run until it reaches a terminal status.
+
+      Returns the latest job record; ``status == "Import Complete"`` means
+      success. On timeout, returns the last (non-terminal) poll rather than
+      raising.
+
+      An import that carries **module/schema** changes puts the appliance
+      through the same backup + DB migrate + cache-rebuild cycle a publish
+      does, during which ``GET /api/3/import_jobs/<job>`` (and the API at
+      large) briefly returns 503s and state strings like "System Backup",
+      "Clearing Cache", or "Schema Update". Mirroring
+      :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI._wait_for_publish`, any
+      such transient failure is treated as "still importing, keep waiting" —
+      only a cleanly fetched job record is allowed to decide the outcome, so a
+      mid-migrate outage never aborts a healthy import.
+
+
+
+   .. py:method:: wait_until_ready(*, interval: float = 3.0, timeout: float = 300.0) -> bool
+
+      Block until the appliance schema layer answers cleanly again.
+
+      After an import that carries module/schema changes reports ``Import
+      Complete``, the appliance keeps rebuilding its schema cache *appliance-
+      wide* for a while longer — so the very next ``list_modules()`` / record
+      query can still hit a 503 "Clearing Cache" or "Schema Update". This polls
+      the schema-metadata endpoint (the one that surfaces those states),
+      treating every transient failure as "not settled yet", and returns once
+      it gets a clean response.
+
+      Returns ``True`` when the schema layer is responsive, ``False`` if it was
+      still settling when ``timeout`` elapsed (callers can retry their own
+      verification with that in mind rather than crashing).
+
+
+
+   .. py:method:: import_file(zip_path: str, *, modify_options: collections.abc.Callable[[dict[str, Any]], dict[str, Any]] | None = None, resolve: str | None = None, allow_schema_changes: bool = False, verify: bool = True, wait: bool = True, interval: float = 3.0, timeout: float = 600.0, options_timeout: float = 120.0, settle: bool = True, settle_timeout: float = 300.0) -> pyfsr.models._integration.ImportJobResult
+
+      Import a Configuration-Export ``.zip`` end-to-end.
+
+      Runs the full lifecycle: upload → create job → generate & wait for
+      options → resolve conflicts → trigger → wait → verify. The option step is
+      the wizard's "Choose Modules and Views to Import" screen: the appliance
+      diffs the bundle against live and reports per-field ``changes`` plus a
+      per-field merge action (overwrite vs keep existing).
+
+      **Refuse-by-default safety.** Some of those changes drive a *destructive*
+      appliance-wide migrate — a ``tableName`` rename, a field type change, or a
+      change to a unique-constraint field — which can fail outright or wedge the
+      box (e.g. a rename whose ``CREATE INDEX`` collides with the old table's
+      index: Postgres ``42P07``). If the generated options contain any such
+      change and you haven't said how to handle it, this raises ``ValueError``
+      *before* triggering — mirroring :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.publish`'s
+      precheck. Pick one of ``modify_options`` / ``resolve`` / ``allow_schema_changes``
+      to proceed (see :func:`inspect_changes` to view the risks first).
+
+      :param zip_path: path to the export ``.zip`` to import.
+      :param modify_options: callback given the generated ``options`` dict; return
+                             the (mutated) dict to ``PUT`` back before triggering. Full control;
+                             takes precedence over ``resolve``. See :func:`connectors_only`,
+                             :func:`connector_flags`, :func:`merge_mode`, :func:`overwrite_all`,
+                             :func:`keep_existing`, :func:`skip_schema_changes`.
+      :param resolve: one-shot conflict strategy instead of a callback — one of
+                      ``"overwrite"`` (apply all field changes), ``"keep_existing"``
+                      (keep every existing field, add only new ones), or ``"skip_schema"``
+                      (import records/views but do **not** apply schema changes — the safe
+                      way past a risky rename). This is the "just do it" flag.
+      :param allow_schema_changes: proceed with the server-default options even when
+                                   risky changes are present, without resolving them (default False).
+      :param verify: raise :class:`~pyfsr.exceptions.FortiSOARException` if the run
+                     finishes in a failure state (``status`` "Error"/"Failed") — the
+                     appliance reports a failed schema migrate right on the job, with the
+                     publish exception in ``errorMessage`` (e.g. the ``42P07`` duplicate-
+                     index wedge). With ``verify=False`` the failed job is returned for
+                     the caller to inspect instead (default True).
+      :param wait: block until the import reaches a terminal status (default True).
+      :param interval: seconds between import-run polls (default 3).
+      :param timeout: give up waiting on the import run after this many seconds.
+      :param options_timeout: give up waiting on option generation after this many
+                              seconds (default 120).
+      :param settle: after a successful wait, block until the appliance schema
+                     cache is responsive again (default True) so a follow-on
+                     ``list_modules()`` / query doesn't hit a "Clearing Cache" /
+                     "Schema Update" 503. See :meth:`wait_until_ready`. Ignored when
+                     ``wait=False``.
+      :param settle_timeout: give up waiting on the schema cache to settle after
+                             this many seconds (default 300); does not raise.
+
+      :returns: With ``wait=True``, the final job record (check ``status ==
+                "Import Complete"``). With ``wait=False``, the job record right after
+                triggering. Carries ``jobUuid`` either way.
+
+      :raises ValueError: if ``resolve`` is unknown, or if risky schema changes are
+          present and none of ``modify_options`` / ``resolve`` /
+          ``allow_schema_changes`` was given.
+      :raises FortiSOARException: if ``verify`` is set and the underlying schema
+          migrate failed (carries the appliance's error, with remediation
+          guidance for the half-applied-migration wedge).
+
+
+
+.. py:function:: connectors_only(options: dict[str, Any]) -> dict[str, Any]
+
+   ``modify_options`` callback: import only connector configs, nothing else.
+
+   Forces ``includeConfigurations=True`` / ``includeInstall=False`` on every
+   connector entry (restore configs, don't reinstall the connector) and clears
+   the other top-level sections so a broad export only re-applies connector
+   configuration. A connector-only export is already scoped this way; this is
+   insurance when importing from a larger bundle.
+
+
+.. py:function:: connector_flags(options: dict[str, Any], *, include_install: bool | None = None, include_configurations: bool | None = None) -> dict[str, Any]
+
+   ``modify_options`` helper: set the two per-connector import toggles.
+
+   Each connector in a bundle carries two independent levers, matching the
+   import wizard's connector row:
+
+   - ``includeInstall`` — (re)install the connector RPM/package itself.
+   - ``includeConfigurations`` — restore the connector's saved configurations
+     (upserted by ``config_id``, secrets and all).
+
+   Pass either as a bool to force it on/off across every connector in the
+   bundle; leave it ``None`` to keep whatever the generated options already
+   have. Unlike :func:`connectors_only`, this does **not** touch the other
+   top-level sections — use it when you want, say, "import everything, but do
+   not reinstall connectors, only restore their configs"::
+
+       client.import_config.import_file(
+           "bundle.zip",
+           modify_options=lambda o: connector_flags(
+               o, include_install=False, include_configurations=True
+           ),
+       )
+
+
+.. py:function:: merge_mode(options: dict[str, Any], *, record_sets: str | None = None, picklists: str | None = None) -> dict[str, Any]
+
+   ``modify_options`` helper: set the per-category merge behavior for existing data.
+
+   When a bundle's records or picklists already exist on the target, the import
+   wizard offers a per-category "when it exists" choice. Each entry in the
+   generated options carries a ``whenExists`` string that pyfsr sets here:
+
+   - ``record_sets`` — ``"replace"`` (default) overwrites matching records with
+     the bundle's; ``"append"`` adds the bundle's records alongside the existing
+     ones. Sets ``options.recordSets.values[].whenExists``.
+   - ``picklists`` — ``"keep"`` (default) leaves each already-present picklist as
+     it is; ``"overwrite"`` replaces it with the bundle's version. Sets
+     ``options.picklistNames.values[].whenExists``.
+
+   Pass either to force it across every entry in that category; leave it ``None``
+   to keep whatever the generated options already have. Both vocabularies and
+   their round-trip persistence are live-verified on 8.0.0. Note the read-only
+   ``moduleNotExists`` flag on a record-set entry (the target module is missing):
+   the engine skips such a set regardless of ``record_sets``.
+
+   Example — import records without clobbering existing rows, and refresh
+   picklists::
+
+       client.import_config.import_file(
+           "bundle.zip",
+           modify_options=lambda o: merge_mode(o, record_sets="append", picklists="overwrite"),
+       )
+
+
+.. py:function:: overwrite_all(options: dict[str, Any]) -> dict[str, Any]
+
+   ``modify_options`` helper: "Overwrite with new version" for every field.
+
+   Sets ``include=True`` / ``_include="yes"`` on every module attribute, applying
+   all field changes from the bundle. Note this *applies* schema changes too — if
+   a change is a risky rename/type change, prefer :func:`skip_schema_changes`.
+
+
+.. py:function:: keep_existing(options: dict[str, Any], fields: list[str] | None = None) -> dict[str, Any]
+
+   ``modify_options`` helper: "Keep old version" for existing fields.
+
+   Sets ``include=False`` / ``_include="no"`` on each *existing* field (one whose
+   counterpart is already live), so its incoming change is not applied; brand-new
+   fields are left included so they're still added. ``fields`` limits this to the
+   named fields (matched on ``name`` or ``title``); ``None`` keeps every existing
+   field.
+
+
+.. py:function:: skip_schema_changes(options: dict[str, Any]) -> dict[str, Any]
+
+   ``modify_options`` helper: import records/views but apply no schema changes.
+
+   Clears each module's ``_schema`` flag (the wizard's per-module "Schema"
+   checkbox), so the import does not run the schema migration — no table rename,
+   column type change, or index/constraint rebuild. This is the safe way past a
+   risky change (see :func:`inspect_changes`) that would otherwise fail or wedge
+   the appliance-wide migrate.
+
+
+.. py:function:: inspect_changes(options: dict[str, Any]) -> list[dict[str, Any]]
+
+   Report schema changes in generated import options that can break a migrate.
+
+   Walks the included modules/attributes and flags the change classes that drive a
+   *destructive* appliance-wide migrate: a module ``tableName``/identity change (a
+   rename whose ``CREATE INDEX`` can collide → Postgres ``42P07``), an attribute
+   type change (column rewrite), and any change to a unique-constraint field
+   (constraint/index rebuild). Each item is
+   ``{module, scope, field, kind, message}``. An empty list means the options are
+   safe to import as-is.
+
+

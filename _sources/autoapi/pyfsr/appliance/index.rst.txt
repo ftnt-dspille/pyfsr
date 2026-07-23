@@ -1,0 +1,511 @@
+pyfsr.appliance
+===============
+
+.. py:module:: pyfsr.appliance
+
+.. autoapi-nested-parse::
+
+   Ergonomic Python facade for the ``pyfsr appliance`` operations.
+
+   The appliance verbs (DB queries, service control, queue management, log tails,
+   Elasticsearch/HA health, …) are implemented as plain functions under
+   :mod:`pyfsr.cli.appliance`, grouped per module — fine for the CLI, awkward to
+   call by hand.
+
+   :class:`Appliance` wraps a single connection and exposes those verbs as grouped
+   methods (``appliance.db.query(...)``, ``appliance.service.status()``,
+   ``appliance.mq.queues()``) so the Python API mirrors the CLI:
+
+   >>> from pyfsr import Appliance
+   >>> box = Appliance(host="10.0.0.1", user="csadmin", key_path="~/.ssh/id_rsa")
+   >>> box.info()                                  # doctest: +SKIP
+   {'target': 'csadmin@10.0.0.1', 'fsr_version': '7.6.0', 'content_db': 'venom',
+    'device_uuid': '0123…cdef', 'db_user': 'cyberpgsql'}
+   >>> dbname, headers, rows = box.db.query("SELECT count(*) FROM alerts")   # doctest: +SKIP
+   >>> (dbname, headers, rows)                      # doctest: +SKIP
+   ('venom', ['count'], [['42']])
+
+   Or reuse a client's host (SSH still needs its own credentials):
+
+   >>> from pyfsr import FortiSOAR                  # doctest: +SKIP
+   >>> client = FortiSOAR("https://10.0.0.1", token="...")             # doctest: +SKIP
+   >>> box = client.appliance(key_path="~/.ssh/id_rsa")               # doctest: +SKIP
+
+   The same ``--yes`` / ``--write`` gating as the CLI applies: mutating methods
+   take ``yes=True`` and SQL writes go through ``box.db.execute(..., yes=True)``.
+   For any command not surfaced as a named method, :meth:`Appliance.run` is the
+   escape hatch.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.appliance.DbNamespace
+   pyfsr.appliance.ServiceNamespace
+   pyfsr.appliance.MqNamespace
+   pyfsr.appliance.HostNamespace
+   pyfsr.appliance.LicenseNamespace
+   pyfsr.appliance.LogsNamespace
+   pyfsr.appliance.EsNamespace
+   pyfsr.appliance.HaNamespace
+   pyfsr.appliance.CertsNamespace
+   pyfsr.appliance.Appliance
+
+
+Module Contents
+---------------
+
+.. py:class:: DbNamespace(facts: pyfsr.cli.appliance.facts.Facts)
+
+   Postgres verbs (``appliance.db``). Reads are open; writes need ``yes=True``.
+
+
+   .. py:method:: query(sql: str, *, role: str | None = None, db_name: str | None = None) -> tuple[str, list[str], list[list[str]]]
+
+      Run a **read-only** SELECT. Returns ``(dbname, headers, rows)``.
+
+
+
+   .. py:method:: execute(sql: str, *, role: str | None = None, db_name: str | None = None, yes: bool = False) -> tuple[str, str]
+
+      Run a mutating statement (``UPDATE``/``DELETE``/``DROP``…). Refuses unless ``yes=True``.
+
+
+
+   .. py:method:: tables(pattern: str | None = None, *, role: str | None = None, db_name: str | None = None) -> tuple[str, list[str], list[list[str]]]
+
+      List tables, optionally filtered by a ``LIKE``/glob pattern. Returns ``(dbname, headers, rows)``.
+
+
+
+   .. py:method:: indexes(pattern: str | None = None, *, role: str | None = None, db_name: str | None = None) -> tuple[str, list[str], list[list[str]]]
+
+      List indexes, optionally filtered by a ``LIKE``/glob pattern. Returns ``(dbname, headers, rows)``.
+
+
+
+   .. py:method:: sizes(*, timeout: float = 60.0) -> list[pyfsr.cli.appliance.db.DataClassSize]
+
+      ``csadm db --getsize`` — footprint by data class.
+
+
+
+   .. py:method:: databases() -> list[pyfsr.cli.appliance.db.DatabaseInfo]
+
+      Enumerate databases with sizes and roles.
+
+
+
+   .. py:method:: find_module_tables(base_table: str) -> list[str]
+
+      Find the physical tables belonging to a module's ``base_table``.
+
+
+
+   .. py:method:: drop_module_tables(base_table: str, *, yes: bool = False) -> dict
+
+      Drop orphaned module tables (``DROP ... CASCADE``). Refuses unless ``yes=True``.
+
+
+
+   .. py:method:: find_orphan_module_tables() -> list[pyfsr.cli.appliance.db.OrphanTable]
+
+      Sweep the content DB for physical tables left behind by deleted modules.
+
+      Non-destructive. Reclaim a reported base with :meth:`drop_module_tables`.
+
+
+
+   .. py:method:: resolve_db(*, role: str | None = None, db_name: str | None = None) -> str
+
+      Resolve the target DB name from an explicit name or a logical role.
+
+      ``db_name`` wins outright. A fixed role (``das``, ``gateway``, …) maps
+      directly. The default ``content`` role is discovered by fingerprinting
+      for ``model_metadatas``.
+
+
+
+.. py:class:: ServiceNamespace(t: pyfsr.cli.appliance.transport.Transport)
+
+   systemd / cyops service verbs (``appliance.service``).
+
+
+   .. py:method:: status(name: str | None = None) -> str
+
+      Parsed ``csadm services --status`` (optionally one service).
+
+
+
+   .. py:method:: services(name: str | None = None) -> list[pyfsr.cli.appliance.service.ServiceState]
+
+      Typed per-service states (name, running, status, since).
+
+
+
+   .. py:method:: liveness(*, base: str = 'https://127.0.0.1', timeout: float = 6.0) -> list[pyfsr.cli.appliance.service.ProbeResult]
+
+      Probe endpoints for active-but-wedged services.
+
+
+
+   .. py:method:: restart(name: str, *, yes: bool = False) -> pyfsr.cli.appliance.service.ServiceActionResult
+
+      Restart one cyops service. Refuses unless ``yes=True``.
+
+
+
+   .. py:method:: start(name: str) -> pyfsr.cli.appliance.service.ServiceActionResult
+
+      Start one cyops service.
+
+
+
+   .. py:method:: stop(name: str, *, yes: bool = False) -> pyfsr.cli.appliance.service.ServiceActionResult
+
+      Stop one cyops service. Refuses unless ``yes=True``.
+
+
+
+   .. py:method:: restart_all(*, yes: bool = False) -> pyfsr.cli.appliance.service.ServiceActionResult
+
+      Restart the whole service stack in order. Refuses unless ``yes=True``.
+
+
+
+   .. py:method:: start_all() -> pyfsr.cli.appliance.service.ServiceActionResult
+
+      Start the whole service stack in order.
+
+
+
+   .. py:method:: stop_all(*, yes: bool = False) -> pyfsr.cli.appliance.service.ServiceActionResult
+
+      Stop the whole service stack in order. Refuses unless ``yes=True``.
+
+
+
+   .. py:method:: listeners() -> list[pyfsr.cli.appliance.service.Listener]
+
+      Listening TCP ports + owning process (``ss -tlnp``).
+
+
+
+.. py:class:: MqNamespace(t: pyfsr.cli.appliance.transport.Transport)
+
+   RabbitMQ verbs (``appliance.mq``).
+
+
+   .. py:method:: status() -> str
+
+      ``rabbitmqctl status``.
+
+
+
+   .. py:method:: queues() -> list[pyfsr.cli.appliance.mq.QueueInfo]
+
+      Queues with depth + consumer counts.
+
+
+
+   .. py:method:: consumers() -> list[pyfsr.cli.appliance.mq.Consumer]
+
+      List consumers (queue ↔ channel).
+
+
+
+   .. py:method:: vhosts() -> list[str]
+
+      List virtual hosts.
+
+
+
+   .. py:method:: permissions(*, all_vhosts: bool = False) -> list[pyfsr.cli.appliance.mq.Permission]
+
+      Per-vhost permissions (default vhost ``/``, or all).
+
+
+
+   .. py:method:: purge_queue(queue: str, *, vhost: str | None = None, yes: bool = False) -> pyfsr.cli.appliance.mq.PurgeResult
+
+      Purge all messages from a queue (irreversible). Refuses unless ``yes=True``.
+
+
+
+   .. py:method:: purge_workflows(*, graceful: bool = False, sweep_data_queues: bool = True, yes: bool = False) -> pyfsr.cli.appliance.mq.WorkflowPurgeReport
+
+      Clear the stuck-worker backlog: purge queues + recycle celeryd. Refuses unless ``yes=True``.
+
+
+
+.. py:class:: HostNamespace(t: pyfsr.cli.appliance.transport.Transport)
+
+   OS resource metrics (``appliance.host``). All read-only, no sudo.
+
+
+   .. py:method:: meminfo() -> pyfsr.cli.appliance.host.MemInfo
+
+      Memory + swap usage (MB).
+
+
+
+   .. py:method:: loadavg() -> pyfsr.cli.appliance.host.LoadAvg
+
+      System load averages.
+
+
+
+   .. py:method:: process_rss(pattern: str) -> pyfsr.cli.appliance.host.ProcRss
+
+      Summed/peak RSS for processes matching ``pattern``.
+
+
+
+   .. py:method:: disk(path: str = '/opt/cyops') -> pyfsr.cli.appliance.host.DiskUsage
+
+      Disk usage for ``path``.
+
+
+
+   .. py:method:: snapshot(*, disk_path: str = '/opt/cyops') -> pyfsr.cli.appliance.host.HostSnapshot
+
+      One coherent sample: mem, swap, load, worker RSS, disk.
+
+
+
+.. py:class:: LicenseNamespace(t: pyfsr.cli.appliance.transport.Transport)
+
+   Licensing / identity (``appliance.license``).
+
+
+   .. py:method:: show() -> str
+
+      Raw ``csadm license --show-details``.
+
+
+
+   .. py:method:: details() -> pyfsr.cli.appliance.license.LicenseDetails
+
+      Parsed license details.
+
+
+
+   .. py:method:: device_uuid() -> str
+
+      Resolved device UUID (file first, csadm fallback).
+
+
+
+   .. py:method:: drift() -> pyfsr.cli.appliance.license.DriftReport
+
+      File vs csadm entitlement-UUID drift report.
+
+
+
+.. py:class:: LogsNamespace(t: pyfsr.cli.appliance.transport.Transport)
+
+   Log tail / error scan (``appliance.logs``).
+
+
+   .. py:method:: tail(service_name: str, *, lines: int = 100) -> str
+
+      Tail a cyops service log.
+
+
+
+   .. py:method:: scan(*, minutes: int = 30) -> str
+
+      Roll up recent journal errors.
+
+
+
+   .. py:method:: bundle(*, timeout: float = 300.0) -> str
+
+      ``csadm log --collect`` → tarball path (slow).
+
+
+
+.. py:class:: EsNamespace(facts: pyfsr.cli.appliance.facts.Facts)
+
+   Elasticsearch health / shards (``appliance.es``).
+
+
+   .. py:method:: health() -> pyfsr.cli.appliance.es.ESHealth
+
+      Cluster health (green/yellow/red + shard counts).
+
+
+
+   .. py:method:: shards() -> tuple[list[str], list[list[str]]]
+
+      Unassigned-shard allocation explain.
+
+
+
+.. py:class:: HaNamespace(t: pyfsr.cli.appliance.transport.Transport)
+
+   HA cluster verbs (``appliance.ha``).
+
+
+   .. py:method:: nodes() -> list[pyfsr.cli.appliance.ha.HaNode]
+
+      HA nodes (current node marked).
+
+
+
+   .. py:method:: health() -> pyfsr.cli.appliance.ha.HaHealth
+
+      HA cluster health.
+
+
+
+   .. py:method:: replication() -> str
+
+      ``csadm ha get-replication-stat``.
+
+
+
+.. py:class:: CertsNamespace(t: pyfsr.cli.appliance.transport.Transport)
+
+   Appliance TLS certificate verbs (``appliance.certs``).
+
+
+   .. py:method:: regenerate(hostname: str, *, yes: bool = False, timeout: float = 120.0) -> str
+
+      Regenerate the self-signed cert (restart services afterward). Refuses unless ``yes=True``.
+
+
+
+.. py:class:: Appliance(host: str | None = None, *, user: str = 'csadmin', password: str | None = None, port: int = 22, key_path: str | None = None, sudo_password: str | None = None, insecure_skip_host_key_check: bool = False, instance: str | None = None, _facts: pyfsr.cli.appliance.facts.Facts | None = None)
+
+   A connection to a FortiSOAR appliance, exposing the ``pyfsr appliance`` verbs.
+
+   Construct it with SSH connection details (or run it on-box with no ``host`` to
+   use a local transport), then reach the grouped verbs:
+
+   - :attr:`db` — Postgres queries, table cleanup
+   - :attr:`service` — start/stop/restart, liveness
+   - :attr:`mq` — RabbitMQ queues, purges
+   - :attr:`host` — memory/load/disk/RSS
+   - :attr:`license` — device UUID, drift
+   - :attr:`logs` — tail, scan, bundle
+   - :attr:`es` — Elasticsearch health/shards
+   - :attr:`ha` — cluster nodes/health/replication
+   - :attr:`certs` — TLS cert regeneration
+
+   plus :meth:`info`, :meth:`diagnose`, and :meth:`run` (the escape hatch for
+   arbitrary shell commands).
+
+   Connection args fall back to ``PYFSR_APPLIANCE_HOST`` / ``_USER`` / ``_PASSWORD``
+   when omitted. Pass ``instance="<alias>"`` to resolve a named SSH profile from
+   ``~/.pyfsr/instances.toml`` (the same file
+   :class:`~pyfsr.instances.InstanceRegistry` uses for the REST client) — this
+   takes precedence over the explicit host/user/password kwargs and is the SDK
+   counterpart of ``pyfsr appliance --instance <alias>``.
+
+   .. note::
+
+      Each grouped verb returns a typed result defined in the corresponding
+      ``pyfsr.cli.appliance`` submodule rather than here, so those dataclasses
+      are documented on their own pages, not under this module's contents:
+
+      - :mod:`pyfsr.cli.appliance.db` — :class:`~pyfsr.cli.appliance.db.DatabaseInfo`,
+        :class:`~pyfsr.cli.appliance.db.DataClassSize`, :class:`~pyfsr.cli.appliance.db.OrphanTable`
+      - :mod:`pyfsr.cli.appliance.service` — :class:`~pyfsr.cli.appliance.service.ServiceState`,
+        :class:`~pyfsr.cli.appliance.service.Listener`, :class:`~pyfsr.cli.appliance.service.ProbeResult`,
+        :class:`~pyfsr.cli.appliance.service.ServiceActionResult`
+      - :mod:`pyfsr.cli.appliance.mq` — :class:`~pyfsr.cli.appliance.mq.QueueInfo`,
+        :class:`~pyfsr.cli.appliance.mq.Consumer`, :class:`~pyfsr.cli.appliance.mq.Permission`,
+        :class:`~pyfsr.cli.appliance.mq.PurgeResult`, :class:`~pyfsr.cli.appliance.mq.WorkflowPurgeReport`
+      - :mod:`pyfsr.cli.appliance.host` — :class:`~pyfsr.cli.appliance.host.MemInfo`,
+        :class:`~pyfsr.cli.appliance.host.LoadAvg`, :class:`~pyfsr.cli.appliance.host.ProcRss`,
+        :class:`~pyfsr.cli.appliance.host.DiskUsage`, :class:`~pyfsr.cli.appliance.host.HostSnapshot`
+      - :mod:`pyfsr.cli.appliance.license` — :class:`~pyfsr.cli.appliance.license.LicenseDetails`,
+        :class:`~pyfsr.cli.appliance.license.DriftReport`
+      - :mod:`pyfsr.cli.appliance.es` — :class:`~pyfsr.cli.appliance.es.ESHealth`
+      - :mod:`pyfsr.cli.appliance.ha` — :class:`~pyfsr.cli.appliance.ha.HaNode`,
+        :class:`~pyfsr.cli.appliance.ha.HaHealth`
+
+
+   .. py:attribute:: db
+      :type:  DbNamespace
+
+      Postgres verbs — queries, table listings, orphan-table cleanup. See :class:`DbNamespace`.
+
+
+   .. py:attribute:: service
+      :type:  ServiceNamespace
+
+      systemd / cyops service verbs — status, liveness, start/stop/restart. See :class:`ServiceNamespace`.
+
+
+   .. py:attribute:: mq
+      :type:  MqNamespace
+
+      RabbitMQ verbs — queues, consumers, permissions, purges. See :class:`MqNamespace`.
+
+
+   .. py:attribute:: host
+      :type:  HostNamespace
+
+      OS resource metrics — memory, load, disk, process RSS. See :class:`HostNamespace`.
+
+
+   .. py:attribute:: license
+      :type:  LicenseNamespace
+
+      Licensing / identity — device UUID, license details, entitlement drift. See :class:`LicenseNamespace`.
+
+
+   .. py:attribute:: logs
+      :type:  LogsNamespace
+
+      Log verbs — tail a service log, scan recent errors, collect a bundle. See :class:`LogsNamespace`.
+
+
+   .. py:attribute:: es
+      :type:  EsNamespace
+
+      Elasticsearch verbs — cluster health, unassigned-shard explain. See :class:`EsNamespace`.
+
+
+   .. py:attribute:: ha
+      :type:  HaNamespace
+
+      HA cluster verbs — nodes, health, replication status. See :class:`HaNamespace`.
+
+
+   .. py:attribute:: certs
+      :type:  CertsNamespace
+
+      Appliance TLS certificate verbs — regenerate the self-signed cert. See :class:`CertsNamespace`.
+
+
+   .. py:method:: info() -> dict[str, str]
+
+      Identity card: host, FortiSOAR version, content DB, device UUID.
+
+
+
+   .. py:method:: diagnose(*, path: str | None = None, timeout: float = 120.0) -> str
+
+      Run ``fsr_diagnose.sh`` on the appliance; returns its output.
+
+
+
+   .. py:method:: run(argv: list[str], *, input_text: str | None = None, env: dict[str, str] | None = None, timeout: float = 60.0, sudo: bool = False) -> str
+
+      Run an arbitrary command on the appliance; returns ``stdout``.
+
+      Raises ``RuntimeError`` on non-zero exit.  Use this as the escape hatch
+      for commands not covered by a namespace method.
+
+      >>> box = Appliance(host="10.0.0.1", key_path="~/.ssh/id_rsa")  # doctest: +SKIP
+      >>> box.run(["uname", "-r"])                                      # doctest: +SKIP
+      '5.15.0-101-generic\n'
+
+
+

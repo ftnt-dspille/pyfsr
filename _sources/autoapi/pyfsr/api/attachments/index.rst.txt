@@ -1,0 +1,98 @@
+pyfsr.api.attachments
+=====================
+
+.. py:module:: pyfsr.api.attachments
+
+.. autoapi-nested-parse::
+
+   Attachment records (``/api/3/attachments``).
+
+   A FortiSOAR attachment is a metadata record that points at an uploaded *file*
+   record: you upload the bytes to ``/api/3/files`` first, then create an
+   ``attachments`` row linking that file by IRI. This wrapper hides that two-step
+   dance — :meth:`~pyfsr.api.attachments.AttachmentsAPI.create_from_file` uploads
+   and links in one call. Accessed as ``client.attachments``.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> att = client.attachments.create(
+   ...     name="report.csv",
+   ...     file="/api/3/files/880e8400-e29b-41d4-a716-446655440010",
+   ...     description="Daily report"
+   ... )
+   >>> att["name"]
+   'report.csv'
+   >>> att["description"]
+   'Daily report'
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.attachments.AttachmentsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: AttachmentsAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Create and manage attachment records.
+
+
+   .. py:method:: create(*, name: str, file: Any, description: str | None = None, **fields: Any) -> pyfsr.models.Attachment
+
+      Create an attachment record linking an already-uploaded file.
+
+      ``file`` is the file record's IRI (``"/api/3/files/<uuid>"``) or the file
+      record/dict itself (its ``@id`` is used). Extra ``fields`` are merged into
+      the payload. Use :meth:`create_from_file` to upload and link in one step.
+      Returns a typed :class:`~pyfsr.models.Attachment`.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> att = client.attachments.create(
+      ...     name="test.csv",
+      ...     file="/api/3/files/880e8400-e29b-41d4-a716-446655440010"
+      ... )
+      >>> att["name"]
+      'report.csv'
+
+
+
+   .. py:method:: create_from_file(path: str, *, name: str | None = None, description: str | None = None, **fields: Any) -> pyfsr.models.Attachment
+
+      Upload a local file **and** create its attachment record in one call.
+
+      Wraps ``client.files.upload(path)`` then :meth:`create`. ``name`` defaults
+      to the uploaded file's name. Returns a typed :class:`~pyfsr.models.Attachment`.
+
+
+
+   .. py:method:: get(ref: str) -> pyfsr.models.Attachment
+
+      Fetch an attachment record by uuid or IRI (typed).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> att = client.attachments.get("770e8400-e29b-41d4-a716-446655440009")
+      >>> att["name"]
+      'report.csv'
+
+
+
+   .. py:method:: delete(ref: str) -> None
+
+      Delete an attachment record by uuid or IRI.
+
+
+

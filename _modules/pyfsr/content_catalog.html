@@ -1,0 +1,1172 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>pyfsr.content_catalog - pyfsr 0.16.1</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/custom.css" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #c8102e;
+  --color-brand-content: #c8102e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">pyfsr 0.16.1</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  <span class="sidebar-brand-text">pyfsr 0.16.1</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Guides</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../getting-started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/authentication.html">Authentication</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/records.html">Working with Records</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/querying.html">Querying</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/module-admin.html">Module Editor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/module-field-schema.html">Module &amp; Field Schema Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/connectors.html">Connectors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/export-import.html">Configuration Export &amp; Import</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/playbook-authoring.html">Playbook Authoring &amp; Deployment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/playbook-yaml-reference.html">Playbook YAML Syntax Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/ai-agents.html">AI &amp; Agents</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/appliance-cli.html">Appliance Administration CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/repo-cli.html">Content Repository CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guides/content-hub-mirror.html">Self-hosted Content Hub mirror</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../reference.html">API Reference</a><input aria-label="Toggle navigation of API Reference" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../autoapi/pyfsr/client/index.html">pyfsr.client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../autoapi/pyfsr/records/index.html">pyfsr.records</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../autoapi/pyfsr/query/index.html">pyfsr.query</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../autoapi/pyfsr/pagination/index.html">pyfsr.pagination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../autoapi/pyfsr/fields/index.html">pyfsr.fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../autoapi/pyfsr/config/index.html">pyfsr.config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../autoapi/pyfsr/instances/index.html">pyfsr.instances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../autoapi/pyfsr/exceptions/index.html">pyfsr.exceptions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../autoapi/pyfsr/api/index.html">pyfsr.api</a><input aria-label="Toggle navigation of pyfsr.api" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/actors/index.html">pyfsr.api.actors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/agents/index.html">pyfsr.api.agents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/ai/index.html">pyfsr.api.ai</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/alerts/index.html">pyfsr.api.alerts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/api_keys/index.html">pyfsr.api.api_keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/api_users/index.html">pyfsr.api.api_users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/app_config/index.html">pyfsr.api.app_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/attachments/index.html">pyfsr.api.attachments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/audit/index.html">pyfsr.api.audit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/auth_config/index.html">pyfsr.api.auth_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/base/index.html">pyfsr.api.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/comments/index.html">pyfsr.api.comments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/connectors/index.html">pyfsr.api.connectors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/content_hub/index.html">pyfsr.api.content_hub</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/export_config/index.html">pyfsr.api.export_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/export_templates/index.html">pyfsr.api.export_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/feeds/index.html">pyfsr.api.feeds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/import_config/index.html">pyfsr.api.import_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/incidents/index.html">pyfsr.api.incidents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/manual_input/index.html">pyfsr.api.manual_input</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/modules/index.html">pyfsr.api.modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/modules_admin/index.html">pyfsr.api.modules_admin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/native_mcp/index.html">pyfsr.api.native_mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/notifications/index.html">pyfsr.api.notifications</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/picklists/index.html">pyfsr.api.picklists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/playbooks/index.html">pyfsr.api.playbooks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/reporting/index.html">pyfsr.api.reporting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/roles/index.html">pyfsr.api.roles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/routers/index.html">pyfsr.api.routers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/rules/index.html">pyfsr.api.rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/schedules/index.html">pyfsr.api.schedules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/search/index.html">pyfsr.api.search</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/solution_packs/index.html">pyfsr.api.solution_packs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/system/index.html">pyfsr.api.system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/system_queries/index.html">pyfsr.api.system_queries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/system_settings/index.html">pyfsr.api.system_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/tags/index.html">pyfsr.api.tags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/tasks/index.html">pyfsr.api.tasks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/taxii/index.html">pyfsr.api.taxii</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/teams/index.html">pyfsr.api.teams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/user_settings/index.html">pyfsr.api.user_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/users/index.html">pyfsr.api.users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/view_templates/index.html">pyfsr.api.view_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/views/index.html">pyfsr.api.views</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/wf_tools/index.html">pyfsr.api.wf_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/widgets/index.html">pyfsr.api.widgets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/api/workflow_collections/index.html">pyfsr.api.workflow_collections</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../autoapi/pyfsr/models/index.html">pyfsr.models</a><input aria-label="Toggle navigation of pyfsr.models" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/models/base/index.html">pyfsr.models.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/models/types/index.html">pyfsr.models.types</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../autoapi/pyfsr/auth/index.html">pyfsr.auth</a><input aria-label="Toggle navigation of pyfsr.auth" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/auth/api_key/index.html">pyfsr.auth.api_key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/auth/base/index.html">pyfsr.auth.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/auth/user_pass/index.html">pyfsr.auth.user_pass</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../autoapi/pyfsr/authoring/index.html">pyfsr.authoring</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../autoapi/pyfsr/agent/index.html">pyfsr.agent</a><input aria-label="Toggle navigation of pyfsr.agent" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../autoapi/pyfsr/agent/archetypes/index.html">pyfsr.agent.archetypes</a><input aria-label="Toggle navigation of pyfsr.agent.archetypes" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/agent/archetypes/harvest/index.html">pyfsr.agent.archetypes.harvest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/agent/archetypes/record/index.html">pyfsr.agent.archetypes.record</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/agent/archetypes/router/index.html">pyfsr.agent.archetypes.router</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/agent/archetypes/store/index.html">pyfsr.agent.archetypes.store</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/agent/mcp/index.html">pyfsr.agent.mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/agent/tools/index.html">pyfsr.agent.tools</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../autoapi/pyfsr/cli/index.html">pyfsr.cli</a><input aria-label="Toggle navigation of pyfsr.cli" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/index.html">pyfsr.cli.appliance</a><input aria-label="Toggle navigation of pyfsr.cli.appliance" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/certs/index.html">pyfsr.cli.appliance.certs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/content_hub/index.html">pyfsr.cli.appliance.content_hub</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/db/index.html">pyfsr.cli.appliance.db</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/diagnose/index.html">pyfsr.cli.appliance.diagnose</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/es/index.html">pyfsr.cli.appliance.es</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/facts/index.html">pyfsr.cli.appliance.facts</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/ha/index.html">pyfsr.cli.appliance.ha</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/host/index.html">pyfsr.cli.appliance.host</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/info/index.html">pyfsr.cli.appliance.info</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/license/index.html">pyfsr.cli.appliance.license</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/logs/index.html">pyfsr.cli.appliance.logs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/mq/index.html">pyfsr.cli.appliance.mq</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/service/index.html">pyfsr.cli.appliance.service</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/cli/appliance/transport/index.html">pyfsr.cli.appliance.transport</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/cli/playbook/index.html">pyfsr.cli.playbook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/cli/repo/index.html">pyfsr.cli.repo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/cli/widget/index.html">pyfsr.cli.widget</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../autoapi/pyfsr/appliance/index.html">pyfsr.appliance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../autoapi/pyfsr/repo/index.html">pyfsr.repo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../autoapi/pyfsr/content_catalog/index.html">pyfsr.content_catalog</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../reference-advanced.html">Advanced &amp; internal</a><input aria-label="Toggle navigation of Advanced &amp; internal" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/playbook_catalog/index.html">pyfsr.playbook_catalog</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/playbook_lint/index.html">pyfsr.playbook_lint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/playbook_match/index.html">pyfsr.playbook_match</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/concurrency/index.html">pyfsr.concurrency</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/projection/index.html">pyfsr.projection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/query_models/index.html">pyfsr.query_models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../autoapi/pyfsr/spec/index.html">pyfsr.spec</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../autoapi/pyfsr/utils/index.html">pyfsr.utils</a><input aria-label="Toggle navigation of pyfsr.utils" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/utils/file_operations/index.html">pyfsr.utils.file_operations</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/utils/iri/index.html">pyfsr.utils.iri</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../autoapi/pyfsr/utils/validation/index.html">pyfsr.utils.validation</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../reference-models.html">Typed models</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../contributing.html">Contributing</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for pyfsr.content_catalog</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Build and validate a self-hosted Content Hub catalog (``content-hub.json``).</span>
+
+<span class="sd">FortiSOAR&#39;s Content Hub sync (``csadm package content-hub sync``) reads **one**</span>
+<span class="sd">manifest from **one** host: ``GET https://{REPOSERVER}/content-hub/content-hub.json``.</span>
+<span class="sd">That file is a flat JSON array of entries (connectors, widgets, solution packs,</span>
+<span class="sd">ai_agents). There is no native multi-repo — so &quot;see both Fortinet&#39;s store and</span>
+<span class="sd">ours&quot; is produced by serving a *merged* ``content-hub.json`` from our own host</span>
+<span class="sd">(``OFFLINEREPO=true``, ``REPOSERVER`` pointed at our VM).</span>
+
+<span class="sd">This module is the no-appliance, no-FDN-cert piece pyfsr owns (Option C in</span>
+<span class="sd">``docs/plans/CONTENT_HUB_SELF_HOSTED_REPO_PLAN.md``): take an upstream catalog,</span>
+<span class="sd">splice in our own local entries, validate every entry against the live schema,</span>
+<span class="sd">and emit a spec-valid ``content-hub.json`` plus the directory tree the sync&#39;s</span>
+<span class="sd">fetch contract expects.</span>
+
+<span class="sd">The fetch contract a served mirror must satisfy (all live-verified on 8.0.0)::</span>
+
+<span class="sd">    /content-hub/content-hub.json                                  # this manifest</span>
+<span class="sd">    /content-hub/{name}-{version}/{buildNumber}/info.json          # per-item detail</span>
+<span class="sd">    /content-hub/{name}-{version}/{buildNumber}/{name}-{version}.zip   # artifact</span>
+<span class="sd">    /content-hub/{name}-{version}/{buildNumber}/images/fsr-icon-large.png</span>
+
+<span class="sd">Every one of those per-item files is written to a ``latest/`` alias as well as the</span>
+<span class="sd">numbered build dir::</span>
+
+<span class="sd">    /content-hub/{name}-{version}/latest/info.json</span>
+<span class="sd">    /content-hub/{name}-{version}/latest/{name}-{version}.zip</span>
+<span class="sd">    /content-hub/{name}-{version}/latest/images/fsr-icon-large.png</span>
+
+<span class="sd">The ``latest/`` artifact is **load-bearing, not a convenience**: an install request</span>
+<span class="sd">that omits ``buildNumber`` makes the appliance fetch the literal ``latest`` path</span>
+<span class="sd">(cyops-api ``SolutionPackController``: ``$requestBody-&gt;buildNumber ?? &quot;latest&quot;``).</span>
+<span class="sd">A tree carrying only numbered builds 404s that download, which the appliance</span>
+<span class="sd">misreports as ``&quot;Please check the network connection to &lt;repo&gt;&quot;``.</span>
+
+<span class="sd">Typical use::</span>
+
+<span class="sd">    from pyfsr.content_catalog import ContentCatalog, build_entry</span>
+
+<span class="sd">    cat = ContentCatalog.from_url(&quot;my-mirror.example.com&quot;)        # crawl a live mirror</span>
+<span class="sd">    # ...or from a saved file: ContentCatalog.from_file(&quot;upstream-content-hub.json&quot;)</span>
+<span class="sd">    cat.add(build_entry(</span>
+<span class="sd">        name=&quot;myConnector&quot;, type=&quot;connector&quot;, version=&quot;1.0.0&quot;, buildNumber=1,</span>
+<span class="sd">        label=&quot;My Connector&quot;, description=&quot;in-house&quot;, publisher=&quot;Acme&quot;,</span>
+<span class="sd">    ))</span>
+<span class="sd">    problems = cat.validate()          # {} when clean</span>
+<span class="sd">    cat.write_tree(&quot;/srv/repo&quot;)        # -&gt; /srv/repo/content-hub/content-hub.json + item dirs</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tarfile</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">zipfile</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">RepoArtifactNotFoundError</span><span class="p">,</span> <span class="n">RepoUnreachableError</span>
+
+<span class="c1">#: ``name``/``version`` become filesystem path segments in the served tree</span>
+<span class="c1">#: (``{name}-{version}/{build}/…``), so they must not contain path separators,</span>
+<span class="c1">#: ``..``, or control characters. We reject exactly those (not an allowlist —</span>
+<span class="c1">#: real catalog names legitimately contain ``&amp;``, e.g. ``mITREATT&amp;CKThreatHunting``);</span>
+<span class="c1">#: :meth:`ContentCatalog.write_tree` adds a realpath-containment backstop.</span>
+<span class="n">_PATH_HOSTILE</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;[/</span><span class="se">\\</span><span class="s2">\x00-\x1f\x7f]&quot;</span><span class="p">)</span>
+
+<span class="c1">#: Path a served mirror exposes the manifest at, relative to the repo host.</span>
+<span class="n">_CATALOG_PATH</span> <span class="o">=</span> <span class="s2">&quot;/content-hub/content-hub.json&quot;</span>
+<span class="n">_HEADERS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;User-Agent&quot;</span><span class="p">:</span> <span class="s2">&quot;pyfsr&quot;</span><span class="p">}</span>
+
+<span class="c1">#: The four entry types the live 8.0.0 catalog carries.</span>
+<div class="viewcode-block" id="CATALOG_TYPES">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.CATALOG_TYPES">[docs]</a>
+<span class="n">CATALOG_TYPES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;connector&quot;</span><span class="p">,</span> <span class="s2">&quot;widget&quot;</span><span class="p">,</span> <span class="s2">&quot;solutionpack&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_agent&quot;</span><span class="p">})</span></div>
+
+
+<span class="c1">#: Keys every entry carries, regardless of type (from the live 931-entry catalog).</span>
+<span class="n">_COMMON_KEYS</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;name&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;version&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;label&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;description&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;buildNumber&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;availableVersions&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;infoPath&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;iconLarge&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;category&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;publisher&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;certified&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: Known-good values of the appliance&#39;s &quot;Solution Pack Category&quot; picklist. The sync</span>
+<span class="c1">#: **rejects the whole entry** — with ``FSR_CH_0000001`` — if ``category`` is a</span>
+<span class="c1">#: non-empty value outside that picklist, so an override with a made-up category</span>
+<span class="c1">#: (e.g. ``&quot;HTTP Requests&quot;``) silently never lands. This set is a best-effort</span>
+<span class="c1">#: *fallback* for warnings when no upstream catalog is available to compare against;</span>
+<span class="c1">#: it is NOT exhaustive (real 8.0.0 solutionpacks use more, e.g. &quot;Document Reader&quot;),</span>
+<span class="c1">#: so it is deliberately NOT used to hard-reject entries — prefer comparing a local</span>
+<span class="c1">#: override&#39;s category against the categories the upstream catalog already uses.</span>
+<div class="viewcode-block" id="SOLUTION_PACK_CATEGORIES">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.SOLUTION_PACK_CATEGORIES">[docs]</a>
+<span class="n">SOLUTION_PACK_CATEGORIES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;Analytics and SIEM&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Asset Management&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Attack surface management&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Case Management&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Cloud Security&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Cloud access security broker (CASB)&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Communication and Coordination&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Compliance and Reporting&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Compute Platform&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Data Enrichment &amp; Threat Intelligence&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;DevOps and Digital Operations&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Email Gateway&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Email Security&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Endpoint Security&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Firewall and Network Protection&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Identity and Access Management&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;IT Service Management&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;IT Services&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ML Service&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Malware Analysis&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Monitoring&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Network Security&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;OT &amp; IoT Security&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Security Posture Management&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Threat Intelligence&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Ticket Management&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Utilities&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Web Application&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">)</span></div>
+
+
+<span class="c1">#: The minimal set a well-formed entry MUST have for the sync to place it and</span>
+<span class="c1">#: for the artifact/info/icon paths to resolve.</span>
+<span class="n">_REQUIRED_KEYS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;version&quot;</span><span class="p">,</span> <span class="s2">&quot;buildNumber&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">)</span>
+
+<span class="c1">#: Keys the sync uses to locate artifacts; if absent we can synthesize them from</span>
+<span class="c1">#: name/version/buildNumber via the path convention.</span>
+<span class="n">_PATH_KEYS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;infoPath&quot;</span><span class="p">,</span> <span class="s2">&quot;iconLarge&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="info_path">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.info_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">info_path</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">version</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">build_number</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the ``infoPath`` for an item, per the live path convention.</span>
+
+<span class="sd">    ``/content-hub/{name}-{version}/{buildNumber}`` — ``buildNumber`` is the real</span>
+<span class="sd">    integer build, not ``&quot;latest&quot;`` (both the numbered dir and a ``latest/`` copy</span>
+<span class="sd">    exist on the wire).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;/content-hub/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">build_number</span><span class="si">}</span><span class="s2">&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="icon_path">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.icon_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">icon_path</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">version</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">build_number</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the ``iconLarge`` path for an item (served from ``OSSERVER``).&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;/content-hub/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">build_number</span><span class="si">}</span><span class="s2">/images/fsr-icon-large.png&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="artifact_path">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.artifact_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">artifact_path</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">version</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">build_number</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the artifact-zip path the sync fetches for an item.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;/content-hub/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">build_number</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2">.zip&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="fetch_catalog">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.fetch_catalog">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fetch_catalog</span><span class="p">(</span>
+    <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">30.0</span><span class="p">,</span>
+    <span class="n">verify</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">cert</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Crawl a live ``content-hub.json`` from ``host`` and return its entry list.</span>
+
+<span class="sd">    ``host`` may be a bare host (``secops-content.forticloud.com``), a</span>
+<span class="sd">    ``scheme://host`` base, or a full URL ending in ``content-hub.json`` — the</span>
+<span class="sd">    manifest path (``_CATALOG_PATH``) is appended unless already present, and</span>
+<span class="sd">    a bare host defaults to ``https://``. This is the upstream half of the merge:</span>
+<span class="sd">    fetch Fortinet&#39;s (or any mirror&#39;s) catalog, then splice your local entries in</span>
+<span class="sd">    via :meth:`ContentCatalog.merge`.</span>
+
+<span class="sd">    The official ``secops-content.forticloud.com`` host requires a mutual-TLS FDN</span>
+<span class="sd">    client certificate in online mode (see the plan doc). Pass ``cert`` — a</span>
+<span class="sd">    combined PEM path, or a ``(cert, key)`` pair — to present it (this is how the</span>
+<span class="sd">    Option-B mirror crawls the entitled upstream). Without it, a bare fetch of the</span>
+<span class="sd">    official host fails the handshake; a plain ``OFFLINEREPO`` mirror needs no cert.</span>
+
+<span class="sd">    Raises :class:`~pyfsr.exceptions.RepoUnreachableError` on a transport failure</span>
+<span class="sd">    (DNS/TLS/timeout/refused), :class:`~pyfsr.exceptions.RepoArtifactNotFoundError`</span>
+<span class="sd">    on a 404, or ``ValueError`` if the host answers with something that isn&#39;t a</span>
+<span class="sd">    JSON array.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">url</span> <span class="o">=</span> <span class="n">_catalog_url</span><span class="p">(</span><span class="n">host</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">resp</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">_HEADERS</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span> <span class="n">cert</span><span class="o">=</span><span class="n">cert</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">RequestException</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">RepoUnreachableError</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">url</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="k">with</span> <span class="n">resp</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">resp</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">404</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">RepoArtifactNotFoundError</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">url</span><span class="p">)</span>
+        <span class="n">resp</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">resp</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">: content-hub.json must be a JSON array, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">data</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_catalog_url</span><span class="p">(</span><span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize ``host`` to a full ``.../content-hub/content-hub.json`` URL.&quot;&quot;&quot;</span>
+    <span class="n">h</span> <span class="o">=</span> <span class="n">host</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">h</span><span class="o">.</span><span class="n">startswith</span><span class="p">((</span><span class="s2">&quot;http://&quot;</span><span class="p">,</span> <span class="s2">&quot;https://&quot;</span><span class="p">)):</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;https://</span><span class="si">{</span><span class="n">h</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="n">h</span> <span class="o">=</span> <span class="n">h</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">h</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;/content-hub.json&quot;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">h</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">h</span><span class="si">}{</span><span class="n">_CATALOG_PATH</span><span class="si">}</span><span class="s2">&quot;</span>
+
+
+<div class="viewcode-block" id="build_entry">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.build_entry">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_entry</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="nb">type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">version</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">buildNumber</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">publisher</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">certified</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">category</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">availableVersions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">extra</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct a spec-valid catalog entry with path fields filled in.</span>
+
+<span class="sd">    Only ``name``/``type``/``version``/``buildNumber``/``label`` are truly</span>
+<span class="sd">    required; the rest default to empty-but-valid. ``infoPath`` and ``iconLarge``</span>
+<span class="sd">    are synthesized from the path convention (:func:`info_path` / :func:`icon_path`)</span>
+<span class="sd">    unless you pass them in ``extra``. Any additional keys — ``operations`` for a</span>
+<span class="sd">    connector, ``contents``/``dependencies`` for a solution pack, ``inputformat``</span>
+<span class="sd">    for an ai_agent — are merged verbatim, so this composes with type-specific</span>
+<span class="sd">    fields.</span>
+
+<span class="sd">    The returned dict is the exact shape :meth:`ContentCatalog.add` and</span>
+<span class="sd">    :func:`validate_entry` expect. It does not itself raise on a bad ``type``;</span>
+<span class="sd">    run it through :func:`validate_entry` to catch that.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">entry</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
+        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span>
+        <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="n">version</span><span class="p">,</span>
+        <span class="s2">&quot;buildNumber&quot;</span><span class="p">:</span> <span class="n">buildNumber</span><span class="p">,</span>
+        <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">label</span><span class="p">,</span>
+        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">description</span><span class="p">,</span>
+        <span class="s2">&quot;publisher&quot;</span><span class="p">:</span> <span class="n">publisher</span><span class="p">,</span>
+        <span class="s2">&quot;certified&quot;</span><span class="p">:</span> <span class="n">certified</span><span class="p">,</span>
+        <span class="c1"># ``category`` is polymorphic (list for solutionpacks, str for others);</span>
+        <span class="c1"># preserve a string as-is rather than shredding it into characters.</span>
+        <span class="s2">&quot;category&quot;</span><span class="p">:</span> <span class="n">category</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">category</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">category</span><span class="p">)</span> <span class="k">if</span> <span class="n">category</span> <span class="k">else</span> <span class="p">[]),</span>
+        <span class="s2">&quot;availableVersions&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">availableVersions</span><span class="p">)</span> <span class="k">if</span> <span class="n">availableVersions</span> <span class="k">else</span> <span class="p">[</span><span class="n">version</span><span class="p">],</span>
+        <span class="s2">&quot;infoPath&quot;</span><span class="p">:</span> <span class="n">info_path</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">version</span><span class="p">,</span> <span class="n">buildNumber</span><span class="p">),</span>
+        <span class="s2">&quot;iconLarge&quot;</span><span class="p">:</span> <span class="n">icon_path</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">version</span><span class="p">,</span> <span class="n">buildNumber</span><span class="p">),</span>
+    <span class="p">}</span>
+    <span class="n">entry</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">extra</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">entry</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_infer_type</span><span class="p">(</span><span class="n">info</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Best-effort artifact type from a parsed ``info.json``.</span>
+
+<span class="sd">    ``operations`` ⇒ connector; ``contents``/``solutionUuid`` ⇒ solutionpack;</span>
+<span class="sd">    otherwise widget. Callers can override with an explicit ``type``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="s2">&quot;operations&quot;</span> <span class="ow">in</span> <span class="n">info</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;connector&quot;</span>
+    <span class="k">if</span> <span class="s2">&quot;contents&quot;</span> <span class="ow">in</span> <span class="n">info</span> <span class="ow">or</span> <span class="s2">&quot;solutionUuid&quot;</span> <span class="ow">in</span> <span class="n">info</span> <span class="ow">or</span> <span class="s2">&quot;solution_uuid&quot;</span> <span class="ow">in</span> <span class="n">info</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;solutionpack&quot;</span>
+    <span class="k">return</span> <span class="s2">&quot;widget&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_with_published_after</span><span class="p">(</span><span class="n">entry</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">replaced</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return ``entry`` guaranteed a ``publishedDate`` strictly newer than the</span>
+<span class="sd">    ``replaced`` (upstream) entry&#39;s.</span>
+
+<span class="sd">    ``publishedDate`` is the appliance&#39;s &quot;is this newer?&quot; gate: a *scheduled*</span>
+<span class="sd">    (non-``--force``) content-hub sync only overwrites a synced item when the</span>
+<span class="sd">    incoming ``publishedDate`` is greater. So an override whose date isn&#39;t newer</span>
+<span class="sd">    than the upstream item it replaces is silently ignored until the next forced</span>
+<span class="sd">    sync. When ``entry`` already carries a newer date it&#39;s returned untouched;</span>
+<span class="sd">    otherwise a shallow copy is returned with ``publishedDate = replaced + 1`` (a</span>
+<span class="sd">    minimal bump — epoch seconds on the wire). If the replaced entry has no</span>
+<span class="sd">    ``publishedDate`` there&#39;s nothing to beat, so ``entry`` is returned as-is.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">old</span> <span class="o">=</span> <span class="n">replaced</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;publishedDate&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="n">entry</span>
+    <span class="n">cur</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;publishedDate&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cur</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">))</span> <span class="ow">and</span> <span class="n">cur</span> <span class="o">&gt;</span> <span class="n">old</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">entry</span>
+    <span class="n">bumped</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+    <span class="n">bumped</span><span class="p">[</span><span class="s2">&quot;publishedDate&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">old</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="n">bumped</span>
+
+
+<div class="viewcode-block" id="read_artifact_info">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.read_artifact_info">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">read_artifact_info</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract and parse the ``info.json`` bundled inside an artifact archive.</span>
+
+<span class="sd">    Works on a connector/widget ``.tgz`` (gzipped tar) or a solution-pack</span>
+<span class="sd">    ``.zip``. Returns the shallowest ``info.json`` found (connectors nest theirs</span>
+<span class="sd">    one dir deep, widgets/SPs keep it at the root). Raises ``ValueError`` if the</span>
+<span class="sd">    archive has no ``info.json`` or isn&#39;t a recognized archive type.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">candidates</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># (depth, member name)</span>
+    <span class="k">if</span> <span class="n">tarfile</span><span class="o">.</span><span class="n">is_tarfile</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">tarfile</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">as</span> <span class="n">tf</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">member</span> <span class="ow">in</span> <span class="n">tf</span><span class="o">.</span><span class="n">getmembers</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">member</span><span class="o">.</span><span class="n">isfile</span><span class="p">()</span> <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">member</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;info.json&quot;</span><span class="p">:</span>
+                    <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">member</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">),</span> <span class="n">member</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">candidates</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: no info.json inside the archive&quot;</span><span class="p">)</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">candidates</span><span class="p">)</span>
+            <span class="n">fh</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">extractfile</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">fh</span><span class="p">)</span> <span class="k">if</span> <span class="n">fh</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="k">elif</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">is_zipfile</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZipFile</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">as</span> <span class="n">zf</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">zi</span> <span class="ow">in</span> <span class="n">zf</span><span class="o">.</span><span class="n">infolist</span><span class="p">():</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">zi</span><span class="o">.</span><span class="n">is_dir</span><span class="p">()</span> <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">zi</span><span class="o">.</span><span class="n">filename</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;info.json&quot;</span><span class="p">:</span>
+                    <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">zi</span><span class="o">.</span><span class="n">filename</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">),</span> <span class="n">zi</span><span class="o">.</span><span class="n">filename</span><span class="p">))</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">candidates</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: no info.json inside the archive&quot;</span><span class="p">)</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">candidates</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">zf</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">fh</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: not a .tgz or .zip archive&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: info.json is not a JSON object&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">data</span></div>
+
+
+
+<div class="viewcode-block" id="entry_from_artifact">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.entry_from_artifact">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">entry_from_artifact</span><span class="p">(</span>
+    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="nb">type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">buildNumber</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">overrides</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a catalog entry directly from a connector/widget/SP artifact file.</span>
+
+<span class="sd">    Reads the archive&#39;s bundled ``info.json`` (:func:`read_artifact_info`), maps</span>
+<span class="sd">    its fields onto a spec-valid entry via :func:`build_entry`, and infers the</span>
+<span class="sd">    ``type`` (``_infer_type``) unless you pass one. ``buildNumber`` and any</span>
+<span class="sd">    other keyword ``overrides`` (e.g. ``publisher=``, ``certified=``) win over the</span>
+<span class="sd">    values read from the archive — so a repackaged in-house build can stamp its</span>
+<span class="sd">    own build number.</span>
+
+<span class="sd">    Raises ``ValueError`` if the archive lacks a usable ``info.json`` or the</span>
+<span class="sd">    ``name``/``version`` needed to place it. The returned entry still carries the</span>
+<span class="sd">    synthesized ``infoPath``/``iconLarge`` paths; feed it to</span>
+<span class="sd">    :meth:`ContentCatalog.add` and, for a downloadable artifact, copy the file to</span>
+<span class="sd">    the tree via :meth:`ContentCatalog.write_tree` (``artifacts=``).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">info</span> <span class="o">=</span> <span class="n">read_artifact_info</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">overrides</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
+    <span class="n">version</span> <span class="o">=</span> <span class="n">overrides</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">version</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: info.json is missing name/version (name=</span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">, version=</span><span class="si">{</span><span class="n">version</span><span class="si">!r}</span><span class="s2">)&quot;</span><span class="p">)</span>
+    <span class="n">etype</span> <span class="o">=</span> <span class="nb">type</span> <span class="ow">or</span> <span class="n">_infer_type</span><span class="p">(</span><span class="n">info</span><span class="p">)</span>
+
+    <span class="c1"># Carry the descriptive fields the catalog surfaces; everything else in the</span>
+    <span class="c1"># artifact&#39;s info.json (operations, contents, help, …) rides along verbatim.</span>
+    <span class="n">passthrough</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">info</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;version&quot;</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">)}</span>
+    <span class="n">passthrough</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">overrides</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">build_entry</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="n">etype</span><span class="p">,</span>
+        <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+        <span class="n">buildNumber</span><span class="o">=</span><span class="n">buildNumber</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="n">passthrough</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;label&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">name</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="n">passthrough</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;description&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">publisher</span><span class="o">=</span><span class="n">passthrough</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;publisher&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">certified</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">passthrough</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;certified&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)),</span>
+        <span class="n">category</span><span class="o">=</span><span class="n">passthrough</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;category&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+        <span class="n">availableVersions</span><span class="o">=</span><span class="n">passthrough</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;availableVersions&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+        <span class="o">**</span><span class="n">passthrough</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="validate_entry">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.validate_entry">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_entry</span><span class="p">(</span><span class="n">entry</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a list of problems with a single catalog entry (empty == valid).</span>
+
+<span class="sd">    Checks structural requirements the sync relies on, not editorial quality:</span>
+
+<span class="sd">    * entry is a JSON object;</span>
+<span class="sd">    * every key in ``_REQUIRED_KEYS`` is present and non-empty;</span>
+<span class="sd">    * ``type`` is one of :data:`CATALOG_TYPES`;</span>
+<span class="sd">    * ``buildNumber`` is an int (the sync builds numeric artifact paths from it);</span>
+<span class="sd">    * ``availableVersions``, when present, is a list; ``category`` is a list or</span>
+<span class="sd">      string (it is a list for solutionpacks, a string for other types on the wire);</span>
+<span class="sd">    * ``version`` appears in ``availableVersions`` when that list is non-empty.</span>
+
+<span class="sd">    Never raises — a non-dict input is reported as a problem string.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">problems</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;entry is not a JSON object (got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">]</span>
+
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_REQUIRED_KEYS</span><span class="p">:</span>
+        <span class="n">val</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">val</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">val</span><span class="o">.</span><span class="n">strip</span><span class="p">()):</span>
+            <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;missing/empty required key </span><span class="si">{</span><span class="n">key</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">etype</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">etype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">etype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">CATALOG_TYPES</span><span class="p">:</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unknown type </span><span class="si">{</span><span class="n">etype</span><span class="si">!r}</span><span class="s2"> (expected one of </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">CATALOG_TYPES</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+
+    <span class="c1"># ``name``/``version`` are interpolated into filesystem paths by</span>
+    <span class="c1"># :meth:`ContentCatalog.write_tree`; reject only what could escape the served</span>
+    <span class="c1"># root (path separators, ``..``, control chars) — not otherwise-unusual but</span>
+    <span class="c1"># safe characters like ``&amp;`` that appear in real catalog names. This is the</span>
+    <span class="c1"># primary guard for untrusted entries (e.g. a manual add via the mirror API).</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;version&quot;</span><span class="p">):</span>
+        <span class="n">val</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">val</span> <span class="ow">and</span> <span class="p">(</span><span class="n">_PATH_HOSTILE</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;..&quot;</span> <span class="ow">in</span> <span class="n">val</span> <span class="ow">or</span> <span class="n">val</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;..&quot;</span><span class="p">)):</span>
+            <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="si">!r}</span><span class="s2"> has path-unsafe characters </span><span class="si">{</span><span class="n">val</span><span class="si">!r}</span><span class="s2"> (no &#39;/&#39;, &#39;</span><span class="se">\\</span><span class="s2">&#39;, &#39;..&#39;, or control chars)&quot;</span><span class="p">)</span>
+
+    <span class="n">build</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;buildNumber&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">build</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">build</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;buildNumber must be an int, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">build</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">avail_val</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;availableVersions&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">avail_val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">avail_val</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;availableVersions&#39; must be a list, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">avail_val</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># ``category`` is polymorphic on the live wire: a list for solutionpacks, a</span>
+    <span class="c1"># plain string for connector/widget/ai_agent (often &quot;&quot;). Accept either.</span>
+    <span class="n">cat_val</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;category&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cat_val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cat_val</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;category&#39; must be a list or string, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">cat_val</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">avail</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;availableVersions&quot;</span><span class="p">)</span>
+    <span class="n">version</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">avail</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="n">avail</span> <span class="ow">and</span> <span class="n">version</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">version</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">avail</span><span class="p">:</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;version </span><span class="si">{</span><span class="n">version</span><span class="si">!r}</span><span class="s2"> not in availableVersions </span><span class="si">{</span><span class="n">avail</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">problems</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_entry_key</span><span class="p">(</span><span class="n">entry</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Identity of an entry for merge/dedup: ``(type, name)``.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)),</span> <span class="nb">str</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)))</span>
+
+
+<div class="viewcode-block" id="ContentCatalog">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.ContentCatalog">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ContentCatalog</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A mutable, ordered collection of Content Hub entries.</span>
+
+<span class="sd">    Backed by a ``(type, name) -&gt; entry`` mapping, so adding an entry with the</span>
+<span class="sd">    same type+name **replaces** the earlier one (last-write-wins) — this is what</span>
+<span class="sd">    makes &quot;splice ours over Fortinet&#39;s&quot; a one-liner: load upstream, then</span>
+<span class="sd">    :meth:`add` your overrides. Iteration and :meth:`to_list` preserve insertion</span>
+<span class="sd">    order.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entries</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_by_key</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">entries</span> <span class="ow">or</span> <span class="p">[]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+
+    <span class="c1"># -- construction ------------------------------------------------------</span>
+
+    <span class="nd">@classmethod</span>
+<div class="viewcode-block" id="ContentCatalog.from_list">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.ContentCatalog.from_list">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_list</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">ContentCatalog</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build from an in-memory list of entries (a parsed ``content-hub.json``).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
+
+
+    <span class="nd">@classmethod</span>
+<div class="viewcode-block" id="ContentCatalog.from_file">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.ContentCatalog.from_file">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_file</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ContentCatalog</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load a ``content-hub.json`` file (a flat JSON array of entries).&quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">fh</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: content-hub.json must be a JSON array, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
+
+
+    <span class="nd">@classmethod</span>
+<div class="viewcode-block" id="ContentCatalog.from_url">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.ContentCatalog.from_url">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_url</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">30.0</span><span class="p">,</span>
+        <span class="n">verify</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">cert</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ContentCatalog</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Crawl a live ``content-hub.json`` from ``host`` into a catalog.</span>
+
+<span class="sd">        Thin wrapper over :func:`fetch_catalog` — see it for the ``host`` forms,</span>
+<span class="sd">        the FDN-cert caveat on the official host (pass ``cert`` to present the</span>
+<span class="sd">        mutual-TLS client certificate), and the error contract. ``verify`` controls</span>
+<span class="sd">        TLS verification (default on); set False only for a self-signed internal mirror.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">fetch_catalog</span><span class="p">(</span><span class="n">host</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span> <span class="n">cert</span><span class="o">=</span><span class="n">cert</span><span class="p">))</span></div>
+
+
+    <span class="c1"># -- mutation ----------------------------------------------------------</span>
+
+<div class="viewcode-block" id="ContentCatalog.add">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.ContentCatalog.add">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entry</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add or replace an entry (keyed by ``type`` + ``name``).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;entry must be a dict, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_by_key</span><span class="p">[</span><span class="n">_entry_key</span><span class="p">(</span><span class="n">entry</span><span class="p">)]</span> <span class="o">=</span> <span class="n">entry</span></div>
+
+
+<div class="viewcode-block" id="ContentCatalog.merge">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.ContentCatalog.merge">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">merge</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">other</span><span class="p">:</span> <span class="n">ContentCatalog</span> <span class="o">|</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">bump_published</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Splice another catalog in, its entries winning on ``type``+``name`` collisions.</span>
+
+<span class="sd">        Use to union Fortinet&#39;s mirrored catalog with your local one: build the</span>
+<span class="sd">        upstream catalog, then ``upstream.merge(local)`` to let your local entries</span>
+<span class="sd">        win — merge always lets the argument (``other``) win, so order the call to</span>
+<span class="sd">        match your intent.</span>
+
+<span class="sd">        With ``bump_published=True`` (default), any incoming entry that *replaces*</span>
+<span class="sd">        an existing one is given a ``publishedDate`` strictly newer than the entry</span>
+<span class="sd">        it overrides, so a *scheduled* (non-``--force``) appliance sync actually</span>
+<span class="sd">        applies the override instead of silently keeping the upstream item (an</span>
+<span class="sd">        override that already carries a newer date is left untouched). Pass</span>
+<span class="sd">        ``False`` to splice verbatim.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">entries</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">ContentCatalog</span><span class="p">)</span> <span class="k">else</span> <span class="n">other</span>
+        <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">entries</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">bump_published</span><span class="p">:</span>
+                <span class="n">existing</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_by_key</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_entry_key</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+                <span class="k">if</span> <span class="n">existing</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">e</span> <span class="o">=</span> <span class="n">_with_published_after</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">existing</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">e</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContentCatalog.remove">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.ContentCatalog.remove">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">remove</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="nb">type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Drop an entry by type+name; return whether one was present.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_by_key</span><span class="o">.</span><span class="n">pop</span><span class="p">((</span><span class="nb">type</span><span class="p">,</span> <span class="n">name</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span></div>
+
+
+    <span class="c1"># -- access ------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="ContentCatalog.to_list">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.ContentCatalog.to_list">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_list</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the entries as a plain list, in insertion order.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_by_key</span><span class="o">.</span><span class="n">values</span><span class="p">())</span></div>
+
+
+<div class="viewcode-block" id="ContentCatalog.to_json">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.ContentCatalog.to_json">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">indent</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize to a ``content-hub.json`` string (a flat JSON array).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_list</span><span class="p">(),</span> <span class="n">indent</span><span class="o">=</span><span class="n">indent</span><span class="p">,</span> <span class="n">ensure_ascii</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContentCatalog.counts">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.ContentCatalog.counts">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">counts</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a ``type -&gt; count`` breakdown (matches the live catalog&#39;s tally).&quot;&quot;&quot;</span>
+        <span class="n">out</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_by_key</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">out</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;?&quot;</span><span class="p">))]</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;?&quot;</span><span class="p">)),</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_by_key</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_by_key</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+
+    <span class="c1"># -- validation --------------------------------------------------------</span>
+
+<div class="viewcode-block" id="ContentCatalog.validate">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.ContentCatalog.validate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate every entry; return ``&quot;{type}/{name}&quot; -&gt; [problems]`` for bad ones.</span>
+
+<span class="sd">        An empty dict means the whole catalog is spec-valid. Duplicate identities</span>
+<span class="sd">        can&#39;t occur (they collapse on :meth:`add`), so this only surfaces</span>
+<span class="sd">        per-entry structural problems from :func:`validate_entry`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">out</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">etype</span><span class="p">,</span> <span class="n">ename</span><span class="p">),</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_by_key</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">problems</span> <span class="o">=</span> <span class="n">validate_entry</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">problems</span><span class="p">:</span>
+                <span class="n">out</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">etype</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">ename</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">problems</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+
+
+    <span class="c1"># -- emit --------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="ContentCatalog.write_tree">
+<a class="viewcode-back" href="../../autoapi/pyfsr/content_catalog/index.html#pyfsr.content_catalog.ContentCatalog.write_tree">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">write_tree</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">root</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">artifacts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">icons</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">validate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write a served-ready directory tree under ``root`` and return its manifest path.</span>
+
+<span class="sd">        Lays out, per the fetch contract::</span>
+
+<span class="sd">            {root}/content-hub/content-hub.json</span>
+<span class="sd">            {root}/content-hub/{name}-{version}/{buildNumber}/info.json</span>
+<span class="sd">            {root}/content-hub/{name}-{version}/{buildNumber}/build.json</span>
+<span class="sd">            {root}/content-hub/{name}-{version}/latest/info.json</span>
+
+<span class="sd">        Each entry&#39;s own dict is written as its ``info.json`` at both the numbered</span>
+<span class="sd">        build dir and the ``latest/`` copy (matching the live layout where both</span>
+<span class="sd">        exist), alongside a ``build.json`` (``{&quot;buildNumber&quot;: N}``) the appliance</span>
+<span class="sd">        reads. If ``artifacts`` / ``icons`` map an entry&#39;s ``(type, name)`` to a</span>
+<span class="sd">        local file, that file is copied to the ``.zip`` artifact / icon path the</span>
+<span class="sd">        sync expects (:func:`artifact_path` / :func:`icon_path`) — in **both** the</span>
+<span class="sd">        numbered build dir and ``latest/``, because an install that omits</span>
+<span class="sd">        ``buildNumber`` fetches the ``latest`` path (see the module docstring).</span>
+
+<span class="sd">        With ``validate=True`` (default) a non-empty :meth:`validate` raises</span>
+<span class="sd">        ``ValueError`` before anything is written, so a bad catalog never produces</span>
+<span class="sd">        a half-built tree.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">validate</span><span class="p">:</span>
+            <span class="n">problems</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">validate</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">problems</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;catalog has </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">problems</span><span class="p">)</span><span class="si">}</span><span class="s2"> invalid entr(y/ies): </span><span class="si">{</span><span class="n">problems</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">base</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="s2">&quot;content-hub&quot;</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">manifest_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="s2">&quot;content-hub.json&quot;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">manifest_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+            <span class="n">fh</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_json</span><span class="p">())</span>
+
+        <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_by_key</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
+            <span class="n">version</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">)</span>
+            <span class="n">build</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;buildNumber&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">name</span> <span class="ow">and</span> <span class="n">version</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">build</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">):</span>
+                <span class="k">continue</span>  <span class="c1"># validate=False path: skip un-placeable entries</span>
+            <span class="n">item_root</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="c1"># Defense in depth: even with validate=False, never write outside the</span>
+            <span class="c1"># served root (a crafted name/version could contain ``..`` / separators).</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">realpath</span><span class="p">(</span><span class="n">item_root</span><span class="p">)</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">realpath</span><span class="p">(</span><span class="n">base</span><span class="p">)</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;entry </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">/</span><span class="si">{</span><span class="n">version</span><span class="si">!r}</span><span class="s2"> resolves outside the served tree; refusing to write&quot;</span><span class="p">)</span>
+            <span class="n">build_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">item_root</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">build</span><span class="p">))</span>
+            <span class="n">latest_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">item_root</span><span class="p">,</span> <span class="s2">&quot;latest&quot;</span><span class="p">)</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">build_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">latest_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+            <span class="n">info_json</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">ensure_ascii</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="c1"># ``build.json`` (= ``{&quot;buildNumber&quot;: N}``) sits beside ``info.json`` on</span>
+            <span class="c1"># the live wire; the appliance reads it to learn the numeric build. Emit</span>
+            <span class="c1"># it in both dirs so the ``latest/`` copy is self-describing too.</span>
+            <span class="n">build_json</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">&quot;buildNumber&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">build</span><span class="p">)})</span>
+            <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="p">(</span><span class="n">build_dir</span><span class="p">,</span> <span class="n">latest_dir</span><span class="p">):</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="s2">&quot;info.json&quot;</span><span class="p">),</span> <span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+                    <span class="n">fh</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">info_json</span><span class="p">)</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="s2">&quot;build.json&quot;</span><span class="p">),</span> <span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+                    <span class="n">fh</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">build_json</span><span class="p">)</span>
+
+            <span class="n">key</span> <span class="o">=</span> <span class="n">_entry_key</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">artifacts</span> <span class="ow">and</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">artifacts</span><span class="p">:</span>
+                <span class="c1"># Serve the artifact at the ``.zip`` path the catalog advertises</span>
+                <span class="c1"># (:func:`artifact_path` is always ``{name}-{version}.zip``, matching</span>
+                <span class="c1"># the live wire) so the manifest-derived download URL resolves. A</span>
+                <span class="c1"># connector&#39;s content-hub artifact is a metadata-only zip (built by</span>
+                <span class="c1"># the mirror&#39;s connector_publish); its runnable payload ships in the</span>
+                <span class="c1"># RPM, not here.</span>
+                <span class="c1">#</span>
+                <span class="c1"># Copy to the ``latest/`` dir too, not just the numbered build. The</span>
+                <span class="c1"># appliance defaults ``buildNumber`` to the literal ``&quot;latest&quot;`` when</span>
+                <span class="c1"># an install request omits it (cyops-api</span>
+                <span class="c1"># ``SolutionPackController``: ``$requestBody-&gt;buildNumber ?? &quot;latest&quot;``),</span>
+                <span class="c1"># so a tree with only numbered builds 404s that download — and the</span>
+                <span class="c1"># appliance reports the 404 as &quot;check the network connection to</span>
+                <span class="c1"># &lt;repo&gt;&quot;, which sends you chasing connectivity instead. Live-verified</span>
+                <span class="c1"># on 8.0.0.</span>
+                <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="p">(</span><span class="n">build_dir</span><span class="p">,</span> <span class="n">latest_dir</span><span class="p">):</span>
+                    <span class="n">shutil</span><span class="o">.</span><span class="n">copyfile</span><span class="p">(</span><span class="n">artifacts</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2">.zip&quot;</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">icons</span> <span class="ow">and</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">icons</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="p">(</span><span class="n">build_dir</span><span class="p">,</span> <span class="n">latest_dir</span><span class="p">):</span>
+                    <span class="n">img_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="s2">&quot;images&quot;</span><span class="p">)</span>
+                    <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="n">shutil</span><span class="o">.</span><span class="n">copyfile</span><span class="p">(</span><span class="n">icons</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="s2">&quot;fsr-icon-large.png&quot;</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">manifest_path</span></div>
+</div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Dylan Spille
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/ftnt-dspille/pyfsr" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=56c55dd0"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=fd10adb8"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

@@ -1,0 +1,1123 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Appliance Administration CLI" href="appliance-cli.html"><link rel="prev" title="Playbook YAML Syntax Reference" href="playbook-yaml-reference.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>AI &amp; Agents - pyfsr 0.16.1</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #c8102e;
+  --color-brand-content: #c8102e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">pyfsr 0.16.1</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <span class="sidebar-brand-text">pyfsr 0.16.1</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Guides</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting-started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="authentication.html">Authentication</a></li>
+<li class="toctree-l1"><a class="reference internal" href="records.html">Working with Records</a></li>
+<li class="toctree-l1"><a class="reference internal" href="querying.html">Querying</a></li>
+<li class="toctree-l1"><a class="reference internal" href="module-admin.html">Module Editor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="module-field-schema.html">Module &amp; Field Schema Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="connectors.html">Connectors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="export-import.html">Configuration Export &amp; Import</a></li>
+<li class="toctree-l1"><a class="reference internal" href="playbook-authoring.html">Playbook Authoring &amp; Deployment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="playbook-yaml-reference.html">Playbook YAML Syntax Reference</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">AI &amp; Agents</a></li>
+<li class="toctree-l1"><a class="reference internal" href="appliance-cli.html">Appliance Administration CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="repo-cli.html">Content Repository CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content-hub-mirror.html">Self-hosted Content Hub mirror</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference.html">API Reference</a><input aria-label="Toggle navigation of API Reference" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/client/index.html">pyfsr.client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/records/index.html">pyfsr.records</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/query/index.html">pyfsr.query</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/pagination/index.html">pyfsr.pagination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/fields/index.html">pyfsr.fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/config/index.html">pyfsr.config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/instances/index.html">pyfsr.instances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/exceptions/index.html">pyfsr.exceptions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/api/index.html">pyfsr.api</a><input aria-label="Toggle navigation of pyfsr.api" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/actors/index.html">pyfsr.api.actors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/agents/index.html">pyfsr.api.agents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/ai/index.html">pyfsr.api.ai</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/alerts/index.html">pyfsr.api.alerts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/api_keys/index.html">pyfsr.api.api_keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/api_users/index.html">pyfsr.api.api_users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/app_config/index.html">pyfsr.api.app_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/attachments/index.html">pyfsr.api.attachments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/audit/index.html">pyfsr.api.audit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/auth_config/index.html">pyfsr.api.auth_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/base/index.html">pyfsr.api.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/comments/index.html">pyfsr.api.comments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/connectors/index.html">pyfsr.api.connectors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/content_hub/index.html">pyfsr.api.content_hub</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/export_config/index.html">pyfsr.api.export_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/export_templates/index.html">pyfsr.api.export_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/feeds/index.html">pyfsr.api.feeds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/import_config/index.html">pyfsr.api.import_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/incidents/index.html">pyfsr.api.incidents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/manual_input/index.html">pyfsr.api.manual_input</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/modules/index.html">pyfsr.api.modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/modules_admin/index.html">pyfsr.api.modules_admin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/native_mcp/index.html">pyfsr.api.native_mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/notifications/index.html">pyfsr.api.notifications</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/picklists/index.html">pyfsr.api.picklists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/playbooks/index.html">pyfsr.api.playbooks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/reporting/index.html">pyfsr.api.reporting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/roles/index.html">pyfsr.api.roles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/routers/index.html">pyfsr.api.routers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/rules/index.html">pyfsr.api.rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/schedules/index.html">pyfsr.api.schedules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/search/index.html">pyfsr.api.search</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/solution_packs/index.html">pyfsr.api.solution_packs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/system/index.html">pyfsr.api.system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/system_queries/index.html">pyfsr.api.system_queries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/system_settings/index.html">pyfsr.api.system_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/tags/index.html">pyfsr.api.tags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/tasks/index.html">pyfsr.api.tasks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/taxii/index.html">pyfsr.api.taxii</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/teams/index.html">pyfsr.api.teams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/user_settings/index.html">pyfsr.api.user_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/users/index.html">pyfsr.api.users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/view_templates/index.html">pyfsr.api.view_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/views/index.html">pyfsr.api.views</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/wf_tools/index.html">pyfsr.api.wf_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/widgets/index.html">pyfsr.api.widgets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/api/workflow_collections/index.html">pyfsr.api.workflow_collections</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/models/index.html">pyfsr.models</a><input aria-label="Toggle navigation of pyfsr.models" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/models/base/index.html">pyfsr.models.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/models/types/index.html">pyfsr.models.types</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/auth/index.html">pyfsr.auth</a><input aria-label="Toggle navigation of pyfsr.auth" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/auth/api_key/index.html">pyfsr.auth.api_key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/auth/base/index.html">pyfsr.auth.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/auth/user_pass/index.html">pyfsr.auth.user_pass</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/authoring/index.html">pyfsr.authoring</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/agent/index.html">pyfsr.agent</a><input aria-label="Toggle navigation of pyfsr.agent" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/index.html">pyfsr.agent.archetypes</a><input aria-label="Toggle navigation of pyfsr.agent.archetypes" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/harvest/index.html">pyfsr.agent.archetypes.harvest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/record/index.html">pyfsr.agent.archetypes.record</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/router/index.html">pyfsr.agent.archetypes.router</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/agent/archetypes/store/index.html">pyfsr.agent.archetypes.store</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/agent/mcp/index.html">pyfsr.agent.mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/agent/tools/index.html">pyfsr.agent.tools</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../autoapi/pyfsr/cli/index.html">pyfsr.cli</a><input aria-label="Toggle navigation of pyfsr.cli" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/index.html">pyfsr.cli.appliance</a><input aria-label="Toggle navigation of pyfsr.cli.appliance" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/certs/index.html">pyfsr.cli.appliance.certs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/content_hub/index.html">pyfsr.cli.appliance.content_hub</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/db/index.html">pyfsr.cli.appliance.db</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/diagnose/index.html">pyfsr.cli.appliance.diagnose</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/es/index.html">pyfsr.cli.appliance.es</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/facts/index.html">pyfsr.cli.appliance.facts</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/ha/index.html">pyfsr.cli.appliance.ha</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/host/index.html">pyfsr.cli.appliance.host</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/info/index.html">pyfsr.cli.appliance.info</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/license/index.html">pyfsr.cli.appliance.license</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/logs/index.html">pyfsr.cli.appliance.logs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/mq/index.html">pyfsr.cli.appliance.mq</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/service/index.html">pyfsr.cli.appliance.service</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/cli/appliance/transport/index.html">pyfsr.cli.appliance.transport</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/cli/playbook/index.html">pyfsr.cli.playbook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/cli/repo/index.html">pyfsr.cli.repo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/cli/widget/index.html">pyfsr.cli.widget</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/appliance/index.html">pyfsr.appliance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/repo/index.html">pyfsr.repo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../autoapi/pyfsr/content_catalog/index.html">pyfsr.content_catalog</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference-advanced.html">Advanced &amp; internal</a><input aria-label="Toggle navigation of Advanced &amp; internal" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/playbook_catalog/index.html">pyfsr.playbook_catalog</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/playbook_lint/index.html">pyfsr.playbook_lint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/playbook_match/index.html">pyfsr.playbook_match</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/concurrency/index.html">pyfsr.concurrency</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/projection/index.html">pyfsr.projection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/query_models/index.html">pyfsr.query_models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../autoapi/pyfsr/spec/index.html">pyfsr.spec</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../autoapi/pyfsr/utils/index.html">pyfsr.utils</a><input aria-label="Toggle navigation of pyfsr.utils" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/utils/file_operations/index.html">pyfsr.utils.file_operations</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/utils/iri/index.html">pyfsr.utils.iri</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../autoapi/pyfsr/utils/validation/index.html">pyfsr.utils.validation</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../reference-models.html">Typed models</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/guides/ai-agents.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="ai-agents">
+<h1>AI &amp; Agents<a class="headerlink" href="#ai-agents" title="Link to this heading">¶</a></h1>
+<p>pyfsr ships a <strong>framework-agnostic tool registry</strong> — a declarative catalogue of
+core FortiSOAR operations (record CRUD, discovery, picklists, connectors,
+playbook runs) as JSON-Schema tool definitions, plus a <code class="docutils literal notranslate"><span class="pre">dispatch()</span></code> that
+executes a tool call against a live client and returns JSON-safe, token-trimmed
+results.</p>
+<p>It’s deliberately transport-neutral (no MCP, no provider SDK), so the same
+registry can feed Anthropic tool-use, OpenAI function calling, the bundled MCP
+server, or a home-grown agent loop.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p>End-to-end FortiAI / FortiSIEM-MCP examples:
+<a class="reference external" href="https://github.com/dylanspille/pyfsr/blob/main/examples/connect_fortisiem_mcp.py"><code class="docutils literal notranslate"><span class="pre">connect_fortisiem_mcp.py</span></code></a>,
+<a class="reference external" href="https://github.com/dylanspille/pyfsr/blob/main/examples/trigger_ai_investigation.py"><code class="docutils literal notranslate"><span class="pre">trigger_ai_investigation.py</span></code></a>,
+and <a class="reference external" href="https://github.com/dylanspille/pyfsr/blob/main/examples/investigate_fortisiem_incident.py"><code class="docutils literal notranslate"><span class="pre">investigate_fortisiem_incident.py</span></code></a>.
+See the <a class="reference external" href="https://github.com/dylanspille/pyfsr/blob/main/examples/README.md">examples index</a> for the full set.</p>
+</div>
+<section id="why-use-it">
+<h2>Why use it<a class="headerlink" href="#why-use-it" title="Link to this heading">¶</a></h2>
+<p>Wiring an LLM to FortiSOAR by hand means hand-writing JSON-Schema for every
+operation, normalizing Hydra envelopes, trimming huge records down to fit a
+context window, and turning every HTTP error into something the model can read.
+The registry does all of that for you:</p>
+<ul class="simple">
+<li><p><strong>Discovery built in.</strong> The model can learn the appliance at runtime —
+<code class="docutils literal notranslate"><span class="pre">list_modules</span></code> → <code class="docutils literal notranslate"><span class="pre">describe_module</span></code> → act — instead of you hard-coding field
+names and module types that differ per deployment.</p></li>
+<li><p><strong>Token-trimmed results.</strong> Every tool supports <code class="docutils literal notranslate"><span class="pre">summary=true</span></code> / <code class="docutils literal notranslate"><span class="pre">fields=[...]</span></code>
+so a 60-field alert doesn’t blow the context window when an agent is scanning
+dozens of records.</p></li>
+<li><p><strong>Picklist resolution.</strong> Agents pass friendly values (<code class="docutils literal notranslate"><span class="pre">&quot;High&quot;</span></code>) and the tool
+maps them to the IRIs the API actually requires — the single most common
+cause of failed writes.</p></li>
+<li><p><strong>Errors as data, not exceptions.</strong> Every failure returns a structured
+<code class="docutils literal notranslate"><span class="pre">{&quot;error&quot;:</span> <span class="pre">{...}}</span></code> the model can read and self-correct from, so one bad call
+doesn’t kill the agent loop.</p></li>
+<li><p><strong>Write once, run anywhere.</strong> The same registry feeds Claude, OpenAI, MCP, or
+your own loop — no per-provider glue.</p></li>
+</ul>
+</section>
+<section id="available-tools">
+<h2>Available tools<a class="headerlink" href="#available-tools" title="Link to this heading">¶</a></h2>
+<p>The registry ships these tools, grouped by what they do:</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 18.0%" />
+<col style="width: 32.0%" />
+<col style="width: 50.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Group</p></th>
+<th class="head"><p>Tool</p></th>
+<th class="head"><p>What it does</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Discovery</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list_modules</span></code></p></td>
+<td><p>List every module (type/label/plural). Start here to find the right module type.</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">describe_module</span></code></p></td>
+<td><p>Describe a module’s fields: name, type, required-ness, and bound picklist.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Records</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">get_record</span></code></p></td>
+<td><p>Fetch one record by reference; <code class="docutils literal notranslate"><span class="pre">summary</span></code>/<code class="docutils literal notranslate"><span class="pre">fields</span></code> keep the result small.</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">search_records</span></code></p></td>
+<td><p>Free-text search a module; returns a page of records.</p></td>
+</tr>
+<tr class="row-even"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">query_records</span></code></p></td>
+<td><p>Structured query with <code class="docutils literal notranslate"><span class="pre">{field,</span> <span class="pre">operator,</span> <span class="pre">value}</span></code> filter conditions.</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">create_record</span></code></p></td>
+<td><p>Create a record; <code class="docutils literal notranslate"><span class="pre">resolve_picklists=true</span></code> accepts friendly picklist values.</p></td>
+</tr>
+<tr class="row-even"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">update_record</span></code></p></td>
+<td><p>Update an existing record’s fields by reference.</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">delete_record</span></code></p></td>
+<td><p>Delete one record (soft by default; <code class="docutils literal notranslate"><span class="pre">hard=true</span></code> to purge). Never collection-wide.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Picklists</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list_picklists</span></code></p></td>
+<td><p>List every picklist name on the appliance.</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">get_picklist_values</span></code></p></td>
+<td><p>List a picklist’s items (itemValue, uuid, iri, ordinal).</p></td>
+</tr>
+<tr class="row-even"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">resolve_picklist</span></code></p></td>
+<td><p>Resolve a friendly value (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;High&quot;</span></code>) to its IRI.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Connectors</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list_connectors</span></code></p></td>
+<td><p>List installed + configured connectors with versions/configs.</p></td>
+</tr>
+<tr class="row-even"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">healthcheck_connector</span></code></p></td>
+<td><p>Live-check whether a connector configuration is reachable.</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">run_connector_operation</span></code></p></td>
+<td><p>Execute one connector operation.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Playbooks</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list_playbook_runs</span></code></p></td>
+<td><p>List recent playbook runs (live + historical, newest first).</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">get_playbook_run</span></code></p></td>
+<td><p>Fetch one playbook run by its pk.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>FortiAI</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">investigate_alert</span></code></p></td>
+<td><p>Trigger an agentic investigation of an alert (normalize → hypothesize → plan → gather evidence → verdict).</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">get_investigation_result</span></code></p></td>
+<td><p>Fetch the status/verdict of an investigation by <code class="docutils literal notranslate"><span class="pre">task_id</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list_ai_config</span></code></p></td>
+<td><p>Report FortiAI config: enabled features, LLM profiles, registered MCP servers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Modules (admin)</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">create_module</span></code></p></td>
+<td><p>Create a module in staging; <code class="docutils literal notranslate"><span class="pre">grant_to</span></code> wires RBAC in one call. Call <code class="docutils literal notranslate"><span class="pre">publish</span></code> to make it live.</p></td>
+</tr>
+<tr class="row-even"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">delete_module</span></code></p></td>
+<td><p>Delete a module (the only op that actually removes one); optionally drops orphan tables.</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">publish</span></code></p></td>
+<td><p>Commit ALL staged schema changes appliance-wide (appliance-wide, not module-scoped).</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Connector config</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">default_connector_config</span></code></p></td>
+<td><p>Build a complete, runtime-valid default config (handles <code class="docutils literal notranslate"><span class="pre">onchange</span></code> sub-fields). Call first, then edit.</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">validate_connector_config</span></code></p></td>
+<td><p>Validate a config against the schema before submitting — returns <code class="docutils literal notranslate"><span class="pre">{valid,</span> <span class="pre">missing,</span> <span class="pre">invalid,</span> <span class="pre">...}</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">create_connector_configuration</span></code></p></td>
+<td><p>Create a named config; <code class="docutils literal notranslate"><span class="pre">exist_ok=true</span></code> delegates to upsert, <code class="docutils literal notranslate"><span class="pre">autofill=true</span></code> fills schema defaults.</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">update_connector_configuration</span></code></p></td>
+<td><p>Update an existing config by <code class="docutils literal notranslate"><span class="pre">config_id</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">upsert_connector_configuration</span></code></p></td>
+<td><p>Idempotent create-or-replace by name — the safe default for deploy scripts.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Playbook runs</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">last_playbook_run</span></code></p></td>
+<td><p>Most recent run of a playbook (live or historical); <code class="docutils literal notranslate"><span class="pre">{run:</span> <span class="pre">null}</span></code> if none.</p></td>
+</tr>
+<tr class="row-even"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">why_playbook_failed</span></code></p></td>
+<td><p>Slim failure detail <code class="docutils literal notranslate"><span class="pre">{status,</span> <span class="pre">failing_step,</span> <span class="pre">error_message,</span> <span class="pre">pk}</span></code> of the most recent run.</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">wait_for_playbook_run</span></code></p></td>
+<td><p>Block until the newest run reaches a terminal state; return its summary.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Records (upsert)</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">upsert_record</span></code></p></td>
+<td><p>Insert-or-update by natural key (or a <code class="docutils literal notranslate"><span class="pre">key</span></code> field); friendly picklists resolved by default.</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">get_or_create_record</span></code></p></td>
+<td><p>Look up by key field(s), create if absent; returns <code class="docutils literal notranslate"><span class="pre">{record,</span> <span class="pre">created}</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Scheduling</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">schedule_playbook</span></code></p></td>
+<td><p>Create a periodic task that runs a playbook on a cron schedule; returns the created schedule.</p></td>
+</tr>
+<tr class="row-odd"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">trigger_schedule_now</span></code></p></td>
+<td><p>Fire a scheduled task immediately (out-of-band of its cron); pair with <code class="docutils literal notranslate"><span class="pre">wait_for_playbook_run</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">delete_schedule</span></code></p></td>
+<td><p>Delete a scheduled periodic task entirely by name (use <code class="docutils literal notranslate"><span class="pre">disable</span></code> to merely pause).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Inspect any tool’s full JSON-Schema (parameters, defaults, enums) at runtime
+with <code class="docutils literal notranslate"><span class="pre">get_tool(&quot;query_records&quot;).input_schema</span></code>.</p>
+</section>
+<section id="calling-tools">
+<h2>Calling tools<a class="headerlink" href="#calling-tools" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">dispatch(client,</span> <span class="pre">name,</span> <span class="pre">arguments)</span></code> runs one tool and returns a JSON-safe,
+token-trimmed result — never raises; a failure comes back as <code class="docutils literal notranslate"><span class="pre">{&quot;error&quot;:</span> <span class="pre">{...}}</span></code>.
+The read tools resolve against the replay session <code class="docutils literal notranslate"><span class="pre">demo_client()</span></code> builds, so
+their return shapes are doctested here (write ops need a live appliance):</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr.agent.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">dispatch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">demo_client</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">r</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;get_record&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="s2">&quot;alerts&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">&quot;ref&quot;</span><span class="p">:</span> <span class="s2">&quot;9f0eb603-ac1e-41c3-b47b-444589beed39&quot;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;@type&quot;</span><span class="p">],</span> <span class="n">r</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">])</span>
+<span class="go">(&#39;Alert&#39;, &#39;Response Capture Test Alert&#39;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">hits</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;query_records&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="s2">&quot;alerts&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">&quot;filters&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;operator&quot;</span><span class="p">:</span> <span class="s2">&quot;eq&quot;</span><span class="p">,</span>
+<span class="gp">... </span>                 <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="s2">&quot;Response Capture Test Alert&quot;</span><span class="p">}]})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">len</span><span class="p">(</span><span class="n">hits</span><span class="p">[</span><span class="s2">&quot;members&quot;</span><span class="p">]),</span> <span class="n">hits</span><span class="p">[</span><span class="s2">&quot;members&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;@type&quot;</span><span class="p">]</span>
+<span class="go">(1, &#39;Alert&#39;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">conns</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;list_connectors&quot;</span><span class="p">,</span> <span class="p">{})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">conns</span><span class="p">[</span><span class="s2">&quot;connectors&quot;</span><span class="p">][:</span><span class="mi">3</span><span class="p">]]</span>
+<span class="go">[&#39;smtp&#39;, &#39;code-snippet&#39;, &#39;mitre-attack&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mods</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;list_modules&quot;</span><span class="p">,</span> <span class="p">{})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">m</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">mods</span><span class="p">[</span><span class="s2">&quot;modules&quot;</span><span class="p">][:</span><span class="mi">3</span><span class="p">]]</span>
+<span class="go">[&#39;agents&#39;, &#39;alerts&#39;, &#39;announcements&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">desc</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;describe_module&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="s2">&quot;alerts&quot;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">desc</span><span class="p">[</span><span class="s2">&quot;module&quot;</span><span class="p">],</span> <span class="n">desc</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">],</span> <span class="n">desc</span><span class="p">[</span><span class="s2">&quot;plural&quot;</span><span class="p">])</span>
+<span class="go">(&#39;alerts&#39;, &#39;Alert&#39;, &#39;alerts&#39;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sev</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">desc</span><span class="p">[</span><span class="s2">&quot;fields&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="n">f</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;severity&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">sev</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">],</span> <span class="n">sev</span><span class="p">[</span><span class="s2">&quot;picklist_name&quot;</span><span class="p">])</span>
+<span class="go">(&#39;picklists&#39;, &#39;Severity&#39;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">pl</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;list_picklists&quot;</span><span class="p">,</span> <span class="p">{})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">pl</span><span class="p">[</span><span class="s2">&quot;picklists&quot;</span><span class="p">]</span>
+<span class="go">[&#39;AlertStatus&#39;, &#39;Severity&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">vals</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;get_picklist_values&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Severity&quot;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">v</span><span class="p">[</span><span class="s2">&quot;itemValue&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">vals</span><span class="p">[</span><span class="s2">&quot;values&quot;</span><span class="p">]]</span>
+<span class="go">[&#39;Minimal&#39;, &#39;Low&#39;, &#39;Medium&#39;, &#39;High&#39;, &#39;Critical&#39;]</span>
+</pre></div>
+</div>
+<p>The write tools (<code class="docutils literal notranslate"><span class="pre">create_record</span></code> / <code class="docutils literal notranslate"><span class="pre">update_record</span></code> / <code class="docutils literal notranslate"><span class="pre">delete_record</span></code>) replay
+against the same captured alert, so their return shapes are doctested too — an
+agent learns the envelope each tool returns without a live box:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">demo_client</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">created</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;create_record&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="s2">&quot;alerts&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;New Alert&quot;</span><span class="p">}})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">created</span><span class="p">[</span><span class="s2">&quot;@type&quot;</span><span class="p">],</span> <span class="n">created</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">])</span>
+<span class="go">(&#39;Alert&#39;, &#39;Response Capture Test Alert&#39;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">updated</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;update_record&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="s2">&quot;alerts&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">&quot;ref&quot;</span><span class="p">:</span> <span class="s2">&quot;9f0eb603-ac1e-41c3-b47b-444589beed39&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;revised&quot;</span><span class="p">}})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">updated</span><span class="p">[</span><span class="s2">&quot;@type&quot;</span><span class="p">]</span>
+<span class="go">&#39;Alert&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;delete_record&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="s2">&quot;alerts&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">&quot;ref&quot;</span><span class="p">:</span> <span class="s2">&quot;9f0eb603-ac1e-41c3-b47b-444589beed39&quot;</span><span class="p">})</span>
+<span class="go">{&#39;deleted&#39;: &#39;9f0eb603-ac1e-41c3-b47b-444589beed39&#39;, &#39;module&#39;: &#39;alerts&#39;, &#39;hard&#39;: False}</span>
+</pre></div>
+</div>
+<p>A <code class="docutils literal notranslate"><span class="pre">create_record</span></code> whose <code class="docutils literal notranslate"><span class="pre">data</span></code> carries a friendly picklist value that doesn’t
+resolve (typo, wrong casing) comes back as a structured, actionable error —
+field, bad value, and the valid options — instead of an opaque box 400, because
+the MCP write tools default <code class="docutils literal notranslate"><span class="pre">strict_picklists=True</span></code>:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">demo_client</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;create_record&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="s2">&quot;alerts&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;severity&quot;</span><span class="p">:</span> <span class="s2">&quot;Nope&quot;</span><span class="p">}})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span><span class="p">[</span><span class="s2">&quot;error&quot;</span><span class="p">][</span><span class="s2">&quot;type&quot;</span><span class="p">],</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;error&quot;</span><span class="p">][</span><span class="s2">&quot;field&quot;</span><span class="p">],</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;error&quot;</span><span class="p">][</span><span class="s2">&quot;picklist&quot;</span><span class="p">]</span>
+<span class="go">(&#39;PicklistResolutionError&#39;, &#39;severity&#39;, &#39;Severity&#39;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s2">&quot;High&quot;</span> <span class="ow">in</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;error&quot;</span><span class="p">][</span><span class="s2">&quot;valid_values&quot;</span><span class="p">]</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+<p>The discovery tools (<code class="docutils literal notranslate"><span class="pre">list_modules</span></code>, <code class="docutils literal notranslate"><span class="pre">describe_module</span></code>) and picklist tools
+(<code class="docutils literal notranslate"><span class="pre">list_picklists</span></code>, <code class="docutils literal notranslate"><span class="pre">get_picklist_values</span></code>) are doctested above too — a model uses
+<code class="docutils literal notranslate"><span class="pre">list_modules</span></code> → <code class="docutils literal notranslate"><span class="pre">describe_module</span></code> to learn a module’s fields (and which are
+picklist-backed) before it writes a record, and <code class="docutils literal notranslate"><span class="pre">list_picklists</span></code> /
+<code class="docutils literal notranslate"><span class="pre">get_picklist_values</span></code> to resolve the friendly strings a picklist accepts.</p>
+<section id="fortiai-investigation">
+<h3>FortiAI investigation<a class="headerlink" href="#fortiai-investigation" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">investigate_alert</span></code> kicks off a FortiAI agentic investigation (normalize →
+hypothesize → plan → gather evidence over MCP → verdict). With <code class="docutils literal notranslate"><span class="pre">wait=false</span></code>
+(default) it returns a <code class="docutils literal notranslate"><span class="pre">{&quot;task_id&quot;,</span> <span class="pre">&quot;status&quot;}</span></code> handle immediately; poll it with
+<code class="docutils literal notranslate"><span class="pre">get_investigation_result</span></code>, which returns the status plus the full verdict payload
+(per-phase progress, summary with classification and key findings, hypotheses,
+recommended next actions). Captured from a live 8.0 appliance; the verdict is
+trimmed (one representative finding/hypothesis/log; all nine phase states kept):</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">demo_client</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">started</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;investigate_alert&quot;</span><span class="p">,</span> <span class="p">{</span>
+<span class="gp">... </span>    <span class="s2">&quot;ref&quot;</span><span class="p">:</span> <span class="s2">&quot;alerts:9f0eb603-ac1e-41c3-b47b-444589beed39&quot;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">started</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">]</span>
+<span class="go">&#39;pending&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;get_investigation_result&quot;</span><span class="p">,</span>
+<span class="gp">... </span>                   <span class="p">{</span><span class="s2">&quot;task_id&quot;</span><span class="p">:</span> <span class="n">started</span><span class="p">[</span><span class="s2">&quot;task_id&quot;</span><span class="p">]})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">]</span>
+<span class="go">&#39;completed&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">][</span><span class="s2">&quot;summary&quot;</span><span class="p">][</span><span class="s2">&quot;classification&quot;</span><span class="p">]</span>
+<span class="go">&#39;Inconclusive&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">][</span><span class="s2">&quot;phases&quot;</span><span class="p">]][:</span><span class="mi">3</span><span class="p">]</span>
+<span class="go">[&#39;normalization&#39;, &#39;context_enrichment&#39;, &#39;hypothesis&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">][</span><span class="s2">&quot;playbook&quot;</span><span class="p">][</span><span class="s2">&quot;immediate_next_actions&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+<span class="go">&#39;Preserve forensic evidence...&#39;</span>
+</pre></div>
+</div>
+</section>
+<section id="running-a-single-agent">
+<h3>Running a single agent<a class="headerlink" href="#running-a-single-agent" title="Link to this heading">¶</a></h3>
+<p>An investigation runs the whole pipeline. When you only need one question
+answered — enrich this indicator, query the SIEM, look up a ticket — call the
+agent directly with <code class="docutils literal notranslate"><span class="pre">run_agent</span></code>. It is far cheaper, and returns the agent’s own
+<code class="docutils literal notranslate"><span class="pre">outputformat</span></code> (<code class="docutils literal notranslate"><span class="pre">answer</span></code> / <code class="docutils literal notranslate"><span class="pre">evidence</span></code> / <code class="docutils literal notranslate"><span class="pre">confidence</span></code>) rather than an
+investigation’s <code class="docutils literal notranslate"><span class="pre">summary</span></code>/<code class="docutils literal notranslate"><span class="pre">hypotheses</span></code>.</p>
+<p>You never have to guess the payload: every agent publishes its input contract,
+and <code class="docutils literal notranslate"><span class="pre">run_agent</span></code> validates against it before spending an LLM call.</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">schema</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">ai</span><span class="o">.</span><span class="n">agent_input_schema</span><span class="p">(</span><span class="s2">&quot;ioc-enrichment&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">sorted</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
+<span class="go">[&#39;ioc&#39;, &#39;question&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">ai</span><span class="o">.</span><span class="n">run_agent</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="s2">&quot;ioc-enrichment&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;question&quot;</span><span class="p">:</span> <span class="s2">&quot;Is this IP known to be malicious?&quot;</span><span class="p">,</span>
+<span class="gp">... </span>     <span class="s2">&quot;ioc&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;IP Address&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="s2">&quot;8.8.8.8&quot;</span><span class="p">}]},</span>
+<span class="gp">... </span>    <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span><span class="o">.</span><span class="n">answer</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">confidence</span>
+<span class="go">(&#39;No&#39;, &#39;95%&#39;)</span>
+</pre></div>
+</div>
+<p>Omit a required key and it fails locally, naming the key, without calling the
+API. Pass <code class="docutils literal notranslate"><span class="pre">validate=False</span></code> to skip the schema lookup when you already know the
+shape.</p>
+<p>Two things that bite:</p>
+<ul class="simple">
+<li><p>The trigger goes to <code class="docutils literal notranslate"><span class="pre">/api/ai/agents/{name}/trigger</span></code> (<strong>plural</strong>). The service
+mounts the same router under <code class="docutils literal notranslate"><span class="pre">/ai/triage</span></code> too, but the front door only
+authorises the <code class="docutils literal notranslate"><span class="pre">agents</span></code> form — the <code class="docutils literal notranslate"><span class="pre">triage</span></code> form is rejected with a bare
+<code class="docutils literal notranslate"><span class="pre">Access</span> <span class="pre">Denied</span></code> no matter what role you hold.</p></li>
+<li><p>The caller needs <code class="docutils literal notranslate"><span class="pre">execute.ai_agents</span></code> (and <code class="docutils literal notranslate"><span class="pre">read.ai_agents</span></code> to read the input
+schema). A missing permission looks identical to a wrong path.</p></li>
+</ul>
+<p>With <code class="docutils literal notranslate"><span class="pre">wait=True</span></code>, a timeout returns the latest result with a non-terminal
+<code class="docutils literal notranslate"><span class="pre">status</span></code> rather than raising — check <code class="docutils literal notranslate"><span class="pre">result.status</span></code> before trusting <code class="docutils literal notranslate"><span class="pre">answer</span></code>.
+See <a class="reference external" href="https://github.com/ftnt-dspille/pyfsr/blob/main/examples/run_single_ai_agent.py"><code class="docutils literal notranslate"><span class="pre">examples/run_single_ai_agent.py</span></code></a>.</p>
+</section>
+</section>
+<section id="use-case-triage-an-alert-end-to-end">
+<h2>Use case: triage an alert end-to-end<a class="headerlink" href="#use-case-triage-an-alert-end-to-end" title="Link to this heading">¶</a></h2>
+<p>A SOC analyst asks an agent <em>“Triage the latest critical alert and tell me if
+it’s a real threat.”</em> With the registry attached, the model can carry out the
+whole workflow itself — no bespoke code per step:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">query_records</span></code> on <code class="docutils literal notranslate"><span class="pre">alerts</span></code> filtered by <code class="docutils literal notranslate"><span class="pre">severity</span> <span class="pre">=</span> <span class="pre">Critical</span></code>, sorted newest
+first, <code class="docutils literal notranslate"><span class="pre">summary=true</span></code> → finds the alert without flooding its context.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">get_record</span></code> with <code class="docutils literal notranslate"><span class="pre">fields=[...]</span></code> → pulls just the fields it needs to reason.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">investigate_alert</span></code> → kicks off a FortiAI investigation that gathers evidence
+over the appliance’s MCP servers and returns a verdict.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">create_record</span></code> on <code class="docutils literal notranslate"><span class="pre">comments</span></code> (with <code class="docutils literal notranslate"><span class="pre">resolve_picklists=true</span></code>) → writes its
+findings back to the alert so the human analyst sees them in FortiSOAR.</p></li>
+</ol>
+<p>Every step is a tool call the model chooses; pyfsr handles discovery,
+trimming, picklist IRIs, and error reporting so the agent stays on task.</p>
+</section>
+<section id="the-registry">
+<h2>The registry<a class="headerlink" href="#the-registry" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr.agent.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">list_tools</span><span class="p">,</span> <span class="n">tool_schemas</span><span class="p">,</span> <span class="n">dispatch</span>
+
+<span class="n">list_tools</span><span class="p">()</span>        <span class="c1"># names of every registered tool</span>
+<span class="n">tool_schemas</span><span class="p">()</span>      <span class="c1"># raw JSON-Schema definitions</span>
+</pre></div>
+</div>
+<p>Every result is JSON-serializable, and <strong>every failure is returned as a
+structured <code class="docutils literal notranslate"><span class="pre">{&quot;error&quot;:</span> <span class="pre">{...}}</span></code> dict — never a raised exception</strong> — so an agent
+can read the message and self-correct.</p>
+</section>
+<section id="anthropic-claude-tool-use">
+<h2>Anthropic (Claude) tool-use<a class="headerlink" href="#anthropic-claude-tool-use" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">to_anthropic_tools()</span></code> returns the registry in Claude’s tool-use shape
+(<code class="docutils literal notranslate"><span class="pre">{name,</span> <span class="pre">description,</span> <span class="pre">input_schema}</span></code>), and <code class="docutils literal notranslate"><span class="pre">dispatch()</span></code> runs whatever tool the
+model picks. Wiring the two together is a short loop: send the tools, run any
+<code class="docutils literal notranslate"><span class="pre">tool_use</span></code> blocks Claude returns, feed the results back, and repeat until it
+stops asking for tools.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr</span><span class="w"> </span><span class="kn">import</span> <span class="n">FortiSOAR</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr.agent.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">to_anthropic_tools</span><span class="p">,</span> <span class="n">dispatch</span>
+
+<span class="n">soar</span> <span class="o">=</span> <span class="n">FortiSOAR</span><span class="p">(</span><span class="s2">&quot;soar.example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;your-api-token&quot;</span><span class="p">)</span>
+<span class="n">llm</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>                 <span class="c1"># reads ANTHROPIC_API_KEY</span>
+<span class="n">tools</span> <span class="o">=</span> <span class="n">to_anthropic_tools</span><span class="p">()</span>
+
+<span class="n">messages</span> <span class="o">=</span> <span class="p">[{</span>
+    <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Find the latest critical alert and add a comment summarizing it.&quot;</span><span class="p">,</span>
+<span class="p">}]</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">resp</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">messages</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+        <span class="n">model</span><span class="o">=</span><span class="s2">&quot;claude-opus-4-8&quot;</span><span class="p">,</span>
+        <span class="n">max_tokens</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
+        <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span>
+        <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">resp</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
+
+    <span class="k">if</span> <span class="n">resp</span><span class="o">.</span><span class="n">stop_reason</span> <span class="o">!=</span> <span class="s2">&quot;tool_use&quot;</span><span class="p">:</span>
+        <span class="c1"># No more tools requested — Claude&#39;s final answer is in resp.content.</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">resp</span><span class="o">.</span><span class="n">content</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+        <span class="k">break</span>
+
+    <span class="c1"># Run every tool Claude asked for and return the results in one turn.</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">resp</span><span class="o">.</span><span class="n">content</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">block</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;tool_use&quot;</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">soar</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">input</span><span class="p">)</span>   <span class="c1"># JSON-safe, never raises</span>
+            <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;tool_result&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;tool_use_id&quot;</span><span class="p">:</span> <span class="n">block</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">out</span><span class="p">),</span>
+            <span class="p">})</span>
+    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">results</span><span class="p">})</span>
+</pre></div>
+</div>
+<p>A typical run of the prompt above has Claude call <code class="docutils literal notranslate"><span class="pre">query_records</span></code> (filter alerts
+by <code class="docutils literal notranslate"><span class="pre">severity</span> <span class="pre">=</span> <span class="pre">Critical</span></code>, newest first), then <code class="docutils literal notranslate"><span class="pre">get_record</span></code> to read it, then
+<code class="docutils literal notranslate"><span class="pre">create_record</span></code> on <code class="docutils literal notranslate"><span class="pre">comments</span></code> with its summary — each step a tool call pyfsr
+executes against the live appliance. Because <code class="docutils literal notranslate"><span class="pre">dispatch()</span></code> returns errors as
+<code class="docutils literal notranslate"><span class="pre">{&quot;error&quot;:</span> <span class="pre">{...}}</span></code> data rather than raising, a bad call just comes back as a
+tool result Claude can read and correct, and the loop keeps going.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Install the SDK with <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">anthropic</span></code>. The same loop works against the
+bundled MCP server or OpenAI’s function calling — only the transport changes,
+not the registry.</p>
+</div>
+</section>
+<section id="openai-function-calling">
+<h2>OpenAI function calling<a class="headerlink" href="#openai-function-calling" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr.agent.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">to_openai_tools</span><span class="p">,</span> <span class="n">dispatch</span>
+
+<span class="n">tools</span> <span class="o">=</span> <span class="n">to_openai_tools</span><span class="p">()</span>                          <span class="c1"># feed to chat.completions</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;search_records&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="s2">&quot;alerts&quot;</span><span class="p">})</span>
+</pre></div>
+</div>
+</section>
+<section id="bundled-mcp-server">
+<h2>Bundled MCP server<a class="headerlink" href="#bundled-mcp-server" title="Link to this heading">¶</a></h2>
+<p>Install the extra and run the server over the tool registry:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;pyfsr[mcp]&quot;</span>
+python<span class="w"> </span>-m<span class="w"> </span>pyfsr.agent.mcp
+</pre></div>
+</div>
+<p>The server reads <code class="docutils literal notranslate"><span class="pre">FSR_*</span></code> environment variables (see
+<a class="reference internal" href="authentication.html"><span class="doc">Authentication</span></a>) to build its client, and exposes the same registry of
+tools to any MCP-compatible host.</p>
+<section id="two-mcp-servers-pyfsr-vs-fsr-playbooks">
+<h3>Two MCP servers: pyfsr vs fsr_playbooks<a class="headerlink" href="#two-mcp-servers-pyfsr-vs-fsr-playbooks" title="Link to this heading">¶</a></h3>
+<p>pyfsr ships the <strong>runtime/admin</strong> MCP server (this one); the separate
+<code class="docutils literal notranslate"><span class="pre">fsr_playbooks</span></code> package ships the <strong>playbook-authoring</strong> MCP server
+(<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">fsr_playbooks.mcp_server</span></code> or <code class="docutils literal notranslate"><span class="pre">fsrpb</span> <span class="pre">mcp</span></code>). They share the same
+<code class="docutils literal notranslate"><span class="pre">FSR_*</span></code> environment (<code class="docutils literal notranslate"><span class="pre">fsr_playbooks</span></code> builds its <code class="docutils literal notranslate"><span class="pre">FortiSOAR</span></code> client from the same
+vars), so point both at one appliance. An agent that must <em>create modules,
+configure connectors, run connector actions, and build playbooks</em> uses <strong>both</strong>:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Task</p></th>
+<th class="head"><p>Server</p></th>
+<th class="head"><p>Tool(s)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Create custom modules</p></td>
+<td><p>pyfsr</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">create_module</span></code> → <code class="docutils literal notranslate"><span class="pre">publish</span></code> (grant RBAC via <code class="docutils literal notranslate"><span class="pre">grant_to</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Configure connectors</p></td>
+<td><p>pyfsr</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">default_connector_config</span></code> → <code class="docutils literal notranslate"><span class="pre">validate_connector_config</span></code> → <code class="docutils literal notranslate"><span class="pre">upsert_connector_configuration</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Run connector actions</p></td>
+<td><p>pyfsr</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">run_connector_operation</span></code> (fsr_playbooks’ <code class="docutils literal notranslate"><span class="pre">run_op</span></code> is the richer, safety-gated variant for authoring)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Build playbooks</p></td>
+<td><p>fsr_playbooks</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">compile_yaml</span></code> → <code class="docutils literal notranslate"><span class="pre">validate_yaml</span></code> → <code class="docutils literal notranslate"><span class="pre">push_playbook</span></code> → <code class="docutils literal notranslate"><span class="pre">dry_run_playbook</span></code>; debug with <code class="docutils literal notranslate"><span class="pre">why_did_playbook_fail</span></code>, <code class="docutils literal notranslate"><span class="pre">step_test</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Trigger &amp; verify a run</p></td>
+<td><p>pyfsr</p></td>
+<td><p>create a triggering record → <code class="docutils literal notranslate"><span class="pre">wait_for_playbook_run</span></code> → <code class="docutils literal notranslate"><span class="pre">why_playbook_failed</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>pyfsr owns discovery, record CRUD, module admin, connector config, connector
+<em>run</em>, and playbook <em>run</em> inspection/debugging. fsr_playbooks owns the playbook
+DSL — compile/validate/push/dry-run, step-type and connector-op <em>discovery</em>
+(<code class="docutils literal notranslate"><span class="pre">get_step_type</span></code>, <code class="docutils literal notranslate"><span class="pre">get_op_schema</span></code>, <code class="docutils literal notranslate"><span class="pre">find_operation</span></code>), single-step <code class="docutils literal notranslate"><span class="pre">step_test</span></code>,
+and recipes. The two don’t overlap on the four tasks, so running both gives an
+agent the full create-configure-run-build loop with no gaps.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p>The <a class="reference internal" href="../autoapi/pyfsr/agent/tools/index.html#module-pyfsr.agent.tools" title="pyfsr.agent.tools"><code class="xref py py-mod docutils literal notranslate"><span class="pre">pyfsr.agent.tools</span></code></a> and <a class="reference internal" href="../autoapi/pyfsr/agent/mcp/index.html#module-pyfsr.agent.mcp" title="pyfsr.agent.mcp"><code class="xref py py-mod docutils literal notranslate"><span class="pre">pyfsr.agent.mcp</span></code></a> modules in the <a class="reference internal" href="../reference.html"><span class="doc">API Reference</span></a>
+for the complete tool list and dispatch signatures.</p>
+</div>
+</section>
+</section>
+<section id="authoring-your-own-ai-agent">
+<h2>Authoring your own AI agent<a class="headerlink" href="#authoring-your-own-ai-agent" title="Link to this heading">¶</a></h2>
+<p>Everything above drives the agents FortiSOAR <em>already ships</em>. FortiSOAR 8.0 also
+lets you install <strong>your own</strong> agentic-AI agent — a reusable “skill” the
+investigation orchestrator can route work to (compute a metric, retrieve records,
+enrich an indicator, summarize a case). You’d author one when the built-in agents
+don’t cover a step your SOC repeats: a bespoke scoring formula, an in-house
+enrichment source, a house-style report format. <code class="docutils literal notranslate"><span class="pre">pyfsr</span></code> packages, validates,
+uploads, and exports these agents so you don’t hand-build the zip or curl the
+multipart endpoint.</p>
+<section id="the-package-model">
+<h3>The package model<a class="headerlink" href="#the-package-model" title="Link to this heading">¶</a></h3>
+<p>An AI agent ships as a zip whose <strong>single top-level folder is the agent’s
+<code class="docutils literal notranslate"><span class="pre">name</span></code></strong>. Both the Fortinet-published agents and yours share this layout:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>metric-computation/
+  info.json            # manifest: name, agentclass, version, config form, I/O
+  agent.py             # the class named by info.json &quot;agentclass&quot;; implements act()
+  __init__.py
+  prompt.yaml          # prompt registry keyed by uuid
+  config/
+    memory.yaml        # allowed_tools: {&lt;mcp_config_uuid&gt;: [tool, ...]}
+  images/
+    small.png
+    large.png
+  constants.py         # optional helper modules
+</pre></div>
+</div>
+<p>What each file does:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">info.json</span></code></strong> — the manifest. <code class="docutils literal notranslate"><span class="pre">name</span></code> must equal the folder name; <code class="docutils literal notranslate"><span class="pre">agentclass</span></code>
+must name a class defined in <code class="docutils literal notranslate"><span class="pre">agent.py</span></code>; <code class="docutils literal notranslate"><span class="pre">configuration.fields</span></code> is the config
+form the UI renders (config-type toggle, LLM-provider picker, MCP-server
+multiselect, masking agent); <code class="docutils literal notranslate"><span class="pre">inputformat</span></code>/<code class="docutils literal notranslate"><span class="pre">outputformat</span></code> document the JSON the
+agent consumes and returns.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">agent.py</span></code></strong> — subclasses the platform’s <code class="docutils literal notranslate"><span class="pre">BaseAgent</span></code> and implements
+<code class="docutils literal notranslate"><span class="pre">act(input_data)</span></code>. It pulls a prompt by uuid
+(<code class="docutils literal notranslate"><span class="pre">self.get_prompt_by_uuid(&quot;&lt;uuid&gt;&quot;)</span></code>), <code class="docutils literal notranslate"><span class="pre">.format(**inputs)</span></code>s the templates, and
+calls the LLM. The uuid it references <strong>must</strong> exist in <code class="docutils literal notranslate"><span class="pre">prompt.yaml</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">prompt.yaml</span></code></strong> — the prompts, keyed by uuid. Each entry is exactly what the
+UI’s <em>Edit Prompt</em> screen edits: <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">description</span></code>, <code class="docutils literal notranslate"><span class="pre">system_instruction</span></code>
+(System Prompt Template), <code class="docutils literal notranslate"><span class="pre">user_instruction</span></code> (User Prompt Template),
+<code class="docutils literal notranslate"><span class="pre">response_format</span></code> (the JSON schema the model must return), and
+<code class="docutils literal notranslate"><span class="pre">validation_instruction</span></code>. Any <code class="docutils literal notranslate"><span class="pre">{placeholder}</span></code> in a template — <code class="docutils literal notranslate"><span class="pre">{query}</span></code>,
+<code class="docutils literal notranslate"><span class="pre">{data}</span></code>, <code class="docutils literal notranslate"><span class="pre">{verdict}</span></code>, <code class="docutils literal notranslate"><span class="pre">{key_findings}</span></code> — is filled by <code class="docutils literal notranslate"><span class="pre">act()</span></code> at call time.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">config/memory.yaml</span></code></strong> — the agent’s MCP-tool allowlist: a map of registered
+<strong>MCP-configuration uuid</strong> → the list of tool names on that server the agent may
+call. This is the safety boundary — an agent can only reach tools it’s explicitly
+granted here. An empty list binds the server without (yet) allowing any tool.</p></li>
+</ul>
+</section>
+<section id="validate-pack-and-upload">
+<h3>Validate, pack, and upload<a class="headerlink" href="#validate-pack-and-upload" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">pyfsr</span></code> models the whole package (<a class="reference internal" href="../reference-models.html#pyfsr.models.AgentPackage" title="pyfsr.models.AgentPackage"><code class="xref py py-class docutils literal notranslate"><span class="pre">AgentPackage</span></code></a>) and checks
+the mistakes that otherwise fail <em>silently on the appliance</em> — an <code class="docutils literal notranslate"><span class="pre">agentclass</span></code>
+that isn’t in <code class="docutils literal notranslate"><span class="pre">agent.py</span></code>, a prompt uuid the code references but the yaml omits, a
+manifest icon that isn’t in the bundle:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr</span><span class="w"> </span><span class="kn">import</span> <span class="n">FortiSOAR</span><span class="p">,</span> <span class="n">pack_agent</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pyfsr.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">AgentPackage</span>
+
+<span class="c1"># Inspect + validate a source folder before uploading (raises on any defect):</span>
+<span class="n">pkg</span> <span class="o">=</span> <span class="n">AgentPackage</span><span class="o">.</span><span class="n">from_dir</span><span class="p">(</span><span class="s2">&quot;./my-agents/incident-scorer&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">pkg</span><span class="o">.</span><span class="n">info</span><span class="o">.</span><span class="n">agentclass</span><span class="p">,</span> <span class="n">pkg</span><span class="o">.</span><span class="n">info</span><span class="o">.</span><span class="n">version</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">pkg</span><span class="o">.</span><span class="n">memory</span><span class="o">.</span><span class="n">mcp_configuration_uuids</span><span class="p">())</span>   <span class="c1"># which MCP servers it&#39;s wired to</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">FortiSOAR</span><span class="p">(</span><span class="s2">&quot;soar.example.com&quot;</span><span class="p">,</span> <span class="n">token</span><span class="o">=</span><span class="s2">&quot;&lt;api-key&gt;&quot;</span><span class="p">)</span>
+
+<span class="c1"># Import straight from a source directory — pyfsr validates + packs it on the fly:</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">ai</span><span class="o">.</span><span class="n">import_agent</span><span class="p">(</span><span class="s2">&quot;./my-agents/incident-scorer&quot;</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">agent_uuid</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;uuid&quot;</span><span class="p">]</span>
+
+<span class="c1"># ...or pack once and upload the zip yourself:</span>
+<span class="n">zip_path</span> <span class="o">=</span> <span class="n">pack_agent</span><span class="p">(</span><span class="s2">&quot;./my-agents/incident-scorer&quot;</span><span class="p">)</span>   <span class="c1"># -&gt; ./my-agents/incident-scorer.zip</span>
+<span class="n">client</span><span class="o">.</span><span class="n">ai</span><span class="o">.</span><span class="n">import_agent</span><span class="p">(</span><span class="n">zip_path</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">import_agent</span></code> accepts either a directory (validated and packed for you) or a
+prebuilt <code class="docutils literal notranslate"><span class="pre">.zip</span></code>. <code class="docutils literal notranslate"><span class="pre">replace=True</span></code> overwrites an already-installed agent of the same
+name+version; without it, re-importing an existing version is rejected.</p>
+<p>The quickest way to author a new agent is to <strong>clone a shipped one</strong> as a
+starting point:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">.</span><span class="n">ai</span><span class="o">.</span><span class="n">export_agent</span><span class="p">(</span><span class="n">agent_uuid</span><span class="p">,</span> <span class="s2">&quot;./incident-scorer-backup.zip&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Unzip it, rename the folder + <code class="docutils literal notranslate"><span class="pre">info.json</span></code> <code class="docutils literal notranslate"><span class="pre">name</span></code>, edit <code class="docutils literal notranslate"><span class="pre">agent.py</span></code>/<code class="docutils literal notranslate"><span class="pre">prompt.yaml</span></code>,
+then <code class="docutils literal notranslate"><span class="pre">import_agent</span></code> the folder back.</p>
+</section>
+<section id="ensuring-your-agent-is-actually-used">
+<h3>Ensuring your agent is actually used<a class="headerlink" href="#ensuring-your-agent-is-actually-used" title="Link to this heading">¶</a></h3>
+<p>An imported agent lands <strong>inactive</strong> and on the default config. Three things make
+the orchestrator route to it:</p>
+<ol class="arabic">
+<li><p><strong>Activate it</strong> — an inactive agent is never selected:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">.</span><span class="n">ai</span><span class="o">.</span><span class="n">activate_agent</span><span class="p">([</span><span class="n">agent_uuid</span><span class="p">])</span>          <span class="c1"># active=True by default</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>Give it an LLM + MCP config</strong> — if it shouldn’t inherit the default, set its
+config so it has a reasoning profile and can reach the MCP tools its
+<code class="docutils literal notranslate"><span class="pre">memory.yaml</span></code> allowlist names:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># grant one MCP server to the agent (read-modify-write of its config):</span>
+<span class="n">client</span><span class="o">.</span><span class="n">ai</span><span class="o">.</span><span class="n">allow_mcp_server_for_agent</span><span class="p">(</span><span class="s2">&quot;incident-scorer&quot;</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">,</span> <span class="n">mcp_uuid</span><span class="p">)</span>
+<span class="c1"># or set the whole inner config (llm_provider, mcp_server, masking_agent):</span>
+<span class="n">client</span><span class="o">.</span><span class="n">ai</span><span class="o">.</span><span class="n">update_agent_config</span><span class="p">(</span><span class="s2">&quot;incident-scorer&quot;</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">,</span>
+                              <span class="p">{</span><span class="s2">&quot;llm_provider&quot;</span><span class="p">:</span> <span class="n">llm_uuid</span><span class="p">,</span> <span class="s2">&quot;mcp_server&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">mcp_uuid</span><span class="p">]})</span>
+</pre></div>
+</div>
+<p>Confirm what’s live with <code class="docutils literal notranslate"><span class="pre">client.ai.get_agent_config(&quot;incident-scorer&quot;,</span> <span class="pre">&quot;1.0.0&quot;)</span></code>
+and <code class="docutils literal notranslate"><span class="pre">client.ai.describe_agent_mcp_servers(...)</span></code>.</p>
+</li>
+<li><p><strong>Verify it’s eligible</strong> — it should now appear active in the agent list, and
+the investigation pipeline (or a direct <code class="docutils literal notranslate"><span class="pre">run_agent</span></code>) can invoke it:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">a</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">client</span><span class="o">.</span><span class="n">ai</span><span class="o">.</span><span class="n">list_agents</span><span class="p">(</span><span class="n">active</span><span class="o">=</span><span class="kc">True</span><span class="p">)]</span>
+<span class="n">client</span><span class="o">.</span><span class="n">ai</span><span class="o">.</span><span class="n">run_agent</span><span class="p">(</span><span class="s2">&quot;incident-scorer&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;natural_language_task&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">}})</span>
+</pre></div>
+</div>
+</li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Custom agents require FortiAI to be enabled (<code class="docutils literal notranslate"><span class="pre">client.ai.enable_features()</span></code>) and an
+appliance at <code class="docutils literal notranslate"><span class="pre">fsrMinCompatibility</span></code> or newer — the shipped agents target 8.0.0.</p>
+</div>
+</section>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="appliance-cli.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Appliance Administration CLI</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="playbook-yaml-reference.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Playbook YAML Syntax Reference</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Dylan Spille
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/ftnt-dspille/pyfsr" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">AI &amp; Agents</a><ul>
+<li><a class="reference internal" href="#why-use-it">Why use it</a></li>
+<li><a class="reference internal" href="#available-tools">Available tools</a></li>
+<li><a class="reference internal" href="#calling-tools">Calling tools</a><ul>
+<li><a class="reference internal" href="#fortiai-investigation">FortiAI investigation</a></li>
+<li><a class="reference internal" href="#running-a-single-agent">Running a single agent</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#use-case-triage-an-alert-end-to-end">Use case: triage an alert end-to-end</a></li>
+<li><a class="reference internal" href="#the-registry">The registry</a></li>
+<li><a class="reference internal" href="#anthropic-claude-tool-use">Anthropic (Claude) tool-use</a></li>
+<li><a class="reference internal" href="#openai-function-calling">OpenAI function calling</a></li>
+<li><a class="reference internal" href="#bundled-mcp-server">Bundled MCP server</a><ul>
+<li><a class="reference internal" href="#two-mcp-servers-pyfsr-vs-fsr-playbooks">Two MCP servers: pyfsr vs fsr_playbooks</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#authoring-your-own-ai-agent">Authoring your own AI agent</a><ul>
+<li><a class="reference internal" href="#the-package-model">The package model</a></li>
+<li><a class="reference internal" href="#validate-pack-and-upload">Validate, pack, and upload</a></li>
+<li><a class="reference internal" href="#ensuring-your-agent-is-actually-used">Ensuring your agent is actually used</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=56c55dd0"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=fd10adb8"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

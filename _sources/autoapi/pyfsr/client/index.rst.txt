@@ -1,0 +1,523 @@
+pyfsr.client
+============
+
+.. py:module:: pyfsr.client
+
+.. autoapi-nested-parse::
+
+   Main client class for FortiSOAR API
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.client.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.client.FortiSOAR
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: FortiSOAR(base_url: str, auth: str | tuple | None = None, *, username: str | None = None, password: str | None = None, token: str | None = None, api_key: str | None = None, verify_ssl: bool = True, suppress_insecure_warnings: bool = False, verbose: bool = False, port: int | None = None, timeout: int | float | None = 30, max_retries: int = 2, retry_backoff_factor: float = 0.5, retry_status_forcelist: tuple[int, Ellipsis] = (429, 500, 502, 503, 504), dry_run: bool = False, http_trace: bool = False)
+
+   Main FortiSOAR client class for interacting with the FortiSOAR API.
+
+
+   .. py:attribute:: http_trace
+      :value: False
+
+
+
+   .. py:attribute:: verbose
+      :value: False
+
+
+
+   .. py:attribute:: base_url
+      :type:  str
+
+
+   .. py:attribute:: timeout
+      :value: 30
+
+
+
+   .. py:attribute:: dry_run
+      :value: False
+
+
+
+   .. py:attribute:: session
+
+
+   .. py:attribute:: verify_ssl
+      :value: True
+
+
+
+   .. py:attribute:: auth
+
+
+   .. py:attribute:: alerts
+      :type:  pyfsr.api.alerts.AlertsAPI
+
+
+   .. py:attribute:: incidents
+      :type:  pyfsr.api.incidents.IncidentsAPI
+
+
+   .. py:attribute:: tasks
+      :type:  pyfsr.api.tasks.TasksAPI
+
+
+   .. py:attribute:: comments
+      :type:  pyfsr.api.comments.CommentsAPI
+
+
+   .. py:attribute:: files
+      :type:  pyfsr.utils.file_operations.FileOperations
+
+
+   .. py:attribute:: attachments
+      :type:  pyfsr.api.attachments.AttachmentsAPI
+
+
+   .. py:attribute:: export_templates
+      :type:  pyfsr.api.export_templates.ExportTemplatesAPI
+
+
+   .. py:attribute:: repo
+
+
+   .. py:attribute:: export_config
+      :type:  pyfsr.api.export_config.ExportConfigAPI
+
+
+   .. py:attribute:: import_config
+      :type:  pyfsr.api.import_config.ImportConfigAPI
+
+
+   .. py:attribute:: content_hub
+      :type:  pyfsr.api.content_hub.ContentHubSearch
+
+
+   .. py:attribute:: modules
+      :type:  pyfsr.api.modules.ModulesAPI
+
+
+   .. py:attribute:: modules_admin
+      :type:  pyfsr.api.modules_admin.ModulesAdminAPI
+
+
+   .. py:attribute:: views
+      :type:  pyfsr.api.views.ViewsAPI
+
+
+   .. py:attribute:: view_templates
+      :type:  pyfsr.api.view_templates.ViewTemplatesAPI
+
+
+   .. py:attribute:: app_config
+      :type:  pyfsr.api.app_config.AppConfigAPI
+
+
+   .. py:attribute:: picklists
+      :type:  pyfsr.api.picklists.PicklistsAPI
+
+
+   .. py:attribute:: connectors
+      :type:  pyfsr.api.connectors.ConnectorsAPI
+
+
+   .. py:attribute:: widgets
+      :type:  pyfsr.api.widgets.WidgetsAPI
+
+
+   .. py:attribute:: playbooks
+      :type:  pyfsr.api.playbooks.PlaybooksAPI
+
+
+   .. py:attribute:: workflow_collections
+      :type:  pyfsr.api.workflow_collections.WorkflowCollectionsAPI
+
+
+   .. py:attribute:: wf_tools
+      :type:  pyfsr.api.wf_tools.WfToolsAPI
+
+
+   .. py:attribute:: solution_packs
+      :type:  pyfsr.api.solution_packs.SolutionPackAPI
+
+
+   .. py:attribute:: system_queries
+      :type:  pyfsr.api.system_queries.SystemQueriesAPI
+
+
+   .. py:attribute:: system_settings
+      :type:  pyfsr.api.system_settings.SystemSettingsAPI
+
+
+   .. py:attribute:: user_settings
+      :type:  pyfsr.api.user_settings.UserSettingsAPI
+
+
+   .. py:attribute:: auth_config
+      :type:  pyfsr.api.auth_config.AuthConfigAPI
+
+
+   .. py:attribute:: schedules
+      :type:  pyfsr.api.schedules.SchedulesAPI
+
+
+   .. py:attribute:: notifications
+      :type:  pyfsr.api.notifications.NotificationsAPI
+
+
+   .. py:attribute:: manual_input
+      :type:  pyfsr.api.manual_input.ManualInputAPI
+
+
+   .. py:attribute:: users
+      :type:  pyfsr.api.users.UsersAPI
+
+
+   .. py:attribute:: ai
+      :type:  pyfsr.api.ai.AIApi
+
+
+   .. py:attribute:: mcp
+      :type:  pyfsr.api.native_mcp.NativeMCPApi
+
+
+   .. py:attribute:: tags
+      :type:  pyfsr.api.tags.TagsAPI
+
+
+   .. py:attribute:: agents
+      :type:  pyfsr.api.agents.AgentsAPI
+
+
+   .. py:attribute:: roles
+      :type:  pyfsr.api.roles.RolesAPI
+
+
+   .. py:attribute:: teams
+      :type:  pyfsr.api.teams.TeamsAPI
+
+
+   .. py:attribute:: routers
+      :type:  pyfsr.api.routers.RoutersAPI
+
+
+   .. py:attribute:: actors
+      :type:  pyfsr.api.actors.ActorsAPI
+
+
+   .. py:attribute:: reporting
+      :type:  pyfsr.api.reporting.ReportingAPI
+
+
+   .. py:attribute:: rules
+      :type:  pyfsr.api.rules.RulesAPI
+
+
+   .. py:attribute:: feeds
+      :type:  pyfsr.api.feeds.IngestFeedsAPI
+
+
+   .. py:attribute:: taxii
+      :type:  pyfsr.api.taxii.TaxiiAPI
+
+
+   .. py:attribute:: audit
+      :type:  pyfsr.api.audit.AuditAPI
+
+
+   .. py:attribute:: api_users
+      :type:  pyfsr.api.api_users.ApiKeyUsersAPI
+
+
+   .. py:attribute:: api_keys
+      :type:  pyfsr.api.api_keys.ApiKeysAPI
+
+
+   .. py:attribute:: system
+      :type:  pyfsr.api.system.SystemAPI
+
+
+   .. py:attribute:: search
+      :type:  pyfsr.api.search.SearchAPI
+
+
+   .. py:method:: from_config_file(path: str, **overrides: Any) -> FortiSOAR
+      :classmethod:
+
+
+      Build a client from a TOML config file (the ``[fortisoar]`` layout).
+
+      Convenience wrapper over ``EnvConfig.from_config_file(path).client()``;
+      see :meth:`pyfsr.config.EnvConfig.from_config_file`. ``overrides`` pass
+      straight through to the constructor.
+
+
+
+   .. py:method:: from_env_file(path: str, *, override: bool = False, **overrides: Any) -> FortiSOAR
+      :classmethod:
+
+
+      Build a client from a ``KEY=VALUE`` env file plus ``os.environ``.
+
+      Convenience wrapper over ``EnvConfig.from_env_file(path).client()``.
+
+
+
+   .. py:method:: from_env(**overrides: Any) -> FortiSOAR
+      :classmethod:
+
+
+      Build a client from ``FSR_*`` environment variables.
+
+      Convenience wrapper over ``EnvConfig.from_env().client()``.
+
+
+
+   .. py:method:: request(method: str, endpoint: str, params: dict | None = None, data: dict | list | None = None, files: dict | None = None, headers: dict | None = None, *, raise_on_status: bool = True, **kwargs: Any) -> requests.Response
+
+      Make a request to the FortiSOAR API.
+
+      :param method: HTTP method (GET, POST, PUT, DELETE)
+      :param endpoint: API endpoint path
+      :param params: Query parameters
+      :param data: Request body data
+      :param files: Files to upload
+      :param headers: Additional headers
+      :param raise_on_status: When True (default) a non-2xx response is converted
+                              to a typed exception (``AuthenticationError`` / ``PermissionError`` /
+                              ``ResourceNotFoundError`` / ``APIError``). Pass ``False`` to get the
+                              raw :class:`requests.Response` back instead — for access-control
+                              probes and "is this identity allowed to do X?" checks that need the
+                              status code (200 vs 401/403) rather than a raised exception. The
+                              reauth-retry for refreshable auth still runs first, so a refreshed
+                              token can still turn a 401 into a 200; non-refreshable (API-key) auth
+                              returns the raw denial status. Transport errors (connection,
+                              timeout) always raise regardless of this flag.
+      :param \*\*kwargs: Additional arguments passed to requests
+
+      :returns: Response from the API
+      :rtype: requests.Response
+
+      :raises ValidationError: When request data validation fails
+      :raises AuthenticationError: When authentication fails
+      :raises PermissionError: When user lacks required permissions
+      :raises ResourceNotFoundError: When requested resource is not found
+      :raises UnsupportedAuthOperationError: When operation is not supported with current
+          authentication method
+      :raises APIError: For other API errors
+
+
+
+   .. py:method:: get(endpoint: str, params: dict | None = ..., *, raise_on_status: Literal[True] = ..., **kwargs: Any) -> dict[str, Any] | bytes
+                  get(endpoint: str, params: dict | None = ..., *, raise_on_status: Literal[False], **kwargs: Any) -> requests.Response
+
+      Perform GET request and return response based on content type.
+
+      Returns JSON for application/json responses and bytes for binary responses.
+      With ``raise_on_status=False`` returns the raw :class:`requests.Response`
+      (so the caller can read ``.status_code`` on a denial).
+
+
+
+   .. py:method:: post(endpoint: str, data: dict | list | None = ..., files: dict | None = ..., params: dict | None = ..., *, raise_on_status: Literal[True] = ..., **kwargs: Any) -> dict[str, Any]
+                  post(endpoint: str, data: dict | list | None = ..., files: dict | None = ..., params: dict | None = ..., *, raise_on_status: Literal[False], **kwargs: Any) -> requests.Response
+                  post(endpoint: str, data: dict | list | None = ..., files: dict | None = ..., params: dict | None = ..., *, raise_on_status: bool, **kwargs: Any) -> dict[str, Any] | requests.Response
+
+      Perform POST request and return JSON response.
+
+      With ``raise_on_status=False`` returns the raw :class:`requests.Response`
+      instead of parsing JSON — use it for fire-and-observe-status probes.
+
+
+
+   .. py:method:: put(endpoint: str, data: dict | None = ..., params: dict | None = ..., *, raise_on_status: Literal[True] = ..., **kwargs: Any) -> dict[str, Any]
+                  put(endpoint: str, data: dict | None = ..., params: dict | None = ..., *, raise_on_status: Literal[False], **kwargs: Any) -> requests.Response
+
+      Perform PUT request and return JSON response.
+
+      With ``raise_on_status=False`` returns the raw :class:`requests.Response`.
+
+
+
+   .. py:method:: delete(endpoint: str, params: dict | None = ..., *, raise_on_status: Literal[True] = ..., **kwargs: Any) -> None
+                  delete(endpoint: str, params: dict | None = ..., *, raise_on_status: Literal[False], **kwargs: Any) -> requests.Response
+
+      Perform DELETE request.
+
+      With ``raise_on_status=False`` returns the raw :class:`requests.Response`
+      instead of ``None``.
+
+
+
+   .. py:method:: query(module: str, query_data: dict) -> dict[str, Any]
+
+      Execute a query against a module
+
+      :param module: Name of the module to query
+      :param query_data: Query parameters and filters
+
+      :returns: Query results
+
+
+
+   .. py:method:: appliance(*, user: str = 'csadmin', password: str | None = None, port: int = 22, key_path: str | None = None, sudo_password: str | None = None, insecure_skip_host_key_check: bool = False) -> pyfsr.appliance.Appliance
+
+      Open an :class:`~pyfsr.appliance.Appliance` against this client's host.
+
+      The REST client and the appliance use **different** transports: this client
+      talks to ``/api/3`` with an API key/credentials, while the appliance reaches
+      the same box over **SSH** (or locally when on-box). The host is reused from
+      this client's ``base_url``; SSH credentials must still be supplied here.
+
+      >>> box = client.appliance(key_path="~/.ssh/id_rsa")   # doctest: +SKIP
+      >>> box.service.status()                               # doctest: +SKIP
+
+
+
+   .. py:method:: records(module: Literal['alerts']) -> pyfsr.records.RecordSet[pyfsr.models.Alert]
+                  records(module: Literal['incidents']) -> pyfsr.records.RecordSet[pyfsr.models.Incident]
+                  records(module: Literal['tasks']) -> pyfsr.records.RecordSet[pyfsr.models.Task]
+                  records(module: Literal['comments']) -> pyfsr.records.RecordSet[pyfsr.models.Comment]
+                  records(module: Literal['workflows']) -> pyfsr.records.RecordSet[pyfsr.models.Workflow]
+                  records(module: Literal['workflow_collections']) -> pyfsr.records.RecordSet[pyfsr.models.WorkflowCollection]
+                  records(module: Literal['files']) -> pyfsr.records.RecordSet[pyfsr.models.FileRecord]
+                  records(module: Literal['people']) -> pyfsr.records.RecordSet[pyfsr.models.User]
+                  records(module: Literal['teams']) -> pyfsr.records.RecordSet[pyfsr.models.Team]
+                  records(module: Literal['roles']) -> pyfsr.records.RecordSet[pyfsr.models.Role]
+                  records(module: Literal['api_keys']) -> pyfsr.records.RecordSet[pyfsr.models.ApiKey]
+                  records(module: str) -> pyfsr.records.RecordSet[Any]
+
+      Return a :class:`~pyfsr.records.RecordSet` for generic CRUD on ``module``.
+
+      Reads come back as typed models (Alert/Incident/Task/Comment, else a
+      dict-compatible ``BaseRecord``); pass ``raw=True`` on an individual read
+      for a plain dict.
+
+      .. rubric:: Example
+
+      >>> incidents = client.records("incidents")
+      >>> page = incidents.query(Query().eq("status.itemValue", "Open").limit(50))
+      >>> for inc in incidents.iterate():
+      ...     print(inc.uuid, inc["name"])
+
+
+
+   .. py:method:: aggregate_many(specs: dict[str, dict[str, Any]], *, max_workers: int = 8) -> dict[str, list[pyfsr.models.AggregateRow]]
+
+      Run several modules' aggregations **concurrently**, keyed by module.
+
+      ``specs`` maps a module name to the keyword arguments for that module's
+      :meth:`RecordSet.aggregate <pyfsr.records.RecordSet.aggregate>` call —
+      e.g. ``{"alerts": {"group_by": "severity.itemValue", "count": True},
+      "incidents": {"count": True}}``. Each aggregation is an independent
+      ``POST /api/query/<module>``, so they run in a bounded thread pool
+      instead of one-after-another; the dashboard-style sweep that was N
+      round-trips becomes roughly one. A module whose aggregation raises lands
+      as an empty ``[]`` so one failure never sinks the whole sweep.
+
+      Returns a dict mapping each module to its list of
+      :class:`~pyfsr.models._system.AggregateRow` results.
+
+
+
+   .. py:method:: list_modules(*, refresh: bool = False) -> list[dict[str, Any]]
+
+      List every module on the appliance as ``[{type, label, plural}, ...]``.
+
+      Discovery shortcut for :meth:`ModulesAPI.list <pyfsr.api.modules.ModulesAPI.list>`
+      — learn the right module ``type`` (and plural name) before a record lookup.
+
+
+
+   .. py:method:: describe_module(module: str, *, refresh: bool = False) -> dict[str, Any]
+
+      Describe one module's fields (name/type/required/picklist).
+
+      Shortcut for
+      :meth:`ModulesAPI.describe <pyfsr.api.modules.ModulesAPI.describe>`.
+
+
+
+   .. py:method:: version(*, refresh: bool = False) -> str | dict[str, Any]
+
+      Get the FortiSOAR product version (tries multiple endpoints), cached.
+
+      The result of the first successful probe is cached on the client, so
+      repeated calls (including internal ones from :meth:`version_tuple` /
+      :meth:`supports_native_mcp`) cost one network round-trip per client
+      lifetime, not one per call. Pass ``refresh=True`` to bypass the cache
+      (e.g. after an appliance upgrade you know happened mid-session).
+
+      Attempts to retrieve the FortiSOAR build version via a fallback chain
+      of endpoints, returning the first successful response as a version
+      string or a dict with build details:
+
+      1. ``GET /cyops_version.json`` — the canonical version file, e.g.
+         ``{"version": "8.0.0-6034"}``. Live-verified across releases.
+      2. ``GET /api/3/appliances`` (reads ``@version`` / ``build`` if present)
+      3. License details endpoint (``GET /api/auth/license``, via system API)
+      4. Public version endpoint (``GET /api/version``, via system API)
+
+      :returns: A clean version string (e.g., ``"7.4.2"``),
+                or a dict like ``{"version": "7.4.2", "build": "..."}`` if
+                multiple fields are present.
+      :rtype: str | dict[str, Any]
+
+      :raises FortiSOARException: If all fallback endpoints return 404 or other
+          failures; the message names every endpoint that was tried.
+
+      .. rubric:: Example
+
+      >>> v = client.version()                       # doctest: +SKIP
+      >>> print(v)                                   # doctest: +SKIP
+      7.4.2
+      >>> v = client.version()                       # doctest: +SKIP
+      >>> print(v["version"] if isinstance(v, dict) else v)  # doctest: +SKIP
+      7.4.2
+
+
+
+   .. py:method:: version_tuple(*, refresh: bool = False) -> tuple[int, int, int] | None
+
+      ``(major, minor, patch)`` parsed from :meth:`version`, or ``None`` if
+      the version string/dict can't be parsed as a dotted version.
+
+      Handles the shapes :meth:`version` actually returns: a plain string
+      (``"8.0.0"``), a build-qualified string (``"8.0.0-6034"``), or a dict
+      with a ``version``/``@version``/``build`` key holding either. Missing
+      trailing components default to 0 (``"8.0"`` -> ``(8, 0, 0)``). ``None``
+      on a network failure too (:meth:`version` exhausting every fallback
+      endpoint) -- capability checks shouldn't raise, just report unknown.
+
+
+
+   .. py:method:: supports_native_mcp(*, refresh: bool = False) -> bool | None
+
+      Whether this appliance's native MCP gateway (``/mcp/*``, ``client.mcp``)
+      is available — shipped starting FortiSOAR 8.0.0. Returns ``None`` if the
+      version can't be determined (network failure, unparseable string) rather
+      than guessing; check for ``None`` explicitly if that distinction matters
+      to the caller (vs. treating it as "unsupported").
+
+
+

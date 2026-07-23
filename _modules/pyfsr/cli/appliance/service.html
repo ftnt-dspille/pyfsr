@@ -1,0 +1,821 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../../genindex.html"><link rel="search" title="Search" href="../../../../search.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>pyfsr.cli.appliance.service - pyfsr 0.16.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/custom.css" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #c8102e;
+  --color-brand-content: #c8102e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #ff5a6e;
+  --color-brand-content: #ff5a6e;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../../index.html"><div class="brand">pyfsr 0.16.1</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../../index.html">
+  
+  <span class="sidebar-brand-text">pyfsr 0.16.1</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Guides</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting-started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/authentication.html">Authentication</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/records.html">Working with Records</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/querying.html">Querying</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/module-admin.html">Module Editor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/module-field-schema.html">Module &amp; Field Schema Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/connectors.html">Connectors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/export-import.html">Configuration Export &amp; Import</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/playbook-authoring.html">Playbook Authoring &amp; Deployment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/playbook-yaml-reference.html">Playbook YAML Syntax Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/ai-agents.html">AI &amp; Agents</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/appliance-cli.html">Appliance Administration CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/repo-cli.html">Content Repository CLI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../guides/content-hub-mirror.html">Self-hosted Content Hub mirror</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../../reference.html">API Reference</a><input aria-label="Toggle navigation of API Reference" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../autoapi/pyfsr/client/index.html">pyfsr.client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../autoapi/pyfsr/records/index.html">pyfsr.records</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../autoapi/pyfsr/query/index.html">pyfsr.query</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../autoapi/pyfsr/pagination/index.html">pyfsr.pagination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../autoapi/pyfsr/fields/index.html">pyfsr.fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../autoapi/pyfsr/config/index.html">pyfsr.config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../autoapi/pyfsr/instances/index.html">pyfsr.instances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../autoapi/pyfsr/exceptions/index.html">pyfsr.exceptions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../../autoapi/pyfsr/api/index.html">pyfsr.api</a><input aria-label="Toggle navigation of pyfsr.api" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/actors/index.html">pyfsr.api.actors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/agents/index.html">pyfsr.api.agents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/ai/index.html">pyfsr.api.ai</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/alerts/index.html">pyfsr.api.alerts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/api_keys/index.html">pyfsr.api.api_keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/api_users/index.html">pyfsr.api.api_users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/app_config/index.html">pyfsr.api.app_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/attachments/index.html">pyfsr.api.attachments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/audit/index.html">pyfsr.api.audit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/auth_config/index.html">pyfsr.api.auth_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/base/index.html">pyfsr.api.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/comments/index.html">pyfsr.api.comments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/connectors/index.html">pyfsr.api.connectors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/content_hub/index.html">pyfsr.api.content_hub</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/export_config/index.html">pyfsr.api.export_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/export_templates/index.html">pyfsr.api.export_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/feeds/index.html">pyfsr.api.feeds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/import_config/index.html">pyfsr.api.import_config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/incidents/index.html">pyfsr.api.incidents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/manual_input/index.html">pyfsr.api.manual_input</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/modules/index.html">pyfsr.api.modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/modules_admin/index.html">pyfsr.api.modules_admin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/native_mcp/index.html">pyfsr.api.native_mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/notifications/index.html">pyfsr.api.notifications</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/picklists/index.html">pyfsr.api.picklists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/playbooks/index.html">pyfsr.api.playbooks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/reporting/index.html">pyfsr.api.reporting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/roles/index.html">pyfsr.api.roles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/routers/index.html">pyfsr.api.routers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/rules/index.html">pyfsr.api.rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/schedules/index.html">pyfsr.api.schedules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/search/index.html">pyfsr.api.search</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/solution_packs/index.html">pyfsr.api.solution_packs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/system/index.html">pyfsr.api.system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/system_queries/index.html">pyfsr.api.system_queries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/system_settings/index.html">pyfsr.api.system_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/tags/index.html">pyfsr.api.tags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/tasks/index.html">pyfsr.api.tasks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/taxii/index.html">pyfsr.api.taxii</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/teams/index.html">pyfsr.api.teams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/user_settings/index.html">pyfsr.api.user_settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/users/index.html">pyfsr.api.users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/view_templates/index.html">pyfsr.api.view_templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/views/index.html">pyfsr.api.views</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/wf_tools/index.html">pyfsr.api.wf_tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/widgets/index.html">pyfsr.api.widgets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/api/workflow_collections/index.html">pyfsr.api.workflow_collections</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../../autoapi/pyfsr/models/index.html">pyfsr.models</a><input aria-label="Toggle navigation of pyfsr.models" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/models/base/index.html">pyfsr.models.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/models/types/index.html">pyfsr.models.types</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../../autoapi/pyfsr/auth/index.html">pyfsr.auth</a><input aria-label="Toggle navigation of pyfsr.auth" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/auth/api_key/index.html">pyfsr.auth.api_key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/auth/base/index.html">pyfsr.auth.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/auth/user_pass/index.html">pyfsr.auth.user_pass</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../autoapi/pyfsr/authoring/index.html">pyfsr.authoring</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../../autoapi/pyfsr/agent/index.html">pyfsr.agent</a><input aria-label="Toggle navigation of pyfsr.agent" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../../../autoapi/pyfsr/agent/archetypes/index.html">pyfsr.agent.archetypes</a><input aria-label="Toggle navigation of pyfsr.agent.archetypes" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/agent/archetypes/harvest/index.html">pyfsr.agent.archetypes.harvest</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/agent/archetypes/record/index.html">pyfsr.agent.archetypes.record</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/agent/archetypes/router/index.html">pyfsr.agent.archetypes.router</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/agent/archetypes/store/index.html">pyfsr.agent.archetypes.store</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/agent/mcp/index.html">pyfsr.agent.mcp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/agent/tools/index.html">pyfsr.agent.tools</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/index.html">pyfsr.cli</a><input aria-label="Toggle navigation of pyfsr.cli" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/index.html">pyfsr.cli.appliance</a><input aria-label="Toggle navigation of pyfsr.cli.appliance" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/certs/index.html">pyfsr.cli.appliance.certs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/content_hub/index.html">pyfsr.cli.appliance.content_hub</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/db/index.html">pyfsr.cli.appliance.db</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/diagnose/index.html">pyfsr.cli.appliance.diagnose</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/es/index.html">pyfsr.cli.appliance.es</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/facts/index.html">pyfsr.cli.appliance.facts</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/ha/index.html">pyfsr.cli.appliance.ha</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/host/index.html">pyfsr.cli.appliance.host</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/info/index.html">pyfsr.cli.appliance.info</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/license/index.html">pyfsr.cli.appliance.license</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/logs/index.html">pyfsr.cli.appliance.logs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/mq/index.html">pyfsr.cli.appliance.mq</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html">pyfsr.cli.appliance.service</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/appliance/transport/index.html">pyfsr.cli.appliance.transport</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/playbook/index.html">pyfsr.cli.playbook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/repo/index.html">pyfsr.cli.repo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/cli/widget/index.html">pyfsr.cli.widget</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../autoapi/pyfsr/appliance/index.html">pyfsr.appliance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../autoapi/pyfsr/repo/index.html">pyfsr.repo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../autoapi/pyfsr/content_catalog/index.html">pyfsr.content_catalog</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../../reference-advanced.html">Advanced &amp; internal</a><input aria-label="Toggle navigation of Advanced &amp; internal" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/playbook_catalog/index.html">pyfsr.playbook_catalog</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/playbook_lint/index.html">pyfsr.playbook_lint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/playbook_match/index.html">pyfsr.playbook_match</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/concurrency/index.html">pyfsr.concurrency</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/projection/index.html">pyfsr.projection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/query_models/index.html">pyfsr.query_models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../../autoapi/pyfsr/spec/index.html">pyfsr.spec</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../../../autoapi/pyfsr/utils/index.html">pyfsr.utils</a><input aria-label="Toggle navigation of pyfsr.utils" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/utils/file_operations/index.html">pyfsr.utils.file_operations</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/utils/iri/index.html">pyfsr.utils.iri</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../autoapi/pyfsr/utils/validation/index.html">pyfsr.utils.validation</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference-models.html">Typed models</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributing.html">Contributing</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for pyfsr.cli.appliance.service</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;``pyfsr appliance service`` — systemd / cyops service verbs.</span>
+
+<span class="sd">Wraps ``csadm services`` plus a **liveness** probe that catches the failure</span>
+<span class="sd">``systemctl status`` misses: a service that is *active* but **wedged** (accepting</span>
+<span class="sd">connections but never responding). The probe curls canonical endpoints on-box with</span>
+<span class="sd">a hard timeout; HTTP 000 / a hang ⇒ &quot;active but wedged → restart&quot;.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">._text</span><span class="w"> </span><span class="kn">import</span> <span class="n">strip_ansi</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.transport</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transport</span>
+
+<span class="c1"># A `csadm services --status` line: &quot;name......[Status]   since &lt;when&gt;&quot;. The name</span>
+<span class="c1"># is dot-padded out to the status bracket; the trailing &quot;since ...&quot; is optional.</span>
+<span class="n">_STATUS_LINE</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^(?P&lt;name&gt;[A-Za-z0-9_.-]+?)\.*\[(?P&lt;status&gt;[^\]]+)\]\s*(?:since\s+(?P&lt;since&gt;.*\S))?\s*$&quot;</span><span class="p">)</span>
+
+<span class="c1"># csadm&#39;s `--{start,stop,restart}-service` verbs validate the name against the</span>
+<span class="c1"># box&#39;s service set (`modify_service_state` in /opt/cyops/adm/subcmd/services) and,</span>
+<span class="c1"># when it doesn&#39;t match, print this rejection and **exit 0** — a silent no-op. The</span>
+<span class="c1"># exit code is therefore meaningless for these verbs; the only reliable failure</span>
+<span class="c1"># signal is this text. (Live-verified on a 7.6.x appliance, June 2026.)</span>
+<span class="n">_CSADM_REJECT</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;can not be modified|can be used for following services&quot;</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">)</span>
+
+<span class="c1"># Canonical endpoints whose health reflects the core services (plan §service</span>
+<span class="c1"># liveness). Each is curled on-box against the local nginx with a short timeout.</span>
+<span class="c1"># (method, path, expected-up codes, label)</span>
+<span class="n">_PROBES</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s2">&quot;POST&quot;</span><span class="p">,</span> <span class="s2">&quot;/auth/authenticate&quot;</span><span class="p">,</span> <span class="p">{</span><span class="mi">400</span><span class="p">,</span> <span class="mi">401</span><span class="p">,</span> <span class="mi">200</span><span class="p">},</span> <span class="s2">&quot;auth (cyops-auth)&quot;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="s2">&quot;/auth/license?param=eula&quot;</span><span class="p">,</span> <span class="p">{</span><span class="mi">200</span><span class="p">,</span> <span class="mi">401</span><span class="p">},</span> <span class="s2">&quot;license (das)&quot;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="s2">&quot;/api/3&quot;</span><span class="p">,</span> <span class="p">{</span><span class="mi">200</span><span class="p">,</span> <span class="mi">401</span><span class="p">,</span> <span class="mi">503</span><span class="p">},</span> <span class="s2">&quot;api entrypoint&quot;</span><span class="p">),</span>
+<span class="p">]</span>
+
+<span class="c1"># A probe is &quot;wedged&quot; when curl returns 000 (no HTTP response / timeout) rather</span>
+<span class="c1"># than any real status code.</span>
+<span class="n">_NO_RESPONSE</span> <span class="o">=</span> <span class="mi">0</span>
+
+
+<div class="viewcode-block" id="ProbeResult">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ProbeResult">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ProbeResult</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<div class="viewcode-block" id="ProbeResult.label">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ProbeResult.label">[docs]</a>
+    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span></div>
+
+<div class="viewcode-block" id="ProbeResult.method">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ProbeResult.method">[docs]</a>
+    <span class="n">method</span><span class="p">:</span> <span class="nb">str</span></div>
+
+<div class="viewcode-block" id="ProbeResult.path">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ProbeResult.path">[docs]</a>
+    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span></div>
+
+<div class="viewcode-block" id="ProbeResult.code">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ProbeResult.code">[docs]</a>
+    <span class="n">code</span><span class="p">:</span> <span class="nb">int</span></div>
+
+<div class="viewcode-block" id="ProbeResult.verdict">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ProbeResult.verdict">[docs]</a>
+    <span class="n">verdict</span><span class="p">:</span> <span class="nb">str</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ServiceState">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceState">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ServiceState</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;One row of ``csadm services --status``, parsed and ANSI-stripped.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="ServiceState.name">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceState.name">[docs]</a>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span></div>
+
+<div class="viewcode-block" id="ServiceState.running">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceState.running">[docs]</a>
+    <span class="n">running</span><span class="p">:</span> <span class="nb">bool</span></div>
+
+<div class="viewcode-block" id="ServiceState.status">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceState.status">[docs]</a>
+    <span class="n">status</span><span class="p">:</span> <span class="nb">str</span>  <span class="c1"># the bracketed word verbatim, e.g. &quot;Running&quot; / &quot;Stopped&quot;</span></div>
+
+<div class="viewcode-block" id="ServiceState.since">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceState.since">[docs]</a>
+    <span class="n">since</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>  <span class="c1"># uptime anchor, e.g. &quot;Thu 2026-05-07 14:10:35 UTC&quot;</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="status">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.status">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">status</span><span class="p">(</span><span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raw ``csadm services --status`` output (optionally for one service).</span>
+
+<span class="sd">    Free-form, ANSI-coloured text — for a typed result use :func:`services`.</span>
+
+<span class="sd">    NB: ``csadm services --status`` has **no** ``--name`` flag; passing one is</span>
+<span class="sd">    silently ignored and the full list comes back (live-verified). So ``name``</span>
+<span class="sd">    filters the lines client-side here rather than being handed to csadm.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">transport</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="s2">&quot;csadm&quot;</span><span class="p">,</span> <span class="s2">&quot;services&quot;</span><span class="p">,</span> <span class="s2">&quot;--status&quot;</span><span class="p">],</span> <span class="n">sudo</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">out</span>
+    <span class="c1"># Filter on the parsed (ANSI-stripped) service name so the dot-padding and</span>
+    <span class="c1"># colour codes in the raw line don&#39;t defeat a plain substring match.</span>
+    <span class="n">kept</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">_STATUS_LINE</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">strip_ansi</span><span class="p">(</span><span class="n">line</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">m</span> <span class="ow">and</span> <span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="n">name</span><span class="p">:</span>
+            <span class="n">kept</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">kept</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="services">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.services">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">services</span><span class="p">(</span><span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">ServiceState</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parsed ``csadm services --status`` — a typed :class:`ServiceState` per service.</span>
+
+<span class="sd">    ``running`` is the useful boolean (``status == &quot;Running&quot;``); ``since`` is the</span>
+<span class="sd">    start time when present. Filter to one service with ``name``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">out</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ServiceState</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">strip_ansi</span><span class="p">(</span><span class="n">status</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="n">name</span><span class="p">))</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">_STATUS_LINE</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">m</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">st</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">ServiceState</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span> <span class="n">running</span><span class="o">=</span><span class="n">st</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;running&quot;</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="n">st</span><span class="p">,</span> <span class="n">since</span><span class="o">=</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s2">&quot;since&quot;</span><span class="p">))</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">out</span></div>
+
+
+
+<div class="viewcode-block" id="liveness">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.liveness">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">liveness</span><span class="p">(</span><span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">base</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;https://127.0.0.1&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">6.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">ProbeResult</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Probe canonical endpoints; flag *active-but-wedged* services.</span>
+
+<span class="sd">    Returns a list of :class:`ProbeResult`. ``code == 0`` (curl&#39;s ``000``) means</span>
+<span class="sd">    no HTTP response within the timeout — the wedge signal.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">results</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ProbeResult</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">method</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">up_codes</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">_PROBES</span><span class="p">:</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base</span><span class="si">}{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="c1"># -s silent, -k skip TLS verify (self-signed appliance cert), -o discard</span>
+        <span class="c1"># body, -w print only the status code, --max-time bounds a wedged box.</span>
+        <span class="n">argv</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="s2">&quot;curl&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;-sk&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;-o&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;/dev/null&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;-w&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;%</span><span class="si">{http_code}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;--max-time&quot;</span><span class="p">,</span>
+            <span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">timeout</span><span class="p">)),</span>
+            <span class="s2">&quot;-X&quot;</span><span class="p">,</span>
+            <span class="n">method</span><span class="p">,</span>
+            <span class="n">url</span><span class="p">,</span>
+        <span class="p">]</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="n">transport</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">argv</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span> <span class="o">+</span> <span class="mi">5</span><span class="p">)</span>
+        <span class="n">code</span> <span class="o">=</span> <span class="n">_parse_code</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">stdout</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">code</span> <span class="o">==</span> <span class="n">_NO_RESPONSE</span><span class="p">:</span>
+            <span class="n">verdict</span> <span class="o">=</span> <span class="s2">&quot;WEDGED (no response — restart candidate)&quot;</span>
+        <span class="k">elif</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">up_codes</span><span class="p">:</span>
+            <span class="n">verdict</span> <span class="o">=</span> <span class="s2">&quot;ok&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">verdict</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;unexpected (</span><span class="si">{</span><span class="n">code</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ProbeResult</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="n">label</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span> <span class="n">code</span><span class="o">=</span><span class="n">code</span><span class="p">,</span> <span class="n">verdict</span><span class="o">=</span><span class="n">verdict</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">results</span></div>
+
+
+
+<div class="viewcode-block" id="ServiceActionResult">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceActionResult">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ServiceActionResult</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Outcome of a service control action (restart/stop/start/kill).</span>
+
+<span class="sd">    ``ok`` is the useful field — the command exited 0. ``output`` keeps the raw</span>
+<span class="sd">    csadm/systemctl text (often empty on success) for diagnostics.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="ServiceActionResult.service">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceActionResult.service">[docs]</a>
+    <span class="n">service</span><span class="p">:</span> <span class="nb">str</span></div>
+
+<div class="viewcode-block" id="ServiceActionResult.action">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceActionResult.action">[docs]</a>
+    <span class="n">action</span><span class="p">:</span> <span class="nb">str</span></div>
+
+<div class="viewcode-block" id="ServiceActionResult.ok">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceActionResult.ok">[docs]</a>
+    <span class="n">ok</span><span class="p">:</span> <span class="nb">bool</span></div>
+
+<div class="viewcode-block" id="ServiceActionResult.output">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.ServiceActionResult.output">[docs]</a>
+    <span class="n">output</span><span class="p">:</span> <span class="nb">str</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">verdict</span> <span class="o">=</span> <span class="s2">&quot;ok&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ok</span> <span class="k">else</span> <span class="s2">&quot;FAILED&quot;</span>
+        <span class="n">detail</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; — </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">output</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">output</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">service</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">verdict</span><span class="si">}{</span><span class="n">detail</span><span class="si">}</span><span class="s2">&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="Listener">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.Listener">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Listener</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A listening TCP socket and its owning process (a row of ``ss -tlnp``).&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="Listener.local_address">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.Listener.local_address">[docs]</a>
+    <span class="n">local_address</span><span class="p">:</span> <span class="nb">str</span></div>
+
+<div class="viewcode-block" id="Listener.process">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.Listener.process">[docs]</a>
+    <span class="n">process</span><span class="p">:</span> <span class="nb">str</span></div>
+</div>
+
+
+
+<span class="c1"># Map a single-service action onto its csadm `--*-service` flag. Whole-stack</span>
+<span class="c1"># actions (restart/stop/start ALL) use the bare `--restart`/`--stop`/`--start`</span>
+<span class="c1"># flags instead — see :func:`restart_all` and friends.</span>
+<span class="n">_SERVICE_FLAG</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;restart&quot;</span><span class="p">:</span> <span class="s2">&quot;--restart-service&quot;</span><span class="p">,</span> <span class="s2">&quot;stop&quot;</span><span class="p">:</span> <span class="s2">&quot;--stop-service&quot;</span><span class="p">,</span> <span class="s2">&quot;start&quot;</span><span class="p">:</span> <span class="s2">&quot;--start-service&quot;</span><span class="p">}</span>
+<span class="n">_ALL_FLAG</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;restart&quot;</span><span class="p">:</span> <span class="s2">&quot;--restart&quot;</span><span class="p">,</span> <span class="s2">&quot;stop&quot;</span><span class="p">:</span> <span class="s2">&quot;--stop&quot;</span><span class="p">,</span> <span class="s2">&quot;start&quot;</span><span class="p">:</span> <span class="s2">&quot;--start&quot;</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_service_action</span><span class="p">(</span><span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ServiceActionResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run one csadm `--*-service` verb and decode its (unreliable) exit code.</span>
+
+<span class="sd">    csadm exits 0 even when it rejects the name as unmodifiable, so success is</span>
+<span class="sd">    ``res.ok`` AND the output not matching ``_CSADM_REJECT``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">transport</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="s2">&quot;csadm&quot;</span><span class="p">,</span> <span class="s2">&quot;services&quot;</span><span class="p">,</span> <span class="n">_SERVICE_FLAG</span><span class="p">[</span><span class="n">action</span><span class="p">],</span> <span class="n">name</span><span class="p">],</span> <span class="n">sudo</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">120</span><span class="p">)</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">stdout</span> <span class="ow">or</span> <span class="n">res</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+    <span class="n">ok</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">ok</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_CSADM_REJECT</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ServiceActionResult</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">ok</span><span class="o">=</span><span class="n">ok</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">text</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_all_action</span><span class="p">(</span><span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ServiceActionResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run a whole-stack csadm verb (``--restart``/`--stop``/`--start``).&quot;&quot;&quot;</span>
+    <span class="c1"># A full-stack bounce is serial (stop → sleep 5 → start, per service) so it can</span>
+    <span class="c1"># run minutes; give it a generous ceiling.</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">transport</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="s2">&quot;csadm&quot;</span><span class="p">,</span> <span class="s2">&quot;services&quot;</span><span class="p">,</span> <span class="n">_ALL_FLAG</span><span class="p">[</span><span class="n">action</span><span class="p">]],</span> <span class="n">sudo</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">600</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ServiceActionResult</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="s2">&quot;ALL&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">ok</span><span class="o">=</span><span class="n">res</span><span class="o">.</span><span class="n">ok</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">stdout</span> <span class="ow">or</span> <span class="n">res</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+
+
+<div class="viewcode-block" id="restart">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.restart">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">restart</span><span class="p">(</span><span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">yes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ServiceActionResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Restart a single cyops service via ``csadm services --restart-service``. Gated by ``yes``.</span>
+
+<span class="sd">    Use this — NOT :func:`restart_all` — for one service. The bare ``--restart``</span>
+<span class="sd">    flag (``restart_all``) bounces the WHOLE stack in order; ``--restart-service``</span>
+<span class="sd">    touches just ``name`` (stop → sleep 5 → start, per csadm).</span>
+
+<span class="sd">    csadm exits 0 even when it refuses an unknown/unmodifiable name (it prints an</span>
+<span class="sd">    ``ERROR: ... can not be modified`` hint and no-ops), so the returned ``ok``</span>
+<span class="sd">    folds that rejection text in — a typo&#39;d name yields ``ok=False``, not a false</span>
+<span class="sd">    success. (live-verified, see ``_CSADM_REJECT``.)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">yes</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">PermissionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;refusing to restart </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> without confirmation (pass --yes)&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_service_action</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="s2">&quot;restart&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="stop">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.stop">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">yes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ServiceActionResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Stop a single cyops service via ``csadm services --stop-service``. Gated by ``yes``.</span>
+
+<span class="sd">    Used to quiesce a worker (e.g. ``celeryd``) so a queue can be purged without it</span>
+<span class="sd">    re-draining mid-operation — see :func:`pyfsr.cli.appliance.mq.purge_workflows`.</span>
+<span class="sd">    Like :func:`restart`, a rejected name surfaces as ``ok=False`` despite csadm&#39;s</span>
+<span class="sd">    exit 0.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">yes</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">PermissionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;refusing to stop </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> without confirmation (pass --yes)&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_service_action</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="s2">&quot;stop&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="start">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.start">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ServiceActionResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Start a single cyops service via ``csadm services --start-service`` (recovery — not gated).&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_service_action</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="s2">&quot;start&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="restart_all">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.restart_all">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">restart_all</span><span class="p">(</span><span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">yes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ServiceActionResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Restart the WHOLE service stack in order via ``csadm services --restart``. Gated by ``yes``.</span>
+
+<span class="sd">    This is the full-stack bounce (stop-all → start-all), distinct from</span>
+<span class="sd">    :func:`restart` which restarts a single named service. Disruptive — every</span>
+<span class="sd">    service drops — so it is gated behind ``yes``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">yes</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">PermissionError</span><span class="p">(</span><span class="s2">&quot;refusing to restart ALL services without confirmation (pass --yes)&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_all_action</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="s2">&quot;restart&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="stop_all">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.stop_all">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">stop_all</span><span class="p">(</span><span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">yes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ServiceActionResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Stop the WHOLE service stack in order via ``csadm services --stop``. Gated by ``yes``.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">yes</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">PermissionError</span><span class="p">(</span><span class="s2">&quot;refusing to stop ALL services without confirmation (pass --yes)&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_all_action</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="s2">&quot;stop&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="start_all">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.start_all">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">start_all</span><span class="p">(</span><span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ServiceActionResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Start the WHOLE service stack in order via ``csadm services --start`` (recovery — not gated).&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_all_action</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="s2">&quot;start&quot;</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># systemctl actions that mutate a unit&#39;s run state — gated behind ``yes``. Read-only</span>
+<span class="c1"># actions (status/is-active/show) are always allowed.</span>
+<span class="n">_SYSTEMCTL_MUTATING</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;stop&quot;</span><span class="p">,</span> <span class="s2">&quot;kill&quot;</span><span class="p">,</span> <span class="s2">&quot;restart&quot;</span><span class="p">,</span> <span class="s2">&quot;start&quot;</span><span class="p">,</span> <span class="s2">&quot;reload&quot;</span><span class="p">})</span>
+
+
+<div class="viewcode-block" id="systemctl">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.systemctl">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">systemctl</span><span class="p">(</span>
+    <span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">,</span>
+    <span class="n">action</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">signal</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">yes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ServiceActionResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Drive systemd directly: ``systemctl &lt;action&gt; &lt;unit&gt;`` (sudo).</span>
+
+<span class="sd">    This is the forceful path that bypasses ``csadm`` orchestration — use it when a</span>
+<span class="sd">    unit is wedged and the graceful :func:`stop`/:func:`restart` won&#39;t take. ``kill``</span>
+<span class="sd">    sends ``SIGTERM`` by default; pass ``signal`` (e.g. ``&quot;SIGKILL&quot;``, ``&quot;9&quot;``) to</span>
+<span class="sd">    escalate. Mutating actions are gated by ``yes``; read-only ones (``status``,</span>
+<span class="sd">    ``is-active``, ``show``) run unconditionally.</span>
+
+<span class="sd">    Returns a :class:`ServiceActionResult`; for read-only actions ``output`` carries</span>
+<span class="sd">    the queried value (e.g. ``&quot;active&quot;`` from ``is-active``). Note ``unit`` is the</span>
+<span class="sd">    *systemd* unit name (e.g. ``celeryd.service``), not always the csadm label.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">_SYSTEMCTL_MUTATING</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">yes</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">PermissionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;refusing to </span><span class="si">{</span><span class="n">action</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">unit</span><span class="si">!r}</span><span class="s2"> without confirmation (pass --yes)&quot;</span><span class="p">)</span>
+    <span class="n">argv</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;systemctl&quot;</span><span class="p">,</span> <span class="n">action</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">action</span> <span class="o">==</span> <span class="s2">&quot;kill&quot;</span> <span class="ow">and</span> <span class="n">signal</span><span class="p">:</span>
+        <span class="c1"># systemd takes the signal as --signal=SIG; accepts names or numbers.</span>
+        <span class="n">argv</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;--signal=</span><span class="si">{</span><span class="n">signal</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">argv</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">unit</span><span class="p">)</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">transport</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">argv</span><span class="p">,</span> <span class="n">sudo</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">120</span><span class="p">)</span>
+    <span class="c1"># `systemctl stop/kill` emit nothing on success; surface stderr so failures</span>
+    <span class="c1"># (no such unit, permission denied) aren&#39;t swallowed into an empty string.</span>
+    <span class="k">return</span> <span class="n">ServiceActionResult</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">unit</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">ok</span><span class="o">=</span><span class="n">res</span><span class="o">.</span><span class="n">ok</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">stdout</span> <span class="ow">or</span> <span class="n">res</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span></div>
+
+
+
+<div class="viewcode-block" id="listeners">
+<a class="viewcode-back" href="../../../../autoapi/pyfsr/cli/appliance/service/index.html#pyfsr.cli.appliance.service.listeners">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">listeners</span><span class="p">(</span><span class="n">transport</span><span class="p">:</span> <span class="n">Transport</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Listener</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Listening TCP sockets with the owning process (parsed ``ss -tlnp``).&quot;&quot;&quot;</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">transport</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="s2">&quot;ss&quot;</span><span class="p">,</span> <span class="s2">&quot;-tlnp&quot;</span><span class="p">],</span> <span class="n">sudo</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">out</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Listener</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">res</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()[</span><span class="mi">1</span><span class="p">:]:</span>  <span class="c1"># skip header</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">5</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">proc</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="s2">&quot;users:&quot;</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Listener</span><span class="p">(</span><span class="n">local_address</span><span class="o">=</span><span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">process</span><span class="o">=</span><span class="n">proc</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">out</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_parse_code</span><span class="p">(</span><span class="n">stdout</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">stdout</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="ow">or</span> <span class="s2">&quot;0&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span>
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Dylan Spille
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/ftnt-dspille/pyfsr" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../../_static/documentation_options.js?v=56c55dd0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../../_static/copybutton.js?v=fd10adb8"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

@@ -1,0 +1,173 @@
+pyfsr.config
+============
+
+.. py:module:: pyfsr.config
+
+.. autoapi-nested-parse::
+
+   Environment-driven client configuration.
+
+   ``EnvConfig.from_env()`` reads the ``FSR_*`` environment variables and
+   ``EnvConfig.client()`` builds a ready :class:`~pyfsr.client.FortiSOAR` from them,
+   so an app (or the bundled MCP server) never hand-wires host/auth/port::
+
+       from pyfsr.config import EnvConfig
+       client = EnvConfig.from_env().client()
+
+   Recognized variables:
+
+   - ``FSR_BASE_URL`` — appliance host or URL (required; ``FSR_HOST`` also accepted).
+   - ``FSR_API_KEY`` — API-key auth, or ``FSR_USERNAME`` + ``FSR_PASSWORD``.
+   - ``FSR_PORT`` — optional port override.
+   - ``FSR_VERIFY_SSL`` — ``false``/``0``/``no``/``off`` disables TLS verification.
+   - ``FSR_SUPPRESS_INSECURE_WARNINGS`` — silence urllib3 warnings when SSL is off.
+   - ``FSR_TIMEOUT`` — per-request timeout in seconds (default 30).
+
+   This is the generic, infra-free counterpart of fsrpb's ``probes/_env.py`` (which
+   also carries SSH/e2e knobs that don't belong in the transport SDK).
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.config.EnvConfig
+
+
+Module Contents
+---------------
+
+.. py:class:: EnvConfig(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Resolved client configuration (host, auth, transport knobs).
+
+   Build it with :meth:`from_env`, then call :meth:`client` for a
+   :class:`~pyfsr.client.FortiSOAR`. ``auth`` is the value passed straight to
+   the client: an API-key string, or a ``(username, password)`` tuple.
+
+   >>> cfg = EnvConfig.from_env({
+   ...     "FSR_BASE_URL": "https://soar.example.com",
+   ...     "FSR_API_KEY": "key-123",
+   ... })
+   >>> cfg.base_url, cfg.auth, cfg.verify_ssl, cfg.timeout
+   ('https://soar.example.com', 'key-123', True, 30)
+   >>> type(cfg.auth).__name__          # a lone key resolves to a str
+   'str'
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: base_url
+      :type:  str
+
+
+   .. py:attribute:: auth
+      :type:  str | tuple[str, str]
+
+
+   .. py:attribute:: verify_ssl
+      :type:  bool
+      :value: True
+
+
+
+   .. py:attribute:: suppress_insecure_warnings
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: port
+      :type:  int | None
+      :value: None
+
+
+
+   .. py:attribute:: timeout
+      :type:  int
+      :value: 30
+
+
+
+   .. py:method:: from_env(env: dict[str, str] | None = None) -> EnvConfig
+      :classmethod:
+
+
+      Build configuration from ``FSR_*`` environment variables.
+
+      Raises ``ValueError`` naming **every** missing required key at once
+      (host and/or auth) so a misconfigured environment is fixed in one pass.
+      Pass ``env`` to read from a dict instead of ``os.environ``.
+
+
+
+   .. py:method:: from_env_file(path: str | pathlib.Path, *, override: bool = False) -> EnvConfig
+      :classmethod:
+
+
+      Build configuration from a ``KEY=VALUE`` env file plus ``os.environ``.
+
+      Real environment variables win over the file unless ``override=True``.
+      This loads only the ``FSR_*`` keys this class understands; it is **not** a
+      general ``.env`` loader — for that, use ``python-dotenv`` and then call
+      :meth:`from_env`.
+
+
+
+   .. py:method:: from_config_file(path: str | pathlib.Path) -> EnvConfig
+      :classmethod:
+
+
+      Build configuration from a TOML file (the ``[fortisoar]`` layout).
+
+      Mirrors the ``config.toml`` used by the examples::
+
+          [fortisoar]
+          base_url = "https://soar.example.com"
+          verify_ssl = false
+
+          [fortisoar.auth]
+          type = "user_pass"   # or "api_key"
+          username = "csadmin"
+          password = "..."
+          # key = "..."        # when type = "api_key"
+
+
+
+   .. py:method:: from_mapping(data: dict[str, Any], *, source: str = '<mapping>') -> EnvConfig
+      :classmethod:
+
+
+      Build configuration from an already-parsed ``[fortisoar]`` mapping.
+
+      Accepts either the full document (with a top-level ``fortisoar`` table) or
+      the inner table directly, so callers holding a sub-table — e.g. one entry
+      of an instance registry — can reuse the same auth/host parsing as
+      :meth:`from_config_file` without re-reading a file. ``source`` only labels
+      error messages.
+
+
+
+   .. py:method:: client(**overrides: Any) -> pyfsr.client.FortiSOAR
+
+      Construct a :class:`~pyfsr.client.FortiSOAR` from this config.
+
+      Any keyword in ``overrides`` is passed through to the client constructor,
+      taking precedence over the resolved values.
+
+      The resolved ``auth`` union is translated into the client's
+      non-deprecated keyword form (``token`` for an API-key string,
+      ``username``/``password`` for a credential tuple) rather than the legacy
+      ``auth`` parameter, so the env/config-file convenience path doesn't trip
+      the ``auth`` deprecation warning.
+
+
+
