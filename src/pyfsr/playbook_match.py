@@ -11,19 +11,25 @@ column matched by substring:
   * **quantities** -- "exactly 2 set-variable steps and at least 1 code-snippet".
   * **parent/child joins** -- "a manual playbook whose referenced child blocks an
     IP".
+  * **trigger metadata** -- "manual playbooks tied to the ``alerts`` module", and
+    surfacing the Execute-menu button label (:func:`manual_on` /
+    :func:`trigger_label` / :func:`trigger_resources`).
 
 This module parses each playbook's steps into :class:`StepInfo` and evaluates
 composable predicates against the parsed shape. The pure functions here are
 appliance-free (unit-testable on fixture dicts); ``PlaybooksAPI`` wires them
-to live fetches via ``match`` / ``match_across``.
+to live fetches via ``match`` / ``match_across`` / ``manual_on_module``.
 
 Example::
 
-    from pyfsr.playbook_match import step, count, trigger, all_of
+    from pyfsr.playbook_match import step, count, trigger, all_of, manual_on
     # 2 set-variable steps AND exactly 1 code-snippet:
     pred = all_of(count(step(step_type="set_variable"), n=2),
                   count(step(step_type="code_snippet"), n=1))
     hits = client.playbooks.match(pred)
+    # manual playbooks tied to the alerts module, with their button labels:
+    for pb in client.playbooks.manual_on_module("alerts"):
+        print(pb["label"], "-", pb["name"])
 """
 
 from __future__ import annotations
@@ -203,6 +209,69 @@ def trigger(trigger_type: str) -> PlaybookPredicate:
         if pb.trigger_type is None:
             return False
         return pb.trigger_type.lower() == want or pb.trigger_type == trigger_type
+
+    return _pred
+
+
+def trigger_step(pb: ParsedPlaybook) -> StepInfo | None:
+    """The playbook's start/trigger step (the first ``cybersponse.*`` step).
+
+    The trigger step carries the playbook's activation metadata in its
+    ``arguments``: ``resources`` (the modules it's tied to), ``title`` (the
+    Execute-menu button label), and ``executeButtonText`` (the manual-input
+    dialog button). Returns ``None`` for a definition with no recognized trigger
+    step (e.g. fetched without relationships, or malformed).
+    """
+    for s in pb.steps:
+        if s.step_type_raw and s.step_type_raw.startswith("cybersponse."):
+            return s
+    return None
+
+
+def trigger_label(pb: ParsedPlaybook) -> str | None:
+    """The UI label shown for a manual playbook's Execute-menu entry.
+
+    A manual trigger's display label is its ``arguments.title`` when set,
+    falling back to the playbook ``name``. Returns ``None`` only when neither
+    is present (a definition with no trigger step and no name).
+    """
+    ts = trigger_step(pb)
+    title = None
+    if ts is not None and isinstance(ts.arguments, dict):
+        title = ts.arguments.get("title")
+    return title or pb.name
+
+
+def trigger_resources(pb: ParsedPlaybook) -> list[str]:
+    """The module name-slugs a manual trigger is tied to (``arguments.resources``).
+
+    Live-verified: the list holds module names like ``"alerts"``, ``"incidents"``,
+    ``"threat_intel_feeds"`` -- not IRIs. Empty for a trigger with no module tie
+    (or no trigger step); a manual playbook started only from the playbook page,
+    not a module's Execute menu, has no ``resources``.
+    """
+    ts = trigger_step(pb)
+    if ts is None:
+        return []
+    res = ts.arguments.get("resources") if isinstance(ts.arguments, dict) else None
+    return [r for r in (res or []) if isinstance(r, str)]
+
+
+def manual_on(module: str) -> PlaybookPredicate:
+    """True when the playbook is a manual trigger tied to ``module``.
+
+    ``module`` is matched case-insensitively against the trigger step's
+    ``arguments.resources`` list (module name-slugs like ``"alerts"`` or
+    ``"incidents"``). A manual playbook with no ``resources`` (one started only
+    from the playbook page, not a module's Execute menu) never matches.
+    """
+    want = module.lower()
+    is_manual = trigger("manual")
+
+    def _pred(pb: ParsedPlaybook) -> bool:
+        if not is_manual(pb):
+            return False
+        return any(r.lower() == want for r in trigger_resources(pb))
 
     return _pred
 

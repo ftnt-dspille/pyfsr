@@ -27,9 +27,10 @@ Example:
 
 from __future__ import annotations
 
-from typing import Any, Literal
+import builtins
+from typing import Any, Literal, overload
 
-from ..models._system import ManualInput, ManualInputResume
+from ..models._system import ManualInput, ManualInputOption, ManualInputResume
 from ..pagination import paginate_offset
 from ..utils.iri import uuid_from_iri
 from .base import BaseAPI
@@ -50,6 +51,42 @@ class ManualInputAPI(BaseAPI):
     # author sets a real title. Titles are also not unique across runs, so
     # prefer :meth:`pending_for_run` (a run-scoped join) when you hold a
     # ``task_id``; :meth:`answer` (``by_title=``) is the best-effort shortcut.
+    @overload
+    def list(
+        self,
+        *,
+        assigned_to: AssignedTo = ...,
+        is_approval: bool | None = ...,
+        unauthenticated_input: bool = ...,
+        ordering: str = ...,
+        limit: int | None = ...,
+        offset: int = ...,
+        typed: Literal[True] = ...,
+    ) -> builtins.list[ManualInput]: ...
+    @overload
+    def list(
+        self,
+        *,
+        assigned_to: AssignedTo = ...,
+        is_approval: bool | None = ...,
+        unauthenticated_input: bool = ...,
+        ordering: str = ...,
+        limit: int | None = ...,
+        offset: int = ...,
+        typed: Literal[False],
+    ) -> builtins.list[dict[str, Any]]: ...
+    @overload
+    def list(
+        self,
+        *,
+        assigned_to: AssignedTo = ...,
+        is_approval: bool | None = ...,
+        unauthenticated_input: bool = ...,
+        ordering: str = ...,
+        limit: int | None = ...,
+        offset: int = ...,
+        typed: bool = ...,
+    ) -> builtins.list[ManualInput] | builtins.list[dict[str, Any]]: ...
     def list(
         self,
         *,
@@ -60,7 +97,7 @@ class ManualInputAPI(BaseAPI):
         limit: int | None = None,
         offset: int = 0,
         typed: bool = True,
-    ) -> list[ManualInput] | list[dict[str, Any]]:
+    ) -> builtins.list[ManualInput] | builtins.list[dict[str, Any]]:
         """Return pending manual inputs in the given assignment scope.
 
         Args:
@@ -119,7 +156,7 @@ class ManualInputAPI(BaseAPI):
         limit: int | None = None,
         offset: int = 0,
         typed: bool = True,
-    ) -> list[ManualInput] | list[dict[str, Any]]:
+    ) -> builtins.list[ManualInput] | builtins.list[dict[str, Any]]:
         """Pending manual inputs for one playbook run, keyed by its ``task_id``.
 
         Resolves ``task_id`` -> the run's primary key, then lists the
@@ -230,11 +267,38 @@ class ManualInputAPI(BaseAPI):
             return int(resp.get("hydra:totalItems") or 0)
         return 0
 
+    @overload
     def retrieve(
         self,
         input_id: int | str,
         *,
-        owners: str | list[str] | None = None,
+        owners: str | builtins.list[str] | None = ...,
+        unauthenticated_input: bool = ...,
+        typed: Literal[True] = ...,
+    ) -> ManualInput: ...
+    @overload
+    def retrieve(
+        self,
+        input_id: int | str,
+        *,
+        owners: str | builtins.list[str] | None = ...,
+        unauthenticated_input: bool = ...,
+        typed: Literal[False],
+    ) -> dict[str, Any]: ...
+    @overload
+    def retrieve(
+        self,
+        input_id: int | str,
+        *,
+        owners: str | builtins.list[str] | None = ...,
+        unauthenticated_input: bool = ...,
+        typed: bool = ...,
+    ) -> ManualInput | dict[str, Any]: ...
+    def retrieve(
+        self,
+        input_id: int | str,
+        *,
+        owners: str | builtins.list[str] | None = None,
         unauthenticated_input: bool = False,
         typed: bool = True,
     ) -> ManualInput | dict[str, Any]:
@@ -427,8 +491,10 @@ class ManualInputAPI(BaseAPI):
 
         user_iri = user or self._resolve_user_iri()
 
+        assert input_id is not None  # resolved above from by_title or passed directly
         full = self.retrieve(input_id, owners=user_iri)
-        options = (full.response_mapping or {}).get("options") or []
+        assert isinstance(full, ManualInput)
+        options = (full.response_mapping.options if full.response_mapping else None) or []
         if not options:
             raise LookupError(f"manual input {input_id} exposes no response options")
         opt = self._pick_option(options, option)
@@ -449,6 +515,8 @@ class ManualInputAPI(BaseAPI):
         if inputs is None and value is not None:
             inputs = self._map_scalar(full, value)
 
+        assert full.workflow is not None  # retrieve always populates the numeric run id
+        assert full.step_id is not None
         return self.resume(
             full.workflow,
             step_iri=step_iri,
@@ -471,7 +539,10 @@ class ManualInputAPI(BaseAPI):
         return members[0]["@id"]
 
     @staticmethod
-    def _pick_option(options: list[dict[str, Any]], option: int | str) -> dict[str, Any]:
+    def _pick_option(
+        options: builtins.list[dict[str, Any]] | builtins.list[ManualInputOption],
+        option: int | str,
+    ) -> dict[str, Any] | ManualInputOption:
         if isinstance(option, int):
             if not -len(options) <= option < len(options):
                 raise IndexError(f"option index {option} out of range (input has {len(options)} option(s))")
@@ -484,8 +555,9 @@ class ManualInputAPI(BaseAPI):
 
     @staticmethod
     def _map_scalar(full: ManualInput, value: Any) -> dict[str, Any]:
-        variables = ((full.input or {}).get("schema") or {}).get("inputVariables") or []
-        names = [v.get("name") for v in variables if v.get("name")]
+        schema_ = full.input.schema_ if full.input else None
+        variables = (schema_.inputVariables if schema_ else None) or []
+        names = [v.name for v in variables if v.name]
         if len(names) != 1:
             raise ValueError(
                 f"prompt declares {len(names)} input variable(s) ({names}); pass a full "
@@ -509,7 +581,7 @@ class ManualInputAPI(BaseAPI):
         self.client.delete(f"{_BASE}{input_id}/", params={"format": "json"})
 
     @staticmethod
-    def _members(resp: Any) -> list[dict[str, Any]]:
+    def _members(resp: Any) -> builtins.list[dict[str, Any]]:
         if isinstance(resp, dict):
             return resp.get("hydra:member") or resp.get("results") or []
         return resp or []

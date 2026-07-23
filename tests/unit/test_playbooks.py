@@ -409,6 +409,96 @@ def test_find_rejects_multiple_argument_substring_filters():
         PlaybooksAPI(c).find(uses_connector="fortigate", route="x")
 
 
+# ----------------------------------------------------------- manual_on_module
+def test_manual_on_module_builds_server_side_contains_query():
+    """manual_on_module() pushes the resource filter to the server via a JSON
+    containment query (``triggerStep.arguments contains {"resources": [mod]}``)
+    on the POST query endpoint -- not fetch-all + client-side filtering."""
+    client = _QueryClient([])
+    PlaybooksAPI(client).manual_on_module("alerts")
+    body, params = client.calls[-1]
+    filters = body.get("filters", [])
+    # manual trigger filter
+    ts_filter = next(f for f in filters if f.get("field") == "triggerStep.stepType.name")
+    assert ts_filter["operator"] == "eq"
+    assert ts_filter["value"] == "cybersponse.action"
+    # resources containment filter
+    res_filter = next(f for f in filters if f.get("field") == "triggerStep.arguments")
+    assert res_filter["operator"] == "contains"
+    assert res_filter["value"] == {"resources": ["alerts"]}
+    # relationships inlined + limit pushed
+    assert params.get("$relationships") == "true"
+    assert params.get("$limit") == 2000
+
+
+def test_manual_on_module_active_filter():
+    client = _QueryClient([])
+    PlaybooksAPI(client).manual_on_module("alerts", active=True)
+    body, _ = client.calls[-1]
+    active_filter = next(f for f in body["filters"] if f.get("field") == "isActive")
+    assert active_filter["value"] is True
+
+
+def test_manual_on_module_extracts_label_name_and_resources():
+    """From the server-filtered results, manual_on_module() surfaces the
+    Execute-menu label (trigger.title, else playbook name), the manual-input
+    dialog button, and every tied module."""
+    workflows = [
+        {
+            "uuid": "w-1",
+            "name": "Get IP Reputation",
+            "steps": [
+                {
+                    "name": "Start",
+                    "stepType": {"name": "cybersponse.action"},
+                    "arguments": {
+                        "title": "VirusTotal: Get IP Reputation",
+                        "executeButtonText": "Execute",
+                        "resources": ["alerts"],
+                    },
+                },
+            ],
+        },
+        {
+            "uuid": "w-2",
+            "name": "Get Industry List",
+            "steps": [
+                {
+                    "name": "Start",
+                    "stepType": {"name": "cybersponse.action"},
+                    "arguments": {"executeButtonText": "Execute", "resources": ["alerts", "incidents"]},
+                },
+            ],
+        },
+    ]
+    out = PlaybooksAPI(_QueryClient(workflows)).manual_on_module("alerts")
+    by_name = {r["name"]: r for r in out}
+    assert set(by_name) == {"Get IP Reputation", "Get Industry List"}
+    # title present -> label is the trigger step's title
+    assert by_name["Get IP Reputation"]["label"] == "VirusTotal: Get IP Reputation"
+    # no title -> label falls back to the playbook name
+    assert by_name["Get Industry List"]["label"] == "Get Industry List"
+    assert by_name["Get Industry List"]["resources"] == ["alerts", "incidents"]
+    assert by_name["Get IP Reputation"]["execute_button_text"] == "Execute"
+
+
+def test_manual_on_module_rejects_empty_module():
+    with pytest.raises(ValueError, match="non-empty module"):
+        PlaybooksAPI(CrudClient()).manual_on_module("   ")
+
+
+class _QueryClient:
+    """Returns a fixed workflow list for POST /api/query/workflows."""
+
+    def __init__(self, workflows):
+        self.workflows = workflows
+        self.calls = []
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        self.calls.append((data or {}, params or {}))
+        return {"hydra:member": self.workflows, "hydra:totalItems": len(self.workflows)}
+
+
 def test_get_definition_fetches_one_workflow():
     class _DefinitionClient(CrudClient):
         def get(self, endpoint, params=None, **kw):
