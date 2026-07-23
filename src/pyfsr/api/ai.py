@@ -35,7 +35,8 @@ start investigation                               ``POST /api/ai/triage/alert``
 find an alert's current investigation             read ``alert["triagetaskid"]``
 poll status                                       ``GET  /api/ai/agents/{task_id}/status``
 fetch result/verdict                              ``GET  /api/ai/agents/{task_id}/result``
-run one agent                                     ``POST /api/ai/triage/{agent_name}/trigger``
+run one agent                                     ``POST /api/ai/agents/{agent_name}/trigger``
+read one agent's input contract                   ``GET  /api/ai/agent/{name}/{version}`` (``inputformat``)
 submit verdict feedback                           ``POST /api/ai/agents/{task_id}/acceptance``
 list reasoning profiles                           ``GET  /api/ai/llm/config``
 list providers                                    ``GET  /api/ai/llm/allowed-providers``
@@ -90,6 +91,7 @@ from ..models._ai import (
     AgentConfig,
     AgentConfigDTO,
     AgentRecord,
+    AgentRunResult,
     ConnectorMcpCandidates,
     InvestigationHandle,
     InvestigationQuestion,
@@ -424,14 +426,125 @@ class AIApi(BaseAPI):
             result.task_id = task_id
         return result
 
-    def run_agent(self, agent_name: str, data: dict[str, Any]) -> InvestigationHandle:
+    def agent_input_schema(self, agent_name: str, version: str = "1.0.0") -> dict[str, Any]:
+        """Return an agent's declared input contract (its ``inputformat``).
+
+        Every agent publishes the exact keys :meth:`run_agent` expects, with per-key
+        ``required`` flags, enums and examples — so you never have to guess the payload.
+        The shape varies by agent: ``ioc-enrichment`` wants ``{"question", "ioc":
+        [{"type", "value"}]}``, ``alert-investigation`` wants ``{"data": <raw alert>}``.
+
+        Example:
+            >>> schema = client.ai.agent_input_schema("ioc-enrichment")  # doctest: +SKIP
+            >>> sorted(schema)  # doctest: +SKIP
+            ['ioc', 'question']
+        """
+        agent = self.get_agent(agent_name, version)
+        raw = agent.inputformat if isinstance(agent.inputformat, dict) else {}
+        return dict(raw)
+
+    @staticmethod
+    def _missing_required_inputs(schema: dict[str, Any], data: dict[str, Any]) -> list[str]:
+        """Names of ``required`` keys in ``schema`` that ``data`` does not supply.
+
+        Only entries whose spec is a dict carrying ``required: true`` are enforced —
+        several agents declare their inputs as plain strings (a description, with no
+        required flag), and those are advisory only.
+        """
+        return [
+            key for key, spec in schema.items() if isinstance(spec, dict) and spec.get("required") and key not in data
+        ]
+
+    def run_agent(
+        self,
+        agent_name: str,
+        data: dict[str, Any],
+        *,
+        version: str = "1.0.0",
+        validate: bool = True,
+        wait: bool = False,
+        interval: float = 5.0,
+        timeout: float = 600.0,
+    ) -> InvestigationHandle | AgentRunResult:
         """Trigger a single named agent (e.g. ``"ioc-enrichment"``) directly.
 
-        Returns the ``{"task_id", "status"}`` handle; poll with
-        :meth:`get_status` / :meth:`get_result` exactly like an investigation.
+        Unlike :meth:`investigate_alert`, this runs *one* agent and answers one
+        question — no hypothesis/planning/verdict pipeline. ``data`` is the agent's
+        own input contract; fetch it with :meth:`agent_input_schema`.
+
+        Args:
+            agent_name: installed agent name, e.g. ``"ioc-enrichment"``.
+            data: payload matching the agent's ``inputformat``.
+            version: agent version to validate ``data`` against (default ``"1.0.0"``).
+            validate: when True (default), check ``data`` against the agent's declared
+                required keys and raise :class:`ValueError` before spending an LLM call.
+                Set False to skip the extra ``GET /api/ai/agent/{name}/{version}``.
+            wait: block until the run reaches a terminal status and return the result.
+            interval: seconds between status polls when ``wait=True``.
+            timeout: give up polling after this many seconds when ``wait=True``.
+
+        Returns:
+            An :class:`~pyfsr.models.InvestigationHandle` (``{"task_id", "status"}``),
+            or an :class:`~pyfsr.models.AgentRunResult` when ``wait=True``.
+
+        Raises:
+            ValueError: ``validate=True`` and ``data`` omits a required input key.
+
+        Example:
+            >>> result = client.ai.run_agent(  # doctest: +SKIP
+            ...     "ioc-enrichment",
+            ...     {"question": "Is this IP known malicious?",
+            ...      "ioc": [{"type": "IP Address", "value": "8.8.8.8"}]},
+            ...     wait=True,
+            ... )
+            >>> result.answer, result.confidence  # doctest: +SKIP
+            ('No', '90%')
         """
-        resp = self.client.post(f"/api/ai/triage/{agent_name}/trigger", data=data)
-        return InvestigationHandle.model_validate(resp if isinstance(resp, dict) else {})
+        if validate:
+            missing = self._missing_required_inputs(self.agent_input_schema(agent_name, version), data)
+            if missing:
+                raise ValueError(
+                    f"agent {agent_name!r} requires input key(s) {missing} — "
+                    f"see client.ai.agent_input_schema({agent_name!r}) for the full contract"
+                )
+        # NOTE: the trigger must go to /api/ai/agents/... (plural). The fsr-ai service
+        # mounts the same router under both /ai/triage and /ai/agents, but the PHP
+        # front door only authorises `^agents?/(.*)/trigger` — a POST to
+        # /api/ai/triage/{name}/trigger matches no permission group and is rejected
+        # with a bare "Access Denied" regardless of the caller's role.
+        resp = self.client.post(f"/api/ai/agents/{agent_name}/trigger", data=data)
+        handle = InvestigationHandle.model_validate(resp if isinstance(resp, dict) else {})
+        if not wait or not handle.task_id:
+            return handle
+        return self.wait_for_agent_result(handle.task_id, interval=interval, timeout=timeout)
+
+    def get_agent_result(self, task_id: str) -> AgentRunResult:
+        """Fetch a single-agent run's result (``answer`` / ``evidence`` / ``confidence``).
+
+        Same endpoint as :meth:`get_result`, typed for the single-agent shape — use
+        this for :meth:`run_agent` tasks and :meth:`get_result` for investigations.
+        """
+        resp = self.client.get(f"/api/ai/agents/{task_id}/result")
+        return AgentRunResult.model_validate(resp if isinstance(resp, dict) else {})
+
+    def wait_for_agent_result(self, task_id: str, *, interval: float = 5.0, timeout: float = 600.0) -> AgentRunResult:
+        """Poll a single-agent task to a terminal status, then return its result.
+
+        Mirrors :meth:`wait_for_result` (which returns the investigation shape). On
+        timeout the latest result is returned with a non-terminal ``status`` rather
+        than raising — check ``result.status`` before trusting ``answer``.
+        """
+        deadline = time.monotonic() + timeout
+        status = self.get_status(task_id)
+        while status not in TERMINAL_STATUSES and time.monotonic() < deadline:
+            time.sleep(interval)
+            status = self.get_status(task_id)
+        result = self.get_agent_result(task_id)
+        if not result.status:
+            result.status = status
+        if not result.task_id:
+            result.task_id = task_id
+        return result
 
     def submit_feedback(self, task_id: str, feedback: dict[str, Any]) -> dict[str, Any]:
         """Submit analyst feedback / acceptance on a triage verdict."""

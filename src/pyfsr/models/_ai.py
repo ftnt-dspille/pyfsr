@@ -242,6 +242,26 @@ class InvestigationResult(_Lenient):
     logs: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class AgentRunResult(_Lenient):
+    """Result of one *single-agent* run (:meth:`~pyfsr.api.ai.AIApi.run_agent`).
+
+    A single agent answers one question; it does not run the investigation
+    pipeline, so this is a different shape from :class:`InvestigationResult` —
+    the keys mirror the agent's own ``outputformat`` (``answer`` / ``evidence`` /
+    ``confidence``) rather than ``summary``/``hypotheses``. ``phases`` is present
+    but empty on a single-agent run; it is only populated for a full
+    investigation. Live-verified on 8.0.
+    """
+
+    task_id: str | None = None
+    status: str | None = None
+    answer: Any | None = None
+    evidence: Any | None = None
+    confidence: str | None = None
+    logs: list[dict[str, Any]] = Field(default_factory=list)
+    phases: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class InvestigationQuestion(_Lenient):
     """One question/evidence entry — see :meth:`~pyfsr.api.ai.AIApi.investigation_questions`."""
 

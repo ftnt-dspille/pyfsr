@@ -269,6 +269,48 @@ trimmed (one representative finding/hypothesis/log; all nine phase states kept):
 'Preserve forensic evidence...'
 ```
 
+### Running a single agent
+
+An investigation runs the whole pipeline. When you only need one question
+answered — enrich this indicator, query the SIEM, look up a ticket — call the
+agent directly with `run_agent`. It is far cheaper, and returns the agent's own
+`outputformat` (`answer` / `evidence` / `confidence`) rather than an
+investigation's `summary`/`hypotheses`.
+
+You never have to guess the payload: every agent publishes its input contract,
+and `run_agent` validates against it before spending an LLM call.
+
+```{doctest}
+>>> schema = client.ai.agent_input_schema("ioc-enrichment")   # doctest: +SKIP
+>>> sorted(schema)                                            # doctest: +SKIP
+['ioc', 'question']
+>>> result = client.ai.run_agent(                             # doctest: +SKIP
+...     "ioc-enrichment",
+...     {"question": "Is this IP known to be malicious?",
+...      "ioc": [{"type": "IP Address", "value": "8.8.8.8"}]},
+...     wait=True,
+... )
+>>> result.answer, result.confidence                          # doctest: +SKIP
+('No', '95%')
+```
+
+Omit a required key and it fails locally, naming the key, without calling the
+API. Pass `validate=False` to skip the schema lookup when you already know the
+shape.
+
+Two things that bite:
+
+- The trigger goes to `/api/ai/agents/{name}/trigger` (**plural**). The service
+  mounts the same router under `/ai/triage` too, but the front door only
+  authorises the `agents` form — the `triage` form is rejected with a bare
+  `Access Denied` no matter what role you hold.
+- The caller needs `execute.ai_agents` (and `read.ai_agents` to read the input
+  schema). A missing permission looks identical to a wrong path.
+
+With `wait=True`, a timeout returns the latest result with a non-terminal
+`status` rather than raising — check `result.status` before trusting `answer`.
+See [`examples/run_single_ai_agent.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/run_single_ai_agent.py).
+
 ## Use case: triage an alert end-to-end
 
 A SOC analyst asks an agent *"Triage the latest critical alert and tell me if

@@ -81,6 +81,7 @@ docstring states which it expects.
 | [`register_and_call_public_mcp_server.py`](register_and_call_public_mcp_server.py) | Register an *external* MCP server (public DeepWiki) with FortiSOAR and call its tools | 🔌 |
 | [`fortisiem_mcp_setup_and_test.py`](fortisiem_mcp_setup_and_test.py) | FortiSIEM ↔ FortiAI MCP: one-file setup + test — register the FortiSIEM MCP server, grant it to triage agents, run an investigation, and inspect tool-usage evidence | 🔌 |
 | [`trigger_ai_investigation.py`](trigger_ai_investigation.py) | Trigger a FortiAI investigation on an alert and print the verdict | 🔌 |
+| [`run_single_ai_agent.py`](run_single_ai_agent.py) | Run ONE FortiAI agent directly — read its declared `inputformat`, call it with validation, print answer/evidence/confidence | 🔌 |
 | [`taxii_threat_feed_to_fortigate.py`](taxii_threat_feed_to_fortigate.py) | Stand up FortiSOAR's native TAXII 2.1 server as a live threat feed a FortiGate can pull (enable TAXII → API-key binding → dataset collection) | 🔌 |
 
 ## Data artifacts

@@ -860,3 +860,96 @@ def test_get_mcp_config_empty_response_is_not_found_not_a_phantom_member():
     c = _ParamRecordingClient({("GET", "/api/3/mcp_configurations"): {}})
     with pytest.raises(ValueError, match="MCP configuration 'Ghost' not found"):
         AIApi(c).get_mcp_config("Ghost")
+
+
+_IOC_AGENT = {
+    "name": "ioc-enrichment",
+    "version": "1.0.0",
+    "inputformat": {
+        "ioc": {"type": "array of objects", "required": True},
+        "question": {"type": "string", "required": True},
+        "context": "free-form string spec carries no required flag",
+    },
+}
+
+
+def test_run_agent_posts_to_agents_prefix_not_triage():
+    """The trigger must use /api/ai/agents/... — the /ai/triage/ form exists on the
+    service but matches no permission group at the front door, so it 403s."""
+    c = RecordingClient(responses={("GET", "/api/ai/agent/ioc-enrichment/1.0.0"): _IOC_AGENT})
+    ai = AIApi(c)
+    handle = ai.run_agent("ioc-enrichment", {"question": "q", "ioc": [{"type": "IP Address", "value": "8.8.8.8"}]})
+    assert handle.task_id == "t-1"
+    posts = [call for call in c.calls if call[0] == "POST"]
+    assert posts == [
+        (
+            "POST",
+            "/api/ai/agents/ioc-enrichment/trigger",
+            {"question": "q", "ioc": [{"type": "IP Address", "value": "8.8.8.8"}]},
+        )
+    ]
+    assert not any("triage" in call[1] for call in c.calls)
+
+
+def test_run_agent_validates_required_inputs_before_calling():
+    c = RecordingClient(responses={("GET", "/api/ai/agent/ioc-enrichment/1.0.0"): _IOC_AGENT})
+    ai = AIApi(c)
+    with pytest.raises(ValueError) as exc:
+        ai.run_agent("ioc-enrichment", {"question": "q"})
+    assert "ioc" in str(exc.value)
+    assert not any(call[0] == "POST" for call in c.calls)
+
+
+def test_run_agent_validate_false_skips_schema_fetch():
+    c = RecordingClient()
+    ai = AIApi(c)
+    ai.run_agent("ioc-enrichment", {}, validate=False)
+    assert not any(call[0] == "GET" for call in c.calls)
+
+
+def test_run_agent_ignores_non_dict_input_specs():
+    """Several agents declare an input as a plain description string; those carry no
+    required flag and must not be enforced."""
+    c = RecordingClient(responses={("GET", "/api/ai/agent/ioc-enrichment/1.0.0"): _IOC_AGENT})
+    ai = AIApi(c)
+    ai.run_agent("ioc-enrichment", {"question": "q", "ioc": []})  # no 'context' supplied
+    assert any(call[0] == "POST" for call in c.calls)
+
+
+def test_agent_input_schema_returns_inputformat():
+    c = RecordingClient(responses={("GET", "/api/ai/agent/ioc-enrichment/1.0.0"): _IOC_AGENT})
+    ai = AIApi(c)
+    assert sorted(ai.agent_input_schema("ioc-enrichment")) == ["context", "ioc", "question"]
+
+
+def test_run_agent_wait_returns_typed_agent_result():
+    c = RecordingClient(
+        responses={
+            ("GET", "/api/ai/agent/ioc-enrichment/1.0.0"): _IOC_AGENT,
+            ("GET", "/api/ai/agents/t-1/status"): {"status": "completed"},
+            ("GET", "/api/ai/agents/t-1/result"): {
+                "answer": "No",
+                "confidence": "90%",
+                "evidence": "clean",
+                "logs": [],
+                "phases": [],
+            },
+        }
+    )
+    ai = AIApi(c)
+    result = ai.run_agent("ioc-enrichment", {"question": "q", "ioc": []}, wait=True, interval=0, timeout=1)
+    assert (result.answer, result.confidence, result.status) == ("No", "90%", "completed")
+    assert result.task_id == "t-1"
+
+
+def test_wait_for_agent_result_keeps_non_terminal_status_on_timeout():
+    c = RecordingClient(
+        responses={
+            ("GET", "/api/ai/agents/t-1/status"): {"status": "inprogress"},
+            ("GET", "/api/ai/agents/t-1/result"): {"answer": None},
+        }
+    )
+    ai = AIApi(c)
+    result = ai.wait_for_agent_result("t-1", interval=0, timeout=0)
+    assert result.status == "inprogress"
+    assert result.status not in TERMINAL_STATUSES
