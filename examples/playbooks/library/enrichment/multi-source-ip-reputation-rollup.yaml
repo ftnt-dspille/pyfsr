@@ -28,29 +28,28 @@ playbooks:
       next: fgt_block
     - option: Reject
       next: the_end
-    arguments:
-      title: Do you approve blocking? the IP{{vars.steps.Enter_IP.input.iP}} on FW
-      description: 'IP: {{vars.steps.Enter_IP.input.iP}} '
-      record: ''
-      resources: indicators
-      is_approval: true
-      owner_detail:
-        isAssigned: true
-        assignedToTeam:
-        - iri: /api/3/teams/6e569c09-3bd4-40f1-98b0-cc994464c3c5
-          teamname: SOC Team
-        emailRecipients: ''
-        assignedToPerson: []
-        assignedToRecord: false
-      isRecordLinked: false
-      email_notification:
-        enabled: false
-        smtpParameters: []
-      customEmailExternal: false
-      inline_channel_list: []
-      external_channel_list: []
-      unauthenticated_input: false
-      internal_email_subject: A FortiSOAR playbook is requesting your input
+    title: Do you approve blocking? the IP{{vars.steps.Enter_IP.input.iP}} on FW
+    description: 'IP: {{vars.steps.Enter_IP.input.iP}} '
+    record: ''
+    resources: indicators
+    is_approval: true
+    owner_detail:
+      isAssigned: true
+      assignedToTeam:
+      - iri: /api/3/teams/6e569c09-3bd4-40f1-98b0-cc994464c3c5
+        teamname: SOC Team
+      emailRecipients: ''
+      assignedToPerson: []
+      assignedToRecord: false
+    isRecordLinked: false
+    email_notification:
+      enabled: false
+      smtpParameters: []
+    customEmailExternal: false
+    inline_channel_list: []
+    external_channel_list: []
+    unauthenticated_input: false
+    internal_email_subject: A FortiSOAR playbook is requesting your input
   - type: manual_input
     name: Enter IP
     step_variables: []
@@ -58,141 +57,129 @@ playbooks:
     - display: Go
       primary: true
       next: vt_lookup
-    arguments:
-      type: InputBased
-      input:
-        schema:
-          title: Enter the IP
-          description: Insert the IP
-          inputVariables:
-          - name: iP
-            type: string
-            label: IP
-            title: IPv4
-            usable: true
-            tooltip: ''
-            dataType: text
-            formType: ipv4
-            required: true
-            _expanded: true
-            mmdUpdate: true
-            collection: false
-            searchable: true
-            templateUrl: app/components/form/fields/webAddress.html
-            defaultValue: 1.1.1.1
-            _previousName: ''
-            playbookField: true
-            lengthConstraint: false
-            allowedEncryption: true
-            allowedGridColumn: true
-            jinjaExpressionView: true
-            useRecordFieldDefault: false
-      record: ''
-      resources: indicators
-      is_approval: false
-      owner_detail:
-        isAssigned: false
-        emailRecipients: ''
-      isRecordLinked: false
-      email_notification:
-        enabled: false
-        smtpParameters: []
-      customEmailExternal: false
-      inline_channel_list: []
-      external_channel_list: []
-      unauthenticated_input: false
-      internal_email_subject: A FortiSOAR playbook is requesting your input
+    input:
+      schema:
+        title: Enter the IP
+        description: Insert the IP
+        inputVariables:
+        - name: iP
+          type: string
+          label: IP
+          title: IPv4
+          usable: true
+          tooltip: ''
+          dataType: text
+          formType: ipv4
+          required: true
+          _expanded: true
+          mmdUpdate: true
+          collection: false
+          searchable: true
+          templateUrl: app/components/form/fields/webAddress.html
+          defaultValue: 1.1.1.1
+          _previousName: ''
+          playbookField: true
+          lengthConstraint: false
+          allowedEncryption: true
+          allowedGridColumn: true
+          jinjaExpressionView: true
+          useRecordFieldDefault: false
+    record: ''
+    resources: indicators
+    is_approval: false
+    owner_detail:
+      isAssigned: false
+      emailRecipients: ''
+    isRecordLinked: false
+    email_notification:
+      enabled: false
+      smtpParameters: []
+    customEmailExternal: false
+    inline_channel_list: []
+    external_channel_list: []
+    unauthenticated_input: false
+    internal_email_subject: A FortiSOAR playbook is requesting your input
   - type: connector
     name: FGT Block
     pickFromTenant: false
     step_variables: []
-    arguments:
-      name: Fortinet FortiGate
-      config: 8b6d9137-f2df-4d37-9687-b38bbaba82e1
-      params:
-        vdom: ''
-        method: Quarantine Based
-        ip_addresses: '{{vars.steps.Enter_IP.input.iP}}'
-        time_to_live: 12 Hour
-      connector: fortigate-firewall
-      operation: block_ip
-      operationTitle: Block IP Address
+    config: 8b6d9137-f2df-4d37-9687-b38bbaba82e1
+    params:
+      vdom: ''
+      method: Quarantine Based
+      ip_addresses: '{{vars.steps.Enter_IP.input.iP}}'
+      time_to_live: 12 Hour
+    connector: fortigate-firewall
+    operation: block_ip
+    operationTitle: Block IP Address
     next: the_end
   - type: CyopsUtilites
     name: JSON to HTML for IPStack
     when: '{{vars.myipstack == 1}}'
     step_variables: []
-    arguments:
-      params:
-        data: '{{vars.steps.Lookup_IP_Stack.data}}'
-        display: Horizontal
-        styling: false
-        template: Stylized with row selection
-        row_fields: ''
-      version: 3.3.0
-      connector: cyops_utilities
-      operation: json_to_html
-      operationTitle: 'Utils: Convert JSON into a HTML Table'
+    params:
+      data: '{{vars.steps.Lookup_IP_Stack.data}}'
+      display: Horizontal
+      styling: false
+      template: Stylized with row selection
+      row_fields: ''
+    version: 3.3.0
+    connector: cyops_utilities
+    operation: json_to_html
+    operationTitle: 'Utils: Convert JSON into a HTML Table'
     next: presenting_results
   - type: CyopsUtilites
     name: JSON to HTML for VT
     when: '{{vars.myvt == 1}}'
     step_variables: []
-    arguments:
-      params:
-        data: '{{vars.steps.VT_Lookup.data.attributes[''last_analysis_stats'']}}'
-        display: Horizontal
-        styling: false
-        template: Stylized with row selection
-        row_fields: ''
-      version: 3.3.0
-      connector: cyops_utilities
-      operation: json_to_html
-      operationTitle: 'Utils: Convert JSON into a HTML Table'
+    params:
+      data: '{{vars.steps.VT_Lookup.data.attributes[''last_analysis_stats'']}}'
+      display: Horizontal
+      styling: false
+      template: Stylized with row selection
+      row_fields: ''
+    version: 3.3.0
+    connector: cyops_utilities
+    operation: json_to_html
+    operationTitle: 'Utils: Convert JSON into a HTML Table'
     next: json_to_html_for_ipstack
   - type: connector
     name: Lokkup IPInfo
     pickFromTenant: false
     step_variables: []
-    arguments:
-      name: ipinfo.io
-      config: f6128dad-bdae-468a-825d-0bc63dd90cd2
-      params:
-        ip_address: '{{vars.steps.Enter_IP.input.iP}}'
-      connector: ipinfo
-      operation: lookup_ip
-      operationTitle: Lookup IP Address
+    config: f6128dad-bdae-468a-825d-0bc63dd90cd2
+    params:
+      ip_address: '{{vars.steps.Enter_IP.input.iP}}'
+    connector: ipinfo
+    operation: lookup_ip
+    operationTitle: Lookup IP Address
     next: lookup_abuse_ip_database
   - type: connector
     name: Lookup Abuse IP Database
     pickFromTenant: false
     step_variables: []
-    arguments:
-      name: AbuseIPDB
-      config: 030f3d6e-ec70-4a5c-89ac-ba5674cb71b0
-      params:
-        ip: '{{vars.steps.Enter_IP.input.iP}}'
-        days: 30
-      connector: abuseipdb
-      operation: ip_lookup
-      operationTitle: IP Lookup
+    config: 030f3d6e-ec70-4a5c-89ac-ba5674cb71b0
+    params:
+      ip: '{{vars.steps.Enter_IP.input.iP}}'
+      days: 30
+    connector: abuseipdb
+    operation: ip_lookup
+    operationTitle: IP Lookup
     next: json_to_html_for_vt
   - type: connector
     name: Lookup IP Stack
     when: '{{vars.myipstack == 1}}'
     pickFromTenant: false
     step_variables: []
-    arguments:
-      name: IPStack
-      config: 4dd23fc8-5493-444a-bca5-043cebd8b503
-      params:
-        query: '{{vars.steps.Enter_IP.input.iP}}'
-        fields: ''
-        enable_hostname: false
-        enable_security: false
-      connector: ipstack
-      operation: ip_locate
-      operationTitle: Geolocate IP
+    config: 4dd23fc8-5493-444a-bca5-043cebd8b503
+    params:
+      query: '{{vars.steps.Enter_IP.input.iP}}'
+      fields: ''
+      enable_hostname: false
+      enable_security: false
+    connector: ipstack
+    operation: ip_locate
+    operationTitle: Geolocate IP
     next: lokkup_ipinfo
   - type: set_variable
     name: Playbook Config
@@ -215,69 +202,63 @@ playbooks:
       next: the_end
     - display: Continue for Blocking
       next: approve_blocking
-    arguments:
-      type: InputBased
-      input:
-        schema:
-          title: Your Results for{{vars.steps.Enter_IP.input.iP}}
-          description: 'VT Result:
+    input:
+      schema:
+        title: Your Results for{{vars.steps.Enter_IP.input.iP}}
+        description: 'VT Result:
 
-            {{vars.steps.JSON_to_HTML_for_VT.data }}
+          {{vars.steps.JSON_to_HTML_for_VT.data }}
 
 
-            <BR><BR>
+          <BR><BR>
 
 
-            IP Quality:
+          IP Quality:
 
-            {{vars.steps.JSON_to_HTML_for_IPStack.data }}
+          {{vars.steps.JSON_to_HTML_for_IPStack.data }}
 
-            '
-          inputVariables: []
-      record: ''
-      resources: indicators
-      is_approval: false
-      owner_detail:
-        isAssigned: false
-        emailRecipients: ''
-      isRecordLinked: false
-      email_notification:
-        enabled: false
-        smtpParameters: []
-      customEmailExternal: false
-      inline_channel_list: []
-      external_channel_list: []
-      unauthenticated_input: false
-      internal_email_subject: A FortiSOAR playbook is requesting your input
+          '
+        inputVariables: []
+    record: ''
+    resources: indicators
+    is_approval: false
+    owner_detail:
+      isAssigned: false
+      emailRecipients: ''
+    isRecordLinked: false
+    email_notification:
+      enabled: false
+      smtpParameters: []
+    customEmailExternal: false
+    inline_channel_list: []
+    external_channel_list: []
+    unauthenticated_input: false
+    internal_email_subject: A FortiSOAR playbook is requesting your input
   - type: start
     name: Start
     module: indicators
-    arguments:
-      route: 337ab01c-ccd4-4a8f-93cc-daf9cf052b91
-      requires_record: false
+    route: 337ab01c-ccd4-4a8f-93cc-daf9cf052b91
+    requires_record: false
     next: playbook_config
   - type: CyopsUtilites
     name: The End
     step_variables: []
-    arguments:
-      params: []
-      version: 3.3.0
-      connector: cyops_utilities
-      operation: no_op
-      operationTitle: 'Utils: No Operation'
+    params: []
+    version: 3.3.0
+    connector: cyops_utilities
+    operation: no_op
+    operationTitle: 'Utils: No Operation'
   - type: connector
     name: VT Lookup
     when: '{{vars.myvt == 1}}'
     pickFromTenant: false
     step_variables: []
-    arguments:
-      name: VirusTotal
-      config: 2df52cf6-e4e2-4eee-bce1-7fc6d22d9fc1
-      params:
-        ip: '{{vars.steps.Enter_IP.input.iP}}'
-      connector: virustotal
-      operation: query_ip
-      operationTitle: Get IP Reputation
+    config: 2df52cf6-e4e2-4eee-bce1-7fc6d22d9fc1
+    params:
+      ip: '{{vars.steps.Enter_IP.input.iP}}'
+    connector: virustotal
+    operation: query_ip
+    operationTitle: Get IP Reputation
     next: lookup_ip_stack
   annotations:
   - id: main_engines

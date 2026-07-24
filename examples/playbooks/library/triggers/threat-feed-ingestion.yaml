@@ -31,57 +31,54 @@ playbooks:
       BPalert_idLEN: '{{vars.myalert.id | length }}'
       myalertSourceData: '{{vars.myalert  | toJSON }}'
     next: is_json_health
-  - type: insert_record
+  - type: create_record
     name: Create Comment
     ignore_errors: true
     step_variables: []
-    arguments:
-      resource:
-        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
-        alerts: '{{vars.steps.Create_Recon_BP_Alert[''@id'']}}'
-        people: []
-        content: <p>Please, pay attention to the SLAs and to the SEVERITY of this alert.</p>
-        __replace: ''
-        isImportant: true
-        peopleUpdated: false
-      operation: Overwrite
-      collection: /api/3/comments
-      fieldOperation:
-        recordTags: Overwrite
+    fields:
+      type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+      alerts: '{{vars.steps.Create_Recon_BP_Alert[''@id'']}}'
+      people: []
+      content: <p>Please, pay attention to the SLAs and to the SEVERITY of this alert.</p>
+      __replace: ''
+      isImportant: true
+      peopleUpdated: false
+    operation: Overwrite
+    collection: /api/3/comments
+    fieldOperation:
+      recordTags: Overwrite
     next: end
-  - type: insert_record
+  - type: create_record
     name: Create Recon BP Alert
     ignore_errors: false
     step_variables: []
-    arguments:
-      resource:
-        name: '{{vars.finalTitle}}'
-        type: /api/3/picklists/0b3ef6f9-eb29-4ab9-ac98-98364bd1a3aa
-        state: /api/3/picklists/a1bac09b-1441-45aa-ad1b-c88744e48e72
-        domain: '{{vars.BPbadDomain}}'
-        source: Webhook
-        status: /api/3/picklists/7de816ff-7140-4ee5-bd05-93ce22002146
-        severity: '{{vars.finalSeverity}}'
-        sourceId: '{{vars.BPalert_id}}'
-        ticketID: BPticket
-        __replace: ''
-        assignedTo: /api/3/people/3451141c-bac6-467c-8d72-85e0fab569ce
-        recordTags: '{{vars.alertTagsArray}}'
-        sourcedata: '{{vars.myalert | toJSON }}'
-        description: "<div class=\"font-size-16 ng-binding padding-bottom-sm\">\n<h4 style=\"background: #404142;padding: 5px;text-align: left;color: orange;background:black;\">\n{{vars.finalTitle}} - {{vars.myalert.id }}\n</h4></div>\n\n<table style=\"border-color: #04080c;\" border=\"1\" class=\"font-normal\">\n<tbody>\n<tr>\n<td>\n\n<div class=\"font-size-14 ng-binding\">Alert Problematic Domain</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPbadDomain}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Original Domain</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPoriginalDomain}}</div>\n</div>\n\n\n<div class=\"font-size-14 ng-binding\">Alert Tags</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.tagString}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Alert Overall Status</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPstatus}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Alert Added Timestamp</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPadded_ts}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Alert Severity</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPseverity}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Alert Online Status</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPonline_status}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Is parked?</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{ vars.BPis_parked}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Is Impersonation?</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPis_impersonation}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Is False Positive?</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BP_is_false_positive}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Artifacts</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid green;background:#141b23\">{{vars.artifactsSpecificArray | join(', ')}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Status Description</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid blue;background:#141b23\">\n\n{% if vars.BPonline_status == 'ONLINE' %}\n{{vars.onlineDescription}}\n{% elif vars.BPonline_status == 'OFFLINE' %}\n{{vars.offlineDescription}}\n{% elif vars.BPonline_status == 'NON_FUNCTIONAL' %}\n{{vars.nonFunctionalDescription}}\n{% elif vars.BPonline_status == 'TAKEDOWN' %}\n{{vars.takedownDescription}}\n{% else %}\n UNKOWN_STATUS\n{% endif %}\n\n</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Tag Description</div><div class=\"card-container-body\"\
-          \ style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid blue;background:#141b23\">\n\n{% for tag in vars.BPtags %}\n  {% if tag.name == 'Brand Impersonation' %}\n    {{vars.impersonationDescription}} <BR>\n  {% elif tag.name == 'Typosquatting' %}\n    {{vars.typoDescription}} <BR>\n  {% elif tag.name == 'MX Record' %}\n    {{vars.mxDescription}} <BR>\n  {% elif tag.name == 'Phishing' %}\n    {{vars.phishingDescription}} <BR>\n  {% elif tag.name == 'Parked Domain' %}\n    {{vars.parkedDescription}}<BR>\n  {% else %}\n    UNKOWN_TAG <BR>\n  {% endif %}\n{% endfor %}\n\n</div>\n</div>\n\n</td>\n</tr>\n</tbody>\n</table>"
-        ackSlaStatus: /api/3/picklists/72979f64-e8b9-4888-a965-957e0ec24818
-        mitreattackid: '{{vars.mitreTechnique}}'
-        respSlaStatus: /api/3/picklists/72979f64-e8b9-4888-a965-957e0ec24818
-        mitreTechnique: '{{vars.mitreTechnique}}'
-        priorityWeight: 1
-        escalatedtoincident: /api/3/picklists/2128a09c-153d-4db3-985d-de6be33deae5
-        resolvedAutomatedly: false
-        alertRemainingAckSLA: 0
-      operation: Overwrite
-      collection: /api/3/alerts
-      fieldOperation:
-        recordTags: Overwrite
+    fields:
+      type: /api/3/picklists/0b3ef6f9-eb29-4ab9-ac98-98364bd1a3aa
+      state: /api/3/picklists/a1bac09b-1441-45aa-ad1b-c88744e48e72
+      domain: '{{vars.BPbadDomain}}'
+      source: Webhook
+      status: /api/3/picklists/7de816ff-7140-4ee5-bd05-93ce22002146
+      severity: '{{vars.finalSeverity}}'
+      sourceId: '{{vars.BPalert_id}}'
+      ticketID: BPticket
+      __replace: ''
+      assignedTo: /api/3/people/3451141c-bac6-467c-8d72-85e0fab569ce
+      recordTags: '{{vars.alertTagsArray}}'
+      sourcedata: '{{vars.myalert | toJSON }}'
+      description: "<div class=\"font-size-16 ng-binding padding-bottom-sm\">\n<h4 style=\"background: #404142;padding: 5px;text-align: left;color: orange;background:black;\">\n{{vars.finalTitle}} - {{vars.myalert.id }}\n</h4></div>\n\n<table style=\"border-color: #04080c;\" border=\"1\" class=\"font-normal\">\n<tbody>\n<tr>\n<td>\n\n<div class=\"font-size-14 ng-binding\">Alert Problematic Domain</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPbadDomain}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Original Domain</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPoriginalDomain}}</div>\n</div>\n\n\n<div class=\"font-size-14 ng-binding\">Alert Tags</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.tagString}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Alert Overall Status</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPstatus}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Alert Added Timestamp</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPadded_ts}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Alert Severity</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPseverity}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Alert Online Status</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPonline_status}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Is parked?</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{ vars.BPis_parked}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Is Impersonation?</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BPis_impersonation}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Is False Positive?</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid red;background:#141b23\">{{vars.BP_is_false_positive}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Artifacts</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid green;background:#141b23\">{{vars.artifactsSpecificArray | join(', ')}}</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Status Description</div><div class=\"card-container-body\" style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid blue;background:#141b23\">\n\n{% if vars.BPonline_status == 'ONLINE' %}\n{{vars.onlineDescription}}\n{% elif vars.BPonline_status == 'OFFLINE' %}\n{{vars.offlineDescription}}\n{% elif vars.BPonline_status == 'NON_FUNCTIONAL' %}\n{{vars.nonFunctionalDescription}}\n{% elif vars.BPonline_status == 'TAKEDOWN' %}\n{{vars.takedownDescription}}\n{% else %}\n UNKOWN_STATUS\n{% endif %}\n\n</div>\n</div>\n\n<div class=\"font-size-14 ng-binding\">Tag Description</div><div class=\"card-container-body\"\
+        \ style=\"width: 100%;font-size:46px;\">\n<div class=\"card-number\" style=\"font-size:20px;  border-left: 5px solid blue;background:#141b23\">\n\n{% for tag in vars.BPtags %}\n  {% if tag.name == 'Brand Impersonation' %}\n    {{vars.impersonationDescription}} <BR>\n  {% elif tag.name == 'Typosquatting' %}\n    {{vars.typoDescription}} <BR>\n  {% elif tag.name == 'MX Record' %}\n    {{vars.mxDescription}} <BR>\n  {% elif tag.name == 'Phishing' %}\n    {{vars.phishingDescription}} <BR>\n  {% elif tag.name == 'Parked Domain' %}\n    {{vars.parkedDescription}}<BR>\n  {% else %}\n    UNKOWN_TAG <BR>\n  {% endif %}\n{% endfor %}\n\n</div>\n</div>\n\n</td>\n</tr>\n</tbody>\n</table>"
+      ackSlaStatus: /api/3/picklists/72979f64-e8b9-4888-a965-957e0ec24818
+      mitreattackid: '{{vars.mitreTechnique}}'
+      respSlaStatus: /api/3/picklists/72979f64-e8b9-4888-a965-957e0ec24818
+      mitreTechnique: '{{vars.mitreTechnique}}'
+      priorityWeight: 1
+      escalatedtoincident: /api/3/picklists/2128a09c-153d-4db3-985d-de6be33deae5
+      resolvedAutomatedly: false
+      alertRemainingAckSLA: 0
+    operation: Overwrite
+    collection: /api/3/alerts
+    fieldOperation:
+      recordTags: Overwrite
     next: create_comment
   - type: set_variable
     name: Create Title and Arrays
@@ -111,12 +108,10 @@ playbooks:
     name: End
     pickFromTenant: false
     step_variables: []
-    arguments:
-      name: Utilities
-      params: []
-      connector: cyops_utilities
-      operation: no_op
-      operationTitle: 'Utils: No Operation'
+    params: []
+    connector: cyops_utilities
+    operation: no_op
+    operationTitle: 'Utils: No Operation'
   - type: set_variable
     name: Extract Main Alert Data
     vars:
@@ -182,105 +177,104 @@ playbooks:
     next: create_recon_bp_alert
   - type: set_api_keys
     name: Playbook Authentication
-    arguments:
-      public_key: '-----BEGIN PUBLIC KEY-----
+    public_key: '-----BEGIN PUBLIC KEY-----
 
-        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAnI4NF5JpGF0MeUe14NsK
+      MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAnI4NF5JpGF0MeUe14NsK
 
-        mAgkl3gfUT0bUDlZamxSzrD5bBXlCrOT4pqLyqyf9AcrnsDOynDwjekDrMkwtPOj
+      mAgkl3gfUT0bUDlZamxSzrD5bBXlCrOT4pqLyqyf9AcrnsDOynDwjekDrMkwtPOj
 
-        /nwfgaYEJfaaQKwmlvddJs14MRCa6t14Uwl2kPTj1nW0BAlnLt/9RDpXx7WK3sqQ
+      /nwfgaYEJfaaQKwmlvddJs14MRCa6t14Uwl2kPTj1nW0BAlnLt/9RDpXx7WK3sqQ
 
-        wM0GSzRMlDyyaLaDctCGvbOPv8IMG269Mxys7nr07qD393aK+SAOQ7BKddyfYc4f
+      wM0GSzRMlDyyaLaDctCGvbOPv8IMG269Mxys7nr07qD393aK+SAOQ7BKddyfYc4f
 
-        KwXRT2xv/3j2ZQ3ghl2OF/YY/BIa81RBXVKkyHLZZYCSr9IZs6jYanMeJ1cS/Mgz
+      KwXRT2xv/3j2ZQ3ghl2OF/YY/BIa81RBXVKkyHLZZYCSr9IZs6jYanMeJ1cS/Mgz
 
-        kooJlTfrT4D894m6VBbGFYU/dc9TG1Eqt7IymZQ0aRN8ArDk9PzW34fypwP7Hjai
+      kooJlTfrT4D894m6VBbGFYU/dc9TG1Eqt7IymZQ0aRN8ArDk9PzW34fypwP7Hjai
 
-        MQolvojGmIVVvJFI4YChbZBCWyFOqJ4q9Q6vjLxG76r8k3nsEJ+BD+t3eU0ov3Pi
+      MQolvojGmIVVvJFI4YChbZBCWyFOqJ4q9Q6vjLxG76r8k3nsEJ+BD+t3eU0ov3Pi
 
-        0pif1qHDnExRu96LR89X2QUT4l4lJen3JeDp3joB0gky+EubrO+CMwouQ24rNhIO
+      0pif1qHDnExRu96LR89X2QUT4l4lJen3JeDp3joB0gky+EubrO+CMwouQ24rNhIO
 
-        OjdelP7vk8Wl+C/scFACq9u5Pgq7oz5lEWel6MA7v9I1AgMBAAE=
+      OjdelP7vk8Wl+C/scFACq9u5Pgq7oz5lEWel6MA7v9I1AgMBAAE=
 
-        -----END PUBLIC KEY-----'
-      private_key: '-----BEGIN RSA PRIVATE KEY-----
+      -----END PUBLIC KEY-----'
+    private_key: '-----BEGIN RSA PRIVATE KEY-----
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        oz5lEWel6MA7v9I1AgMBAAECggGABdzyc8XxiagMDFhTLdVsoCT6udfioStySmuo
+      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
 
-        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
+      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
 
-        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
+      RzhPlMejjxlAGmuqhfGX+/XJhc6cRbDUdgnAqNcTUoQwbAeW3dTP14eUSdKI6MMG
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      I03yIGQ1DqAITe5BsItl8BcLoDBFSM7hgGG3B6z8KZkeIwUS/Y3Kl5T3v0WnM5XJ
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      2dGsWNOxP/rnACDbwJuHicejhitxnAhchITYDyUCgcAK0bHe6BFgiPLLJgSalf5J
 
-        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
+      sz5+bod11vbsJ5n/gIlfXKK19BLUa+ie5njp0qhisXXMMS27Ch2zh6lHKEUlqwaF
 
-        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
+      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
 
-        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
+      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
 
-        c4f7mo8GLPqUs8JonWSC52EcH6SwnZXP1MMk22nAfxECgcBmmV+CgZcaUI/HEFH/
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        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
+      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
 
-        +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
+      +3KSCnaIoAp9ZDQFOWNTvjmMD4Adw9OzENxj2WlP4OZ93o6YAfHttnQF2SF5RUhX
 
-        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
+      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
 
-        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
+      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
 
-        -----END RSA PRIVATE KEY-----'
+      -----END RSA PRIVATE KEY-----'
     next: get_json_alert
   - type: set_variable
     name: Set Tag and Status Descr
@@ -302,13 +296,12 @@ playbooks:
         params:
           api_body: '{{vars.request.data}}'
           api_params: '{{vars.request.params}}'
-    arguments:
-      route: deferred/xperts
-      __triggerLimit: true
-      triggerOnSource: true
-      triggerOnReplicate: false
-      authentication_methods:
-      - anonymous
+    route: deferred/xperts
+    __triggerLimit: true
+    triggerOnSource: true
+    triggerOnReplicate: false
+    authentication_methods:
+    - anonymous
     next: playbook_authentication
   annotations:
   - id: bp_alert_creation

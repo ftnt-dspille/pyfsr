@@ -31,28 +31,24 @@ playbooks:
   - type: create_record
     name: Create Incident
     # swap-in: <your incidents connector> (config: <uuid or name>)
-    arguments:
-      module: incidents
-      resource:
-        name: "Incident from alert {{ vars.alert_title }}"
-        severity: "{{ vars.alert_severity }}"
-        status: /api/3/picklists/incident-status-new   # placeholder picklist IRI for "New"
+    module: incidents
+    fields:
+      severity: "{{ vars.alert_severity }}"
+      status: /api/3/picklists/incident-status-new   # placeholder picklist IRI for "New"
     next: Link Alert to Incident
 
   - type: update_record
     name: Link Alert to Incident
-    arguments:
-      collection: "{{ vars.alert_iri }}"
-      resource:
-        incident: "{{ vars.steps.Create_Incident.record_iri }}"
-        status: /api/3/picklists/incident-status-linked   # placeholder for "Linked"/"In Progress"
+    record: "{{ vars.alert_iri }}"
+    fields:
+      incident: "{{ vars.steps.Create_Incident.record_iri }}"
+      status: /api/3/picklists/incident-status-linked   # placeholder for "Linked"/"In Progress"
     next: End
 
   - type: CyopsUtilites
     name: End
-    arguments:
-      params: []
-      version: 3.5.0
-      connector: cyops_utilities
-      operation: no_op
-      operationTitle: 'Utils: No Operation'
+    params: []
+    version: 3.5.0
+    connector: cyops_utilities
+    operation: no_op
+    operationTitle: 'Utils: No Operation'

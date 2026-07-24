@@ -50,11 +50,10 @@ playbooks:
       # Confirmed FP: stamp the tag and move to allowlist + close.
       - name: Tag As False Positive
         type: update_record
-        arguments:
-          module: alerts
-          collection: "{{ vars.input.records[0]['@id'] }}"
-          resource:
-            tags: false-positive
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          tags: false-positive
         next: Add Indicator To Allowlist
 
       # Add the indicator to the runtime allowlist set (deduped) so future hits auto-close.
@@ -66,29 +65,27 @@ playbooks:
 
       # Comment the alert explaining the auto-close verdict.
       - name: Post FP Comment
-        type: insert_record
-        arguments:
-          collection: /api/3/comments
-          operation: Overwrite
-          resource:
-            content: >-
-              <p>Auto-closed as <b>false positive</b>.</p>
-              <p>Indicator <code>{{ vars.indicator_value }}</code> matched the FP
-              allowlist (source: <code>{{ vars.alert_source }}</code>).</p>
-            isImportant: false
-            people: []
-            peopleUpdated: false
-            attachments: '{{ vars.input.records[0]["@id"] }}'
+        type: create_record
+        collection: /api/3/comments
+        operation: Overwrite
+        fields:
+          content: >-
+            <p>Auto-closed as <b>false positive</b>.</p>
+            <p>Indicator <code>{{ vars.indicator_value }}</code> matched the FP
+            allowlist (source: <code>{{ vars.alert_source }}</code>).</p>
+          isImportant: false
+          people: []
+          peopleUpdated: false
+          attachments: '{{ vars.input.records[0]["@id"] }}'
         next: Close Alert
 
       # Auto-close the alert.
       - name: Close Alert
         type: update_record
-        arguments:
-          module: alerts
-          collection: "{{ vars.input.records[0]['@id'] }}"
-          resource:
-            status: Closed
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: Closed
         next: Stop
 
       # Not an FP: stop here so normal triage (other playbooks / a human) picks it up.

@@ -29,15 +29,13 @@ playbooks:
     # swap‑in: <your threat���intel connector> (config: <uuid>)
     pickFromTenant: false
     step_variables: []
-    arguments:
-      name: Threat Intel Lookup
-      config: <YOUR_CONNECTOR_UUID>
-      params:
-        observable: "{{ item.value }}"
-        type: "{{ item.type }}"
-      connector: cyops_utilities
-      operation: no_op
-      operationTitle: "Lookup Observable"
+    config: <YOUR_CONNECTOR_UUID>
+    params:
+      observable: "{{ item.value }}"
+      type: "{{ item.type }}"
+    connector: cyops_utilities
+    operation: no_op
+    operationTitle: "Lookup Observable"
     for_each:
       item: "{{ vars.artifactsAll.results }}"
       parallel: false
@@ -54,9 +52,8 @@ playbooks:
   - type: CyopsUtilites
     name: End
     step_variables: []
-    arguments:
-      params: []
-      version: 3.3.0
-      connector: cyops_utilities
-      operation: no_op
-      operationTitle: "Utils: No Operation"
+    params: []
+    version: 3.3.0
+    connector: cyops_utilities
+    operation: no_op
+    operationTitle: "Utils: No Operation"

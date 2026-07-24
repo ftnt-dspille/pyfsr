@@ -22,16 +22,15 @@ playbooks:
       - type: ApprovalManualInput
         name: First Approval Request
         description: First approval gate before proceeding.
-        arguments:
-          type: InputBased
-          input:
-            schema:
-              title: First Approval Needed
-              description: Approve to continue the workflow.
-              inputVariables: []
-          record: "{{ vars.input.records[0]['@id'] }}"
-          resources: records
-          is_approval: true
+        type: InputBased
+        input:
+          schema:
+            title: First Approval Needed
+            description: Approve to continue the workflow.
+            inputVariables: []
+        record: "{{ vars.input.records[0]['@id'] }}"
+        resources: records
+        is_approval: true
         next: Capture First Approver Info
 
       - type: set_variable
@@ -43,36 +42,33 @@ playbooks:
 
       - type: update_record
         name: Record First Approver
-        arguments:
-          collection: "{{ vars.input.records[0]['@id'] }}"
-          resource:
-            firstApprover: "{{ vars.first_approver }}"
-            firstApprovalTimestamp: "{{ vars.first_approval_time }}"
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          firstApprover: "{{ vars.first_approver }}"
+          firstApprovalTimestamp: "{{ vars.first_approval_time }}"
         next: No Op After First Approval
 
       - type: CyopsUtilites
         name: No Op After First Approval
-        arguments:
-          params: []
-          version: 3.5.0
-          connector: cyops_utilities
-          operation: no_op
-          operationTitle: 'Utils: No Operation'
+        params: []
+        version: 3.5.0
+        connector: cyops_utilities
+        operation: no_op
+        operationTitle: 'Utils: No Operation'
         next: Second Approval Request
 
       - type: ApprovalManualInput
         name: Second Approval Request
         description: Second confirmation approval before final action.
-        arguments:
-          type: InputBased
-          input:
-            schema:
-              title: Second Approval Needed
-              description: Approve to execute final action.
-              inputVariables: []
-          record: "{{ vars.input.records[0]['@id'] }}"
-          resources: records
-          is_approval: true
+        type: InputBased
+        input:
+          schema:
+            title: Second Approval Needed
+            description: Approve to execute final action.
+            inputVariables: []
+        record: "{{ vars.input.records[0]['@id'] }}"
+        resources: records
+        is_approval: true
         next: Capture Second Approver Info
 
       - type: set_variable
@@ -84,28 +80,25 @@ playbooks:
 
       - type: update_record
         name: Record Second Approver
-        arguments:
-          collection: "{{ vars.input.records[0]['@id'] }}"
-          resource:
-            secondApprover: "{{ vars.second_approver }}"
-            secondApprovalTimestamp: "{{ vars.second_approval_time }}"
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          secondApprover: "{{ vars.second_approver }}"
+          secondApprovalTimestamp: "{{ vars.second_approval_time }}"
         next: Final No-Op Action
 
       - type: CyopsUtilites
         name: Final No-Op Action
-        arguments:
-          params: []
-          version: 3.5.0
-          connector: cyops_utilities
-          operation: no_op
-          operationTitle: 'Utils: Final No Operation'
+        params: []
+        version: 3.5.0
+        connector: cyops_utilities
+        operation: no_op
+        operationTitle: 'Utils: Final No Operation'
         next: End
 
       - type: CyopsUtilites
         name: End
-        arguments:
-          params: []
-          version: 3.5.0
-          connector: cyops_utilities
-          operation: no_op
-          operationTitle: 'Utils: End'
+        params: []
+        version: 3.5.0
+        connector: cyops_utilities
+        operation: no_op
+        operationTitle: 'Utils: End'

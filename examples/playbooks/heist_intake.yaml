@@ -39,8 +39,7 @@ playbooks:
       # 2. Real Python: work out everyone's cut and a risk label.
       - name: Split The Take
         type: code_snippet
-        arguments:
-          code: |
+        code: |
             take = int("{{ vars.take }}" or 0)
             crew = int("{{ vars.crew_count }}" or 1)
             if crew < 1:
@@ -54,8 +53,7 @@ playbooks:
       # 3. Dramatic pause — case the joint.
       - name: Case The Joint
         type: delay
-        arguments:
-          seconds: 5
+        seconds: 5
         next: Worth The Risk?
 
       # 4. Branch on the size of the score.
@@ -70,20 +68,18 @@ playbooks:
       # 5a / 5b. Stamp the record status (the automated proof the run reached here).
       - name: Mark Authorized
         type: update_record
-        arguments:
-          module: heists
-          collection: "{{ vars.input.records[0]['@id'] }}"
-          resource:
-            status: Authorized
+        module: heists
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: Authorized
         next: Final Go Call
 
       - name: Mark Briefed
         type: update_record
-        arguments:
-          module: heists
-          collection: "{{ vars.input.records[0]['@id'] }}"
-          resource:
-            status: Briefed
+        module: heists
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: Briefed
         next: Final Go Call
 
       # 6. Wait for a human to make the final call.

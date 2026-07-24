@@ -41,13 +41,12 @@ playbooks:
       - name: Act On Indicator
         type: connector
         ignore_errors: true
-        arguments:
-          connector: cyops_utilities
-          operation: no_op
-          operationTitle: 'CyOPs: No-Op'
-          config: default
-          params:
-            value: "{{ vars.target }}"
+        connector: cyops_utilities
+        operation: no_op
+        operationTitle: 'CyOPs: No-Op'
+        config: default
+        params:
+          value: "{{ vars.target }}"
         next: Did It Succeed
 
       # Branch on the step's runtime status. status is one of
@@ -63,18 +62,17 @@ playbooks:
 
       # Success path: confirm and finish.
       - name: Post Success Comment
-        type: insert_record
-        arguments:
-          collection: /api/3/comments
-          operation: Overwrite
-          resource:
-            content: >-
-              <p>Action on <code>{{ vars.target }}</code> succeeded
-              (status: <b>{{ vars.steps.Act_On_Indicator.status }}</b>).</p>
-            isImportant: false
-            people: []
-            peopleUpdated: false
-            attachments: '{{ vars.record_iri }}'
+        type: create_record
+        collection: /api/3/comments
+        operation: Overwrite
+        fields:
+          content: >-
+            <p>Action on <code>{{ vars.target }}</code> succeeded
+            (status: <b>{{ vars.steps.Act_On_Indicator.status }}</b>).</p>
+          isImportant: false
+          people: []
+          peopleUpdated: false
+          attachments: '{{ vars.record_iri }}'
         next: Stop
 
       # Failure path: post an error comment carrying the status + the step's error data,
@@ -82,19 +80,18 @@ playbooks:
       # manual_input approval, or open an incident ��� the pattern is the same: read
       # vars.steps.<name>.status / .data, branch, act.
       - name: Recover From Failure
-        type: insert_record
-        arguments:
-          collection: /api/3/comments
-          operation: Overwrite
-          resource:
-            content: >-
-              <p>Connector step <b>Act On Indicator</b> did not succeed
-              (status: <b>{{ vars.steps.Act_On_Indicator.status }}</b>).</p>
-              <p>Manual review required for <code>{{ vars.target }}</code>.</p>
-            isImportant: true
-            people: []
-            peopleUpdated: false
-            attachments: '{{ vars.record_iri }}'
+        type: create_record
+        collection: /api/3/comments
+        operation: Overwrite
+        fields:
+          content: >-
+            <p>Connector step <b>Act On Indicator</b> did not succeed
+            (status: <b>{{ vars.steps.Act_On_Indicator.status }}</b>).</p>
+            <p>Manual review required for <code>{{ vars.target }}</code>.</p>
+          isImportant: true
+          people: []
+          peopleUpdated: false
+          attachments: '{{ vars.record_iri }}'
         next: Stop
 
       - name: Stop

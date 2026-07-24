@@ -19,45 +19,42 @@ playbooks:
   is_active: true
   trigger_step_id: start
   steps:
-  - type: insert_record
+  - type: create_record
     name: Add Comment to Alert with OpenAI Output
     step_variables: []
-    arguments:
-      resource:
-        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
-        alerts: '{{vars.input.records[0][''@id'']}}'
-        people: []
-        content: '<p><span style="color: rgb(241, 196, 15);"><span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);">OpenAI:</span> </span>{{vars.openaiOutput.choices.0.message.content}} <span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);">Model:</span> {{vars.openaiOutput.model}}</p>'
-        __replace: ''
-        isImportant: true
-        peopleUpdated: false
-      operation: Overwrite
-      collection: /api/3/comments
-      fieldOperation:
-        recordTags: Overwrite
+    fields:
+      type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+      alerts: '{{vars.input.records[0][''@id'']}}'
+      people: []
+      content: '<p><span style="color: rgb(241, 196, 15);"><span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);">OpenAI:</span> </span>{{vars.openaiOutput.choices.0.message.content}} <span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);">Model:</span> {{vars.openaiOutput.model}}</p>'
+      __replace: ''
+      isImportant: true
+      peopleUpdated: false
+    operation: Overwrite
+    collection: /api/3/comments
+    fieldOperation:
+      recordTags: Overwrite
     next: add_tags_to_alert
   - type: update_record
     name: Add Tags to Alert
     step_variables: []
-    arguments:
-      resource:
-        __link:
-          recordTags: '{{vars.myTags}}'
-      operation: Append
-      collection: '{{vars.input.records[0][''@id'']}}'
-      collectionType: /api/3/alerts
-      fieldOperation:
-        recordTags: Append
+    fields:
+      __link:
+        recordTags: '{{vars.myTags}}'
+    operation: Append
+    record: '{{vars.input.records[0][''@id'']}}'
+    collectionType: /api/3/alerts
+    fieldOperation:
+      recordTags: Append
     next: end
   - type: CyopsUtilites
     name: End
     step_variables: []
-    arguments:
-      params: []
-      version: 3.4.0
-      connector: cyops_utilities
-      operation: no_op
-      operationTitle: 'Utils: No Operation'
+    params: []
+    version: 3.4.0
+    connector: cyops_utilities
+    operation: no_op
+    operationTitle: 'Utils: No Operation'
   - type: set_variable
     name: Final Query to OpenAI
     vars:
@@ -78,28 +75,25 @@ playbooks:
   - type: start
     name: Start
     module: alerts
-    arguments:
-      route: e2ec63a3-2e91-4f68-a8fa-7440875a1614
-      button_label: 'TT: OpenAI Query'
+    route: e2ec63a3-2e91-4f68-a8fa-7440875a1614
+    button_label: 'TT: OpenAI Query'
     next: gpt_model_and_other_vars
   - type: connector
     name: The Query
     pickFromTenant: false
     step_variables:
       openaiOutput: '{{vars.steps.The_Query.data}}'
-    arguments:
-      name: OpenAI
-      config: a2aec12c-5dec-4f20-bf85-d4d3a38438a1
-      params:
-        model: '{{vars.model1}}'
-        top_p: ''
-        message: '{{vars.final_query}}'
-        timeout: 600
-        temperature: ''
-        other_fields: ''
-      connector: openai
-      operation: chat_completions
-      operationTitle: Ask a Question
+    config: a2aec12c-5dec-4f20-bf85-d4d3a38438a1
+    params:
+      model: '{{vars.model1}}'
+      top_p: ''
+      message: '{{vars.final_query}}'
+      timeout: 600
+      temperature: ''
+      other_fields: ''
+    connector: openai
+    operation: chat_completions
+    operationTitle: Ask a Question
     next: add_comment_to_alert_with_openai_output
   annotations:
   - id: important

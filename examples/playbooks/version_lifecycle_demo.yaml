@@ -29,14 +29,11 @@ playbooks:
       - name: Start
         type: start
         next: Emit
-        arguments:
-          module: alerts
-          button_label: Stamp marker
+        module: alerts
+        button_label: Stamp marker
 
       - name: Emit
         type: create_record
-        arguments:
-          module: alerts
-          resource:
-            name: ZZ VLD emitted
-            description: ALPHA
+        module: alerts
+        fields:
+          description: ALPHA
