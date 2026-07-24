@@ -34,7 +34,6 @@ playbooks:
   - type: create_record
     name: Create Comment
     ignore_errors: true
-    step_variables: []
     fields:
       type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
       alerts: '{{vars.steps.Create_Recon_BP_Alert[''@id'']}}'
@@ -51,7 +50,6 @@ playbooks:
   - type: create_record
     name: Create Recon BP Alert
     ignore_errors: false
-    step_variables: []
     fields:
       type: /api/3/picklists/0b3ef6f9-eb29-4ab9-ac98-98364bd1a3aa
       state: /api/3/picklists/a1bac09b-1441-45aa-ad1b-c88744e48e72
@@ -107,7 +105,6 @@ playbooks:
   - type: connector
     name: End
     pickFromTenant: false
-    step_variables: []
     params: []
     connector: cyops_utilities
     operation: no_op
@@ -151,7 +148,6 @@ playbooks:
     next: controls_and_tags
   - type: decision
     name: Is JSON Health
-    step_variables: []
     conditions:
     - display: Go Ahead
       when: '{{ vars.BPalert_idLEN > 10 and vars.BPalert_idLEN > 10 }}'

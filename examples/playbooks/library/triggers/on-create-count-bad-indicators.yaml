@@ -21,7 +21,6 @@ playbooks:
   steps:
   - type: decision
     name: Amount of bad Indicators
-    step_variables: []
     conditions:
     - display: '>= 0'
       when: '{{ vars.num_indicators > 0 }}'
@@ -31,7 +30,6 @@ playbooks:
       next: create_comment_you_have_no_problem_by_now
   - type: create_record
     name: Create Comment YOU HAVE A PROBLEM
-    step_variables: []
     fields:
       type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
       alerts: '{{vars.alert_IRI}}'
@@ -47,7 +45,6 @@ playbooks:
     next: the_end
   - type: create_record
     name: Create Comment YOU HAVE NO PROBLEM BY NOW
-    step_variables: []
     fields:
       type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
       alerts: '{{vars.alert_IRI}}'
@@ -72,32 +69,28 @@ playbooks:
       my_indicators: '{{vars.steps.Get_Bad_Indicators}}'
       num_indicators: '{{vars.steps.Get_Bad_Indicators | length}}'
     module: indicators?$limit=30&$relationships=true&$fsr_max_relation_count=100
-    query:
-      sort: []
-      limit: 30
-      logic: AND
-      filters:
-      - type: primitive
-        field: alerts.uuid
-        value: '{{vars.input.records[0].uuid}}'
-        operator: eq
-        _operator: eq
-      - type: array
-        field: reputation
-        value:
-        - 7074e547-7785-4979-be32-c6d0c863e4bd
-        - 50bfd06c-9aff-4f7d-b6d9-821339e31fe7
-        module: reputation
-        display: ''
-        operator: in
-        template: multiselectpicklist
-        enableJinja: true
-        OPERATOR_KEY: $
-        useInOperator: true
-        previousOperator: in
-        previousTemplate: multiselectpicklist
     checkboxFields: false
     next: amount_of_bad_indicators
+    filters:
+    - type: primitive
+      field: alerts.uuid
+      value: '{{vars.input.records[0].uuid}}'
+      operator: eq
+      _operator: eq
+    - type: array
+      field: reputation
+      value:
+      - 7074e547-7785-4979-be32-c6d0c863e4bd
+      - 50bfd06c-9aff-4f7d-b6d9-821339e31fe7
+      module: reputation
+      display: ''
+      operator: in
+      template: multiselectpicklist
+      enableJinja: true
+      OPERATOR_KEY: $
+      useInOperator: true
+      previousOperator: in
+      previousTemplate: multiselectpicklist
   - type: start
     name: Start
     module: alerts
@@ -106,7 +99,6 @@ playbooks:
     next: get_alert_id_iri
   - type: CyopsUtilites
     name: The End
-    step_variables: []
     params: []
     version: 3.4.0
     connector: cyops_utilities

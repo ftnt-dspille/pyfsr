@@ -22,7 +22,6 @@ playbooks:
   - type: create_record
     name: Add Comment on top of Just Created Alert
     ignore_errors: true
-    step_variables: []
     fields:
       type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
       alerts: '{{vars.steps.Create_new_Cybr_Hawk_Alert[''@id'']}}'
@@ -151,7 +150,6 @@ playbooks:
   - type: create_record
     name: Create new Cybr Hawk Alert
     ignore_errors: true
-    step_variables: []
     fields:
       rule: '{{vars.cybr_alert_rule_id}}:{{vars.cybr_alert_rule_description}}'
       type: /api/3/picklists/574a6ee2-7265-4701-815e-cff83b053bce
@@ -283,7 +281,6 @@ playbooks:
     next: get_add_alert_status
   - type: create_record
     name: Create Task with the Error JSON
-    step_variables: []
     fields:
       type: /api/3/picklists/62322a54-a069-4f74-a917-3d864f24524a
       status: /api/3/picklists/7669725a-28cc-4b19-98a3-9ca71e0f88f4
@@ -316,7 +313,6 @@ playbooks:
     next: finish
   - type: CyopsUtilites
     name: Finish
-    step_variables: []
     params: []
     version: 3.4.0
     connector: cyops_utilities
@@ -335,7 +331,6 @@ playbooks:
     next: source_data_setting_and_controlling
   - type: decision
     name: Is JSON Correct
-    step_variables: []
     conditions:
     - display: It seems the Alert is GOOD
       when: '{{ vars.control1 > 10 and vars.control2 > 10 }}'

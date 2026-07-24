@@ -28,7 +28,6 @@ playbooks:
     name: Lookup Artifacts
     # swap‑in: <your threat���intel connector> (config: <uuid>)
     pickFromTenant: false
-    step_variables: []
     config: <YOUR_CONNECTOR_UUID>
     params:
       observable: "{{ item.value }}"
@@ -51,7 +50,6 @@ playbooks:
     next: End
   - type: CyopsUtilites
     name: End
-    step_variables: []
     params: []
     version: 3.3.0
     connector: cyops_utilities

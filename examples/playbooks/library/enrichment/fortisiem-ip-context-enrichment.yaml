@@ -21,7 +21,6 @@ playbooks:
   steps:
   - type: create_record
     name: Add Comment to the Indicator with the result
-    step_variables: []
     fields:
       type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
       people: []
@@ -38,7 +37,6 @@ playbooks:
   - type: connector
     name: Bring IP Conext from FortiSIEM
     pickFromTenant: false
-    step_variables: []
     config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
     params:
       value: '{{vars.myIP}}'
@@ -60,7 +58,6 @@ playbooks:
     next: output
   - type: CyopsUtilites
     name: End
-    step_variables: []
     params: []
     version: 3.5.0
     connector: cyops_utilities
@@ -73,7 +70,6 @@ playbooks:
     next: create_table
   - type: manual_input
     name: Output
-    step_variables: []
     options:
     - display: Save JSON + Send via Email
       next: add_comment_to_the_indicator_with_the_result
@@ -90,13 +86,7 @@ playbooks:
     record: ''
     resources: indicators
     is_approval: false
-    owner_detail:
-      isAssigned: false
-      emailRecipients: ''
     isRecordLinked: false
-    email_notification:
-      enabled: false
-      smtpParameters: []
     customEmailExternal: false
     inline_channel_list: []
     external_channel_list: []
@@ -107,7 +97,6 @@ playbooks:
     when: '{{vars.sendEmail > 0}}'
     ignore_errors: true
     pickFromTenant: false
-    step_variables: []
     config: 420864d3-364c-4ebb-a49f-87fa7ecc717e
     params:
       body: <p>{{vars.myTable}}</p>
@@ -142,7 +131,6 @@ playbooks:
     next: configuration
   - type: update_record
     name: Update Indicator
-    step_variables: []
     fields:
       sourceData: '{{vars.steps.Bring_IP_Conext_from_FortiSIEM.data | toJSON }}'
     operation: Append

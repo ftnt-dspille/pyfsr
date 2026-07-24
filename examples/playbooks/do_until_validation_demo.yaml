@@ -38,9 +38,11 @@ playbooks:
       # child's output that the parent reads as vars.steps.<ref>.<name>.
       - name: Validate
         type: set_variable
+        with:
+          answer: "{{ vars.steps.AskNumber.input.my_number }}"
         vars:
-          is_valid_number: "{{ (vars.steps.AskNumber.input.my_number | string | length) == 6 }}"
-          validated_number: "{{ vars.steps.AskNumber.input.my_number }}"
+          is_valid_number: "{{ (vars.answer | string | length) == 6 }}"
+          validated_number: "{{ vars.answer }}"
 
   # --- Parent: loop the child until valid -----------------------------------
   - name: Loop Until Six Digits

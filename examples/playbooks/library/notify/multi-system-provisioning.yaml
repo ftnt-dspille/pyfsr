@@ -21,7 +21,6 @@ playbooks:
   steps:
   - type: create_record
     name: Add Comment to Request
-    step_variables: []
     fields:
       type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
       alerts: '{{vars.input.records[0][''@id'']}}'
@@ -39,7 +38,6 @@ playbooks:
     next: update_request_to_closed
   - type: decision
     name: AD Provisioning
-    step_variables: []
     conditions:
     - display: Continue
       default: true
@@ -50,7 +48,6 @@ playbooks:
   - type: connector
     name: Apply Linux Commands
     pickFromTenant: false
-    step_variables: []
     config: 2429fec1-ff14-40ac-bef4-3d72ba76fa83
     params:
       cmd: '{{vars.item}}'
@@ -64,7 +61,6 @@ playbooks:
     name: Create AD User Object
     ignore_errors: true
     pickFromTenant: false
-    step_variables: []
     config: 0243c862-a811-4285-914a-edafa17175fb
     params:
       mail: admin@example.com
@@ -83,7 +79,6 @@ playbooks:
     next: linux_provisioning
   - type: decision
     name: DKIM Signature and Email Source
-    step_variables: []
     conditions:
     - display: Finish
       default: true
@@ -103,7 +98,6 @@ playbooks:
     next: fgt_provisioning
   - type: decision
     name: FGT Provisioning
-    step_variables: []
     conditions:
     - display: 'Yes'
       when: '{{ vars.fgt_provisioning == 1 }}'
@@ -113,7 +107,6 @@ playbooks:
       next: ad_provisioning
   - type: CyopsUtilites
     name: FINISH Provisioning
-    step_variables: []
     params: []
     version: 3.6.0
     connector: cyops_utilities
@@ -127,7 +120,6 @@ playbooks:
     next: create_ad_user_object
   - type: decision
     name: Linux Provisioning
-    step_variables: []
     conditions:
     - display: 'Yes'
       when: '{{ vars.linux_provisioning == 1 }}'
@@ -156,7 +148,6 @@ playbooks:
     name: Send Provisioning Report
     ignore_errors: false
     pickFromTenant: false
-    step_variables: []
     config: 420864d3-364c-4ebb-a49f-87fa7ecc717e
     params:
       body: '<p>Hi {{vars.email_sender}},</p>
@@ -261,7 +252,6 @@ playbooks:
   - type: connector
     name: Update FGT Address Object
     pickFromTenant: false
-    step_variables: []
     config: c39ff169-25f7-4309-9e3e-434faec7ce91
     params:
       type: Device (MAC Address)
@@ -277,7 +267,6 @@ playbooks:
     next: ad_provisioning
   - type: update_record
     name: Update Request to CLOSED
-    step_variables: []
     fields:
       type: /api/3/picklists/0b3ef6f9-eb29-4ab9-ac98-98364bd1a3aa
       status: /api/3/picklists/fac53e73-8d16-4189-98d5-95fbd1555232
@@ -287,7 +276,6 @@ playbooks:
     operation: Append
     record: '{{vars.input.records[0][''@id'']}}'
     collectionType: /api/3/alerts
-    fieldOperation: []
     next: send_provisioning_report
   annotations:
   - id: fortisoar_orchestration

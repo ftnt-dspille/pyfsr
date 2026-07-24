@@ -21,7 +21,6 @@ playbooks:
   steps:
   - type: create_record
     name: Add Comment to Alert
-    step_variables: []
     fields:
       type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
       alerts: '{{vars.input.records[0][''@id'']}}'
@@ -42,7 +41,6 @@ playbooks:
   - type: connector
     name: Change the Resolution Field
     pickFromTenant: false
-    step_variables: []
     config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
     params:
       comments: ''
@@ -58,7 +56,6 @@ playbooks:
   - type: connector
     name: Clear Manually an Incident with a Reason
     pickFromTenant: false
-    step_variables: []
     config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
     params:
       id: '{{vars.incidentId}}'
@@ -75,7 +72,6 @@ playbooks:
     next: clear_manually_an_incident_with_a_reason
   - type: CyopsUtilites
     name: End
-    step_variables: []
     params: []
     version: 3.5.0
     connector: cyops_utilities
@@ -100,7 +96,6 @@ playbooks:
     next: configuration
   - type: update_record
     name: Update Alert Status
-    step_variables: []
     fields:
       status: /api/3/picklists/fac53e73-8d16-4189-98d5-95fbd1555232
       assignedTo: /api/3/people/3451141c-bac6-467c-8d72-85e0fab569ce

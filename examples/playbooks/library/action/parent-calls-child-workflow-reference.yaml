@@ -22,29 +22,23 @@ playbooks:
   - type: workflow_reference
     name: Call Specific playbook
     apply_async: false
-    step_variables: []
     IncidentIRI: '{{vars.item[''@id'']}}'
     pass_parent_env: false
     pass_input_record: false
     workflowReference: /api/3/workflows/98088c22-2006-43c1-bf73-ef1c151c1cd6
   - type: find_record
     name: Find Incidents
-    step_variables: []
     module: incidents?$limit=30
-    query:
-      sort: []
-      limit: 30
-      logic: AND
-      filters:
-      - type: object
-        field: severity
-        value: '{{vars.sev2}}'
-        _value:
-          '@id': '{{vars.sev2}}'
-          display: Critical
-          itemValue: ''
-        operator: eq
     next: call_specific_playbook
+    filters:
+    - type: object
+      field: severity
+      value: '{{vars.sev2}}'
+      _value:
+        '@id': '{{vars.sev2}}'
+        display: Critical
+        itemValue: ''
+      operator: eq
   - type: set_variable
     name: myVars
     vars:
