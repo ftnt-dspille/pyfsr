@@ -37,33 +37,31 @@ playbooks:
       - name: FetchFortiCloud
         type: connector
         next: FetchServiceNow
-        arguments:
-          connector: forticloud-asset-management
-          operation: generic_api_call
-          config: forticloud-reconcile
-          params:
-            method: POST
-            endpoint: /products/list
-            payload:
-              accountId: 1245007
-              status: Registered
-              expireBefore: "2030-01-01T00:00:00-00:00"
+        connector: forticloud-asset-management
+        operation: generic_api_call
+        config: forticloud-reconcile
+        params:
+          method: POST
+          endpoint: /products/list
+          payload:
+            accountId: 1245007
+            status: Registered
+            expireBefore: "2030-01-01T00:00:00-00:00"
 
       # --- Source B: ServiceNow CMDB (live) ----------------------------------
       - name: FetchServiceNow
         type: connector
         next: Reconcile
-        arguments:
-          connector: servicenow-cmdb
-          operation: get_configuration_items
-          config: servicenow-reconcile
-          params:
-            class_name: cmdb_ci
-            sysparm_limit: 1000
+        connector: servicenow-cmdb
+        operation: get_configuration_items
+        config: servicenow-reconcile
+        params:
+          class_name: cmdb_ci
+          sysparm_limit: 1000
             # Source-side filter: only reconcile CIs the pilot owns (tagged
             # asset_tag=PYFSR-RECON by reseed_servicenow_cmdb.py), so stock demo
             # CIs (MacBooks, etc.) never enter the diff.
-            sysparm_query: "asset_tag=PYFSR-RECON"
+          sysparm_query: "asset_tag=PYFSR-RECON"
 
       # --- Diff the two live inventories by serial ---------------------------
       # Uses the custom code-runner connector (UNRESTRICTED python: set/sum/
@@ -72,12 +70,11 @@ playbooks:
       - name: Reconcile
         type: connector
         next: Write finding
-        arguments:
-          connector: code-runner
-          operation: run_python
-          config: code-runner-pilot
-          params:
-            code: |
+        connector: code-runner
+        operation: run_python
+        config: code-runner-pilot
+        params:
+          code: |
               import csv, io, re, json, datetime
               # Upstream connector outputs, rendered as python literals by jinja.
               fc_raw = {{ vars.steps.FetchFortiCloud.data.assets }}
@@ -223,63 +220,57 @@ playbooks:
         next: Email report
         for_each:
           item: "{{ vars.steps.Reconcile.data.code_output.findings }}"
-        arguments:
-          module: reconciliation_results
-          operation: Create
-          resource:
-            source_system: "{{ vars.item.source_system }}"
-            source_id: "{{ vars.item.source_id }}"
-            target_system: "{{ vars.item.target_system }}"
-            target_id: "{{ vars.item.target_id }}"
-            join_key: "{{ vars.item.join_key }}"
-            mismatch_type: "{{ vars.item.mismatch_type }}"
+        module: reconciliation_results
+        operation: Create
+        fields:
+          source_system: "{{ vars.item.source_system }}"
+          source_id: "{{ vars.item.source_id }}"
+          target_system: "{{ vars.item.target_system }}"
+          target_id: "{{ vars.item.target_id }}"
+          join_key: "{{ vars.item.join_key }}"
+          mismatch_type: "{{ vars.item.mismatch_type }}"
             # ReconStatus picklist IRI for "Open" (create_record needs an IRI).
-            status: "/api/3/picklists/58200b01-3cca-4b6b-a3c3-a83415def3e2"
-            details: "{{ vars.item.details }}"
-          step_variables: []
-
+          status: "/api/3/picklists/58200b01-3cca-4b6b-a3c3-a83415def3e2"
+          details: "{{ vars.item.details }}"
       # One Slack message per flagged device issue, to #it-asset-mgmt.
       - name: Slack alert
         type: connector
         next: Slack summary
         for_each:
           item: "{{ vars.steps.Reconcile.data.code_output.findings }}"
-        arguments:
-          connector: slack
-          operation: send_message
-          config: slack
-          params:
-            channel: "#it-asset-mgmt"
-            message: "{{ vars.item.emoji }} *{{ vars.item.severity }}* — {{ vars.item.details }} (asset {{ vars.item.join_key }}, {{ vars.item.source_system }} vs {{ vars.item.target_system }})"
+        connector: slack
+        operation: send_message
+        config: slack
+        params:
+          channel: "#it-asset-mgmt"
+          message: "{{ vars.item.emoji }} *{{ vars.item.severity }}* — {{ vars.item.details }} (asset {{ vars.item.join_key }}, {{ vars.item.source_system }} vs {{ vars.item.target_system }})"
             # The connector defaults thread_ts to 0 (Slack rejects it) unless sent
             # explicitly empty — post as a top-level message, not a thread reply.
-            thread_ts: ""
+          thread_ts: ""
 
       # Big summary view — native Block Kit (header + field grids).
       - name: Slack summary
         type: connector
-        arguments:
-          connector: slack
-          operation: send_message
-          config: slack
-          params:
-            channel: "#it-asset-mgmt"
-            message: "{{ vars.steps.Reconcile.data.code_output.summary_text }}"
-            blocks: "{{ vars.steps.Reconcile.data.code_output.summary_blocks }}"
-            thread_ts: ""
+        connector: slack
+        operation: send_message
+        config: slack
+        params:
+          channel: "#it-asset-mgmt"
+          message: "{{ vars.steps.Reconcile.data.code_output.summary_text }}"
+          blocks: "{{ vars.steps.Reconcile.data.code_output.summary_blocks }}"
+          thread_ts: ""
 
       - name: Email report
         type: connector
         next: Slack alert
-        arguments:
-          connector: smtp
-          operation: send_email
-          config: localhost-postfix
-          params:
-            to: "root@localhost"
-            subject: "Reconciliation Report - {{ vars.steps.Reconcile.data.code_output.matched }} matched, {{ vars.steps.Reconcile.data.code_output.count }} findings (FortiCloud {{ vars.steps.Reconcile.data.code_output.fc_count }} vs ServiceNow {{ vars.steps.Reconcile.data.code_output.sn_count }})"
-            body: "Reconciliation report:\n\nFortiCloud assets: {{ vars.steps.Reconcile.data.code_output.fc_count }}\nServiceNow CMDB CIs: {{ vars.steps.Reconcile.data.code_output.sn_count }}\nMatched: {{ vars.steps.Reconcile.data.code_output.matched }}\nDiscrepancies: {{ vars.steps.Reconcile.data.code_output.count }}\n\nFull breakdown attached (cmdb_reconciliation_report.csv)."
-            content_type: "text"
+        connector: smtp
+        operation: send_email
+        config: localhost-postfix
+        params:
+          to: "root@localhost"
+          subject: "Reconciliation Report - {{ vars.steps.Reconcile.data.code_output.matched }} matched, {{ vars.steps.Reconcile.data.code_output.count }} findings (FortiCloud {{ vars.steps.Reconcile.data.code_output.fc_count }} vs ServiceNow {{ vars.steps.Reconcile.data.code_output.sn_count }})"
+          body: "Reconciliation report:\n\nFortiCloud assets: {{ vars.steps.Reconcile.data.code_output.fc_count }}\nServiceNow CMDB CIs: {{ vars.steps.Reconcile.data.code_output.sn_count }}\nMatched: {{ vars.steps.Reconcile.data.code_output.matched }}\nDiscrepancies: {{ vars.steps.Reconcile.data.code_output.count }}\n\nFull breakdown attached (cmdb_reconciliation_report.csv)."
+          content_type: "text"
             # Attach the CSV the Reconcile step wrote to the appliance.
-            file_path: "{{ vars.steps.Reconcile.data.code_output.csv_path }}"
-            file_name: "cmdb_reconciliation_report.csv"
+          file_path: "{{ vars.steps.Reconcile.data.code_output.csv_path }}"
+          file_name: "cmdb_reconciliation_report.csv"
