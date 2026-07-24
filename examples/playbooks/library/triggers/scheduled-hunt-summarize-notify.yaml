@@ -51,7 +51,7 @@ playbooks:
 
       - type: create_record
         name: Post Digest Comment
-        collection: /api/3/comments
+        module: comments
         operation: Overwrite
         fields:
           content: |
@@ -62,13 +62,9 @@ playbooks:
                 <li>Medium: {{ vars.medium_count }}</li>
                 <li>Low: {{ vars.low_count }}</li>
               </ul>
-            isImportant: true
+              <p>isImportant: true</p>
         next: This is the End
 
-      - type: CyopsUtilites
+      - type: utilities
         name: This is the End
-        connector: cyops_utilities
-        version: 3.7.0
         operation: no_op
-        operationTitle: "Utils: No Operation"
-        params: []
