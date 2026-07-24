@@ -32,7 +32,6 @@ playbooks:
     name: Disable AD Account
     # swap-in: activedirectory (config: <replace-with-your-config-uuid>)
     pickFromTenant: false
-    step_variables: []
     config: <replace-with-your-config-uuid>
     params:
       search_attr_name: "SamAccount Name"
@@ -51,7 +50,6 @@ playbooks:
 
   - type: update_record
     name: Tag Alert as Contained
-    step_variables: []
     fields:
       recordTags: "{{ vars.tags }}"
     operation: Append
@@ -63,7 +61,6 @@ playbooks:
 
   - type: update_record
     name: Update Asset Status to Contained
-    step_variables: []
     module: assets
     record: "{{ vars.asset_iri }}"
     fields:
@@ -73,7 +70,6 @@ playbooks:
 
   - type: SendMail
     name: Send Containment Notification
-    step_variables: []
     config: <replace-with-smtp-config-uuid>
     params:
       subject: "Host Containment Executed for {{ vars.host_name }}"
@@ -87,7 +83,6 @@ playbooks:
 
   - type: CyopsUtilites
     name: End
-    step_variables: []
     params: []
     version: 3.5.0
     connector: cyops_utilities

@@ -21,7 +21,6 @@ playbooks:
   steps:
   - type: manual_input
     name: Approve Blocking
-    step_variables: []
     options:
     - option: Approve
       primary: true
@@ -33,26 +32,18 @@ playbooks:
     record: ''
     resources: indicators
     is_approval: true
-    owner_detail:
-      isAssigned: true
-      assignedToTeam:
-      - iri: /api/3/teams/6e569c09-3bd4-40f1-98b0-cc994464c3c5
-        teamname: SOC Team
-      emailRecipients: ''
-      assignedToPerson: []
-      assignedToRecord: false
     isRecordLinked: false
-    email_notification:
-      enabled: false
-      smtpParameters: []
     customEmailExternal: false
     inline_channel_list: []
     external_channel_list: []
     unauthenticated_input: false
     internal_email_subject: A FortiSOAR playbook is requesting your input
+    assign_to:
+      team:
+        iri: /api/3/teams/6e569c09-3bd4-40f1-98b0-cc994464c3c5
+        teamname: SOC Team
   - type: manual_input
     name: Enter IP
-    step_variables: []
     options:
     - display: Go
       primary: true
@@ -87,13 +78,7 @@ playbooks:
     record: ''
     resources: indicators
     is_approval: false
-    owner_detail:
-      isAssigned: false
-      emailRecipients: ''
     isRecordLinked: false
-    email_notification:
-      enabled: false
-      smtpParameters: []
     customEmailExternal: false
     inline_channel_list: []
     external_channel_list: []
@@ -102,7 +87,6 @@ playbooks:
   - type: connector
     name: FGT Block
     pickFromTenant: false
-    step_variables: []
     config: 8b6d9137-f2df-4d37-9687-b38bbaba82e1
     params:
       vdom: ''
@@ -116,7 +100,6 @@ playbooks:
   - type: CyopsUtilites
     name: JSON to HTML for IPStack
     when: '{{vars.myipstack == 1}}'
-    step_variables: []
     params:
       data: '{{vars.steps.Lookup_IP_Stack.data}}'
       display: Horizontal
@@ -131,7 +114,6 @@ playbooks:
   - type: CyopsUtilites
     name: JSON to HTML for VT
     when: '{{vars.myvt == 1}}'
-    step_variables: []
     params:
       data: '{{vars.steps.VT_Lookup.data.attributes[''last_analysis_stats'']}}'
       display: Horizontal
@@ -146,7 +128,6 @@ playbooks:
   - type: connector
     name: Lokkup IPInfo
     pickFromTenant: false
-    step_variables: []
     config: f6128dad-bdae-468a-825d-0bc63dd90cd2
     params:
       ip_address: '{{vars.steps.Enter_IP.input.iP}}'
@@ -157,7 +138,6 @@ playbooks:
   - type: connector
     name: Lookup Abuse IP Database
     pickFromTenant: false
-    step_variables: []
     config: 030f3d6e-ec70-4a5c-89ac-ba5674cb71b0
     params:
       ip: '{{vars.steps.Enter_IP.input.iP}}'
@@ -170,7 +150,6 @@ playbooks:
     name: Lookup IP Stack
     when: '{{vars.myipstack == 1}}'
     pickFromTenant: false
-    step_variables: []
     config: 4dd23fc8-5493-444a-bca5-043cebd8b503
     params:
       query: '{{vars.steps.Enter_IP.input.iP}}'
@@ -195,7 +174,6 @@ playbooks:
     next: enter_ip
   - type: manual_input
     name: Presenting results
-    step_variables: []
     options:
     - display: Finish
       primary: true
@@ -222,13 +200,7 @@ playbooks:
     record: ''
     resources: indicators
     is_approval: false
-    owner_detail:
-      isAssigned: false
-      emailRecipients: ''
     isRecordLinked: false
-    email_notification:
-      enabled: false
-      smtpParameters: []
     customEmailExternal: false
     inline_channel_list: []
     external_channel_list: []
@@ -242,7 +214,6 @@ playbooks:
     next: playbook_config
   - type: CyopsUtilites
     name: The End
-    step_variables: []
     params: []
     version: 3.3.0
     connector: cyops_utilities
@@ -252,7 +223,6 @@ playbooks:
     name: VT Lookup
     when: '{{vars.myvt == 1}}'
     pickFromTenant: false
-    step_variables: []
     config: 2df52cf6-e4e2-4eee-bce1-7fc6d22d9fc1
     params:
       ip: '{{vars.steps.Enter_IP.input.iP}}'

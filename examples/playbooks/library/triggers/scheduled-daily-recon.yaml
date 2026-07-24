@@ -22,7 +22,6 @@ playbooks:
   - type: create_record
     name: Add Comment to File
     ignore_errors: true
-    step_variables: []
     fields:
       type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
       people: []
@@ -41,7 +40,6 @@ playbooks:
   - type: connector
     name: Block Domains FGT
     pickFromTenant: false
-    step_variables: []
     config: a41931f5-f1de-4bc3-b069-4446d374a72b
     params:
       url: '[''{{vars.item.domain}}'']'
@@ -53,7 +51,6 @@ playbooks:
   - type: connector
     name: Block Domains SSH
     pickFromTenant: false
-    step_variables: []
     config: b0027dc0-7147-489e-a8ea-3b4ad70b7f9e
     params:
       cmd: echo "{{vars.item.domain}}" >>{{vars.ssh_filename}}
@@ -66,7 +63,6 @@ playbooks:
   - type: connector
     name: Create Excel Attachment
     pickFromTenant: false
-    step_variables: []
     params:
       fileName: '{{vars.excel_filename}}'
       jsonData: "{\r\n  \"domain\":\r\n  {{vars.excelDomains}}\r\n}"
@@ -82,7 +78,6 @@ playbooks:
     next: create_excel_attachment
   - type: decision
     name: Excel Automation
-    step_variables: []
     conditions:
     - display: End
       default: true
@@ -92,32 +87,26 @@ playbooks:
       next: create_excel_content
   - type: find_record
     name: Find Recon BP Alert Records
-    step_variables: []
     module: alerts?$limit=100
-    query:
-      sort: []
-      limit: 30
-      logic: AND
-      filters:
-      - type: primitive
-        field: source
-        value: Webhook
-        operator: eq
-        _operator: eq
-      - type: datetime
-        logic: AND
-        _field: assigneddate
-        _value: '{{vars.daysAgo}}'
-        filters:
-        - type: datetime
-          field: assigneddate
-          value: '{{getRelativeDate(0,0,-1,"end","end","end")}}'
-          operator: gt
-        _operator: gt
     next: fortigate_automation
+    filters:
+    - type: primitive
+      field: source
+      value: Webhook
+      operator: eq
+      _operator: eq
+    - type: datetime
+      logic: AND
+      _field: assigneddate
+      _value: '{{vars.daysAgo}}'
+      filters:
+      - type: datetime
+        field: assigneddate
+        value: '{{getRelativeDate(0,0,-1,"end","end","end")}}'
+        operator: gt
+      _operator: gt
   - type: decision
     name: FortiGate Automation
-    step_variables: []
     conditions:
     - display: Web Filter
       when: '{{ vars.fgt_automation == 1 }}'
@@ -127,7 +116,6 @@ playbooks:
       next: ssh_automation
   - type: update_record
     name: Link Alerts to File
-    step_variables: []
     fields:
       __link:
         alerts: '{{ vars.steps.Find_Recon_BP_Alert_Records | json_query(''[]."@id"'') }}'
@@ -150,7 +138,6 @@ playbooks:
     next: find_recon_bp_alert_records
   - type: decision
     name: SSH Automation
-    step_variables: []
     conditions:
     - display: SSH
       when: '{{ vars.ssh_automation == 1 }}'
@@ -166,7 +153,6 @@ playbooks:
     next: playbook_config
   - type: CyopsUtilites
     name: This is the End
-    step_variables: []
     params: []
     version: 3.7.0
     connector: cyops_utilities

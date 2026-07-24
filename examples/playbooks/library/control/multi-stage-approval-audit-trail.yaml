@@ -29,9 +29,11 @@ playbooks:
 
       - type: set_variable
         name: Capture First Approver Info
+        with:
+          approval: "{{ vars.steps.First_Approval_Request }}"
         vars:
-          first_approver: "{{ vars.steps.First_Approval_Request.username }}"
-          first_approval_time: "{{ vars.steps.First_Approval_Request.approvedAt }}"
+          first_approver: "{{ vars.approval.username }}"
+          first_approval_time: "{{ vars.approval.approvedAt }}"
         next: Record First Approver
 
       - type: update_record
@@ -58,9 +60,11 @@ playbooks:
 
       - type: set_variable
         name: Capture Second Approver Info
+        with:
+          approval: "{{ vars.steps.Second_Approval_Request }}"
         vars:
-          second_approver: "{{ vars.steps.Second_Approval_Request.username }}"
-          second_approval_time: "{{ vars.steps.Second_Approval_Request.approvedAt }}"
+          second_approver: "{{ vars.approval.username }}"
+          second_approval_time: "{{ vars.approval.approvedAt }}"
         next: Record Second Approver
 
       - type: update_record

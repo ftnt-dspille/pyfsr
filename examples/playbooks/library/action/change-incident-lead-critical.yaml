@@ -23,7 +23,6 @@ playbooks:
   steps:
   - type: CyopsUtilites
     name: End
-    step_variables: []
     params: []
     version: 3.3.0
     connector: cyops_utilities
@@ -34,7 +33,6 @@ playbooks:
     next: update_lead
   - type: update_record
     name: Update Lead
-    step_variables: []
     fields:
       phase: /api/3/picklists/bb740d30-f699-11e7-8c3f-9a214cf093ae
       impactROI: 4
@@ -42,5 +40,4 @@ playbooks:
     operation: Append
     record: '{{vars.input.params.IncidentIRI}}'
     collectionType: /api/3/incidents
-    fieldOperation: []
     next: end

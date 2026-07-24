@@ -22,7 +22,6 @@ playbooks:
   - type: create_record
     name: Add Comment to Indicator
     when: '{{vars.writeComment == 1}}'
-    step_variables: []
     fields:
       type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
       people: []
@@ -53,7 +52,6 @@ playbooks:
     name: Apply Quarantine on FGT
     agent: HomeOfficeAgent1
     pickFromTenant: false
-    step_variables: []
     config: c177a2e5-2052-4c93-83b6-b7f34f8dffa8
     params:
       vdom: ''
@@ -67,7 +65,6 @@ playbooks:
     next: add_comment_to_indicator
   - type: manual_input
     name: Approval Request
-    step_variables: []
     options:
     - option: Approve
       primary: true
@@ -79,27 +76,19 @@ playbooks:
     record: '{{ vars.input.records[0]["@id"] }}'
     resources: indicators
     is_approval: true
-    owner_detail:
-      isAssigned: true
-      assignedToTeam: []
-      emailRecipients: ''
-      assignedToPerson:
-      - iri: /api/3/people/2833b1dc-8173-4729-8343-21922c33f182
-        lastname: Righi
-        firstname: Rafael
-      assignedToRecord: false
     isRecordLinked: false
-    email_notification:
-      enabled: false
-      smtpParameters: []
     customEmailExternal: false
     inline_channel_list: []
     external_channel_list: []
     unauthenticated_input: false
     internal_email_subject: A FortiSOAR playbook is requesting your input
+    assign_to:
+      person:
+      - iri: /api/3/people/2833b1dc-8173-4729-8343-21922c33f182
+        lastname: Righi
+        firstname: Rafael
   - type: CyopsUtilites
     name: End
-    step_variables: []
     params: []
     version: 3.3.0
     connector: cyops_utilities
@@ -117,7 +106,6 @@ playbooks:
   - type: SendMail
     name: Send Email Notification
     when: '{{vars.sendEmail == 1}}'
-    step_variables: []
     config: 420864d3-364c-4ebb-a49f-87fa7ecc717e
     params:
       body: <p>{{vars.steps.Add_Comment_to_Indicator.content}}</p>
@@ -134,7 +122,6 @@ playbooks:
     next: end
   - type: decision
     name: Short Path OR Log Path
-    step_variables: []
     conditions:
     - display: Fast track
       when: '{{ vars.askApproval == 0 }}'
@@ -164,7 +151,6 @@ playbooks:
     next: plyabook_configuration
   - type: update_record
     name: Update Indicator
-    step_variables: []
     fields:
       description: Indicator has been Blocked by a FortiSOAR Playbook.
       indicatorStatus: /api/3/picklists/fa29fe48-f01e-476f-bb33-c910f5795b57

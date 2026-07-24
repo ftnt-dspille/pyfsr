@@ -21,7 +21,6 @@ playbooks:
   steps:
   - type: create_record
     name: Add Comment to Alert with OpenAI Output
-    step_variables: []
     fields:
       type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
       alerts: '{{vars.input.records[0][''@id'']}}'
@@ -37,7 +36,6 @@ playbooks:
     next: add_tags_to_alert
   - type: update_record
     name: Add Tags to Alert
-    step_variables: []
     fields:
       __link:
         recordTags: '{{vars.myTags}}'
@@ -49,7 +47,6 @@ playbooks:
     next: end
   - type: CyopsUtilites
     name: End
-    step_variables: []
     params: []
     version: 3.4.0
     connector: cyops_utilities
