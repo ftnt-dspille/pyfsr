@@ -19,54 +19,51 @@ playbooks:
   is_active: true
   trigger_step_id: start
   steps:
-  - type: insert_record
+  - type: create_record
     name: Add Comment to Indicator
     when: '{{vars.writeComment == 1}}'
     step_variables: []
-    arguments:
-      resource:
-        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
-        people: []
-        content: '<p>IP {{vars.input.records[0].value}} with Reputation Malicious {{vars.input.records[0].reputation.itemValue}} was<span style="color: rgb(0, 0, 0);"> </span><span style="background-color: rgb(224, 62, 45); color: rgb(0, 0, 0);">Blocked on FGT</span>. Below the status:</p>
+    fields:
+      type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+      people: []
+      content: '<p>IP {{vars.input.records[0].value}} with Reputation Malicious {{vars.input.records[0].reputation.itemValue}} was<span style="color: rgb(0, 0, 0);"> </span><span style="background-color: rgb(224, 62, 45); color: rgb(0, 0, 0);">Blocked on FGT</span>. Below the status:</p>
 
-          <p>&nbsp;</p>
+        <p>&nbsp;</p>
 
-          <p><span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);">FGT:</span> {{vars.steps.Apply_Quarantine_on_FGT.status}}</p>
+        <p><span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);">FGT:</span> {{vars.steps.Apply_Quarantine_on_FGT.status}}</p>
 
-          <p>&nbsp;</p>
+        <p>&nbsp;</p>
 
-          <p>{% if vars.userApproved %}<br><span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);">USER who Approved:</span> {{vars.userApproved}}<br>{% endif %}</p>
+        <p>{% if vars.userApproved %}<br><span style="background-color: rgb(241, 196, 15); color: rgb(0, 0, 0);">USER who Approved:</span> {{vars.userApproved}}<br>{% endif %}</p>
 
-          <p>&nbsp;</p>
+        <p>&nbsp;</p>
 
-          <p>&nbsp;</p>'
-        __replace: ''
-        indicators: '{{vars.input.records[0][''@id'']}}'
-        recordTags: '{{vars.commentTags}}'
-        isImportant: true
-        peopleUpdated: false
-      operation: Overwrite
-      collection: /api/3/comments
-      fieldOperation:
-        recordTags: Overwrite
+        <p>&nbsp;</p>'
+      __replace: ''
+      indicators: '{{vars.input.records[0][''@id'']}}'
+      recordTags: '{{vars.commentTags}}'
+      isImportant: true
+      peopleUpdated: false
+    operation: Overwrite
+    collection: /api/3/comments
+    fieldOperation:
+      recordTags: Overwrite
     next: update_indicator
   - type: connector
     name: Apply Quarantine on FGT
     agent: HomeOfficeAgent1
     pickFromTenant: false
     step_variables: []
-    arguments:
-      name: Fortinet FortiGate
-      config: c177a2e5-2052-4c93-83b6-b7f34f8dffa8
-      params:
-        vdom: ''
-        method: Quarantine Based
-        ip_addresses: '{{vars.input.records[0].value}}'
-        time_to_live: '{{vars.blockPeriod}}'
-      connector: fortigate-firewall
-      operation: block_ip_new
-      operationTitle: Block IP Address
-      dynamicallySelected: false
+    config: c177a2e5-2052-4c93-83b6-b7f34f8dffa8
+    params:
+      vdom: ''
+      method: Quarantine Based
+      ip_addresses: '{{vars.input.records[0].value}}'
+      time_to_live: '{{vars.blockPeriod}}'
+    connector: fortigate-firewall
+    operation: block_ip_new
+    operationTitle: Block IP Address
+    dynamicallySelected: false
     next: add_comment_to_indicator
   - type: manual_input
     name: Approval Request
@@ -77,39 +74,37 @@ playbooks:
       next: user_who_approved
     - option: Reject
       next: end
-    arguments:
-      title: Do you Agree with this Blocking?
-      description: IP to be blocked {{vars.input.records[0].value}}
-      record: '{{ vars.input.records[0]["@id"] }}'
-      resources: indicators
-      is_approval: true
-      owner_detail:
-        isAssigned: true
-        assignedToTeam: []
-        emailRecipients: ''
-        assignedToPerson:
-        - iri: /api/3/people/2833b1dc-8173-4729-8343-21922c33f182
-          lastname: Righi
-          firstname: Rafael
-        assignedToRecord: false
-      isRecordLinked: false
-      email_notification:
-        enabled: false
-        smtpParameters: []
-      customEmailExternal: false
-      inline_channel_list: []
-      external_channel_list: []
-      unauthenticated_input: false
-      internal_email_subject: A FortiSOAR playbook is requesting your input
+    title: Do you Agree with this Blocking?
+    description: IP to be blocked {{vars.input.records[0].value}}
+    record: '{{ vars.input.records[0]["@id"] }}'
+    resources: indicators
+    is_approval: true
+    owner_detail:
+      isAssigned: true
+      assignedToTeam: []
+      emailRecipients: ''
+      assignedToPerson:
+      - iri: /api/3/people/2833b1dc-8173-4729-8343-21922c33f182
+        lastname: Righi
+        firstname: Rafael
+      assignedToRecord: false
+    isRecordLinked: false
+    email_notification:
+      enabled: false
+      smtpParameters: []
+    customEmailExternal: false
+    inline_channel_list: []
+    external_channel_list: []
+    unauthenticated_input: false
+    internal_email_subject: A FortiSOAR playbook is requesting your input
   - type: CyopsUtilites
     name: End
     step_variables: []
-    arguments:
-      params: []
-      version: 3.3.0
-      connector: cyops_utilities
-      operation: no_op
-      operationTitle: 'Utils: No Operation'
+    params: []
+    version: 3.3.0
+    connector: cyops_utilities
+    operation: no_op
+    operationTitle: 'Utils: No Operation'
   - type: set_variable
     name: Plyabook Configuration
     vars:
@@ -123,20 +118,19 @@ playbooks:
     name: Send Email Notification
     when: '{{vars.sendEmail == 1}}'
     step_variables: []
-    arguments:
-      config: 420864d3-364c-4ebb-a49f-87fa7ecc717e
-      params:
-        body: <p>{{vars.steps.Add_Comment_to_Indicator.content}}</p>
-        subject: FortiGate was updated - Quarantine IP
-        iri_list: ''
-        cc_recipients: ''
-        to_recipients: admin@example.com
-        bcc_recipients: ''
-      version: 2.5.0
-      from_str: admin@example.com
-      connector: smtp
-      operation: send_email
-      operationTitle: Send Email
+    config: 420864d3-364c-4ebb-a49f-87fa7ecc717e
+    params:
+      body: <p>{{vars.steps.Add_Comment_to_Indicator.content}}</p>
+      subject: FortiGate was updated - Quarantine IP
+      iri_list: ''
+      cc_recipients: ''
+      to_recipients: admin@example.com
+      bcc_recipients: ''
+    version: 2.5.0
+    from_str: admin@example.com
+    connector: smtp
+    operation: send_email
+    operationTitle: Send Email
     next: end
   - type: decision
     name: Short Path OR Log Path
@@ -151,36 +145,34 @@ playbooks:
   - type: start
     name: Start
     module: indicators
-    arguments:
-      route: 906871fa-4bb4-4fe5-b0fc-495498c1604b
-      button_label: 'Agent1: Quanrantine an IP on FGT'
-      displayConditions:
-        indicators:
-          sort: []
-          limit: 30
-          logic: AND
-          filters:
-          - type: object
-            field: typeofindicator
-            value: /api/3/picklists/c0beeda4-2c7a-4214-b7e5-53ba1649539c
-            _value:
-              '@id': /api/3/picklists/c0beeda4-2c7a-4214-b7e5-53ba1649539c
-              display: IP Address
-              itemValue: IP Address
-            operator: eq
+    route: 906871fa-4bb4-4fe5-b0fc-495498c1604b
+    button_label: 'Agent1: Quanrantine an IP on FGT'
+    displayConditions:
+      indicators:
+        sort: []
+        limit: 30
+        logic: AND
+        filters:
+        - type: object
+          field: typeofindicator
+          value: /api/3/picklists/c0beeda4-2c7a-4214-b7e5-53ba1649539c
+          _value:
+            '@id': /api/3/picklists/c0beeda4-2c7a-4214-b7e5-53ba1649539c
+            display: IP Address
+            itemValue: IP Address
+          operator: eq
     next: plyabook_configuration
   - type: update_record
     name: Update Indicator
     step_variables: []
-    arguments:
-      resource:
-        description: Indicator has been Blocked by a FortiSOAR Playbook.
-        indicatorStatus: /api/3/picklists/fa29fe48-f01e-476f-bb33-c910f5795b57
-      operation: Append
-      collection: '{{vars.input.records[0][''@id'']}}'
-      collectionType: /api/3/indicators
-      fieldOperation:
-        recordTags: Append
+    fields:
+      description: Indicator has been Blocked by a FortiSOAR Playbook.
+      indicatorStatus: /api/3/picklists/fa29fe48-f01e-476f-bb33-c910f5795b57
+    operation: Append
+    record: '{{vars.input.records[0][''@id'']}}'
+    collectionType: /api/3/indicators
+    fieldOperation:
+      recordTags: Append
     next: send_email_notification
   - type: set_variable
     name: User Who Approved

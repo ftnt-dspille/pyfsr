@@ -57,8 +57,7 @@ playbooks:
         type: workflow_reference
         next: StampResult
         apply_async: false
-        arguments:
-          target: Validate Six Digit Number
+        target: Validate Six Digit Number
         retry:
           until: "{{ vars.steps.CallChild.is_valid_number == true }}"
           times: 8

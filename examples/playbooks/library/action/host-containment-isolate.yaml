@@ -33,15 +33,13 @@ playbooks:
     # swap-in: activedirectory (config: <replace-with-your-config-uuid>)
     pickFromTenant: false
     step_variables: []
-    arguments:
-      name: Active Directory
-      config: <replace-with-your-config-uuid>
-      params:
-        search_attr_name: "SamAccount Name"
-        search_attr_value: "{{ vars.host_name }}"
-      connector: activedirectory
-      operation: disable_user_account
-      operationTitle: Disable AD Account
+    config: <replace-with-your-config-uuid>
+    params:
+      search_attr_name: "SamAccount Name"
+      search_attr_value: "{{ vars.host_name }}"
+    connector: activedirectory
+    operation: disable_user_account
+    operationTitle: Disable AD Account
     next: Add Containment Tag
 
   - type: set_variable
@@ -54,48 +52,44 @@ playbooks:
   - type: update_record
     name: Tag Alert as Contained
     step_variables: []
-    arguments:
-      resource:
-        recordTags: "{{ vars.tags }}"
-      operation: Append
-      collection: "{{ vars.input.records[0]['@id'] }}"
-      collectionType: /api/3/alerts
-      fieldOperation:
-        recordTags: Append
+    fields:
+      recordTags: "{{ vars.tags }}"
+    operation: Append
+    record: "{{ vars.input.records[0]['@id'] }}"
+    collectionType: /api/3/alerts
+    fieldOperation:
+      recordTags: Append
     next: Update Asset Status to Contained
 
   - type: update_record
     name: Update Asset Status to Contained
     step_variables: []
-    arguments:
-      module: assets
-      collection: "{{ vars.asset_iri }}"
-      resource:
-        status: "Contained"
-      operation: Overwrite
+    module: assets
+    record: "{{ vars.asset_iri }}"
+    fields:
+      status: "Contained"
+    operation: Overwrite
     next: Send Containment Notification
 
   - type: SendMail
     name: Send Containment Notification
     step_variables: []
-    arguments:
-      config: <replace-with-smtp-config-uuid>
-      params:
-        subject: "Host Containment Executed for {{ vars.host_name }}"
-        body: "The AD account for host {{ vars.host_name }} has been disabled, the alert tagged as contained, and the asset status updated."
-        to_recipients: "security@example.com"
-      version: 2.5.0
-      connector: smtp
-      operation: send_email
-      operationTitle: Send Email
+    config: <replace-with-smtp-config-uuid>
+    params:
+      subject: "Host Containment Executed for {{ vars.host_name }}"
+      body: "The AD account for host {{ vars.host_name }} has been disabled, the alert tagged as contained, and the asset status updated."
+      to_recipients: "security@example.com"
+    version: 2.5.0
+    connector: smtp
+    operation: send_email
+    operationTitle: Send Email
     next: End
 
   - type: CyopsUtilites
     name: End
     step_variables: []
-    arguments:
-      params: []
-      version: 3.5.0
-      connector: cyops_utilities
-      operation: no_op
-      operationTitle: 'Utils: No Operation'
+    params: []
+    version: 3.5.0
+    connector: cyops_utilities
+    operation: no_op
+    operationTitle: 'Utils: No Operation'

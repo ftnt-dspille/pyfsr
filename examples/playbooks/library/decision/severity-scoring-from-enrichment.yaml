@@ -29,8 +29,7 @@ playbooks:
       # 2. Compute weighted severity score using Python logic.
       - name: Compute severity score
         type: code_snippet
-        arguments:
-          code: |
+        code: |
             hits = int('{{ vars.malicious_hits }}' or 0)
             # Map criticality string to weight
             crit_map = {'low': 1, 'medium': 3, 'high': 5}
@@ -73,10 +72,9 @@ playbooks:
       # 6. Update the record with computed severity and tags.
       - name: Update record with severity
         type: update_record
-        arguments:
-          module: alerts
-          collection: "{{ vars.input.records[0]['@id'] }}"
-          resource:
-            severity: "{{ vars.severity_score }}"
-            tags: "{{ vars.tags | trim(',') }}"
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          severity: "{{ vars.severity_score }}"
+          tags: "{{ vars.tags | trim(',') }}"
         # End of playbook – no next.

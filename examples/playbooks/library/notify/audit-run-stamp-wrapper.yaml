@@ -28,13 +28,12 @@ playbooks:
   - type: create_record
     name: Create Audit Record
     # swap-in: <your audit connector> (config: <uuid or name>)
-    arguments:
-      module: audit
-      resource:
-        user: "{{ state.session_user | default('unknown') }}"
-        timestamp: "{{ now() }}"
-        verdict: "{{ vars.verdict | default('unknown') }}"
-        inputs_hash: "{{ vars.inputs_hash }}"
+    module: audit
+    fields:
+      user: "{{ state.session_user | default('unknown') }}"
+      timestamp: "{{ now() }}"
+      verdict: "{{ vars.verdict | default('unknown') }}"
+      inputs_hash: "{{ vars.inputs_hash }}"
     next: Set Audit IRI
 
   - type: set_variable
@@ -45,9 +44,8 @@ playbooks:
 
   - type: CyopsUtilites
     name: End
-    arguments:
-      params: []
-      version: 3.5.0
-      connector: cyops_utilities
-      operation: no_op
-      operationTitle: 'Utils: No Operation'
+    params: []
+    version: 3.5.0
+    connector: cyops_utilities
+    operation: no_op
+    operationTitle: 'Utils: No Operation'

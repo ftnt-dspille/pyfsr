@@ -37,13 +37,12 @@ playbooks:
 
       - name: Escalate Alert
         type: update_record
-        arguments:
-          module: alerts
-          collection: "{{ vars.alert_id }}"
-          resource:
-            severity: "High"
-            owner: "escalation_group"
-            sla_escalated: true
+        module: alerts
+        record: "{{ vars.alert_id }}"
+        fields:
+          severity: "High"
+          owner: "escalation_group"
+          sla_escalated: true
         # swap-in: <your connector> (config: <uuid>)
         next: Notify Stakeholders
 
