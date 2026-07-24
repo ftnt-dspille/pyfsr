@@ -39,6 +39,7 @@ playbooks:
 
   - type: update_record
     name: Link Alert to Incident
+    module: alerts
     record: "{{ vars.alert_iri }}"
     fields:
       incident: "{{ vars.steps.Create_Incident.record_iri }}"
