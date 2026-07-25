@@ -110,6 +110,13 @@ class FortiSOAR:
     Main FortiSOAR client class for interacting with the FortiSOAR API.
     """
 
+    #: The instance-registry alias this client was built from, when created via
+    #: :meth:`~pyfsr.instances.InstanceRegistry.client`. Lets appliance-backed
+    #: APIs (e.g. ``delete_module(drop_orphan_tables=True)``) auto-resolve the
+    #: matching ``[instances.<alias>.appliance]`` SSH profile. ``None`` for
+    #: directly-constructed clients.
+    _instance_alias: str | None = None
+
     def __init__(
         self,
         base_url: str,

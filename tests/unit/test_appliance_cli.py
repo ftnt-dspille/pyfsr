@@ -897,3 +897,28 @@ def test_text_helpers():
     assert _text.slice_columns("ab   cdefg  hi", spans) == ["ab", "cdefg", "hi"]
     assert _text.to_int("Remaining 290 days") == 290 and _text.to_int(None, -1) == -1
     assert _text.to_float("51.2%") == 51.2
+
+
+def test_find_module_tables_includes_underscore_stripped_join_family():
+    """A module with underscores in its tableName has join tables named from the
+    underscore-*stripped* form (foo_bar -> foobar_team). find_module_tables must
+    match both families, else drop leaves join tables that wedge the next publish."""
+
+    class RecordingFacts:
+        def __init__(self):
+            self.sql = ""
+
+        def content_db(self):
+            return "venom"
+
+        def psql(self, sql, db=None, **kw):
+            self.sql = sql
+            return [["foo_bar"], ["foobar_actor"], ["foobar_team"]]
+
+    f = RecordingFacts()
+    found = db_cmds.find_module_tables(f, "foo_bar")
+    assert set(found) == {"foo_bar", "foobar_actor", "foobar_team"}
+    # both the base family and the underscore-stripped join family are queried
+    assert "tablename='foo_bar'" in f.sql
+    assert "LIKE 'foo_bar\\_%'" in f.sql
+    assert "LIKE 'foobar\\_%'" in f.sql

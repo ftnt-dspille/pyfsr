@@ -43,11 +43,13 @@ class ModuleSelection(_ExportEntry):
     """A module **schema** selection (``options.modules[]``).
 
     ``value`` is the module api name (e.g. ``"alerts"``). ``includedAttributes``
-    limits the exported fields; leave empty to export the whole schema.
+    limits the exported fields; leave ``None`` (the default) to export the whole
+    schema — the key is then omitted from the wire, which the export engine reads
+    as "all attributes" (an explicit empty list, by contrast, exports *none*).
     """
 
     value: str
-    includedAttributes: list[str] = []
+    includedAttributes: list[str] | None = None
 
 
 class RecordSet(_ExportEntry):

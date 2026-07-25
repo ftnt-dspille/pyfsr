@@ -226,3 +226,92 @@ def test_read_yaml_raw_text_returned_as_is():
 def test_read_yaml_bad_type_raises():
     with pytest.raises(TypeError):
         _read_yaml_source(123)
+
+
+def _build_bundle_zip(tmp_path):
+    """Minimal UI-export zip: one collection + one custom module definition."""
+    import json
+    import zipfile
+
+    root = tmp_path / "Bundle"
+    coll = root / "playbooks" / "Coll"
+    coll.mkdir(parents=True)
+    (coll / "collection.metadata.json").write_text(json.dumps({"uuid": "c-1", "name": "Coll"}))
+    (coll / "pb1.json").write_text(json.dumps({"name": "PB1"}))
+    mod = root / "modules" / "scenario"
+    mod.mkdir(parents=True)
+    (mod / "mmd.json").write_text(json.dumps({"type": "scenario", "attributes": []}))
+    zip_path = tmp_path / "bundle.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for p in root.rglob("*"):
+            if p.is_file():
+                zf.write(p, p.relative_to(tmp_path))
+    return zip_path
+
+
+class _FakeModulesAdmin:
+    def __init__(self):
+        self.calls = []
+
+    def get_or_create_module_from_metadata(self, mmd, **kw):
+        self.calls.append(mmd)
+        return {"type": mmd["type"]}, True
+
+
+def test_import_export_zip_create_modules_true(tmp_path, monkeypatch):
+    zip_path = _build_bundle_zip(tmp_path)
+    c = RecordingClient()
+    c.modules_admin = _FakeModulesAdmin()
+    a = WorkflowCollectionsAPI(c)
+    monkeypatch.setattr(a, "import_export", lambda envelope, **k: [{"name": "Coll", "uuid": "c-1"}])
+
+    res = a.import_export_zip(zip_path, create_modules=True, create_records=False)
+
+    assert res["modules_created"] == ["scenario"]
+    assert c.modules_admin.calls[0]["type"] == "scenario"
+
+
+def test_import_export_zip_create_modules_default_off(tmp_path, monkeypatch):
+    zip_path = _build_bundle_zip(tmp_path)
+    c = RecordingClient()
+    c.modules_admin = _FakeModulesAdmin()
+    a = WorkflowCollectionsAPI(c)
+    monkeypatch.setattr(a, "import_export", lambda envelope, **k: [])
+
+    res = a.import_export_zip(zip_path, create_records=False)  # create_modules defaults False
+
+    assert res["modules_created"] == []
+    assert c.modules_admin.calls == []
+
+
+def _build_module_only_zip(tmp_path):
+    """Export-Wizard-style bundle with a module + record but NO playbooks/ dir."""
+    import json
+    import zipfile
+
+    root = tmp_path / "Backup"
+    mod = root / "modules" / "scenario"
+    mod.mkdir(parents=True)
+    (mod / "mmd.json").write_text(json.dumps({"type": "scenario", "attributes": []}))
+    recs = root / "records" / "scenario"
+    recs.mkdir(parents=True)
+    (recs / "r.json").write_text(json.dumps([{"name": "demo-1"}]))
+    zip_path = tmp_path / "backup.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for p in root.rglob("*"):
+            if p.is_file():
+                zf.write(p, p.relative_to(tmp_path))
+    return zip_path
+
+
+def test_import_export_zip_module_only_no_playbooks(tmp_path):
+    """A module/record-only bundle imports without a playbooks/ dir (no raise)."""
+    zip_path = _build_module_only_zip(tmp_path)
+    c = RecordingClient()
+    c.modules_admin = _FakeModulesAdmin()
+    a = WorkflowCollectionsAPI(c)
+
+    res = a.import_export_zip(zip_path, create_modules=True, create_records=False)
+
+    assert res["collections"] == []  # nothing to import, no error
+    assert res["modules_created"] == ["scenario"]

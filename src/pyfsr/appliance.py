@@ -445,6 +445,15 @@ class Appliance:
         self.ha = HaNamespace(t)
         self.certs = CertsNamespace(t)
 
+    @property
+    def facts(self) -> Facts:
+        """The appliance's :class:`~pyfsr.cli.appliance.facts.Facts` (SSH transport +
+        cached lookups). Public handle for APIs that need appliance access — e.g.
+        :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.delete_module`'s
+        ``drop_orphan_tables`` — so callers pass ``appliance`` rather than a
+        private attribute."""
+        return self._facts
+
     def info(self) -> dict[str, str]:
         """Identity card: host, FortiSOAR version, content DB, device UUID."""
         return info.identity(self._facts)

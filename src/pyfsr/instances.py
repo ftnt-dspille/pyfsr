@@ -72,6 +72,7 @@ appliance CLI simply has no named SSH profile for it (fall back to
 
 from __future__ import annotations
 
+import contextlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -324,7 +325,14 @@ class InstanceRegistry:
         """Return a cached :class:`~pyfsr.client.FortiSOAR` for ``alias`` (or the default)."""
         name = self.resolve(alias)
         if name not in self._clients:
-            self._clients[name] = self.configs[name].client()
+            client = self.configs[name].client()
+            # Stamp the alias so appliance-backed APIs (e.g. delete_module's
+            # drop_orphan_tables=True) can auto-resolve this instance's SSH
+            # profile without the caller hand-building an Appliance/Facts.
+            # Guarded: some test doubles return non-settable sentinels.
+            with contextlib.suppress(AttributeError):
+                client._instance_alias = name
+            self._clients[name] = client
         return self._clients[name]
 
     def appliance_names(self) -> list[str]:

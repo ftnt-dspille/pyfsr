@@ -98,6 +98,7 @@ from ._playbooks import (
     TriggerResponse,
     VersionDiff,
     VersionStepDelta,
+    WaitProgress,
 )
 from ._rules import DeliveryRule, PreprocessingRule, RuleChannel
 from ._schedules import CrontabScheduleModel, ScheduledTask
@@ -260,6 +261,7 @@ __all__ = [
     "RunNode",
     "RunFailure",
     "RunResult",
+    "WaitProgress",
     "TriggerResponse",
     # playbook version-control shapes (workflow_versions snapshots)
     "PlaybookVersion",

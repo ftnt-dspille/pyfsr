@@ -140,6 +140,30 @@ class RunNode(ApiResult):
     steps: list[RunStepSnapshot] = Field(default_factory=list)
 
 
+class WaitProgress(BaseModel):
+    """A single poll snapshot handed to the ``on_poll`` callback of
+    :meth:`~pyfsr.api.playbooks.PlaybooksAPI.wait_for_task`.
+
+    Lets a caller act on the live run *between* polls — answer a pending
+    manual-input gate, patch a field to unblock an SLA timer, log progress —
+    without re-implementing the poll loop. ``tree`` is the freshly-fetched
+    :class:`RunNode`; ``poll_count`` counts polls so far (1-based);
+    ``elapsed_s`` is seconds since the wait began; ``is_terminal`` is ``True``
+    on the final poll (the run has reached a terminal status and the wait is
+    about to return).
+
+    Return ``False`` from the callback to stop waiting early and return the
+    current tree; return ``None``/``True`` (or nothing) to keep polling.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    tree: RunNode
+    poll_count: int
+    elapsed_s: float
+    is_terminal: bool
+
+
 class RunFailure(ApiResult):
     """The slim failure projection from :meth:`~pyfsr.api.playbooks.PlaybooksAPI.why_failed`.
 

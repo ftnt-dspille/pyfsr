@@ -189,15 +189,29 @@ def find_module_tables(facts: Facts, base_table: str) -> list[str]:
     """All physical tables left orphaned by a module delete: the base table and
     its join tables (``<base>_<x>``), discovered from ``pg_tables`` in the content DB.
 
-    Matches ``base_table`` exactly plus any ``base_table_*`` (relationship,
-    ``_team``, ``_actor``, etc.). Returns the actual table names present.
+    Matches ``base_table`` exactly, any ``base_table_*``, **and** the
+    underscore-stripped join-table family. FortiSOAR names a module's
+    ownership/relationship join tables from the tableName with underscores
+    **removed** — a base table ``pyfsr_wizard_demo`` gets join tables
+    ``pyfsrwizarddemo_team`` / ``pyfsrwizarddemo_actor`` (not
+    ``pyfsr_wizard_demo_team``). Matching only ``base_table_*`` misses them, so
+    a drop leaves the join tables behind and the next module reusing the name
+    fails to publish on a stale-row FK violation. Returns the actual table
+    names present.
     """
     _require_identifier(base_table)
     target = facts.content_db()
+    clauses = [
+        f"tablename='{base_table}'",
+        f"tablename LIKE '{base_table}\\_%' ESCAPE '\\'",
+    ]
+    stripped = base_table.replace("_", "")
+    if stripped and stripped != base_table:
+        _require_identifier(stripped)
+        # The underscore-stripped join-table family (e.g. ``<stripped>_team``).
+        clauses.append(f"tablename LIKE '{stripped}\\_%' ESCAPE '\\'")
     rows = facts.psql(
-        "SELECT tablename FROM pg_tables WHERE schemaname='public' AND "
-        f"(tablename='{base_table}' OR tablename LIKE '{base_table}\\_%' ESCAPE '\\') "
-        "ORDER BY tablename",
+        f"SELECT tablename FROM pg_tables WHERE schemaname='public' AND ({' OR '.join(clauses)}) ORDER BY tablename",
         db=target,
     )
     return [r[0] for r in rows if r and r[0]]

@@ -2,6 +2,8 @@
 
 import re
 
+import pytest
+
 from pyfsr.api.playbooks import PlaybooksAPI
 
 
@@ -105,6 +107,72 @@ def test_run_tree_unresolvable_keeps_task_id():
     tree = PlaybooksAPI(TreeClient({})).run_tree(tid)
     assert tree.pk is None
     assert tree.task_id == tid
+
+
+def test_wait_for_task_returns_when_already_terminal():
+    runs = {"10": {"name": "P", "status": "finished", "parent": None}}
+    tree = PlaybooksAPI(TreeClient(runs)).wait_for_task("10", timeout=1, poll_interval=0)
+    assert tree.pk == "10" and tree.status == "finished"
+
+
+def test_wait_for_task_polls_until_terminal(monkeypatch):
+    """Status flips executing -> finished after a couple of polls."""
+    runs = {"10": {"name": "P", "status": "executing", "parent": None}}
+    api = PlaybooksAPI(TreeClient(runs))
+
+    calls = {"n": 0}
+    real_run_tree = api.run_tree
+
+    def flip(*a, **kw):
+        calls["n"] += 1
+        if calls["n"] >= 3:
+            runs["10"]["status"] = "finished"
+        return real_run_tree(*a, **kw)
+
+    monkeypatch.setattr(api, "run_tree", flip)
+    monkeypatch.setattr("pyfsr.api.playbooks.time.sleep", lambda _s: None)
+
+    tree = api.wait_for_task("10", timeout=5, poll_interval=0.01)
+    assert tree.status == "finished"
+    assert calls["n"] == 3  # two non-terminal polls, then terminal
+
+
+def test_wait_for_task_times_out():
+    runs = {"10": {"name": "P", "status": "executing", "parent": None}}
+    with pytest.raises(TimeoutError, match="did not finish within"):
+        PlaybooksAPI(TreeClient(runs)).wait_for_task("10", timeout=0, poll_interval=0)
+
+
+def test_wait_for_task_on_poll_drives_run_to_terminal(monkeypatch):
+    """The callback acts on the live run (flips it terminal) — the mid-flight
+    gate-driving pattern collapsed into one loop."""
+    runs = {"10": {"name": "P", "status": "executing", "parent": None}}
+    api = PlaybooksAPI(TreeClient(runs))
+    monkeypatch.setattr("pyfsr.api.playbooks.time.sleep", lambda _s: None)
+
+    seen = []
+
+    def drive(progress):
+        seen.append((progress.poll_count, progress.tree.status, progress.is_terminal))
+        # After the 2nd poll, "answer the gate" so the run finishes.
+        if progress.poll_count == 2:
+            runs["10"]["status"] = "finished"
+
+    tree = api.wait_for_task("10", timeout=5, poll_interval=0.01, on_poll=drive)
+    assert tree.status == "finished"
+    # WaitProgress carried a real RunNode + 1-based count; terminal poll flagged.
+    assert seen[0] == (1, "executing", False)
+    assert seen[-1] == (3, "finished", True)
+    assert all(isinstance(c, int) for c, _, _ in seen)
+
+
+def test_wait_for_task_on_poll_early_stop():
+    """Returning False from on_poll stops the wait and returns the current tree."""
+    runs = {"10": {"name": "P", "status": "executing", "parent": None}}
+    api = PlaybooksAPI(TreeClient(runs))
+
+    tree = api.wait_for_task("10", timeout=5, poll_interval=0, on_poll=lambda p: False)
+    assert tree.status == "executing"  # returned pre-terminal, no timeout raised
 
 
 def test_run_env_resolves_task_id():
