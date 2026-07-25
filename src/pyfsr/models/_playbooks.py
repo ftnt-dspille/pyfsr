@@ -59,10 +59,23 @@ class RunSummary(ApiResult):
 
 
 class RunStep(ApiResult):
-    """One step's outcome within a run, as reshaped by :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_env`."""
+    """One step's outcome within a run, as reshaped by :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_env`.
+
+    Timing fields (``start_time`` / ``end_time`` / ``duration_ms``) are parsed
+    from the wire's ``started`` / ``completed`` ISO timestamps — available
+    when ``step_detail=True`` (which :meth:`run_env` always sets).
+    """
 
     status: str | None = None
     result: Any | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    duration_ms: int | None = None
+
+    @property
+    def is_slow(self, threshold_ms: int = 30000) -> bool:
+        """``True`` when ``duration_ms`` exceeds ``threshold_ms`` (default 30s)."""
+        return self.duration_ms is not None and self.duration_ms > threshold_ms
 
 
 class RunStepSnapshot(ApiResult):
@@ -72,11 +85,22 @@ class RunStepSnapshot(ApiResult):
     to call :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_env` for the full detail,
     without the full result bloating the tree. ``result_preview`` is the step's
     ``result`` JSON-encoded and capped to ~500 chars.
+
+    Timing fields (``start_time`` / ``end_time`` / ``duration_ms``) are parsed
+    from the wire's ``started`` / ``completed`` ISO timestamps.
     """
 
     name: str | None = None
     status: str | None = None
     result_preview: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    duration_ms: int | None = None
+
+    @property
+    def is_slow(self, threshold_ms: int = 30000) -> bool:
+        """``True`` when ``duration_ms`` exceeds ``threshold_ms`` (default 30s)."""
+        return self.duration_ms is not None and self.duration_ms > threshold_ms
 
 
 class RunEnv(ApiResult):
@@ -128,6 +152,34 @@ class RunFailure(ApiResult):
     failing_step: str | None = None
     error_message: str | None = None
     pk: str | None = None
+
+
+class RunResult(ApiResult):
+    """The typed result of :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_and_wait`.
+
+    The all-in-one outcome of a trigger-and-poll cycle: the run's terminal
+    status, per-step snapshots (with timing), failure details, and child-run
+    results (for sub-playbook chains). Everything an agent needs to debug a
+    playbook in one object.
+    """
+
+    status: str | None = None
+    task_id: str | None = None
+    pk: str | None = None
+    name: str | None = None
+    steps: list[RunStepSnapshot] = Field(default_factory=list)
+    failure: RunFailure | None = None
+    children: list[RunResult] = Field(default_factory=list)
+
+    @property
+    def succeeded(self) -> bool:
+        """``True`` when ``status == "finished"``."""
+        return self.status == "finished"
+
+    @property
+    def slow_steps(self) -> list[RunStepSnapshot]:
+        """Steps that took longer than 30s (the default ``is_slow`` threshold)."""
+        return [s for s in self.steps if s.is_slow]
 
 
 class TriggerResponse(ApiResult):

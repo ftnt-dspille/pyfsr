@@ -42,6 +42,7 @@ from ..models import (
     RunEnv,
     RunFailure,
     RunNode,
+    RunResult,
     RunStep,
     RunStepSnapshot,
     RunSummary,
@@ -180,6 +181,35 @@ _looks_like_uuid = is_uuid
 _STEP_PREVIEW_LIMIT = 500
 
 
+def _parse_step_timing(s: dict[str, Any]) -> tuple[str | None, str | None, int | None]:
+    """Extract (start_time, end_time, duration_ms) from a wire step record.
+
+    The wire carries ``started`` and ``completed`` as ISO-8601 strings
+    (e.g. ``2026-07-24T20:09:02.770832Z``). Returns raw strings + computed
+    duration in milliseconds; ``None`` for any field that's missing.
+    """
+    started = s.get("started")
+    completed = s.get("completed")
+    duration_ms: int | None = None
+    if started and completed:
+        try:
+            from datetime import datetime
+
+            def _parse_iso(ts: str) -> datetime:
+                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+            start_dt = _parse_iso(str(started))
+            end_dt = _parse_iso(str(completed))
+            duration_ms = int((end_dt - start_dt).total_seconds() * 1000)
+        except Exception:
+            pass
+    return (
+        str(started) if started else None,
+        str(completed) if completed else None,
+        duration_ms,
+    )
+
+
 def _trim_result_preview(result: Any, *, limit: int = _STEP_PREVIEW_LIMIT) -> str | None:
     """JSON-encode a step result and cap it to ``limit`` chars (a snapshot preview).
 
@@ -214,11 +244,15 @@ def _step_snapshots(full: Any) -> list[RunStepSnapshot]:
             name = (md.get("metadata") or {}).get("name") or md.get("name")
         if not name:
             continue
+        start_time, end_time, duration_ms = _parse_step_timing(s)
         out.append(
             RunStepSnapshot(
                 name=name,
                 status=s.get("status"),
                 result_preview=_trim_result_preview(s.get("result")),
+                start_time=start_time,
+                end_time=end_time,
+                duration_ms=duration_ms,
             )
         )
     return out
@@ -475,6 +509,55 @@ class PlaybooksAPI(BaseAPI):
         """
         uuid = self._resolve_uuid(playbook)
         return f"{_WORKFLOWS}/{uuid}" if uuid else None
+
+    def resolve(
+        self,
+        playbook: str,
+        *,
+        collection: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Resolve a playbook by name, optionally scoped to a collection name.
+
+        The preferred lookup when you know the playbook's (and optionally its
+        collection's) display name but not its UUID. Playbook names are unique
+        within a collection, so ``collection + name`` always resolves to exactly
+        one playbook. Without a collection, a name that exists in multiple
+        collections is ambiguous — the first match is returned (with a debug
+        log if more than one was found).
+
+        Args:
+            playbook: the playbook's display name (exact match).
+            collection: optional — the collection's display name (not uuid).
+                When given, the collection is resolved by name first, then
+                the playbook is looked up within it.
+
+        Returns:
+            The playbook definition dict (with ``uuid``, ``name``,
+            ``collection``, etc.), or ``None`` if not found.
+
+        Example::
+
+            pb = client.playbooks.resolve("Manual Trigger FortiEDR C2 Response",
+                                          collection="02 - Use Case - FortiEDR C2 Response")
+            pb_uuid = pb["uuid"]
+        """
+        if collection:
+            # Resolve collection by name
+            cols = self.client.workflow_collections.list(relationships=True)
+            col_match = None
+            for c in cols:
+                if (c.get("name") or "") == collection:
+                    col_match = c
+                    break
+            if not col_match:
+                return None
+            col_uuid = col_match.get("uuid")
+            results = self.list(name=playbook, collection=col_uuid, limit=5)
+        else:
+            results = self.list(name=playbook, limit=5)
+        if not results:
+            return None
+        return results[0]
 
     # ------------------------------------------------------ definition CRUD
     def list(
@@ -1595,7 +1678,14 @@ class PlaybooksAPI(BaseAPI):
                 name = (md.get("metadata") or {}).get("name") or md.get("name")
             if not name:
                 continue
-            steps[name] = RunStep(status=s.get("status"), result=s.get("result"))
+            start_time, end_time, duration_ms = _parse_step_timing(s)
+            steps[name] = RunStep(
+                status=s.get("status"),
+                result=s.get("result"),
+                start_time=start_time,
+                end_time=end_time,
+                duration_ms=duration_ms,
+            )
         return RunEnv(
             name=full.get("name"),
             env=full.get("env") or {},
@@ -1632,6 +1722,7 @@ class PlaybooksAPI(BaseAPI):
         depth: int = 3,
         limit: int = 100,
         steps: bool = False,
+        detailed: bool = False,
     ) -> RunNode:
         """Resolve a run to its execution tree: the run plus its child runs.
 
@@ -1653,17 +1744,33 @@ class PlaybooksAPI(BaseAPI):
                 its immediate children only, ``0`` = just the run).
             limit: max children fetched per node (default 100).
             steps: when ``True``, enrich the root node with a slim per-step
-                snapshot (``RunStepSnapshot``: name/status/result_preview) so an
-                agent can drill into the root run's step outcomes without a
+                snapshot (``RunStepSnapshot``: name/status/result_preview/timing)
+                so an agent can drill into the root run's step outcomes without a
                 separate :meth:`run_env` call. Each step's ``result`` is
-                JSON-capped to ~500 chars (a preview, not the full blob). Children
-                stay slim regardless (call ``run_env(child_pk)`` for a child's
-                full detail). Default ``False`` (cheaper — no ``step_detail``
-                fetch).
+                JSON-capped to ~500 chars (a preview, not the full blob).
+                Default ``False`` (cheaper — no ``step_detail`` fetch).
+            detailed: when ``True``, populate step snapshots on **every node**
+                in the tree, not just the root. This is the one-call equivalent of
+                manually calling :meth:`run_env` on each child — useful for
+                debugging deep subplaybook chains (e.g. C2 Response →
+                Get Record IOCs → Query Record State). Implies ``steps=True``
+                on children at every depth. Default ``False`` (children stay
+                slim; call :meth:`run_env(child_pk) <run_env>` for a child's
+                detail).
 
         Returns:
             the root :class:`~pyfsr.models.RunNode`. ``pk`` is ``None`` if ``run``
             can't be resolved (the node still carries the original ``task_id``).
+
+        Example::
+
+            tree = client.playbooks.run_tree("602295", steps=True, detailed=True)
+            for s in tree.steps:
+                print(f"{s.name:40} {s.duration_ms}ms")
+            for child in tree.children:
+                print(f"\\n{child.name} ({child.status})")
+                for s in child.steps:
+                    print(f"  {s.name:40} {s.duration_ms}ms")
         """
         pk = self._resolve_run_pk(run)
         task_id = str(run) if _looks_like_uuid(str(run)) else None
@@ -1682,10 +1789,55 @@ class PlaybooksAPI(BaseAPI):
             for child in self.child_runs(pk, limit=limit):
                 child_pk = child.get("pk")
                 if child_pk:
-                    # Children never carry step snapshots (only the root does) —
-                    # keeps the tree cheap; call run_env(child_pk) for a child's detail.
-                    node.children.append(self.run_tree(child_pk, depth=depth - 1, limit=limit, steps=False))
+                    # When detailed=True, children also get step snapshots (with
+                    # timing) — the one-call way to inspect a deep subplaybook
+                    # chain. Otherwise children stay slim (call run_env for detail).
+                    child_steps = steps if detailed else False
+                    node.children.append(
+                        self.run_tree(child_pk, depth=depth - 1, limit=limit, steps=child_steps, detailed=detailed)
+                    )
         return node
+
+    def step_timeline(
+        self,
+        run: str | int,
+        *,
+        slow_threshold_ms: int = 30_000,
+    ) -> list[RunStepSnapshot]:
+        """Return a run's steps sorted by start time, with timing + slow flags.
+
+        Answers "which step took how long?" — the most common debugging
+        question when a playbook is slow or stuck. Fetches the run with
+        ``step_detail=True`` (same as :meth:`run_env`), extracts per-step
+        ``start_time`` / ``end_time`` / ``duration_ms`` from the wire's
+        ``started`` / ``completed`` timestamps, and returns a list sorted
+        by start time.
+
+        Each step's ``is_slow`` property flags steps exceeding
+        ``slow_threshold_ms`` (default 30s) — useful for spotting a
+        ``do_until`` loop that ran the full timeout.
+
+        Args:
+            run: a run pk / ``@id`` path / ``task_id`` (resolved like
+                :meth:`run_env`).
+            slow_threshold_ms: duration threshold in milliseconds; steps
+                taking longer get ``is_slow=True`` in the returned models
+                (the property reads this at call time, so pass it here to
+                bake it into the flag — or just check ``duration_ms``
+                yourself).
+
+        Returns:
+            a list of :class:`~pyfsr.models.RunStepSnapshot` with timing
+            populated, sorted by ``start_time`` (steps without a
+            ``start_time`` sort last by name).
+        """
+        pk = self._resolve_run_pk(run)
+        if pk is None:
+            return []
+        full = self.get_execution(str(pk), step_detail=True)
+        steps = _step_snapshots(full)
+        steps.sort(key=lambda s: (s.start_time is None, s.start_time or "", s.name or ""))
+        return steps
 
     def diagnose_run(
         self,
@@ -2139,6 +2291,187 @@ class PlaybooksAPI(BaseAPI):
                     f"did not finish within {timeout}s (currently {status!r})"
                 )
             time.sleep(poll_interval)
+
+    def run_and_wait(
+        self,
+        playbook: str | None = None,
+        *,
+        playbook_uuid: str | None = None,
+        collection: str | None = None,
+        record_uuid: str | None = None,
+        module: str | None = None,
+        route_uuid: str | None = None,
+        inputs: dict[str, Any] | None = None,
+        timeout: float = 120,
+        poll_interval: float = 3,
+        step_detail: bool = True,
+        collect_children: bool = True,
+    ) -> RunResult:
+        """Trigger a playbook and poll until it reaches a terminal status.
+
+        The all-in-one convenience for the most common test pattern:
+        trigger → wait → inspect. Returns a :class:`RunResult` with the
+        run's status, per-step outcomes (with timing), failure details,
+        and child runs — everything an agent needs to debug a playbook
+        in one call.
+
+        Picks the trigger route automatically:
+          - If ``route_uuid`` is given, uses :meth:`trigger_action` (record-action).
+          - If ``record_uuid`` + ``module`` are given but no ``route_uuid``,
+            resolves the playbook's trigger route automatically.
+          - Otherwise, uses :meth:`trigger` (manual-execute / ``notrigger``).
+
+        Args:
+            playbook: the playbook name — resolved to uuid if needed.
+                When ``collection`` is also given, the lookup is scoped to
+                that collection (by name, not uuid).
+            playbook_uuid: the playbook uuid (use instead of ``playbook``).
+            collection: the collection's display name — used to scope the
+                playbook name lookup. Optional but recommended when the
+                playbook name might exist in multiple collections.
+            record_uuid: for record-action triggers, the record to run against.
+            module: for record-action triggers, the module name (e.g. ``"alerts"``).
+            route_uuid: the trigger step's route uuid (for record-action).
+                When omitted but ``record_uuid`` + ``module`` are given, the
+                route is resolved from the playbook definition automatically.
+            inputs: manual-input parameters (merged into trigger body).
+            timeout: seconds to wait before raising :exc:`TimeoutError`.
+            poll_interval: seconds between polls.
+            step_detail: when ``True`` (default), include per-step status +
+                timing in the result.
+            collect_children: when ``True`` (default), walk child runs and
+                include their step outcomes too.
+
+        Returns:
+            A :class:`RunResult` with ``status``, ``task_id``, ``pk``,
+            ``steps`` (list of :class:`RunStepSnapshot` with timing),
+            ``failure`` (the :class:`RunFailure` or ``None``), and
+            ``children`` (list of child :class:`RunResult` for sub-playbook runs).
+
+        Raises:
+            TimeoutError: if the run doesn't finish within ``timeout`` seconds.
+            ValueError: if the playbook can't be resolved or the trigger
+                parameters are invalid.
+
+        Example::
+
+            >>> result = client.playbooks.run_and_wait("My Playbook", timeout=60)  # doctest: +SKIP
+            >>> result.status  # doctest: +SKIP
+            'finished'
+            >>> [s for s in result.steps if s.is_slow]  # doctest: +SKIP
+            []
+        """
+        import time as _time
+
+        # Resolve playbook uuid if needed
+        if not playbook_uuid and playbook:
+            if collection:
+                pb = self.resolve(playbook, collection=collection)
+                if pb:
+                    playbook_uuid = pb.get("uuid")
+            else:
+                playbook_uuid = self._resolve_uuid(playbook)
+        if not playbook_uuid and not route_uuid:
+            raise ValueError("run_and_wait() requires a playbook name/uuid or route_uuid")
+
+        # Auto-resolve route from the playbook definition if needed
+        if record_uuid and module and not route_uuid and playbook_uuid:
+            d = self.get_definition(playbook_uuid, relationships=True)
+            for s in d.get("steps") or []:
+                r = (s.get("arguments") or {}).get("route")
+                if r:
+                    route_uuid = r
+                    break
+
+        # --- trigger ---
+        if route_uuid:
+            if not module or not record_uuid:
+                raise ValueError("record-action trigger requires module + record_uuid")
+            resp = self.trigger_action(
+                route_uuid,
+                module=module,
+                record_uuid=record_uuid,
+                playbook_uuid=playbook_uuid,
+            )
+        else:
+            resp = self.trigger(playbook_uuid, inputs=inputs)
+        resp = TriggerResponse(**resp) if isinstance(resp, dict) else resp
+        if not resp.task_ids:
+            raise ValueError("trigger returned no task_id")
+        task_id = resp.task_ids[0]
+
+        # --- poll to terminal ---
+        deadline = _time.monotonic() + timeout
+        while True:
+            tree = self.run_tree(task_id, steps=step_detail)
+            if tree.status in _TERMINAL_STATUSES:
+                break
+            if _time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"playbook run {task_id!r} did not finish within {timeout}s (currently {tree.status!r})"
+                )
+            _time.sleep(poll_interval)
+
+        # --- build result ---
+        steps = tree.steps if step_detail else []
+        if step_detail and not steps:
+            # Root may not have steps; fetch via run_env
+            try:
+                env = self.run_env(task_id)
+                steps = [
+                    RunStepSnapshot(
+                        name=name,
+                        status=s.status,
+                        result_preview=_trim_result_preview(s.result),
+                        start_time=s.start_time,
+                        end_time=s.end_time,
+                        duration_ms=s.duration_ms,
+                    )
+                    for name, s in env.steps.items()
+                ]
+            except Exception:  # noqa: BLE001
+                pass
+
+        failure = None
+        if tree.status != "finished":
+            try:
+                failure = self.why_failed(tree.pk or task_id)
+            except Exception:  # noqa: BLE001
+                pass
+
+        children: list[RunResult] = []
+        if collect_children and tree.children:
+            for ch in tree.children:
+                child_steps: list[RunStepSnapshot] = []
+                if step_detail and ch.pk:
+                    child_steps = self.step_timeline(ch.pk)
+                child_failure = None
+                if ch.status and ch.status != "finished":
+                    try:
+                        child_failure = self.why_failed(ch.pk)
+                    except Exception:  # noqa: BLE001
+                        pass
+                children.append(
+                    RunResult(
+                        status=ch.status,
+                        task_id=ch.task_id,
+                        pk=ch.pk,
+                        name=ch.name,
+                        steps=child_steps,
+                        failure=child_failure,
+                        children=[],
+                    )
+                )
+
+        return RunResult(
+            status=tree.status,
+            task_id=task_id,
+            pk=tree.pk,
+            name=tree.name,
+            steps=steps,
+            failure=failure,
+            children=children,
+        )
 
     # ---------------------------------------------------------------- resume
     def resume(
