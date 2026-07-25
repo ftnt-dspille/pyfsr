@@ -63,7 +63,7 @@ class RunStep(ApiResult):
 
     Timing fields (``start_time`` / ``end_time`` / ``duration_ms``) are parsed
     from the wire's ``started`` / ``completed`` ISO timestamps — available
-    when ``step_detail=True`` (which :meth:`run_env` always sets).
+    when ``step_detail=True`` (which :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_env` always sets).
     """
 
     status: str | None = None

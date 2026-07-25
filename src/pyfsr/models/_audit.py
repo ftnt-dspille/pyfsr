@@ -74,7 +74,7 @@ class AuditActivity(ApiResult):
 
 
 class LifecycleEntry(ApiResult):
-    """One entry in a record's lifecycle timeline (from :meth:`AuditAPI.lifecycle`).
+    """One entry in a record's lifecycle timeline (from :meth:`~pyfsr.api.audit.AuditAPI.lifecycle`).
 
     A unified view of either an audit-log change or a playbook execution,
     sorted by timestamp. ``kind`` distinguishes the source: ``"audit"`` for
@@ -105,7 +105,7 @@ class LifecycleEntry(ApiResult):
 
 
 class RecordLifecycle(ApiResult):
-    """The full change-history timeline for a record (from :meth:`AuditAPI.lifecycle`).
+    """The full change-history timeline for a record (from :meth:`~pyfsr.api.audit.AuditAPI.lifecycle`).
 
     Combines audit-log entries (field changes, links, comments) with playbook
     executions into a single sorted timeline. ``entries`` is oldest-first;
