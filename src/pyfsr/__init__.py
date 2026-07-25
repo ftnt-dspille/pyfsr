@@ -12,6 +12,7 @@ from .appliance import Appliance
 from .client import FortiSOAR
 from .concurrency import ConcurrencyResult, compute_overlap
 from .config import EnvConfig
+from .jinja_validate import FSR_JINJA_FILTERS, JinjaIssue, validate_jinja_expressions
 from .models import (
     MODEL_REGISTRY,
     Alert,
@@ -77,6 +78,9 @@ __all__ = [
     "ExportTemplate",
     "Query",
     "QueryBody",
+    "JinjaIssue",
+    "validate_jinja_expressions",
+    "FSR_JINJA_FILTERS",
     "OPERATOR_SPECS",
     "RecordSet",
     "BulkUpsertResult",

@@ -155,13 +155,13 @@ def _h_get_record(client, *, module, ref, fields=None, summary=False) -> Any:
     return project(rec, fields=fields, summary=summary)
 
 
-def _h_search_records(client, *, module, term="", limit=30, fields=None, summary=False) -> Any:
+def _h_search_records(client, *, module, term="", limit=30, fields=None, summary=True) -> Any:
     page = client.records(module).search(term, limit=limit)
     return project(page, fields=fields, summary=summary)
 
 
 def _h_query_records(
-    client, *, module, filters=None, logic="AND", sort=None, limit=30, fields=None, summary=False
+    client, *, module, filters=None, logic="AND", sort=None, limit=30, fields=None, summary=True
 ) -> Any:
     body: dict[str, Any] = {"logic": logic, "filters": filters or []}
     if sort:
@@ -214,31 +214,38 @@ _CONNECTOR_LIST_FIELDS = ("name", "label", "version", "category", "active", "con
 
 
 def _h_list_connectors(client) -> Any:
-    """List configured connectors, compacted to the fields needed to pick one.
+    """List configured connectors as one compact line each.
 
-    Drops the base64 icons and other bulk that made the full listing ~95x the MCP
-    output cap (so the tail of the list was silently truncated). Shape stays
-    ``{"connectors": [{...}]}``.
+    The full ``InstalledConnector`` is ~10 KB apiece (93% base64 icons), so a
+    37-connector box serialized to ~380 KB and the MCP cap truncated most of it.
+    Even a trimmed dict-per-connector overflows once you account for indent=2
+    inflation across dozens of rows, so each connector is rendered as a single
+    string ``"<name> — <label> v<version>[ (<n> configs)][ [inactive]]"``. ``name``
+    (the key every other connector tool takes) leads each line. Configured/disabled
+    state is shown only when it's the non-default (has configs / inactive); a
+    ``config_count`` of -1 is a "not counted" sentinel (system connectors) and is
+    suppressed. For a connector's operations/params, use describe/run tools.
     """
-    out: list[dict[str, Any]] = []
+    out: list[str] = []
     for cn in client.connectors.list_configured():
         d = cn.model_dump() if hasattr(cn, "model_dump") else dict(cn)
-        entry: dict[str, Any] = {}
-        for k in ("name", "label", "version", "category"):
-            if d.get(k) is not None:
-                entry[k] = d[k]
+        name = d.get("name") or "?"
+        label = d.get("label")
+        version = d.get("version")
+        line = name
+        if label and label != name:
+            line += f" — {label}"
+        if version:
+            line += f" v{version}"
         cfgs = d.get("config_count")
         if cfgs is None and isinstance(d.get("configurations"), list):
             cfgs = len(d["configurations"])
-        # Omit the uninteresting defaults (configured=0, active=True) so the common
-        # row stays tiny — same "drop redundant fields" rule as list_modules. A
-        # disabled or configured connector still stands out.
-        if cfgs:
-            entry["config_count"] = cfgs
+        if isinstance(cfgs, int) and cfgs > 0:
+            line += f" ({cfgs} config{'s' if cfgs != 1 else ''})"
         if d.get("active") is False:
-            entry["active"] = False
-        out.append(entry)
-    return {"connectors": out, "count": len(out)}
+            line += " [inactive]"
+        out.append(line)
+    return {"connectors": sorted(out), "count": len(out)}
 
 
 def _h_healthcheck_connector(client, *, connector, config=None) -> Any:
@@ -707,8 +714,9 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "search_records",
-        "Free-text search a module. Returns a page of records; use summary=true to keep the "
-        "output compact when scanning many results.",
+        "Free-text search a module. Returns a compact identity+triage summary of each "
+        "record by default (summary=true); pass summary=false for full records, or "
+        "fields=[...] to pick exact keys.",
         _obj(
             {
                 "module": _MODULE,
@@ -724,7 +732,9 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "query_records",
         "Structured query of a module with filter conditions. Each filter is "
-        "{field, operator, value}; operator is one of eq/neq/gt/gte/lt/lte/in/contains/like/etc.",
+        "{field, operator, value}; operator is one of eq/neq/gt/gte/lt/lte/in/contains/like/etc. "
+        "Returns a compact identity+triage summary per record by default (summary=true); "
+        "pass summary=false for full records, or fields=[...] to pick exact keys.",
         _obj(
             {
                 "module": _MODULE,

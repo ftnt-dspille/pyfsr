@@ -891,6 +891,42 @@ class PlaybooksAPI(BaseAPI):
         assert isinstance(resp, dict)
         return Workflow(**resp)
 
+    def validate_jinja(
+        self,
+        playbook: str,
+        *,
+        known_filters: Any = None,
+    ) -> list[Any]:
+        """Statically lint every Jinja expression in a playbook's step arguments.
+
+        Fetches the playbook definition by uuid/IRI/name and runs
+        :func:`pyfsr.jinja_validate.validate_jinja_expressions` over its steps,
+        catching — *before* deploy — the runtime-only failures Jinja causes:
+        syntax errors, unknown filters, and the ``picklist``-returns-dict bug that
+        400s a string field mid-run (the FortiEDR C2 scenario). Returns a list of
+        :class:`~pyfsr.jinja_validate.JinjaIssue` (empty when clean); filter on
+        ``severity`` (``"error"`` vs ``"warning"``) to gate a deploy.
+
+        Args:
+            playbook: a workflow uuid, a ``/api/3/workflows/<uuid>`` IRI, or a
+                playbook name (resolved to the first match).
+            known_filters: optional set of valid filter names to check against
+                (defaults to the built-in FortiSOAR catalog).
+
+        Example::
+
+            issues = client.playbooks.validate_jinja("Manual Trigger FortiEDR C2 Response")
+            if any(i.severity == "error" for i in issues):
+                raise SystemExit("fix Jinja errors before deploying")
+        """
+        from ..jinja_validate import validate_jinja_expressions
+
+        uuid = self._resolve_playbook_uuid(playbook, "validate_jinja")
+        definition = self.get_definition(uuid)
+        steps = definition.get("steps") or []
+        step_dicts = [s if isinstance(s, dict) else s.to_dict() for s in steps]
+        return validate_jinja_expressions(step_dicts, known_filters=known_filters)
+
     def create_playbook(
         self,
         name: str,
