@@ -39,6 +39,7 @@ from ._ai_agent_package import (
     AgentPromptFile,
 )
 from ._app_config import NavItem, NavRequire, NavState
+from ._audit import AuditActivity, LifecycleEntry, RecordLifecycle
 from ._export import (
     ConnectorSelection,
     ModuleSelection,
@@ -88,6 +89,7 @@ from ._playbooks import (
     RunEnv,
     RunFailure,
     RunNode,
+    RunResult,
     RunStep,
     RunStepSnapshot,
     RunSummary,
@@ -257,6 +259,7 @@ __all__ = [
     "RunEnv",
     "RunNode",
     "RunFailure",
+    "RunResult",
     "TriggerResponse",
     # playbook version-control shapes (workflow_versions snapshots)
     "PlaybookVersion",
@@ -340,4 +343,8 @@ __all__ = [
     # scheduled (periodic) tasks
     "ScheduledTask",
     "CrontabScheduleModel",
+    # audit / lifecycle
+    "AuditActivity",
+    "LifecycleEntry",
+    "RecordLifecycle",
 ]
