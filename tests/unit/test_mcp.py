@@ -80,18 +80,23 @@ def test_call_dispatches_new_admin_tool_as_text_json():
 
 
 def test_call_caps_large_output_with_valid_json_envelope():
-    # A tool whose result serializes past the cap is replaced by a parseable
-    # truncation envelope, not a blindly-sliced (invalid) JSON fragment.
+    # A list tool whose result serializes past the cap is trimmed list-aware:
+    # whole leading items are kept (still valid, parseable JSON) with a
+    # `_truncated` marker reporting shown/total — not a blindly-sliced fragment.
     class BigClient:
         def list_modules(self, refresh=False):
             return [{"type": f"m{i}", "label": "x" * 100} for i in range(500)]
 
     content = mcp_mod._call(BigClient(), "list_modules", {})
     assert len(content[0].text) <= mcp_mod.MAX_TOOL_OUTPUT_CHARS
-    env = json.loads(content[0].text)  # still valid JSON
-    assert env["truncated"] is True
-    assert env["total_chars"] > mcp_mod.MAX_TOOL_OUTPUT_CHARS
-    assert env["preview"]
+    out = json.loads(content[0].text)  # still valid JSON
+    # kept a whole-item prefix, not everything, and each kept item is intact
+    assert 0 < len(out["modules"]) < 500
+    assert all("type" in m for m in out["modules"])
+    # honest accounting of what was dropped
+    assert out["_truncated"]["total"] == 500
+    assert out["_truncated"]["shown"] == len(out["modules"])
+    assert out["_truncated"]["shown"] < out["_truncated"]["total"]
 
 
 def test_call_small_output_passes_through_verbatim():
