@@ -123,7 +123,27 @@ def _obj(properties: dict[str, Any], required: list[str] | None = None) -> dict[
 
 
 def _h_list_modules(client) -> Any:
-    return {"modules": client.list_modules()}
+    """List modules, dropping fields that just echo ``type``.
+
+    ``list_modules()`` returns ``{type, label, plural}`` per module, but on most
+    appliances ``plural == type`` (and often ``label`` is just the type), so the
+    full form is ~3x larger than needed and pushes the result past the MCP output
+    cap — which truncates the *alphabetical tail* (``scenario``, ``tasks``, ...)
+    right off the list. We emit ``type`` always and ``label``/``plural`` only when
+    they carry information (differ from ``type``), keeping the payload small enough
+    that no module is silently dropped. Shape stays ``{"modules": [{"type", ...}]}``.
+    """
+    slim: list[dict[str, str]] = []
+    for m in client.list_modules():
+        t = m.get("type")
+        entry: dict[str, str] = {"type": t}
+        label, plural = m.get("label"), m.get("plural")
+        if label and label != t:
+            entry["label"] = label
+        if plural and plural != t:
+            entry["plural"] = plural
+        slim.append(entry)
+    return {"modules": slim, "count": len(slim)}
 
 
 def _h_describe_module(client, *, module: str) -> Any:
@@ -628,8 +648,9 @@ def _h_appliance_diagnose_run(client, path=None, timeout=120.0) -> Any:
 _TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "list_modules",
-        "List every module (type/label/plural) on the FortiSOAR appliance. Start here to "
-        "discover the correct module type before reading or writing records.",
+        "List every module on the FortiSOAR appliance as {type[, label][, plural]} "
+        "(label/plural shown only when they differ from type). Start here to discover "
+        "the correct module type before reading or writing records.",
         _obj({}),
         _h_list_modules,
     ),

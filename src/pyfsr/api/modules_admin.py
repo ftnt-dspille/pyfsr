@@ -1944,6 +1944,7 @@ class ModulesAdminAPI(BaseAPI):
         remove_from_nav: bool = False,
         timeout: float = 600.0,
         poll_interval: float = 10.0,
+        reset_stale_log: bool | Any = False,
     ) -> dict[str, Any]:
         """Delete a module — the **only** API path that actually removes one, verified live.
 
@@ -2004,6 +2005,14 @@ class ModulesAdminAPI(BaseAPI):
                 appliance profile) — pass an ``Appliance`` explicitly then.
             timeout: Passed to :meth:`publish`.
             poll_interval: Passed to :meth:`publish`.
+            reset_stale_log: Forwarded to the delete-:meth:`publish`. Opt-in; when truthy
+                (carrying appliance SSH access, same values as :meth:`reset_publish_log`) and
+                the delete-publish leaves ``/api/publish/error`` reporting a *stale* non-Success
+                status, truncate the appended-forever log so the endpoint reports reality. Off
+                by default and a no-op on a healthy box — never clears a live log implicitly.
+                Independent of ``drop_orphan_tables``: the two hold appliance access for
+                different purposes (dropping tables vs. clearing a log), so neither implies the
+                other. Requires ``publish=True`` to have any effect.
 
         Returns:
             A dict with keys ``module``, ``detached`` (list), ``orphan_table``
@@ -2050,7 +2059,9 @@ class ModulesAdminAPI(BaseAPI):
             "nav_removed": None,
         }
         if publish:
-            result["published"] = self.publish(timeout=timeout, poll_interval=poll_interval)
+            result["published"] = self.publish(
+                timeout=timeout, poll_interval=poll_interval, reset_stale_log=reset_stale_log
+            )
             if remove_from_nav:
                 # The module is gone; drop its nav entry too (no-op if it had none).
                 self.client.app_config.remove_navigation_item(module=module, missing_ok=True)
@@ -2157,6 +2168,7 @@ class ModulesAdminAPI(BaseAPI):
         timeout: float = 600.0,
         poll_interval: float = 10.0,
         precheck: bool = True,
+        reset_stale_log: bool | Any = False,
     ) -> dict[str, Any]:
         """Commit **all** pending staged schema changes to live (``PUT /api/publish``).
 
@@ -2224,6 +2236,23 @@ class ModulesAdminAPI(BaseAPI):
             poll_interval: Seconds between readiness probes.
             precheck: If True (default), refuse to publish when any staged draft has an
                 invalid module name (see :meth:`find_invalid_drafts`).
+            reset_stale_log: **Opt-in remediation for a poisoned publish-error log.** The
+                appliance *appends* every publish to ``last_system_publish.log`` and
+                ``/api/publish/error`` greps the whole file, so one past failure makes that
+                endpoint report ``Fail`` **forever** — even after this publish commits cleanly
+                (see :meth:`reset_publish_log`). pyfsr's own poller sees through that (it checks
+                whether the error text changed and confirms structurally), so publish still
+                returns correctly; the stale ``status`` only misleads *external* readers of
+                ``/api/publish/error``. When this publish committed but the endpoint still
+                reports non-``Success`` (i.e. the log is provably stale) **and** appliance SSH
+                access is supplied here, truncate the log so the endpoint reports reality again.
+                Accepts the same values as :meth:`reset_publish_log`'s ``appliance``
+                (``True`` to auto-resolve from the client's instance alias, an
+                :class:`~pyfsr.appliance.Appliance`, or a ``Facts``). Default ``False`` — never
+                touches the log, and does nothing on a healthy box even when set (the log is
+                only cleared when actually poisoned). This is **never** unconditional: it fires
+                only on a detected-stale log, so a normal publish leaves the appliance's forensic
+                log intact.
 
         Returns:
             The final ``/api/publish/error`` body
@@ -2268,12 +2297,32 @@ class ModulesAdminAPI(BaseAPI):
             # (Deferred grants/nav from create_module(grant_to=/add_to_nav=) are flushed below.)
             self._flush_pending_grants()
             self._flush_pending_nav()
-            return self._publish_status() or {"status": "Success", "note": "no pending changes"}
+            noop = self._publish_status() or {"status": "Success", "note": "no pending changes"}
+            return self._maybe_reset_stale_log(noop, reset_stale_log)
         result = self._wait_for_publish(prev_time, timeout, poll_interval, prev_errors=prev_errors)
         # The schema is now live — apply role grants and nav entries deferred from create_module.
         self._flush_pending_grants()
         self._flush_pending_nav()
-        return result
+        return self._maybe_reset_stale_log(result, reset_stale_log)
+
+    def _maybe_reset_stale_log(self, result: dict[str, Any], reset_stale_log: bool | Any) -> dict[str, Any]:
+        """Truncate a poisoned publish-error log iff the caller opted in and it is stale.
+
+        Only fires when ``reset_stale_log`` is truthy (carrying appliance access) **and** this
+        publish committed while ``/api/publish/error`` still reports a non-``Success`` status —
+        i.e. the log is provably stale (see :meth:`reset_publish_log`). A healthy box returns
+        ``Success`` and is left untouched, so this never clears a live forensic log; it only
+        remediates a log the poller already had to see through. Re-reads the endpoint after the
+        truncate so the returned body reflects the now-honest status.
+        """
+        if not reset_stale_log:
+            return result
+        if str(result.get("status", "")).lower() == "success":
+            return result
+        # We reached a return from publish → the change committed; a lingering non-Success is
+        # the appended-forever log, not this publish's outcome. Clear it and re-read.
+        self.reset_publish_log(reset_stale_log, backup=True)
+        return self._publish_status() or result
 
     def revert(self) -> dict[str, Any]:
         """Discard **all** pending staged schema changes (``PUT /api/publish/revert``).
