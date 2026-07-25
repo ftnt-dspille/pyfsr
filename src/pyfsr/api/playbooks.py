@@ -2310,7 +2310,7 @@ class PlaybooksAPI(BaseAPI):
         """Trigger a playbook and poll until it reaches a terminal status.
 
         The all-in-one convenience for the most common test pattern:
-        trigger → wait → inspect. Returns a :class:`RunResult` with the
+        trigger → wait → inspect. Returns a :class:`~pyfsr.models.RunResult` with the
         run's status, per-step outcomes (with timing), failure details,
         and child runs — everything an agent needs to debug a playbook
         in one call.
@@ -2343,10 +2343,10 @@ class PlaybooksAPI(BaseAPI):
                 include their step outcomes too.
 
         Returns:
-            A :class:`RunResult` with ``status``, ``task_id``, ``pk``,
-            ``steps`` (list of :class:`RunStepSnapshot` with timing),
-            ``failure`` (the :class:`RunFailure` or ``None``), and
-            ``children`` (list of child :class:`RunResult` for sub-playbook runs).
+            A :class:`~pyfsr.models.RunResult` with ``status``, ``task_id``, ``pk``,
+            ``steps`` (list of :class:`~pyfsr.models.RunStepSnapshot` with timing),
+            ``failure`` (the :class:`~pyfsr.models.RunFailure` or ``None``), and
+            ``children`` (list of child :class:`~pyfsr.models.RunResult` for sub-playbook runs).
 
         Raises:
             TimeoutError: if the run doesn't finish within ``timeout`` seconds.

@@ -321,9 +321,9 @@ class WorkflowCollectionsAPI(BaseAPI):
                 expression.
 
         Returns:
-            A dict with: ``collections`` (list of created collections),
+            A dict with keys ``collections`` (list of created collections),
             ``records_created`` (list of created record IRIs),
-            ``picklists_patched`` (int — number of IRIs replaced, or 0).
+            and ``picklists_patched`` (int — number of IRIs replaced, or 0).
 
         Example::
 

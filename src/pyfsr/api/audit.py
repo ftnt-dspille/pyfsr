@@ -286,8 +286,13 @@ class AuditAPI(BaseAPI):
 
         Args:
             entity_uuid: the record UUID to filter by.
-            start_date / end_date: optional time window (epoch s/ms or ISO).
-            operation / component / user_id / entity_type / search: optional filters.
+            start_date: optional window start (epoch s/ms or ISO).
+            end_date: optional window end (epoch s/ms or ISO).
+            operation: filter by operation type.
+            component: filter by component.
+            user_id: filter by user UUID.
+            entity_type: filter by entity type.
+            search: free-text search across audit fields.
             page_size: records per page (default 100).
             max_pages: safety cap (default 50 — 5000 records max).
 
