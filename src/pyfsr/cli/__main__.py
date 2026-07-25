@@ -11,6 +11,7 @@ import json
 import sys
 
 from . import _output
+from . import jinja as jinja_cmds
 from . import playbook as playbook_cmds
 from . import repo as repo_cmds
 from . import widget as widget_cmds
@@ -467,6 +468,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_records_delete.add_argument("id", nargs="+", help="one or more record UUIDs to delete")
     p_records_delete.add_argument("--yes", action="store_true", help="skip confirmation")
     p_records_delete.set_defaults(func=cmd_records_delete)
+
+    # --- jinja group (top-level; offline reference DB query, no appliance) ---
+    p_jinja = sub.add_parser(
+        "jinja",
+        help="query the FSR Jinja reference store (filters, globals, tests, examples)",
+    )
+    jinja_sub = p_jinja.add_subparsers(dest="jinja_command", required=True)
+    jinja_cmds.build_subparser(jinja_sub)
 
     # --- mcp group (top-level; the appliance's own native /mcp/* gateway) ---
     p_mcp = sub.add_parser(
