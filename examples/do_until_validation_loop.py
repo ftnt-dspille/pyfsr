@@ -111,8 +111,7 @@ def wait_for_new_input(client: FortiSOAR, handled: set[int], timeout: float = 90
 # run introspection
 # --------------------------------------------------------------------------- #
 def _recent_runs(client: FortiSOAR, limit: int = 50) -> list:
-    resp = client.get("/api/wf/api/workflows/", params={"limit": limit, "ordering": "-id", "format": "json"})
-    return resp.get("hydra:member") or resp.get("results") or []
+    return client.playbooks.search_executions(limit=limit)
 
 
 def find_parent_run(client: FortiSOAR) -> str | None:
