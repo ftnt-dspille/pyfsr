@@ -204,6 +204,42 @@ class PicklistsAPI(BaseAPI):
         should choose from. Cached via :meth:`values`."""
         return [it.get("itemValue") for it in self.values(picklist_name) if it.get("itemValue")]
 
+    def reverse_resolve(self, iri: str) -> dict[str, str] | None:
+        """Resolve a picklist IRI back to its ``(picklist_name, itemValue)``.
+
+        The inverse of :meth:`resolve`: given an IRI like
+        ``/api/3/picklists/<uuid>``, return ``{"picklist": "AlertState",
+        "itemValue": "Indicator Extracted", "iri": "..."}``, or ``None``
+        if the IRI isn't a known picklist item.
+
+        Useful for patching exported playbooks that hardcode picklist IRIs
+        from a different box — reverse-resolve to the friendly name, then
+        emit a Jinja ``picklist`` filter expression that resolves dynamically.
+        """
+        if not iri or not iri.startswith("/api/3/picklists/"):
+            return None
+        self._load_bulk()
+        for name, items in (self._items or {}).items():
+            for it in items:
+                if it.iri == iri:
+                    return {"picklist": name, "itemValue": it.itemValue, "iri": iri}
+        return None
+
+    def jinja_picklist_expr(self, picklist_name: str, item_value: str, *, key: str = "@id") -> str:
+        """Build a Jinja ``picklist`` filter expression for a picklist value.
+
+        Returns ``{{ "PicklistName" | picklist("Value", "@id") }}`` — the
+        pattern that resolves dynamically at runtime on any box, avoiding
+        hardcoded IRI portability issues.
+
+        Args:
+            picklist_name: the picklist list name (e.g. ``"AlertState"``).
+            item_value: the option's friendly value (e.g. ``"Indicator Extracted"``).
+            key: the key to extract — ``"@id"`` (IRI, default), ``"uuid"``,
+                or ``"itemValue"`` (display name). Omit for the full dict.
+        """
+        return f'{{{{ "{picklist_name}" | picklist("{item_value}", "{key}") }}}}'
+
     def resolve_record_fields(
         self,
         module: str,
