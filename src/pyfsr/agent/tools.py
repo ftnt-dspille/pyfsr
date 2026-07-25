@@ -1587,15 +1587,39 @@ def _output_cap() -> int:
     return v if v >= 0 else 4000
 
 
+def _serialized_len(obj: Any) -> int | None:
+    """Length of ``obj`` as the agent will actually receive it (indent=2 JSON).
+
+    The MCP transport serializes results with ``indent=2``, so the cap decision
+    must measure the *same* form — a compact-JSON measurement here would let a
+    result slip past this cap only to be blindly sliced by the transport layer.
+    Returns None if the object isn't JSON-serializable.
+    """
+    try:
+        return len(json.dumps(obj, indent=2, default=str))
+    except (TypeError, ValueError):
+        return None
+
+
 def _cap_output(result: Any, *, tool: str, cap: int | None = None) -> Any:
     """Bound a tool result's serialized size for the agent transport.
 
     Returns ``result`` unchanged when it fits the cap (default 4000 chars of
-    JSON). When it exceeds the cap, returns a structured truncation envelope —
-    ``{_truncated, tool, original_chars, preview, hint}`` — so the agent learns
-    the result was cut, sees a preview, and is told how to narrow the next call
-    (``summary=True`` / ``fields=[...]`` / ``limit=N``) instead of acting on a
-    silent truncation. Errors (``{"error": ...}``) are passed through untouched.
+    ``indent=2`` JSON — the form the transport actually sends).
+
+    When it's too big, prefer a **list-aware** trim: if the result is a dict
+    whose payload is a single list (the shape every ``list_*``/``query``/
+    ``search`` tool returns — ``{"modules": [...]}``, ``{"members": [...]}``,
+    ``{"runs": [...]}``, ...), keep as many *whole* leading items as fit and add a
+    ``_truncated: {shown, total, hint}`` marker. That beats the old behaviour of
+    slicing the serialized text mid-item into an unparseable fragment, and no item
+    is silently corrupted — the agent sees complete records plus an honest
+    "showing K of N, narrow to see the rest".
+
+    Falls back to a structured preview envelope (``{_truncated, tool,
+    original_chars, preview, hint}``) for a single oversized object (e.g. one huge
+    record) or when not even one list item fits. Errors (``{"error": ...}``) pass
+    through untouched.
     """
     if cap is None:
         cap = _output_cap()
@@ -1604,24 +1628,68 @@ def _cap_output(result: Any, *, tool: str, cap: int | None = None) -> Any:
     if isinstance(result, dict) and "error" in result and len(result) <= 4:
         # An error envelope — already small, never truncate.
         return result
-    try:
-        text = json.dumps(result, default=str)
-    except (TypeError, ValueError):
+    total = _serialized_len(result)
+    if total is None:
         return result
-    if len(text) <= cap:
+    if total <= cap:
         return result
-    # Leave room for the envelope keys so the serialized result fits the cap.
-    preview = text[: max(cap - 320, 0)]
-    return {
-        "_truncated": True,
-        "tool": tool,
-        "original_chars": len(text),
-        "preview": preview,
-        "hint": (
-            f"Result exceeded {cap} chars and was truncated. Narrow it: pass "
-            "summary=True, fields=[...], or limit=N to reduce the payload."
-        ),
-    }
+
+    hint = (
+        f"Result exceeded {cap} chars. Narrow it: pass summary=True, fields=[...], "
+        "or limit=N (or fetch a specific record by id) to reduce the payload."
+    )
+
+    # List-aware path: exactly one non-empty list value → keep a whole-item prefix.
+    if isinstance(result, dict):
+        list_keys = [k for k, v in result.items() if isinstance(v, list) and v]
+        if len(list_keys) == 1:
+            key = list_keys[0]
+            items = result[key]
+            n = len(items)
+            base = {k: v for k, v in result.items() if k != key}
+
+            def _try(m: int) -> tuple[bool, dict[str, Any]]:
+                trial = dict(base)
+                trial[key] = items[:m]
+                trial["_truncated"] = {"tool": tool, "shown": m, "total": n, "hint": hint}
+                s = _serialized_len(trial)
+                return (s is not None and s <= cap), trial
+
+            # Estimate a starting count from the average item size, then shrink
+            # until it fits (serialization isn't linear, so verify + step down).
+            m = min(n - 1, max(1, (n * cap) // total))
+            fits, trial = _try(m)
+            while m > 1 and not fits:
+                m -= max(1, m // 8)
+                fits, trial = _try(m)
+            if fits and m >= 1:
+                return trial
+            # else: even a single item overflows → blind preview below.
+
+    text = json.dumps(result, indent=2, default=str)
+
+    def _envelope(preview: str) -> dict[str, Any]:
+        return {
+            "_truncated": True,
+            "tool": tool,
+            "original_chars": len(text),
+            "preview": preview,
+            "hint": hint,
+        }
+
+    # Shrink the preview until the *serialized envelope* fits the cap. A fixed
+    # headroom isn't enough: under indent=2, JSON-escaping the preview (quotes,
+    # newlines, backslashes) inflates the wrapper non-linearly, so measure and
+    # step down until it actually fits.
+    budget = max(cap - 320, 0)
+    env = _envelope(text[:budget])
+    guard = 0
+    while budget > 0 and (_serialized_len(env) or 0) > cap and guard < 64:
+        over = (_serialized_len(env) or 0) - cap
+        budget = max(budget - over - 16, 0)
+        env = _envelope(text[:budget])
+        guard += 1
+    return env
 
 
 def dispatch(client, name: str, arguments: dict[str, Any] | None = None) -> Any:
