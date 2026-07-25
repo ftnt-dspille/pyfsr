@@ -1761,6 +1761,36 @@ def test_reset_publish_log_backup_false_skips_copy():
     assert "cp -a" not in cmd
 
 
+def test_maybe_reset_stale_log_clears_only_when_stale_and_opted_in():
+    """The publish stale-log remediation fires only when opted in AND the returned
+    status is non-Success (a committed publish still reporting Fail = poisoned log)."""
+    admin = ModulesAdminAPI(RecordingClient())
+    reset_calls = []
+    admin.reset_publish_log = lambda appliance, **kw: reset_calls.append((appliance, kw)) or True
+    admin._publish_status = lambda: {"status": "Success", "last_publish_time": 99}
+
+    from pyfsr.appliance import Appliance
+
+    app = Appliance.__new__(Appliance)
+
+    # opted in + stale (non-Success) → clears, then re-reads the now-honest status
+    out = admin._maybe_reset_stale_log({"status": "Fail"}, app)
+    assert reset_calls == [(app, {"backup": True})]
+    assert out["status"] == "Success"  # re-read after truncate
+
+    # opted in but healthy (Success) → never touches the log
+    reset_calls.clear()
+    out = admin._maybe_reset_stale_log({"status": "Success"}, app)
+    assert reset_calls == []
+    assert out == {"status": "Success"}
+
+    # not opted in → never touches the log even when stale
+    reset_calls.clear()
+    out = admin._maybe_reset_stale_log({"status": "Fail"}, False)
+    assert reset_calls == []
+    assert out == {"status": "Fail"}
+
+
 def test_grant_with_retry_survives_transient_fk(monkeypatch):
     """A transient module_uuid FK violation right after publish is retried until
     the modules registry settles."""
