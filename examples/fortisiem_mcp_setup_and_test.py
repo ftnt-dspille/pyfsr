@@ -155,14 +155,14 @@ def refresh(client: FortiSOAR, mcp_uuid: str) -> None:
 
 def _pick_fortisiem_alert(client: FortiSOAR) -> str:
     """Return the uuid of the most recent FortiSIEM-sourced alert."""
-    resp = client.get(
-        "/api/3/alerts",
-        params={"source": FSIEM_SOURCE, "$limit": 1, "$orderby": "-createDate"},
-    )
-    rows = resp.get("hydra:member") or resp.get("data") or []
-    if not rows:
+    from pyfsr import Query
+
+    page = client.records("alerts").query(Query().eq("source", FSIEM_SOURCE).sort("createDate", "DESC").limit(1))
+    if not page.members:
         sys.exit(f"No alerts with source={FSIEM_SOURCE!r} found — create one first.")
-    return iri_to_uuid(rows[0])
+    rec = page.members[0]
+    d = rec.model_dump(by_alias=True) if hasattr(rec, "model_dump") else rec
+    return d.get("uuid") or iri_to_uuid(d.get("@id", ""))
 
 
 def _poll(client: FortiSOAR, task_id: str, *, interval: float = 5.0, timeout: float = 600.0) -> str:

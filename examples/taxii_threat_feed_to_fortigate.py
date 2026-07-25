@@ -259,7 +259,9 @@ def query_by_source(client: FortiSOAR, source: str, *, limit: int = 100) -> list
             "filters": [{"field": "source", "operator": "eq", "value": source, "type": "primitive"}],
         },
     )
-    return r.get("hydra:member", [])
+    from pyfsr.pagination import extract_members
+
+    return extract_members(r)
 
 
 def cleanup(client: FortiSOAR, *, source: str) -> None:
@@ -289,7 +291,7 @@ def cleanup(client: FortiSOAR, *, source: str) -> None:
     if ds:
         client.system_queries.delete(ds["uuid"])
         print(f"  deleted dataset {ds['uuid']}")
-    for b in client.get("/api/3/api_keys", params={"$limit": 100}).get("hydra:member", []):
+    for b in client.api_keys.list():
         if b.get("name") == API_KEY_NAME:
             client.delete(f"/api/3/api_keys/{b['uuid']}")
             print(f"  deleted api key {b['uuid']}")
