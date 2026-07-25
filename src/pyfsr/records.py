@@ -1268,6 +1268,78 @@ class RecordSet(Generic[T]):
             page = self.query(query, show_deleted=show_deleted, raw=True)
         return bool(page.members)
 
+    def wait_for(
+        self,
+        query: Query | dict[str, Any] | None = None,
+        *,
+        predicate: Any = None,
+        timeout: float = 60,
+        poll_interval: float = 3,
+        show_deleted: bool = False,
+        raw: bool = False,
+    ) -> T | dict[str, Any]:
+        """Poll until a record matching ``query`` (and ``predicate``) appears; return it.
+
+        The record-side counterpart to
+        :meth:`~pyfsr.api.playbooks.PlaybooksAPI.wait_for_task`: use it when a
+        downstream side effect *creates a record* you must wait on but hold no
+        ``task_id`` for — e.g. a ticket-intake playbook that mints an alert, where
+        the only link back is a marker the intake wrote into the alert. Replaces the
+        hand-rolled ``for _ in range(n): time.sleep(); query(); check`` loop.
+
+        ``query`` narrows server-side (cheap); ``predicate`` — a callable taking one
+        record and returning bool — filters what the query can't express (e.g. a
+        substring in a description). With neither, waits for *any* record to exist.
+
+        Args:
+            query: optional :class:`~pyfsr.query.Query`/dict to filter server-side.
+            predicate: optional ``callable(record) -> bool`` applied to each member
+                of the fetched page; the first record it accepts is returned.
+            timeout: seconds to wait before raising :exc:`TimeoutError`.
+            poll_interval: seconds between polls.
+            show_deleted: include soft-deleted records.
+            raw: return the raw record dict rather than the typed model.
+
+        Returns:
+            The first matching record (typed model or dict).
+
+        Raises:
+            TimeoutError: if no matching record appears within ``timeout``.
+
+        Example::
+
+            # wait for the intake playbook to create an alert carrying our marker
+            alert = client.records("alerts").wait_for(
+                predicate=lambda a: f"snow_sys_id={sys_id}" in (a.get("description") or ""),
+                timeout=60,
+            )
+        """
+        import time as _time_module
+
+        # Without a predicate a limit=1 fetch suffices; with one, pull a page so a
+        # matching-but-not-first record is still found.
+        if predicate is None:
+            fetch = lambda: [self.first(query, show_deleted=show_deleted, raw=raw)]  # noqa: E731
+        else:
+            if query is None:
+                fetch = lambda: self.list(limit=30, show_deleted=show_deleted, raw=raw).members  # noqa: E731
+            else:
+                fetch = lambda: self.query(query, show_deleted=show_deleted, raw=raw).members  # noqa: E731
+
+        deadline = _time_module.monotonic() + timeout
+        while True:
+            for rec in fetch():
+                if rec is None:
+                    continue
+                if predicate is None or predicate(rec):
+                    return rec
+            if _time_module.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"no {self.module} record matched within {timeout}s"
+                    + (" (with predicate)" if predicate is not None else "")
+                )
+            _time_module.sleep(poll_interval)
+
     def create_and_wait(
         self,
         data: dict[str, Any],
