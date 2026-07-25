@@ -19,36 +19,41 @@ playbooks:
   is_active: true
   trigger_step_id: start
   steps:
-  - type: create_record
+  - type: insert_record
     name: Add Comment about the COUNT
-    fields:
-      type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
-      alerts: '{{vars.input.records[0][''@id'']}}'
-      people: []
-      content: '<p>Incident <span style="color: rgb(241, 196, 15);">First Seen</span> is:<strong> <span style="color: rgb(185, 106, 217); font-size: 12pt;">{{arrow.get(vars.incidentFirstSeen).to("UTC").format("YYYY-MM-DD HH:mm:ss ZZ")}} UTC</span></strong></p>
+    step_variables: []
+    arguments:
+      resource:
+        type: /api/3/picklists/ff599189-3eeb-4c86-acb0-a7915e85ac3b
+        alerts: '{{vars.input.records[0][''@id'']}}'
+        people: []
+        content: '<p>Incident <span style="color: rgb(241, 196, 15);">First Seen</span> is:<strong> <span style="color: rgb(185, 106, 217); font-size: 12pt;">{{arrow.get(vars.incidentFirstSeen).to("UTC").format("YYYY-MM-DD HH:mm:ss ZZ")}} UTC</span></strong></p>
 
-        <p>Incident <span style="color: rgb(241, 196, 15);">Last Seen</span> is: <span style="color: rgb(185, 106, 217); font-size: 12pt;">{{arrow.get(vars.incidentLastSeen).to("UTC").format("YYYY-MM-DD HH:mm:ss ZZ")}} UTC</span></p>
+          <p>Incident <span style="color: rgb(241, 196, 15);">Last Seen</span> is: <span style="color: rgb(185, 106, 217); font-size: 12pt;">{{arrow.get(vars.incidentLastSeen).to("UTC").format("YYYY-MM-DD HH:mm:ss ZZ")}} UTC</span></p>
 
-        <p>Incident&nbsp;<span style="color: rgb(241, 196, 15);">count</span> is:<span style="color: rgb(45, 194, 107);"><strong> <span style="font-size: 24pt;">{{vars.incidentCount}}</span></strong></span></p>
+          <p>Incident&nbsp;<span style="color: rgb(241, 196, 15);">count</span> is:<span style="color: rgb(45, 194, 107);"><strong> <span style="font-size: 24pt;">{{vars.incidentCount}}</span></strong></span></p>
 
-        <p>&nbsp;</p>'
-      __replace: ''
-      isImportant: true
-      peopleUpdated: false
-    operation: Overwrite
-    collection: /api/3/comments
-    fieldOperation:
-      recordTags: Overwrite
+          <p>&nbsp;</p>'
+        __replace: ''
+        isImportant: true
+        peopleUpdated: false
+      operation: Overwrite
+      collection: /api/3/comments
+      fieldOperation:
+        recordTags: Overwrite
     next: end
   - type: connector
     name: Clear Manually an Incident with a Reason
     pickFromTenant: false
-    config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
-    params:
-      incidentId: '{{vars.incidentId}}'
-    connector: fortinet-fortisiem
-    operation: get_incident_details
-    operationTitle: Get Incident Details
+    step_variables: []
+    arguments:
+      name: Fortinet FortiSIEM
+      config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
+      params:
+        incidentId: '{{vars.incidentId}}'
+      connector: fortinet-fortisiem
+      operation: get_incident_details
+      operationTitle: Get Incident Details
     next: incident_output
   - type: set_variable
     name: Configuration
@@ -57,11 +62,13 @@ playbooks:
     next: clear_manually_an_incident_with_a_reason
   - type: CyopsUtilites
     name: End
-    params: []
-    version: 3.5.0
-    connector: cyops_utilities
-    operation: no_op
-    operationTitle: 'Utils: No Operation'
+    step_variables: []
+    arguments:
+      params: []
+      version: 3.5.0
+      connector: cyops_utilities
+      operation: no_op
+      operationTitle: 'Utils: No Operation'
   - type: set_variable
     name: Incident Output
     vars:
@@ -77,20 +84,21 @@ playbooks:
         params: []
         records:
         - '{{vars.input.records[0]}}'
-    resource: alerts
-    resources:
-    - alerts
-    __triggerLimit: true
-    triggerOnSource: true
-    fieldbasedtrigger:
-      sort: []
-      limit: 30
-      logic: AND
-      filters:
-      - type: primitive
-        field: source
-        value: Fortinet FortiSIEM
-        operator: eq
-        _operator: eq
-    triggerOnReplicate: false
+    arguments:
+      resource: alerts
+      resources:
+      - alerts
+      __triggerLimit: true
+      triggerOnSource: true
+      fieldbasedtrigger:
+        sort: []
+        limit: 30
+        logic: AND
+        filters:
+        - type: primitive
+          field: source
+          value: Fortinet FortiSIEM
+          operator: eq
+          _operator: eq
+      triggerOnReplicate: false
     next: configuration

@@ -29,25 +29,28 @@ playbooks:
     next: save_tabular_format
   - type: CyopsUtilites
     name: Save Tabular Format
-    params:
-      iri: '{{vars.request.data.records[0]["@id"]}}'
-      body: "{   \"description\": \"<h3>Active Directory Resource</h3><table class='table margin-bottom-sm' border='1'> <tr><td width ='30%'>dn</td><td width ='30%'>{{vars.dn}}</td> {% if vars.attributes|length > 1 %}{% for key,value in vars.attributes.items() %} \t<tr><td width = '30%'>{{ key }}</td><td width = '70%'>{{ value}}</td></tr>{% endfor %}{% endif %}</table>\"  }"
-    version: 3.3.0
-    connector: cyops_utilities
-    operation: update_cyops_resource
-    operationTitle: 'CyOPs: Update Record'
+    arguments:
+      params:
+        iri: '{{vars.request.data.records[0]["@id"]}}'
+        body: "{   \"description\": \"<h3>Active Directory Resource</h3><table class='table margin-bottom-sm' border='1'> <tr><td width ='30%'>dn</td><td width ='30%'>{{vars.dn}}</td> {% if vars.attributes|length > 1 %}{% for key,value in vars.attributes.items() %} \t<tr><td width = '30%'>{{ key }}</td><td width = '70%'>{{ value}}</td></tr>{% endfor %}{% endif %}</table>\"  }"
+      version: 3.3.0
+      connector: cyops_utilities
+      operation: update_cyops_resource
+      operationTitle: 'CyOPs: Update Record'
   - type: connector
     name: Search by Email
     pickFromTenant: false
-    config: 65262d44-9202-4501-bc06-9e5b3ef5c9c5
-    params:
-      cookie: ''
-      search_object: User
-      search_attr_name: Email
-      search_attr_value: '{{vars.input.records[0].value}}'
-    connector: activedirectory
-    operation: global_search
-    operationTitle: Global Search
+    arguments:
+      name: Active Directory
+      config: 65262d44-9202-4501-bc06-9e5b3ef5c9c5
+      params:
+        cookie: ''
+        search_object: User
+        search_attr_name: Email
+        search_attr_value: '{{vars.input.records[0].value}}'
+      connector: activedirectory
+      operation: global_search
+      operationTitle: Global Search
     next: save_resource_details
   - type: start
     name: Start

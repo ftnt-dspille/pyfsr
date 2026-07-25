@@ -80,17 +80,19 @@ playbooks:
     pickFromTenant: false
     step_variables:
       openaiOutput: '{{vars.steps.The_Query.data}}'
-    config: a2aec12c-5dec-4f20-bf85-d4d3a38438a1
-    params:
-      model: '{{vars.model1}}'
-      top_p: ''
-      message: '{{vars.final_query}}'
-      timeout: 600
-      temperature: ''
-      other_fields: ''
-    connector: openai
-    operation: chat_completions
-    operationTitle: Ask a Question
+    arguments:
+      name: OpenAI
+      config: a2aec12c-5dec-4f20-bf85-d4d3a38438a1
+      params:
+        model: '{{vars.model1}}'
+        top_p: ''
+        message: '{{vars.final_query}}'
+        timeout: 600
+        temperature: ''
+        other_fields: ''
+      connector: openai
+      operation: chat_completions
+      operationTitle: Ask a Question
     next: add_comment_to_alert_with_openai_output
   annotations:
   - id: important

@@ -45,9 +45,14 @@ playbooks:
           firstApprovalTimestamp: "{{ vars.first_approval_time }}"
         next: No Op After First Approval
 
-      - type: utilities
+      - type: CyopsUtilites
         name: No Op After First Approval
-        operation: no_op
+        arguments:
+          params: []
+          version: 3.5.0
+          connector: cyops_utilities
+          operation: no_op
+          operationTitle: 'Utils: No Operation'
         next: Second Approval Request
 
       - type: approval
@@ -76,11 +81,21 @@ playbooks:
           secondApprovalTimestamp: "{{ vars.second_approval_time }}"
         next: Final No-Op Action
 
-      - type: utilities
+      - type: CyopsUtilites
         name: Final No-Op Action
-        operation: no_op
+        arguments:
+          params: []
+          version: 3.5.0
+          connector: cyops_utilities
+          operation: no_op
+          operationTitle: 'Utils: No Operation'
         next: End
 
-      - type: utilities
+      - type: CyopsUtilites
         name: End
-        operation: no_op
+        arguments:
+          params: []
+          version: 3.5.0
+          connector: cyops_utilities
+          operation: no_op
+          operationTitle: 'Utils: No Operation'
