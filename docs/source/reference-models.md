@@ -229,6 +229,13 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 ```
 
 ```{eval-rst}
+.. autoclass:: pyfsr.models.RunResult
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
 .. autoclass:: pyfsr.models.RunStep
    :members:
    :undoc-members:
@@ -783,14 +790,14 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 ```
 
 ```{eval-rst}
-.. autoclass:: pyfsr.models.ConnectorMcpCandidates
+.. autoclass:: pyfsr.models.AgentRunResult
    :members:
    :undoc-members:
    :show-inheritance:
 ```
 
 ```{eval-rst}
-.. autoclass:: pyfsr.models.AgentRunResult
+.. autoclass:: pyfsr.models.ConnectorMcpCandidates
    :members:
    :undoc-members:
    :show-inheritance:
@@ -1001,6 +1008,29 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 
 ```{eval-rst}
 .. autoclass:: pyfsr.models.BaseRecord
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+## _audit
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.AuditActivity
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.LifecycleEntry
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.RecordLifecycle
    :members:
    :undoc-members:
    :show-inheritance:
