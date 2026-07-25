@@ -95,11 +95,36 @@ _PUBLISH = "/api/publish"
 _ENTRYPOINT = "/api/3"
 _PUBLISH_ERROR = "/api/publish/error"
 _REVERT = "/api/publish/revert"
+# The appliance-side log ``/api/publish/error`` derives its status from. The publish
+# process appends every run here and the endpoint scans the whole file for error
+# markers, so one historical failure makes the endpoint report Fail indefinitely —
+# poisoning any tooling that gates on publish status. reset_publish_log() clears it.
+_PUBLISH_LOG_PATH = "/var/log/cyops/cyops-api/last_system_publish.log"
 #: Sentinel for "no prior errors captured" — distinct from a real ``errors`` value of None.
 _UNSET = object()
 _VIEW_TEMPLATES = "/api/3/system_view_templates"
 _VIEW_TEMPLATES_BULK = "/api/3/bulkupsert/system_view_templates"
 _REL = {"$relationships": "true"}
+#: JSON-LD annotations, server-managed stamps, and the source-box owner
+#: reference stripped from an exported ``mmd.json`` before re-staging it on the
+#: target appliance (see :meth:`ModulesAdminAPI.get_or_create_module_from_metadata`).
+_MMD_SERVER_FIELDS = frozenset(
+    {
+        "@context",
+        "@type",
+        "@id",
+        "id",
+        "uuid",
+        "createDate",
+        "modifyDate",
+        "createUser",
+        "modifyUser",
+        "module",
+    }
+)
+#: Per-attribute source-box identifiers stripped from each exported ``attributes[]``
+#: entry before re-staging (the target appliance mints fresh ones).
+_MMD_ATTR_SERVER_FIELDS = frozenset({"@context", "@type", "@id", "id", "uuid"})
 _ALL = {"$limit": 2147483647}
 
 # Display type (``formType``) -> storage column type (``type``). This is the mapping the
@@ -1321,6 +1346,167 @@ class ModulesAdminAPI(BaseAPI):
         meta = (self.get_published(module) if publish else None) or self.get_staging(module)
         return meta or {}, True
 
+    def get_or_create_module_from_metadata(
+        self,
+        mmd: dict[str, Any],
+        *,
+        publish: bool = True,
+        create_view_templates: bool = True,
+        grant_to: list[str] | str | None = None,
+        publish_kwargs: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], bool]:
+        """Idempotently create a module from an exported metadata doc (``mmd.json``).
+
+        The faithful analogue of :meth:`get_or_create_module` for import bundles.
+        A UI-export zip ships each custom module's definition as
+        ``modules/<name>/mmd.json`` — which is a full model-metadata document
+        (the same shape :meth:`get_published` returns). Rather than re-deriving
+        field kwargs (lossy — the ``create_module`` path only carries
+        name/type/label/formType/required per field), this posts the export's
+        own metadata **verbatim** to the staging endpoint, preserving every
+        attribute, formType, validation, tooltip, picklist ref, and module flag.
+
+        Server-managed / JSON-LD fields (``@context``, ``@type``, ``@id``,
+        ``id``, ``uuid``, create/modify stamps, and the source-box ``module``
+        owner reference) are stripped so the target appliance assigns its own.
+
+        Behaviour mirrors :meth:`get_or_create_module`:
+
+        - If the module already exists (published **or** staging), return its
+          current metadata with ``created=False`` — nothing is created or
+          published (the common case: a solution pack already provides it).
+        - Otherwise POST the stripped ``mmd`` to staging, optionally create the
+          default view templates, and (when ``publish`` is True) publish so the
+          schema goes live. Return ``(metadata, True)``.
+
+        Note: this creates the **module schema**. Bundle-level picklists and
+        custom view-template layouts beyond the defaults are not (yet) imported
+        here — see the ``create_modules`` limitations on
+        :meth:`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export_zip`.
+
+        Args:
+            mmd: the parsed ``mmd.json`` model-metadata document.
+            publish: publish after staging so the module goes live (default True).
+                Publishing is appliance-wide and is a DB migration.
+            create_view_templates: also create default list/detail/form view
+                templates (default True — without them the module has no UI
+                layout). Set False for an API-only module.
+            grant_to: role name(s) to grant full CRUD+execute on the new module
+                once published. A module's metadata carries **no** RBAC grants,
+                so without this the imported module is inaccessible (403) until a
+                role is granted. No-op when the module already existed.
+            publish_kwargs: forwarded to :meth:`publish` (e.g. ``{"timeout": 420}``).
+
+        Returns:
+            ``(metadata, created)`` — the published (or staging) metadata and
+            whether this call created it.
+
+        Raises:
+            ValueError: if ``mmd`` has no ``type``/``tableName``.
+        """
+        module = mmd.get("type") or mmd.get("tableName")
+        if not module:
+            raise ValueError("mmd has no 'type'/'tableName' — not a module metadata doc")
+
+        existing = self.get_published(module) or self.get_staging(module)
+        if existing is not None:
+            return existing, False
+
+        payload = {k: v for k, v in mmd.items() if k not in _MMD_SERVER_FIELDS}
+        # Scrub per-attribute source-box identifiers too: an exported attribute
+        # carries its own uuid/@id, and POSTing those verbatim makes the target
+        # try to load a non-existent AttributeMetadata entity ("... for IDs
+        # uuid(...) was not found"). Strip them so the target mints its own.
+        if isinstance(payload.get("attributes"), list):
+            payload["attributes"] = [
+                {k: v for k, v in attr.items() if k not in _MMD_ATTR_SERVER_FIELDS} if isinstance(attr, dict) else attr
+                for attr in payload["attributes"]
+            ]
+        self.client.post(_STAGING, data=payload, params=_REL)
+        if create_view_templates:
+            self.create_view_templates(module)
+        if publish:
+            self.publish(**(publish_kwargs or {}))
+            # A module's metadata carries no RBAC grants, so a freshly-imported
+            # module is inaccessible (403) until a role is granted. The grant's
+            # FK targets the `modules` registry table, populated by the publish's
+            # "Generating Modules" step which can lag the metadata activation the
+            # publish wait returns on — so a grant fired immediately can hit a
+            # transient module_uuid FK violation. Retry briefly until it settles.
+            if grant_to:
+                for role in [grant_to] if isinstance(grant_to, str) else grant_to:
+                    self._grant_with_retry(role, module)
+
+        meta = (self.get_published(module) if publish else None) or self.get_staging(module)
+        return meta or {}, True
+
+    def reset_publish_log(self, appliance: Any, *, backup: bool = True) -> bool:
+        """Clear the appliance's stale publish log so ``/api/publish/error`` reports
+        the *current* publish outcome, not a poisoned historical one.
+
+        Platform quirk (verified live on 8.0.0): the publish pipeline **appends**
+        every run to ``/var/log/cyops/cyops-api/last_system_publish.log``, and the
+        ``/api/publish/error`` handler greps the **entire** file for error markers
+        (``"ERROR:"``, ``"An exception occurred"``, …). So a single past failure —
+        e.g. one wedged migrate — makes the endpoint report ``Fail`` **forever**,
+        even after fully-successful publishes, and a service restart does **not**
+        clear it (the log file persists). This truncates the log so status
+        reporting reflects reality again.
+
+        Needs appliance SSH access. Pass an :class:`~pyfsr.appliance.Appliance`
+        (or a ``Facts``); ``True`` auto-resolves it from the client's instance
+        alias, exactly like :meth:`delete_module`'s ``drop_orphan_tables``.
+
+        Args:
+            appliance: an :class:`~pyfsr.appliance.Appliance`, a ``Facts``, or
+                ``True`` to auto-resolve from the client's instance alias.
+            backup: copy the log aside before clearing (default True).
+
+        Returns:
+            ``True`` once the log is cleared.
+        """
+        from ..appliance import Appliance
+
+        if isinstance(appliance, Appliance):
+            app = appliance
+        else:
+            app = Appliance(_facts=self._resolve_drop_facts(appliance))
+        parts = []
+        if backup:
+            parts.append(f"cp -a {_PUBLISH_LOG_PATH} {_PUBLISH_LOG_PATH}.bak.$(date +%s) 2>/dev/null")
+        parts.append(f"truncate -s 0 {_PUBLISH_LOG_PATH}")
+        app.run(["bash", "-lc", "; ".join(parts)], sudo=True)
+        return True
+
+    def _grant_with_retry(self, role: str, module: str, *, timeout: float = 90, poll_interval: float = 5) -> None:
+        """Grant ``role`` full permissions on ``module``, retrying while the grant
+        fails with a transient module_uuid FK violation.
+
+        Right after a publish, the ``modules`` registry table (the grant's FK
+        target) can lag the metadata activation the publish wait returns on, so a
+        grant fired immediately raises a "Foreign key violation on field
+        'module_uuid'" error. That clears once the publish's module-generation
+        step commits; retry until it does, then re-raise anything still failing.
+        """
+        deadline = time.monotonic() + timeout
+        while True:
+            # Re-fetch the module→uuid map each attempt: the module may have just
+            # been (re)created, so a cached mapping is stale, and the server-side
+            # /api/3/modules listing can lag the registry by a few seconds.
+            try:
+                self.client.roles.invalidate_module_cache()
+            except AttributeError:
+                pass
+            try:
+                self.client.roles.grant_module_permissions(role, module=module)
+                return
+            except Exception as exc:  # noqa: BLE001 - only swallow the transient FK/resolve race
+                s = str(exc).lower()
+                transient = "module_uuid" in s or "foreign key" in s or "not found in /api/3/modules" in s
+                if not transient or time.monotonic() >= deadline:
+                    raise
+                time.sleep(poll_interval)
+
     @property
     def _pending_grants(self) -> dict[str, list[str]]:
         """Role grants requested via ``create_module(grant_to=...)``, applied on the next publish.
@@ -1754,7 +1940,7 @@ class ModulesAdminAPI(BaseAPI):
         detach_relationships: bool = False,
         publish: bool = True,
         drop_view_templates: bool = True,
-        drop_orphan_tables: Any | None = None,
+        drop_orphan_tables: bool | Any | None = False,
         remove_from_nav: bool = False,
         timeout: float = 600.0,
         poll_interval: float = 10.0,
@@ -1797,14 +1983,25 @@ class ModulesAdminAPI(BaseAPI):
                 of ``create_module(add_to_nav=True)``) via
                 :meth:`~pyfsr.api.app_config.AppConfigAPI.remove_navigation_item`. Done after
                 the publish commits the delete; a no-op if the module has no nav entry.
-            drop_orphan_tables: Optional :class:`pyfsr.cli.appliance.Facts` (an
-                appliance transport context). When given **and** ``publish`` is
-                True, the orphaned physical Postgres tables (base + join tables)
-                are dropped with ``DROP TABLE ... CASCADE`` after the publish
-                commits the delete — the only way to fully reclaim a module's
-                ``tableName`` so a future module can reuse it. Left None, the
-                tables are reported in ``orphan_table`` but not dropped (the API
-                cannot touch them; see the warning above).
+            drop_orphan_tables: Reclaim the orphaned physical Postgres tables
+                (base + join tables) with ``DROP TABLE ... CASCADE`` after the
+                publish commits the delete — the only way to fully free a
+                module's ``tableName`` so a future module can reuse it. Accepts:
+
+                - ``True`` — **auto-resolve** appliance SSH access from the
+                  client's own instance (the alias it was built from via
+                  ``InstanceRegistry.client()``, whose ``[instances.<alias>.appliance]``
+                  profile supplies the transport). No ``Facts`` to hand-build.
+                - an :class:`~pyfsr.appliance.Appliance` — use its SSH access.
+                - a :class:`pyfsr.cli.appliance.facts.Facts` — used directly
+                  (advanced/back-compat).
+                - ``False``/``None`` (default) — leave the tables as orphans
+                  (reported in ``orphan_table``; the API can't touch them).
+
+                Requires ``publish=True`` to have any effect. Raises
+                :class:`ValueError` if ``True`` but the appliance can't be
+                resolved (client not from a registry alias, or the alias has no
+                appliance profile) — pass an ``Appliance`` explicitly then.
             timeout: Passed to :meth:`publish`.
             poll_interval: Passed to :meth:`publish`.
 
@@ -1858,14 +2055,43 @@ class ModulesAdminAPI(BaseAPI):
                 # The module is gone; drop its nav entry too (no-op if it had none).
                 self.client.app_config.remove_navigation_item(module=module, missing_ok=True)
                 result["nav_removed"] = True
-            if drop_orphan_tables is not None and orphan_table:
+            if drop_orphan_tables and orphan_table:
+                facts = self._resolve_drop_facts(drop_orphan_tables)
                 # Lazy import: keeps the API client free of the CLI/SSH/psql layer
-                # unless an appliance context is actually handed in.
+                # unless an appliance context is actually resolved.
                 from ..cli.appliance import db as _appliance_db
 
-                drop = _appliance_db.drop_module_tables(drop_orphan_tables, orphan_table, yes=True)
+                drop = _appliance_db.drop_module_tables(facts, orphan_table, yes=True)
                 result["dropped_tables"] = drop["dropped"]
         return result
+
+    def _resolve_drop_facts(self, drop_orphan_tables: Any) -> Any:
+        """Normalize a ``drop_orphan_tables`` value to a ``Facts`` for the DROP.
+
+        Accepts ``True`` (auto-resolve from the client's instance alias), an
+        :class:`~pyfsr.appliance.Appliance`, or a ``Facts`` (used directly).
+        """
+        from ..appliance import Appliance
+        from ..cli.appliance.facts import Facts
+
+        if isinstance(drop_orphan_tables, Facts):
+            return drop_orphan_tables
+        if isinstance(drop_orphan_tables, Appliance):
+            return drop_orphan_tables.facts
+        if drop_orphan_tables is True:
+            alias = getattr(self.client, "_instance_alias", None)
+            if not alias:
+                raise ValueError(
+                    "drop_orphan_tables=True needs a client built from an instance "
+                    "registry alias with an [instances.<alias>.appliance] SSH profile. "
+                    "Pass an Appliance explicitly instead: "
+                    "delete_module(..., drop_orphan_tables=Appliance(instance='<alias>'))"
+                )
+            from ..instances import InstanceRegistry
+
+            return Facts(InstanceRegistry.load().transport(alias))
+        # Fallback: a bare transport/facts-like object (advanced/back-compat).
+        return drop_orphan_tables
 
     def discard_staging_draft(self, module: str, *, drop_view_templates: bool = True) -> bool:
         """Discard a module's editable **staging draft** (``DELETE`` on staging). Returns
@@ -2128,15 +2354,19 @@ class ModulesAdminAPI(BaseAPI):
                     return body
                 if saw_outage and advanced and errors_stale:
                     return body
-                # Lightweight (metadata-only) publishes — toggling visibility, setting
-                # required-by-condition — commit on 8.0 WITHOUT a migrate: no 503 outage and
-                # ``last_publish_time`` never advances, so the signals above never fire and we
-                # would wait out the full timeout. Detect completion structurally instead: once
-                # staging matches published again (nothing pending), the publish is done. Guard
-                # it to the "no outage, no advance" case so it never races a real migrate, and
-                # only when there is no *fresh* failure on record. ``pending_changes`` itself can
-                # error mid-migrate — treat that as "still in progress".
-                if not advanced and not saw_outage and (errors_stale or status in ("", "success")):
+                # Detect completion structurally whenever there is no *fresh* failure on
+                # record — staging matching published again (nothing pending) means the
+                # publish committed. This covers two cases the timestamp/outage signals miss:
+                #   * lightweight metadata-only publishes (toggling visibility, required-by-
+                #     condition) commit on 8.0 WITHOUT a migrate — no 503 outage and
+                #     ``last_publish_time`` never advances; and
+                #   * a publish whose time *advanced* but whose error log is **stale** (a box
+                #     with a wedged ``/api/publish/error`` frozen on an old failure) — the
+                #     advance proves this publish ran, the stale error proves it added no new
+                #     failure, so trust the structural check rather than the frozen "Fail".
+                # Safe mid-migrate: ``pending_changes`` errors during the outage and is caught
+                # as "still in progress", so this never races a real migrate to a false commit.
+                if errors_stale or status in ("", "success"):
                     try:
                         committed = not self.pending_changes()
                     except Exception:

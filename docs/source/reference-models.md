@@ -291,6 +291,13 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
    :show-inheritance:
 ```
 
+```{eval-rst}
+.. autoclass:: pyfsr.models.WaitProgress
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
 ## Module administration
 
 ```{eval-rst}

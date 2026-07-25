@@ -51,6 +51,7 @@ from ..models import (
     TriggerResponse,
     VersionDiff,
     VersionStepDelta,
+    WaitProgress,
     Workflow,
 )
 from ..pagination import HydraPage, extract_members
@@ -2292,6 +2293,90 @@ class PlaybooksAPI(BaseAPI):
                 )
             time.sleep(poll_interval)
 
+    def wait_for_task(
+        self,
+        task_id: str,
+        *,
+        timeout: float = 120,
+        poll_interval: float = 3,
+        steps: bool = True,
+        detailed: bool = False,
+        on_poll: Callable[[WaitProgress], bool | None] | None = None,
+    ) -> RunNode:
+        """Poll a known ``task_id`` until its run tree reaches a terminal status.
+
+        Use this when you've already triggered a playbook (via :meth:`trigger`
+        or :meth:`trigger_action`) and hold the ``task_id``, but need to do work
+        *between* the trigger and the wait — e.g. patch a record mid-flight to
+        unblock an SLA gate. :meth:`run_and_wait` triggers and waits atomically,
+        leaving no such window; :meth:`wait_for_run` polls by playbook *name*
+        via execution history rather than by ``task_id``. This method is the
+        by-``task_id`` primitive both of those build on.
+
+        Args:
+            task_id: the trigger's task id (``TriggerResponse.task_ids[0]``).
+            timeout: seconds to wait before raising :exc:`TimeoutError`.
+            poll_interval: seconds between polls.
+            steps: pass through to :meth:`run_tree` — include per-step snapshots.
+            detailed: pass through to :meth:`run_tree` — recurse child runs and
+                surface per-step timing on every node.
+            on_poll: optional callback invoked once per poll with a
+                :class:`~pyfsr.models.WaitProgress` (the freshly-fetched tree,
+                poll count, elapsed seconds, and whether this is the terminal
+                poll). Use it to act on the *live* run — answer a pending
+                manual-input gate, patch a field to unblock an SLA timer, log
+                progress — without re-implementing the poll loop. Returning
+                ``False`` stops the wait early and returns the current tree.
+
+        Returns:
+            The terminal :class:`~pyfsr.models.RunNode` tree (or the current
+            tree if ``on_poll`` requested an early stop).
+
+        Raises:
+            TimeoutError: if the run doesn't finish within ``timeout`` seconds.
+
+        Example::
+
+            >>> resp = client.playbooks.trigger_action(route, module="alerts", record_uuid=uuid)  # doctest: +SKIP
+            >>> client.records("alerts").update(uuid, {"dueBy": ...})  # unblock mid-flight  # doctest: +SKIP
+            >>> tree = client.playbooks.wait_for_task(resp.task_ids[0], detailed=True)  # doctest: +SKIP
+            >>> tree.status  # doctest: +SKIP
+            'finished'
+
+        Drive approval gates while the run executes::
+
+            >>> def drive(p):  # doctest: +SKIP
+            ...     gate = pending_gate_for_run(client, p.tree.pk)
+            ...     if gate:
+            ...         client.manual_input.answer(input_id=gate, option=0)
+            >>> tree = client.playbooks.wait_for_task(task_id, on_poll=drive)  # doctest: +SKIP
+        """
+        deadline = time.monotonic() + timeout
+        started = time.monotonic()
+        poll_count = 0
+        while True:
+            tree = self.run_tree(task_id, steps=steps, detailed=detailed)
+            poll_count += 1
+            is_terminal = tree.status in _TERMINAL_STATUSES
+            if on_poll is not None:
+                verdict = on_poll(
+                    WaitProgress(
+                        tree=tree,
+                        poll_count=poll_count,
+                        elapsed_s=time.monotonic() - started,
+                        is_terminal=is_terminal,
+                    )
+                )
+                if verdict is False:
+                    return tree
+            if is_terminal:
+                return tree
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"playbook run {task_id!r} did not finish within {timeout}s (currently {tree.status!r})"
+                )
+            time.sleep(poll_interval)
+
     def run_and_wait(
         self,
         playbook: str | None = None,
@@ -2361,8 +2446,6 @@ class PlaybooksAPI(BaseAPI):
             >>> [s for s in result.steps if s.is_slow]  # doctest: +SKIP
             []
         """
-        import time as _time
-
         # Resolve playbook uuid if needed
         if not playbook_uuid and playbook:
             if collection:
@@ -2401,16 +2484,7 @@ class PlaybooksAPI(BaseAPI):
         task_id = resp.task_ids[0]
 
         # --- poll to terminal ---
-        deadline = _time.monotonic() + timeout
-        while True:
-            tree = self.run_tree(task_id, steps=step_detail)
-            if tree.status in _TERMINAL_STATUSES:
-                break
-            if _time.monotonic() >= deadline:
-                raise TimeoutError(
-                    f"playbook run {task_id!r} did not finish within {timeout}s (currently {tree.status!r})"
-                )
-            _time.sleep(poll_interval)
+        tree = self.wait_for_task(task_id, timeout=timeout, poll_interval=poll_interval, steps=step_detail)
 
         # --- build result ---
         steps = tree.steps if step_detail else []

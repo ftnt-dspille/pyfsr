@@ -136,7 +136,7 @@ class ExportTemplate:
 
     def add_module(self, module: str, *, fields: list[str] | None = None) -> "ExportTemplate":
         """Export a module's schema, optionally limited to ``fields`` (all fields if omitted)."""
-        self._modules.append(ModuleSelection(value=module, includedAttributes=list(fields or [])))
+        self._modules.append(ModuleSelection(value=module, includedAttributes=list(fields) if fields else None))
         return self
 
     def add_view_templates(

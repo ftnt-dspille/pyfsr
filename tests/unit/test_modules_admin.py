@@ -1617,3 +1617,213 @@ def test_print_module_writes_to_stdout(capsys):
     demo_client().modules_admin.print_module("alerts")
     captured = capsys.readouterr()
     assert "Module: Alert" in captured.out
+
+
+def test_get_or_create_module_from_metadata_creates_and_strips(monkeypatch):
+    """Absent module: posts the mmd verbatim (minus server/JSON-LD fields),
+    creates view templates, publishes, and reports created=True."""
+    c = RecordingClient()
+    admin = ModulesAdminAPI(c)
+    monkeypatch.setattr(admin, "get_published", lambda m, **k: None)
+    monkeypatch.setattr(admin, "get_staging", lambda m, **k: None)
+    made_svt = []
+    published = []
+    monkeypatch.setattr(admin, "create_view_templates", lambda m: made_svt.append(m))
+    monkeypatch.setattr(admin, "publish", lambda **k: published.append(k))
+
+    mmd = {
+        "@context": "/api/3/contexts/ModelMetadata",
+        "@type": "ModelMetadata",
+        "uuid": "src-box-uuid",
+        "module": "/api/3/modules/src",  # source-box owner ref — must be stripped
+        "type": "scenario",
+        "tableName": "scenario",
+        "attributes": [{"name": "title", "type": "string", "formType": "text"}],
+        "taggable": True,
+    }
+    meta, created = admin.get_or_create_module_from_metadata(mmd)
+
+    assert created is True
+    assert made_svt == ["scenario"] and len(published) == 1
+    posts = [(e, d) for (verb, e, d) in c.calls if verb == "POST"]
+    assert posts, "expected a staging POST"
+    endpoint, payload = posts[-1]
+    assert endpoint == "/api/3/staging_model_metadatas"
+    # server/JSON-LD fields stripped; real definition preserved
+    for gone in ("@context", "@type", "uuid", "module"):
+        assert gone not in payload
+    assert payload["type"] == "scenario"
+    assert payload["attributes"][0]["name"] == "title"
+    assert payload["taggable"] is True
+
+
+def test_get_or_create_module_from_metadata_idempotent_when_present(monkeypatch):
+    """Existing module: no POST, no publish, created=False."""
+    c = RecordingClient()
+    admin = ModulesAdminAPI(c)
+    monkeypatch.setattr(admin, "get_published", lambda m, **k: {"type": "scenario", "uuid": "u"})
+    monkeypatch.setattr(admin, "publish", lambda **k: (_ for _ in ()).throw(AssertionError("must not publish")))
+
+    meta, created = admin.get_or_create_module_from_metadata({"type": "scenario", "attributes": []})
+    assert created is False
+    assert not [c for c in c.calls if c[0] == "POST"]
+
+
+def test_get_or_create_module_from_metadata_rejects_typeless():
+    import pytest
+
+    with pytest.raises(ValueError, match="no 'type'"):
+        ModulesAdminAPI(RecordingClient()).get_or_create_module_from_metadata({"attributes": []})
+
+
+def test_resolve_drop_facts_true_without_alias_raises():
+    """drop_orphan_tables=True on a client with no instance alias gives a
+    clear, actionable error instead of leaking Facts internals."""
+    import pytest
+
+    admin = ModulesAdminAPI(RecordingClient())  # no _instance_alias stamped
+    with pytest.raises(ValueError, match="instance registry alias"):
+        admin._resolve_drop_facts(True)
+
+
+def test_resolve_drop_facts_passes_through_facts_object():
+    """A real Facts is returned unchanged (advanced/back-compat path)."""
+    from pyfsr.cli.appliance.facts import Facts
+
+    class _DummyTransport:
+        pass
+
+    admin = ModulesAdminAPI(RecordingClient())
+    f = Facts(_DummyTransport())
+    assert admin._resolve_drop_facts(f) is f
+
+
+def test_wait_for_publish_commits_on_advanced_time_with_stale_error(monkeypatch):
+    """A box with a wedged /api/publish/error frozen on an OLD failure: this
+    publish's timestamp advanced (it ran) and the error log is unchanged (no new
+    failure), so trust the structural pending_changes check rather than the stale
+    'Fail' — return committed instead of timing out."""
+    admin = ModulesAdminAPI(RecordingClient())
+    stale = {"status": "Fail", "last_publish_time": 200, "errors": "OLD-FAILURE"}
+    monkeypatch.setattr(admin, "_publish_status", lambda: stale)
+    monkeypatch.setattr(admin, "pending_changes", lambda: [])  # nothing pending => committed
+    monkeypatch.setattr("pyfsr.api.modules_admin.time.sleep", lambda _s: None)
+
+    body = admin._wait_for_publish(100, 5, 0, prev_errors="OLD-FAILURE")
+    assert body is stale
+
+
+def test_wait_for_publish_raises_on_fresh_failure(monkeypatch):
+    """A genuinely new failure (error log changed) still raises, not masked by the
+    structural check (which only runs when the failure is stale/absent)."""
+    import pytest
+
+    from pyfsr.exceptions import FortiSOARException
+
+    admin = ModulesAdminAPI(RecordingClient())
+    fresh = {"status": "Fail", "last_publish_time": 200, "errors": "NEW-FAILURE"}
+    monkeypatch.setattr(admin, "_publish_status", lambda: fresh)
+    monkeypatch.setattr(admin, "pending_changes", lambda: [{"module": "x"}])
+    monkeypatch.setattr("pyfsr.api.modules_admin.time.sleep", lambda _s: None)
+
+    with pytest.raises(FortiSOARException):
+        admin._wait_for_publish(100, 5, 0, prev_errors="OLD-FAILURE")
+
+
+def test_reset_publish_log_truncates_via_appliance():
+    """reset_publish_log runs a sudo truncate (with backup) of the publish log
+    through the supplied Appliance."""
+    from pyfsr.appliance import Appliance
+
+    app = Appliance.__new__(Appliance)  # bypass SSH __init__
+    calls = []
+    app.run = lambda argv, **kw: calls.append((argv, kw)) or ""
+
+    ok = ModulesAdminAPI(RecordingClient()).reset_publish_log(app)
+    assert ok is True
+    argv, kw = calls[0]
+    assert kw.get("sudo") is True
+    cmd = argv[-1]
+    assert "truncate -s 0 /var/log/cyops/cyops-api/last_system_publish.log" in cmd
+    assert "cp -a" in cmd  # backup by default
+
+
+def test_reset_publish_log_backup_false_skips_copy():
+    from pyfsr.appliance import Appliance
+
+    app = Appliance.__new__(Appliance)
+    calls = []
+    app.run = lambda argv, **kw: calls.append((argv, kw)) or ""
+
+    ModulesAdminAPI(RecordingClient()).reset_publish_log(app, backup=False)
+    cmd = calls[0][0][-1]
+    assert "truncate -s 0" in cmd
+    assert "cp -a" not in cmd
+
+
+def test_grant_with_retry_survives_transient_fk(monkeypatch):
+    """A transient module_uuid FK violation right after publish is retried until
+    the modules registry settles."""
+    from pyfsr.exceptions import APIError
+
+    admin = ModulesAdminAPI(RecordingClient())
+    monkeypatch.setattr("pyfsr.api.modules_admin.time.sleep", lambda _s: None)
+
+    class FakeRoles:
+        def __init__(self):
+            self.n = 0
+
+        def grant_module_permissions(self, role, *, module):
+            self.n += 1
+            if self.n < 3:
+                raise APIError("Foreign key violation on field 'module_uuid'", None)
+            return {"ok": True}
+
+    admin.client.roles = FakeRoles()
+    admin._grant_with_retry("Security Administrator", "demo", timeout=30, poll_interval=0)
+    assert admin.client.roles.n == 3  # two transient failures, then success
+
+
+def test_grant_with_retry_reraises_non_transient(monkeypatch):
+    import pytest
+
+    from pyfsr.exceptions import APIError
+
+    admin = ModulesAdminAPI(RecordingClient())
+
+    class FakeRoles:
+        def grant_module_permissions(self, role, *, module):
+            raise APIError("role not found", None)
+
+    admin.client.roles = FakeRoles()
+    with pytest.raises(APIError, match="role not found"):
+        admin._grant_with_retry("X", "demo", timeout=5, poll_interval=0)
+
+
+def test_get_or_create_module_from_metadata_scrubs_attribute_ids(monkeypatch):
+    """Per-attribute source-box uuid/@id are stripped before staging, else the
+    target tries to load a non-existent AttributeMetadata entity."""
+    c = RecordingClient()
+    admin = ModulesAdminAPI(c)
+    monkeypatch.setattr(admin, "get_published", lambda m, **k: None)
+    monkeypatch.setattr(admin, "get_staging", lambda m, **k: None)
+    monkeypatch.setattr(admin, "create_view_templates", lambda m: None)
+    monkeypatch.setattr(admin, "publish", lambda **k: None)
+
+    mmd = {
+        "type": "scenario",
+        "attributes": [
+            {
+                "@id": "/api/3/attribute_metadatas/x",
+                "uuid": "src-attr-uuid",
+                "name": "title",
+                "type": "string",
+                "formType": "text",
+            },
+        ],
+    }
+    admin.get_or_create_module_from_metadata(mmd)
+    payload = [d for (verb, e, d) in c.calls if verb == "POST"][-1]
+    attr = payload["attributes"][0]
+    assert attr["name"] == "title" and attr["formType"] == "text"
+    assert "uuid" not in attr and "@id" not in attr

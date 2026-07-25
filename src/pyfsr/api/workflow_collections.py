@@ -280,9 +280,15 @@ class WorkflowCollectionsAPI(BaseAPI):
         replace: bool = True,
         strip_stale: bool = True,
         create_records: bool = True,
+        create_modules: bool = False,
+        grant_modules_to: list[str] | str | None = None,
         patch_picklists: bool = False,
     ) -> dict[str, Any]:
         """Import a FortiSOAR UI-export zip bundle in one call.
+
+        This is the programmatic equivalent of the FortiSOAR UI's **Import
+        Wizard** (Settings → Application Editor → Import Wizard) — the flow that
+        consumes an Export-button ``.zip``.
 
         The UI's Export button produces a zip with:
           ``info.json`` + ``modules/<name>/mmd.json`` + ``playbooks/<collection>/*.json``
@@ -292,18 +298,31 @@ class WorkflowCollectionsAPI(BaseAPI):
 
           1. Extracts the zip and builds the ``{"type": "workflow_collections", ...}``
              envelope from ``playbooks/<collection>/`` dirs.
-          2. When ``strip_stale=True``, strips server-managed fields
+          2. When ``create_modules=True``, creates any custom module the bundle
+             defines (from ``modules/<name>/mmd.json``) that isn't already on
+             the box, via
+             :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.get_or_create_module_from_metadata`,
+             then publishes. Runs **first** so bundled records have a module to
+             land in. Idempotent — a module a solution pack already provides is
+             left untouched.
+          3. When ``strip_stale=True``, strips server-managed fields
              (``createdAlertsID``, ``createUser``, ``modifyUser``, etc.) from
              bundled records before creating them.
-          3. When ``create_records=True``, creates bundled records
+          4. When ``create_records=True``, creates bundled records
              (from ``records/<module>/``) that don't already exist.
-          4. When ``patch_picklists=True``, scans all playbook steps for
+          5. When ``patch_picklists=True``, scans all playbook steps for
              hardcoded ``/api/3/picklists/`` IRIs and replaces them with
              Jinja ``picklist`` filter expressions that resolve dynamically
              at runtime — eliminating the #1 portability bug.
-          5. Imports the (optionally patched) envelope via :meth:`import_export`
+          6. Imports the (optionally patched) envelope via :meth:`import_export`
              with ``replace=True`` (hard-deletes any existing collection with
              the same uuid first).
+
+        .. note::
+           ``create_modules`` imports the **module schema** (all attributes and
+           flags, posted verbatim from ``mmd.json``). Bundle-level picklists and
+           non-default view-template layouts are not yet imported — for those,
+           install the source solution pack or add the picklists first.
 
         Args:
             zip_path: path to the ``.zip`` file from the UI Export button.
@@ -314,6 +333,14 @@ class WorkflowCollectionsAPI(BaseAPI):
                 (default ``True``).
             create_records: create bundled records that don't already exist
                 (default ``True``).
+            create_modules: create custom modules the bundle defines (from
+                ``modules/<name>/mmd.json``) that aren't already on the box,
+                then publish (default ``False``). Idempotent.
+            grant_modules_to: role name(s) to grant full access on any module
+                created by ``create_modules``. A module's metadata carries no
+                RBAC grants, so without this the imported module is inaccessible
+                (403) — pass the role(s) that should own the imported content
+                (and that lets the subsequent record import land).
             patch_picklists: replace hardcoded picklist IRIs with Jinja
                 ``picklist`` filter expressions (default ``False``). When
                 ``True``, calls :meth:`~pyfsr.api.picklists.PicklistsAPI.reverse_resolve`
@@ -322,7 +349,8 @@ class WorkflowCollectionsAPI(BaseAPI):
 
         Returns:
             A dict with keys ``collections`` (list of created collections),
-            ``records_created`` (list of created record IRIs),
+            ``modules_created`` (list of module type-names newly created, or
+            empty), ``records_created`` (list of created record IRIs),
             and ``picklists_patched`` (int — number of IRIs replaced, or 0).
 
         Example::
@@ -348,12 +376,11 @@ class WorkflowCollectionsAPI(BaseAPI):
         children = [p for p in tmp_dir.iterdir() if p.is_dir()]
         export_dir = children[0] if children else tmp_dir
 
-        # 2. Build envelope from playbooks/
+        # 2. Build envelope from playbooks/ (optional — a bundle may carry only
+        #    modules and/or records, e.g. an Export-Wizard module backup).
         pb_dir = export_dir / "playbooks"
-        if not pb_dir.exists():
-            raise ValueError(f"no 'playbooks/' dir in export zip: {zip_path}")
         collections = []
-        for cd in sorted(pb_dir.iterdir()):
+        for cd in sorted(pb_dir.iterdir()) if pb_dir.exists() else []:
             if not cd.is_dir():
                 continue
             meta_path = cd / "collection.metadata.json"
@@ -370,9 +397,27 @@ class WorkflowCollectionsAPI(BaseAPI):
 
         result: dict[str, Any] = {
             "collections": [],
+            "modules_created": [],
             "records_created": [],
             "picklists_patched": 0,
         }
+
+        # 2b. Create custom modules the bundle defines (before records, which
+        #     need a module to land in). Idempotent — skips modules already on
+        #     the box (e.g. provided by a solution pack).
+        if create_modules:
+            modules_dir = export_dir / "modules"
+            if modules_dir.exists():
+                for module_dir in sorted(modules_dir.iterdir()):
+                    mmd_path = module_dir / "mmd.json"
+                    if not mmd_path.exists():
+                        continue
+                    mmd = json.loads(mmd_path.read_text(encoding="utf-8"))
+                    _meta, created = self.client.modules_admin.get_or_create_module_from_metadata(
+                        mmd, grant_to=grant_modules_to
+                    )
+                    if created:
+                        result["modules_created"].append(mmd.get("type") or module_dir.name)
 
         # 3. Create bundled records
         if create_records:
@@ -426,9 +471,10 @@ class WorkflowCollectionsAPI(BaseAPI):
             patched_count = self._patch_picklists_in_envelope(envelope)
             result["picklists_patched"] = patched_count
 
-        # 5. Import
-        created = self.import_export(envelope, replace=replace)
-        result["collections"] = created
+        # 5. Import (only if the bundle actually carried playbook collections)
+        if collections:
+            created = self.import_export(envelope, replace=replace)
+            result["collections"] = created
 
         # Cleanup temp dir
         import shutil

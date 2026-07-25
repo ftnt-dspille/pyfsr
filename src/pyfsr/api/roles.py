@@ -84,6 +84,14 @@ class RolesAPI(BaseAPI):
             self._module_cache = {m["type"]: m for m in (resp or {}).get("hydra:member", []) if m.get("type")}
         return self._module_cache
 
+    def invalidate_module_cache(self) -> None:
+        """Drop the cached ``/api/3/modules`` map so the next module resolution
+        re-fetches. Call after creating/deleting/re-publishing a module within a
+        long-lived client — otherwise a stale module→uuid mapping (e.g. a module
+        deleted and recreated with a new uuid) makes grants fail with a
+        ``module_uuid`` foreign-key violation against the fresh registry."""
+        self._module_cache = None
+
     def _resolve_role_uuid(self, role: str) -> str:
         """Accept a role uuid or name and return the uuid."""
         if _is_uuid(role):

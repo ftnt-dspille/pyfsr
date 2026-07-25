@@ -209,7 +209,7 @@ def test_builder_slugifies_name_and_builds_metadata():
     )
     assert b.name == "my-soc-pack"  # slug derived from label
     assert b.label == "My SOC Pack"
-    assert b.build() == {"modules": [{"value": "alerts", "includedAttributes": []}]}
+    assert b.build() == {"modules": [{"value": "alerts"}]}
     ic = b.info_content()
     assert ic["label"] == "My SOC Pack"
     assert ic["version"] == "1.0.0"
@@ -242,7 +242,7 @@ def test_create_posts_solutionpack_export_body(mock_client, mock_response, monke
     assert body["local"] is True and body["draft"] is True
     assert body["recordTags"] == ["t1"]
     assert body["template"]["type"] == "SolutionPack Export"
-    assert body["template"]["options"] == {"modules": [{"value": "alerts", "includedAttributes": []}]}
+    assert body["template"]["options"] == {"modules": [{"value": "alerts"}]}
 
 
 def test_create_publish_false_marks_development(mock_client, mock_response, monkeypatch):
