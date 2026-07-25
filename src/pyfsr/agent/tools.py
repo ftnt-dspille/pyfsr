@@ -202,8 +202,43 @@ def _h_resolve_picklist(client, *, value, picklist=None, module=None, field=None
     return {"value": value, "iri": iri, "resolved": iri is not None}
 
 
+#: Fields worth returning when listing connectors. The full InstalledConnector is
+#: ~10 KB each — of which ``icon_large``/``icon_small`` (base64 images) are ~93% —
+#: so a 37-connector appliance serializes to ~380 KB and the MCP output cap
+#: truncates most of it. An agent choosing a connector needs the machine ``name``
+#: (the key every other connector tool takes), a human ``label``, the ``version``,
+#: whether it's usable (``active`` + how many ``config_count``), and ``category``.
+#: Everything else (icons, install/remote status blobs, timestamps, rpm metadata)
+#: is dropped; call the connector-config tools for details on a specific one.
+_CONNECTOR_LIST_FIELDS = ("name", "label", "version", "category", "active", "config_count")
+
+
 def _h_list_connectors(client) -> Any:
-    return {"connectors": client.connectors.list_configured()}
+    """List configured connectors, compacted to the fields needed to pick one.
+
+    Drops the base64 icons and other bulk that made the full listing ~95x the MCP
+    output cap (so the tail of the list was silently truncated). Shape stays
+    ``{"connectors": [{...}]}``.
+    """
+    out: list[dict[str, Any]] = []
+    for cn in client.connectors.list_configured():
+        d = cn.model_dump() if hasattr(cn, "model_dump") else dict(cn)
+        entry: dict[str, Any] = {}
+        for k in ("name", "label", "version", "category"):
+            if d.get(k) is not None:
+                entry[k] = d[k]
+        cfgs = d.get("config_count")
+        if cfgs is None and isinstance(d.get("configurations"), list):
+            cfgs = len(d["configurations"])
+        # Omit the uninteresting defaults (configured=0, active=True) so the common
+        # row stays tiny — same "drop redundant fields" rule as list_modules. A
+        # disabled or configured connector still stands out.
+        if cfgs:
+            entry["config_count"] = cfgs
+        if d.get("active") is False:
+            entry["active"] = False
+        out.append(entry)
+    return {"connectors": out, "count": len(out)}
 
 
 def _h_healthcheck_connector(client, *, connector, config=None) -> Any:

@@ -240,3 +240,39 @@ def test_filter_forwards_to_query():
     page = RecordSet(c, "alerts").filter(Query().eq("status", "Open"))
     assert page.members[0]["uuid"] == "u1"
     assert c.calls[-1][1] == "/api/query/alerts"
+
+
+# -- wait_for ----------------------------------------------------------------
+def test_wait_for_returns_first_match_with_predicate(monkeypatch):
+    # First poll: no match; second poll: a member the predicate accepts.
+    pages = iter([_page([{"description": "x"}]), _page([{"description": "snow_sys_id=abc"}, {"description": "y"}])])
+    c = FakeClient(lambda _e: next(pages))
+    sleeps = []
+    monkeypatch.setattr(__import__("time"), "sleep", lambda s: sleeps.append(s))
+
+    rec = RecordSet(c, "alerts").wait_for(
+        predicate=lambda a: "snow_sys_id=abc" in (a.get("description") or ""),
+        timeout=30,
+        poll_interval=1,
+    )
+    assert rec["description"] == "snow_sys_id=abc"
+    assert sleeps == [1]  # slept once between the two polls
+    assert c.calls[-1][1] == "/api/3/alerts"  # no query -> list path
+
+
+def test_wait_for_times_out(monkeypatch):
+    c = FakeClient({"/api/3/alerts": _page([])})
+    monkeypatch.setattr(__import__("time"), "sleep", lambda s: None)
+    # monotonic advances past the deadline on the second read
+    ticks = iter([0.0, 0.0, 100.0, 100.0])
+    monkeypatch.setattr(__import__("time"), "monotonic", lambda: next(ticks))
+    with pytest.raises(TimeoutError):
+        RecordSet(c, "alerts").wait_for(predicate=lambda a: False, timeout=10)
+
+
+def test_wait_for_no_predicate_uses_first(monkeypatch):
+    c = FakeClient({"/api/3/alerts": _page([{"uuid": "u1"}])})
+    monkeypatch.setattr(__import__("time"), "sleep", lambda s: None)
+    rec = RecordSet(c, "alerts").wait_for(timeout=5)
+    assert rec["uuid"] == "u1"
+    assert c.calls[-1][2]["$limit"] == 1  # first() path
