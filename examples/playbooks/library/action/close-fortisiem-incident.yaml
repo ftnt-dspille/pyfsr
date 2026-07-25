@@ -41,28 +41,32 @@ playbooks:
   - type: connector
     name: Change the Resolution Field
     pickFromTenant: false
-    config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
-    params:
-      comments: ''
-      incidentId: '{{vars.incidentId}}'
-      resolution: True Positive
-      actionStatus: ''
-      externalTicketId: ''
-      externalAssignedUser: ''
-    connector: fortinet-fortisiem
-    operation: update_incident
-    operationTitle: Update Incident
+    arguments:
+      name: Fortinet FortiSIEM
+      config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
+      params:
+        comments: ''
+        incidentId: '{{vars.incidentId}}'
+        resolution: True Positive
+        actionStatus: ''
+        externalTicketId: ''
+        externalAssignedUser: ''
+      connector: fortinet-fortisiem
+      operation: update_incident
+      operationTitle: Update Incident
     next: add_comment_to_alert
   - type: connector
     name: Clear Manually an Incident with a Reason
     pickFromTenant: false
-    config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
-    params:
-      id: '{{vars.incidentId}}'
-      comment_text: '{{vars.clearReason}}'
-    connector: fortinet-fortisiem
-    operation: clear_incident
-    operationTitle: Clear Incident With Reason
+    arguments:
+      name: Fortinet FortiSIEM
+      config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
+      params:
+        id: '{{vars.incidentId}}'
+        comment_text: '{{vars.clearReason}}'
+      connector: fortinet-fortisiem
+      operation: clear_incident
+      operationTitle: Clear Incident With Reason
     next: change_the_resolution_field
   - type: set_variable
     name: Configuration

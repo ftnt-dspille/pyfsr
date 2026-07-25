@@ -35,24 +35,28 @@ playbooks:
         step_variables:
           - name: indicator
             value: "{{ item }}"
-        workflowReference: child_playbook_uuid  # swap-in: child playbook UUID
-        Indicator: "{{ vars.indicator }}"
-        pass_parent_env: false
-        pass_input_record: false
+        arguments:
+          workflowReference: child_playbook_uuid  # swap-in: child playbook UUID
+          arguments:
+            Indicator: "{{ vars.indicator }}"
+          pass_parent_env: false
+          pass_input_record: false
         next: Collect Child Results
 
       - type: code_snippet
         name: Collect Child Results
-        code: |
-            # Placeholder: implement collection via pyfsr client child_runs API
-            # Example (pseudo):
-            # parent_pk = {{ run.pk }}
-            # children = client.playbooks.child_runs(parent_pk)
-            # summary = {c['name']: c['status'] for c in children}
-            # set_variable('child_summary', summary)
-            # Here we just set a dummy summary.
-            summary = {'dummy': 'collected'}
-            output = {'child_summary': summary}
+        arguments:
+          params:
+            python_function: |
+              # Placeholder: implement collection via pyfsr client child_runs API
+              # Example (pseudo):
+              # parent_pk = {{ run.pk }}
+              # children = client.playbooks.child_runs(parent_pk)
+              # summary = {c['name']: c['status'] for c in children}
+              # set_variable('child_summary', summary)
+              # Here we just set a dummy summary.
+              summary = {'dummy': 'collected'}
+              output = {'child_summary': summary}
         next: End
 
       - type: end

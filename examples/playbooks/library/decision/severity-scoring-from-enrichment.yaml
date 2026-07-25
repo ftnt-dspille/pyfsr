@@ -29,14 +29,16 @@ playbooks:
       # 2. Compute weighted severity score using Python logic.
       - name: Compute severity score
         type: code_snippet
-        code: |
-            hits = int('{{ vars.malicious_hits }}' or 0)
-            # Map criticality string to weight
-            crit_map = {'low': 1, 'medium': 3, 'high': 5}
-            crit = crit_map.get('{{ vars.asset_criticality }}'.lower(), 1)
-            # Example weighting: each hit = 10 points, criticality weight = 20 points per level
-            score = hits * 10 + crit * 20
-            output = {'severity_score': score}
+        arguments:
+          params:
+            python_function: |
+              hits = int('{{ vars.malicious_hits }}' or 0)
+              # Map criticality string to weight
+              crit_map = {'low': 1, 'medium': 3, 'high': 5}
+              crit = crit_map.get('{{ vars.asset_criticality }}'.lower(), 1)
+              # Example weighting: each hit = 10 points, criticality weight = 20 points per level
+              score = hits * 10 + crit * 20
+              output = {'severity_score': score}
         next: Set severity variable
 
       # 3. Store the computed severity score.
