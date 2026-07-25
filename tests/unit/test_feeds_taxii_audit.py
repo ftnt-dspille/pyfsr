@@ -88,12 +88,11 @@ def test_taxii_discovery_trailing_slash():
 # --------------------------------------------------------------------- audit
 def test_audit_activities_builds_filter_body():
     c = FakeClient(post_resp={"content": []})
-    AuditAPI(c).activities("S", "E", operation="login", limit=100, user_id="u1")
+    AuditAPI(c).activities(operation="login", limit=100, user_id="u1")
     method, endpoint, data, params = c.calls[-1]
     assert endpoint == "/api/gateway/audit/activities"
     assert data == {
-        "startDate": "S",
-        "endDate": "E",
+        "page": 0,
         "limit": 100,
         "operation": "login",
         "userId": "u1",
@@ -102,9 +101,22 @@ def test_audit_activities_builds_filter_body():
 
 def test_audit_count_omits_paging():
     c = FakeClient()
-    AuditAPI(c).count("S", "E")
-    assert c.calls[-1][2] == {"startDate": "S", "endDate": "E"}
+    AuditAPI(c).count()
+    assert c.calls[-1][2] == {}
     assert c.calls[-1][1] == "/api/gateway/audit/activities/count"
+
+
+def test_audit_activities_with_entity_uuid():
+    c = FakeClient(post_resp={"content": []})
+    AuditAPI(c).activities(entity_uuid="abc-123")
+    method, endpoint, data, params = c.calls[-1]
+    assert data == {"page": 0, "limit": 10, "entityUuid": "abc-123"}
+
+
+def test_audit_count_with_entity_uuid():
+    c = FakeClient(post_resp={"total": 5})
+    AuditAPI(c).count(entity_uuid="abc-123")
+    assert c.calls[-1][2] == {"entityUuid": "abc-123"}
 
 
 def test_audit_disable_ttl_and_operations():

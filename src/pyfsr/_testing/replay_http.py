@@ -156,7 +156,7 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("GET", "/api/gateway/audit/operations", cap.AUDIT_OPERATIONS_RESPONSE),
         _entry(
             "GET",
-            "/api/gateway/audit/activities/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "/api/gateway/audit/activities/9314875",
             cap.AUDIT_ACTIVITY_RECORD,
         ),
         _entry("POST", "/api/gateway/audit/activities", cap.AUDIT_ACTIVITIES_RESPONSE),

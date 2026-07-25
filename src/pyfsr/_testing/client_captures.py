@@ -1274,7 +1274,7 @@ SYSTEM_VIEW_TEMPLATES_RESPONSE = {
 # GET /api/gateway/audit/operations, DELETE /api/gateway/audit/activities/ttl.
 # Captured from a live FortiSOAR appliance (8.0.x).
 
-# GET /api/gateway/audit/operations — list of valid operation values.
+# GET /api/gateway/audit/operations — list of valid operation values (system-level).
 AUDIT_OPERATIONS_RESPONSE = [
     "login",
     "logout",
@@ -1288,25 +1288,57 @@ AUDIT_OPERATIONS_RESPONSE = [
     "publish",
 ]
 
-# A single audit activity record (``GET /api/gateway/audit/activities/{audit_id}``).
+# GET /api/gateway/audit/operations?operationType=module_detail — per-record operations.
+AUDIT_MODULE_OPERATIONS_RESPONSE = [
+    "Create",
+    "Update",
+    "Link",
+    "Unlink",
+    "Comment",
+    "Trigger",
+    "Import",
+    "Update During Import",
+    "Replication Failed",
+    "Executed Action",
+]
+
+# A single audit activity record (GET /api/gateway/audit/activities/{id}).
+# Captured from a live 8.0.0 appliance — the real wire format.
 AUDIT_ACTIVITY_RECORD = {
-    "id": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "user_id": "5f8ba8e9-10e6-4acc-8b6a-9860f373e1c1",
-    "user": "admin",
-    "component": "alerts",
-    "entity_type": "Alert",
-    "entity_id": "9f0eb603-ac1e-41c3-b47b-444589beed39",
-    "operation": "create",
-    "result": "success",
-    "timestamp": 1735149051,
-    "details": "Created alert: Test Alert",
+    "id": 9314875,
+    "component": "crudhub",
+    "subComponent": "EntityRecord",
+    "operation": "Link",
+    "entityType": "alerts",
+    "entityUuid": "dac6e931-7edc-44d9-b8dd-d8825bb9b07e",
+    "entitySingularName": "Alert",
+    "displayName": "TeamViewer access request: WKSTN-BU12-014",
+    "title": "Indicator [203.0.113.44] Linked to Alert [TeamViewer access request: WKSTN-BU12-014]",
+    "transactionDate": 1784838609220,
+    "user": "Playbook",
+    "userId": "57545210-2adc-472b-a24f-2df6ee8dfe63",
+    "playbookIri": "/api/3/workflows/bff221c6-1a9b-4486-8180-6841e7a59f34",
+    "playbookName": "Extract Indicators (Alerts)",
+    "source": "127.0.0.1",
+    "teamIris": ["cs-non-ownable"],
+    "userOwnerIris": [],
+    "data": {
+        "@id": "/api/3/indicators/3925cf92-f923-41ef-b948-36f877461854",
+        "displayName": "203.0.113.44",
+    },
+    "linkEntityDetails": {
+        "iri": "/api/3/indicators/3925cf92-f923-41ef-b948-36f877461854",
+        "type": "indicators",
+        "displayName": "203.0.113.44",
+        "singularName": "Indicator",
+    },
 }
 
-# POST /api/gateway/audit/activities — a slice of audit records.
-AUDIT_ACTIVITIES_RESPONSE = {"content": [AUDIT_ACTIVITY_RECORD]}
+# POST /api/gateway/audit/activities — Spring-paginated audit records.
+AUDIT_ACTIVITIES_RESPONSE = {"number": 0, "content": [AUDIT_ACTIVITY_RECORD]}
 
-# POST /api/gateway/audit/activities/count — audit record count for a time window.
-AUDIT_COUNT_RESPONSE = {"count": 42}
+# POST /api/gateway/audit/activities/count — audit record count.
+AUDIT_COUNT_RESPONSE = {"total": 4}
 
 # GET /api/version — build version (public).
 VERSION_RESPONSE = {"version": "8.0.0-6034"}
