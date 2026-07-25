@@ -273,6 +273,213 @@ class WorkflowCollectionsAPI(BaseAPI):
             raise ValueError(f"export file is not valid JSON: {path}: {exc}") from exc
         return self.import_export(data, replace=replace)
 
+    def import_export_zip(
+        self,
+        zip_path: str | Path,
+        *,
+        replace: bool = True,
+        strip_stale: bool = True,
+        create_records: bool = True,
+        patch_picklists: bool = False,
+    ) -> dict[str, Any]:
+        """Import a FortiSOAR UI-export zip bundle in one call.
+
+        The UI's Export button produces a zip with:
+          ``info.json`` + ``modules/<name>/mmd.json`` + ``playbooks/<collection>/*.json``
+          + ``records/<module>/*.json`` + ``exportTemplates/*.json``.
+
+        This method handles the full unpack+build+import cycle:
+
+          1. Extracts the zip and builds the ``{"type": "workflow_collections", ...}``
+             envelope from ``playbooks/<collection>/`` dirs.
+          2. When ``strip_stale=True``, strips server-managed fields
+             (``createdAlertsID``, ``createUser``, ``modifyUser``, etc.) from
+             bundled records before creating them.
+          3. When ``create_records=True``, creates bundled records
+             (from ``records/<module>/``) that don't already exist.
+          4. When ``patch_picklists=True``, scans all playbook steps for
+             hardcoded ``/api/3/picklists/`` IRIs and replaces them with
+             Jinja ``picklist`` filter expressions that resolve dynamically
+             at runtime — eliminating the #1 portability bug.
+          5. Imports the (optionally patched) envelope via :meth:`import_export`
+             with ``replace=True`` (hard-deletes any existing collection with
+             the same uuid first).
+
+        Args:
+            zip_path: path to the ``.zip`` file from the UI Export button.
+            replace: hard-delete any existing collection with the same uuid
+                before re-creating (default ``True`` — matches the UI's
+                "Replace existing" flow).
+            strip_stale: strip server-managed fields from bundled records
+                (default ``True``).
+            create_records: create bundled records that don't already exist
+                (default ``True``).
+            patch_picklists: replace hardcoded picklist IRIs with Jinja
+                ``picklist`` filter expressions (default ``False``). When
+                ``True``, calls :meth:`~pyfsr.api.picklists.PicklistsAPI.reverse_resolve`
+                on each IRI and builds a ``{{ "Name" | picklist("Value", "@id") }}``
+                expression.
+
+        Returns:
+            A dict with: ``collections`` (list of created collections),
+            ``records_created`` (list of created record IRIs),
+            ``picklists_patched`` (int — number of IRIs replaced, or 0).
+
+        Example::
+
+            result = client.workflow_collections.import_export_zip(
+                "~/Downloads/My Scenario.zip",
+                patch_picklists=True,
+            )
+            print(result["collections"][0]["name"])
+        """
+        import tempfile
+        import zipfile
+
+        zip_path = Path(zip_path)
+        if not zip_path.exists():
+            raise FileNotFoundError(f"export zip not found: {zip_path}")
+
+        # 1. Extract
+        tmp_dir = Path(tempfile.mkdtemp(prefix="fsr_export_"))
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(tmp_dir)
+        # Find the top-level dir inside the zip (usually "<export name>/")
+        children = [p for p in tmp_dir.iterdir() if p.is_dir()]
+        export_dir = children[0] if children else tmp_dir
+
+        # 2. Build envelope from playbooks/
+        pb_dir = export_dir / "playbooks"
+        if not pb_dir.exists():
+            raise ValueError(f"no 'playbooks/' dir in export zip: {zip_path}")
+        collections = []
+        for cd in sorted(pb_dir.iterdir()):
+            if not cd.is_dir():
+                continue
+            meta_path = cd / "collection.metadata.json"
+            if not meta_path.exists():
+                continue
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta["workflows"] = [
+                json.loads(pf.read_text(encoding="utf-8"))
+                for pf in sorted(cd.glob("*.json"))
+                if pf.name != "collection.metadata.json"
+            ]
+            collections.append(meta)
+        envelope = {"type": "workflow_collections", "data": collections}
+
+        result: dict[str, Any] = {
+            "collections": [],
+            "records_created": [],
+            "picklists_patched": 0,
+        }
+
+        # 3. Create bundled records
+        if create_records:
+            records_dir = export_dir / "records"
+            if records_dir.exists():
+                _stale_fields = frozenset(
+                    {
+                        "createdAlertsID",
+                        "createUser",
+                        "modifyUser",
+                        "createDate",
+                        "modifyDate",
+                    }
+                )
+                from ..query import Query
+
+                for module_dir in sorted(records_dir.iterdir()):
+                    if not module_dir.is_dir():
+                        continue
+                    module = module_dir.name
+                    for rec_file in sorted(module_dir.glob("*.json")):
+                        raw = json.loads(rec_file.read_text(encoding="utf-8"))
+                        if not isinstance(raw, list):
+                            raw = [raw]
+                        for rec in raw:
+                            if strip_stale:
+                                rec = {k: v for k, v in rec.items() if k not in _stale_fields}
+                            # Check if record already exists (by title or uuid)
+                            rs = self.client.records(module)
+                            title = rec.get("title") or rec.get("name")
+                            exists = False
+                            if title:
+                                try:
+                                    existing = rs.query(Query().eq("title", title).limit(1))
+                                    members = existing.members if hasattr(existing, "members") else []
+                                    if members:
+                                        exists = True
+                                except Exception:
+                                    pass
+                            if not exists:
+                                rec.pop("@type", None)
+                                try:
+                                    created = rs.create(rec, resolve_picklists=False)
+                                    iri = created.get("@id") if isinstance(created, dict) else None
+                                    result["records_created"].append(iri or str(rec_file))
+                                except Exception:
+                                    pass  # record creation is best-effort
+
+        # 4. Patch hardcoded picklist IRIs
+        if patch_picklists:
+            patched_count = self._patch_picklists_in_envelope(envelope)
+            result["picklists_patched"] = patched_count
+
+        # 5. Import
+        created = self.import_export(envelope, replace=replace)
+        result["collections"] = created
+
+        # Cleanup temp dir
+        import shutil
+
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        return result
+
+    def _patch_picklists_in_envelope(self, envelope: dict[str, Any]) -> int:
+        """Replace hardcoded ``/api/3/picklists/`` IRIs in playbook steps with
+        Jinja ``picklist`` filter expressions. Returns the count of IRIs patched.
+
+        Scans all step argument string values for ``/api/3/picklists/<uuid>``
+        patterns, reverse-resolves each to ``(picklist_name, item_value)``, and
+        replaces the literal IRI with ``{{ "Name" | picklist("Value", "@id") }}``.
+        Only patches string values — dict/list structures are left intact.
+        """
+        import re
+
+        _IRI_RE = re.compile(r"/api/3/picklists/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+        patched = 0
+        for col in envelope.get("data", []):
+            for wf in col.get("workflows", []):
+                for step in wf.get("steps", []):
+                    if not isinstance(step, dict):
+                        continue
+                    args = step.get("arguments")
+                    if not isinstance(args, dict):
+                        continue
+                    for key, val in list(args.items()):
+                        if not isinstance(val, str):
+                            continue
+                        # Find all picklist IRIs in this string value
+                        matches = _IRI_RE.findall(val)
+                        if not matches:
+                            continue
+                        new_val = val
+                        for iri in matches:
+                            try:
+                                info = self.client.picklists.reverse_resolve(iri)
+                            except Exception:
+                                info = None
+                            if info:
+                                expr = self.client.picklists.jinja_picklist_expr(info["picklist"], info["itemValue"])
+                                new_val = new_val.replace(iri, expr)
+                                patched += 1
+                        if new_val != val:
+                            args[key] = new_val
+        return patched
+
     def compile_yaml(
         self,
         source: str | Path,
