@@ -178,11 +178,11 @@ their return shapes are doctested here (write ops need a live appliance):
 >>> hits = dispatch(client, "query_records", {"module": "alerts",
 ...     "filters": [{"field": "name", "operator": "eq",
 ...                  "value": "Response Capture Test Alert"}]})
->>> len(hits["members"]), hits["members"][0]["@type"]
-(1, 'Alert')
+>>> len(hits["members"]), hits["members"][0]["name"]
+(1, 'Response Capture Test Alert')
 >>> conns = dispatch(client, "list_connectors", {})
->>> [c.name for c in conns["connectors"][:3]]
-['smtp', 'code-snippet', 'mitre-attack']
+>>> conns["connectors"][:3]
+['code-snippet — Code Snippet v2.2.1 (1 config)', 'mitre-attack — MITRE ATT&CK v2.0.2 (1 config)', 'smtp — SMTP v2.6.0 (1 config)']
 >>> mods = dispatch(client, "list_modules", {})
 >>> [m["type"] for m in mods["modules"][:3]]
 ['agents', 'alerts', 'announcements']

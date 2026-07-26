@@ -2893,3 +2893,76 @@ NOTIFICATIONS_LIST_RESPONSE = {
         },
     ],
 }
+
+
+# --- Data ingestion (Configure Data Ingestion wizard) -----------------------
+# Shapes captured from a FortiSOAR 8.0 appliance.
+
+CONNECTOR_DEPENDENCIES_RESPONSE = {"dependencies_installed": True, "message": None}
+
+# GET /api/integration/data-import/?configuration=<config_id> — the custom
+# (non-Hydra) integration envelope, same as /api/integration/configuration/.
+INGESTION_METADATA_LIST_RESPONSE = {
+    "data": [
+        {
+            "id": 4,
+            "name": "Ingestion_mitre-attack_Demo_01e4e6b4-c34e-4fc1-b692-bb08591f1fe5",
+            "description": "Metadata for Ingestion_mitre-attack_Demo",
+            "configuration": "01e4e6b4-c34e-4fc1-b692-bb08591f1fe5",
+            "connector": {"name": "mitre-attack", "version": "2.0.2"},
+            "metadata": {
+                "scheduleId": "gAAAAABqNUAy74f8v_HwB7xMxY-sxGRI0omVq5FzKA8r",
+                "scheduleName": "Ingestion_mitre-attack_Demo_01e4e6b4-c34e-4fc1-b692-bb08591f1fe5",
+                "scheduleStatus": True,
+            },
+            "owners": [],
+        }
+    ]
+}
+
+INGESTION_METADATA_CREATE_RESPONSE = INGESTION_METADATA_LIST_RESPONSE["data"][0]
+
+# POST /api/query/workflows — a connector's #dataingestion sample playbooks.
+# One playbook can carry several ingestion roles at once: the Ingest playbook
+# below is tagged #ingest AND #create.
+INGESTION_PLAYBOOKS_QUERY_RESPONSE = {
+    "hydra:member": [
+        {
+            "@id": "/api/3/workflows/81b1d18e-1188-46fd-bd63-158ce5513983",
+            "@type": "Workflow",
+            "uuid": "81b1d18e-1188-46fd-bd63-158ce5513983",
+            "name": "> MITRE ATT&CK > Fetch",
+            "tag": "#mitre-attack #fetch #dataingestion",
+            "recordTags": ["dataingestion", "fetch", "mitre-attack"],
+            "isActive": False,
+        },
+        {
+            "@id": "/api/3/workflows/26191d34-e980-40b0-bfc1-0e7bfb04dab5",
+            "@type": "Workflow",
+            "uuid": "26191d34-e980-40b0-bfc1-0e7bfb04dab5",
+            "name": "MITRE ATT&CK > Ingest",
+            "tag": "#mitre-attack #ingest #dataingestion #create",
+            "recordTags": ["create", "dataingestion", "ingest", "mitre-attack"],
+            "isActive": True,
+        },
+    ],
+    "hydra:totalItems": 2,
+}
+
+# POST /api/triggers/1/notrigger/<uuid> — the "Trigger Ingestion Now" button.
+INGESTION_TRIGGER_RESPONSE = {"task_id": "9e7df03a-29d9-4b90-a4a7-6e61810efd88"}
+
+# GET /api/3/workflow_collections — used to find a connector's bundled
+# "Sample - <label> - <version>" collection, the source the ingestion wizard
+# clones from, plus an already-built per-config ingestion collection.
+WORKFLOW_COLLECTIONS_LIST_RESPONSE = {
+    "hydra:member": [
+        {"name": "Sample - MITRE ATT&CK - 2.0.2", "uuid": "02e75666-44df-456f-9ed3-0665bb136674"},
+        {"name": "Sample - VirusTotal - 3.2.1", "uuid": "ea96c91b-2d37-4dc1-a462-bc888a96c20c"},
+        {
+            "name": "MITRE ATT&CK 2.0.2 DemoIngestion(01e4e6b4-c34e-4fc1-b692-bb08591f1fe5)",
+            "uuid": "01e4e6b4-c34e-4fc1-b692-bb08591f1fe5",
+        },
+    ],
+    "hydra:totalItems": 3,
+}

@@ -1779,10 +1779,10 @@ class ConnectorsAPI(BaseAPI):
         reason a freshly installed connector's operations blow up at runtime
         even though its configuration health is green.
 
-        Example (needs a live appliance)::
-
-            client.connectors.dependencies_status("virustotal").dependencies_installed
-            # True
+        Example:
+            >>> client = demo_client()
+            >>> client.connectors.dependencies_status("mitre-attack").dependencies_installed
+            True
         """
         version = version or self.resolve_version(connector)
         if not version:
@@ -1897,6 +1897,13 @@ class ConnectorsAPI(BaseAPI):
         how the UI re-finds an existing ingestion schedule for a configuration
         (via ``metadata.scheduleId``) — an ingestion set up without one of these
         looks unconfigured in the UI even though the schedule runs fine.
+
+        Example:
+            >>> client = demo_client()
+            >>> meta = client.connectors.ingestion_metadata(
+            ...     "01e4e6b4-c34e-4fc1-b692-bb08591f1fe5")[0]
+            >>> meta.metadata["scheduleStatus"]
+            True
         """
         resp = self.client.get("/api/integration/data-import/", params={"configuration": config_id})
         env = IntegrationListEnvelope.parse(resp)
@@ -2082,10 +2089,15 @@ class ConnectorsAPI(BaseAPI):
         ``Sample - …`` collection) for playbooks tagged with the connector name
         and sorts them into ``fetch`` / ``ingest`` / ``create`` / ``update``.
 
-        Example (needs a live appliance)::
-
-            pbs = client.connectors.ingestion_playbooks("fortinet-fortisiem")
-            pbs.ingest["name"]      # 'FortiSIEM > Ingest'
+        Example:
+            >>> client = demo_client()
+            >>> pbs = client.connectors.ingestion_playbooks("mitre-attack")
+            >>> pbs.ingest.name              # a typed Workflow, not a dict
+            'MITRE ATT&CK > Ingest'
+            >>> pbs.ingest.uuid == pbs.create.uuid   # one playbook, two roles
+            True
+            >>> pbs.missing()
+            ['update']
         """
         collection = collection or self.find_sample_ingestion_collection(connector, version=version)
         if not collection:
@@ -2333,10 +2345,10 @@ class ConnectorsAPI(BaseAPI):
                 collection holds no ``ingest``-tagged playbook (i.e. ingestion
                 was never set up — run :meth:`data_ingest_wizard` first).
 
-        Example (needs a live appliance)::
-
-            client.connectors.trigger_ingestion("fortinet-fortisiem", config="prod")
-            # {'task_id': '9e7df03a-29d9-4b90-a4a7-6e61810efd88'}
+        Example:
+            >>> client = demo_client()
+            >>> client.connectors.trigger_ingestion("mitre-attack")
+            {'task_id': '9e7df03a-29d9-4b90-a4a7-6e61810efd88'}
         """
         if playbook:
             uuid = playbook.rstrip("/").split("/")[-1]

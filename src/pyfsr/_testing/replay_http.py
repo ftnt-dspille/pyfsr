@@ -75,6 +75,23 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         # connector_detail: POST /api/integration/connectors/<id>/ — one fixture
         # regardless of which connector id the doctest resolves (id collapsed below).
         _entry("POST", "/api/integration/connectors/3/", cap.CONNECTOR_DETAIL_RESPONSE),
+        # Data ingestion: dependency status, the sample-collection lookup, the
+        # #dataingestion playbook query, the data-import metadata record, and
+        # the ingestion trigger.
+        _entry(
+            "GET",
+            "/api/integration/connectors/dependencies_check/mitre-attack/2.0.2/",
+            cap.CONNECTOR_DEPENDENCIES_RESPONSE,
+        ),
+        _entry("GET", "/api/3/workflow_collections", cap.WORKFLOW_COLLECTIONS_LIST_RESPONSE),
+        _entry("GET", "/api/integration/data-import/", cap.INGESTION_METADATA_LIST_RESPONSE),
+        _entry("POST", "/api/integration/data-import/", cap.INGESTION_METADATA_CREATE_RESPONSE),
+        _entry("POST", "/api/query/workflows", cap.INGESTION_PLAYBOOKS_QUERY_RESPONSE),
+        _entry(
+            "POST",
+            "/api/triggers/1/notrigger/26191d34-e980-40b0-bfc1-0e7bfb04dab5",
+            cap.INGESTION_TRIGGER_RESPONSE,
+        ),
         # execute(): POST /api/integration/execute/ — one fixture regardless of
         # which connector/operation the doctest names (the body varies, the path
         # doesn't; matching ignores the body, same as every other POST fixture here).
@@ -481,6 +498,18 @@ def _path_and_match(method: str, url: str, params: Any = None) -> tuple[str, str
     # resolves to the list capture, not this one.
     if len(segments) == 5 and segments[1] == "api" and segments[2] == "3" and segments[3] == "widgets":
         return "/api/3/widgets/5fef77ad-8917-40c6-82a2-fdd753bdf41c", path
+    # /api/integration/connectors/dependencies_check/<name>/<version>/ -> recorded.
+    if (
+        len(segments) == 7
+        and segments[1] == "api"
+        and segments[3] == "connectors"
+        and segments[4] == "dependencies_check"
+    ):
+        return "/api/integration/connectors/dependencies_check/mitre-attack/2.0.2/", path
+    # /api/triggers/1/notrigger/<workflow uuid>  ->  recorded, so a doctest that
+    # names any ingestion playbook still resolves.
+    if len(segments) == 5 and segments[1] == "api" and segments[2] == "triggers" and segments[4] == "notrigger":
+        return "/api/triggers/1/notrigger/26191d34-e980-40b0-bfc1-0e7bfb04dab5", path
     # /api/integration/connectors/healthcheck/<name>/<version>/  ->  recorded.
     # segments: ['', 'api', 'integration', 'connectors', 'healthcheck', name, version]
     if len(segments) == 7 and segments[1] == "api" and segments[3] == "connectors" and segments[4] == "healthcheck":
