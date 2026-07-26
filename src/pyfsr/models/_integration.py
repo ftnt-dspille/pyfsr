@@ -12,11 +12,14 @@ for the capture script.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .types import RecordIRI
+
+if TYPE_CHECKING:  # `_system` imports ApiResult from here -- defer to break the cycle.
+    from ._system import Workflow
 
 
 def _coerce_display_text(v: Any) -> Any:
@@ -776,10 +779,10 @@ class IngestionPlaybooks(ApiResult):
     *FortiSIEM > Ingest* is tagged ``ingest`` **and** ``create``).
     """
 
-    fetch: dict[str, Any] | None = None
-    ingest: dict[str, Any] | None = None
-    create: dict[str, Any] | None = None
-    update: dict[str, Any] | None = None
+    fetch: Workflow | None = None
+    ingest: Workflow | None = None
+    create: Workflow | None = None
+    update: Workflow | None = None
 
     def missing(self) -> list[str]:
         """Which of the four ingestion roles have no playbook."""
@@ -801,7 +804,7 @@ class IngestionSetupResult(ApiResult):
     config_name: str | None = None
     collection_uuid: str | None = None
     collection_name: str | None = None
-    playbooks: list[dict[str, Any]] = Field(default_factory=list)
+    playbooks: list[Workflow] = Field(default_factory=list)
     ingest_playbook_iri: str | None = None
     schedule_id: str | None = None
     schedule_name: str | None = None

@@ -73,6 +73,7 @@ from ..models._integration import (
     Operation,
     OperationParam,
 )
+from ..models._system import Workflow
 from ..pagination import extract_members
 from ._solutionpacks import upload_solutionpack
 from .base import BaseAPI
@@ -1971,7 +1972,7 @@ class ConnectorsAPI(BaseAPI):
         return iri.rstrip("/").split("/")[-1] if isinstance(iri, str) and iri else None
 
     # ------------------------------------------------ ingestion playbooks
-    def _ingestion_query(self, collection_uuid: str, connector: str) -> list[dict[str, Any]]:
+    def _ingestion_query(self, collection_uuid: str, connector: str) -> list[Workflow]:
         """Playbooks in ``collection_uuid`` tagged for ``connector``.
 
         Reproduces the wizard's sample-playbook query: scope to one collection,
@@ -2001,9 +2002,9 @@ class ConnectorsAPI(BaseAPI):
             "/api/query/workflows?$relationships=true&$export=true&$limit=256",
             data=body,
         )
-        return list(extract_members(resp))
+        return [Workflow.model_validate(row) for row in extract_members(resp)]
 
-    def _dataingestion_playbooks(self, collection_uuid: str, connector: str) -> list[dict[str, Any]]:
+    def _dataingestion_playbooks(self, collection_uuid: str, connector: str) -> list[Workflow]:
         """Every ``#dataingestion``-tagged playbook for ``connector`` in a collection.
 
         The four *roles* (fetch/ingest/create/update) are not the whole set — a
@@ -2013,26 +2014,25 @@ class ConnectorsAPI(BaseAPI):
         them; cloning only the roles leaves the copies calling shared sample
         playbooks that are bound to no configuration.
         """
-        rows = self._ingestion_query(collection_uuid, connector)
         out = []
-        for pb in rows:
-            tags = {str(t).strip().lower() for t in (pb.get("recordTags") or []) if t}
-            if "dataingestion" in tags or "#dataingestion" in str(pb.get("tag") or "").lower():
+        for pb in self._ingestion_query(collection_uuid, connector):
+            tags = {str(t).strip().lower() for t in (pb.recordTags or []) if t}
+            if "dataingestion" in tags or "#dataingestion" in str(pb.tag or "").lower():
                 out.append(pb)
         return out
 
     @staticmethod
-    def _bucket_by_tag(playbooks: list[dict[str, Any]]) -> IngestionPlaybooks:
+    def _bucket_by_tag(playbooks: list[Workflow]) -> IngestionPlaybooks:
         """Sort playbooks into the fetch/ingest/create/update ingestion roles.
 
         Matches on ``recordTags`` (and the ``#tag`` string) case-insensitively.
         A playbook may fill several roles at once — FortiSIEM's
         *FortiSIEM > Ingest* is tagged both ``ingest`` and ``create``.
         """
-        buckets: dict[str, dict[str, Any] | None] = {"fetch": None, "ingest": None, "create": None, "update": None}
+        buckets: dict[str, Workflow | None] = {"fetch": None, "ingest": None, "create": None, "update": None}
         for pb in playbooks:
-            tags = {str(t).strip().lower() for t in (pb.get("recordTags") or []) if t}
-            raw = str(pb.get("tag") or "").lower()
+            tags = {str(t).strip().lower() for t in (pb.recordTags or []) if t}
+            raw = str(pb.tag or "").lower()
             for role in buckets:
                 if buckets[role] is None and (role in tags or f"#{role}" in raw):
                     buckets[role] = pb
@@ -2261,7 +2261,7 @@ class ConnectorsAPI(BaseAPI):
         ingest = buckets.ingest
         if ingest is None:
             raise ValueError(f"the ingestion collection for {connector!r}/{config_id} has no 'ingest' playbook")
-        ingest_iri = ingest.get("@id") or f"/api/3/workflows/{ingest.get('uuid')}"
+        ingest_iri = ingest.id_iri or f"/api/3/workflows/{ingest.uuid}"
         result.ingest_playbook_iri = ingest_iri
 
         # The UI's _getSchedularName(): "Ingestion_<connector>_<config name>_<config_id>".
@@ -2350,7 +2350,7 @@ class ConnectorsAPI(BaseAPI):
                     f"no ingestion playbook for {connector!r}/{config_id} — "
                     "run data_ingest_wizard() to set ingestion up first"
                 )
-            uuid = str(buckets.ingest.get("uuid"))
+            uuid = str(buckets.ingest.uuid)
         resp = self.client.post(f"/api/triggers/1/notrigger/{uuid}", data={})
         return resp if isinstance(resp, dict) else {"result": resp}
 
@@ -2384,7 +2384,7 @@ class ConnectorsAPI(BaseAPI):
 
     def _clone_ingestion_playbooks(
         self,
-        source_playbooks: list[dict[str, Any]],
+        source_playbooks: list[Workflow],
         samples: IngestionPlaybooks,
         *,
         connector: str,
@@ -2392,7 +2392,7 @@ class ConnectorsAPI(BaseAPI):
         collection_uuid: str,
         agent: str | None,
         activate: bool,
-    ) -> tuple[IngestionPlaybooks, list[dict[str, Any]]]:
+    ) -> tuple[IngestionPlaybooks, list[Workflow]]:
         """Clone the sample ingestion playbooks and apply the wizard's rewrites.
 
         Two passes, because the rewrites reference the *clones*: first clone
@@ -2410,28 +2410,28 @@ class ConnectorsAPI(BaseAPI):
         """
         suffix = config_id.replace("-", "_")
         uuid_map: dict[str, str] = {}
-        clones: dict[str, dict[str, Any]] = {}
+        clones: dict[str, Workflow] = {}
 
         for source in source_playbooks:
-            source_uuid = str(source.get("uuid"))
+            source_uuid = str(source.uuid)
             if source_uuid in uuid_map:
                 continue
             created = self.client.playbooks.clone(
                 source_uuid,
-                str(source.get("name") or source_uuid),
+                str(source.name or source_uuid),
                 collection=collection_uuid,
                 is_active=False,
                 transform=lambda body: _rewrite_ingestion_playbook(body, connector, config_id, suffix, agent),
             )
             uuid_map[source_uuid] = str(created.get("uuid"))
-            clones[source_uuid] = created
+            clones[source_uuid] = Workflow.model_validate(created)
 
         create_uuid = None
         if samples.create is not None:
-            create_uuid = uuid_map.get(str(samples.create.get("uuid")))
+            create_uuid = uuid_map.get(str(samples.create.uuid))
 
         for source_uuid, clone in list(clones.items()):
-            clone_uuid = str(clone.get("uuid"))
+            clone_uuid = str(clone.uuid)
             # Re-read with relationships so the steps are inlined objects; the
             # clone response's steps are bare IRIs and carry no references.
             definition = self.client.playbooks.get_definition(clone_uuid, relationships=True).to_dict(by_alias=True)
@@ -2440,12 +2440,12 @@ class ConnectorsAPI(BaseAPI):
                 self.client.playbooks.update(clone_uuid, steps=patched)
             if activate:
                 self.client.playbooks.update(clone_uuid, isActive=True)
-            clones[source_uuid] = self.client.playbooks.get_definition(clone_uuid, relationships=True).to_dict(
-                by_alias=True
+            clones[source_uuid] = Workflow.model_validate(
+                self.client.playbooks.get_definition(clone_uuid, relationships=True).to_dict(by_alias=True)
             )
 
-        def _clone_for(pb: dict[str, Any] | None) -> dict[str, Any] | None:
-            return clones.get(str(pb.get("uuid"))) if pb else None
+        def _clone_for(pb: Workflow | None) -> Workflow | None:
+            return clones.get(str(pb.uuid)) if pb else None
 
         buckets = IngestionPlaybooks.model_validate(
             {role: _clone_for(getattr(samples, role)) for role in ("fetch", "ingest", "create", "update")}

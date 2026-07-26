@@ -139,7 +139,7 @@ def main() -> int:
     pbs = client.connectors.ingestion_playbooks(CONNECTOR, version=version)
     for role in ("fetch", "ingest", "create", "update"):
         pb = getattr(pbs, role)
-        print(f"    {role:<7}: {(pb or {}).get('name')}")
+        print(f"    {role:<7}: {pb.name if pb else None}")
     if pbs.ingest is None:
         sys.exit(f"{CONNECTOR} ships no #ingest playbook — nothing to schedule")
 
@@ -166,24 +166,24 @@ def main() -> int:
         print("    FAIL: cloned collection has no #ingest playbook")
         ok = False
     else:
-        print(f"    ingest playbook : {built.ingest.get('name')} (active={built.ingest.get('isActive')})")
+        print(f"    ingest playbook : {built.ingest.name} (active={built.ingest.isActive})")
 
     # NOTE: "no wrongly-bound steps" passes vacuously on a playbook with zero
     # connector steps -- which is how the first live run reported PASS while the
     # clones were still calling the shared sample playbooks. Assert positively:
     # everything cloned, something bound, and no reference left pointing at a sample.
     sample_collection = client.connectors.find_sample_ingestion_collection(CONNECTOR, version=version)
-    sample_uuids = {pb["uuid"] for pb in client.connectors._dataingestion_playbooks(sample_collection, CONNECTOR)}
-    clone_uuids = {pb["uuid"] for pb in result.playbooks}
+    sample_uuids = {pb.uuid for pb in client.connectors._dataingestion_playbooks(sample_collection, CONNECTOR)}
+    clone_uuids = {pb.uuid for pb in result.playbooks}
     bound_total = 0
     for pb in result.playbooks:
-        definition = client.playbooks.get_definition(pb["uuid"], relationships=True).to_dict()
+        definition = client.playbooks.get_definition(pb.uuid, relationships=True).to_dict()
         steps = definition.get("steps") or []
         bound = [s for s in steps if (s.get("arguments") or {}).get("connector") == CONNECTOR]
         bound_total += len(bound)
         wrong = [s for s in bound if (s.get("arguments") or {}).get("config") != result.config_id]
         if wrong:
-            print(f"    FAIL: {pb['name']}: {len(wrong)} step(s) not bound to this config")
+            print(f"    FAIL: {pb.name}: {len(wrong)} step(s) not bound to this config")
             ok = False
 
         for step in steps:
@@ -193,14 +193,14 @@ def main() -> int:
                     continue
                 target = value.rstrip("/").split("/")[-1]
                 if target in sample_uuids:
-                    print(f"    FAIL: {pb['name']}/{step.get('name')}: {key} still points at the SAMPLE playbook")
+                    print(f"    FAIL: {pb.name}/{step.get('name')}: {key} still points at the SAMPLE playbook")
                     ok = False
                 elif target not in clone_uuids:
-                    print(f"    WARN: {pb['name']}/{step.get('name')}: {key} -> unknown playbook {target}")
+                    print(f"    WARN: {pb.name}/{step.get('name')}: {key} -> unknown playbook {target}")
             params = args.get("params")
             create_pb = params.get("create_pb_id") if isinstance(params, dict) else None
             if create_pb and create_pb in sample_uuids:
-                print(f"    FAIL: {pb['name']}/{step.get('name')}: create_pb_id still points at the SAMPLE playbook")
+                print(f"    FAIL: {pb.name}/{step.get('name')}: create_pb_id still points at the SAMPLE playbook")
                 ok = False
 
     print(f"    clones          : {len(clone_uuids)} of {len(sample_uuids)} #dataingestion playbook(s)")
