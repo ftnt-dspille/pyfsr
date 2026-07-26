@@ -87,6 +87,13 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 ```
 
 ```{eval-rst}
+.. autoclass:: pyfsr.models.DependencyStatus
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
 .. autoclass:: pyfsr.models.EnsureVersionResult
    :members:
    :undoc-members:
@@ -116,6 +123,27 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 
 ```{eval-rst}
 .. autoclass:: pyfsr.models.ImportJobResult
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.IngestionMetadata
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.IngestionPlaybooks
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.IngestionSetupResult
    :members:
    :undoc-members:
    :show-inheritance:
