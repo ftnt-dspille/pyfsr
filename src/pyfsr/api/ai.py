@@ -69,7 +69,7 @@ remove specific tools from a hosted server         ``DELETE /mcp/tools/delete``
     (``app_proxy.handlers.ai``). Dead methods removed: ``list_models()``
     (``/api/ai/llm/models`` — unauthorised), ``test_llm_config()``
     (``/api/ai/llm/test`` — not in the service spec). Replaced by
-    :meth:`verify_llm_config` (``GET /api/ai/llm/config/{uuid}/verify``).
+    :meth:`AIApi.verify_llm_config` (``GET /api/ai/llm/config/{uuid}/verify``).
 
 Connector → MCP server
 -----------------------
