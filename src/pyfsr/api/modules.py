@@ -71,6 +71,13 @@ class ModulesAPI(BaseAPI):
         ``type`` is the singular module type used in record IRIs; ``plural`` is
         the collection name (they differ on some appliances). Cached after the
         first call; pass ``refresh=True`` to re-fetch.
+
+        Note:
+            This lists modules visible in the staging-model metadata. A module
+            provided by a solution pack (e.g. ``scenario`` from SOC Simulator)
+            may not appear here even though it's published and usable. To check
+            whether a *specific* module exists (published), use
+            :meth:`client.modules_admin.get_published <pyfsr.api.modules_admin.ModulesAdminAPI.get_published>`.
         """
         if self._modules is not None and not refresh:
             return self._modules

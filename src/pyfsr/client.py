@@ -1060,6 +1060,12 @@ class FortiSOAR:
 
         Discovery shortcut for :meth:`ModulesAPI.list <pyfsr.api.modules.ModulesAPI.list>`
         — learn the right module ``type`` (and plural name) before a record lookup.
+
+        Note:
+            Solution-pack modules (e.g. ``scenario``) may not appear here even
+            when published. Use :meth:`client.modules_admin.get_published
+            <pyfsr.api.modules_admin.ModulesAdminAPI.get_published>` to check if
+            a specific module exists.
         """
         return self.modules.list(refresh=refresh)
 
