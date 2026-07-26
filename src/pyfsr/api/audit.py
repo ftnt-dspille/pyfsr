@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..models._audit import LifecycleEntry, RecordLifecycle
+from ..models._audit import ExecutionContext, LifecycleEntry, RecordLifecycle
 from .base import BaseAPI
 
 _BASE = "/api/gateway/audit"
@@ -455,4 +455,147 @@ class AuditAPI(BaseAPI):
             entries=entries,
             audit_count=audit_count,
             execution_count=execution_count,
+        )
+
+    # ----------------------------------------------------------- execution context
+    def execution_context(
+        self,
+        run_pk: str,
+        *,
+        window_seconds: int = 60,
+    ) -> ExecutionContext:
+        """Build the audit context around a specific playbook run.
+
+        Answers "why did this playbook see state X when I expected state Y?"
+        by showing what *else* was happening to the same record during (and
+        just before) the run. Cross-references the audit log with the run's
+        time window to surface concurrent changes from other playbooks or
+        manual actions.
+
+        Args:
+            run_pk: the execution pk (from ``RunSummary.pk`` or
+                ``RunResult.pk``).
+            window_seconds: buffer (in seconds) added before and after the
+                run's time window. The run's own ``created``→``modified``
+                timestamps define the core window; this expands it so
+                changes just before the run started or just after it
+                finished are included. Default 60s.
+
+        Returns:
+            An :class:`~pyfsr.models.ExecutionContext` with concurrent
+            changes, concurrent runs, and prior changes.
+
+        Example:
+            >>> client = demo_client()
+            >>> ctx = client.audit.execution_context("636714")  # doctest: +SKIP
+            >>> ctx.summary()  # doctest: +SKIP
+            'run Extract Indicators (pk=636714) finished, on alerts 0e4b9e32,
+             3 concurrent changes, 0 concurrent runs'
+            >>> [c.playbook_name for c in ctx.concurrent_changes]  # doctest: +SKIP
+            ['Extract Indicators (Alerts)', 'Extract Indicators (Alerts)']
+        """
+        # 1. Get the run details
+        detail = self.client.playbooks.get_execution(run_pk, step_detail=True)
+        d = detail.model_dump() if hasattr(detail, "model_dump") else (detail or {})
+        env = d.get("env") or {}
+        record_iri = env.get("record_iri")
+        run_name = d.get("name")
+        run_status = d.get("status")
+        run_created = d.get("created")
+        run_modified = d.get("modified")
+        resource = env.get("resource")
+
+        # Extract record UUID from the IRI
+        record_uuid: str | None = None
+        if record_iri:
+            record_uuid = record_iri.rsplit("/", 1)[-1]
+        elif env.get("input") and isinstance(env["input"], dict):
+            records = env["input"].get("records") or []
+            if records and isinstance(records[0], dict):
+                rec_id = records[0].get("@id") or ""
+                if rec_id:
+                    record_uuid = rec_id.rsplit("/", 1)[-1]
+
+        # 2. Compute the time window
+        from datetime import datetime as _dt
+
+        def _parse_iso(ts: str | None) -> float | None:
+            if not ts:
+                return None
+            try:
+                return _dt.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+            except Exception:
+                return None
+
+        start_ts = _parse_iso(run_created)
+        end_ts = _parse_iso(run_modified)
+        if start_ts is not None:
+            start_ts -= window_seconds
+        if end_ts is not None:
+            end_ts += window_seconds
+
+        # 3. Query audit events for the record — all of them, then split
+        # into concurrent (within the run window ± buffer) and before.
+        # The audit log is already scoped to this specific record, so
+        # Trigger/Update/Link entries tell us exactly which OTHER playbooks
+        # touched this record — unlike search_executions (all records).
+        concurrent_changes: list[LifecycleEntry] = []
+        before_changes: list[LifecycleEntry] = []
+        concurrent_runs_list: list[dict[str, Any]] = []
+
+        if record_uuid:
+            audit_items = self.all_activities(
+                entity_uuid=record_uuid,
+                entity_type=resource,
+                page_size=100,
+            )
+            for item in audit_items:
+                ts_ms = item.get("transactionDate")
+                if ts_ms is None:
+                    continue
+                entry = LifecycleEntry(
+                    timestamp_ms=ts_ms,
+                    kind="audit",
+                    operation=item.get("operation"),
+                    user=item.get("user"),
+                    playbook_name=item.get("playbookName"),
+                    title=item.get("title"),
+                    entity_type=item.get("entityType"),
+                    entity_uuid=item.get("entityUuid"),
+                    raw=item,
+                )
+                ts_s = ts_ms / 1000.0
+                if start_ts is not None and end_ts is not None:
+                    if start_ts <= ts_s <= end_ts:
+                        concurrent_changes.append(entry)
+                        # Trigger operations mark concurrent playbook runs
+                        if item.get("operation") == "Trigger" and item.get("playbookName") != run_name:
+                            concurrent_runs_list.append(
+                                {
+                                    "name": item.get("playbookName"),
+                                    "playbookIri": item.get("playbookIri"),
+                                    "timestamp": ts_ms,
+                                    "source": "audit",
+                                }
+                            )
+                    elif ts_s < start_ts:
+                        before_changes.append(entry)
+
+        # Sort
+        concurrent_changes.sort(key=lambda e: (e.timestamp_ms is None, e.timestamp_ms or 0))
+        before_changes.sort(key=lambda e: (e.timestamp_ms is None, e.timestamp_ms or 0))
+
+        return ExecutionContext(
+            run_pk=str(run_pk),
+            run_name=run_name,
+            run_status=run_status,
+            run_created=run_created,
+            run_modified=run_modified,
+            record_uuid=record_uuid,
+            record_iri=record_iri,
+            entity_type=resource,
+            concurrent_changes=concurrent_changes,
+            concurrent_runs=concurrent_runs_list if record_uuid else [],
+            before_changes=before_changes[-20:],  # last 20 prior changes
+            window_seconds=window_seconds,
         )
