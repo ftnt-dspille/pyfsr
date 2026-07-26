@@ -39,19 +39,16 @@ playbooks:
         step_variables:
           - name: record
             value: "{{ item }}"
-        arguments:
-          workflowReference: child_playbook_uuid  # swap-in: child playbook UUID (or name)
-          arguments:
-            Record: "{{ vars.record }}"
-          pass_parent_env: false
-          pass_input_record: false
+        workflowReference: child_playbook_uuid  # swap-in: child playbook UUID (or name)
+        Record: "{{ vars.record }}"
+        pass_parent_env: false
+        pass_input_record: false
         next: Collect Child Results
 
       - type: code_snippet
         name: Collect Child Results
-        arguments:
-          params:
-            python_function: |
+        params:
+          python_function: |
               # Placeholder: collect child run results via pyfsr client (pseudo)
               summary = {'dummy': 'collected'}
               output = {'processed_summary': summary}

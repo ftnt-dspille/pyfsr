@@ -29,9 +29,8 @@ playbooks:
       # 2. Compute weighted severity score using Python logic.
       - name: Compute severity score
         type: code_snippet
-        arguments:
-          params:
-            python_function: |
+        params:
+          python_function: |
               hits = int('{{ vars.malicious_hits }}' or 0)
               # Map criticality string to weight
               crit_map = {'low': 1, 'medium': 3, 'high': 5}
