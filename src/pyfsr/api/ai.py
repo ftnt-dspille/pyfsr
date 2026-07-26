@@ -59,6 +59,18 @@ list a hosted server's current tools               ``POST /mcp/config/export``
 remove specific tools from a hosted server         ``DELETE /mcp/tools/delete``
 ================================================  ==================================================
 
+.. note::
+
+    **Reachability:** The AI service publishes 55 operations in its OpenAPI,
+    but only ~41 are reachable through the PHP proxy's permission map. A
+    request matching no group gets a bare ``403 Access Denied`` —
+    indistinguishable from a missing-role 403. Before wiring a new
+    ``/api/ai/*`` endpoint, check the permission map in ``parameters.yaml``
+    (``app_proxy.handlers.ai``). Dead methods removed: ``list_models()``
+    (``/api/ai/llm/models`` — unauthorised), ``test_llm_config()``
+    (``/api/ai/llm/test`` — not in the service spec). Replaced by
+    :meth:`verify_llm_config` (``GET /api/ai/llm/config/{uuid}/verify``).
+
 Connector → MCP server
 -----------------------
 Any installed connector can be *hosted* as an MCP server — each operation
@@ -564,10 +576,6 @@ class AIApi(BaseAPI):
         resp = self.client.get(f"/api/ai/llm/config/{uuid}")
         return LLMConfig.model_validate(resp if isinstance(resp, dict) else {})
 
-    def list_models(self) -> list[dict[str, Any]]:
-        """List every model exposed across the configured providers."""
-        return _as_list(self.client.get("/api/ai/llm/models"))
-
     def create_llm_config(self, configs: list[dict[str, Any]]) -> Any:
         """Create one or more reasoning-profile configs (``POST /api/ai/llm/config``).
 
@@ -577,10 +585,23 @@ class AIApi(BaseAPI):
         body = configs if isinstance(configs, list) else [configs]
         return self.client.post("/api/ai/llm/config", data=body)
 
-    def test_llm_config(self, config: dict[str, Any]) -> dict[str, Any]:
-        """Live-test an LLM config without persisting it (``POST /api/ai/llm/test``)."""
-        resp = self.client.post("/api/ai/llm/test", data=config)
-        return resp if isinstance(resp, dict) else {"result": resp}
+    def verify_llm_config(self, uuid: str, *, model_id: str | None = None) -> dict[str, Any]:
+        """Verify a saved LLM config on the live appliance.
+
+        Calls ``GET /api/ai/llm/config/{uuid}/verify`` — the only reachable
+        verification endpoint (``POST /api/ai/llm/test`` is not authorised
+        through the API gateway).
+
+        Args:
+            uuid: the LLM config UUID (from :meth:`list_llm_configs`).
+            model_id: optional model identifier to scope the verify (e.g.
+                ``"gpt-4.1"``). When omitted, the config's own modelname is used.
+
+        Returns:
+            The verification result dict from the appliance.
+        """
+        params = {"model_id": model_id} if model_id else None
+        return self.client.get(f"/api/ai/llm/config/{uuid}/verify", params=params)
 
     def delete_llm_config(self, uuid: str) -> None:
         """Delete a reasoning-profile config by uuid."""
