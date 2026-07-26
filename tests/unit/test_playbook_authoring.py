@@ -595,8 +595,13 @@ def test_warm_catalog_writes_connector_configs(tmp_path):
     import sqlite3
 
     conn = sqlite3.connect(db)
+    # The warm_catalog copies the packaged catalog on first run, which may
+    # already contain connector_configs rows from a prior warm. The test
+    # only cares about the code-runner + smtp rows written by THIS warm,
+    # so filter to those connectors.
     rows = conn.execute(
-        "SELECT connector, config_id, config_name, is_default FROM connector_configs ORDER BY config_id"
+        "SELECT connector, config_id, config_name, is_default FROM connector_configs "
+        "WHERE connector IN ('code-runner', 'smtp') ORDER BY config_id"
     ).fetchall()
     assert rows == [
         ("code-runner", "cfg-alt", "Alt", 0),
