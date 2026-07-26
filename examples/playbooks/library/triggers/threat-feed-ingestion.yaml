@@ -43,7 +43,7 @@ playbooks:
       isImportant: true
       peopleUpdated: false
     operation: Overwrite
-    collection: /api/3/comments
+    module: comments
     fieldOperation:
       recordTags: Overwrite
     next: end
@@ -74,7 +74,7 @@ playbooks:
       resolvedAutomatedly: false
       alertRemainingAckSLA: 0
     operation: Overwrite
-    collection: /api/3/alerts
+    module: alerts
     fieldOperation:
       recordTags: Overwrite
     next: create_comment

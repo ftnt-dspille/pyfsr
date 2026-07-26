@@ -30,21 +30,19 @@ playbooks:
       isImportant: true
       peopleUpdated: false
     operation: Overwrite
-    collection: /api/3/comments
+    module: comments
     fieldOperation:
       recordTags: Overwrite
     next: update_indicator
   - type: connector
     name: Bring IP Conext from FortiSIEM
     pickFromTenant: false
-    arguments:
-      name: Fortinet FortiSIEM
-      config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
-      params:
-        value: '{{vars.myIP}}'
-      connector: fortinet-fortisiem
-      operation: get_ip_context
-      operationTitle: Get IP Context
+    config: c9ee8a67-9ce3-4578-97f7-e9d33ffaad8b
+    params:
+      value: '{{vars.myIP}}'
+    connector: fortinet-fortisiem
+    operation: get_ip_context
+    operationTitle: Get IP Context
     next: get_output
   - type: set_variable
     name: Configuration
@@ -60,12 +58,11 @@ playbooks:
     next: output
   - type: CyopsUtilites
     name: End
-    arguments:
-      params: []
-      version: 3.5.0
-      connector: cyops_utilities
-      operation: no_op
-      operationTitle: 'Utils: No Operation'
+    params: []
+    version: 3.5.0
+    connector: cyops_utilities
+    operation: no_op
+    operationTitle: 'Utils: No Operation'
   - type: set_variable
     name: Get Output
     vars:

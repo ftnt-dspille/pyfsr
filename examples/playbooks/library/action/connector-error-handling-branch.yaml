@@ -63,7 +63,7 @@ playbooks:
       # Success path: confirm and finish.
       - name: Post Success Comment
         type: create_record
-        collection: /api/3/comments
+        module: comments
         operation: Overwrite
         fields:
           content: >-
@@ -81,7 +81,7 @@ playbooks:
       # vars.steps.<name>.status / .data, branch, act.
       - name: Recover From Failure
         type: create_record
-        collection: /api/3/comments
+        module: comments
         operation: Overwrite
         fields:
           content: >-

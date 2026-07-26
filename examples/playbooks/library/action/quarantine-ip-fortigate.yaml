@@ -44,7 +44,7 @@ playbooks:
       isImportant: true
       peopleUpdated: false
     operation: Overwrite
-    collection: /api/3/comments
+    module: comments
     fieldOperation:
       recordTags: Overwrite
     next: update_indicator

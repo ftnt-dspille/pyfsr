@@ -47,12 +47,11 @@ playbooks:
 
       - type: CyopsUtilites
         name: No Op After First Approval
-        arguments:
-          params: []
-          version: 3.5.0
-          connector: cyops_utilities
-          operation: no_op
-          operationTitle: 'Utils: No Operation'
+        params: []
+        version: 3.5.0
+        connector: cyops_utilities
+        operation: no_op
+        operationTitle: 'Utils: No Operation'
         next: Second Approval Request
 
       - type: approval
@@ -83,19 +82,17 @@ playbooks:
 
       - type: CyopsUtilites
         name: Final No-Op Action
-        arguments:
-          params: []
-          version: 3.5.0
-          connector: cyops_utilities
-          operation: no_op
-          operationTitle: 'Utils: No Operation'
+        params: []
+        version: 3.5.0
+        connector: cyops_utilities
+        operation: no_op
+        operationTitle: 'Utils: No Operation'
         next: End
 
       - type: CyopsUtilites
         name: End
-        arguments:
-          params: []
-          version: 3.5.0
-          connector: cyops_utilities
-          operation: no_op
-          operationTitle: 'Utils: No Operation'
+        params: []
+        version: 3.5.0
+        connector: cyops_utilities
+        operation: no_op
+        operationTitle: 'Utils: No Operation'

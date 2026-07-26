@@ -82,7 +82,7 @@ playbooks:
       isImportant: true
       peopleUpdated: false
     operation: Overwrite
-    collection: /api/3/comments
+    module: comments
     fieldOperation:
       recordTags: Overwrite
     next: finish
@@ -275,7 +275,7 @@ playbooks:
       resolvedAutomatedly: false
       alertRemainingAckSLA: 0
     operation: Overwrite
-    collection: /api/3/alerts
+    module: alerts
     fieldOperation:
       recordTags: Overwrite
     next: get_add_alert_status
@@ -307,7 +307,7 @@ playbooks:
       submittedBy: /api/3/people/3451141c-bac6-467c-8d72-85e0fab569ce
       assignedToPerson: /api/3/people/3451141c-bac6-467c-8d72-85e0fab569ce
     operation: Overwrite
-    collection: /api/3/tasks
+    module: tasks
     fieldOperation:
       recordTags: Overwrite
     next: finish
