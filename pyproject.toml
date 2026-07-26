@@ -162,6 +162,11 @@ line-length = 120
 target-version = "py310"
 src = ["src", "tests"]
 
+[tool.ruff.format]
+# Only format Python files — ruff 0.16+ added experimental markdown formatting
+# that reformats .md files, which we don't want.
+exclude = ["*.md"]
+
 [tool.ruff.lint]
 # E/W pycodestyle, F pyflakes, I isort, B bugbear, UP pyupgrade.
 select = ["E", "W", "F", "I", "B", "UP"]
