@@ -55,11 +55,15 @@ from ._integration import (
     ConnectorConfig,
     ConnectorConfigSummary,
     ConnectorDefinition,
+    DependencyStatus,
     EnsureVersionResult,
     ExecuteResult,
     ExportJobResult,
     HealthcheckResult,
     ImportJobResult,
+    IngestionMetadata,
+    IngestionPlaybooks,
+    IngestionSetupResult,
     InstalledConnector,
     InstallJobStatus,
     IntegrationListEnvelope,
@@ -187,6 +191,10 @@ def model_for(module: str) -> type[BaseRecord]:
 
 
 __all__ = [
+    "IngestionSetupResult",
+    "IngestionPlaybooks",
+    "IngestionMetadata",
+    "DependencyStatus",
     # base classes
     "BaseRecord",
     "ApiResult",

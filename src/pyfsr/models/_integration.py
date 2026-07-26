@@ -720,3 +720,92 @@ class ExportJobResult(ApiResult):
     currentlyExporting: str | None = None
     type: str | None = None
     file: RecordIRI | dict[str, Any] | None = None
+
+
+# ---------------------------------------------------------------------------
+# Data ingestion (the "Configure Data Ingestion" wizard)
+# ---------------------------------------------------------------------------
+
+
+class DependencyStatus(ApiResult):
+    """Python-dependency state for an installed connector.
+
+    From ``GET /api/integration/connectors/dependencies_check/<name>/<version>/``.
+    The UI maps ``dependencies_installed`` onto the tri-state badge
+    ``Completed`` / ``Failed`` / ``In-Progress`` shown on the connector card.
+    """
+
+    dependencies_installed: bool | None = None
+    message: str | None = None
+
+
+class IngestionMetadata(ApiResult):
+    """A ``/api/integration/data-import/`` record.
+
+    The join between a connector *configuration* and the periodic task that
+    drives its ingestion. The UI writes one of these per configuration and
+    later re-finds the schedule through ``metadata.scheduleId`` — without it
+    the *Configure Data Ingestion* screen cannot show an existing schedule.
+    """
+
+    id: int | None = None
+    name: str | None = None
+    description: str | None = None
+    configuration: str | None = None
+    connector: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    sample_data: Any = None
+    owners: list[Any] = Field(default_factory=list)
+    created_by: str | None = None
+    modified_by: str | None = None
+
+    @property
+    def schedule_id(self) -> str | None:
+        """The periodic-task id this configuration's ingestion runs under."""
+        value = (self.metadata or {}).get("scheduleId")
+        return str(value) if value not in (None, "") else None
+
+
+class IngestionPlaybooks(ApiResult):
+    """The tag-bucketed ingestion playbooks for one connector.
+
+    FortiSOAR identifies ingestion playbooks purely by **record tag**: a
+    playbook tagged ``fetch`` is the sample-data fetcher, ``ingest`` is the one
+    the schedule fires, ``create``/``update`` are the record writers. A single
+    playbook can carry several of these tags at once (FortiSIEM's
+    *FortiSIEM > Ingest* is tagged ``ingest`` **and** ``create``).
+    """
+
+    fetch: dict[str, Any] | None = None
+    ingest: dict[str, Any] | None = None
+    create: dict[str, Any] | None = None
+    update: dict[str, Any] | None = None
+
+    def missing(self) -> list[str]:
+        """Which of the four ingestion roles have no playbook."""
+        return [role for role in ("fetch", "ingest", "create", "update") if getattr(self, role) is None]
+
+
+class IngestionSetupResult(ApiResult):
+    """What :meth:`~pyfsr.api.connectors.ConnectorsAPI.data_ingest_wizard` built.
+
+    Mirrors the end state of the UI wizard: a per-configuration playbook
+    collection, the cloned+rewritten ingestion playbooks inside it, the
+    periodic task that fires the ``ingest`` playbook, and the
+    ``data-import`` metadata record that ties them together.
+    """
+
+    connector: str | None = None
+    version: str | None = None
+    config_id: str | None = None
+    config_name: str | None = None
+    collection_uuid: str | None = None
+    collection_name: str | None = None
+    playbooks: list[dict[str, Any]] = Field(default_factory=list)
+    ingest_playbook_iri: str | None = None
+    schedule_id: str | None = None
+    schedule_name: str | None = None
+    scheduled: bool = False
+    health_status: str | None = None
+    cloned: bool = False
+    dry_run: bool = False

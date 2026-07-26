@@ -25,9 +25,12 @@ Example:
         conn.execute("virustotal", "get_reputation_ip", params={"ip": "8.8.8.8"})
 
 .. note::
-    Setting up **data ingestion** (the *Configure Data Ingestion* wizard) is not
-    automated here — configure the connector with this API, then run the wizard
-    in the UI to map fetched data and schedule the ingestion playbook.
+    Setting up **data ingestion** (the *Configure Data Ingestion* wizard) is
+    automated by :meth:`ConnectorsAPI.data_ingest_wizard`, which reproduces what
+    the UI writes: a per-configuration playbook collection, the connector's
+    sample ingestion playbooks cloned and rewritten into it, the periodic task
+    that fires the ``ingest`` playbook, and the ``data-import`` metadata record
+    that ties them together.
 
 .. warning::
     Execution is **synchronous only for connectors that run on the FortiSOAR
@@ -57,9 +60,13 @@ from ..models._integration import (
     ConnectorConfig,
     ConnectorConfigSummary,
     ConnectorDefinition,
+    DependencyStatus,
     EnsureVersionResult,
     ExecuteResult,
     HealthcheckResult,
+    IngestionMetadata,
+    IngestionPlaybooks,
+    IngestionSetupResult,
     InstalledConnector,
     InstallJobStatus,
     IntegrationListEnvelope,
@@ -1761,6 +1768,599 @@ class ConnectorsAPI(BaseAPI):
         resp = self.client.post("/api/integration/execute/", data=body)
         return ExecuteResult.model_validate(resp if isinstance(resp, dict) else {"result": resp})
 
+    # ------------------------------------------------------- dependencies
+    def dependencies_status(self, connector: str, *, version: str | None = None) -> DependencyStatus:
+        """Whether a connector's Python dependencies finished installing.
+
+        ``GET /api/integration/connectors/dependencies_check/<name>/<version>/``.
+        The connector card's *Requirements* badge reads this: a false
+        ``dependencies_installed`` is the ``Failed`` state, and is a common
+        reason a freshly installed connector's operations blow up at runtime
+        even though its configuration health is green.
+
+        Example (needs a live appliance)::
+
+            client.connectors.dependencies_status("virustotal").dependencies_installed
+            # True
+        """
+        version = version or self.resolve_version(connector)
+        if not version:
+            raise ValueError(f"{connector!r} is not installed (cannot resolve a version)")
+        resp = self.client.get(f"/api/integration/connectors/dependencies_check/{connector}/{version}/")
+        return DependencyStatus.model_validate(resp if isinstance(resp, dict) else {"result": resp})
+
+    def install_dependencies(
+        self,
+        connector: str,
+        *,
+        version: str | None = None,
+        agent: str | None = None,
+    ) -> dict[str, Any]:
+        """Retry the Python-dependency install for a connector.
+
+        ``POST`` to the same URL :meth:`dependencies_status` reads — the
+        *Retry* button next to a failed *Requirements* badge. Pass ``agent`` to
+        install the dependencies on a remote agent instead of the appliance.
+        """
+        version = version or self.resolve_version(connector)
+        if not version:
+            raise ValueError(f"{connector!r} is not installed (cannot resolve a version)")
+        params = {"format": "json"}
+        if agent:
+            params["agent"] = agent
+        return self.client.post(
+            f"/api/integration/connectors/dependencies_check/{connector}/{version}/",
+            data={},
+            params=params,
+        )
+
+    # ------------------------------------------------------ misc surfaces
+    def ingestion_sources(self) -> list[InstalledConnector]:
+        """Installed connectors that support data ingestion.
+
+        ``POST /api/integration/connector_details/?ingestion_supported=true`` —
+        the list backing the *Data Ingestion* page's connector picker. These are
+        the connectors :meth:`data_ingest_wizard` can meaningfully target.
+        """
+        resp = self.client.post(
+            "/api/integration/connector_details/",
+            data={},
+            params={
+                "format": "json",
+                "exclude": "operation",
+                "ingestion_supported": "true",
+                "ordering": "label",
+            },
+        )
+        return [InstalledConnector.model_validate(row) for row in IntegrationListEnvelope.parse(resp).data]
+
+    def output_schema(
+        self,
+        connector: str,
+        operation: str,
+        *,
+        version: str | None = None,
+        config: str | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Infer an operation's output schema.
+
+        ``POST /api/integration/connector_output_schema/<name>/<version>/`` —
+        what the playbook editor calls to populate step-output pickers. Note the
+        UI resolves this endpoint's *failures* as successes too (it returns
+        whatever body came back), so check the payload rather than trusting a 2xx.
+        """
+        version = version or self.resolve_version(connector)
+        if not version:
+            raise ValueError(f"{connector!r} is not installed (cannot resolve a version)")
+        body = {
+            "operation": operation,
+            "config": config if config else self.resolve_config(connector),
+            "params": params or {},
+        }
+        return self.client.post(
+            f"/api/integration/connector_output_schema/{connector}/{version}/",
+            data=body,
+            params={"format": "json"},
+        )
+
+    def set_operation_roles(
+        self,
+        operation_id: str,
+        roles: list[str],
+        *,
+        replace: bool = True,
+    ) -> dict[str, Any]:
+        """Restrict a connector operation to a set of roles.
+
+        ``POST`` (first assignment) or ``PUT`` (replacing an existing one) to
+        ``/api/integration/connectors/operations/<operation_id>/roles/``. The UI
+        picks the verb by whether the operation already has roles — mirror that
+        with ``replace``.
+
+        Args:
+            operation_id: the operation's ``id`` from :meth:`operations`.
+            roles: role uuids allowed to run the operation.
+            replace: ``True`` (default) sends ``PUT``; ``False`` sends ``POST``
+                for an operation that currently has no roles.
+        """
+        path = f"/api/integration/connectors/operations/{operation_id}/roles/"
+        body = {"roles": list(roles)}
+        return self.client.put(path, data=body) if replace else self.client.post(path, data=body)
+
+    # -------------------------------------------------- ingestion metadata
+    def ingestion_metadata(self, config_id: str) -> list[IngestionMetadata]:
+        """The ``data-import`` records for a connector configuration.
+
+        ``GET /api/integration/data-import/?configuration=<config_id>``. This is
+        how the UI re-finds an existing ingestion schedule for a configuration
+        (via ``metadata.scheduleId``) — an ingestion set up without one of these
+        looks unconfigured in the UI even though the schedule runs fine.
+        """
+        resp = self.client.get("/api/integration/data-import/", params={"configuration": config_id})
+        env = IntegrationListEnvelope.parse(resp)
+        return [IngestionMetadata.model_validate(row) for row in env.data]
+
+    def save_ingestion_metadata(
+        self,
+        config_id: str,
+        *,
+        connector: str,
+        version: str,
+        name: str,
+        schedule_id: str | None = None,
+        schedule_name: str = "",
+        schedule_enabled: bool = False,
+        sample_data: Any = None,
+        actor: str | None = None,
+        created: bool = True,
+    ) -> dict[str, Any]:
+        """Write the ``data-import`` record that links a config to its schedule.
+
+        ``POST /api/integration/data-import/``. Called twice by the UI: once
+        with ``sample_data`` after the fetch step, and once with the
+        ``metadata.scheduleId`` after the schedule is saved.
+
+        Args:
+            config_id: the connector configuration's ``config_id``.
+            connector: connector name.
+            version: connector version.
+            name: record name — the UI uses the schedule name, falling back to
+                the ``config_id``.
+            schedule_id: the periodic task's id, once it exists.
+            schedule_name: display name of that schedule.
+            schedule_enabled: whether ingestion is scheduled to run.
+            sample_data: parsed sample payload to store alongside the mapping.
+            actor: ``people`` uuid to stamp as creator/modifier; resolved from
+                the current actor when omitted.
+            created: include ``created_by`` (the UI only sets it on first write).
+        """
+        if actor is None:
+            actor = self._current_actor_uuid()
+        body: dict[str, Any] = {
+            "name": name,
+            "description": f"Metadata for {name}",
+            "modified_by": actor,
+            "owners": [],
+            "connector": {"name": connector, "version": version},
+            "configuration": config_id,
+            "metadata": {
+                "scheduleId": schedule_id,
+                "scheduleName": schedule_name,
+                "scheduleStatus": bool(schedule_enabled),
+            },
+        }
+        if created:
+            body["created_by"] = actor
+        if sample_data is not None:
+            body["sample_data"] = sample_data
+        return self.client.post("/api/integration/data-import/", data=body)
+
+    def _current_actor_uuid(self) -> str | None:
+        """The current user's ``people`` uuid, for ``created_by``/``modified_by``."""
+        try:
+            actor = self.client.get("/api/3/actors/current")
+        except Exception:  # pragma: no cover - identity is best-effort metadata
+            return None
+        if not isinstance(actor, dict):
+            return None
+        uuid = actor.get("uuid")
+        if isinstance(uuid, str) and uuid:
+            return uuid
+        iri = actor.get("@id")
+        return iri.rstrip("/").split("/")[-1] if isinstance(iri, str) and iri else None
+
+    # ------------------------------------------------ ingestion playbooks
+    def _ingestion_query(self, collection_uuid: str, connector: str) -> list[dict[str, Any]]:
+        """Playbooks in ``collection_uuid`` tagged for ``connector``.
+
+        Reproduces the wizard's sample-playbook query: scope to one collection,
+        then match either the ``#<connector>`` hashtag on ``tag.uuid`` or the
+        connector name inside ``recordTags.uuid``.
+        """
+        body = {
+            "limit": 256,
+            "logic": "AND",
+            "filters": [
+                {"field": "collection.uuid", "operator": "eq", "value": collection_uuid, "type": "primitive"},
+                {
+                    "logic": "OR",
+                    "filters": [
+                        {"field": "tag.uuid", "operator": "like", "value": f"%#{connector}%", "type": "primitive"},
+                        {
+                            "field": "recordTags.uuid",
+                            "operator": "like",
+                            "value": f"%{connector}%",
+                            "type": "primitive",
+                        },
+                    ],
+                },
+            ],
+        }
+        resp = self.client.post(
+            "/api/query/workflows?$relationships=true&$export=true&$limit=256",
+            data=body,
+        )
+        return list(extract_members(resp))
+
+    @staticmethod
+    def _bucket_by_tag(playbooks: list[dict[str, Any]]) -> IngestionPlaybooks:
+        """Sort playbooks into the fetch/ingest/create/update ingestion roles.
+
+        Matches on ``recordTags`` (and the ``#tag`` string) case-insensitively.
+        A playbook may fill several roles at once — FortiSIEM's
+        *FortiSIEM > Ingest* is tagged both ``ingest`` and ``create``.
+        """
+        buckets: dict[str, dict[str, Any] | None] = {"fetch": None, "ingest": None, "create": None, "update": None}
+        for pb in playbooks:
+            tags = {str(t).strip().lower() for t in (pb.get("recordTags") or []) if t}
+            raw = str(pb.get("tag") or "").lower()
+            for role in buckets:
+                if buckets[role] is None and (role in tags or f"#{role}" in raw):
+                    buckets[role] = pb
+        return IngestionPlaybooks.model_validate(buckets)
+
+    def find_sample_ingestion_collection(self, connector: str, *, version: str | None = None) -> str | None:
+        """Locate the connector's bundled ``Sample - <Label> - <version>`` collection.
+
+        Installing a connector that ships playbooks creates one of these; it is
+        the source :meth:`data_ingest_wizard` clones from. Returns its uuid, or
+        ``None`` when the connector ships no sample playbooks (in which case
+        there is nothing to ingest with and the wizard cannot proceed).
+        """
+        version = version or self.resolve_version(connector)
+        resp = self.client.get(
+            "/api/3/workflow_collections",
+            params={"$limit": 2147483647, "__selectFields": "name,uuid"},
+        )
+        rows = list(extract_members(resp))
+        label = None
+        hit = self._find_configured(connector)
+        if hit is not None:
+            label = hit.label
+        candidates = []
+        for row in rows:
+            name = str(row.get("name") or "")
+            if not name.lower().startswith("sample - "):
+                continue
+            if version and name.rstrip().endswith(f"- {version}"):
+                if label and label.lower() in name.lower():
+                    return str(row.get("uuid"))
+                candidates.append(row)
+            elif label and label.lower() in name.lower():
+                candidates.append(row)
+        return str(candidates[0]["uuid"]) if candidates else None
+
+    def ingestion_playbooks(
+        self,
+        connector: str,
+        *,
+        collection: str | None = None,
+        version: str | None = None,
+    ) -> IngestionPlaybooks:
+        """The connector's ingestion playbooks, bucketed by role.
+
+        Looks inside ``collection`` (defaulting to the connector's bundled
+        ``Sample - …`` collection) for playbooks tagged with the connector name
+        and sorts them into ``fetch`` / ``ingest`` / ``create`` / ``update``.
+
+        Example (needs a live appliance)::
+
+            pbs = client.connectors.ingestion_playbooks("fortinet-fortisiem")
+            pbs.ingest["name"]      # 'FortiSIEM > Ingest'
+        """
+        collection = collection or self.find_sample_ingestion_collection(connector, version=version)
+        if not collection:
+            return IngestionPlaybooks()
+        return self._bucket_by_tag(self._ingestion_query(collection, connector))
+
+    # ------------------------------------------------------- the wizard
+    def data_ingest_wizard(
+        self,
+        connector: str,
+        *,
+        config: str | None = None,
+        version: str | None = None,
+        cron: str | None = None,
+        schedule_name: str | None = None,
+        enabled: bool = True,
+        timezone: str = "UTC",
+        exit_if_running: bool = True,
+        source_collection: str | None = None,
+        agent: str | None = None,
+        require_health: bool = True,
+        activate: bool = True,
+        reuse_existing: bool = True,
+        dry_run: bool = False,
+    ) -> IngestionSetupResult:
+        """Set up data ingestion for a connector configuration — the whole wizard.
+
+        Reproduces every write the UI's *Configure Data Ingestion* wizard makes,
+        in the order it makes them:
+
+        1. resolve the configuration and (unless ``require_health=False``)
+           refuse to proceed on anything but ``Available`` health — the UI gates
+           the wizard behind a green health check;
+        2. find-or-create the per-configuration playbook collection, whose
+           **uuid is the ``config_id``** and whose name follows the UI's
+           ``"<label> <version> <config>Ingestion(<config_id>)"`` convention;
+        3. clone the connector's sample ingestion playbooks into it, rewriting
+           each clone the way the UI does — ``arguments.config`` stamped with
+           the ``config_id`` on that connector's own steps, ``globalVars``
+           suffixed with the config id so two configurations of the same
+           connector don't share variables, cross-playbook references remapped
+           onto the clones, and ``params.create_pb_id`` on the *Fetch and
+           Create* step pointed at the cloned ``create`` playbook;
+        4. activate the clones;
+        5. create the periodic task that fires the ``ingest`` playbook;
+        6. write the ``data-import`` metadata record that links configuration →
+           schedule, so the UI shows the ingestion as configured.
+
+        Args:
+            connector: connector name (e.g. ``"fortinet-fortisiem"``).
+            config: which configuration to set ingestion up for — a config
+                **name** or a ``config_id`` uuid. Defaults to the connector's
+                default configuration.
+            version: connector version; resolved from the install when omitted.
+            cron: 5-field cron expression for the ingestion schedule (e.g.
+                ``"*/15 * * * *"``). Omit to build the playbooks without
+                scheduling anything.
+            schedule_name: schedule display name. Defaults to the platform's
+                own convention, ``"Ingestion_<connector>_<config>_<config_id>"``
+                — the UI matches on this string, so overriding it makes the
+                ingestion look unconfigured in the *Data Ingestion* screen.
+            enabled: create the schedule enabled (default ``True``).
+            timezone: IANA timezone for the crontab.
+            exit_if_running: skip a fire while the previous run is still going.
+            source_collection: uuid of the collection to clone sample playbooks
+                from. Defaults to the connector's bundled ``Sample - …``.
+            agent: stamp ``arguments.agent`` on the connector's steps so the
+                cloned playbooks run the connector on a remote agent.
+            require_health: refuse to run unless configuration health is
+                ``Available`` (default, matching the UI). Set ``False`` to build
+                the ingestion pipeline against a connector you know is
+                unreachable — useful when staging a box before credentials exist.
+            activate: set ``isActive`` on the cloned playbooks (default ``True``).
+            reuse_existing: if the per-config collection already holds ingestion
+                playbooks, reuse them instead of re-cloning (default ``True``).
+                Set ``False`` to rebuild from the samples.
+            dry_run: resolve and report what *would* be written without making
+                any change.
+
+        Returns:
+            :class:`~pyfsr.models.IngestionSetupResult` describing the
+            collection, playbooks, schedule, and health at the end of the run.
+
+        Raises:
+            ValueError: the connector isn't installed, the configuration can't
+                be resolved, health isn't ``Available`` (with ``require_health``),
+                or the connector ships no ``ingest``-tagged playbook.
+
+        Example (needs a live appliance)::
+
+            result = client.connectors.data_ingest_wizard(
+                "fortinet-fortisiem", config="prod", cron="*/15 * * * *")
+            result.scheduled        # True
+        """
+        version = version or self.resolve_version(connector)
+        if not version:
+            raise ValueError(f"{connector!r} is not installed (cannot resolve a version)")
+
+        summaries = self.configurations(connector)
+        if not summaries:
+            raise ValueError(f"{connector!r} has no configuration — create one before setting up ingestion")
+        chosen = None
+        if config:
+            chosen = next((c for c in summaries if c.config_id == config or c.name == config), None)
+            if chosen is None:
+                names = ", ".join(f"{c.name!r}" for c in summaries)
+                raise ValueError(f"no configuration named or identified by {config!r} on {connector!r} (have: {names})")
+        else:
+            chosen = next((c for c in summaries if c.default), None) or summaries[0]
+        config_id = chosen.config_id
+        if not config_id:
+            raise ValueError(f"configuration {chosen.name!r} on {connector!r} has no config_id")
+
+        result = IngestionSetupResult(
+            connector=connector,
+            version=version,
+            config_id=config_id,
+            config_name=chosen.name,
+            dry_run=dry_run,
+        )
+
+        health = self.healthcheck(connector, version=version, config=config_id)
+        result.health_status = health.status
+        if require_health and str(health.status or "").strip().lower() != "available":
+            raise ValueError(
+                f"configuration {chosen.name!r} on {connector!r} is {health.status!r}, not 'Available'. "
+                "The UI gates data ingestion on a green health check; pass require_health=False to override."
+            )
+
+        installed = self._find_configured(connector)
+        label = (installed.label if installed else None) or connector
+        collection_name = f"{label} {version} {chosen.name or ''}Ingestion({config_id})"
+        result.collection_name = collection_name
+        result.collection_uuid = config_id
+
+        source_collection = source_collection or self.find_sample_ingestion_collection(connector, version=version)
+        if not source_collection:
+            raise ValueError(
+                f"{connector!r} ships no 'Sample - …' playbook collection to clone ingestion playbooks from"
+            )
+
+        existing = self._ingestion_query(config_id, connector) if self._collection_exists(config_id) else []
+        if existing and reuse_existing:
+            buckets = self._bucket_by_tag(existing)
+            result.playbooks = existing
+        else:
+            samples = self._bucket_by_tag(self._ingestion_query(source_collection, connector))
+            if samples.ingest is None:
+                raise ValueError(
+                    f"no 'ingest'-tagged playbook for {connector!r} in collection {source_collection!r} — "
+                    "the connector's sample playbooks must carry the #ingest and #dataingestion tags"
+                )
+            if dry_run:
+                result.playbooks = [pb for pb in (samples.fetch, samples.ingest, samples.create, samples.update) if pb]
+                return result
+            self._ensure_ingestion_collection(config_id, collection_name)
+            buckets, cloned = self._clone_ingestion_playbooks(
+                samples,
+                connector=connector,
+                config_id=config_id,
+                collection_uuid=config_id,
+                agent=agent,
+                activate=activate,
+            )
+            result.playbooks = cloned
+            result.cloned = True
+
+        if dry_run:
+            return result
+
+        ingest = buckets.ingest
+        if ingest is None:
+            raise ValueError(f"the ingestion collection for {connector!r}/{config_id} has no 'ingest' playbook")
+        ingest_iri = ingest.get("@id") or f"/api/3/workflows/{ingest.get('uuid')}"
+        result.ingest_playbook_iri = ingest_iri
+
+        # The UI's _getSchedularName(): "Ingestion_<connector>_<config name>_<config_id>".
+        # Match it exactly — the ingestion screen and the data-import record find each
+        # other by this string, so a differently-named schedule reads as "not configured".
+        schedule_name = schedule_name or f"Ingestion_{connector}_{chosen.name or ''}_{config_id}"
+        result.schedule_name = schedule_name
+        if cron:
+            task = self.client.schedules.create(
+                schedule_name,
+                ingest_iri,
+                cron,
+                timezone=timezone,
+                enabled=enabled,
+                exit_if_running=exit_if_running,
+                typed=False,
+            )
+            result.schedule_id = str(task.get("id")) if isinstance(task, dict) else None
+            result.scheduled = bool(enabled)
+
+        self.save_ingestion_metadata(
+            config_id,
+            connector=connector,
+            version=version,
+            name=schedule_name,
+            schedule_id=result.schedule_id,
+            schedule_name=schedule_name if cron else "",
+            schedule_enabled=result.scheduled,
+            created=not self.ingestion_metadata(config_id),
+        )
+        return result
+
+    def _collection_exists(self, uuid: str) -> bool:
+        """Whether a workflow collection with ``uuid`` already exists."""
+        try:
+            self.client.get(f"/api/3/workflow_collections/{uuid}")
+            return True
+        except Exception:
+            return False
+
+    def _ensure_ingestion_collection(self, config_id: str, name: str) -> dict[str, Any]:
+        """Find-or-create the per-configuration ingestion collection.
+
+        Its ``uuid`` is deliberately the ``config_id`` — that identity is how
+        the UI locates a configuration's ingestion playbooks, so it must not be
+        left to the server to generate. Created ``visible=False`` so the
+        collection doesn't clutter the playbook list.
+        """
+        try:
+            existing = self.client.get(f"/api/3/workflow_collections/{config_id}")
+            if isinstance(existing, dict):
+                return existing
+        except Exception:
+            pass
+        created = self.client.post(
+            "/api/3/workflow_collections",
+            data={"name": name, "uuid": config_id, "visible": False},
+        )
+        return created if isinstance(created, dict) else {"uuid": config_id, "name": name}
+
+    def _clone_ingestion_playbooks(
+        self,
+        samples: IngestionPlaybooks,
+        *,
+        connector: str,
+        config_id: str,
+        collection_uuid: str,
+        agent: str | None,
+        activate: bool,
+    ) -> tuple[IngestionPlaybooks, list[dict[str, Any]]]:
+        """Clone the sample ingestion playbooks and apply the wizard's rewrites.
+
+        Two passes, because the rewrites reference the *clones*: first clone
+        each source playbook into the per-config collection (remapping owned
+        uuids via :meth:`~pyfsr.api.playbooks.PlaybooksAPI.clone`), then patch
+        cross-playbook references — the old→new uuid map and the ``create``
+        playbook's new uuid aren't known until every clone exists.
+        """
+        suffix = config_id.replace("-", "_")
+        roles = [r for r in ("fetch", "ingest", "create", "update") if getattr(samples, r) is not None]
+        uuid_map: dict[str, str] = {}
+        by_source: dict[str, dict[str, Any]] = {}
+        clones: dict[str, dict[str, Any]] = {}
+
+        for role in roles:
+            source = getattr(samples, role)
+            source_uuid = str(source.get("uuid"))
+            if source_uuid in by_source:  # one playbook can fill several roles
+                clones[role] = by_source[source_uuid]
+                continue
+            created = self.client.playbooks.clone(
+                source_uuid,
+                str(source.get("name") or role),
+                collection=collection_uuid,
+                is_active=False,
+                transform=lambda body: _rewrite_ingestion_playbook(body, connector, config_id, suffix, agent),
+            )
+            uuid_map[source_uuid] = str(created.get("uuid"))
+            by_source[source_uuid] = created
+            clones[role] = created
+
+        create_uuid = str(clones["create"].get("uuid")) if "create" in clones else None
+        for role, pb in list(clones.items()):
+            patched = _patch_clone_references(pb, uuid_map, create_uuid)
+            if patched is not None:
+                clones[role] = self.client.playbooks.update(str(pb.get("uuid")), steps=patched)
+            if activate:
+                clones[role] = self.client.playbooks.update(str(clones[role].get("uuid")), isActive=True)
+
+        buckets = IngestionPlaybooks.model_validate({role: clones.get(role) for role in roles})
+        unique: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for pb in clones.values():
+            key = str(pb.get("uuid"))
+            if key not in seen:
+                seen.add(key)
+                unique.append(pb)
+        return buckets, unique
+
 
 def _import_job_id(resp: dict[str, Any]) -> str | None:
     """Pull the import-job id out of a Content-Hub install response.
@@ -1783,3 +2383,89 @@ def _import_job_id(resp: dict[str, Any]) -> str | None:
     if isinstance(iri, str) and "import_jobs" in iri:
         return iri.rstrip("/").split("/")[-1]
     return None
+
+
+_GLOBAL_VAR_RE = re.compile(r"(globalVars\.)(\w+)")
+
+
+def _rewrite_ingestion_playbook(
+    body: dict[str, Any],
+    connector: str,
+    config_id: str,
+    suffix: str,
+    agent: str | None,
+) -> dict[str, Any]:
+    """Apply the wizard's per-configuration rewrites to a cloned playbook body.
+
+    Two edits, both of which the UI makes before persisting a clone:
+
+    * **Global-variable namespacing** — every ``globalVars.X`` reference becomes
+      ``globalVars.X_<config_id with dashes as underscores>``, and any bare
+      string equal to a renamed variable is renamed with it. Without this, two
+      configurations of the same connector silently share ingestion state (last
+      pull time, cursors) and interleave their fetches.
+    * **Connector binding** — steps whose ``arguments.connector`` is *this*
+      connector get ``arguments.config`` set to the configuration being wired
+      up, plus ``arguments.agent`` when the connector runs on an agent. Steps
+      calling other connectors (``cyops_utilities`` and friends) are left alone,
+      which is exactly what a live ingestion collection looks like.
+    """
+    renamed: set[str] = set()
+
+    def rename(match: re.Match[str]) -> str:
+        renamed.add(match.group(2))
+        return f"{match.group(1)}{match.group(2)}_{suffix}"
+
+    serialized = _GLOBAL_VAR_RE.sub(rename, json.dumps(body))
+    for name in renamed:
+        serialized = serialized.replace(f'"{name}"', f'"{name}_{suffix}"')
+    body = json.loads(serialized)
+
+    for step in body.get("steps") or []:
+        args = step.get("arguments")
+        if isinstance(args, dict) and args.get("connector") == connector:
+            args["config"] = config_id
+            if agent:
+                args["agent"] = agent
+    return body
+
+
+def _patch_clone_references(
+    playbook: dict[str, Any],
+    uuid_map: dict[str, str],
+    create_uuid: str | None,
+) -> list[dict[str, Any]] | None:
+    """Repoint a clone's cross-playbook references at the other clones.
+
+    Runs after every clone exists, because these references can't be resolved
+    during the clone itself:
+
+    * ``params.create_pb_id`` on the *Fetch and Create* step must name the
+      **cloned** ``create`` playbook, not the sample one — otherwise ingestion
+      writes records through the shared sample playbook and ignores the
+      per-configuration copy;
+    * reference steps pointing at a sample playbook's uuid/IRI are remapped onto
+      its clone.
+
+    Returns the patched ``steps`` list, or ``None`` when nothing changed.
+    """
+    steps = playbook.get("steps")
+    if not isinstance(steps, list):
+        return None
+    serialized = json.dumps(steps)
+    patched = serialized
+    for old, new in uuid_map.items():
+        patched = patched.replace(old, new)
+    steps = json.loads(patched)
+
+    changed = patched != serialized
+    if create_uuid:
+        for step in steps:
+            if str(step.get("name") or "").strip().lower() != "fetch and create":
+                continue
+            args = step.setdefault("arguments", {})
+            params = args.setdefault("params", {})
+            if params.get("create_pb_id") != create_uuid:
+                params["create_pb_id"] = create_uuid
+                changed = True
+    return steps if changed else None
