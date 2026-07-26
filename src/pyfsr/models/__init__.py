@@ -39,7 +39,7 @@ from ._ai_agent_package import (
     AgentPromptFile,
 )
 from ._app_config import NavItem, NavRequire, NavState
-from ._audit import AuditActivity, LifecycleEntry, RecordLifecycle
+from ._audit import AuditActivity, ExecutionContext, LifecycleEntry, RecordLifecycle
 from ._export import (
     ConnectorSelection,
     ModuleSelection,
@@ -349,4 +349,5 @@ __all__ = [
     "AuditActivity",
     "LifecycleEntry",
     "RecordLifecycle",
+    "ExecutionContext",
 ]

@@ -73,6 +73,13 @@ life = client.audit.lifecycle(alert_uuid, entity_type="alerts")
 print(life.summary())
 for e in life.entries:
     print(f"  [{e.timestamp_iso}] {e.kind:10} {e.operation:12} {e.playbook_name or ''}")
+
+# What else was happening to the record during a specific run?
+ctx = client.audit.execution_context(run_pk, window_seconds=120)
+print(ctx.summary())
+for ch in ctx.concurrent_changes:
+    print(f"  [{ch.timestamp_iso}] {ch.operation:12} by={ch.user or '?':10} pb={ch.playbook_name or ''}")
+print(f"  other playbooks: {ctx.other_playbooks}")
 ```
 
 ## Audit log (per-record change history)

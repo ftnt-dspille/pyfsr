@@ -1030,6 +1030,13 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 ```
 
 ```{eval-rst}
+.. autoclass:: pyfsr.models.ExecutionContext
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
 .. autoclass:: pyfsr.models.LifecycleEntry
    :members:
    :undoc-members:

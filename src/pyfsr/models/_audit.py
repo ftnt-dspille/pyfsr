@@ -154,3 +154,61 @@ class RecordLifecycle(ApiResult):
             f"{self.audit_count} audit events, {self.execution_count} playbook runs, "
             f"{len(self.playbook_names)} playbooks involved"
         )
+
+
+class ExecutionContext(ApiResult):
+    """What was happening to a record around the time of a specific playbook run.
+
+    Returned by :meth:`client.audit.execution_context
+    <pyfsr.api.audit.AuditAPI.execution_context>`. Answers the debugging
+    question "why did this playbook see state X when I expected state Y?" by
+    showing what *other* playbooks or manual actions changed the record
+    within the run's time window.
+
+    ``concurrent_changes`` are audit events on the same record that happened
+    during the run (between its ``created`` and ``modified`` timestamps, ± a
+    buffer). ``concurrent_runs`` are other playbook executions on the same
+    record in the same window. ``before_changes`` are audit events just before
+    the run started (context for what state the playbook saw).
+    """
+
+    run_pk: str | None = None
+    run_name: str | None = None
+    run_status: str | None = None
+    run_created: str | None = None
+    run_modified: str | None = None
+    record_uuid: str | None = None
+    record_iri: str | None = None
+    entity_type: str | None = None
+    concurrent_changes: list[LifecycleEntry] = []
+    concurrent_runs: list[dict[str, Any]] = []
+    before_changes: list[LifecycleEntry] = []
+    window_seconds: int = 60
+
+    @property
+    def other_playbooks(self) -> list[str]:
+        """Playbook names (excluding the run itself) that changed the record."""
+        seen: list[str] = []
+        for e in self.concurrent_changes:
+            if e.playbook_name and e.playbook_name != self.run_name and e.playbook_name not in seen:
+                seen.append(e.playbook_name)
+        for r in self.concurrent_runs:
+            name = r.get("name")
+            if name and name != self.run_name and name not in seen:
+                seen.append(name)
+        return seen
+
+    def summary(self) -> str:
+        """A one-line summary suitable for agent output."""
+        other = self.other_playbooks
+        parts = [
+            f"run {self.run_name!r} (pk={self.run_pk}) {self.run_status}",
+            f"on {self.entity_type or 'record'} {self.record_uuid[:8] if self.record_uuid else '?'}",
+            f"{len(self.concurrent_changes)} concurrent changes",
+            f"{len(self.concurrent_runs)} concurrent runs",
+        ]
+        if other:
+            parts.append(f"other playbooks: {', '.join(other)}")
+        if self.before_changes:
+            parts.append(f"{len(self.before_changes)} prior changes")
+        return ", ".join(parts)
