@@ -2003,6 +2003,24 @@ class ConnectorsAPI(BaseAPI):
         )
         return list(extract_members(resp))
 
+    def _dataingestion_playbooks(self, collection_uuid: str, connector: str) -> list[dict[str, Any]]:
+        """Every ``#dataingestion``-tagged playbook for ``connector`` in a collection.
+
+        The four *roles* (fetch/ingest/create/update) are not the whole set — a
+        connector's ingestion often includes helper playbooks that carry only
+        ``#dataingestion`` (FortiSIEM ships a *Fetch Associated events for
+        Incident* that the ingest playbook calls). The UI clones **all** of
+        them; cloning only the roles leaves the copies calling shared sample
+        playbooks that are bound to no configuration.
+        """
+        rows = self._ingestion_query(collection_uuid, connector)
+        out = []
+        for pb in rows:
+            tags = {str(t).strip().lower() for t in (pb.get("recordTags") or []) if t}
+            if "dataingestion" in tags or "#dataingestion" in str(pb.get("tag") or "").lower():
+                out.append(pb)
+        return out
+
     @staticmethod
     def _bucket_by_tag(playbooks: list[dict[str, Any]]) -> IngestionPlaybooks:
         """Sort playbooks into the fetch/ingest/create/update ingestion roles.
@@ -2214,17 +2232,19 @@ class ConnectorsAPI(BaseAPI):
             buckets = self._bucket_by_tag(existing)
             result.playbooks = existing
         else:
-            samples = self._bucket_by_tag(self._ingestion_query(source_collection, connector))
+            source_playbooks = self._dataingestion_playbooks(source_collection, connector)
+            samples = self._bucket_by_tag(source_playbooks)
             if samples.ingest is None:
                 raise ValueError(
                     f"no 'ingest'-tagged playbook for {connector!r} in collection {source_collection!r} — "
                     "the connector's sample playbooks must carry the #ingest and #dataingestion tags"
                 )
             if dry_run:
-                result.playbooks = [pb for pb in (samples.fetch, samples.ingest, samples.create, samples.update) if pb]
+                result.playbooks = source_playbooks
                 return result
             self._ensure_ingestion_collection(config_id, collection_name)
             buckets, cloned = self._clone_ingestion_playbooks(
+                source_playbooks,
                 samples,
                 connector=connector,
                 config_id=config_id,
@@ -2274,6 +2294,66 @@ class ConnectorsAPI(BaseAPI):
         )
         return result
 
+    def trigger_ingestion(
+        self,
+        connector: str,
+        *,
+        config: str | None = None,
+        playbook: str | None = None,
+    ) -> dict[str, Any]:
+        """Run a configuration's ingestion right now — the *Trigger Ingestion Now* button.
+
+        ``POST /api/triggers/1/notrigger/<ingest playbook uuid>``. Note this is
+        **not** the scheduler's trigger
+        (:meth:`~pyfsr.api.schedules.SchedulesAPI.trigger_now`, which posts to
+        ``/api/wf/api/scheduled/trigger-now/``): the UI's ingestion button
+        bypasses the periodic task entirely and fires the playbook named by the
+        schedule's ``kwargs.wf_iri``. That distinction matters — the ingestion
+        button works on a configuration whose schedule is disabled, or that has
+        no schedule at all.
+
+        Resolves the ``ingest``-tagged playbook inside the configuration's own
+        ingestion collection, so it fires the per-config clone rather than the
+        shared sample playbook.
+
+        Args:
+            connector: connector name.
+            config: config name or ``config_id``; defaults to the default
+                configuration.
+            playbook: fire this playbook uuid/IRI instead of resolving one
+                (escape hatch for a non-standard ingestion layout).
+
+        Returns:
+            The trigger response, carrying the async ``task_id``. The fire is
+            asynchronous — poll ``client.playbooks.execution_history(...)`` or
+            watch the target module's record count to see the result.
+
+        Raises:
+            ValueError: the configuration can't be resolved, or its ingestion
+                collection holds no ``ingest``-tagged playbook (i.e. ingestion
+                was never set up — run :meth:`data_ingest_wizard` first).
+
+        Example (needs a live appliance)::
+
+            client.connectors.trigger_ingestion("fortinet-fortisiem", config="prod")
+            # {'task_id': '9e7df03a-29d9-4b90-a4a7-6e61810efd88'}
+        """
+        if playbook:
+            uuid = playbook.rstrip("/").split("/")[-1]
+        else:
+            config_id = self.resolve_config(connector, config)
+            if not config_id:
+                raise ValueError(f"cannot resolve a configuration for {connector!r}")
+            buckets = self._bucket_by_tag(self._ingestion_query(config_id, connector))
+            if buckets.ingest is None:
+                raise ValueError(
+                    f"no ingestion playbook for {connector!r}/{config_id} — "
+                    "run data_ingest_wizard() to set ingestion up first"
+                )
+            uuid = str(buckets.ingest.get("uuid"))
+        resp = self.client.post(f"/api/triggers/1/notrigger/{uuid}", data={})
+        return resp if isinstance(resp, dict) else {"result": resp}
+
     def _collection_exists(self, uuid: str) -> bool:
         """Whether a workflow collection with ``uuid`` already exists."""
         try:
@@ -2304,6 +2384,7 @@ class ConnectorsAPI(BaseAPI):
 
     def _clone_ingestion_playbooks(
         self,
+        source_playbooks: list[dict[str, Any]],
         samples: IngestionPlaybooks,
         *,
         connector: str,
@@ -2315,51 +2396,61 @@ class ConnectorsAPI(BaseAPI):
         """Clone the sample ingestion playbooks and apply the wizard's rewrites.
 
         Two passes, because the rewrites reference the *clones*: first clone
-        each source playbook into the per-config collection (remapping owned
-        uuids via :meth:`~pyfsr.api.playbooks.PlaybooksAPI.clone`), then patch
+        every ``#dataingestion`` playbook into the per-config collection
+        (remapping owned uuids via
+        :meth:`~pyfsr.api.playbooks.PlaybooksAPI.clone`), then patch
         cross-playbook references — the old→new uuid map and the ``create``
         playbook's new uuid aren't known until every clone exists.
+
+        The second pass re-reads each clone with ``get_definition(...,
+        relationships=True)``. A clone's POST *response* carries its steps as
+        IRIs rather than inlined objects, so patching the response finds no
+        references to rewrite and silently leaves the copies pointing at the
+        shared sample playbooks.
         """
         suffix = config_id.replace("-", "_")
-        roles = [r for r in ("fetch", "ingest", "create", "update") if getattr(samples, r) is not None]
         uuid_map: dict[str, str] = {}
-        by_source: dict[str, dict[str, Any]] = {}
         clones: dict[str, dict[str, Any]] = {}
 
-        for role in roles:
-            source = getattr(samples, role)
+        for source in source_playbooks:
             source_uuid = str(source.get("uuid"))
-            if source_uuid in by_source:  # one playbook can fill several roles
-                clones[role] = by_source[source_uuid]
+            if source_uuid in uuid_map:
                 continue
             created = self.client.playbooks.clone(
                 source_uuid,
-                str(source.get("name") or role),
+                str(source.get("name") or source_uuid),
                 collection=collection_uuid,
                 is_active=False,
                 transform=lambda body: _rewrite_ingestion_playbook(body, connector, config_id, suffix, agent),
             )
             uuid_map[source_uuid] = str(created.get("uuid"))
-            by_source[source_uuid] = created
-            clones[role] = created
+            clones[source_uuid] = created
 
-        create_uuid = str(clones["create"].get("uuid")) if "create" in clones else None
-        for role, pb in list(clones.items()):
-            patched = _patch_clone_references(pb, uuid_map, create_uuid)
+        create_uuid = None
+        if samples.create is not None:
+            create_uuid = uuid_map.get(str(samples.create.get("uuid")))
+
+        for source_uuid, clone in list(clones.items()):
+            clone_uuid = str(clone.get("uuid"))
+            # Re-read with relationships so the steps are inlined objects; the
+            # clone response's steps are bare IRIs and carry no references.
+            definition = self.client.playbooks.get_definition(clone_uuid, relationships=True).to_dict(by_alias=True)
+            patched = _patch_clone_references(definition, uuid_map, create_uuid)
             if patched is not None:
-                clones[role] = self.client.playbooks.update(str(pb.get("uuid")), steps=patched)
+                self.client.playbooks.update(clone_uuid, steps=patched)
             if activate:
-                clones[role] = self.client.playbooks.update(str(clones[role].get("uuid")), isActive=True)
+                self.client.playbooks.update(clone_uuid, isActive=True)
+            clones[source_uuid] = self.client.playbooks.get_definition(clone_uuid, relationships=True).to_dict(
+                by_alias=True
+            )
 
-        buckets = IngestionPlaybooks.model_validate({role: clones.get(role) for role in roles})
-        unique: list[dict[str, Any]] = []
-        seen: set[str] = set()
-        for pb in clones.values():
-            key = str(pb.get("uuid"))
-            if key not in seen:
-                seen.add(key)
-                unique.append(pb)
-        return buckets, unique
+        def _clone_for(pb: dict[str, Any] | None) -> dict[str, Any] | None:
+            return clones.get(str(pb.get("uuid"))) if pb else None
+
+        buckets = IngestionPlaybooks.model_validate(
+            {role: _clone_for(getattr(samples, role)) for role in ("fetch", "ingest", "create", "update")}
+        )
+        return buckets, list(clones.values())
 
 
 def _import_job_id(resp: dict[str, Any]) -> str | None:

@@ -168,15 +168,49 @@ def main() -> int:
     else:
         print(f"    ingest playbook : {built.ingest.get('name')} (active={built.ingest.get('isActive')})")
 
+    # NOTE: "no wrongly-bound steps" passes vacuously on a playbook with zero
+    # connector steps -- which is how the first live run reported PASS while the
+    # clones were still calling the shared sample playbooks. Assert positively:
+    # everything cloned, something bound, and no reference left pointing at a sample.
+    sample_collection = client.connectors.find_sample_ingestion_collection(CONNECTOR, version=version)
+    sample_uuids = {pb["uuid"] for pb in client.connectors._dataingestion_playbooks(sample_collection, CONNECTOR)}
+    clone_uuids = {pb["uuid"] for pb in result.playbooks}
+    bound_total = 0
     for pb in result.playbooks:
         definition = client.playbooks.get_definition(pb["uuid"], relationships=True).to_dict()
-        bound = [s for s in (definition.get("steps") or []) if (s.get("arguments") or {}).get("connector") == CONNECTOR]
+        steps = definition.get("steps") or []
+        bound = [s for s in steps if (s.get("arguments") or {}).get("connector") == CONNECTOR]
+        bound_total += len(bound)
         wrong = [s for s in bound if (s.get("arguments") or {}).get("config") != result.config_id]
         if wrong:
             print(f"    FAIL: {pb['name']}: {len(wrong)} step(s) not bound to this config")
             ok = False
-        else:
-            print(f"    bound steps     : {pb['name']} -> {len(bound)} step(s) on config_id")
+
+        for step in steps:
+            args = step.get("arguments") or {}
+            for key, value in args.items():
+                if not (isinstance(value, str) and "/workflows/" in value):
+                    continue
+                target = value.rstrip("/").split("/")[-1]
+                if target in sample_uuids:
+                    print(f"    FAIL: {pb['name']}/{step.get('name')}: {key} still points at the SAMPLE playbook")
+                    ok = False
+                elif target not in clone_uuids:
+                    print(f"    WARN: {pb['name']}/{step.get('name')}: {key} -> unknown playbook {target}")
+            params = args.get("params")
+            create_pb = params.get("create_pb_id") if isinstance(params, dict) else None
+            if create_pb and create_pb in sample_uuids:
+                print(f"    FAIL: {pb['name']}/{step.get('name')}: create_pb_id still points at the SAMPLE playbook")
+                ok = False
+
+    print(f"    clones          : {len(clone_uuids)} of {len(sample_uuids)} #dataingestion playbook(s)")
+    print(f"    connector steps : {bound_total} bound to config_id")
+    if len(clone_uuids) != len(sample_uuids):
+        print("    FAIL: not every #dataingestion playbook was cloned")
+        ok = False
+    if bound_total == 0:
+        print("    FAIL: no step is bound to this configuration — ingestion would use the wrong config")
+        ok = False
 
     metadata = client.connectors.ingestion_metadata(result.config_id)
     if not metadata:

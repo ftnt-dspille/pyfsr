@@ -5,6 +5,8 @@ itself is driven against a fake client that records every write, so the test
 asserts the *sequence and shape* of what the UI would have sent.
 """
 
+import json
+
 import pytest
 
 from pyfsr.api.connectors import (
@@ -129,13 +131,14 @@ def test_bucket_by_tag_matches_hashtag_string_form():
 class FakeClient:
     """Records writes; serves just enough reads for the wizard to run."""
 
-    def __init__(self, *, health="Available", existing_ingestion=None, collection_exists=False):
+    def __init__(self, *, health="Available", existing_ingestion=None, collection_exists=False, source_playbooks=None):
         self.posts = []
         self.puts = []
         self.gets = []
         self._health = health
         self._existing = existing_ingestion or []
         self._collection_exists = collection_exists
+        self._source = source_playbooks or [_FETCH_PB, _INGEST_PB]
         self.playbooks = FakePlaybooks(self)
         self.schedules = FakeSchedules(self)
 
@@ -168,7 +171,7 @@ class FakeClient:
             scoped = (data["filters"][0]["value"],)
             if scoped[0] == CONFIG_ID:
                 return {"hydra:member": self._existing}
-            return {"hydra:member": [_FETCH_PB, _INGEST_PB]}
+            return {"hydra:member": self._source}
         if endpoint == "/api/3/workflow_collections":
             return {"uuid": CONFIG_ID, "name": data["name"]}
         return {}
@@ -181,21 +184,59 @@ class FakeClient:
         return None
 
 
+class _Definition:
+    """Stands in for the typed Workflow model's to_dict()."""
+
+    def __init__(self, data):
+        self._data = data
+
+    def to_dict(self, **kw):
+        import copy
+
+        return copy.deepcopy(self._data)
+
+
+def _SOURCE_STEPS(source_uuid):
+    """The ingest playbook references the fetch playbook by IRI."""
+    if source_uuid == _INGEST_PB["uuid"]:
+        return [
+            {
+                "name": "List Incident",
+                "arguments": {"workflowReference": f"/api/3/workflows/{_FETCH_PB['uuid']}"},
+            },
+            {"name": "Fetch and Create", "arguments": {"params": {"create_pb_id": _INGEST_PB["uuid"]}}},
+        ]
+    return [{"name": "Fetch Incidents", "arguments": {"connector": "fortinet-fortisiem"}}]
+
+
 class FakePlaybooks:
+    """Models the appliance's asymmetry: a clone POST answers with steps as
+    bare IRIs, while get_definition(relationships=True) inlines them. Patching
+    the POST response instead of the definition is what silently left clones
+    pointing at the shared sample playbooks."""
+
     def __init__(self, client):
         self.client = client
         self.clones = []
+        self.definitions = {}
 
     def clone(self, uuid, new_name, *, collection=None, is_active=False, transform=None):
-        body = {"uuid": uuid, "name": new_name, "steps": [], "collection": collection}
+        body = {"uuid": uuid, "name": new_name, "steps": _SOURCE_STEPS(uuid), "collection": collection}
         if transform:
             body = transform(body) or body
-        created = dict(body, uuid=f"clone-of-{uuid}")
+        new_uuid = f"clone-of-{uuid}"
+        self.definitions[new_uuid] = dict(body, uuid=new_uuid)
+        # the wire response carries IRIs, NOT the inlined steps
+        created = {"uuid": new_uuid, "name": new_name, "steps": ["/api/3/workflow_steps/s1"]}
         self.clones.append(created)
         return created
 
+    def get_definition(self, uuid, *, relationships=False):
+        return _Definition(self.definitions.get(uuid, {"uuid": uuid, "steps": []}))
+
     def update(self, uuid, **fields):
         self.client.puts.append((f"/api/3/workflows/{uuid}", fields))
+        self.definitions.setdefault(uuid, {"uuid": uuid}).update(fields)
         return {"uuid": uuid, **fields}
 
 
@@ -346,3 +387,65 @@ def test_set_operation_roles_picks_verb_by_replace():
     assert client.puts[-1][0] == "/api/integration/connectors/operations/op-1/roles/"
     api.set_operation_roles("op-1", ["role-a"], replace=False)
     assert client.posts[-1][0] == "/api/integration/connectors/operations/op-1/roles/"
+
+
+def test_wizard_repoints_cross_playbook_references_at_the_clones():
+    """Regression: the clone POST response carries steps as IRIs, so patching it
+    (instead of re-reading the inlined definition) silently left the cloned
+    ingest playbook calling the shared, config-less SAMPLE fetch playbook."""
+    api, client = _api()
+    api.data_ingest_wizard("fortinet-fortisiem", config="prod")
+
+    ingest_clone = f"clone-of-{_INGEST_PB['uuid']}"
+    steps_writes = [f for path, f in client.puts if path.endswith(ingest_clone) and "steps" in f]
+    assert steps_writes, "the ingest clone's steps were never rewritten"
+    written = json.dumps(steps_writes[-1]["steps"])
+
+    assert f'/api/3/workflows/{_FETCH_PB["uuid"]}"' not in written, "clone still references the SAMPLE fetch playbook"
+    assert f"/api/3/workflows/clone-of-{_FETCH_PB['uuid']}" in written
+    assert f'"create_pb_id": "{ingest_clone}"' in written
+
+
+def test_wizard_clones_every_dataingestion_playbook_not_just_the_roles():
+    """A connector's ingestion includes helpers tagged only #dataingestion
+    (FortiSIEM's 'Fetch Associated events'); skipping them leaves the clones
+    calling shared sample playbooks bound to no configuration."""
+    helper = {
+        "uuid": "a661ebb5-afb3-486c-bdb1-ed6792fbaac2",
+        "name": ">> FortiSIEM > Fetch Associated events for Incident",
+        "recordTags": ["dataingestion", "fortinet-fortisiem"],
+    }
+    api, client = _api(source_playbooks=[_FETCH_PB, _INGEST_PB, helper])
+    out = api.data_ingest_wizard("fortinet-fortisiem", config="prod")
+    cloned = {c["uuid"] for c in client.playbooks.clones}
+    assert f"clone-of-{helper['uuid']}" in cloned
+    assert len(out.playbooks) == 3
+
+
+def test_wizard_ignores_playbooks_without_the_dataingestion_tag():
+    """The connector's other sample playbooks (Get Watch Lists, etc.) are tagged
+    with the connector name but not #dataingestion -- they must not be cloned."""
+    action_pb = {
+        "uuid": "80523094-f5ad-421a-859a-a04700fd78f6",
+        "name": "Get Watch Lists",
+        "recordTags": ["Fortinet", "fortinet-fortisiem"],
+    }
+    api, client = _api(source_playbooks=[_FETCH_PB, _INGEST_PB, action_pb])
+    api.data_ingest_wizard("fortinet-fortisiem", config="prod")
+    assert f"clone-of-{action_pb['uuid']}" not in {c["uuid"] for c in client.playbooks.clones}
+
+
+def test_trigger_ingestion_uses_the_notrigger_endpoint_not_the_scheduler():
+    """The UI's 'Trigger Ingestion Now' fires the playbook directly, so it works
+    even when the periodic task is disabled or absent."""
+    api, client = _api(existing_ingestion=[_FETCH_PB, _INGEST_PB], collection_exists=True)
+    api.trigger_ingestion("fortinet-fortisiem", config="prod")
+    endpoint = client.posts[-1][0]
+    assert endpoint == f"/api/triggers/1/notrigger/{_INGEST_PB['uuid']}"
+    assert "scheduled/trigger-now" not in endpoint
+
+
+def test_trigger_ingestion_errors_when_ingestion_was_never_set_up():
+    api, _ = _api(existing_ingestion=[], collection_exists=True)
+    with pytest.raises(ValueError, match="run data_ingest_wizard"):
+        api.trigger_ingestion("fortinet-fortisiem", config="prod")
