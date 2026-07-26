@@ -157,3 +157,78 @@ class SystemAPI(BaseAPI):
         if node_id is not None:
             body["nodeId"] = node_id
         return self.client.post("/api/public/license", data=body)
+
+    # -- FortiFlex ---------------------------------------------------------
+
+    def install_flex_license(self, license_token: str, *, node_id: str | None = None) -> dict[str, Any]:
+        """Submit a FortiFlex token for redemption (``POST /api/public/license``
+        ``install_flex_license``). Unauthenticated — works under the
+        ``FSR-Auth-018`` duplicate-license lockout.
+
+        Unlike :meth:`deploy_license` / :meth:`deploy_license_public`, which take
+        a *signed license JWT*, this takes the short FortiFlex entitlement token
+        and has the appliance redeem it against the licensing server (token →
+        license, server-side). Redemption is asynchronous — poll
+        :meth:`flex_license_status`, or use :meth:`deploy_flex_license` which
+        does both. **FortiFlex tokens are single-use**: a failed redemption
+        spends the token; mint a fresh one (from an ACTIVE entitlement) to retry.
+        """
+        body: dict[str, Any] = {"action": "install_flex_license", "data": {"license_token": license_token}}
+        if node_id is not None:
+            body["nodeId"] = node_id
+        return self.client.post("/api/public/license", data=body)
+
+    def flex_license_status(self, *, node_id: str | None = None) -> dict[str, Any]:
+        """Current FortiFlex deployment status (``POST /api/public/license``
+        ``get_status``). Carries ``depl_status`` (``in_progress`` / ``finished``
+        / ``failed``) and ``depl_message``."""
+        body: dict[str, Any] = {"action": "get_status"}
+        if node_id is not None:
+            body["nodeId"] = node_id
+        return self.client.post("/api/public/license", data=body)
+
+    def deploy_flex_license(
+        self, license_token: str, *, node_id: str | None = None, timeout: float = 600, poll_interval: float = 5
+    ) -> dict[str, Any]:
+        """Redeem a FortiFlex token and wait for the deployment to resolve.
+
+        Submits the token (:meth:`install_flex_license`) then polls
+        :meth:`flex_license_status` until ``depl_status`` is ``finished`` or
+        ``failed`` (or ``timeout`` seconds elapse). Returns
+        ``{"ok", "depl_status", "depl_message", "install", "polls"}`` — ``ok`` is
+        True only on a ``finished`` deployment. Never raises on a ``failed``
+        redemption; the failure is reported in the returned dict (the token is
+        spent regardless — mint a fresh one to retry).
+
+        On a license-locked appliance no credential authenticates, so build the
+        client with ``public=True`` (a no-auth client for the unauthenticated
+        ``/api/public/license`` endpoint):
+
+        Example:
+            >>> client = FortiSOAR("https://soar.example.com", public=True, verify_ssl=False)  # doctest: +SKIP
+            >>> res = client.system.deploy_flex_license("<token>")  # doctest: +SKIP
+            >>> res["ok"], res["depl_status"]  # doctest: +SKIP
+            (True, 'finished')
+        """
+        import time
+
+        install = self.install_flex_license(license_token, node_id=node_id)
+        deadline = time.monotonic() + timeout
+        polls = 0
+        depl_status = None
+        depl_message = None
+        while time.monotonic() < deadline:
+            polls += 1
+            status = self.flex_license_status(node_id=node_id)
+            depl_status = (status or {}).get("depl_status")
+            depl_message = (status or {}).get("depl_message")
+            if depl_status in ("finished", "failed"):
+                break
+            time.sleep(poll_interval)
+        return {
+            "ok": depl_status == "finished",
+            "depl_status": depl_status,
+            "depl_message": depl_message,
+            "install": install,
+            "polls": polls,
+        }
