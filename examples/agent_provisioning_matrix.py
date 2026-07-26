@@ -44,9 +44,11 @@ KEY_TEAM_FALLBACKS = ["SOC Team", "SOC - Security"]
 
 # A trivial, side-effect-free op present on the utilities connector that
 # provision_agent installs on every agent — used to prove the round trip.
+# no_op takes no params and always succeeds: it proves the SOAR dispatched the
+# action to the agent and got a result back, without depending on agent-host state.
 PROBE_CONNECTOR = "cyops_utilities"
-PROBE_OPERATION = "get_hash"  # hashes an inline string on the agent host
-PROBE_PARAMS = {"input": "agent-roundtrip-probe", "algorithm": "sha256"}
+PROBE_OPERATION = "no_op"
+PROBE_PARAMS: dict = {}
 
 
 def _client_basic(base_url: str, user: str, password: str) -> FortiSOAR:
@@ -123,8 +125,14 @@ def cmd_verify(args: argparse.Namespace) -> None:
         agent=agent_id,
     )
     cfg_id = cfg.get("@id") if hasattr(cfg, "get") else cfg
+    # Pin the version: without it, execute resolves the *appliance self-agent's*
+    # connector version (often different from the agent's) and runs there instead.
     result = client.connectors.execute(
-        PROBE_CONNECTOR, PROBE_OPERATION, config=f"{args.agent}-probe", params=PROBE_PARAMS
+        PROBE_CONNECTOR,
+        PROBE_OPERATION,
+        version=args.connector_version,
+        config=f"{args.agent}-probe",
+        params=PROBE_PARAMS,
     )
     print(f"execute : {PROBE_OPERATION} -> ok={getattr(result, 'ok', None)}")
     print(f"  data  : {result.get('data')}")
