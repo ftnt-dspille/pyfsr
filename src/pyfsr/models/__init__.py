@@ -190,6 +190,14 @@ def model_for(module: str) -> type[BaseRecord]:
     return MODEL_REGISTRY.get(module, BaseRecord)
 
 
+# `_integration` annotates ingestion payloads as `Workflow` but cannot import it at
+# module scope (`_system` imports ApiResult from `_integration`). Both modules are
+# loaded by now, so resolve the deferred reference.
+from ._system import Workflow as _Workflow  # noqa: E402
+
+for _model in (IngestionPlaybooks, IngestionSetupResult):
+    _model.model_rebuild(_types_namespace={"Workflow": _Workflow})
+
 __all__ = [
     "IngestionSetupResult",
     "IngestionPlaybooks",

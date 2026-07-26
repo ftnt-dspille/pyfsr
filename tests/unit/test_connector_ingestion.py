@@ -14,6 +14,7 @@ from pyfsr.api.connectors import (
     _patch_clone_references,
     _rewrite_ingestion_playbook,
 )
+from pyfsr.models import Workflow
 
 CONFIG_ID = "e02562a9-a719-4081-ac83-3dfebbb66422"
 SUFFIX = CONFIG_ID.replace("-", "_")
@@ -116,15 +117,18 @@ def test_patch_returns_none_when_nothing_changes():
 # --------------------------------------------------------------- bucketing
 def test_bucket_by_tag_lets_one_playbook_fill_several_roles():
     """FortiSIEM's Ingest playbook is tagged both `ingest` and `create`."""
-    buckets = ConnectorsAPI._bucket_by_tag([_FETCH_PB, _INGEST_PB])
-    assert buckets.fetch["name"] == "> FortiSIEM > Fetch"
-    assert buckets.ingest["uuid"] == buckets.create["uuid"] == _INGEST_PB["uuid"]
+    buckets = ConnectorsAPI._bucket_by_tag([Workflow.model_validate(p) for p in (_FETCH_PB, _INGEST_PB)])
+    assert buckets.fetch.name == "> FortiSIEM > Fetch"
+    assert buckets.ingest.uuid == buckets.create.uuid == _INGEST_PB["uuid"]
     assert buckets.missing() == ["update"]
+    # typed return, but still dict-subscriptable for legacy callers
+    assert isinstance(buckets.ingest, Workflow)
+    assert buckets.ingest["name"] == "FortiSIEM > Ingest"
 
 
 def test_bucket_by_tag_matches_hashtag_string_form():
-    pb = {"uuid": "x", "tag": "#fortinet-fortisiem #ingest #dataingestion", "recordTags": []}
-    assert ConnectorsAPI._bucket_by_tag([pb]).ingest["uuid"] == "x"
+    pb = Workflow.model_validate({"uuid": "x", "tag": "#fortinet-fortisiem #ingest #dataingestion", "recordTags": []})
+    assert ConnectorsAPI._bucket_by_tag([pb]).ingest.uuid == "x"
 
 
 # --------------------------------------------------------------- the wizard
