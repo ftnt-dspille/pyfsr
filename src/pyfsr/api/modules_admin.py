@@ -867,18 +867,91 @@ class ModulesAdminAPI(BaseAPI):
             cls._apply_team_scope(attr, team_scope)
         return AttributeMetadata.model_validate(attr)
 
-    @staticmethod
-    def _to_field_dict(field: dict[str, Any] | AttributeMetadata) -> dict[str, Any]:
+    @classmethod
+    def _to_field_dict(cls, field: dict[str, Any] | AttributeMetadata) -> dict[str, Any]:
         """Normalize a field (typed :class:`AttributeMetadata` or plain dict) to a wire dict.
 
         The staging consumers (:meth:`create_module` / :meth:`add_field` /
         :meth:`scope_field_to_teams`) mutate field dicts in place and POST them, so
         they coerce a typed field back to a plain dict at their boundary.
         ``exclude_unset`` keeps the body byte-identical to a hand-built dict.
+
+        A hand-built dict is also run through :meth:`_guard_field_shape`, because a raw
+        dict bypasses the typed builders' defaults and can otherwise stage metadata that
+        breaks the appliance.
         """
         if isinstance(field, AttributeMetadata):
             return field.model_dump(by_alias=True, exclude_unset=True)
+        if not isinstance(field, dict):
+            raise TypeError(f"field must be a dict or AttributeMetadata, got {type(field).__name__}")
+        cls._guard_field_shape(field)
         return field
+
+    @staticmethod
+    def _guard_field_shape(attr: dict[str, Any]) -> None:
+        """Validate/repair a hand-built field dict **in place** before it reaches staging.
+
+        The typed builders (:meth:`field`, :meth:`text_field`, ...) always emit a
+        well-formed ``descriptions`` object, but a raw dict passed straight to
+        :meth:`create_module` / :meth:`add_field` does not — and FortiSOAR's API accepts
+        the malformed record without complaint.
+
+        That is not a cosmetic problem. The Angular UI normalizes **every** attribute of
+        **every** module (``modelMetadatasService.getModuleList``) *before* it populates
+        its metadata store, and it reads ``descriptions.singular`` unguarded. A single
+        attribute whose ``descriptions`` is ``[]`` throws a ``TypeError`` there, the
+        promise rejects, and **no** module gets metadata — every route in the product then
+        fails with ``"<type> metadata not found"`` until the record is repaired and
+        republished. One bad field written by pyfsr bricks the whole appliance UI.
+
+        So: coerce a missing/empty ``descriptions`` to the platform default, and refuse
+        outright anything structurally wrong.
+        """
+        name = attr.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"field needs a non-empty string 'name', got {name!r}")
+        if not isinstance(attr.get("type"), str) or not attr["type"].strip():
+            raise ValueError(f"field {name!r} needs a non-empty string 'type' (its storage type)")
+
+        desc = attr.get("descriptions")
+        if desc is None or desc == [] or desc == {}:
+            # Missing rather than malformed — apply the same default the typed builders use.
+            attr["descriptions"] = {"singular": name}
+            return
+        if not isinstance(desc, dict):
+            raise ValueError(
+                f"field {name!r} has descriptions={desc!r}; it must be a dict like "
+                '{"singular": "My Field"}. A non-object descriptions value breaks module '
+                "metadata for EVERY module in the UI, not just this one."
+            )
+        if not isinstance(desc.get("singular"), str) or not desc["singular"].strip():
+            attr["descriptions"] = {**desc, "singular": name}
+
+    @staticmethod
+    def _guard_module_descriptions(payload: dict[str, Any]) -> None:
+        """Validate a staging **module** payload's ``descriptions`` in place.
+
+        Same failure mode as :meth:`_guard_field_shape`: the UI's normalizer reads
+        ``descriptions.singular`` and ``descriptions.plural`` on the module record without
+        guarding, so a non-object value there also voids metadata appliance-wide.
+        """
+        module = payload.get("type") or payload.get("module") or "<unknown>"
+        desc = payload.get("descriptions")
+        if desc is None or desc == [] or desc == {}:
+            payload["descriptions"] = {"singular": module, "plural": f"{module}s"}
+            return
+        if not isinstance(desc, dict):
+            raise ValueError(
+                f"module {module!r} has descriptions={desc!r}; it must be a dict like "
+                '{"singular": "Alert", "plural": "Alerts"}. A non-object descriptions '
+                "value breaks module metadata for EVERY module in the UI."
+            )
+        fixed = dict(desc)
+        if not isinstance(fixed.get("singular"), str) or not fixed["singular"].strip():
+            fixed["singular"] = str(module)
+        if not isinstance(fixed.get("plural"), str) or not fixed["plural"].strip():
+            fixed["plural"] = f"{fixed['singular']}s"
+        payload["descriptions"] = fixed
 
     @staticmethod
     def _apply_team_scope(attr: dict[str, Any], teams: list[str]) -> None:
@@ -1279,6 +1352,8 @@ class ModulesAdminAPI(BaseAPI):
             "attributes": field_dicts,
         }
         payload.update(opts)
+        # opts can override descriptions; the UI reads module descriptions unguarded too.
+        self._guard_module_descriptions(payload)
         created = self.client.post(_STAGING, data=payload, params=_REL)
         if create_view_templates:
             self.create_view_templates(module)

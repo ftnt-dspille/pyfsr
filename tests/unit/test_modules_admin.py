@@ -1857,3 +1857,79 @@ def test_get_or_create_module_from_metadata_scrubs_attribute_ids(monkeypatch):
     attr = payload["attributes"][0]
     assert attr["name"] == "title" and attr["formType"] == "text"
     assert "uuid" not in attr and "@id" not in attr
+
+
+# --------------------------------------------------------------------------- #
+# Field-shape guard: pyfsr must never stage metadata that bricks the SOAR UI.
+#
+# The Angular UI normalizes every attribute of every module before it populates
+# its metadata store, reading descriptions.singular unguarded. One attribute with
+# descriptions == [] throws there, so NO module gets metadata and every route
+# fails with "<type> metadata not found". A raw field dict used to reach staging
+# unvalidated, so pyfsr could write exactly that.
+# --------------------------------------------------------------------------- #
+
+
+def test_raw_field_dict_gets_default_descriptions():
+    """A hand-built dict with no descriptions is repaired, not passed through."""
+    f = {"name": "instruction", "type": "string"}
+    ModulesAdminAPI._to_field_dict(f)
+    assert f["descriptions"] == {"singular": "instruction"}
+
+
+def test_raw_field_dict_empty_list_descriptions_is_repaired():
+    """descriptions == [] is the exact shape that voided metadata appliance-wide."""
+    f = {"name": "enabled", "type": "boolean", "descriptions": []}
+    ModulesAdminAPI._to_field_dict(f)
+    assert f["descriptions"] == {"singular": "enabled"}
+
+
+def test_raw_field_dict_non_object_descriptions_is_refused():
+    import pytest
+
+    with pytest.raises(ValueError, match="descriptions"):
+        ModulesAdminAPI._to_field_dict({"name": "x", "type": "string", "descriptions": "Label"})
+
+
+def test_raw_field_dict_requires_name_and_type():
+    import pytest
+
+    with pytest.raises(ValueError, match="name"):
+        ModulesAdminAPI._to_field_dict({"name": "", "type": "string"})
+    with pytest.raises(ValueError, match="type"):
+        ModulesAdminAPI._to_field_dict({"name": "y"})
+
+
+def test_typed_field_builder_output_is_unchanged():
+    """The guard must not alter what the typed builders already emit."""
+    typed = ModulesAdminAPI.text_field("name", required=True)
+    assert ModulesAdminAPI._to_field_dict(typed)["descriptions"] == {"singular": "name"}
+
+
+def test_create_module_stages_repaired_descriptions(monkeypatch):
+    """End-to-end: raw dicts through create_module reach staging well-formed."""
+    c = RecordingClient()
+    admin = ModulesAdminAPI(c)
+    monkeypatch.setattr(admin, "create_view_templates", lambda m: None)
+
+    admin.create_module(
+        "skills",
+        fields=[{"name": "instruction", "type": "string"}, {"name": "enabled", "type": "boolean"}],
+        create_view_templates=False,
+    )
+    payload = [d for (verb, e, d) in c.calls if verb == "POST"][-1]
+    for attr in payload["attributes"]:
+        assert isinstance(attr["descriptions"], dict)
+        assert isinstance(attr["descriptions"]["singular"], str)
+    assert isinstance(payload["descriptions"], dict)
+
+
+def test_module_descriptions_guard():
+    p = {"type": "skills", "descriptions": []}
+    ModulesAdminAPI._guard_module_descriptions(p)
+    assert p["descriptions"]["singular"] == "skills"
+
+    import pytest
+
+    with pytest.raises(ValueError, match="descriptions"):
+        ModulesAdminAPI._guard_module_descriptions({"type": "skills", "descriptions": "Skill"})
