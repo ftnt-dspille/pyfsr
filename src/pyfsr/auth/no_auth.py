@@ -8,7 +8,7 @@ working credentials to authenticate with, so those endpoints are the only way
 in. :class:`NoAuth` lets a client be constructed for exactly that case: it sends
 no ``Authorization`` header and does no construction-time validation.
 
-Build one via :meth:`pyfsr.client.FortiSOAR.public`. Authenticated operations
+Build one by passing ``public=True`` to :class:`pyfsr.client.FortiSOAR`. Authenticated operations
 are marked unsupported so a misdirected call fails with a clear message rather
 than a confusing 401.
 """
