@@ -975,6 +975,7 @@ class PlaybooksAPI(BaseAPI):
         *,
         collection: str | None = None,
         is_active: bool = False,
+        record_tags: list[str] | None = None,
         transform: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
     ) -> dict[str, Any]:
         """Clone an existing playbook definition under a new name.
@@ -1000,6 +1001,12 @@ class PlaybooksAPI(BaseAPI):
                 (uuid or IRI). Defaults to the source's collection.
             is_active: whether the clone is active. Defaults to ``False`` so a
                 copy never starts firing on triggers before it's been reviewed.
+            record_tags: tags to set on the clone. ``clone()`` otherwise strips
+                ``recordTags`` (a copy shouldn't inherit the source's
+                user-facing labels), but some tags are *functional* — data
+                ingestion discovers its ``fetch``/``ingest``/``create`` playbooks
+                purely by tag, so the ingestion wizard passes them through here.
+                ``None`` (default) keeps the strip; a list (incl. ``[]``) sets it.
             transform: optional callback to mutate the prepared POST body
                 **before** it is sent — receives the body dict (already remapped,
                 stripped, and renamed) and may edit it in place or return a
@@ -1016,6 +1023,8 @@ class PlaybooksAPI(BaseAPI):
         src = self.get_definition(uuid, relationships=True).to_dict(by_alias=True)
 
         body = _prepare_clone_body(src, new_name=new_name.strip(), is_active=is_active)
+        if record_tags is not None:
+            body["recordTags"] = record_tags
         if collection is not None:
             if not isinstance(collection, str) or not collection.strip():
                 raise ValueError("clone() collection must be a uuid or IRI")

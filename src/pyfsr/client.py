@@ -136,6 +136,7 @@ class FortiSOAR:
         retry_status_forcelist: tuple[int, ...] = (429, 500, 502, 503, 504),
         dry_run: bool = False,
         http_trace: bool = False,
+        public: bool = False,
     ):
         """
         Initialize the FortiSOAR client.
@@ -151,6 +152,14 @@ class FortiSOAR:
                it is treated as an API key (a lone secret is almost always a key).
            token (str, optional): API key for token auth. ``api_key`` is an alias.
            api_key (str, optional): Alias for ``token``.
+           public (bool, optional): Build a no-auth client for FortiSOAR's
+               *unauthenticated* endpoints only (``version``, and the public
+               license API — ``deploy_license_public`` / ``install_flex_license``
+               / ``deploy_flex_license``). Takes no credentials and makes no auth
+               call on construction, so it works on a fresh or license-locked
+               appliance (``FSR-Auth-018`` duplicate-license lockout) where no
+               credential authenticates. Authenticated calls are unsupported on
+               such a client. Defaults to False.
            verify_ssl (bool, optional): Whether to verify SSL certificates. Defaults to True.
            suppress_insecure_warnings (bool, optional): Whether to suppress insecure request
                warnings. Defaults to False.
@@ -274,13 +283,22 @@ class FortiSOAR:
         if suppress_insecure_warnings:
             requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
 
-        # Setup authentication
-        self.auth = self._resolve_auth(
-            auth=auth,
-            username=username,
-            password=password,
-            token=token or api_key,
-        )
+        # Setup authentication. `public=True` builds a no-auth client for the
+        # unauthenticated endpoints (version, /api/public/license) — the only way
+        # in on a fresh or license-locked appliance, where no credential works.
+        if public:
+            if auth is not None or username or password or token or api_key:
+                raise ValueError("public=True takes no credentials (it is for unauthenticated endpoints).")
+            from .auth.no_auth import NoAuth
+
+            self.auth = NoAuth(self.base_url, verify_ssl)
+        else:
+            self.auth = self._resolve_auth(
+                auth=auth,
+                username=username,
+                password=password,
+                token=token or api_key,
+            )
 
         # Apply authentication headers
         self.session.headers.update(self.auth.get_auth_headers())

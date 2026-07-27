@@ -111,6 +111,16 @@ class HydraPage(Generic[T]):
     def __len__(self) -> int:
         return len(self.members)
 
+    def __getitem__(self, index: int | slice) -> T | list[T]:
+        return self.members[index]
+
+    def __bool__(self) -> bool:
+        return bool(self.members)
+
+    def __repr__(self) -> str:
+        total = "?" if self.total is None else self.total
+        return f"<HydraPage page={self.page} members={len(self.members)} total={total}>"
+
 
 def paginate(
     fetch_page: Callable[[int], Any],

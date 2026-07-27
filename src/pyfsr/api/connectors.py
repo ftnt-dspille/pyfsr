@@ -54,7 +54,7 @@ import warnings
 from pathlib import Path
 from typing import Any
 
-from ..exceptions import APIError, ConfigurationExistsError, ConfigValidationError
+from ..exceptions import APIError, ConfigurationExistsError, ConfigValidationError, ResourceNotFoundError
 from ..models._integration import (
     ConfigValidationResult,
     ConnectorConfig,
@@ -67,12 +67,15 @@ from ..models._integration import (
     IngestionMetadata,
     IngestionPlaybooks,
     IngestionSetupResult,
+    IngestionStatus,
+    IngestionTeardownResult,
     InstalledConnector,
     InstallJobStatus,
     IntegrationListEnvelope,
     Operation,
     OperationParam,
 )
+from ..models._schedules import ScheduledTask
 from ..models._system import Workflow
 from ..pagination import extract_members
 from ._solutionpacks import upload_solutionpack
@@ -2306,6 +2309,231 @@ class ConnectorsAPI(BaseAPI):
         )
         return result
 
+    def ensure_ingestion(
+        self, connector: str, *, config: str | None = None, **wizard_kwargs: Any
+    ) -> IngestionSetupResult:
+        """Set up data ingestion only if it isn't already — "make it or get it".
+
+        The idempotent front door to :meth:`data_ingest_wizard`, mirroring the
+        ``get_or_create`` pattern elsewhere in pyfsr: it calls
+        :meth:`ingestion_status` first and, when ingestion is already
+        ``configured`` (per-config collection + an ``ingest``-tagged playbook),
+        returns an :class:`~pyfsr.models.IngestionSetupResult` describing the
+        existing setup **without writing anything** (``existed=True``).
+        Otherwise it delegates to the wizard (``existed=False``), forwarding any
+        ``**wizard_kwargs`` (``cron``, ``schedule_name``, ``agent``,
+        ``require_health``, ``dry_run``, ...).
+
+        Safe to call repeatedly — the common "set ingestion up if it's not
+        there" line becomes one call instead of a status-check-then-branch. It
+        does **not** reconcile drift: an already-configured setup is returned
+        as-is even if it has no schedule and you passed ``cron`` — call
+        :meth:`data_ingest_wizard` directly to add or change a schedule on an
+        existing setup.
+
+        Args:
+            connector: connector name.
+            config: config name or ``config_id``; defaults to the default
+                configuration.
+            **wizard_kwargs: forwarded verbatim to :meth:`data_ingest_wizard`
+                when a setup is actually built.
+
+        Returns:
+            :class:`~pyfsr.models.IngestionSetupResult`; ``existed`` distinguishes
+            the "get" path (already configured) from the "make" path.
+
+        Example (needs a live appliance)::
+
+            first = client.connectors.ensure_ingestion(
+                "fortinet-fortisiem", config="prod", cron="*/15 * * * *")
+            first.existed        # False — the wizard built it
+            again = client.connectors.ensure_ingestion("fortinet-fortisiem", config="prod")
+            again.existed        # True — returned as-is, no writes
+        """
+        status = self.ingestion_status(connector, config=config)
+        if not status.configured:
+            result = self.data_ingest_wizard(connector, config=config, **wizard_kwargs)
+            result.existed = False
+            return result
+
+        # Already configured — describe it without writing. Dedup the role
+        # buckets by uuid (one playbook can fill several roles, e.g. ingest+create).
+        seen: set[str] = set()
+        playbooks: list[Workflow] = []
+        for pb in (status.playbooks.fetch, status.playbooks.ingest, status.playbooks.create, status.playbooks.update):
+            if pb is None:
+                continue
+            key = str(pb.uuid)
+            if key not in seen:
+                seen.add(key)
+                playbooks.append(pb)
+        ingest = status.playbooks.ingest
+        return IngestionSetupResult(
+            connector=connector,
+            config_id=status.config_id,
+            config_name=(status.metadata.name if status.metadata else None),
+            collection_uuid=status.config_id,
+            playbooks=playbooks,
+            ingest_playbook_iri=(ingest.id_iri or f"/api/3/workflows/{ingest.uuid}") if ingest else None,
+            schedule_id=status.schedule_id,
+            schedule_name=status.schedule_name,
+            scheduled=bool(status.schedule_enabled),
+            existed=True,
+        )
+
+    def remove_ingestion(
+        self,
+        connector: str,
+        *,
+        config: str | None = None,
+        delete_collection: bool = True,
+        dry_run: bool = False,
+    ) -> IngestionTeardownResult:
+        """Tear down a configuration's data ingestion — the inverse of the wizard.
+
+        Reverses :meth:`data_ingest_wizard`'s writes in dependency order:
+
+        1. delete the periodic task (by the name recorded in the metadata), so
+           nothing fires mid-teardown;
+        2. delete the ``data-import`` metadata record(s) that linked the config
+           to that schedule;
+        3. (when ``delete_collection``) hard-delete the per-configuration
+           collection, which **cascades** the cloned ingestion playbooks.
+
+        Idempotent and partial-safe: a missing schedule / metadata / collection
+        is simply skipped (the corresponding ``*_deleted`` stays ``False``), so
+        re-running after a half-done teardown finishes the job rather than
+        erroring. Built entirely on verified primitives — ``schedules.delete``
+        and ``workflow_collections.delete`` (hard).
+
+        Args:
+            connector: connector name.
+            config: config name or ``config_id``; defaults to the default
+                configuration.
+            delete_collection: also hard-delete the per-config collection and
+                its cloned playbooks (default). ``False`` removes only the
+                schedule + metadata, leaving the playbooks in place — useful to
+                keep hand-edited clones while detaching the schedule.
+            dry_run: report what *would* be removed without deleting anything.
+
+        Returns:
+            :class:`~pyfsr.models.IngestionTeardownResult` recording what was
+            (or, under ``dry_run``, would be) removed.
+
+        Raises:
+            ValueError: the configuration can't be resolved.
+
+        Example (needs a live appliance)::
+
+            client.connectors.remove_ingestion("fortinet-fortisiem", config="prod")
+        """
+        config_id = self.resolve_config(connector, config)
+        if not config_id:
+            raise ValueError(f"cannot resolve a configuration for {connector!r}")
+
+        status = self.ingestion_status(connector, config=config)
+        result = IngestionTeardownResult(connector=connector, config_id=config_id, dry_run=dry_run)
+
+        if status.schedule_name:
+            result.schedule_name = status.schedule_name
+            if not dry_run:
+                try:
+                    self.client.schedules.delete(status.schedule_name)
+                    result.schedule_deleted = True
+                except ValueError:
+                    pass  # already gone — leave schedule_deleted False
+
+        for meta in self.ingestion_metadata(config_id):
+            if meta.id is None:
+                continue
+            result.metadata_ids.append(meta.id)
+            if not dry_run:
+                # Trailing slash is required: without it the appliance's APPEND_SLASH
+                # redirect re-issues the DELETE and the retry fails HMAC validation (403).
+                self.client.delete(f"/api/integration/data-import/{meta.id}/")
+                result.metadata_deleted += 1
+
+        if delete_collection and status.collection_exists:
+            result.collection_uuid = config_id
+            if not dry_run:
+                try:
+                    self.client.workflow_collections.delete(config_id, hard=True)
+                    result.collection_deleted = True
+                except ResourceNotFoundError:
+                    # Deleting the data-import record cascades the per-config
+                    # collection (and its cloned playbooks) on the appliance, so
+                    # by this point it may already be gone. Idempotent: fine.
+                    pass
+
+        return result
+
+    def ingestion_status(
+        self, connector: str, *, config: str | None = None, live_schedule: bool = False
+    ) -> IngestionStatus:
+        """Report a configuration's current data-ingestion state — read-only.
+
+        The inverse-lens of :meth:`data_ingest_wizard`: it inspects the four
+        pieces the wizard builds and reports whether each is present, **without
+        writing anything**. Use it to answer "is ingestion set up for this
+        config, and is its schedule running?" before setting up, tearing down,
+        or triggering.
+
+        The per-configuration ingestion collection has the ``config_id`` as its
+        uuid (the wizard's own convention), so this looks there — not in the
+        connector's shared ``Sample - …`` collection — for the cloned
+        ``ingest``-tagged playbook. The schedule id / name / enabled state come
+        from the ``data-import`` metadata record the wizard writes; pass
+        ``live_schedule=True`` to re-read the periodic task itself so a schedule
+        toggled off since setup reports ``schedule_enabled=False`` rather than
+        the recorded write-time value.
+
+        Args:
+            connector: connector name.
+            config: config name or ``config_id``; defaults to the default
+                configuration.
+            live_schedule: re-read the periodic task named in the metadata
+                record for its current ``enabled`` state, instead of trusting
+                the ``scheduleStatus`` the metadata recorded at setup time. One
+                extra request; off by default.
+
+        Returns:
+            :class:`~pyfsr.models.IngestionStatus`. When nothing is set up,
+            ``.configured`` is ``False`` and the playbook buckets are empty —
+            not an error.
+
+        Raises:
+            ValueError: the configuration can't be resolved.
+
+        Example:
+            >>> client = demo_client()
+            >>> status = client.connectors.ingestion_status("mitre-attack")
+            >>> status.configured          # no per-config collection in the demo box
+            False
+        """
+        config_id = self.resolve_config(connector, config)
+        if not config_id:
+            raise ValueError(f"cannot resolve a configuration for {connector!r}")
+
+        status = IngestionStatus(connector=connector, config_id=config_id)
+        if self._collection_exists(config_id):
+            status.collection_exists = True
+            status.playbooks = self._bucket_by_tag(self._ingestion_query(config_id, connector))
+
+        metas = self.ingestion_metadata(config_id)
+        if metas:
+            meta = metas[0]
+            md = meta.metadata or {}
+            status.metadata = meta
+            status.schedule_id = meta.schedule_id
+            status.schedule_name = md.get("scheduleName") or None
+            recorded = md.get("scheduleStatus")
+            status.schedule_enabled = bool(recorded) if recorded is not None else None
+            if live_schedule and status.schedule_name:
+                task = self.client.schedules.get(status.schedule_name)
+                if isinstance(task, ScheduledTask):
+                    status.schedule_enabled = bool(task.enabled)
+        return status
+
     def trigger_ingestion(
         self,
         connector: str,
@@ -2433,6 +2661,10 @@ class ConnectorsAPI(BaseAPI):
                 str(source.name or source_uuid),
                 collection=collection_uuid,
                 is_active=False,
+                # Ingestion discovery is tag-based; carry the sample's functional
+                # tags (fetch/ingest/create/dataingestion/<connector>) onto the
+                # clone, which clone() would otherwise strip.
+                record_tags=[str(t) for t in (source.recordTags or []) if t],
                 transform=lambda body: _rewrite_ingestion_playbook(body, connector, config_id, suffix, agent),
             )
             uuid_map[source_uuid] = str(created.get("uuid"))
