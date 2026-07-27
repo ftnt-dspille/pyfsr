@@ -4,6 +4,97 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.18.2] - 2026-07-26
+
+### Added
+- **`connectors.remove_ingestion()`** — the inverse of `data_ingest_wizard`:
+  tears down a configuration's ingestion (periodic task → `data-import` metadata
+  record → per-config collection, which cascades the cloned playbooks) in
+  dependency order. Idempotent and partial-safe (missing pieces are skipped),
+  `dry_run` reports what would go, `delete_collection=False` keeps the playbooks.
+  Returns the new `IngestionTeardownResult`. Full teardown→rebuild cycle
+  live-verified on FortiSOAR 8.0.0.
+- **`connectors.ensure_ingestion()`** — idempotent "make it or get it" front
+  door to `data_ingest_wizard`, mirroring the `get_or_create` pattern: returns
+  the existing setup without writing when ingestion is already configured
+  (`existed=True`), else runs the wizard (`existed=False`), forwarding
+  `cron`/`agent`/etc. Safe to call repeatedly; does not reconcile drift (call
+  the wizard directly to change a schedule on an existing setup). Adds an
+  `existed` flag to `IngestionSetupResult`. The get-path is live-verified on
+  FortiSOAR 8.0.0 (returns the existing setup with zero writes).
+- **`connectors.ingestion_status()`** — the read-only counterpart to
+  `data_ingest_wizard`: reports whether a configuration's data ingestion is set
+  up (per-config collection + `ingest` playbook), the `data-import` metadata
+  record, and the schedule (id / name / enabled). `.configured` is a one-line
+  "is ingestion set up?" check. `live_schedule=True` re-reads the periodic task
+  for its current enabled state instead of the value the metadata recorded at
+  setup. Returns the new `IngestionStatus` model. Live-verified on FortiSOAR
+  8.0.0, where `live_schedule=True` caught a real case of the metadata's
+  recorded `scheduleStatus` being stale (enabled) versus a schedule that had
+  since been disabled.
+- **`HydraPage` full sequence protocol** — added `__getitem__` (index +
+  slice), `__bool__`, and `__repr__` to complete the sequence behaviour begun
+  with `__iter__`/`__len__`, so a query page indexes, slices, truthiness-tests,
+  and reprs like the list it wraps.
+- **`playbooks.clone(record_tags=...)`** — clone otherwise strips `recordTags`;
+  this opt-in sets them on the clone (see the fix below).
+
+### Fixed
+- **`data_ingest_wizard` dropped the ingestion playbooks' functional tags** —
+  `clone()` strips `recordTags`, so the cloned `fetch`/`ingest`/`create`
+  playbooks landed untagged and tag-based discovery (`ingestion_status`,
+  `trigger_ingestion`, the UI's *Data Ingestion* screen) couldn't find them: a
+  wizard-built pipeline read back as "not configured". The wizard now carries
+  each sample playbook's `recordTags` onto its clone via the new
+  `clone(record_tags=...)`. Found and fixed by a live teardown→rebuild cycle on
+  FortiSOAR 8.0.0.
+
+## [0.18.1] - 2026-07-26
+
+### Added
+- **Connector ingestion API + `data_ingest_wizard`** — the ingestion surface
+  for driving a connector's data-ingestion playbooks (scheduled pulls),
+  doctested against replay fixtures.
+- **`ai.verify_llm_config`** — replaces the removed dead `list_models` /
+  `test_llm_config` methods.
+
+### Fixed
+- **Ingestion clones now target the cloned playbooks**, not the originating
+  SAMPLE playbooks.
+- **`connectors.ingest()` returns typed pydantic `Workflow` models** instead of
+  bare dicts.
+- **21 library YAMLs migrated to the friendly form** (+ 3 data fixes).
+- **CI:** exclude Markdown from `ruff format` (ruff 0.16 added experimental
+  Markdown formatting); fix two Sphinx warnings that failed the docs build.
+
+## [0.18.0] - 2026-07-26
+
+### Added
+- **`playbooks.run_and_wait()`** — trigger a playbook, poll to terminal status,
+  and return a typed result with per-step introspection (`slow_steps`,
+  `step_timeline`); step models now carry `start_time` / `end_time` /
+  `duration_ms` timing.
+- **`WorkflowCollectionsAPI`** — collection-level operations including
+  Import-Wizard module round-trip (bundle import).
+- **`audit.execution_context()`** — cross-references a playbook run against
+  concurrent record changes for race-condition debugging; the audit API was
+  redesigned around per-record lifecycle tracking.
+- **`RecordSet.wait_for()`** — poll a query until records match a predicate.
+- **D4 static Jinja validation** of playbook Jinja before deploy, plus
+  `picklists.jinja_picklist_expr()` and a `jinja` CLI subcommand for
+  filter/global/test reference lookup.
+- **`publish(reset_stale_log=...)`** — opt-in clearing of a poisoned
+  publish-error log.
+- **Compact, list-aware MCP tool output** so agent tool results stop
+  truncating.
+- **`AGENTS.md`** agent reference for pyfsr development.
+
+### Fixed
+- **`list_modules()` documents the `modules_admin.get_published` gap** —
+  solution-pack modules may not appear in the module list view.
+- **Restored required connector params** dropped by the friendly-forms sweep;
+  migrated 30 example playbooks to friendly forms.
+
 ## [0.17.0] - 2026-07-23
 
 ### Changed

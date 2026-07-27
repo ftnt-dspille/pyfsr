@@ -812,3 +812,65 @@ class IngestionSetupResult(ApiResult):
     health_status: str | None = None
     cloned: bool = False
     dry_run: bool = False
+    #: ``True`` when :meth:`~pyfsr.api.connectors.ConnectorsAPI.ensure_ingestion`
+    #: found ingestion already configured and returned it without writing
+    #: ("get"); ``False`` when the wizard actually built it ("make").
+    existed: bool = False
+
+
+class IngestionTeardownResult(ApiResult):
+    """What :meth:`~pyfsr.api.connectors.ConnectorsAPI.remove_ingestion` removed.
+
+    The inverse of :class:`IngestionSetupResult`: it records which of the
+    wizard's four artifacts were torn down — the periodic task, the
+    ``data-import`` metadata record(s), and the per-configuration collection
+    (which cascades the cloned playbooks). With ``dry_run=True`` the ``*_deleted``
+    flags/counts stay ``False``/``0`` and the fields report what *would* be
+    removed.
+    """
+
+    connector: str | None = None
+    config_id: str | None = None
+    schedule_name: str | None = None
+    schedule_deleted: bool = False
+    metadata_ids: list[int] = Field(default_factory=list)
+    metadata_deleted: int = 0
+    collection_uuid: str | None = None
+    collection_deleted: bool = False
+    dry_run: bool = False
+
+
+class IngestionStatus(ApiResult):
+    """The current data-ingestion state of one connector configuration.
+
+    The read-only counterpart to
+    :meth:`~pyfsr.api.connectors.ConnectorsAPI.data_ingest_wizard`: it inspects
+    what the wizard would have built — the per-configuration collection, the
+    cloned ingestion playbooks, the periodic task, and the ``data-import``
+    metadata record — and reports whether each piece is present, without
+    writing anything.
+    """
+
+    connector: str | None = None
+    config_id: str | None = None
+    #: ``True`` when the per-configuration ingestion collection exists.
+    collection_exists: bool = False
+    #: The ingestion playbooks found in that collection, bucketed by role.
+    playbooks: IngestionPlaybooks = Field(default_factory=lambda: IngestionPlaybooks())
+    #: ``data-import`` metadata record for this config, if one was written.
+    metadata: IngestionMetadata | None = None
+    schedule_id: str | None = None
+    schedule_name: str | None = None
+    #: ``True`` when a schedule exists and is enabled; ``None`` when unknown
+    #: (no schedule referenced by the metadata record).
+    schedule_enabled: bool | None = None
+
+    @property
+    def configured(self) -> bool:
+        """Whether ingestion has been set up at all for this configuration.
+
+        ``True`` once the collection exists **and** holds an ``ingest``-tagged
+        playbook — the minimum the *Trigger Ingestion Now* button needs. A
+        configured setup may still be unscheduled (``schedule_id is None``).
+        """
+        return self.collection_exists and self.playbooks.ingest is not None

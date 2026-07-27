@@ -135,16 +135,27 @@ def test_bucket_by_tag_matches_hashtag_string_form():
 class FakeClient:
     """Records writes; serves just enough reads for the wizard to run."""
 
-    def __init__(self, *, health="Available", existing_ingestion=None, collection_exists=False, source_playbooks=None):
+    def __init__(
+        self,
+        *,
+        health="Available",
+        existing_ingestion=None,
+        collection_exists=False,
+        source_playbooks=None,
+        data_import=None,
+    ):
         self.posts = []
         self.puts = []
         self.gets = []
+        self.deletes = []
         self._health = health
         self._existing = existing_ingestion or []
         self._collection_exists = collection_exists
         self._source = source_playbooks or [_FETCH_PB, _INGEST_PB]
+        self._data_import = data_import or []
         self.playbooks = FakePlaybooks(self)
         self.schedules = FakeSchedules(self)
+        self.workflow_collections = FakeWorkflowCollections(self)
 
     def get(self, endpoint, params=None, **kw):
         self.gets.append((endpoint, params))
@@ -153,7 +164,7 @@ class FakeClient:
         if endpoint.startswith("/api/integration/connectors/"):
             return _CONFIGURED
         if endpoint == "/api/integration/data-import/":
-            return {"data": []}
+            return {"data": self._data_import}
         if endpoint.startswith("/api/3/workflow_collections/"):
             if self._collection_exists:
                 return {"uuid": CONFIG_ID, "name": "existing"}
@@ -185,6 +196,7 @@ class FakeClient:
         return {}
 
     def delete(self, endpoint, params=None, **kw):
+        self.deletes.append((endpoint, params))
         return None
 
 
@@ -224,8 +236,10 @@ class FakePlaybooks:
         self.clones = []
         self.definitions = {}
 
-    def clone(self, uuid, new_name, *, collection=None, is_active=False, transform=None):
+    def clone(self, uuid, new_name, *, collection=None, is_active=False, record_tags=None, transform=None):
         body = {"uuid": uuid, "name": new_name, "steps": _SOURCE_STEPS(uuid), "collection": collection}
+        if record_tags is not None:
+            body["recordTags"] = record_tags
         if transform:
             body = transform(body) or body
         new_uuid = f"clone-of-{uuid}"
@@ -248,10 +262,30 @@ class FakeSchedules:
     def __init__(self, client):
         self.client = client
         self.created = []
+        self.tasks = {}
 
     def create(self, name, workflow_iri, cron, **kw):
         self.created.append({"name": name, "wf_iri": workflow_iri, "cron": cron, **kw})
         return {"id": "sched-1", "name": name}
+
+    def get(self, name, *, typed=True):
+        from pyfsr.models._schedules import ScheduledTask
+
+        task = self.tasks.get(name)
+        return ScheduledTask.model_validate(task) if task is not None else None
+
+    def delete(self, name):
+        self.deleted = getattr(self, "deleted", [])
+        self.deleted.append(name)
+
+
+class FakeWorkflowCollections:
+    def __init__(self, client):
+        self.client = client
+        self.deleted = []
+
+    def delete(self, uuid, *, hard=True):
+        self.deleted.append((uuid, hard))
 
 
 def _api(**kw):
@@ -453,3 +487,161 @@ def test_trigger_ingestion_errors_when_ingestion_was_never_set_up():
     api, _ = _api(existing_ingestion=[], collection_exists=True)
     with pytest.raises(ValueError, match="run data_ingest_wizard"):
         api.trigger_ingestion("fortinet-fortisiem", config="prod")
+
+
+# --------------------------------------------------------- ingestion_status
+def _data_import_record(*, schedule_status=True):
+    return {
+        "id": 42,
+        "name": f"Ingestion_fortinet-fortisiem_prod_{CONFIG_ID}",
+        "configuration": CONFIG_ID,
+        "connector": {"name": "fortinet-fortisiem", "version": "6.1.1"},
+        "metadata": {
+            "scheduleId": "sched-1",
+            "scheduleName": f"Ingestion_fortinet-fortisiem_prod_{CONFIG_ID}",
+            "scheduleStatus": schedule_status,
+        },
+    }
+
+
+def test_ingestion_status_reports_unconfigured_when_nothing_is_set_up():
+    api, _ = _api(collection_exists=False, data_import=[])
+    status = api.ingestion_status("fortinet-fortisiem", config="prod")
+    assert status.config_id == CONFIG_ID
+    assert status.collection_exists is False
+    assert status.configured is False
+    assert status.playbooks.ingest is None
+    assert status.schedule_id is None
+    assert status.schedule_enabled is None
+
+
+def test_ingestion_status_reports_configured_with_schedule_from_metadata():
+    api, _ = _api(
+        collection_exists=True,
+        existing_ingestion=[_FETCH_PB, _INGEST_PB],
+        data_import=[_data_import_record(schedule_status=True)],
+    )
+    status = api.ingestion_status("fortinet-fortisiem", config="prod")
+    assert status.collection_exists is True
+    assert status.configured is True
+    assert status.playbooks.ingest is not None
+    assert status.schedule_id == "sched-1"
+    assert status.schedule_enabled is True  # from the metadata's scheduleStatus
+
+
+def test_ingestion_status_live_schedule_reads_back_the_periodic_task():
+    """metadata records scheduleStatus=True, but the schedule was disabled since;
+    live_schedule=True re-reads the periodic task and reports the real state."""
+    api, client = _api(
+        collection_exists=True,
+        existing_ingestion=[_FETCH_PB, _INGEST_PB],
+        data_import=[_data_import_record(schedule_status=True)],
+    )
+    sched_name = f"Ingestion_fortinet-fortisiem_prod_{CONFIG_ID}"
+    client.schedules.tasks[sched_name] = {"name": sched_name, "enabled": False}
+
+    stale = api.ingestion_status("fortinet-fortisiem", config="prod")
+    assert stale.schedule_enabled is True  # trusts the recorded value
+
+    live = api.ingestion_status("fortinet-fortisiem", config="prod", live_schedule=True)
+    assert live.schedule_enabled is False  # re-read from the task
+
+
+# --------------------------------------------------------- ensure_ingestion
+def test_ensure_ingestion_gets_existing_without_writing():
+    """Already configured -> return it as-is, no clones and no schedule created."""
+    api, client = _api(
+        collection_exists=True,
+        existing_ingestion=[_FETCH_PB, _INGEST_PB],
+        data_import=[_data_import_record(schedule_status=True)],
+    )
+    result = api.ensure_ingestion("fortinet-fortisiem", config="prod")
+    assert result.existed is True
+    assert result.config_id == CONFIG_ID
+    assert result.ingest_playbook_iri == _INGEST_PB["@id"]
+    assert result.scheduled is True
+    # ingest+create share one uuid -> deduped to a single playbook
+    assert [str(p.uuid) for p in result.playbooks] == [_FETCH_PB["uuid"], _INGEST_PB["uuid"]]
+    # nothing was built
+    assert client.playbooks.clones == []
+    assert client.schedules.created == []
+
+
+def test_ensure_ingestion_makes_it_when_absent():
+    """Not configured -> delegate to the wizard and mark existed=False."""
+    api, client = _api(collection_exists=False, data_import=[])
+    result = api.ensure_ingestion("fortinet-fortisiem", config="prod", cron="*/15 * * * *")
+    assert result.existed is False
+    assert result.cloned is True
+    assert client.playbooks.clones  # the wizard cloned the sample playbooks
+    assert client.schedules.created  # and created the periodic task
+
+
+# --------------------------------------------------------- remove_ingestion
+def _configured_client():
+    return _api(
+        collection_exists=True,
+        existing_ingestion=[_FETCH_PB, _INGEST_PB],
+        data_import=[_data_import_record(schedule_status=True)],
+    )
+
+
+def test_remove_ingestion_deletes_schedule_metadata_and_collection():
+    api, client = _configured_client()
+    result = api.remove_ingestion("fortinet-fortisiem", config="prod")
+    assert result.schedule_deleted is True
+    assert result.metadata_deleted == 1 and result.metadata_ids == [42]
+    assert result.collection_deleted is True and result.collection_uuid == CONFIG_ID
+    # schedule removed by name
+    assert client.schedules.deleted == [_data_import_record()["metadata"]["scheduleName"]]
+    # data-import DELETE MUST carry a trailing slash (APPEND_SLASH/HMAC trap)
+    assert ("/api/integration/data-import/42/", None) in client.deletes
+    # collection hard-deleted (cascades cloned playbooks)
+    assert client.workflow_collections.deleted == [(CONFIG_ID, True)]
+
+
+def test_remove_ingestion_dry_run_deletes_nothing():
+    api, client = _configured_client()
+    result = api.remove_ingestion("fortinet-fortisiem", config="prod", dry_run=True)
+    assert result.dry_run is True
+    assert result.schedule_deleted is False and result.metadata_deleted == 0 and result.collection_deleted is False
+    # but it still reports what WOULD go
+    assert result.schedule_name and result.metadata_ids == [42] and result.collection_uuid == CONFIG_ID
+    assert client.schedules.deleted == [] if hasattr(client.schedules, "deleted") else True
+    assert client.deletes == []
+    assert client.workflow_collections.deleted == []
+
+
+def test_remove_ingestion_keeps_collection_when_asked():
+    api, client = _configured_client()
+    result = api.remove_ingestion("fortinet-fortisiem", config="prod", delete_collection=False)
+    assert result.schedule_deleted is True and result.metadata_deleted == 1
+    assert result.collection_deleted is False and result.collection_uuid is None
+    assert client.workflow_collections.deleted == []  # playbooks left in place
+
+
+def test_remove_ingestion_tolerates_cascaded_collection_404():
+    """Deleting the data-import record cascades the collection on the appliance,
+    so the later collection delete may 404 -- that must be swallowed."""
+    from pyfsr.exceptions import ResourceNotFoundError
+
+    api, client = _configured_client()
+
+    def _boom(uuid, *, hard=True):
+        raise ResourceNotFoundError("Not Found", None)
+
+    client.workflow_collections.delete = _boom
+    result = api.remove_ingestion("fortinet-fortisiem", config="prod")
+    assert result.collection_deleted is False  # swallowed, no raise
+    assert result.metadata_deleted == 1
+
+
+def test_wizard_preserves_functional_tags_on_clones():
+    """Regression: clone() strips recordTags, but ingestion discovery is tag-based,
+    so the wizard must carry the sample playbooks' tags onto the clones (else
+    ingestion_status/trigger_ingestion can't find the ingest playbook)."""
+    api, client = _api()
+    api.data_ingest_wizard("fortinet-fortisiem", config="prod")
+    for src in (_FETCH_PB, _INGEST_PB):
+        clone_def = client.playbooks.definitions[f"clone-of-{src['uuid']}"]
+        assert clone_def.get("recordTags") == src["recordTags"]
