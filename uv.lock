@@ -591,7 +591,7 @@ wheels = [
 
 [[package]]
 name = "fsr-playbooks"
-version = "0.4.27"
+version = "0.5.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jinja2" },
@@ -600,7 +600,7 @@ dependencies = [
     { name = "ruamel-yaml" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/76/39/52ac6b477e9465f6f1c58b0c594bdb99c040456ad2864d85e515a8f866e4/fsr_playbooks-0.4.27-py3-none-any.whl", hash = "sha256:f099f7253a96232d31b46ca43e6e859ee7d056519399907a60f9b0d623177c65", size = 798229, upload-time = "2026-07-16T23:27:34.391Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/f5/858cdf2a7d865cee013fd23bf54f286036a88e914f40514700bd0f1a88fa/fsr_playbooks-0.5.7-py3-none-any.whl", hash = "sha256:6f29683f12164003b921cc53c52ee107ee94df5e43ebee7dd84d9db6e8790d76", size = 860868, upload-time = "2026-07-27T17:20:12.183Z" },
 ]
 
 [[package]]

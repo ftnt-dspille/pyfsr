@@ -330,6 +330,24 @@ def build_parser() -> argparse.ArgumentParser:
     _add_fmt(p_lic_drift)
     p_lic_drift.set_defaults(func=cmd_license_drift)
 
+    p_lic_flex = licsub.add_parser(
+        "deploy-flex",
+        help="redeem a FortiFlex token (install + poll); use --public on a license-locked box",
+    )
+    p_lic_flex.add_argument("license_token", help="FortiFlex entitlement token to redeem")
+    playbook_cmds.add_connection_args(p_lic_flex)  # HTTP: --server/--username/--password/--port/--no-verify-ssl
+    p_lic_flex.add_argument(
+        "--public",
+        action="store_true",
+        help="use a no-auth client for the public license endpoint — required on a "
+        "fresh or license-locked box (FSR-Auth-018) where no credential authenticates",
+    )
+    p_lic_flex.add_argument("--node-id", dest="node_id", help="cluster node id (multi-node)")
+    p_lic_flex.add_argument("--timeout", type=float, default=600, help="seconds to wait for redemption (default 600)")
+    p_lic_flex.add_argument("--poll-interval", type=float, default=5, help="status poll interval seconds (default 5)")
+    _add_fmt(p_lic_flex)
+    p_lic_flex.set_defaults(func=cmd_license_deploy_flex)
+
     # --- logs group ---
     p_logs = asub.add_parser("logs", help="log tail / error scan")
     logssub = p_logs.add_subparsers(dest="logs_command", required=True)
@@ -863,6 +881,41 @@ def cmd_license_drift(args: argparse.Namespace) -> int:
     )
     # Non-zero exit when drifted, so it's usable as a health gate.
     return 1 if report.drifted else 0
+
+
+def cmd_license_deploy_flex(args: argparse.Namespace) -> int:
+    if args.public:
+        if not args.server:
+            print("--public requires --server (the box URL)", file=sys.stderr)
+            return 2
+        from ..client import FortiSOAR
+
+        client = FortiSOAR(
+            args.server,
+            public=True,
+            verify_ssl=not args.no_verify_ssl,
+            suppress_insecure_warnings=args.no_verify_ssl,
+            port=args.port,
+        )
+    else:
+        client = playbook_cmds._make_client(args)
+    res = client.system.deploy_flex_license(
+        args.license_token,
+        node_id=args.node_id,
+        timeout=args.timeout,
+        poll_interval=args.poll_interval,
+    )
+    _output.kv(
+        {
+            "ok": res["ok"],
+            "depl_status": res["depl_status"],
+            "depl_message": res["depl_message"] or "",
+            "polls": res["polls"],
+        },
+        fmt=args.fmt,
+    )
+    # Non-zero exit on a failed/incomplete redemption so it's scriptable.
+    return 0 if res["ok"] else 1
 
 
 # --- logs handlers -------------------------------------------------------

@@ -64,6 +64,8 @@ from ._integration import (
     IngestionMetadata,
     IngestionPlaybooks,
     IngestionSetupResult,
+    IngestionStatus,
+    IngestionTeardownResult,
     InstalledConnector,
     InstallJobStatus,
     IntegrationListEnvelope,
@@ -195,11 +197,13 @@ def model_for(module: str) -> type[BaseRecord]:
 # loaded by now, so resolve the deferred reference.
 from ._system import Workflow as _Workflow  # noqa: E402
 
-for _model in (IngestionPlaybooks, IngestionSetupResult):
+for _model in (IngestionPlaybooks, IngestionSetupResult, IngestionStatus):
     _model.model_rebuild(_types_namespace={"Workflow": _Workflow})
 
 __all__ = [
     "IngestionSetupResult",
+    "IngestionStatus",
+    "IngestionTeardownResult",
     "IngestionPlaybooks",
     "IngestionMetadata",
     "DependencyStatus",
