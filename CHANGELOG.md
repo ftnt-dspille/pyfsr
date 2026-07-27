@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.18.3] - 2026-07-27
+
+### Fixed
+- **Raw field dicts can no longer stage metadata that breaks the appliance UI.**
+  A hand-built field dict passed to `create_module()` / `add_field()` reached
+  staging unvalidated — only the typed builders (`field()`, `text_field()`, …)
+  ever set `descriptions`. FortiSOAR's API accepts the malformed attribute
+  without complaint, so pyfsr could write an attribute whose `descriptions` is
+  `[]`.
+
+  That is not cosmetic. The UI normalizes every attribute of every module
+  *before* it populates its metadata store, reading `descriptions.singular`
+  unguarded. One such attribute throws a `TypeError` there, so **no** module gets
+  metadata and every route in the product fails with `"<type> metadata not
+  found"` until the record is repaired and republished — and the error names
+  whichever route loaded first, not the broken module.
+
+  `_to_field_dict()` is the single chokepoint every field crosses on its way to
+  staging, so the guard lives there:
+  - missing / `None` / `[]` / `{}` `descriptions` → coerced to the platform
+    default `{"singular": <name>}`, matching what the typed builders emit
+  - structurally wrong `descriptions` (a string, a populated list) → `ValueError`
+  - blank or missing `name` / `type` → `ValueError`; non-dict field → `TypeError`
+
+  The module-level `descriptions` on the `create_module` payload — which `opts`
+  could override — is guarded the same way. Typed-builder output is unchanged.
+
 ## [0.18.2] - 2026-07-26
 
 ### Added
