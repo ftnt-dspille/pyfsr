@@ -1,5 +1,13 @@
 # Library playbook collection: FortiAI Agent Catalog
 #
+# goal: one-click deploy all 11 on-appliance FortiAI agents as callable
+#   playbooks so the SOC can trigger any agent from the alert UI and see
+#   its input shape + result shape in FortiSOAR.
+# trigger: manual (Execute button on alerts or via the collection)
+# inputs:  per-playbook (each agent expects its own inputformat contract)
+# outputs: a comment on the source record with the agent's verdict or data
+# connectors: cyops_utilities (make_cyops_request -- the loopback HTTP caller)
+#
 # One collection, one playbook per on-appliance FortiAI agent -- so you can
 # deploy a single file and see every agent's input shape + result shape in
 # the FortiSOAR UI. Each playbook triggers a named agent via the fsr-ai
