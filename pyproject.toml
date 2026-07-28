@@ -35,7 +35,7 @@ test = [
     "pytest",
     "pytest-cov",
     "pytest-mock",
-    "mcp>=1.0", # exercise the optional pyfsr[mcp] server in CI
+    "mcp>=1.0,<2", # exercise the optional pyfsr[mcp] server in CI (2.0 renamed APIs)
 ]
 
 typecheck = [
@@ -65,7 +65,7 @@ docs = [
 # Optional generic MCP server: `python -m pyfsr.agent.mcp` over the tool registry.
 # Pulls in the Model Context Protocol SDK; the core library never imports it.
 mcp = [
-    "mcp>=1.0",
+    "mcp>=1.0,<2",
 ]
 
 # Author playbooks in YAML and deploy them (`pyfsr playbook`, import_from_yaml).
@@ -73,7 +73,7 @@ mcp = [
 # Floor is 0.4.10: the authoring-DX surface (manual_input.answer, do_until
 # example) relies on the compiler's step-level manual_input inputs/title/
 # description hoist (F3) + the default-on reference lint, both first shipped in
-# 0.4.10 — older versions silently drop those inputs.
+# 0.4.10 -- older versions silently drop those inputs.
 playbooks = [
     "fsr_playbooks>=0.4.11",
 ]
@@ -87,7 +87,7 @@ pyfsr-mcp = "pyfsr.agent.mcp:main"
 # automatically on a bare `uv sync` (default-groups defaults to ["dev"]), so
 # PyCharm's background auto-sync keeps ruff/pre-commit/pytest/mypy/sphinx in
 # .venv. Previously `dev` was an *extra*, which a default `uv sync` does NOT
-# install — so the sync dropped `pre_commit` and broke the git pre-push hook
+# install -- so the sync dropped `pre_commit` and broke the git pre-push hook
 # (`.venv/bin/python -mpre_commit`). CI is unaffected: it installs the
 # individual extras (test/docs/typecheck/playbooks) via pip, not this group.
 # Manual install without uv: `pip install -e . --group dev` (pip >= 25.1).
@@ -163,7 +163,7 @@ target-version = "py310"
 src = ["src", "tests"]
 
 [tool.ruff.format]
-# Only format Python files — ruff 0.16+ added experimental markdown formatting
+# Only format Python files -- ruff 0.16+ added experimental markdown formatting
 # that reformats .md files, which we don't want.
 exclude = ["*.md"]
 

@@ -5,17 +5,17 @@
 #   with the alert's source IP, wait for it to finish, fetch the result, and
 #   comment the answer/confidence/evidence back on the alert.
 # trigger: manual (Execute button on alerts)
-# inputs:  vars.input.records[0] (inbound alert) — needs a source IP field
+# inputs:  vars.input.records[0] (inbound alert) -- needs a source IP field
 # outputs: a comment on the source alert with the agent's verdict
-# connectors: cyops_utilities (make_cyops_request — the loopback HTTP caller)
-# adapts-to: any FortiAI agent — swap the agent name in the trigger IRI and the
+# connectors: cyops_utilities (make_cyops_request -- the loopback HTTP caller)
+# adapts-to: any FortiAI agent -- swap the agent name in the trigger IRI and the
 #   payload to match the agent's inputformat (see client.ai.agent_input_schema).
 #
 # Unlike the raw fortinet-fortiai-proxy agent_chat_completions op (a single
 # LLM completion with no agent identity), this playbook calls a NAMED agent
 # through the fsr-ai service API (/api/ai/agents/<name>/trigger). Each agent
 # has its own input contract (inputformat) and returns a structured
-# answer/evidence/confidence — this one uses ioc-enrichment (the Threat
+# answer/evidence/confidence -- this one uses ioc-enrichment (the Threat
 # Intelligence Provider agent). For a free-form question instead of an IOC
 # lookup, swap the agent name to "conversation" and adapt the payload to its
 # inputformat (messages / insight_id / message_history).
@@ -33,7 +33,7 @@ collection: Enrichment Library
 description: ''
 visible: true
 playbooks:
-- name: FortiAI Agent – IOC Enrichment
+- name: FortiAI Agent - IOC Enrichment
   description: Trigger the on-appliance ioc-enrichment FortiAI agent with the alert's source IP and write the answer/evidence back as a comment.
   is_active: true
   trigger_step_id: Start
@@ -89,7 +89,7 @@ playbooks:
     fields:
       alerts: '{{ vars.input.records[0]["@id"] }}'
       content: >-
-        <p><b>FortiAI ioc-enrichment agent</b> — verdict: <b>{{ vars.agent_answer }}</b>
+        <p><b>FortiAI ioc-enrichment agent</b> -- verdict: <b>{{ vars.agent_answer }}</b>
         (confidence: {{ vars.agent_confidence }})</p>
         <p>{{ vars.agent_evidence }}</p>
       isImportant: true
