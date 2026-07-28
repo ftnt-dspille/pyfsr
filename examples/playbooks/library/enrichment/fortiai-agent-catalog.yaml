@@ -42,7 +42,7 @@ playbooks:
 # VERDICT FAMILY — result: {answer, confidence, evidence}
 # ─────────────────────────────────────────────────────────────────────
 
-- name: 01 – IOC Enrichment Agent
+- name: 01 - IOC Enrichment Agent
   description: Ask the Threat Intelligence Provider agent whether a source IP is malicious.
   is_active: true
   trigger_step_id: Start
@@ -109,7 +109,7 @@ playbooks:
     version: 3.4.0
     operationTitle: 'Utils: No Operation'
 
-- name: 02 – SIEM Search Agent
+- name: 02 - SIEM Search Agent
   description: Ask the Query SIEM agent for recent events from the alert's source host.
   is_active: true
   trigger_step_id: Start
@@ -178,7 +178,7 @@ playbooks:
     version: 3.4.0
     operationTitle: 'Utils: No Operation'
 
-- name: 03 – Identity Context Agent
+- name: 03 - Identity Context Agent
   description: Ask the Identity Context Provider agent about a user's roles and groups.
   is_active: true
   trigger_step_id: Start
@@ -245,7 +245,7 @@ playbooks:
     version: 3.4.0
     operationTitle: 'Utils: No Operation'
 
-- name: 04 – ITSM Context Agent
+- name: 04 - ITSM Context Agent
   description: Ask the ITSM Context Provider agent about open tickets related to the alert's indicators.
   is_active: true
   trigger_step_id: Start
@@ -313,7 +313,7 @@ playbooks:
     version: 3.4.0
     operationTitle: 'Utils: No Operation'
 
-- name: 05 – Asset Enrichment Agent
+- name: 05 - Asset Enrichment Agent
   description: Ask the Asset Context Provider agent what is known about the alert's source asset.
   is_active: true
   trigger_step_id: Start
@@ -380,7 +380,7 @@ playbooks:
     version: 3.4.0
     operationTitle: 'Utils: No Operation'
 
-- name: 06 – Endpoint Telemetry Agent
+- name: 06 - Endpoint Telemetry Agent
   description: Ask the Query Endpoint agent for endpoint telemetry on the alert's host.
   is_active: true
   trigger_step_id: Start
@@ -452,7 +452,7 @@ playbooks:
 # STRUCTURED FAMILY — result: {data: str | object}
 # ─────────────────────────────────────────────────────────────────────
 
-- name: 07 – Summary Agent
+- name: 07 - Summary Agent
   description: Ask the Summary agent to summarize investigation findings from prior steps.
   is_active: true
   trigger_step_id: Start
@@ -518,7 +518,7 @@ playbooks:
     version: 3.4.0
     operationTitle: 'Utils: No Operation'
 
-- name: 08 – Risk Evaluation Agent
+- name: 08 - Risk Evaluation Agent
   description: Ask the Impact Analysis agent to evaluate the risk level of the current alert.
   is_active: true
   trigger_step_id: Start
@@ -584,7 +584,7 @@ playbooks:
     version: 3.4.0
     operationTitle: 'Utils: No Operation'
 
-- name: 09 – Metric Computation Agent
+- name: 09 - Metric Computation Agent
   description: Ask the Metric Computation agent to count alerts by severity.
   is_active: true
   trigger_step_id: Start
@@ -648,7 +648,7 @@ playbooks:
     version: 3.4.0
     operationTitle: 'Utils: No Operation'
 
-- name: 10 – Task Planner Agent
+- name: 10 - Task Planner Agent
   description: Ask the Task Planner agent to decompose an investigation into structured steps.
   is_active: true
   trigger_step_id: Start
@@ -716,7 +716,7 @@ playbooks:
     version: 3.4.0
     operationTitle: 'Utils: No Operation'
 
-- name: 11 – FortiSOAR Data Access Agent
+- name: 11 - FortiSOAR Data Access Agent
   description: Ask the FortiSOAR Data Access agent a natural-language question about records on this box.
   is_active: true
   trigger_step_id: Start
