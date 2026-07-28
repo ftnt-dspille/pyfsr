@@ -1,13 +1,13 @@
 # Typed models
 
-Every typed model re-exported from `pyfsr.models` — the shapes returned by
+Every typed model re-exported from `pyfsr.models` -- the shapes returned by
 the client APIs and the validated argument bundles accepted by the write
 verbs.
 
 ```{note}
 This page is generated from `pyfsr.models.__all__`. The classes themselves
 live in private submodules (`_playbooks.py`, `_generated.py`, …), which
-autoapi does not page — so documenting them here under their **public**
+autoapi does not page -- so documenting them here under their **public**
 name is what gives `pyfsr.models.X` a resolvable target. Without it every
 `{class}`~pyfsr.models.X`` cross-reference in the docs is silently dead.
 ```
@@ -896,6 +896,13 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 
 ```{eval-rst}
 .. autoclass:: pyfsr.models.MCPServerRef
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.MCPServerStatus
    :members:
    :undoc-members:
    :show-inheritance:

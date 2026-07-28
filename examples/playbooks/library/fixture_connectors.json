@@ -19,6 +19,9 @@
     "block_url",
     "update_address"
   ],
+  "fortinet-fortiai-proxy": [
+    "agent_chat_completions"
+  ],
   "fortinet-fortisiem": [
     "clear_incident",
     "get_incident_details",

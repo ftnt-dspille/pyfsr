@@ -1,20 +1,20 @@
-"""FortiAI — agentic alert investigation, LLM-provider and MCP-server management.
+"""FortiAI -- agentic alert investigation, LLM-provider and MCP-server management.
 
 FortiSOAR 8.0 ships an on-appliance agentic AI service (``fsr-ai``) mounted at
 ``/api/ai``. This module wraps the three things you actually drive from a
 client:
 
-- **Investigation** — fire the multi-agent triage pipeline at an alert
+- **Investigation** -- fire the multi-agent triage pipeline at an alert
   (normalize → hypothesize → plan → gather evidence over MCP → verdict) and poll
   for the result. See :meth:`AIApi.investigate_alert`.
-- **LLM providers** — list the configured reasoning profiles and the
+- **LLM providers** -- list the configured reasoning profiles and the
   provider/model catalogue (``/api/ai/llm``).
-- **MCP servers** — list, validate and register the Model Context Protocol
+- **MCP servers** -- list, validate and register the Model Context Protocol
   servers the investigation agents are allowed to call (``/api/ai/mcp`` +
   the ``mcp_configurations`` collection).
 
 Plus the one-time enablement gate: FortiAI features must be turned on (and the
-AI terms accepted) in System Settings before any of this works — see
+AI terms accepted) in System Settings before any of this works -- see
 :meth:`AIApi.enable_features`, which writes ``publicValues.ai_feature``.
 
 Accessed as ``client.ai``.
@@ -41,6 +41,7 @@ submit verdict feedback                           ``POST /api/ai/agents/{task_id
 list reasoning profiles                           ``GET  /api/ai/llm/config``
 list providers                                    ``GET  /api/ai/llm/allowed-providers``
 list MCP servers                                  ``GET  /api/ai/mcp``
+MCP server health                                 ``GET  /api/ai/mcp/status``
 validate an MCP server config                     ``POST /api/ai/mcp/validate``
 register an MCP server                            ``POST /api/3/mcp_configurations``
 update a registered MCP server                    ``PUT  /api/3/mcp_configurations/{uuid}``
@@ -63,29 +64,29 @@ remove specific tools from a hosted server         ``DELETE /mcp/tools/delete``
 
     **Reachability:** The AI service publishes 55 operations in its OpenAPI,
     but only ~41 are reachable through the PHP proxy's permission map. A
-    request matching no group gets a bare ``403 Access Denied`` —
+    request matching no group gets a bare ``403 Access Denied`` --
     indistinguishable from a missing-role 403. Before wiring a new
     ``/api/ai/*`` endpoint, check the permission map in ``parameters.yaml``
     (``app_proxy.handlers.ai``). Dead methods removed: ``list_models()``
-    (``/api/ai/llm/models`` — unauthorised), ``test_llm_config()``
-    (``/api/ai/llm/test`` — not in the service spec). Replaced by
+    (``/api/ai/llm/models`` -- unauthorised), ``test_llm_config()``
+    (``/api/ai/llm/test`` -- not in the service spec). Replaced by
     :meth:`AIApi.verify_llm_config` (``GET /api/ai/llm/config/{uuid}/verify``).
 
 Connector → MCP server
 -----------------------
-Any installed connector can be *hosted* as an MCP server — each operation
-becomes a tool — via :meth:`AIApi.host_connector_as_mcp_server`. This is
+Any installed connector can be *hosted* as an MCP server -- each operation
+becomes a tool -- via :meth:`AIApi.host_connector_as_mcp_server`. This is
 distinct from :meth:`AIApi.register_mcp_server` (connecting to an *external*
 MCP server); both land in the same ``mcp_configurations`` collection,
 distinguished by ``type`` (``"connector"`` vs ``"internal"``/``"external"``).
-Check :meth:`AIApi.mcp_connector_candidates` first — some connectors can't be
+Check :meth:`AIApi.mcp_connector_candidates` first -- some connectors can't be
 hosted this way. These ``/mcp/...`` routes (unlike everything else here) live
 at the appliance root rather than under ``/api/3``.
 
 Agent ↔ MCP binding
 -------------------
 Which MCP servers a triage agent may call is stored on the agent's
-configuration as ``config["mcp_server"]`` — a list of registered MCP-server
+configuration as ``config["mcp_server"]`` -- a list of registered MCP-server
 UUIDs. To let an agent reach a newly-registered server (e.g. FortiSIEM), append
 its uuid to that list and ``PUT`` the config back; the high-level
 :meth:`AIApi.allow_mcp_server_for_agent` does the read-modify-write for you.
@@ -112,6 +113,7 @@ from ..models._ai import (
     LLMProvider,
     MCPServerConfig,
     MCPServerRef,
+    MCPServerStatus,
     MCPTool,
     MCPToolResult,
     MCPValidateResult,
@@ -140,7 +142,7 @@ ALERT_TRIAGE_TASK_KEY = "triagetaskid"
 def pack_agent(source_dir: str, output: str | None = None, *, validate: bool = True) -> str:
     """Bundle an AI agent source folder into a FortiSOAR-importable ``.zip``.
 
-    ``source_dir`` is the package root — the folder that *is* the agent (holds
+    ``source_dir`` is the package root -- the folder that *is* the agent (holds
     ``info.json``, ``agent.py``, ``prompt.yaml``, ``config/memory.yaml``,
     ``images/``). The archive is written with that folder as its single
     top-level entry (``<name>/info.json`` …), which is the layout
@@ -190,7 +192,7 @@ class AIApi(BaseAPI):
         return bool(ai.get("enable"))
 
     def enable_features(self, enabled: bool = True, *, modified_by: str | None = None) -> dict[str, Any]:
-        """Enable (or disable) FortiAI features — the AI terms-acceptance gate.
+        """Enable (or disable) FortiAI features -- the AI terms-acceptance gate.
 
         This is the programmatic equivalent of toggling *Enable AI Features* in
         **System Settings**; FortiSOAR records it as
@@ -222,7 +224,7 @@ class AIApi(BaseAPI):
 
         When ``link`` is true (default), the returned ``task_id`` is written back
         to the alert's :data:`ALERT_TRIAGE_TASK_KEY` (``triagetaskid``) field,
-        exactly as the FortiSOAR UI does — this is what makes
+        exactly as the FortiSOAR UI does -- this is what makes
         :meth:`get_investigation_for_alert` able to recover the investigation
         later. The write is best-effort: if the alert uuid can't be determined it
         is skipped silently (e.g. an alert dict with no ``@id``/``uuid``).
@@ -244,7 +246,7 @@ class AIApi(BaseAPI):
     def get_investigation_for_alert(self, alert: dict[str, Any] | str) -> str | None:
         """Return the ``task_id`` of an alert's current investigation, or ``None``.
 
-        Reads the alert's :data:`ALERT_TRIAGE_TASK_KEY` (``triagetaskid``) field —
+        Reads the alert's :data:`ALERT_TRIAGE_TASK_KEY` (``triagetaskid``) field --
         the direct alert→investigation link FortiSOAR persists when triage starts.
         ``alert`` may be a record (dict) or a reference (uuid / ``"alerts:<uuid>"``
         / IRI), in which case the alert is fetched first.
@@ -276,7 +278,7 @@ class AIApi(BaseAPI):
         """Return the current pipeline status for a triage task.
 
         While running the pipeline reports ``"pending"`` then ``"inprogress"``;
-        it ends on a terminal status — ``"completed"`` or ``"failed"`` (see
+        it ends on a terminal status -- ``"completed"`` or ``"failed"`` (see
         :data:`TERMINAL_STATUSES`). Returns ``""`` if the status can't be read.
         """
         resp = self.client.get(f"/api/ai/agents/{task_id}/status")
@@ -286,8 +288,8 @@ class AIApi(BaseAPI):
         """Fetch the full investigation result/verdict for a triage task.
 
         The payload carries the per-stage ``phases`` (normalization →
-        hypothesis → planning → evidence → verdict), any ``logs``, and — once
-        ``status == "completed"`` — the synthesized verdict/summary. While the
+        hypothesis → planning → evidence → verdict), any ``logs``, and -- once
+        ``status == "completed"`` -- the synthesized verdict/summary. While the
         pipeline is still running this returns the partial progress so far.
         """
         resp = self.client.get(f"/api/ai/agents/{task_id}/result")
@@ -296,7 +298,7 @@ class AIApi(BaseAPI):
     def investigation_questions(self, task_id: str) -> list[InvestigationQuestion]:
         """Return the investigation's question-by-question evidence.
 
-        This is the data behind the UI's *Investigation Questions* panel — one
+        This is the data behind the UI's *Investigation Questions* panel -- one
         entry per question the agents asked, shaped as::
 
             {"index", "question", "agent", "input", "response", "evidence",
@@ -306,7 +308,7 @@ class AIApi(BaseAPI):
         ``input`` is the agent's tool input (``params``), ``response`` its answer
         (``result``), and ``evidence`` the natural-language justification derived
         from the tool output. ``supports``/``weakens`` are the hypothesis ids this
-        answer votes for/against — the link into the weighting (see
+        answer votes for/against -- the link into the weighting (see
         :meth:`hypothesis_evidence`). Each entry's ``agent`` (e.g. *Threat
         Intelligence Provider*, *Query SIEM*) is the agent that answered it;
         which MCP tool that agent called is recoverable via
@@ -338,7 +340,7 @@ class AIApi(BaseAPI):
 
         This is the **provenance/weighting view**: it shows, per hypothesis, the
         questions whose evidence supported or weakened it, alongside the
-        hypothesis's resolved status and the final verdict — i.e. proof that the
+        hypothesis's resolved status and the final verdict -- i.e. proof that the
         investigation's conclusion is grounded in the gathered evidence rather
         than asserted. Returns::
 
@@ -442,7 +444,7 @@ class AIApi(BaseAPI):
         """Return an agent's declared input contract (its ``inputformat``).
 
         Every agent publishes the exact keys :meth:`run_agent` expects, with per-key
-        ``required`` flags, enums and examples — so you never have to guess the payload.
+        ``required`` flags, enums and examples -- so you never have to guess the payload.
         The shape varies by agent: ``ioc-enrichment`` wants ``{"question", "ioc":
         [{"type", "value"}]}``, ``alert-investigation`` wants ``{"data": <raw alert>}``.
 
@@ -459,7 +461,7 @@ class AIApi(BaseAPI):
     def _missing_required_inputs(schema: dict[str, Any], data: dict[str, Any]) -> list[str]:
         """Names of ``required`` keys in ``schema`` that ``data`` does not supply.
 
-        Only entries whose spec is a dict carrying ``required: true`` are enforced —
+        Only entries whose spec is a dict carrying ``required: true`` are enforced --
         several agents declare their inputs as plain strings (a description, with no
         required flag), and those are advisory only.
         """
@@ -481,7 +483,7 @@ class AIApi(BaseAPI):
         """Trigger a single named agent (e.g. ``"ioc-enrichment"``) directly.
 
         Unlike :meth:`investigate_alert`, this runs *one* agent and answers one
-        question — no hypothesis/planning/verdict pipeline. ``data`` is the agent's
+        question -- no hypothesis/planning/verdict pipeline. ``data`` is the agent's
         own input contract; fetch it with :meth:`agent_input_schema`.
 
         Args:
@@ -516,12 +518,12 @@ class AIApi(BaseAPI):
             missing = self._missing_required_inputs(self.agent_input_schema(agent_name, version), data)
             if missing:
                 raise ValueError(
-                    f"agent {agent_name!r} requires input key(s) {missing} — "
+                    f"agent {agent_name!r} requires input key(s) {missing} -- "
                     f"see client.ai.agent_input_schema({agent_name!r}) for the full contract"
                 )
         # NOTE: the trigger must go to /api/ai/agents/... (plural). The fsr-ai service
         # mounts the same router under both /ai/triage and /ai/agents, but the PHP
-        # front door only authorises `^agents?/(.*)/trigger` — a POST to
+        # front door only authorises `^agents?/(.*)/trigger` -- a POST to
         # /api/ai/triage/{name}/trigger matches no permission group and is rejected
         # with a bare "Access Denied" regardless of the caller's role.
         resp = self.client.post(f"/api/ai/agents/{agent_name}/trigger", data=data)
@@ -533,7 +535,7 @@ class AIApi(BaseAPI):
     def get_agent_result(self, task_id: str) -> AgentRunResult:
         """Fetch a single-agent run's result (``answer`` / ``evidence`` / ``confidence``).
 
-        Same endpoint as :meth:`get_result`, typed for the single-agent shape — use
+        Same endpoint as :meth:`get_result`, typed for the single-agent shape -- use
         this for :meth:`run_agent` tasks and :meth:`get_result` for investigations.
         """
         resp = self.client.get(f"/api/ai/agents/{task_id}/result")
@@ -544,7 +546,7 @@ class AIApi(BaseAPI):
 
         Mirrors :meth:`wait_for_result` (which returns the investigation shape). On
         timeout the latest result is returned with a non-terminal ``status`` rather
-        than raising — check ``result.status`` before trusting ``answer``.
+        than raising -- check ``result.status`` before trusting ``answer``.
         """
         deadline = time.monotonic() + timeout
         status = self.get_status(task_id)
@@ -588,7 +590,7 @@ class AIApi(BaseAPI):
     def verify_llm_config(self, uuid: str, *, model_id: str | None = None) -> dict[str, Any]:
         """Verify a saved LLM config on the live appliance.
 
-        Calls ``GET /api/ai/llm/config/{uuid}/verify`` — the only reachable
+        Calls ``GET /api/ai/llm/config/{uuid}/verify`` -- the only reachable
         verification endpoint (``POST /api/ai/llm/test`` is not authorised
         through the API gateway).
 
@@ -612,6 +614,22 @@ class AIApi(BaseAPI):
         """List registered MCP servers (id + name) the AI agents can be granted."""
         return [MCPServerRef.model_validate(m) for m in _as_list(self.client.get("/api/ai/mcp"))]
 
+    def mcp_status(self) -> list[MCPServerStatus]:
+        """Runtime health of every registered MCP server (``GET /api/ai/mcp/status``).
+
+        Returns one :class:`~pyfsr.models.MCPServerStatus` per registered server -- the same
+        green/red liveness probe the agent UI uses. ``valid`` is the connectivity
+        verdict; ``error`` carries the failure reason when it is not. Complements
+        :meth:`list_mcp_servers` (id+name only) and :meth:`mcp_configs` (full
+        records). Live-verified on 8.0.0.
+
+        Example:
+            >>> for s in client.ai.mcp_status():  # doctest: +SKIP
+            ...     if not s.valid:
+            ...         print(f"{s.name}: {s.error}")
+        """
+        return [MCPServerStatus.model_validate(m) for m in _as_list(self.client.get("/api/ai/mcp/status"))]
+
     def validate_mcp_server(self, config: dict[str, Any]) -> MCPValidateResult:
         """Probe an MCP-server config *before* persisting it.
 
@@ -626,7 +644,7 @@ class AIApi(BaseAPI):
     def list_mcp_tools(self, config: dict[str, Any]) -> list[str]:
         """Return the tool *names* an MCP server advertises (its ``tools/list``).
 
-        Thin convenience over :meth:`validate_mcp_server` — opens the connection,
+        Thin convenience over :meth:`validate_mcp_server` -- opens the connection,
         runs ``tools/list``, and returns just the tool names. Use it to learn a
         server's tool surface (e.g. which tools belong to FortiSIEM) so you can
         attribute observed :meth:`tool_usage` back to the server that owns them.
@@ -663,7 +681,7 @@ class AIApi(BaseAPI):
         if _is_uuid(name_or_uuid):
             return MCPServerConfig.model_validate(self.client.get(f"/api/3/mcp_configurations/{name_or_uuid}"))
         # ``extract_members``, not ``_as_list``: this is a collection GET, and
-        # ``_as_list`` coerces a bare dict to ``[resp]`` — which would turn an empty
+        # ``_as_list`` coerces a bare dict to ``[resp]`` -- which would turn an empty
         # response into a phantom member and mask a genuine "not found".
         members = extract_members(self.client.get("/api/3/mcp_configurations", params={"name": name_or_uuid}))
         for record in members:
@@ -696,7 +714,7 @@ class AIApi(BaseAPI):
         """List the tools a **registered** MCP server advertises, by calling it.
 
         Resolves the server's ``url`` + ``authentication`` from its registration
-        and opens a real MCP ``tools/list`` — the same reach fsr-ai's agent uses
+        and opens a real MCP ``tools/list`` -- the same reach fsr-ai's agent uses
         (streamable-HTTP + auth header), driven from your own process. Thinner
         than :meth:`mcp_tool_catalog` (one server, typed :class:`~pyfsr.models.MCPTool`).
 
@@ -718,9 +736,9 @@ class AIApi(BaseAPI):
 
         This is how you invoke a registered server's tool *outside* an agent
         investigation: FortiSOAR exposes no REST endpoint that runs one (only
-        ``/api/ai/mcp/validate`` — a ``tools/list`` probe), so this resolves the
+        ``/api/ai/mcp/validate`` -- a ``tools/list`` probe), so this resolves the
         server's ``url`` + ``authentication`` from its registration and speaks MCP
-        ``tools/call`` directly over streamable-HTTP — the same mechanism fsr-ai's
+        ``tools/call`` directly over streamable-HTTP -- the same mechanism fsr-ai's
         agent uses (``langchain_mcp_adapters.MultiServerMCPClient``), reusing
         pyfsr's own raw-MCP session (no langchain dependency).
 
@@ -754,7 +772,7 @@ class AIApi(BaseAPI):
         registered server (FortiSIEM, a 3rd-party SIEM, internal FSR servers, …),
         not just FortiSIEM, and needs no extra credentials when the stored token
         is still valid. Servers that fail to probe (e.g. an expired bearer token)
-        are skipped — mint a fresh token and :meth:`update_mcp_server` first to
+        are skipped -- mint a fresh token and :meth:`update_mcp_server` first to
         include them.
 
         A tool name seen on two servers keeps the first-probed owner (collisions
@@ -813,12 +831,12 @@ class AIApi(BaseAPI):
         """Persist a validated MCP-server config (``POST /api/3/mcp_configurations``).
 
         The ``authentication`` block is encrypted server-side, so always create
-        rows through this API — never write the ``mcp_configuration`` table
+        rows through this API -- never write the ``mcp_configuration`` table
         directly. Returns the created record (including its new ``uuid``).
 
         Note: the persistence layer stores ``authentication`` as a JSON *string*
         (the built-ins are e.g. ``'{"type":"FSR"}'``). A dict is JSON-encoded here
-        automatically — passing a raw object makes the backend stringify it to the
+        automatically -- passing a raw object makes the backend stringify it to the
         literal ``"Array"``, which then breaks ``GET /api/ai/mcp/status`` for every
         server (it ``json.loads`` each row's auth).
         """
@@ -832,7 +850,7 @@ class AIApi(BaseAPI):
     def update_mcp_server(self, uuid: str, config: dict[str, Any]) -> MCPServerConfig:
         """Update a registered MCP server (``PUT /api/3/mcp_configurations/{uuid}``).
 
-        Use this to rotate a credential whose token expires — e.g. re-stamping a
+        Use this to rotate a credential whose token expires -- e.g. re-stamping a
         FortiSIEM ``bearer`` value after minting a fresh OAuth token (FortiSOAR's
         MCP client only forwards a *static* credential; it does not run the
         OAuth ``client_credentials`` grant itself, so the token must be refreshed
@@ -851,7 +869,7 @@ class AIApi(BaseAPI):
         return MCPServerConfig.model_validate(resp if isinstance(resp, dict) else {})
 
     def save_mcp_server(self, config: dict[str, Any], *, validate: bool = True) -> MCPServerConfig:
-        """Validate then persist an MCP server — the exact flow the FortiSOAR UI uses.
+        """Validate then persist an MCP server -- the exact flow the FortiSOAR UI uses.
 
         The UI gates *Save* on a successful *Test*, so this mirrors it: it first
         calls :meth:`validate_mcp_server` (with ``authentication`` as an object)
@@ -874,7 +892,7 @@ class AIApi(BaseAPI):
         return self.register_mcp_server(config)
 
     def upsert_mcp_server(self, config: dict[str, Any], *, validate: bool = True) -> MCPServerConfig:
-        """Create or update an MCP server **keyed by name** — re-runnable setup.
+        """Create or update an MCP server **keyed by name** -- re-runnable setup.
 
         :meth:`save_mcp_server` routes on ``uuid`` (present → update, absent →
         create), which means a caller must look the row up by name and inject the
@@ -908,19 +926,19 @@ class AIApi(BaseAPI):
         self.client.delete(f"/api/3/mcp_configurations/{uuid}")
 
     def register_and_verify(self, config: dict[str, Any]) -> dict[str, Any]:
-        """Validate, register, and learn the tool list — the one-liner for
+        """Validate, register, and learn the tool list -- the one-liner for
         the "validate → check tools → upsert → print uuid" every MCP setup
         script hand-rolls today (this repo's ``fortisiem_mcp_setup_and_test.py``
         and ``register_and_call_public_mcp_server.py`` examples included).
 
         Raises ``ValueError`` on a failed validation (same guarantee
-        :meth:`upsert_mcp_server`'s default ``validate=True`` already gives —
+        :meth:`upsert_mcp_server`'s default ``validate=True`` already gives --
         this just avoids the second round-trip callers were already making to
         also learn the tool list, by reusing the one validation response for
         both).
 
         Returns the upserted record (with its ``uuid``) plus a ``tools`` key
-        — the tool list the validation probe reported, so callers don't need
+        -- the tool list the validation probe reported, so callers don't need
         a follow-up :meth:`list_mcp_tools` call just to print what they
         registered.
         """
@@ -960,12 +978,12 @@ class AIApi(BaseAPI):
         name: str | None = None,
         description: str | None = None,
     ) -> MCPServerConfig:
-        """Convert an installed connector into a hosted MCP server — the exact
+        """Convert an installed connector into a hosted MCP server -- the exact
         flow the FortiSOAR UI's "Add MCP Server → Connector" wizard runs.
 
         Each of the connector's operations becomes an MCP tool. By default all
         (enabled) operations are exposed; pass ``operations`` (a list of
-        operation names, e.g. ``["fetch_email_new"]``) to expose a subset —
+        operation names, e.g. ``["fetch_email_new"]``) to expose a subset --
         see :meth:`~pyfsr.api.connectors.ConnectorsAPI.operations` to list them.
 
         If the connector requires configuration (most do), the connector's
@@ -974,7 +992,7 @@ class AIApi(BaseAPI):
         connector with no configured instance yet is still hosted (mirroring
         the UI), but its tools won't work until one is configured.
 
-        Check :meth:`mcp_connector_candidates` first — some connectors
+        Check :meth:`mcp_connector_candidates` first -- some connectors
         (internal/system ones) can never be hosted this way.
 
         Returns the created :class:`~pyfsr.models.MCPServerConfig`. Use
@@ -1049,7 +1067,7 @@ class AIApi(BaseAPI):
         """Replace the tool set of an already-hosted connector MCP server
         (``PUT /mcp/tools/{uuid}``).
 
-        ``operations`` is the *full* desired set of exposed operation names —
+        ``operations`` is the *full* desired set of exposed operation names --
         any currently-exposed operation not in the list is removed
         (``remove_tools``), mirroring the UI's tool checklist. Re-resolves the
         connector definition/config the same way :meth:`host_connector_as_mcp_server`
@@ -1099,7 +1117,7 @@ class AIApi(BaseAPI):
     def list_agents(self, **filters: Any) -> list[AgentRecord]:
         """List the installed AI agents (``GET /api/ai/agent/``).
 
-        Optional keyword filters are passed straight through as query params —
+        Optional keyword filters are passed straight through as query params --
         the service recognizes ``category``, ``status``, ``active``,
         ``installed``, ``system`` and ``publisher``. Each item is an agent
         record with ``name``, ``version``, ``label``, ``uuid``, ``active`` etc.
@@ -1121,7 +1139,7 @@ class AIApi(BaseAPI):
 
         Returns the typed :class:`~pyfsr.models.AgentPackage` (manifest, prompts,
         MCP allowlist, file list) so you can inspect it, or raises with the exact
-        defect. Run this before :meth:`import_agent` when authoring — it catches
+        defect. Run this before :meth:`import_agent` when authoring -- it catches
         the failures that would otherwise only surface when the agent runs on the
         appliance (a bad ``agentclass``, a prompt uuid the code references but
         ``prompt.yaml`` omits, a manifest icon that isn't in the bundle).
@@ -1138,20 +1156,20 @@ class AIApi(BaseAPI):
         """Install an AI agent package onto the appliance.
 
         ``POST /api/ai/agent/import`` (multipart ``file``). ``path`` may be either
-        an already-built ``.zip`` or an agent **source directory** — a directory
+        an already-built ``.zip`` or an agent **source directory** -- a directory
         is packed on the fly with :func:`pack_agent` (which validates it first).
         Pass ``replace=True`` to overwrite an already-installed agent of the same
         name+version (``?replace=true``); without it, re-importing an existing
         name+version is rejected by the service.
 
-        The uploaded agent lands **inactive** — call :meth:`activate_agent` with
+        The uploaded agent lands **inactive** -- call :meth:`activate_agent` with
         its uuid (from the response or :meth:`list_agents`) to make the
         orchestrator eligible to route to it, and give it an LLM/MCP config via
         :meth:`update_agent_config` if it isn't using the default.
 
         Set ``validate=False`` to skip local package validation (e.g. to upload a
         vendor ``.zip`` you don't want re-inspected). Ignored when ``path`` is a
-        ``.zip`` — only source directories are validated/packed.
+        ``.zip`` -- only source directories are validated/packed.
 
         Returns the service's import response (the created/updated agent record).
         """
@@ -1190,7 +1208,7 @@ class AIApi(BaseAPI):
         """Download an installed agent as a ``.zip`` (``POST /api/ai/agent/export/{agent_id}``).
 
         ``agent_id`` is the agent's uuid (from :meth:`list_agents`). Writes the
-        archive bytes to ``dest`` and returns ``dest`` — handy for cloning a
+        archive bytes to ``dest`` and returns ``dest`` -- handy for cloning a
         published agent as the starting point for a custom one, or for backing up
         an edited agent before re-importing.
         """
@@ -1238,7 +1256,7 @@ class AIApi(BaseAPI):
         :meth:`allow_mcp_server_for_agent` when all you want is to grant the
         agent one more MCP server.
 
-        Note: this is a ``POST`` even though it updates — fsr-ai's ``POST
+        Note: this is a ``POST`` even though it updates -- fsr-ai's ``POST
         /config`` handler upserts, and (importantly) the FortiSOAR API gateway
         only authorizes ``POST ^agent/config$`` against ``update.ai_agents``; a
         ``PUT`` matches no ACL rule and is rejected with ``Access Denied``.
@@ -1286,7 +1304,7 @@ class AIApi(BaseAPI):
         """Return a ``{uuid: name}`` map of every registered MCP server.
 
         Handy for turning an agent's raw ``mcp_server`` UUID allowlist into
-        human-readable names — see :meth:`list_agent_mcp_servers` with
+        human-readable names -- see :meth:`list_agent_mcp_servers` with
         ``friendly=True`` and :meth:`describe_agent_mcp_servers`.
         """
         return {
@@ -1329,11 +1347,11 @@ class AIApi(BaseAPI):
         the default, so other agents are unaffected.
 
         Returns the updated ``AiAgentConfigurationDTO``. Takes effect on the next
-        investigation — no service restart required.
+        investigation -- no service restart required.
         """
         dto = self.get_agent_config(name, version)
         config = dto.config
-        # An agent reported as "default" has no row of its own yet — seed from
+        # An agent reported as "default" has no row of its own yet -- seed from
         # the default config so the write creates a dedicated, non-shared row.
         if config.config_type == "default" or config is None:
             config = self.get_default_agent_config().config
@@ -1363,7 +1381,7 @@ class AIApi(BaseAPI):
 
         Every reasoning step is logged to the ``llm_activity_logs`` module with a
         structured ``response`` of ``{"content", "tool_name", "tool_args"}``. When
-        the model selects a tool, ``tool_name`` is populated — *this* is the
+        the model selects a tool, ``tool_name`` is populated -- *this* is the
         deterministic record of which MCP/connector tool ran (the prompt text does
         **not** carry it). This returns one entry per tool-selecting log::
 
@@ -1372,7 +1390,7 @@ class AIApi(BaseAPI):
         Args:
             correlation_id: scope to a single investigation. **The investigation's
                 ``task_id`` (from :meth:`investigate_alert`) IS this
-                ``correlationID``** — every log for that run is stamped with it —
+                ``correlationID``** -- every log for that run is stamped with it --
                 so pass a ``task_id`` here to see exactly what that run called.
             limit: max log records to scan when ``correlation_id`` is omitted
                 (the appliance returns newest first).
@@ -1414,7 +1432,7 @@ class AIApi(BaseAPI):
 
         The alert's ``triagetaskid`` field (see
         :meth:`get_investigation_for_alert`) only keeps the *latest* run, so to
-        find earlier ones — an alert investigated repeatedly yields several — this
+        find earlier ones -- an alert investigated repeatedly yields several -- this
         searches the ``llm_activity_logs`` instead: every log for a run embeds the
         alert's payload, so a full-text search for the alert uuid surfaces them,
         and their distinct ``correlationID``\\ s are exactly the investigations'
@@ -1443,7 +1461,7 @@ class AIApi(BaseAPI):
     def investigation_tool_calls(self, task_id: str) -> list[ToolCall]:
         """The tool calls made during one investigation (by its ``task_id``).
 
-        Shorthand for ``tool_usage(correlation_id=task_id)`` — the triage
+        Shorthand for ``tool_usage(correlation_id=task_id)`` -- the triage
         ``task_id`` returned by :meth:`investigate_alert` is the ``correlationID``
         on that run's ``llm_activity_logs``. Pair with :meth:`list_mcp_tools` to
         confirm a specific server's tool (e.g. a FortiSIEM tool) was actually

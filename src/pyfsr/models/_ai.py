@@ -1,7 +1,7 @@
 """Typed models for the FortiAI agentic-service surface (``client.ai``).
 
 These wrap the ``fsr-ai`` service responses (``/api/ai/...``) and the
-``MCPConfiguration`` module (``/api/3/mcp_configurations``) — distinct from the
+``MCPConfiguration`` module (``/api/3/mcp_configurations``) -- distinct from the
 installable-package models in :mod:`pyfsr.models._ai_agent_package`. Shapes are
 live-verified against a FortiSOAR 8.0 appliance with the FortiAI solution pack
 installed; unknown keys are preserved (``extra="allow"``).
@@ -40,11 +40,11 @@ class _Lenient(BaseModel):
 
 
 class MCPServerConfig(BaseRecord):
-    """A registered MCP server (``/api/3/mcp_configurations`` — the ``MCPConfiguration`` module).
+    """A registered MCP server (``/api/3/mcp_configurations`` -- the ``MCPConfiguration`` module).
 
     ``authentication`` is stored server-side as a JSON *string* (e.g.
     ``'{"type":"FSR"}'`` for built-ins, ``'{"value": "<bearer token>"}'`` for a
-    remote server) — left untyped since its shape varies by ``type``. See
+    remote server) -- left untyped since its shape varies by ``type``. See
     :meth:`~pyfsr.api.ai.AIApi.register_mcp_server` for the encode-on-write
     convenience and :meth:`~pyfsr.api.ai.AIApi.mcp_tool_catalog` for decoding it
     back to probe ``tools/list``.
@@ -63,7 +63,7 @@ class MCPServerConfig(BaseRecord):
 
 
 class MCPServerRef(_Lenient):
-    """One entry from ``GET /api/ai/mcp`` — the id+name the agent-config UI lists.
+    """One entry from ``GET /api/ai/mcp`` -- the id+name the agent-config UI lists.
 
     Thinner than :class:`MCPServerConfig` (no url/transport/auth); resolve to
     the full record via :meth:`~pyfsr.api.ai.AIApi.mcp_configs`.
@@ -82,7 +82,7 @@ class MCPTool(_Lenient):
     historical dict shape used ``input_schema``). ``inputSchema`` accepts either
     spelling on the wire and :attr:`input_schema` reads it back either way, so
     ``tool["input_schema"]``/``tool.get("input_schema")`` and ``tool.inputSchema``
-    all resolve — the dict-style access the tool-surface materializer relies on
+    all resolve -- the dict-style access the tool-surface materializer relies on
     keeps working.
     """
 
@@ -104,7 +104,7 @@ class MCPToolResult(_Lenient):
     Every FortiSOAR native tool (``/mcp/soc/``, ``/mcp/playbooks/``, ...) replies
     with this envelope on success; :attr:`ok` is a convenience for
     ``status == "success"``. In-band tool failures come back as a plain string
-    instead of this envelope — :meth:`~pyfsr.api.native_mcp.NativeMCPApi.call_tool`
+    instead of this envelope -- :meth:`~pyfsr.api.native_mcp.NativeMCPApi.call_tool`
     returns that raw value untouched, while
     :meth:`~pyfsr.api.native_mcp.NativeMCPApi.call_tool_result` always wraps into
     this model (a non-envelope payload lands under :attr:`result` with
@@ -117,23 +117,38 @@ class MCPToolResult(_Lenient):
 
     @property
     def ok(self) -> bool:
-        """``status == "success"`` — the FortiSOAR-native envelope convention.
+        """``status == "success"`` -- the FortiSOAR-native envelope convention.
 
         Only meaningful for FortiSOAR's own tools (native gateway / internal
         registered servers), which reply with ``{"status": "success", ...}``. A
         third-party MCP server returns its own payload shape (e.g. raw text or its
-        own JSON), so ``ok`` is ``False`` even on success — read :attr:`result` /
+        own JSON), so ``ok`` is ``False`` even on success -- read :attr:`result` /
         :attr:`error` for those.
         """
         return self.status == "success"
 
 
 class MCPValidateResult(_Lenient):
-    """Response of ``POST /api/ai/mcp/validate`` — probing a server before saving."""
+    """Response of ``POST /api/ai/mcp/validate`` -- probing a server before saving."""
 
     valid: bool = False
     tools: list[MCPTool] = Field(default_factory=list)
     message: str | None = None
+
+
+class MCPServerStatus(_Lenient):
+    """One entry from ``GET /api/ai/mcp/status`` -- the health of a registered MCP server.
+
+    Complements :class:`MCPServerRef` (id+name) and :class:`MCPServerConfig`
+    (full record): this is the runtime liveness probe the agent UI uses to show
+    green/red per server. ``valid`` is the connectivity verdict; ``error``
+    carries the failure reason when it is not.
+    """
+
+    uuid: str | None = None
+    name: str | None = None
+    valid: bool = False
+    error: str | None = None
 
 
 class AgentRecord(_Lenient):
@@ -179,7 +194,7 @@ class AgentConfig(_Lenient):
 
 
 class AgentConfigDTO(_Lenient):
-    """``AiAgentConfigurationDTO`` — response of the agent-config endpoints
+    """``AiAgentConfigurationDTO`` -- response of the agent-config endpoints
     (``GET/POST /api/ai/agent/config/{name}/{version}`` and ``.../default``).
     """
 
@@ -192,7 +207,7 @@ class AgentConfigDTO(_Lenient):
 
 
 class LLMProvider(_Lenient):
-    """An allowed LLM provider — an installed solution pack (``/api/ai/llm/allowed-providers``)."""
+    """An allowed LLM provider -- an installed solution pack (``/api/ai/llm/allowed-providers``)."""
 
     uuid: str | None = None
     name: str | None = None
@@ -220,7 +235,7 @@ class LLMConfig(_Lenient):
 
 
 class InvestigationHandle(_Lenient):
-    """Response of starting/triggering a triage run — ``{"task_id", "status"}``."""
+    """Response of starting/triggering a triage run -- ``{"task_id", "status"}``."""
 
     task_id: str | None = None
     status: str | None = None
@@ -229,7 +244,7 @@ class InvestigationHandle(_Lenient):
 class InvestigationResult(_Lenient):
     """Full triage result/verdict (``GET /api/ai/agents/{task_id}/result``).
 
-    ``summary``/``hypotheses``/``logs`` are left untyped (``Any``) — see
+    ``summary``/``hypotheses``/``logs`` are left untyped (``Any``) -- see
     :meth:`~pyfsr.api.ai.AIApi.investigation_questions` and
     :meth:`~pyfsr.api.ai.AIApi.hypothesis_evidence` for the derived, typed views
     over this payload.
@@ -246,7 +261,7 @@ class AgentRunResult(_Lenient):
     """Result of one *single-agent* run (:meth:`~pyfsr.api.ai.AIApi.run_agent`).
 
     A single agent answers one question; it does not run the investigation
-    pipeline, so this is a different shape from :class:`InvestigationResult` —
+    pipeline, so this is a different shape from :class:`InvestigationResult` --
     the keys mirror the agent's own ``outputformat`` (``answer`` / ``evidence`` /
     ``confidence``) rather than ``summary``/``hypotheses``. ``phases`` is present
     but empty on a single-agent run; it is only populated for a full
@@ -263,7 +278,7 @@ class AgentRunResult(_Lenient):
 
 
 class InvestigationQuestion(_Lenient):
-    """One question/evidence entry — see :meth:`~pyfsr.api.ai.AIApi.investigation_questions`."""
+    """One question/evidence entry -- see :meth:`~pyfsr.api.ai.AIApi.investigation_questions`."""
 
     index: int | None = None
     question: str | None = None
@@ -281,7 +296,7 @@ class ConnectorMcpCandidates(_Lenient):
     """Which installed connectors can be hosted as an MCP server (``GET /mcp/servers/connector``).
 
     ``restricted`` connectors (internal/system ones, e.g. the agent-communication
-    bridge) can never be hosted. ``available`` connectors aren't yet hosted —
+    bridge) can never be hosted. ``available`` connectors aren't yet hosted --
     once one is, it drops off this list (find it instead via :meth:`~pyfsr.api.ai.AIApi.mcp_configs`,
     filtering on ``type == "connector"``).
     """
@@ -291,7 +306,7 @@ class ConnectorMcpCandidates(_Lenient):
 
 
 class ToolCall(_Lenient):
-    """One MCP/connector tool invocation, from ``llm_activity_logs`` — see
+    """One MCP/connector tool invocation, from ``llm_activity_logs`` -- see
     :meth:`~pyfsr.api.ai.AIApi.tool_usage`."""
 
     tool_name: str | None = None
