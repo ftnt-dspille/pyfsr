@@ -1,6 +1,6 @@
 {
   "library_dir": "/Users/dylanspille/PycharmProjects/pyfsr/examples/playbooks/library",
-  "count": 27,
+  "count": 28,
   "playbooks": [
     {
       "slug": "ai-enrichment-openai",
@@ -704,6 +704,32 @@
       ],
       "triggers": [
         "api_endpoint"
+      ],
+      "compiles_ok": true
+    },
+    {
+      "slug": "fortiai-agent-ioc-enrichment",
+      "stage": "enrichment",
+      "path": "examples/playbooks/library/enrichment/fortiai-agent-ioc-enrichment.yaml",
+      "name": "FortiAI Agent – IOC Enrichment",
+      "goal": "Trigger the on-appliance ioc-enrichment FortiAI agent (POST /api/ai/agents/<name>/trigger) with the alert's source IP, wait, fetch the result, and write the answer/evidence back as a comment.",
+      "source": "new",
+      "step_types": [
+        "start",
+        "set_variable",
+        "connector",
+        "delay",
+        "create_record"
+      ],
+      "connectors": [
+        "cyops_utilities"
+      ],
+      "jinja_filters": [
+        "default",
+        "tojson"
+      ],
+      "triggers": [
+        "start"
       ],
       "compiles_ok": true
     }
