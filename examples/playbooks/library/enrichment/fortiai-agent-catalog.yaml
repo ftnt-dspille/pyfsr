@@ -1,0 +1,782 @@
+# Library playbook collection: FortiAI Agent Catalog
+#
+# One collection, one playbook per on-appliance FortiAI agent — so you can
+# deploy a single file and see every agent's input shape + result shape in
+# the FortiSOAR UI. Each playbook triggers a named agent via the fsr-ai
+# service API (POST /api/ai/agents/<name>/trigger), waits, fetches the
+# result, and writes the agent's answer back as a comment.
+#
+# Two result families:
+#   VERDICT agents (ioc-enrichment, siem, identity-context, itsm,
+#   endpoint-telemetry, asset-enrichment, organization-context) return:
+#     {answer: str, confidence: str, evidence: str}
+#
+#   STRUCTURED agents (summary, metric-computation, risk-evaluation,
+#   task-planner, fortisoar-data-access) return:
+#     {data: str | object}  — no answer/confidence/evidence
+#
+# Requirements:
+#   - FortiAI features enabled (System Settings)
+#   - The calling role needs execute.ai_agents
+#   - cyops_utilities connector configured (make_cyops_request is the
+#     loopback HTTP caller)
+#
+# Input format discovery:
+#   The documented inputformat is at GET /api/ai/agent/{name}/{version}
+#   (client.ai.agent_input_schema(name)). It is sometimes INCOMPLETE —
+#   task-planner requires chain_of_thought (undocumented), conversation
+#   requires user_id (undocumented). Send an empty payload to the trigger
+#   endpoint and read the error to discover the real required fields:
+#     POST /api/ai/agents/<name>/trigger  {}  →  error names missing keys
+#
+# Live-verified on .159 (8.0.0) — all response shapes captured through
+# make_cyops_request via /api/integration/execute/ (exactly how a playbook
+# step calls them), so the Jinja in the comment steps matches the real
+# wire format.
+
+collection: FortiAI Agent Catalog
+description: 'One playbook per FortiAI agent — trigger, wait, result, comment. Deploy this single collection to see every agent work in the UI.'
+visible: true
+playbooks:
+# ─────────────────────────────────────────────────────────────────────
+# VERDICT FAMILY — result: {answer, confidence, evidence}
+# ─────────────────────────────────────────────────────────────────────
+
+- name: 01 – IOC Enrichment Agent
+  description: Ask the Threat Intelligence Provider agent whether a source IP is malicious.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    module: alerts
+    button_label: IOC Enrichment
+    next: Build Input
+  - type: set_variable
+    name: Build Input
+    vars:
+      ioc_value: '{{ vars.input.records[0].sourceIP | default(vars.input.records[0].sourceip) | default("8.8.8.8") }}'
+      agent_body: >-
+        {{ {"question": "Is this source IP associated with known malicious activity?",
+            "ioc": [{"type": "IP Address", "value": vars.ioc_value}]} | tojson }}
+    next: Trigger Agent
+  - type: connector
+    name: Trigger Agent
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: /api/ai/agents/ioc-enrichment/trigger
+      method: POST
+      body: '{{ vars.agent_body }}'
+    step_variables:
+      task_id: '{{ vars.steps.Trigger_Agent.data.task_id }}'
+    next: Wait
+  - type: delay
+    name: Wait
+    seconds: 30
+    next: Get Result
+  - type: connector
+    name: Get Result
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: '/api/ai/agents/{{ vars.task_id }}/result'
+      method: GET
+    step_variables:
+      answer: '{{ vars.steps.Get_Result.data.answer | default("(no answer)") }}'
+      confidence: '{{ vars.steps.Get_Result.data.confidence | default("") }}'
+      evidence: '{{ vars.steps.Get_Result.data.evidence | default("") }}'
+    next: Add Comment
+  - type: create_record
+    name: Add Comment
+    module: comments
+    fields:
+      alerts: '{{ vars.input.records[0]["@id"] }}'
+      content: >-
+        <p><b>FortiAI ioc-enrichment</b> — verdict: <b>{{ vars.answer }}</b>
+        (confidence: {{ vars.confidence }})</p>
+        <p>{{ vars.evidence }}</p>
+      isImportant: true
+    operation: Overwrite
+    next: End
+  - type: connector
+    name: End
+    connector: cyops_utilities
+    operation: no_op
+    params: []
+    version: 3.4.0
+    operationTitle: 'Utils: No Operation'
+
+- name: 02 – SIEM Search Agent
+  description: Ask the Query SIEM agent for recent events from the alert's source host.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    module: alerts
+    button_label: SIEM Search
+    next: Build Input
+  - type: set_variable
+    name: Build Input
+    vars:
+      host: '{{ vars.input.records[0].sourceIP | default("192.168.100.20") }}'
+      agent_body: >-
+        {{ {"intent": "search_events",
+            "question": "Show recent events from host " ~ vars.host,
+            "indicatorRecordType": "Host",
+            "indicatorRecordValue": vars.host} | tojson }}
+    next: Trigger Agent
+  - type: connector
+    name: Trigger Agent
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: /api/ai/agents/siem/trigger
+      method: POST
+      body: '{{ vars.agent_body }}'
+    step_variables:
+      task_id: '{{ vars.steps.Trigger_Agent.data.task_id }}'
+    next: Wait
+  - type: delay
+    name: Wait
+    seconds: 45
+    next: Get Result
+  - type: connector
+    name: Get Result
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: '/api/ai/agents/{{ vars.task_id }}/result'
+      method: GET
+    step_variables:
+      answer: '{{ vars.steps.Get_Result.data.answer | default("(no answer)") }}'
+      confidence: '{{ vars.steps.Get_Result.data.confidence | default("") }}'
+      evidence: '{{ vars.steps.Get_Result.data.evidence | default("") }}'
+    next: Add Comment
+  - type: create_record
+    name: Add Comment
+    module: comments
+    fields:
+      alerts: '{{ vars.input.records[0]["@id"] }}'
+      content: >-
+        <p><b>FortiAI siem</b> — verdict: <b>{{ vars.answer }}</b>
+        (confidence: {{ vars.confidence }})</p>
+        <p>{{ vars.evidence }}</p>
+      isImportant: true
+    operation: Overwrite
+    next: End
+  - type: connector
+    name: End
+    connector: cyops_utilities
+    operation: no_op
+    params: []
+    version: 3.4.0
+    operationTitle: 'Utils: No Operation'
+
+- name: 03 – Identity Context Agent
+  description: Ask the Identity Context Provider agent about a user's roles and groups.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    module: alerts
+    button_label: Identity Context
+    next: Build Input
+  - type: set_variable
+    name: Build Input
+    vars:
+      username: '{{ vars.input.records[0].createdBy | default("admin") }}'
+      agent_body: >-
+        {{ {"user": vars.username,
+            "question": "What roles and groups does this user belong to?"} | tojson }}
+    next: Trigger Agent
+  - type: connector
+    name: Trigger Agent
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: /api/ai/agents/identity-context/trigger
+      method: POST
+      body: '{{ vars.agent_body }}'
+    step_variables:
+      task_id: '{{ vars.steps.Trigger_Agent.data.task_id }}'
+    next: Wait
+  - type: delay
+    name: Wait
+    seconds: 15
+    next: Get Result
+  - type: connector
+    name: Get Result
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: '/api/ai/agents/{{ vars.task_id }}/result'
+      method: GET
+    step_variables:
+      answer: '{{ vars.steps.Get_Result.data.answer | default("(no answer)") }}'
+      confidence: '{{ vars.steps.Get_Result.data.confidence | default("") }}'
+      evidence: '{{ vars.steps.Get_Result.data.evidence | default("") }}'
+    next: Add Comment
+  - type: create_record
+    name: Add Comment
+    module: comments
+    fields:
+      alerts: '{{ vars.input.records[0]["@id"] }}'
+      content: >-
+        <p><b>FortiAI identity-context</b> — verdict: <b>{{ vars.answer }}</b>
+        (confidence: {{ vars.confidence }})</p>
+        <p>{{ vars.evidence }}</p>
+      isImportant: true
+    operation: Overwrite
+    next: End
+  - type: connector
+    name: End
+    connector: cyops_utilities
+    operation: no_op
+    params: []
+    version: 3.4.0
+    operationTitle: 'Utils: No Operation'
+
+- name: 04 – ITSM Context Agent
+  description: Ask the ITSM Context Provider agent about open tickets related to the alert's indicators.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    module: alerts
+    button_label: ITSM Lookup
+    next: Build Input
+  - type: set_variable
+    name: Build Input
+    vars:
+      entity: '{{ vars.input.records[0].sourceIP | default("192.168.100.20") }}'
+      agent_body: >-
+        {{ {"entities": [vars.entity],
+            "question": "Are there any open tickets related to " ~ vars.entity ~ "?",
+            "time_window_days": 30} | tojson }}
+    next: Trigger Agent
+  - type: connector
+    name: Trigger Agent
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: /api/ai/agents/itsm/trigger
+      method: POST
+      body: '{{ vars.agent_body }}'
+    step_variables:
+      task_id: '{{ vars.steps.Trigger_Agent.data.task_id }}'
+    next: Wait
+  - type: delay
+    name: Wait
+    seconds: 15
+    next: Get Result
+  - type: connector
+    name: Get Result
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: '/api/ai/agents/{{ vars.task_id }}/result'
+      method: GET
+    step_variables:
+      answer: '{{ vars.steps.Get_Result.data.answer | default("(no answer)") }}'
+      confidence: '{{ vars.steps.Get_Result.data.confidence | default("") }}'
+      evidence: '{{ vars.steps.Get_Result.data.evidence | default("") }}'
+    next: Add Comment
+  - type: create_record
+    name: Add Comment
+    module: comments
+    fields:
+      alerts: '{{ vars.input.records[0]["@id"] }}'
+      content: >-
+        <p><b>FortiAI itsm</b> — verdict: <b>{{ vars.answer }}</b>
+        (confidence: {{ vars.confidence }})</p>
+        <p>{{ vars.evidence }}</p>
+      isImportant: true
+    operation: Overwrite
+    next: End
+  - type: connector
+    name: End
+    connector: cyops_utilities
+    operation: no_op
+    params: []
+    version: 3.4.0
+    operationTitle: 'Utils: No Operation'
+
+- name: 05 – Asset Enrichment Agent
+  description: Ask the Asset Context Provider agent what is known about the alert's source asset.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    module: alerts
+    button_label: Asset Enrichment
+    next: Build Input
+  - type: set_variable
+    name: Build Input
+    vars:
+      asset: '{{ vars.input.records[0].sourceIP | default("192.168.100.20") }}'
+      agent_body: >-
+        {{ {"asset": [vars.asset],
+            "question": "What do we know about this asset?"} | tojson }}
+    next: Trigger Agent
+  - type: connector
+    name: Trigger Agent
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: /api/ai/agents/asset-enrichment/trigger
+      method: POST
+      body: '{{ vars.agent_body }}'
+    step_variables:
+      task_id: '{{ vars.steps.Trigger_Agent.data.task_id }}'
+    next: Wait
+  - type: delay
+    name: Wait
+    seconds: 25
+    next: Get Result
+  - type: connector
+    name: Get Result
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: '/api/ai/agents/{{ vars.task_id }}/result'
+      method: GET
+    step_variables:
+      answer: '{{ vars.steps.Get_Result.data.answer | default("(no answer)") }}'
+      confidence: '{{ vars.steps.Get_Result.data.confidence | default("") }}'
+      evidence: '{{ vars.steps.Get_Result.data.evidence | default("") }}'
+    next: Add Comment
+  - type: create_record
+    name: Add Comment
+    module: comments
+    fields:
+      alerts: '{{ vars.input.records[0]["@id"] }}'
+      content: >-
+        <p><b>FortiAI asset-enrichment</b> — verdict: <b>{{ vars.answer }}</b>
+        (confidence: {{ vars.confidence }})</p>
+        <p>{{ vars.evidence }}</p>
+      isImportant: true
+    operation: Overwrite
+    next: End
+  - type: connector
+    name: End
+    connector: cyops_utilities
+    operation: no_op
+    params: []
+    version: 3.4.0
+    operationTitle: 'Utils: No Operation'
+
+- name: 06 – Endpoint Telemetry Agent
+  description: Ask the Query Endpoint agent for endpoint telemetry on the alert's host.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    module: alerts
+    button_label: Endpoint Telemetry
+    next: Build Input
+  - type: set_variable
+    name: Build Input
+    vars:
+      host: '{{ vars.input.records[0].sourceIP | default("192.168.100.20") }}'
+      agent_body: >-
+        {{ {"hostname": vars.host,
+            "ioc": vars.host,
+            "question": "Is there any endpoint telemetry for this host?"} | tojson }}
+    next: Trigger Agent
+  - type: connector
+    name: Trigger Agent
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: /api/ai/agents/endpoint-telemetry/trigger
+      method: POST
+      body: '{{ vars.agent_body }}'
+    step_variables:
+      task_id: '{{ vars.steps.Trigger_Agent.data.task_id }}'
+    next: Wait
+  - type: delay
+    name: Wait
+    seconds: 20
+    next: Get Result
+  - type: connector
+    name: Get Result
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: '/api/ai/agents/{{ vars.task_id }}/result'
+      method: GET
+    step_variables:
+      answer: '{{ vars.steps.Get_Result.data.answer | default("(no answer)") }}'
+      confidence: '{{ vars.steps.Get_Result.data.confidence | default("") }}'
+      evidence: '{{ vars.steps.Get_Result.data.evidence | default("") }}'
+    next: Add Comment
+  - type: create_record
+    name: Add Comment
+    module: comments
+    fields:
+      alerts: '{{ vars.input.records[0]["@id"] }}'
+      content: >-
+        <p><b>FortiAI endpoint-telemetry</b> — verdict: <b>{{ vars.answer }}</b>
+        (confidence: {{ vars.confidence }})</p>
+        <p>{{ vars.evidence }}</p>
+      isImportant: true
+    operation: Overwrite
+    next: End
+  - type: connector
+    name: End
+    connector: cyops_utilities
+    operation: no_op
+    params: []
+    version: 3.4.0
+    operationTitle: 'Utils: No Operation'
+
+# ─────────────────────────────────────────────────────────────────────
+# STRUCTURED FAMILY — result: {data: str | object}
+# ─────────────────────────────────────────────────────────────────────
+
+- name: 07 – Summary Agent
+  description: Ask the Summary agent to summarize investigation findings from prior steps.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    module: alerts
+    button_label: Summarize
+    next: Build Input
+  - type: set_variable
+    name: Build Input
+    vars:
+      agent_body: >-
+        {{ {"data": [{"step": "Alert Intake",
+            "verdict": "Suspicious",
+            "evidence": vars.input.records[0].name ~ " — " ~ (vars.input.records[0].description | default("no description"))}],
+            "natural_language_task": "Summarize the investigation findings and give a verdict.",
+            "socrole": "L2 Analyst"} | tojson }}
+    next: Trigger Agent
+  - type: connector
+    name: Trigger Agent
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: /api/ai/agents/summary/trigger
+      method: POST
+      body: '{{ vars.agent_body }}'
+    step_variables:
+      task_id: '{{ vars.steps.Trigger_Agent.data.task_id }}'
+    next: Wait
+  - type: delay
+    name: Wait
+    seconds: 15
+    next: Get Result
+  - type: connector
+    name: Get Result
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: '/api/ai/agents/{{ vars.task_id }}/result'
+      method: GET
+    step_variables:
+      result_data: '{{ vars.steps.Get_Result.data.data | default("(no data)") }}'
+    next: Add Comment
+  - type: create_record
+    name: Add Comment
+    module: comments
+    fields:
+      alerts: '{{ vars.input.records[0]["@id"] }}'
+      content: >-
+        <p><b>FortiAI summary</b></p>
+        <p>{{ vars.result_data }}</p>
+      isImportant: true
+    operation: Overwrite
+    next: End
+  - type: connector
+    name: End
+    connector: cyops_utilities
+    operation: no_op
+    params: []
+    version: 3.4.0
+    operationTitle: 'Utils: No Operation'
+
+- name: 08 – Risk Evaluation Agent
+  description: Ask the Impact Analysis agent to evaluate the risk level of the current alert.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    module: alerts
+    button_label: Risk Evaluation
+    next: Build Input
+  - type: set_variable
+    name: Build Input
+    vars:
+      agent_body: >-
+        {{ {"data": [{"type": "alert",
+            "name": vars.input.records[0].name,
+            "severity": vars.input.records[0].severity | default("Medium"),
+            "sourceIP": vars.input.records[0].sourceIP | default("")}],
+            "natural_language_task": "Evaluate the risk level of this alert."} | tojson }}
+    next: Trigger Agent
+  - type: connector
+    name: Trigger Agent
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: /api/ai/agents/risk-evaluation/trigger
+      method: POST
+      body: '{{ vars.agent_body }}'
+    step_variables:
+      task_id: '{{ vars.steps.Trigger_Agent.data.task_id }}'
+    next: Wait
+  - type: delay
+    name: Wait
+    seconds: 15
+    next: Get Result
+  - type: connector
+    name: Get Result
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: '/api/ai/agents/{{ vars.task_id }}/result'
+      method: GET
+    step_variables:
+      result_data: '{{ vars.steps.Get_Result.data.data | tojson | default("{}") }}'
+    next: Add Comment
+  - type: create_record
+    name: Add Comment
+    module: comments
+    fields:
+      alerts: '{{ vars.input.records[0]["@id"] }}'
+      content: >-
+        <p><b>FortiAI risk-evaluation</b></p>
+        <pre>{{ vars.result_data }}</pre>
+      isImportant: true
+    operation: Overwrite
+    next: End
+  - type: connector
+    name: End
+    connector: cyops_utilities
+    operation: no_op
+    params: []
+    version: 3.4.0
+    operationTitle: 'Utils: No Operation'
+
+- name: 09 – Metric Computation Agent
+  description: Ask the Metric Computation agent to count alerts by severity.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    module: alerts
+    button_label: Compute Metrics
+    next: Build Input
+  - type: set_variable
+    name: Build Input
+    vars:
+      agent_body: >-
+        {{ {"data": [{"name": vars.input.records[0].name,
+            "severity": vars.input.records[0].severity | default("Medium")}],
+            "natural_language_task": "Count alerts by severity and report the most common severity."} | tojson }}
+    next: Trigger Agent
+  - type: connector
+    name: Trigger Agent
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: /api/ai/agents/metric-computation/trigger
+      method: POST
+      body: '{{ vars.agent_body }}'
+    step_variables:
+      task_id: '{{ vars.steps.Trigger_Agent.data.task_id }}'
+    next: Wait
+  - type: delay
+    name: Wait
+    seconds: 15
+    next: Get Result
+  - type: connector
+    name: Get Result
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: '/api/ai/agents/{{ vars.task_id }}/result'
+      method: GET
+    step_variables:
+      result_data: '{{ vars.steps.Get_Result.data.data | tojson | default("{}") }}'
+    next: Add Comment
+  - type: create_record
+    name: Add Comment
+    module: comments
+    fields:
+      alerts: '{{ vars.input.records[0]["@id"] }}'
+      content: >-
+        <p><b>FortiAI metric-computation</b></p>
+        <pre>{{ vars.result_data }}</pre>
+      isImportant: true
+    operation: Overwrite
+    next: End
+  - type: connector
+    name: End
+    connector: cyops_utilities
+    operation: no_op
+    params: []
+    version: 3.4.0
+    operationTitle: 'Utils: No Operation'
+
+- name: 10 – Task Planner Agent
+  description: Ask the Task Planner agent to decompose an investigation into structured steps.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    module: alerts
+    button_label: Plan Investigation
+    next: Build Input
+  - type: set_variable
+    name: Build Input
+    vars:
+      agent_body: >-
+        {{ {"query": "Investigate alert: " ~ vars.input.records[0].name,
+            "socrole": "L1 Analyst",
+            "generate_plan": "true",
+            "chain_of_thought": "Decompose the investigation into enrichment, IOC lookup, and containment steps."} | tojson }}
+    next: Trigger Agent
+  - type: connector
+    name: Trigger Agent
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: /api/ai/agents/task-planner/trigger
+      method: POST
+      body: '{{ vars.agent_body }}'
+    step_variables:
+      task_id: '{{ vars.steps.Trigger_Agent.data.task_id }}'
+    next: Wait
+  - type: delay
+    name: Wait
+    seconds: 25
+    next: Get Result
+  - type: connector
+    name: Get Result
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: '/api/ai/agents/{{ vars.task_id }}/result'
+      method: GET
+    step_variables:
+      objective: '{{ vars.steps.Get_Result.data.objective | default("") }}'
+      chain_of_thought: '{{ vars.steps.Get_Result.data.chain_of_thought | tojson | default("[]") }}'
+    next: Add Comment
+  - type: create_record
+    name: Add Comment
+    module: comments
+    fields:
+      alerts: '{{ vars.input.records[0]["@id"] }}'
+      content: >-
+        <p><b>FortiAI task-planner</b></p>
+        <p><b>Objective:</b> {{ vars.objective }}</p>
+        <p><b>Plan:</b></p>
+        <pre>{{ vars.chain_of_thought }}</pre>
+      isImportant: true
+    operation: Overwrite
+    next: End
+  - type: connector
+    name: End
+    connector: cyops_utilities
+    operation: no_op
+    params: []
+    version: 3.4.0
+    operationTitle: 'Utils: No Operation'
+
+- name: 11 – FortiSOAR Data Access Agent
+  description: Ask the FortiSOAR Data Access agent a natural-language question about records on this box.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    module: alerts
+    button_label: FSR Data Query
+    next: Build Input
+  - type: set_variable
+    name: Build Input
+    vars:
+      agent_body: >-
+        {{ {"natural_language_task": "Find the 3 most recent alerts and return their names and severities.",
+            "objective": "Get recent alerts for investigation context.",
+            "entities": "name, severity",
+            "user_context": "L2 Analyst"} | tojson }}
+    next: Trigger Agent
+  - type: connector
+    name: Trigger Agent
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: /api/ai/agents/fortisoar-data-access/trigger
+      method: POST
+      body: '{{ vars.agent_body }}'
+    step_variables:
+      task_id: '{{ vars.steps.Trigger_Agent.data.task_id }}'
+    next: Wait
+  - type: delay
+    name: Wait
+    seconds: 90
+    next: Get Result
+  - type: connector
+    name: Get Result
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: '/api/ai/agents/{{ vars.task_id }}/result'
+      method: GET
+    step_variables:
+      result_data: '{{ vars.steps.Get_Result.data.data | tojson | default("{}") }}'
+    next: Add Comment
+  - type: create_record
+    name: Add Comment
+    module: comments
+    fields:
+      alerts: '{{ vars.input.records[0]["@id"] }}'
+      content: >-
+        <p><b>FortiAI fortisoar-data-access</b></p>
+        <pre>{{ vars.result_data }}</pre>
+      isImportant: true
+    operation: Overwrite
+    next: End
+  - type: connector
+    name: End
+    connector: cyops_utilities
+    operation: no_op
+    params: []
+    version: 3.4.0
+    operationTitle: 'Utils: No Operation'
