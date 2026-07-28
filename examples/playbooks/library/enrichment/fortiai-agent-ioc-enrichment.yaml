@@ -1,0 +1,104 @@
+# Library playbook: Ask a specific on-appliance FortiAI agent to enrich an
+# indicator, then write the agent's answer + evidence back as a comment.
+#
+# goal: trigger the ioc-enrichment FortiAI agent (POST /api/ai/agents/<name>/trigger)
+#   with the alert's source IP, wait for it to finish, fetch the result, and
+#   comment the answer/confidence/evidence back on the alert.
+# trigger: manual (Execute button on alerts)
+# inputs:  vars.input.records[0] (inbound alert) — needs a source IP field
+# outputs: a comment on the source alert with the agent's verdict
+# connectors: cyops_utilities (make_cyops_request — the loopback HTTP caller)
+# adapts-to: any FortiAI agent — swap the agent name in the trigger IRI and the
+#   payload to match the agent's inputformat (see client.ai.agent_input_schema).
+#
+# Unlike the raw fortinet-fortiai-proxy agent_chat_completions op (a single
+# LLM completion with no agent identity), this playbook calls a NAMED agent
+# through the fsr-ai service API (/api/ai/agents/<name>/trigger). Each agent
+# has its own input contract (inputformat) and returns a structured
+# answer/evidence/confidence — this one uses ioc-enrichment (the Threat
+# Intelligence Provider agent). For a free-form question instead of an IOC
+# lookup, swap the agent name to "conversation" and adapt the payload to its
+# inputformat (messages / insight_id / message_history).
+#
+# Three-step async pattern (trigger → wait → result):
+#   1. POST /api/ai/agents/ioc-enrichment/trigger  → {task_id, status: "pending"}
+#   2. delay (ioc-enrichment typically finishes in <30s; poll status in production)
+#   3. GET  /api/ai/agents/<task_id>/result         → {answer, confidence, evidence}
+#
+# Requires: FortiAI features enabled (System Settings) + the calling role needs
+# execute.ai_agents. The make_cyops_request op calls the local API loopback,
+# so no external key or egress.
+
+collection: Enrichment Library
+description: ''
+visible: true
+playbooks:
+- name: FortiAI Agent – IOC Enrichment
+  description: Trigger the on-appliance ioc-enrichment FortiAI agent with the alert's source IP and write the answer/evidence back as a comment.
+  is_active: true
+  trigger_step_id: Start
+  steps:
+  - type: start
+    name: Start
+    module: alerts
+    button_label: Enrich with FortiAI Agent
+    next: Build Agent Input
+  - type: set_variable
+    name: Build Agent Input
+    vars:
+      # The ioc-enrichment agent's inputformat: {question: str, ioc: [{type, value}]}.
+      # Adapt the field name to your alert's source-IP mapping; FortiSOAR alert
+      # field names vary by ingestion connector (sourceIP, sourceip, endpoint, …).
+      ioc_value: '{{ vars.input.records[0].sourceIP | default(vars.input.records[0].sourceip) | default("") }}'
+      agent_body: >-
+        {{ {"question": "Is this source IP associated with known malicious activity?",
+            "ioc": [{"type": "IP Address", "value": vars.ioc_value}]} | tojson }}
+    next: Trigger Agent
+  - type: connector
+    name: Trigger Agent
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: /api/ai/agents/ioc-enrichment/trigger
+      method: POST
+      body: '{{ vars.agent_body }}'
+    step_variables:
+      task_id: '{{ vars.steps.Trigger_Agent.data.task_id }}'
+    next: Wait for Agent
+  - type: delay
+    name: Wait for Agent
+    seconds: 30
+    next: Get Agent Result
+  - type: connector
+    name: Get Agent Result
+    connector: cyops_utilities
+    operation: make_cyops_request
+    operationTitle: 'FSR: Make FortiSOAR API Call'
+    params:
+      iri: '/api/ai/agents/{{ vars.task_id }}/result'
+      method: GET
+    step_variables:
+      agent_answer: '{{ vars.steps.Get_Agent_Result.data.answer | default("(no answer)") }}'
+      agent_confidence: '{{ vars.steps.Get_Agent_Result.data.confidence | default("") }}'
+      agent_evidence: '{{ vars.steps.Get_Agent_Result.data.evidence | default("") }}'
+    next: Add Comment
+  - type: create_record
+    name: Add Comment
+    module: comments
+    fields:
+      alerts: '{{ vars.input.records[0]["@id"] }}'
+      content: >-
+        <p><b>FortiAI ioc-enrichment agent</b> — verdict: <b>{{ vars.agent_answer }}</b>
+        (confidence: {{ vars.agent_confidence }})</p>
+        <p>{{ vars.agent_evidence }}</p>
+      isImportant: true
+    operation: Overwrite
+    next: End
+  - type: connector
+    name: End
+    connector: cyops_utilities
+    operation: no_op
+    params: []
+    version: 3.4.0
+    operationTitle: 'Utils: No Operation'
