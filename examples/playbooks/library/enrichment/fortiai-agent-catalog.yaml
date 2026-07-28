@@ -1,6 +1,6 @@
 # Library playbook collection: FortiAI Agent Catalog
 #
-# One collection, one playbook per on-appliance FortiAI agent — so you can
+# One collection, one playbook per on-appliance FortiAI agent -- so you can
 # deploy a single file and see every agent's input shape + result shape in
 # the FortiSOAR UI. Each playbook triggers a named agent via the fsr-ai
 # service API (POST /api/ai/agents/<name>/trigger), waits, fetches the
@@ -13,7 +13,7 @@
 #
 #   STRUCTURED agents (summary, metric-computation, risk-evaluation,
 #   task-planner, fortisoar-data-access) return:
-#     {data: str | object}  — no answer/confidence/evidence
+#     {data: str | object}  -- no answer/confidence/evidence
 #
 # Requirements:
 #   - FortiAI features enabled (System Settings)
@@ -23,23 +23,23 @@
 #
 # Input format discovery:
 #   The documented inputformat is at GET /api/ai/agent/{name}/{version}
-#   (client.ai.agent_input_schema(name)). It is sometimes INCOMPLETE —
+#   (client.ai.agent_input_schema(name)). It is sometimes INCOMPLETE --
 #   task-planner requires chain_of_thought (undocumented), conversation
 #   requires user_id (undocumented). Send an empty payload to the trigger
 #   endpoint and read the error to discover the real required fields:
 #     POST /api/ai/agents/<name>/trigger  {}  →  error names missing keys
 #
-# Live-verified on .159 (8.0.0) — all response shapes captured through
+# Live-verified on .159 (8.0.0) -- all response shapes captured through
 # make_cyops_request via /api/integration/execute/ (exactly how a playbook
 # step calls them), so the Jinja in the comment steps matches the real
 # wire format.
 
 collection: FortiAI Agent Catalog
-description: 'One playbook per FortiAI agent — trigger, wait, result, comment. Deploy this single collection to see every agent work in the UI.'
+description: 'One playbook per FortiAI agent -- trigger, wait, result, comment. Deploy this single collection to see every agent work in the UI.'
 visible: true
 playbooks:
 # ─────────────────────────────────────────────────────────────────────
-# VERDICT FAMILY — result: {answer, confidence, evidence}
+# VERDICT FAMILY -- result: {answer, confidence, evidence}
 # ─────────────────────────────────────────────────────────────────────
 
 - name: 01 - IOC Enrichment Agent
@@ -95,7 +95,7 @@ playbooks:
     fields:
       alerts: '{{ vars.input.records[0]["@id"] }}'
       content: >-
-        <p><b>FortiAI ioc-enrichment</b> — verdict: <b>{{ vars.answer }}</b>
+        <p><b>FortiAI ioc-enrichment</b> -- verdict: <b>{{ vars.answer }}</b>
         (confidence: {{ vars.confidence }})</p>
         <p>{{ vars.evidence }}</p>
       isImportant: true
@@ -164,7 +164,7 @@ playbooks:
     fields:
       alerts: '{{ vars.input.records[0]["@id"] }}'
       content: >-
-        <p><b>FortiAI siem</b> — verdict: <b>{{ vars.answer }}</b>
+        <p><b>FortiAI siem</b> -- verdict: <b>{{ vars.answer }}</b>
         (confidence: {{ vars.confidence }})</p>
         <p>{{ vars.evidence }}</p>
       isImportant: true
@@ -231,7 +231,7 @@ playbooks:
     fields:
       alerts: '{{ vars.input.records[0]["@id"] }}'
       content: >-
-        <p><b>FortiAI identity-context</b> — verdict: <b>{{ vars.answer }}</b>
+        <p><b>FortiAI identity-context</b> -- verdict: <b>{{ vars.answer }}</b>
         (confidence: {{ vars.confidence }})</p>
         <p>{{ vars.evidence }}</p>
       isImportant: true
@@ -299,7 +299,7 @@ playbooks:
     fields:
       alerts: '{{ vars.input.records[0]["@id"] }}'
       content: >-
-        <p><b>FortiAI itsm</b> — verdict: <b>{{ vars.answer }}</b>
+        <p><b>FortiAI itsm</b> -- verdict: <b>{{ vars.answer }}</b>
         (confidence: {{ vars.confidence }})</p>
         <p>{{ vars.evidence }}</p>
       isImportant: true
@@ -366,7 +366,7 @@ playbooks:
     fields:
       alerts: '{{ vars.input.records[0]["@id"] }}'
       content: >-
-        <p><b>FortiAI asset-enrichment</b> — verdict: <b>{{ vars.answer }}</b>
+        <p><b>FortiAI asset-enrichment</b> -- verdict: <b>{{ vars.answer }}</b>
         (confidence: {{ vars.confidence }})</p>
         <p>{{ vars.evidence }}</p>
       isImportant: true
@@ -434,7 +434,7 @@ playbooks:
     fields:
       alerts: '{{ vars.input.records[0]["@id"] }}'
       content: >-
-        <p><b>FortiAI endpoint-telemetry</b> — verdict: <b>{{ vars.answer }}</b>
+        <p><b>FortiAI endpoint-telemetry</b> -- verdict: <b>{{ vars.answer }}</b>
         (confidence: {{ vars.confidence }})</p>
         <p>{{ vars.evidence }}</p>
       isImportant: true
@@ -449,7 +449,7 @@ playbooks:
     operationTitle: 'Utils: No Operation'
 
 # ─────────────────────────────────────────────────────────────────────
-# STRUCTURED FAMILY — result: {data: str | object}
+# STRUCTURED FAMILY -- result: {data: str | object}
 # ─────────────────────────────────────────────────────────────────────
 
 - name: 07 - Summary Agent
@@ -468,7 +468,7 @@ playbooks:
       agent_body: >-
         {{ {"data": [{"step": "Alert Intake",
             "verdict": "Suspicious",
-            "evidence": vars.input.records[0].name ~ " — " ~ (vars.input.records[0].description | default("no description"))}],
+            "evidence": vars.input.records[0].name ~ " -- " ~ (vars.input.records[0].description | default("no description"))}],
             "natural_language_task": "Summarize the investigation findings and give a verdict.",
             "socrole": "L2 Analyst"} | tojson }}
     next: Trigger Agent
