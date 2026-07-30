@@ -1,4 +1,4 @@
-"""Configuration *import* — the other half of the Export Wizard.
+"""Configuration *import* -- the other half of the Export Wizard.
 
 Wraps FortiSOAR's ``/api/import`` + ``/api/3/import_jobs`` surface so callers can
 re-apply a Configuration-Export ``.zip`` (the kind :class:`~pyfsr.api.export_config.ExportConfigAPI`
@@ -15,17 +15,17 @@ them intact; importing onto a different appliance only decrypts if its
 
 Lifecycle (each step verified live on 7.6.5):
 
-1. ``POST /api/3/files`` — upload the ``.zip`` (via ``client.files.upload``).
+1. ``POST /api/3/files`` -- upload the ``.zip`` (via ``client.files.upload``).
 2. ``POST /api/3/import_jobs`` ``{status:"InProgress", file:"/api/3/files/<uuid>"}``.
-3. ``GET /api/import/<job>`` — kicks off **async** option generation; its body is
+3. ``GET /api/import/<job>`` -- kicks off **async** option generation; its body is
    a progress log, *not* the options. Poll ``GET /api/3/import_jobs/<job>`` until
    ``options`` is populated (status becomes ``"Reviewing"``).
 4. Optionally ``PUT /api/3/import_jobs/<job>`` ``{options:...}`` to tweak, then
    ``PUT /api/import/<job>`` to trigger. Poll until ``status == "Import Complete"``.
 
 An import that carries **module/schema** changes drives the appliance through the
-same backup + DB migrate + cache-rebuild cycle a publish does, so — like
-:meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.publish` — the pollers here ride
+same backup + DB migrate + cache-rebuild cycle a publish does, so -- like
+:meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.publish` -- the pollers here ride
 through the transient 5xx / "System Backup" / "Clearing Cache" / "Schema Update"
 states instead of failing on them, and :meth:`~ImportConfigAPI.import_file`
 settles on a responsive schema cache before returning (see
@@ -44,10 +44,12 @@ Example:
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
 from typing import Any
 
 from ..exceptions import FortiSOARException, describe_migrate_failure, is_migrate_transient
+from ..exports import Export, ExportKind, Finding
 from ..models._integration import ImportJobResult
 from .base import BaseAPI
 
@@ -55,14 +57,101 @@ from .base import BaseAPI
 _IMPORT_TERMINAL = frozenset({"import complete", "completed", "failed", "error"})
 
 #: Terminal statuses that mean the import (and any schema migrate it triggered) failed.
-#: The appliance surfaces a failed migrate right on the job — ``status == "Error"`` with
+#: The appliance surfaces a failed migrate right on the job -- ``status == "Error"`` with
 #: the publish exception in ``errorMessage`` (e.g. the ``42P07`` duplicate-index wedge).
 _IMPORT_FAILED = frozenset({"failed", "error"})
 
-#: Module-level ``changes`` fields that rewrite a table's identity — these drive a
+#: Module-level ``changes`` fields that rewrite a table's identity -- these drive a
 #: destructive migrate (rename + index/constraint rebuild) that can fail or wedge the
 #: appliance (e.g. a tableName rename whose ``CREATE INDEX`` collides with the old one).
 _RISKY_MODULE_FIELDS = frozenset({"tablename", "name", "type"})
+
+
+@dataclass
+class DryRunResult:
+    """What an import *would* do, without doing it.
+
+    Combines the two things that can be known before committing: the offline
+    structural findings from :mod:`pyfsr.exports`, and the appliance's own
+    analysis of the bundle (the options the wizard's review screen renders,
+    which is the only authority on whether the export's fields line up with
+    *this* target's schema).
+    """
+
+    path: str
+    kind: ExportKind
+    findings: list[Finding] = field(default_factory=list)
+    options: dict[str, Any] = field(default_factory=dict)
+    risks: list[dict[str, Any]] = field(default_factory=list)
+    sections: dict[str, dict[str, int]] = field(default_factory=dict)
+    external_connectors: list[str] = field(default_factory=list)
+    job_uuid: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        """True when nothing would block or endanger the import."""
+        return not self.risks and not any(f.is_error for f in self.findings)
+
+    def summary(self) -> str:
+        """A short human-readable report."""
+        lines = [f"{self.path} -- {self.kind.value}", f"  verdict     : {'OK' if self.ok else 'PROBLEMS'}"]
+        for name, c in sorted(self.sections.items()):
+            detail = f"{c['total']} item(s): {c['new']} new, {c['existing']} already present"
+            if c["excluded"]:
+                detail += f", {c['excluded']} excluded by default"
+            lines.append(f"  {name:22}: {detail}")
+        if self.external_connectors:
+            lines.append("  requires    : " + ", ".join(self.external_connectors))
+        for r in self.risks:
+            lines.append(f"  RISK   [{r['module']}] {r['message']}")
+        for f in self.findings:
+            if f.is_error:
+                lines.append(f"  ERROR  {f.code}: {f.message}")
+        return "\n".join(lines)
+
+
+def _iter_option_items(options: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Yield ``(section, item)`` for every reviewable item in generated options.
+
+    Sections are shaped ``{"values": ..., "include": bool}``, where ``values`` is
+    either a list of items or a dict of named sub-sections that each hold their
+    own ``values`` list (``playbooks -> collections -> values``).
+    """
+    for section, body in (options or {}).items():
+        if not isinstance(body, dict):
+            continue
+        values = body.get("values")
+        if isinstance(values, list):
+            for item in values:
+                if isinstance(item, dict):
+                    yield section, item
+        elif isinstance(values, dict):
+            for sub, subbody in values.items():
+                subvalues = subbody.get("values") if isinstance(subbody, dict) else None
+                if isinstance(subvalues, list):
+                    for item in subvalues:
+                        if isinstance(item, dict):
+                            yield f"{section}.{sub}", item
+
+
+def _plan_sections(options: dict[str, Any]) -> dict[str, dict[str, int]]:
+    """Per-section counts of what the import would create versus overwrite.
+
+    The appliance marks each item ``exists`` after matching it against live
+    content, which is what turns "8 playbook collections" into the far more
+    useful "8 collections, all of which already exist and would be merged".
+    """
+    plan: dict[str, dict[str, int]] = {}
+    for section, item in _iter_option_items(options):
+        counts = plan.setdefault(section, {"total": 0, "new": 0, "existing": 0, "excluded": 0})
+        counts["total"] += 1
+        if not item.get("include", True):
+            counts["excluded"] += 1
+        if item.get("exists"):
+            counts["existing"] += 1
+        else:
+            counts["new"] += 1
+    return plan
 
 
 def _job_uuid(resp: dict[str, Any]) -> str | None:
@@ -104,7 +193,7 @@ class ImportConfigAPI(BaseAPI):
         """Trigger option generation for an import job (async; returns immediately).
 
         ``GET /api/import/<job>`` starts the server walking the bundle to build
-        the per-section ``options``. The response is a progress log — the options
+        the per-section ``options``. The response is a progress log -- the options
         themselves land on the job record, so follow this with
         :meth:`wait_for_options`.
         """
@@ -166,7 +255,7 @@ class ImportConfigAPI(BaseAPI):
         large) briefly returns 503s and state strings like "System Backup",
         "Clearing Cache", or "Schema Update". Mirroring
         :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI._wait_for_publish`, any
-        such transient failure is treated as "still importing, keep waiting" —
+        such transient failure is treated as "still importing, keep waiting" --
         only a cleanly fetched job record is allowed to decide the outcome, so a
         mid-migrate outage never aborts a healthy import.
         """
@@ -176,7 +265,7 @@ class ImportConfigAPI(BaseAPI):
             try:
                 job = self.get_job(job_uuid)
             except Exception as exc:
-                # API down mid-migrate — the outage is the signal the import is
+                # API down mid-migrate -- the outage is the signal the import is
                 # still running; keep polling until it stabilises or we time out.
                 if not is_migrate_transient(exc):
                     raise
@@ -188,7 +277,7 @@ class ImportConfigAPI(BaseAPI):
             time.sleep(interval)
         if job is None:
             # Never got a single clean poll within the window (whole import ran
-            # under a migrate outage) — surface that rather than a bare None.
+            # under a migrate outage) -- surface that rather than a bare None.
             raise TimeoutError(f"import job {job_uuid} never returned a readable status within {timeout}s")
         return job
 
@@ -197,7 +286,7 @@ class ImportConfigAPI(BaseAPI):
 
         After an import that carries module/schema changes reports ``Import
         Complete``, the appliance keeps rebuilding its schema cache *appliance-
-        wide* for a while longer — so the very next ``list_modules()`` / record
+        wide* for a while longer -- so the very next ``list_modules()`` / record
         query can still hit a 503 "Clearing Cache" or "Schema Update". This polls
         the schema-metadata endpoint (the one that surfaces those states),
         treating every transient failure as "not settled yet", and returns once
@@ -220,6 +309,91 @@ class ImportConfigAPI(BaseAPI):
             time.sleep(interval)
 
     # ------------------------------------------------------------- high level
+    def dry_run(
+        self,
+        zip_path: str,
+        *,
+        options_timeout: float = 120.0,
+        cleanup: bool = True,
+        target_version: str | None = None,
+    ) -> DryRunResult:
+        """Analyse an export ``.zip`` against this appliance **without importing it**.
+
+        Runs the two halves of validation that can actually be known:
+
+        1. **Offline** -- :class:`pyfsr.exports.Export` structural checks: manifest
+           versus files, installers that resolve, categories that map to real
+           directories, dangling icon/postInstall/dependency references.
+        2. **On the target** -- upload → create job → generate options → read them
+           back. That option set *is* the appliance's own analysis of the bundle
+           (the wizard's review screen), so it answers the one question no local
+           parser can: do these fields line up with **this** target's schema?
+           :func:`inspect_changes` then flags anything that would drive a
+           destructive migrate.
+
+        The run stops before ``PUT /api/import/<job>``, so nothing is applied --
+        the import job and its uploaded file are deleted again on the way out.
+
+        Args:
+            zip_path: the export ``.zip`` to analyse.
+            options_timeout: give up waiting on option generation (default 120s).
+            cleanup: delete the import job and uploaded file afterwards (default True).
+                Pass False to keep the job for inspection in the UI.
+            target_version: appliance version to check ``fsrMinCompatibility``
+                against. Read from the appliance when omitted.
+
+        Returns:
+            A :class:`DryRunResult`; check ``.ok`` or print ``.summary()``.
+
+        Example:
+            >>> client = demo_client()  # doctest: +SKIP
+            >>> report = client.import_config.dry_run("myPack-1.0.0.zip")  # doctest: +SKIP
+            >>> report.ok  # doctest: +SKIP
+            True
+        """
+        if target_version is None:
+            try:
+                raw = self.client.version()
+                target_version = str(raw.get("version") if isinstance(raw, dict) else raw) or None
+            except Exception:  # noqa: BLE001 -- version is a nicety, not a requirement
+                target_version = None
+
+        with Export.open(zip_path) as exp:
+            result = DryRunResult(
+                path=str(zip_path),
+                kind=exp.kind,
+                findings=exp.problems(target_version=target_version),
+                external_connectors=sorted(exp.external_connectors()),
+            )
+
+        job_uuid = None
+        file_iri = None
+        try:
+            uploaded = self.client.files.upload(zip_path)
+            file_iri = uploaded.get("@id")
+            if not file_iri:
+                raise ValueError(f"file upload returned no @id: {uploaded!r}")
+            job_uuid = self.create_job(file_iri)
+            result.job_uuid = job_uuid
+            self.generate_options(job_uuid)
+            result.options = self.wait_for_options(job_uuid, timeout=options_timeout)
+            result.risks = inspect_changes(result.options)
+            result.sections = _plan_sections(result.options)
+        finally:
+            if cleanup:
+                self._discard(job_uuid, file_iri)
+        return result
+
+    def _discard(self, job_uuid: str | None, file_iri: str | None) -> None:
+        """Delete an untriggered import job and its upload. Best-effort."""
+        for path in (f"/api/3/import_jobs/{job_uuid}" if job_uuid else None, file_iri):
+            if not path:
+                continue
+            try:
+                self.client.delete(path)
+            except Exception:  # noqa: BLE001 -- leaving a stray job behind is not worth raising over
+                pass
+
     def import_file(
         self,
         zip_path: str,
@@ -244,12 +418,12 @@ class ImportConfigAPI(BaseAPI):
         per-field merge action (overwrite vs keep existing).
 
         **Refuse-by-default safety.** Some of those changes drive a *destructive*
-        appliance-wide migrate — a ``tableName`` rename, a field type change, or a
-        change to a unique-constraint field — which can fail outright or wedge the
+        appliance-wide migrate -- a ``tableName`` rename, a field type change, or a
+        change to a unique-constraint field -- which can fail outright or wedge the
         box (e.g. a rename whose ``CREATE INDEX`` collides with the old table's
         index: Postgres ``42P07``). If the generated options contain any such
         change and you haven't said how to handle it, this raises ``ValueError``
-        *before* triggering — mirroring :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.publish`'s
+        *before* triggering -- mirroring :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.publish`'s
         precheck. Pick one of ``modify_options`` / ``resolve`` / ``allow_schema_changes``
         to proceed (see :func:`inspect_changes` to view the risks first).
 
@@ -260,15 +434,15 @@ class ImportConfigAPI(BaseAPI):
                 takes precedence over ``resolve``. See :func:`connectors_only`,
                 :func:`connector_flags`, :func:`merge_mode`, :func:`overwrite_all`,
                 :func:`keep_existing`, :func:`skip_schema_changes`.
-            resolve: one-shot conflict strategy instead of a callback — one of
+            resolve: one-shot conflict strategy instead of a callback -- one of
                 ``"overwrite"`` (apply all field changes), ``"keep_existing"``
                 (keep every existing field, add only new ones), or ``"skip_schema"``
-                (import records/views but do **not** apply schema changes — the safe
+                (import records/views but do **not** apply schema changes -- the safe
                 way past a risky rename). This is the "just do it" flag.
             allow_schema_changes: proceed with the server-default options even when
                 risky changes are present, without resolving them (default False).
             verify: raise :class:`~pyfsr.exceptions.FortiSOARException` if the run
-                finishes in a failure state (``status`` "Error"/"Failed") — the
+                finishes in a failure state (``status`` "Error"/"Failed") -- the
                 appliance reports a failed schema migrate right on the job, with the
                 publish exception in ``errorMessage`` (e.g. the ``42P07`` duplicate-
                 index wedge). With ``verify=False`` the failed job is returned for
@@ -341,7 +515,7 @@ class ImportConfigAPI(BaseAPI):
             job = self.get_job(job_uuid)
             # Record the polled job UUID on the typed model (the wire record
             # carries its own @id/uuid, but legacy dict-compat callers read
-            # ``result["jobUuid"]`` — declared field, not __pydantic_extra__).
+            # ``result["jobUuid"]`` -- declared field, not __pydantic_extra__).
             if job.jobUuid is None:
                 job.jobUuid = job_uuid
             return job
@@ -349,11 +523,11 @@ class ImportConfigAPI(BaseAPI):
         final = self.wait_for_import(job_uuid, interval=interval, timeout=timeout)
         if settle and str(final.status or "").strip().lower() in _IMPORT_TERMINAL:
             # Job reports done, but the appliance-wide schema/cache rebuild can
-            # outlive it — wait for the schema layer to answer cleanly so the
+            # outlive it -- wait for the schema layer to answer cleanly so the
             # caller's next list_modules()/query doesn't hit a stray 503.
             self.wait_until_ready(interval=interval, timeout=settle_timeout)
         if verify and str(final.status or "").strip().lower() in _IMPORT_FAILED:
-            # A failed schema migrate is reported right on the job — status "Error"
+            # A failed schema migrate is reported right on the job -- status "Error"
             # with the publish exception in errorMessage (e.g. the 42P07 duplicate-
             # index wedge). Raise it with remediation guidance rather than handing
             # back a job the caller has to remember to inspect.
@@ -397,14 +571,14 @@ def connector_flags(
     Each connector in a bundle carries two independent levers, matching the
     import wizard's connector row:
 
-    - ``includeInstall`` — (re)install the connector RPM/package itself.
-    - ``includeConfigurations`` — restore the connector's saved configurations
+    - ``includeInstall`` -- (re)install the connector RPM/package itself.
+    - ``includeConfigurations`` -- restore the connector's saved configurations
       (upserted by ``config_id``, secrets and all).
 
     Pass either as a bool to force it on/off across every connector in the
     bundle; leave it ``None`` to keep whatever the generated options already
     have. Unlike :func:`connectors_only`, this does **not** touch the other
-    top-level sections — use it when you want, say, "import everything, but do
+    top-level sections -- use it when you want, say, "import everything, but do
     not reinstall connectors, only restore their configs"::
 
         client.import_config.import_file(
@@ -446,10 +620,10 @@ def merge_mode(
     wizard offers a per-category "when it exists" choice. Each entry in the
     generated options carries a ``whenExists`` string that pyfsr sets here:
 
-    - ``record_sets`` — ``"replace"`` (default) overwrites matching records with
+    - ``record_sets`` -- ``"replace"`` (default) overwrites matching records with
       the bundle's; ``"append"`` adds the bundle's records alongside the existing
       ones. Sets ``options.recordSets.values[].whenExists``.
-    - ``picklists`` — ``"keep"`` (default) leaves each already-present picklist as
+    - ``picklists`` -- ``"keep"`` (default) leaves each already-present picklist as
       it is; ``"overwrite"`` replaces it with the bundle's version. Sets
       ``options.picklistNames.values[].whenExists``.
 
@@ -459,7 +633,7 @@ def merge_mode(
     ``moduleNotExists`` flag on a record-set entry (the target module is missing):
     the engine skips such a set regardless of ``record_sets``.
 
-    Example — import records without clobbering existing rows, and refresh
+    Example -- import records without clobbering existing rows, and refresh
     picklists::
 
         client.import_config.import_file(
@@ -515,7 +689,7 @@ def overwrite_all(options: dict[str, Any]) -> dict[str, Any]:
     """``modify_options`` helper: "Overwrite with new version" for every field.
 
     Sets ``include=True`` / ``_include="yes"`` on every module attribute, applying
-    all field changes from the bundle. Note this *applies* schema changes too — if
+    all field changes from the bundle. Note this *applies* schema changes too -- if
     a change is a risky rename/type change, prefer :func:`skip_schema_changes`.
     """
     for m in _iter_modules(options):
@@ -538,7 +712,7 @@ def keep_existing(options: dict[str, Any], fields: list[str] | None = None) -> d
     for m in _iter_modules(options):
         for a in _iter_attributes(m):
             if not a.get("exists"):
-                continue  # new fields have no keep/overwrite choice — leave them in
+                continue  # new fields have no keep/overwrite choice -- leave them in
             if want is None or a.get("name") in want or a.get("title") in want:
                 a["include"] = False
                 a["_include"] = "no"
@@ -549,7 +723,7 @@ def skip_schema_changes(options: dict[str, Any]) -> dict[str, Any]:
     """``modify_options`` helper: import records/views but apply no schema changes.
 
     Clears each module's ``_schema`` flag (the wizard's per-module "Schema"
-    checkbox), so the import does not run the schema migration — no table rename,
+    checkbox), so the import does not run the schema migration -- no table rename,
     column type change, or index/constraint rebuild. This is the safe way past a
     risky change (see :func:`inspect_changes`) that would otherwise fail or wedge
     the appliance-wide migrate.
@@ -591,7 +765,7 @@ def inspect_changes(options: dict[str, Any]) -> list[dict[str, Any]]:
                 )
         for a in _iter_attributes(m):
             if not a.get("include", True):
-                continue  # field set to "keep existing" — its change won't apply
+                continue  # field set to "keep existing" -- its change won't apply
             aname = a.get("name")
             entries: list[dict[str, Any]] = []
             changes = a.get("changes")
