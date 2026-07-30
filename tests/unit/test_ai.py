@@ -116,7 +116,7 @@ def test_start_investigation_link_false_skips_writeback():
 def test_start_investigation_link_skipped_when_uuid_unknown():
     c = RecordingClient()
     ai = AIApi(c)
-    # an alert dict with no uuid/@id/id can't be linked — best-effort, no error
+    # an alert dict with no uuid/@id/id can't be linked -- best-effort, no error
     ai.start_alert_investigation({"name": "no-id alert"})
     assert c.alerts.updates == []
 
@@ -642,7 +642,7 @@ def test_register_and_verify_merges_tools_from_validation():
 
     assert result["uuid"] == "m-new"
     assert result["tools"] == ["read_wiki_structure"]
-    # Only ONE validate call — upsert doesn't re-validate (already known-good).
+    # Only ONE validate call -- upsert doesn't re-validate (already known-good).
     assert [call for call in c.calls if call[:2] == ("POST", "/api/ai/mcp/validate")].__len__() == 1
 
 
@@ -781,7 +781,7 @@ def test_get_mcp_config_unknown_name_raises():
 
 # -- call_registered_tool / list_registered_tools ------------------------------
 class _FakeNativeMCP:
-    """Stands in for client.mcp — records the (url, headers, ...) it's reached with."""
+    """Stands in for client.mcp -- records the (url, headers, ...) it's reached with."""
 
     def __init__(self, call_payload=None, tools=None):
         self.call_payload = call_payload
@@ -874,7 +874,7 @@ _IOC_AGENT = {
 
 
 def test_run_agent_posts_to_agents_prefix_not_triage():
-    """The trigger must use /api/ai/agents/... — the /ai/triage/ form exists on the
+    """The trigger must use /api/ai/agents/... -- the /ai/triage/ form exists on the
     service but matches no permission group at the front door, so it 403s."""
     c = RecordingClient(responses={("GET", "/api/ai/agent/ioc-enrichment/1.0.0"): _IOC_AGENT})
     ai = AIApi(c)
@@ -953,3 +953,146 @@ def test_wait_for_agent_result_keeps_non_terminal_status_on_timeout():
     result = ai.wait_for_agent_result("t-1", interval=0, timeout=0)
     assert result.status == "inprogress"
     assert result.status not in TERMINAL_STATUSES
+
+
+# -- LLM config idempotency ------------------------------------------------
+
+
+def test_upsert_llm_config_creates_new_when_name_not_found():
+    new_uuid = "new-uuid"
+    c = RecordingClient(
+        responses={
+            ("GET", "/api/ai/llm/config"): [],
+            ("GET", f"/api/ai/llm/config/{new_uuid}"): {
+                "uuid": new_uuid,
+                "name": "OpenAI Direct",
+                "provider": "openai",
+            },
+        }
+    )
+    ai = AIApi(c)
+    result = ai.upsert_llm_config(
+        "OpenAI Direct",
+        provider="openai",
+        modelname="gpt-4.1",
+        apikey="test-key-123",
+        uuid=new_uuid,
+    )
+    posts = [call for call in c.calls if call[0] == "POST" and call[1] == "/api/ai/llm/config"]
+    assert len(posts) == 1
+    body = posts[0][2]
+    assert isinstance(body, list) and len(body) == 1
+    assert body[0]["name"] == "OpenAI Direct"
+    assert body[0]["provider"] == "openai"
+    assert body[0]["modelname"] == "gpt-4.1"
+    assert body[0]["apikey"] == "test-key-123"
+    assert body[0]["uuid"] == new_uuid  # supplied uuid honored
+    assert result.uuid == new_uuid  # GET round-trip returns the saved config
+    assert result.name == "OpenAI Direct"
+
+
+def test_upsert_llm_config_generates_uuid_when_none_supplied():
+    c = RecordingClient(responses={("GET", "/api/ai/llm/config"): []})
+    ai = AIApi(c)
+    ai.upsert_llm_config("Brand New", provider="openai", modelname="gpt-4.1", apikey="test-key-123")
+    posts = [call for call in c.calls if call[0] == "POST" and call[1] == "/api/ai/llm/config"]
+    assert len(posts) == 1
+    body = posts[0][2][0]
+    assert isinstance(body["uuid"], str) and body["uuid"]  # a fresh uuid was generated
+
+
+def test_upsert_llm_config_reuses_existing_uuid_by_name():
+    existing_uuid = "abc-123"
+    c = RecordingClient(
+        responses={
+            ("GET", "/api/ai/llm/config"): [
+                {"uuid": existing_uuid, "name": "Low Reasoning", "provider": "fortisoar"},
+            ],
+            ("GET", f"/api/ai/llm/config/{existing_uuid}"): {
+                "uuid": existing_uuid,
+                "name": "Low Reasoning",
+                "provider": "fortisoar",
+            },
+        }
+    )
+    ai = AIApi(c)
+    ai.upsert_llm_config(
+        "Low Reasoning",
+        provider="fortisoar",
+        modelname="gpt-4.1",
+        config={"connector_name": "openai", "connector_config_id": "cfg-1"},
+    )
+    posts = [call for call in c.calls if call[0] == "POST" and call[1] == "/api/ai/llm/config"]
+    assert len(posts) == 1
+    body = posts[0][2]
+    assert body[0]["uuid"] == existing_uuid  # reused, not regenerated
+    assert body[0]["modelname"] == "gpt-4.1"
+    assert body[0]["config"]["connector_name"] == "openai"
+
+
+def test_upsert_llm_config_is_idempotent_on_repeated_calls():
+    existing_uuid = "abc-123"
+    c = RecordingClient(
+        responses={
+            ("GET", "/api/ai/llm/config"): [
+                {"uuid": existing_uuid, "name": "My Profile", "provider": "openai"},
+            ],
+            ("GET", f"/api/ai/llm/config/{existing_uuid}"): {
+                "uuid": existing_uuid,
+                "name": "My Profile",
+                "provider": "openai",
+            },
+        }
+    )
+    ai = AIApi(c)
+    ai.upsert_llm_config("My Profile", provider="openai", modelname="gpt-4.1", apikey="test-key-123")
+    ai.upsert_llm_config("My Profile", provider="openai", modelname="gpt-4.1", apikey="test-key-123")
+    posts = [call for call in c.calls if call[0] == "POST" and call[1] == "/api/ai/llm/config"]
+    assert len(posts) == 2
+    assert posts[0][2][0]["uuid"] == existing_uuid
+    assert posts[1][2][0]["uuid"] == existing_uuid
+
+
+def test_verify_llm_config_does_not_send_model_id_as_query_param():
+    c = RecordingClient(
+        responses={
+            ("GET", "/api/ai/llm/config/abc/verify"): {"verified": True},
+        }
+    )
+    ai = AIApi(c)
+    result = ai.verify_llm_config("abc", model_id="gpt-4.1")
+    assert result == {"verified": True}
+    gets = [call for call in c.calls if call[0] == "GET" and "verify" in call[1]]
+    assert len(gets) == 1
+    assert gets[0][1] == "/api/ai/llm/config/abc/verify"
+
+
+def test_test_llm_config_posts_to_config_verify():
+    c = RecordingClient(
+        responses={
+            ("POST", "/api/ai/llm/config/verify"): {"verified": True},
+        }
+    )
+    ai = AIApi(c)
+    result = ai.test_llm_config(
+        name="OpenAI Direct",
+        provider="openai",
+        modelname="gpt-4.1",
+        apikey="test-key-123",
+        config={"temperature": 0.1},
+    )
+    assert result == {"verified": True}
+    posts = [call for call in c.calls if call[0] == "POST" and call[1] == "/api/ai/llm/config/verify"]
+    assert len(posts) == 1
+    body = posts[0][2]
+    assert body["name"] == "OpenAI Direct"
+    assert body["provider"] == "openai"
+
+
+def test_delete_llm_config_calls_delete_endpoint():
+    c = RecordingClient()
+    ai = AIApi(c)
+    ai.delete_llm_config("abc-123")
+    deletes = [call for call in c.calls if call[0] == "DELETE"]
+    assert len(deletes) == 1
+    assert deletes[0][1] == "/api/ai/llm/config/abc-123"

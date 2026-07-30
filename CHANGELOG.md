@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`AIApi.upsert_llm_config()`** -- idempotent create-or-update an LLM
+  reasoning profile by name. Looks up existing configs, reuses the found
+  UUID (or generates one), then `POST /api/ai/llm/config`; safe to re-run any
+  number of times. Avoids the 500 name-collision `create_llm_config` hits when
+  re-POSTing a duplicate name with a different UUID.
+- **`AIApi.test_llm_config()`** -- pre-save verification
+  (`POST /api/ai/llm/config/verify`) that sends a full `LLMConfigDTO` body so
+  the appliance builds a client and pings the provider before you commit the
+  profile.
+
+### Fixed
+- **`AIApi.verify_llm_config()` no longer sends `model_id` as a query param.**
+  On fsr-ai 8.0.0 the `GET .../{uuid}/verify` handler declares `model_id` as a
+  *path* parameter (same slot as `uuid`), so passing it as a query triggered a
+  422. The appliance tests the config's own `modelname`; the `model_id` arg is
+  retained for backward compatibility but ignored.
+
 ## [0.18.4] - 2026-07-28
 
 ### Added

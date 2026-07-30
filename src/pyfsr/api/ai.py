@@ -583,9 +583,91 @@ class AIApi(BaseAPI):
 
         The endpoint takes a *list* of config objects, mirroring the UI's bulk
         save; a single dict is wrapped automatically.
+
+        Note: the endpoint upserts by UUID -- if ``uuid`` is set and exists, the
+        profile is updated; if ``uuid`` is ``None`` a new one is created. However,
+        re-POSTing the same ``name`` with a *different* ``uuid`` will 500 on a
+        name-collision. For idempotent creates, use :meth:`upsert_llm_config`.
         """
         body = configs if isinstance(configs, list) else [configs]
         return self.client.post("/api/ai/llm/config", data=body)
+
+    def upsert_llm_config(
+        self,
+        name: str,
+        *,
+        provider: str,
+        modelname: str | None = None,
+        apikey: str | None = None,
+        baseurl: str | None = None,
+        config: dict[str, Any] | None = None,
+        isdefault: bool = False,
+        active: bool = True,
+        uuid: str | None = None,
+    ) -> LLMConfig:
+        """Idempotently create-or-update an LLM reasoning profile by name.
+
+        Searches existing configs for a matching ``name``. If found, reuses its
+        UUID (so the backend upserts in place). If not found, uses the supplied
+        ``uuid`` (or generates one). Then ``POST /api/ai/llm/config`` -- safe to
+        re-run any number of times.
+
+        Args:
+            name: profile display name (e.g. ``"Low Reasoning"``).
+            provider: one of ``openai``, ``anthropic``, ``gemini``, ``fortisoar``.
+            modelname: model identifier (e.g. ``"gpt-4.1"``).
+            apikey: API key for native providers (``openai``/``anthropic``/``gemini``).
+                Ignored for ``fortisoar`` (auth comes from the connector).
+            baseurl: base URL for native providers (e.g.
+                ``"https://api.openai.com/v1"``).
+            config: provider-specific config dict. For ``fortisoar``:
+                ``{"connector_name": "openai", "connector_config_id": "<uuid>"}``.
+                For native providers: ``{"temperature": 0.1}``.
+            isdefault: mark this as the default profile.
+            active: mark this profile as active.
+            uuid: explicit UUID for a new profile. If omitted and the name
+                doesn't exist, a random UUID is generated.
+
+        Returns:
+            The saved :class:`~pyfsr.models.LLMConfig`.
+
+        Example:
+            >>> client.ai.upsert_llm_config(  # doctest: +SKIP
+            ...     "OpenAI Direct",
+            ...     provider="openai",
+            ...     modelname="gpt-4.1",
+            ...     apikey="sk-...",
+            ...     baseurl="https://api.openai.com/v1",
+            ...     config={"temperature": 0.1},
+            ... )
+        """
+        existing = self.list_llm_configs()
+        found_uuid = uuid
+        for c in existing:
+            if c.name == name:
+                found_uuid = str(c.uuid)
+                break
+
+        if not found_uuid:
+            import uuid as _uuid
+
+            found_uuid = str(_uuid.uuid4())
+
+        payload = [
+            {
+                "uuid": found_uuid,
+                "name": name,
+                "isdefault": isdefault,
+                "active": active,
+                "provider": provider,
+                "modelname": modelname,
+                "apikey": apikey,
+                "baseurl": baseurl,
+                "config": config or {},
+            }
+        ]
+        self.client.post("/api/ai/llm/config", data=payload)
+        return self.get_llm_config(found_uuid)
 
     def verify_llm_config(self, uuid: str, *, model_id: str | None = None) -> dict[str, Any]:
         """Verify a saved LLM config on the live appliance.
@@ -594,19 +676,70 @@ class AIApi(BaseAPI):
         verification endpoint (``POST /api/ai/llm/test`` is not authorised
         through the API gateway).
 
+        .. note::
+           On fsr-ai 8.0.0 the ``GET .../{uuid}/verify`` handler declares
+           ``model_id`` as a **path** parameter (same slot as ``uuid``), so
+           passing it as a query param triggers a 422. This method sends it as
+           part of the path instead. If the endpoint is unreachable or 500s
+           (known on some builds), use :meth:`test_llm_config` which calls the
+           ``POST /config/verify`` body-based endpoint instead.
+
         Args:
             uuid: the LLM config UUID (from :meth:`list_llm_configs`).
-            model_id: optional model identifier to scope the verify (e.g.
-                ``"gpt-4.1"``). When omitted, the config's own modelname is used.
+            model_id: optional model identifier (unused on some builds -- the
+                config's own ``modelname`` is what gets tested).
 
         Returns:
             The verification result dict from the appliance.
         """
-        params = {"model_id": model_id} if model_id else None
-        return self.client.get(f"/api/ai/llm/config/{uuid}/verify", params=params)
+        endpoint = f"/api/ai/llm/config/{uuid}/verify"
+        return self.client.get(endpoint)
+
+    def test_llm_config(
+        self,
+        *,
+        name: str,
+        provider: str,
+        modelname: str | None = None,
+        apikey: str | None = None,
+        config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Test an LLM config *before* saving it (``POST /api/ai/llm/config/verify``).
+
+        Sends a full ``LLMConfigDTO`` body; fsr-ai builds a client and pings the
+        provider. This is the pre-save verification the UI uses.
+
+        Args:
+            name: profile name (checked for uniqueness on the appliance).
+            provider: one of ``openai``, ``anthropic``, ``gemini``, ``fortisoar``.
+            modelname: model identifier (e.g. ``"gpt-4.1"``).
+            apikey: API key for native providers.
+            config: provider-specific config dict.
+
+        Returns:
+            The config dict if verification passed; raises on failure.
+        """
+        body: dict[str, Any] = {
+            "name": name,
+            "provider": provider,
+            "modelname": modelname,
+            "apikey": apikey,
+            "config": config or {},
+        }
+        return self.client.post("/api/ai/llm/config/verify", data=body)
 
     def delete_llm_config(self, uuid: str) -> None:
-        """Delete a reasoning-profile config by uuid."""
+        """Delete a reasoning-profile config by uuid.
+
+        .. warning::
+           On fsr-ai 8.0.0 the ``DELETE /api/ai/llm/config/{uuid}`` handler is a
+           **known no-op bug** -- it calls ``get_llm_config_by_uuid`` (a read)
+           instead of the service's ``delete_llm_configuration``. The profile is
+           not deleted and the endpoint returns 200. To actually remove a
+           profile you must delete it from the ``venom.llm_configuration`` table
+           directly (requires root on the appliance) or overwrite it via an
+           upsert. See :meth:`upsert_llm_config` for the safe overwrite path.
+        """
         self.client.delete(f"/api/ai/llm/config/{uuid}")
 
     # ----------------------------------------------------------- MCP servers
