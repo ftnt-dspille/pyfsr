@@ -12,6 +12,7 @@ from .appliance import Appliance
 from .client import FortiSOAR
 from .concurrency import ConcurrencyResult, compute_overlap
 from .config import EnvConfig
+from .exports import Export, ExportError, ExportKind, ExportValidationError, Finding
 from .jinja_validate import FSR_JINJA_FILTERS, JinjaIssue, validate_jinja_expressions
 from .models import (
     MODEL_REGISTRY,
@@ -73,6 +74,11 @@ __all__ = [
     "FortiSOAR",
     "Appliance",
     "EnvConfig",
+    "Export",
+    "ExportKind",
+    "ExportError",
+    "ExportValidationError",
+    "Finding",
     "pack_agent",
     "pack_connector",
     "ExportTemplate",
