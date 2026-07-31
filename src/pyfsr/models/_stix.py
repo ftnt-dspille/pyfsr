@@ -118,7 +118,8 @@ class StixThreatActor(StixObject):
     Attributes:
         threat_actor_types: open-vocab types (``["nation-state"``, ...).
         aliases: alternative names.
-        first_seen / last_seen: observation window.
+        first_seen: when the actor was first observed.
+        last_seen: when the actor was last observed.
         kill_chain_phases: kill-chain phase entries.
     """
 
@@ -134,7 +135,8 @@ class StixCampaign(StixObject):
 
     Attributes:
         aliases: alternative names.
-        first_seen / last_seen: campaign activity window.
+        first_seen: when the campaign was first observed.
+        last_seen: when the campaign was last observed.
         objectives: campaign objectives.
     """
 
@@ -161,7 +163,8 @@ class StixIntrusionSet(StixObject):
 
     Attributes:
         aliases: alternative names.
-        first_seen / last_seen: activity window.
+        first_seen: when the intrusion set was first observed.
+        last_seen: when the intrusion set was last observed.
         goals: intrusion-set goals.
         resource_level: resource level (``"individual"``, ``"organization"``).
         primary_motivation: primary motivation (``"financial"``, ...).
