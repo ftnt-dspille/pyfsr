@@ -6,7 +6,7 @@ For detailed documentation, visit: https://ftnt-dspille.github.io/pyfsr/
 
 from . import content_catalog, repo
 from .api.ai import pack_agent
-from .api.connectors import pack_connector
+from .api.connectors import ConnectorPackageError, pack_connector, validate_connector_source
 from .api.export_config import ExportTemplate
 from .appliance import Appliance
 from .client import FortiSOAR
@@ -80,7 +80,9 @@ __all__ = [
     "ExportValidationError",
     "Finding",
     "pack_agent",
+    "ConnectorPackageError",
     "pack_connector",
+    "validate_connector_source",
     "ExportTemplate",
     "Query",
     "QueryBody",
