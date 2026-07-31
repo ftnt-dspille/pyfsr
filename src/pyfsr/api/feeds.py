@@ -1,9 +1,9 @@
 """Bulk threat-intel / record ingestion (``/api/ingest-feeds`` + ``/api/insert-feeds``).
 
-These endpoints bulk-insert records **without firing on-create playbook triggers** —
+These endpoints bulk-insert records **without firing on-create playbook triggers** --
 intentional for high-volume feed ingestion (the regular ``/api/3/<module>`` create
 *does* fire triggers). Existing records are internally upserted based on the
-module's unique-constraint criterion (only changed fields are touched — unlike
+module's unique-constraint criterion (only changed fields are touched -- unlike
 ``bulkupsert``, this does not overwrite the whole row). Accessed as ``client.feeds``.
 
 Example:
@@ -21,6 +21,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from ..models._taxii import StixBundleResult
 from ..models.base import BaseRecord
 from .base import BaseAPI
 
@@ -29,7 +30,7 @@ class FeedIngestResult(BaseModel):
     """Response of a bulk feed-ingest call (``{"status": "success", "uuids": [...]}``).
 
     Live-verified shape: a flat ``status`` string plus the ``uuids`` of every
-    row that was created-or-updated, in request order — there is no per-row
+    row that was created-or-updated, in request order -- there is no per-row
     success/failure split like :meth:`~pyfsr.records.RecordSet.bulk_upsert`
     gets; a row-level failure fails the whole call.
     """
@@ -124,15 +125,19 @@ class IngestFeedsAPI(BaseAPI):
         resp = self.client.post("/api/ingest-feeds/threatintel", data={"data": _to_rows(records)})
         return FeedIngestResult.model_validate(resp)
 
-    def stix_bundle(self, bundle: dict[str, Any]) -> Any:
+    def stix_bundle(self, bundle: dict[str, Any]) -> StixBundleResult:
         """Ingest a STIX 2.x bundle (``POST /api/ingest-feeds/stix-bundle``).
 
         Fans the bundle out into FortiSOAR's threat-intel record types
-        (indicators, threat actors, campaigns, malware, attack patterns, …) by
+        (indicators, threat actors, campaigns, malware, attack patterns, ...) by
         each object's STIX ``type``. Bypasses on-create playbook triggers. This
         endpoint takes the STIX bundle as-is (not the ``{"data": [...]}``
-        row-list envelope the other feed endpoints use), and its response shape
-        has not been live-verified, so it is returned unparsed.
+        row-list envelope the other feed endpoints use).
+
+        Returns a typed :class:`~pyfsr.models.StixBundleResult` -- a distinct
+        shape from :class:`FeedIngestResult` (it carries ``message`` and
+        ``objects_processed`` instead of a ``uuids`` list, because the bundle
+        fans out into multiple record types).
 
         Example:
             >>> client = demo_client()
@@ -144,15 +149,18 @@ class IngestFeedsAPI(BaseAPI):
             ...     ]
             ... }
             >>> result = client.feeds.stix_bundle(bundle)
-            >>> result["status"]
-            'success'
+            >>> result.ok
+            True
+            >>> result.objects_processed
+            3
         """
-        return self.client.post("/api/ingest-feeds/stix-bundle", data=bundle)
+        resp = self.client.post("/api/ingest-feeds/stix-bundle", data=bundle)
+        return StixBundleResult.model_validate(resp)
 
     def insert(self, record_type: str, records: list[dict[str, Any] | BaseRecord]) -> FeedIngestResult:
         """Generic trigger-bypassing bulk insert for any record type.
 
-        ``POST /api/ingest-feeds/{record_type}`` — the generalization of
+        ``POST /api/ingest-feeds/{record_type}`` -- the generalization of
         :meth:`indicators` for an arbitrary ``record_type`` (the module's
         short/type name from ``ModelMetadata``, e.g. ``"alerts"``, ``"events"``).
         Same trigger-skipping behavior.
@@ -166,7 +174,7 @@ class IngestFeedsAPI(BaseAPI):
         Note:
             ``/api/insert-feeds/{record_type}`` (no "g") is a different,
             similarly-named path that does **not** exist in that build's
-            routing config — it 404s at the router level for every
+            routing config -- it 404s at the router level for every
             ``record_type``, not because of a permissions/module restriction.
             Do not confuse the two.
 

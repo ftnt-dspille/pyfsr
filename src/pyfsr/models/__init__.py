@@ -109,6 +109,20 @@ from ._playbooks import (
 )
 from ._rules import DeliveryRule, PreprocessingRule, RuleChannel
 from ._schedules import CrontabScheduleModel, ScheduledTask
+from ._stix import (
+    StixAttackPattern,
+    StixBundle,
+    StixCampaign,
+    StixIndicator,
+    StixIntrusionSet,
+    StixMalware,
+    StixObject,
+    StixReport,
+    StixThreatActor,
+    StixTool,
+    StixVulnerability,
+    parse_stix_object,
+)
 from ._system import (
     Actor,
     AggregateRow,
@@ -163,6 +177,14 @@ from ._system import (
     Workflow,
     WorkflowCollection,
     WorkflowRun,
+)
+from ._taxii import (
+    StixBundleResult,
+    TaxiiCollection,
+    TaxiiDiscovery,
+    TaxiiManifest,
+    TaxiiManifestEntry,
+    TaxiiObjectsEnvelope,
 )
 from ._widgets import WidgetRecord
 from .base import BaseRecord
@@ -372,4 +394,24 @@ __all__ = [
     "LifecycleEntry",
     "RecordLifecycle",
     "ExecutionContext",
+    # STIX 2.1 objects
+    "StixObject",
+    "StixIndicator",
+    "StixMalware",
+    "StixThreatActor",
+    "StixCampaign",
+    "StixAttackPattern",
+    "StixIntrusionSet",
+    "StixTool",
+    "StixVulnerability",
+    "StixReport",
+    "StixBundle",
+    "parse_stix_object",
+    # TAXII 2.1 responses + STIX bundle ingest
+    "TaxiiDiscovery",
+    "TaxiiCollection",
+    "TaxiiManifestEntry",
+    "TaxiiManifest",
+    "TaxiiObjectsEnvelope",
+    "StixBundleResult",
 ]
