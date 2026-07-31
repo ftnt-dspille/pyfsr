@@ -103,6 +103,53 @@ class FakePlaybooks:
         return {"pk": "100", "name": playbook or "pb", "status": "finished"}
 
 
+class FakeAudit:
+    def lifecycle(self, entity_uuid, *, entity_type=None, include_executions=True, start_date=None, end_date=None):
+        from pyfsr.models._audit import LifecycleEntry, RecordLifecycle
+
+        entries = [
+            LifecycleEntry(timestamp_ms=1000, kind="audit", operation="Create", user="CS Admin"),
+            LifecycleEntry(timestamp_ms=2000, kind="audit", operation="Link", user="Playbook", playbook_name="Enrich"),
+        ]
+        return RecordLifecycle(
+            entity_uuid=entity_uuid,
+            entity_type=entity_type,
+            entries=entries,
+            audit_count=2,
+            execution_count=0,
+        )
+
+    def execution_context(self, run_pk, *, window_seconds=60):
+        from pyfsr.models._audit import ExecutionContext, LifecycleEntry
+
+        return ExecutionContext(
+            run_pk=str(run_pk),
+            run_name="Enrich",
+            run_status="finished",
+            record_uuid="abc123",
+            entity_type="alerts",
+            concurrent_changes=[
+                LifecycleEntry(
+                    timestamp_ms=1500, kind="audit", operation="Update",
+                    user="Playbook", playbook_name="Other PB",
+                ),
+            ],
+            concurrent_runs=[{"name": "Other PB", "timestamp": 1500}],
+            before_changes=[],
+            window_seconds=window_seconds,
+        )
+
+    def all_activities(self, *, entity_uuid=None, start_date=None, end_date=None, operation=None,
+                       entity_type=None, page_size=100, max_pages=50):
+        return [
+            {"operation": "Create", "transactionDate": 1000, "user": "CS Admin", "entityUuid": entity_uuid},
+            {
+                "operation": "Link", "transactionDate": 2000,
+                "user": "Playbook", "playbookName": "Enrich", "entityUuid": entity_uuid,
+            },
+        ]
+
+
 class FakeModulesAdmin:
     def __init__(self, store):
         self.store = store
@@ -127,6 +174,7 @@ class FakeClient:
         self.connectors = FakeConnectors()
         self.playbooks = FakePlaybooks()
         self.modules_admin = FakeModulesAdmin(self.store)
+        self.audit = FakeAudit()
 
     def records(self, module, **kwargs):
         return FakeRecordSet(module, self.store)
@@ -176,6 +224,9 @@ def test_registry_covers_core_ops():
         "wait_for_playbook_run",
         "upsert_record",
         "get_or_create_record",
+        "record_lifecycle",
+        "execution_context",
+        "audit_activities",
         "map_use_case",
     }:
         assert expected in names
@@ -367,6 +418,30 @@ def test_dispatch_why_playbook_failed(client):
 def test_dispatch_wait_for_playbook_run(client):
     out = tools.dispatch(client, "wait_for_playbook_run", {"playbook": "Block IP", "timeout": 5})
     assert out["status"] == "finished"
+
+
+# -- dispatch: audit / change history ---------------------------------------
+def test_dispatch_record_lifecycle(client):
+    out = tools.dispatch(client, "record_lifecycle", {"entity_uuid": "u1"})
+    assert "summary" in out
+    assert out["lifecycle"]["entity_uuid"] == "u1"
+    assert len(out["lifecycle"]["entries"]) == 2
+    assert out["lifecycle"]["entries"][0]["operation"] == "Create"
+
+
+def test_dispatch_execution_context(client):
+    out = tools.dispatch(client, "execution_context", {"run_pk": "42"})
+    assert "summary" in out
+    assert out["context"]["run_pk"] == "42"
+    assert out["context"]["run_name"] == "Enrich"
+    assert len(out["context"]["concurrent_changes"]) == 1
+
+
+def test_dispatch_audit_activities(client):
+    out = tools.dispatch(client, "audit_activities", {"entity_uuid": "u1", "limit": 10})
+    assert out["total"] == 2
+    assert out["activities"][0]["operation"] == "Create"
+    assert out["activities"][1]["playbookName"] == "Enrich"
 
 
 # -- dispatch: record upsert ------------------------------------------------

@@ -6,7 +6,7 @@ playbook runs) as JSON-Schema tool definitions, plus a :func:`dispatch` that
 executes a tool call against a live :class:`~pyfsr.client.FortiSOAR` client and
 returns JSON-serializable, token-trimmed results.
 
-It is deliberately transport-neutral — no MCP, no provider SDK — so it can feed:
+It is deliberately transport-neutral -- no MCP, no provider SDK -- so it can feed:
 
 - the optional bundled MCP server (``python -m pyfsr.agent.mcp``, a thin consumer),
 - Anthropic tool-use (:func:`to_anthropic_tools`),
@@ -110,6 +110,10 @@ _PLAYBOOK = {
     "type": "string",
     "description": "Playbook name. Scope to one playbook by its display name.",
 }
+_ENTITY_UUID = {
+    "type": "string",
+    "description": "Record UUID to trace in the audit log (the primary filter).",
+}
 
 
 def _obj(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -128,7 +132,7 @@ def _h_list_modules(client) -> Any:
     ``list_modules()`` returns ``{type, label, plural}`` per module, but on most
     appliances ``plural == type`` (and often ``label`` is just the type), so the
     full form is ~3x larger than needed and pushes the result past the MCP output
-    cap — which truncates the *alphabetical tail* (``scenario``, ``tasks``, ...)
+    cap -- which truncates the *alphabetical tail* (``scenario``, ``tasks``, ...)
     right off the list. We emit ``type`` always and ``label``/``plural`` only when
     they carry information (differ from ``type``), keeping the payload small enough
     that no module is silently dropped. Shape stays ``{"modules": [{"type", ...}]}``.
@@ -203,7 +207,7 @@ def _h_resolve_picklist(client, *, value, picklist=None, module=None, field=None
 
 
 #: Fields worth returning when listing connectors. The full InstalledConnector is
-#: ~10 KB each — of which ``icon_large``/``icon_small`` (base64 images) are ~93% —
+#: ~10 KB each -- of which ``icon_large``/``icon_small`` (base64 images) are ~93% --
 #: so a 37-connector appliance serializes to ~380 KB and the MCP output cap
 #: truncates most of it. An agent choosing a connector needs the machine ``name``
 #: (the key every other connector tool takes), a human ``label``, the ``version``,
@@ -220,7 +224,7 @@ def _h_list_connectors(client) -> Any:
     37-connector box serialized to ~380 KB and the MCP cap truncated most of it.
     Even a trimmed dict-per-connector overflows once you account for indent=2
     inflation across dozens of rows, so each connector is rendered as a single
-    string ``"<name> — <label> v<version>[ (<n> configs)][ [inactive]]"``. ``name``
+    string ``"<name> -- <label> v<version>[ (<n> configs)][ [inactive]]"``. ``name``
     (the key every other connector tool takes) leads each line. Configured/disabled
     state is shown only when it's the non-default (has configs / inactive); a
     ``config_count`` of -1 is a "not counted" sentinel (system connectors) and is
@@ -234,7 +238,7 @@ def _h_list_connectors(client) -> Any:
         version = d.get("version")
         line = name
         if label and label != name:
-            line += f" — {label}"
+            line += f" -- {label}"
         if version:
             line += f" v{version}"
         cfgs = d.get("config_count")
@@ -258,7 +262,7 @@ def _h_run_connector_operation(client, *, connector, operation, params=None, con
 
 #: The FortiAI Agentic Assistant connector that owns the chat-session store.
 #: The machine name varies by deployment/version (e.g. some boxes register it as
-#: 'fortinet-fsr-playbook-builder') — pass the ``connector`` arg to override.
+#: 'fortinet-fsr-playbook-builder') -- pass the ``connector`` arg to override.
 _AGENT_CONNECTOR = "connector-fsr-soc-assistant"
 
 
@@ -538,11 +542,46 @@ def _h_map_use_case(client, *, use_case) -> Any:
     return map_use_case(use_case)
 
 
+# -- audit / change history -------------------------------------------------
+def _h_record_lifecycle(
+    client, *, entity_uuid, entity_type=None, include_executions=True, start_date=None, end_date=None
+) -> Any:
+    life = client.audit.lifecycle(
+        entity_uuid,
+        entity_type=entity_type,
+        include_executions=include_executions,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return {"summary": life.summary(), "lifecycle": to_jsonable(life)}
+
+
+def _h_execution_context(client, *, run_pk, window_seconds=60) -> Any:
+    ctx = client.audit.execution_context(run_pk, window_seconds=window_seconds)
+    return {"summary": ctx.summary(), "context": to_jsonable(ctx)}
+
+
+def _h_audit_activities(
+    client, *, entity_uuid, operation=None, entity_type=None, start_date=None, end_date=None, limit=50
+) -> Any:
+    page_size = min(limit, 100)
+    items = client.audit.all_activities(
+        entity_uuid=entity_uuid,
+        start_date=start_date,
+        end_date=end_date,
+        operation=operation,
+        entity_type=entity_type,
+        page_size=page_size,
+        max_pages=max(1, -(-limit // page_size)),
+    )
+    return {"total": len(items), "activities": to_jsonable(items[:limit])}
+
+
 # ------------------------------------------------------------------ appliance verbs
 #
 # Read-only `pyfsr appliance` verbs surfaced to an agent. These reach the box over
 # SSH (or locally when on-box), NOT the REST API, so `client` (the REST FortiSOAR
-# client passed by dispatch) is unused — each handler builds its own Transport via
+# client passed by dispatch) is unused -- each handler builds its own Transport via
 # transport_from_env() (PYFSR_APPLIANCE_* env vars). Mutating verbs (db write,
 # service restart/stop, mq purge, cert regenerate) are intentionally omitted from
 # this first cut.
@@ -772,7 +811,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "create_record",
         "Create a record in a module. data is a field->value mapping; friendly picklist "
-        "values (e.g. 'High') map to IRIs automatically — set resolve_picklists=false to skip.",
+        "values (e.g. 'High') map to IRIs automatically -- set resolve_picklists=false to skip.",
         _obj(
             {
                 "module": _MODULE,
@@ -788,7 +827,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
                 "strict_picklists": {
                     "type": "boolean",
                     "description": "Raise pre-flight on a friendly value that doesn't resolve "
-                    "(typo, wrong casing) — returns field, bad value, and valid options instead "
+                    "(typo, wrong casing) -- returns field, bad value, and valid options instead "
                     "of an opaque box 400. Default true.",
                 },
             },
@@ -909,7 +948,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
                     "type": "object",
                     "description": (
                         "The operation's own parameters as a flat inline object, e.g. "
-                        '{"ip": "8.8.8.8"} — not wrapped in another key. Inspect the '
+                        '{"ip": "8.8.8.8"} -- not wrapped in another key. Inspect the '
                         "connector's operation schema for the exact field names."
                     ),
                 },
@@ -942,7 +981,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "get_agent_session",
         "Fetch a full FortiAI Agentic Assistant chat transcript by session_id. Returns the turn "
-        "sequence including raw tool-call arguments and API response bodies — the ground truth for "
+        "sequence including raw tool-call arguments and API response bodies -- the ground truth for "
         "what a create_record/update_record call actually sent and received.",
         _obj(
             {
@@ -1021,7 +1060,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
         "create_module",
         "Create a new module in STAGING (call publish to make it live). Define its fields and "
         "optionally grant a role permissions in one call via grant_to (e.g. "
-        "['Full App Permissions']) — otherwise the new module gets no role permissions and "
+        "['Full App Permissions']) -- otherwise the new module gets no role permissions and "
         "record writes will 403 until you grant them. Returns the created staging module.",
         _obj(
             {
@@ -1052,7 +1091,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "delete_module",
-        "Delete a module — the only operation that actually removes one. By default detaches "
+        "Delete a module -- the only operation that actually removes one. By default detaches "
         "reverse relationships, publishes the change, and (when drop_orphan_tables is set) drops "
         "the physical tables. Set publish=false to leave the delete in staging.",
         _obj(
@@ -1080,7 +1119,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "publish",
         "Commit ALL staged schema changes appliance-wide (module creates/deletes/edits). This is "
-        "appliance-wide, not module-scoped — every staged change ships at once. Polls until the "
+        "appliance-wide, not module-scoped -- every staged change ships at once. Polls until the "
         "publish job finishes. Call after create_module/delete_module to make them live.",
         _obj(
             {
@@ -1096,7 +1135,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "default_connector_config",
-        "Build a complete, runtime-valid default configuration for a connector — every field's "
+        "Build a complete, runtime-valid default configuration for a connector -- every field's "
         "default plus the onchange-revealed sub-fields. Call this first, edit the values you need "
         "(credentials etc.), then pass the result as `config` to create_/upsert_connector_configuration.",
         _obj(
@@ -1169,7 +1208,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "upsert_connector_configuration",
-        "Create a named configuration, or update it in place if one already exists with the same name — "
+        "Create a named configuration, or update it in place if one already exists with the same name -- "
         "the idempotent write safe to re-run from a deploy script. Preferred over create_connector_configuration "
         "when the config may already exist.",
         _obj(
@@ -1250,6 +1289,93 @@ _TOOLS: tuple[ToolSpec, ...] = (
             }
         ),
         _h_wait_for_playbook_run,
+    ),
+    ToolSpec(
+        "record_lifecycle",
+        "Build a full change-history timeline for a record: audit events (create/update/link/"
+        "comment/trigger) plus playbook executions, sorted oldest-first. Answers 'what happened "
+        "to this alert and in what order?' Returns a one-line summary plus the timeline; each "
+        "entry carries kind (audit/execution), operation, timestamp, user, and playbook name.",
+        _obj(
+            {
+                "entity_uuid": _ENTITY_UUID,
+                "entity_type": {
+                    "type": "string",
+                    "description": "Entity type filter (e.g. 'alerts'). Optional.",
+                },
+                "include_executions": {
+                    "type": "boolean",
+                    "description": "Also merge playbook execution history into the timeline (default true).",
+                },
+                "start_date": {
+                    "type": "string",
+                    "description": "Window start (ISO-8601 or epoch). Optional.",
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "Window end (ISO-8601 or epoch). Optional.",
+                },
+            },
+            ["entity_uuid"],
+        ),
+        _h_record_lifecycle,
+    ),
+    ToolSpec(
+        "execution_context",
+        "Cross-reference a playbook run against concurrent record changes. Answers 'why did "
+        "this playbook see state X when I expected state Y?' by showing what other playbooks or "
+        "manual actions changed the same record during (and just before) the run's time window. "
+        "Returns a one-line summary plus concurrent_changes, concurrent_runs, and prior_changes.",
+        _obj(
+            {
+                "run_pk": {
+                    "type": "string",
+                    "description": "Execution pk (from RunSummary.pk or last_playbook_run).",
+                },
+                "window_seconds": {
+                    "type": "integer",
+                    "description": "Buffer in seconds added before and after the run window (default 60).",
+                    "minimum": 0,
+                },
+            },
+            ["run_pk"],
+        ),
+        _h_execution_context,
+    ),
+    ToolSpec(
+        "audit_activities",
+        "Query the raw audit log for a record (create/update/link/unlink/comment/trigger events). "
+        "Lower-level than record_lifecycle -- use when you need the raw audit entries without the "
+        "execution merge, or to filter by a specific operation type. Returns {total, activities}.",
+        _obj(
+            {
+                "entity_uuid": _ENTITY_UUID,
+                "operation": {
+                    "type": "string",
+                    "description": "Filter by operation type: Create, Update, Link, Unlink, Comment, "
+                    "Trigger, Import, etc.",
+                },
+                "entity_type": {
+                    "type": "string",
+                    "description": "Entity type filter (e.g. 'alerts'). Optional.",
+                },
+                "start_date": {
+                    "type": "string",
+                    "description": "Window start (ISO-8601 or epoch). Optional.",
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "Window end (ISO-8601 or epoch). Optional.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum audit entries to return (default 50).",
+                    "minimum": 1,
+                },
+            },
+            ["entity_uuid"],
+        ),
+        _h_audit_activities,
     ),
     ToolSpec(
         "upsert_record",
@@ -1591,7 +1717,7 @@ def _serialized_len(obj: Any) -> int | None:
     """Length of ``obj`` as the agent will actually receive it (indent=2 JSON).
 
     The MCP transport serializes results with ``indent=2``, so the cap decision
-    must measure the *same* form — a compact-JSON measurement here would let a
+    must measure the *same* form -- a compact-JSON measurement here would let a
     result slip past this cap only to be blindly sliced by the transport layer.
     Returns None if the object isn't JSON-serializable.
     """
@@ -1605,15 +1731,15 @@ def _cap_output(result: Any, *, tool: str, cap: int | None = None) -> Any:
     """Bound a tool result's serialized size for the agent transport.
 
     Returns ``result`` unchanged when it fits the cap (default 4000 chars of
-    ``indent=2`` JSON — the form the transport actually sends).
+    ``indent=2`` JSON -- the form the transport actually sends).
 
     When it's too big, prefer a **list-aware** trim: if the result is a dict
     whose payload is a single list (the shape every ``list_*``/``query``/
-    ``search`` tool returns — ``{"modules": [...]}``, ``{"members": [...]}``,
+    ``search`` tool returns -- ``{"modules": [...]}``, ``{"members": [...]}``,
     ``{"runs": [...]}``, ...), keep as many *whole* leading items as fit and add a
     ``_truncated: {shown, total, hint}`` marker. That beats the old behaviour of
     slicing the serialized text mid-item into an unparseable fragment, and no item
-    is silently corrupted — the agent sees complete records plus an honest
+    is silently corrupted -- the agent sees complete records plus an honest
     "showing K of N, narrow to see the rest".
 
     Falls back to a structured preview envelope (``{_truncated, tool,
@@ -1626,7 +1752,7 @@ def _cap_output(result: Any, *, tool: str, cap: int | None = None) -> Any:
     if cap == 0:
         return result
     if isinstance(result, dict) and "error" in result and len(result) <= 4:
-        # An error envelope — already small, never truncate.
+        # An error envelope -- already small, never truncate.
         return result
     total = _serialized_len(result)
     if total is None:
@@ -1696,13 +1822,13 @@ def dispatch(client, name: str, arguments: dict[str, Any] | None = None) -> Any:
     """Execute a tool call against ``client`` and return a JSON-safe result.
 
     Looks ``name`` up in the :data:`REGISTRY` and invokes its handler with
-    ``**arguments``. Any failure — unknown tool, bad arguments, or an API error —
+    ``**arguments``. Any failure -- unknown tool, bad arguments, or an API error --
     is returned as a structured ``{"error": {...}}`` dict rather than raised, so
     an agent loop never has to wrap the call in a try/except.
 
     Success results are size-capped (default 4000 chars of JSON, override with
     ``FSR_MCP_OUTPUT_CAP``, ``0`` disables) so a single huge return can't flood
-    the agent's context — an over-budget result comes back as a structured
+    the agent's context -- an over-budget result comes back as a structured
     truncation envelope with a preview + a hint to narrow the call.
     """
     spec = REGISTRY.get(name)
