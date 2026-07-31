@@ -52,6 +52,7 @@ __all__ = [
     "ExportValidationError",
     "Finding",
     "Severity",
+    "Installer",
     "CATEGORY_DIRS",
 ]
 

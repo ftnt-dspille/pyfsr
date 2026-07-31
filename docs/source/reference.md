@@ -4,15 +4,15 @@ The complete, auto-generated reference for every pyfsr module and class.
 
 ## Module overview
 
-- **Client** — main FortiSOAR client ({class}`pyfsr.client.FortiSOAR`)
-- **Records** — generic CRUD over any module ({class}`pyfsr.records.RecordSet`)
-- **Query** — fluent query DSL ({class}`pyfsr.query.Query`)
-- **Pagination** — Hydra page helpers ({class}`pyfsr.pagination.HydraPage`, {func}`pyfsr.pagination.paginate`)
-- **Models** — typed Pydantic records (`Alert`, `Incident`, …)
-- **Config** — environment-driven setup ({class}`pyfsr.config.EnvConfig`)
-- **Instances** — named multi-appliance client registry ({class}`pyfsr.instances.InstanceRegistry`)
-- **Tools** — agent tool registry ({mod}`pyfsr.agent.tools`)
-- **MCP** — bundled Model Context Protocol server ({mod}`pyfsr.agent.mcp`)
+- **Client** -- main FortiSOAR client ({class}`pyfsr.client.FortiSOAR`)
+- **Records** -- generic CRUD over any module ({class}`pyfsr.records.RecordSet`)
+- **Query** -- fluent query DSL ({class}`pyfsr.query.Query`)
+- **Pagination** -- Hydra page helpers ({class}`pyfsr.pagination.HydraPage`, {func}`pyfsr.pagination.paginate`)
+- **Models** -- typed Pydantic records (`Alert`, `Incident`, …)
+- **Config** -- environment-driven setup ({class}`pyfsr.config.EnvConfig`)
+- **Instances** -- named multi-appliance client registry ({class}`pyfsr.instances.InstanceRegistry`)
+- **Tools** -- agent tool registry ({mod}`pyfsr.agent.tools`)
+- **MCP** -- bundled Model Context Protocol server ({mod}`pyfsr.agent.mcp`)
 
 ## Full reference
 
@@ -31,6 +31,7 @@ autoapi/pyfsr/fields/index
 autoapi/pyfsr/config/index
 autoapi/pyfsr/instances/index
 autoapi/pyfsr/exceptions/index
+autoapi/pyfsr/exports/index
 ```
 
 ```{toctree}
