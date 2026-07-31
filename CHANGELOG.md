@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Typed STIX 2.1 object models** -- `StixObject` base with typed subclasses
+  (`StixIndicator`, `StixMalware`, `StixThreatActor`, `StixCampaign`,
+  `StixAttackPattern`, `StixIntrusionSet`, `StixTool`, `StixVulnerability`,
+  `StixReport`) and a `StixBundle` container. `parse_stix_object()` dispatches
+  on the STIX `type` field; unknown types fall back to the lenient base.
+  All are dict-compatible (`.get()`, `obj["key"]`, `"key" in obj`).
+- **Typed TAXII 2.1 response models** -- `TaxiiDiscovery`,
+  `TaxiiCollection`, `TaxiiManifest`/`TaxiiManifestEntry`,
+  `TaxiiObjectsEnvelope`. `client.taxii` now returns typed models instead of
+  raw dicts. Objects in the envelope are parsed into typed STIX subclasses.
+- **`StixBundleResult`** -- `client.feeds.stix_bundle()` now returns a typed
+  result (`status`, `message`, `objects_processed`, `.ok`) instead of an
+  unparsed `Any`.
+
 ## [0.18.5] - 2026-07-31
 
 ### Added

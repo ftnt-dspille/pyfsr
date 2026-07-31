@@ -9,7 +9,17 @@ from pyfsr.api.feeds import FeedIngestResult, IngestFeedsAPI
 from pyfsr.api.search import SearchAPI
 from pyfsr.api.system import SystemAPI
 from pyfsr.api.taxii import TaxiiAPI
-from pyfsr.models import ApiKeyUser
+from pyfsr.models import (
+    ApiKeyUser,
+    StixBundleResult,
+    StixMalware,
+    StixObject,
+    TaxiiCollection,
+    TaxiiDiscovery,
+    TaxiiManifest,
+    TaxiiObjectsEnvelope,
+)
+from pyfsr.models._stix import parse_stix_object
 
 
 class FakeClient:
@@ -46,10 +56,14 @@ def test_feeds_indicators_wraps_rows_in_data_envelope():
 
 
 def test_feeds_stix_bundle_posts_dict_unwrapped():
-    c = FakeClient(post_resp={"status": "success"})
-    IngestFeedsAPI(c).stix_bundle({"type": "bundle", "objects": []})
+    c = FakeClient(post_resp={"status": "success", "message": "ok", "objects_processed": 3})
+    result = IngestFeedsAPI(c).stix_bundle({"type": "bundle", "objects": []})
     assert c.calls[-1][1] == "/api/ingest-feeds/stix-bundle"
     assert c.calls[-1][2] == {"type": "bundle", "objects": []}
+    assert isinstance(result, StixBundleResult)
+    assert result.ok is True
+    assert result.objects_processed == 3
+    assert result.message == "ok"
 
 
 def test_feeds_insert_generic_record_type_wraps_data_envelope():
@@ -65,24 +79,126 @@ def test_feeds_insert_rejects_blank():
 
 
 # --------------------------------------------------------------------- taxii
+def test_taxii_discovery_returns_typed():
+    c = FakeClient(get_resp={"title": "FortiSOAR TAXII Server", "max_content_length": 10485760})
+    d = TaxiiAPI(c).discovery()
+    assert isinstance(d, TaxiiDiscovery)
+    assert d.title == "FortiSOAR TAXII Server"
+    assert d.max_content_length == 10485760
+    assert d["title"] == "FortiSOAR TAXII Server"
+    assert c.calls[-1][1] == "/api/taxii/1/"
+
+
 def test_taxii_collections_unwraps():
-    c = FakeClient(get_resp={"collections": [{"id": "c1"}]})
-    assert TaxiiAPI(c).collections() == [{"id": "c1"}]
+    c = FakeClient(get_resp={"collections": [{"id": "c1", "title": "Col 1", "can_read": True}]})
+    cols = TaxiiAPI(c).collections()
+    assert len(cols) == 1
+    assert isinstance(cols[0], TaxiiCollection)
+    assert cols[0].id == "c1"
+    assert cols[0].title == "Col 1"
+    assert cols[0].can_read is True
+    assert cols[0]["id"] == "c1"
     assert c.calls[-1][1] == "/api/taxii/1/collections"
+
+
+def test_taxii_collection_single():
+    c = FakeClient(get_resp={"id": "c1", "title": "Col 1", "can_write": False})
+    col = TaxiiAPI(c).collection("c1")
+    assert isinstance(col, TaxiiCollection)
+    assert col.id == "c1"
+    assert col.can_write is False
+    assert c.calls[-1][1] == "/api/taxii/1/collections/c1"
+
+
+def test_taxii_manifest_returns_typed():
+    c = FakeClient(
+        get_resp={
+            "objects": [
+                {
+                    "id": "malware--123",
+                    "date_added": "2026-01-01T00:00:00Z",
+                    "version": "2026-01-01T00:00:00Z",
+                    "media_type": "application/stix+json;version=2.1",
+                },
+            ]
+        }
+    )
+    man = TaxiiAPI(c).manifest("c1")
+    assert isinstance(man, TaxiiManifest)
+    assert len(man.objects) == 1
+    assert man.objects[0].id == "malware--123"
+    assert man.objects[0].media_type == "application/stix+json;version=2.1"
 
 
 def test_taxii_objects_passes_paging():
     c = FakeClient(get_resp={"totalItems": 0, "objects": []})
-    TaxiiAPI(c).objects("c1", limit=50, added_after="2026-01-01T00:00:00Z")
+    env = TaxiiAPI(c).objects("c1", limit=50, added_after="2026-01-01T00:00:00Z")
     method, endpoint, params = c.calls[-1]
     assert endpoint == "/api/taxii/1/collections/c1/objects"
     assert params == {"limit": 50, "added_after": "2026-01-01T00:00:00Z"}
+    assert isinstance(env, TaxiiObjectsEnvelope)
+    assert env.total_items == 0
 
 
-def test_taxii_discovery_trailing_slash():
-    c = FakeClient()
-    TaxiiAPI(c).discovery()
-    assert c.calls[-1][1] == "/api/taxii/1/"
+def test_taxii_objects_parses_stix_types():
+    c = FakeClient(
+        get_resp={
+            "totalItems": 2,
+            "objects": [
+                {"type": "malware", "id": "malware--123", "name": "evil", "is_family": False},
+                {"type": "indicator", "id": "indicator--456", "value": "8.8.8.8", "pattern": None},
+            ],
+        }
+    )
+    env = TaxiiAPI(c).objects("c1")
+    assert isinstance(env, TaxiiObjectsEnvelope)
+    assert env.total_items == 2
+    assert len(env.objects) == 2
+    assert isinstance(env.objects[0], StixMalware)
+    assert env.objects[0].name == "evil"
+    assert env.objects[0].is_family is False
+    assert env.objects[1].type == "indicator"
+    assert env.objects[1]["value"] == "8.8.8.8"
+
+
+def test_taxii_objects_unknown_type_falls_back_to_base():
+    c = FakeClient(
+        get_resp={"totalItems": 1, "objects": [{"type": "x-custom-type", "id": "x-custom--abc", "foo": "bar"}]}
+    )
+    env = TaxiiAPI(c).objects("c1")
+    obj = env.objects[0]
+    assert isinstance(obj, StixObject)
+    assert obj.type == "x-custom-type"
+    assert obj["foo"] == "bar"
+
+
+def test_taxii_object_single():
+    c = FakeClient(
+        get_resp={
+            "totalItems": 1,
+            "objects": [{"type": "malware", "id": "malware--123", "name": "example-malware"}],
+        }
+    )
+    env = TaxiiAPI(c).object("c1", "malware--123")
+    assert isinstance(env, TaxiiObjectsEnvelope)
+    assert len(env.objects) == 1
+    assert env.objects[0].name == "example-malware"
+
+
+# --------------------------------------------------------------- stix models
+def test_parse_stix_object_dispatches_by_type():
+    obj = parse_stix_object({"type": "threat-actor", "id": "threat-actor--1", "name": "APT28"})
+    assert obj.type == "threat-actor"
+    assert obj.name == "APT28"
+    assert obj["name"] == "APT28"
+
+
+def test_parse_stix_object_unknown_type_preserves_fields():
+    obj = parse_stix_object({"type": "x-foo", "id": "x-foo--1", "custom_field": 42})
+    assert isinstance(obj, StixObject)
+    assert obj.type == "x-foo"
+    assert obj["custom_field"] == 42
+    assert "custom_field" in obj
 
 
 # --------------------------------------------------------------------- audit
@@ -158,7 +274,7 @@ def test_api_users_reset_validity_includes_days():
 
 def test_api_users_regenerate_sends_uppercase_key_type_and_validity():
     # Server requires key_type "API_KEY" (uppercase) AND api_key_validity for a
-    # REGENERATE — both verified live on 7.6.5; a missing validity errors.
+    # REGENERATE -- both verified live on 7.6.5; a missing validity errors.
     c = FakeClient()
     ApiKeyUsersAPI(c).regenerate("u-1", api_key_validity=1)
     method, endpoint, data = c.calls[-1]
@@ -178,7 +294,7 @@ def test_api_users_bad_operation_raises():
 
 # ------------------------------------------------------------------ api_keys
 class _FakeUsers:
-    """Stand-in for ``client.roles`` / ``client.teams`` — resolves known names
+    """Stand-in for ``client.roles`` / ``client.teams`` -- resolves known names
     to fake IRIs and passes IRIs through (mirrors the real
     :class:`~pyfsr.api.roles.RolesAPI` / :class:`~pyfsr.api.teams.TeamsAPI`)."""
 
@@ -266,7 +382,7 @@ def test_api_keys_update_resolves_and_puts():
 
 # ------------------------------------------------------------- api_keys.ensure_usable
 class _FakeApiUsers:
-    """Stand-in for ``client.api_users`` — records lifecycle calls and serves
+    """Stand-in for ``client.api_users`` -- records lifecycle calls and serves
     configurable plaintext on ``get(show_api_key=True)``. Returns the
     *unwrapped* user dict (the real :meth:`ApiKeyUsersAPI.get` unwraps the
     ``usersresp`` envelope), with ``api_key.retrievable`` set per case."""
@@ -330,7 +446,7 @@ def test_ensure_usable_creates_user_and_binding_and_reads_plaintext_from_respons
         "/api/3/api_keys",
         {"name": "k", "userId": "u-1", "teams": ["/api/3/teams/t-1"]},
     )
-    # Plaintext came from the create response — no show_api_key GET, no regenerate.
+    # Plaintext came from the create response -- no show_api_key GET, no regenerate.
     ops = [op for op, *_ in au.calls]
     assert "get" not in ops
     assert "regenerate" not in ops
@@ -376,7 +492,7 @@ def test_ensure_usable_raises_when_regenerate_response_has_no_plaintext():
 
 
 def test_ensure_usable_never_toggles_retrievable_mode():
-    # The broken-branch trigger on 7.6.5/8.0.0 — ensure_usable must not touch it.
+    # The broken-branch trigger on 7.6.5/8.0.0 -- ensure_usable must not touch it.
     ac = _FakeAuthConfig(retrievable=False)
     c = _ensure_client(list_members=[], auth_config=ac)
     ApiKeysAPI(c).ensure_usable(name="k")

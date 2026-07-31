@@ -1098,3 +1098,126 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
    :undoc-members:
    :show-inheritance:
 ```
+
+## _stix
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.StixAttackPattern
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.StixBundle
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.StixCampaign
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.StixIndicator
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.StixIntrusionSet
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.StixMalware
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.StixObject
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.StixReport
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.StixThreatActor
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.StixTool
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.StixVulnerability
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+## _taxii
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.StixBundleResult
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.TaxiiCollection
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.TaxiiDiscovery
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.TaxiiManifest
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.TaxiiManifestEntry
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.TaxiiObjectsEnvelope
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
