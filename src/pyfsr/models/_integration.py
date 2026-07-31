@@ -6,7 +6,7 @@ job records.  All models subclass :class:`ApiResult` which adds dict-compat
 shims so existing code that does ``result["config_id"]`` keeps working while
 new code uses ``result.config_id``.
 
-Shapes are validated against a live 7.6.5 appliance — see the pyfsr dev notes
+Shapes are validated against a live 7.6.5 appliance -- see the pyfsr dev notes
 for the capture script.
 """
 
@@ -103,7 +103,7 @@ class IntegrationListEnvelope(ApiResult):
          "nextPage": 2, "previousPage": null, "data": [ {...}, ... ]}
 
     Typed once here so callers parse it the same way everywhere (it has been
-    mis-read as a bare list more than once). ``data`` stays ``list[Any]`` —
+    mis-read as a bare list more than once). ``data`` stays ``list[Any]`` --
     the per-endpoint method validates each row into its own model.
     """
 
@@ -189,7 +189,7 @@ class ParamOption(ApiResult):
     Normalized from the two wire shapes an operation's ``options[]`` uses (see
     :meth:`OperationParam.select_options`): a plain string ``"Basic"`` becomes
     ``ParamOption(value="Basic", title="Basic")``; a ``{"value": ..., "title":
-    ...}`` dict maps straight across (either key may be absent — the other
+    ...}`` dict maps straight across (either key may be absent -- the other
     fills in). ``value`` is what you send as the param; ``title`` is the label a
     UI shows.
     """
@@ -207,8 +207,13 @@ class OperationParam(ApiResult):
     default to ``True`` when the wire omits them. ``onchange`` is typed
     recursively (``dict[str, list[OperationParam]]``) so conditional sub-params
     validate too; ``options`` stays ``list[Any]`` (plain strings or
-    ``{value,title}`` dicts); uncurated fields (``apiOperation``, …) stay in
-    ``extra``.
+    ``{value,title}`` dicts).
+
+    Dynamic dropdowns: ``apiOperation`` names a sibling connector operation whose
+    result populates the choices at render time (e.g. ``get_incident_severities``);
+    ``apiOnchange=True`` re-calls it whenever a sibling field changes (cascading
+    dropdowns). See the Connector Building Guide section "Dynamic Options from an
+    Operation".
     """
 
     name: str | None = None
@@ -225,11 +230,11 @@ class OperationParam(ApiResult):
     visible: bool = True
     editable: bool = True
     # ``onchange``: a ``select`` param reveals further sub-params once a given
-    # option is chosen — ``{option_value: [sub-param, ...]}``. Live-grounded on
+    # option is chosen -- ``{option_value: [sub-param, ...]}``. Live-grounded on
     # .205 (smtp_ng.send_email_new type/body_type, fortigate-firewall
     # block_ip.method, etc.): one level deep across 50 connectors (no nesting),
     # but typed RECURSIVELY so each sub-param is itself a validated
-    # ``OperationParam`` — otherwise sub-params land in ``__pydantic_extra__``
+    # ``OperationParam`` -- otherwise sub-params land in ``__pydantic_extra__``
     # as raw dicts, BYPASSING this model's display-text coercion (the
     # activedirectory.add_group_members.object_dn placeholder arrives as a
     # 1-element list ``['CN=user-name,...']``; un-coerced it's a list a SQLite
@@ -239,9 +244,17 @@ class OperationParam(ApiResult):
     # ``list[Any]`` because the wire mixes plain strings and ``{value,title}``
     # dicts within one list; :meth:`select_options` normalizes both to
     # :class:`ParamOption`. Previously undeclared, so choices fell into
-    # ``__pydantic_extra__`` — a UI/agent staging the call couldn't reach them
+    # ``__pydantic_extra__`` -- a UI/agent staging the call couldn't reach them
     # without re-parsing the raw definition.
     options: list[Any] = Field(default_factory=list)
+    # Dynamic dropdowns (Connector Building Guide section "Dynamic Options from
+    # an Operation"): ``apiOperation`` names the connector operation whose result
+    # populates the choices; ``apiOnchange=True`` re-calls it whenever a sibling
+    # field changes (cascading dropdowns like SAP-RFC's pick-a-module-then-its-
+    # params-appear). Live-grounded across ~30 connectors (cisco-threatgrid,
+    # salesforce, symantec-mss, fortinet-fortimanager, misp, sap-rfc, ...).
+    apiOperation: str | None = None
+    apiOnchange: bool = False
 
     @field_validator("title", "description", "tooltip", "placeholder", mode="before")
     @classmethod
@@ -275,7 +288,7 @@ class OperationParam(ApiResult):
 
 # Self-recursive ``onchange`` (dict[str, list[OperationParam]]) needs the
 # class to exist in the module namespace before pydantic can resolve the
-# forward ref — rebuild now that ``OperationParam`` is defined.
+# forward ref -- rebuild now that ``OperationParam`` is defined.
 OperationParam.model_rebuild()
 
 
@@ -283,7 +296,7 @@ class Operation(ApiResult):
     """One action a connector exposes, from its definition's ``operations[]``.
 
     Richer than :class:`~pyfsr.models._system.ConnectorOperation` (the Content-Hub
-    catalog shape) — this is the *runtime* definition, carrying typed
+    catalog shape) -- this is the *runtime* definition, carrying typed
     :class:`OperationParam` inputs. ``visible``/``enabled`` default to ``True``
     when omitted. Dict-compatible (``op["operation"]`` still works).
     """
@@ -306,7 +319,7 @@ class Operation(ApiResult):
         """Tolerate a param-less operation serialized as ``{}`` instead of ``[]``.
 
         Live-grounded on box 206 (8.0.0): ``fortinet-fortiai-proxy`` ships an
-        operation whose ``parameters`` is an empty **dict**, not a list — enough
+        operation whose ``parameters`` is an empty **dict**, not a list -- enough
         to fail the whole :class:`ConnectorDefinition` parse (so ``operations()``
         raised and the connector dropped out of a warmed catalog entirely).
         FortiSOAR treats an empty ``{}`` as "no parameters"; coerce it to ``[]``
@@ -326,7 +339,7 @@ class Operation(ApiResult):
 
         Returns the operation's :attr:`parameters` filtered to the **visible**
         ones (hidden params are platform-managed, not author-facing), ordered
-        **required-first** then by declared order, and **deduped by name** — a
+        **required-first** then by declared order, and **deduped by name** -- a
         param that appears in several conditional ``onchange`` groups (e.g.
         ``block_ip``'s ``ip`` under each ``method`` option) collapses to its
         first occurrence, so the list reads as one form, not a repeated field.
@@ -334,14 +347,14 @@ class Operation(ApiResult):
         This is the schema every action-staging caller was re-deriving by hand
         (the fsr-playbook-framework MCP discovery tool's ``_param_sig`` /
         ``_required_params``). Each returned :class:`OperationParam` still
-        carries its ``type``/``title``/``required`` and — for a ``select`` — its
+        carries its ``type``/``title``/``required`` and -- for a ``select`` -- its
         :meth:`~OperationParam.select_options`, so the caller picks valid param
         names and valid choice values straight from the definition.
 
         **Conditional reveal (``selections``).** A ``select`` param can gate
         further inputs via its :attr:`~OperationParam.onchange` map (option value
         → the sub-params that become active when it is chosen). By default those
-        sub-params are **not** returned — the base form only. Pass ``selections``
+        sub-params are **not** returned -- the base form only. Pass ``selections``
         (a ``{param_name: chosen_value}`` map of what the user has picked so far)
         to also include the sub-params those choices reveal, so you render only
         the fields actually needed for the current state. On box 206, choosing
@@ -391,7 +404,7 @@ class Operation(ApiResult):
 class ConnectorDefinition(ApiResult):
     """A connector's full definition (config schema + operations).
 
-    Returned by :meth:`~pyfsr.api.connectors.ConnectorsAPI.definition` — the
+    Returned by :meth:`~pyfsr.api.connectors.ConnectorsAPI.definition` -- the
     ``POST /api/integration/connectors/<name>/<version>/?format=json`` payload
     ``warm_catalog`` reads to sync the installed connector catalog. ``category``
     may arrive as a string or a list; both are tolerated. Curated fields are
@@ -413,7 +426,7 @@ class ConnectorDefinition(ApiResult):
     configuration: Any = None
 
 
-# Self-recursive ``ConnectorDefinition.config_schema`` forward-ref — rebuild
+# Self-recursive ``ConnectorDefinition.config_schema`` forward-ref -- rebuild
 # after ``ConfigSchema``/``ConfigSchemaField`` are defined (end of this block).
 class ConfigSchemaField(ApiResult):
     """One field of a connector's configuration schema, from a connector
@@ -433,13 +446,13 @@ class ConfigSchemaField(ApiResult):
     enum because the guide documents undocumented/legacy aliases (§"Type
     aliases") and typos in the wild that the loader drops. ``onchange`` reveals
     sub-fields when a controlling selection is made (keyed by the parent's
-    option value, or ``"true"``/``"false"`` for checkboxes) — typed RECURSIVELY
+    option value, or ``"true"``/``"false"`` for checkboxes) -- typed RECURSIVELY
     so sub-fields validate too (microsoft-graph auth trees nest), mirroring
     :class:`OperationParam`. Display fields use the same
     :func:`_coerce_display_text` coercion. Note: the guide warns of real
     field-name typos in published connectors (``tootltip``, ``Description``, …);
     the FortiSOAR loader is key-strict and drops them, so they're deliberately
-    NOT modeled — they fall through to ``extra`` as the loader itself does.
+    NOT modeled -- they fall through to ``extra`` as the loader itself does.
     """
 
     name: str | None = None
@@ -482,11 +495,11 @@ class ConfigSchemaField(ApiResult):
 
 
 class ConfigSchema(ApiResult):
-    """A connector's configuration schema — always ``{fields: [...]}`` on the
+    """A connector's configuration schema -- always ``{fields: [...]}`` on the
     wire (live-verified: ``fields`` is the sole top-level key across 40
     connectors). Typed so the config-field walkers
     (``default_config``/``validate_config``/``required_config_fields``) read
-    validated :class:`ConfigSchemaField` objects instead of raw dicts — closing
+    validated :class:`ConfigSchemaField` objects instead of raw dicts -- closing
     the ``dict[str, Any]`` escape hatch ``ConnectorDefinition.config_schema``
     used to be.
     """
@@ -510,7 +523,7 @@ class ConnectorConfig(ApiResult):
     """A connector configuration record from ``/api/integration/configuration/``.
 
     Returned by ``create_configuration()``, ``update_configuration()``, and
-    ``list_configurations()``.  ``config`` is the live field map — its shape
+    ``list_configurations()``.  ``config`` is the live field map -- its shape
     varies by connector.
     """
 
@@ -522,7 +535,7 @@ class ConnectorConfig(ApiResult):
     # 7.x update all return the saved record). Kept as int so callers can rely on
     # ``cfg.status == 1``; unknown *fields* are still tolerated via extra="allow".
     # FortiSOAR 8.0's *update* echo instead nests an async op-envelope here
-    # (``{"status":"finished","message":...}``) — that conveys no active-flag, so
+    # (``{"status":"finished","message":...}``) -- that conveys no active-flag, so
     # the validator coerces any non-int (dict/str) to None rather than failing.
     status: int | None = None
 
@@ -608,7 +621,7 @@ class HealthcheckResult(ApiResult):
 class ExecuteResult(ApiResult):
     """Return value of ``client.connectors.execute()``.
 
-    ``data`` is the connector's own output — its shape varies by connector and
+    ``data`` is the connector's own output -- its shape varies by connector and
     operation.
     """
 
@@ -623,7 +636,7 @@ class ExecuteResult(ApiResult):
 
         Saves callers the recurring ``str(r.status).lower() == "success"`` check.
         Note (see ``ConnectorsAPI.execute``): an agent-bound, fire-and-forget call
-        can succeed with empty ``data`` — ``ok`` reflects ``status``, not ``data``.
+        can succeed with empty ``data`` -- ``ok`` reflects ``status``, not ``data``.
         """
         return str(self.status).strip().lower() == "success"
 
@@ -747,7 +760,7 @@ class IngestionMetadata(ApiResult):
 
     The join between a connector *configuration* and the periodic task that
     drives its ingestion. The UI writes one of these per configuration and
-    later re-finds the schedule through ``metadata.scheduleId`` — without it
+    later re-finds the schedule through ``metadata.scheduleId`` -- without it
     the *Configure Data Ingestion* screen cannot show an existing schedule.
     """
 
@@ -822,7 +835,7 @@ class IngestionTeardownResult(ApiResult):
     """What :meth:`~pyfsr.api.connectors.ConnectorsAPI.remove_ingestion` removed.
 
     The inverse of :class:`IngestionSetupResult`: it records which of the
-    wizard's four artifacts were torn down — the periodic task, the
+    wizard's four artifacts were torn down -- the periodic task, the
     ``data-import`` metadata record(s), and the per-configuration collection
     (which cascades the cloned playbooks). With ``dry_run=True`` the ``*_deleted``
     flags/counts stay ``False``/``0`` and the fields report what *would* be
@@ -845,9 +858,9 @@ class IngestionStatus(ApiResult):
 
     The read-only counterpart to
     :meth:`~pyfsr.api.connectors.ConnectorsAPI.data_ingest_wizard`: it inspects
-    what the wizard would have built — the per-configuration collection, the
+    what the wizard would have built -- the per-configuration collection, the
     cloned ingestion playbooks, the periodic task, and the ``data-import``
-    metadata record — and reports whether each piece is present, without
+    metadata record -- and reports whether each piece is present, without
     writing anything.
     """
 
@@ -870,7 +883,7 @@ class IngestionStatus(ApiResult):
         """Whether ingestion has been set up at all for this configuration.
 
         ``True`` once the collection exists **and** holds an ``ingest``-tagged
-        playbook — the minimum the *Trigger Ingestion Now* button needs. A
+        playbook -- the minimum the *Trigger Ingestion Now* button needs. A
         configured setup may still be unscheduled (``schedule_id is None``).
         """
         return self.collection_exists and self.playbooks.ingest is not None
