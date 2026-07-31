@@ -1,6 +1,6 @@
 # AI & Agents
 
-pyfsr ships a **framework-agnostic tool registry** — a declarative catalogue of
+pyfsr ships a **framework-agnostic tool registry** -- a declarative catalogue of
 core FortiSOAR operations (record CRUD, discovery, picklists, connectors,
 playbook runs) as JSON-Schema tool definitions, plus a `dispatch()` that
 executes a tool call against a live client and returns JSON-safe, token-trimmed
@@ -25,20 +25,20 @@ operation, normalizing Hydra envelopes, trimming huge records down to fit a
 context window, and turning every HTTP error into something the model can read.
 The registry does all of that for you:
 
-- **Discovery built in.** The model can learn the appliance at runtime —
-  `list_modules` → `describe_module` → act — instead of you hard-coding field
+- **Discovery built in.** The model can learn the appliance at runtime --
+  `list_modules` → `describe_module` → act -- instead of you hard-coding field
   names and module types that differ per deployment.
 - **Token-trimmed results.** Every tool supports `summary=true` / `fields=[...]`
   so a 60-field alert doesn't blow the context window when an agent is scanning
   dozens of records.
 - **Picklist resolution.** Agents pass friendly values (`"High"`) and the tool
-  maps them to the IRIs the API actually requires — the single most common
+  maps them to the IRIs the API actually requires -- the single most common
   cause of failed writes.
 - **Errors as data, not exceptions.** Every failure returns a structured
   `{"error": {...}}` the model can read and self-correct from, so one bad call
   doesn't kill the agent loop.
 - **Write once, run anywhere.** The same registry feeds Claude, OpenAI, MCP, or
-  your own loop — no per-provider glue.
+  your own loop -- no per-provider glue.
 
 ## Available tools
 
@@ -122,7 +122,7 @@ The registry ships these tools, grouped by what they do:
   - Build a complete, runtime-valid default config (handles `onchange` sub-fields). Call first, then edit.
 * -
   - `validate_connector_config`
-  - Validate a config against the schema before submitting — returns `{valid, missing, invalid, ...}`.
+  - Validate a config against the schema before submitting -- returns `{valid, missing, invalid, ...}`.
 * -
   - `create_connector_configuration`
   - Create a named config; `exist_ok=true` delegates to upsert, `autofill=true` fills schema defaults.
@@ -131,7 +131,7 @@ The registry ships these tools, grouped by what they do:
   - Update an existing config by `config_id`.
 * -
   - `upsert_connector_configuration`
-  - Idempotent create-or-replace by name — the safe default for deploy scripts.
+  - Idempotent create-or-replace by name -- the safe default for deploy scripts.
 * - **Playbook runs**
   - `last_playbook_run`
   - Most recent run of a playbook (live or historical); `{run: null}` if none.
@@ -164,7 +164,7 @@ with `get_tool("query_records").input_schema`.
 ## Calling tools
 
 `dispatch(client, name, arguments)` runs one tool and returns a JSON-safe,
-token-trimmed result — never raises; a failure comes back as `{"error": {...}}`.
+token-trimmed result -- never raises; a failure comes back as `{"error": {...}}`.
 The read tools resolve against the replay session `demo_client()` builds, so
 their return shapes are doctested here (write ops need a live appliance):
 
@@ -182,7 +182,7 @@ their return shapes are doctested here (write ops need a live appliance):
 (1, 'Response Capture Test Alert')
 >>> conns = dispatch(client, "list_connectors", {})
 >>> conns["connectors"][:3]
-['code-snippet — Code Snippet v2.2.1 (1 config)', 'mitre-attack — MITRE ATT&CK v2.0.2 (1 config)', 'smtp — SMTP v2.6.0 (1 config)']
+['code-snippet -- Code Snippet v2.2.1 (1 config)', 'mitre-attack -- MITRE ATT&CK v2.0.2 (1 config)', 'smtp -- SMTP v2.6.0 (1 config)']
 >>> mods = dispatch(client, "list_modules", {})
 >>> [m["type"] for m in mods["modules"][:3]]
 ['agents', 'alerts', 'announcements']
@@ -201,7 +201,7 @@ their return shapes are doctested here (write ops need a live appliance):
 ```
 
 The write tools (`create_record` / `update_record` / `delete_record`) replay
-against the same captured alert, so their return shapes are doctested too — an
+against the same captured alert, so their return shapes are doctested too -- an
 agent learns the envelope each tool returns without a live box:
 
 ```{doctest}
@@ -221,8 +221,8 @@ agent learns the envelope each tool returns without a live box:
 ```
 
 A `create_record` whose `data` carries a friendly picklist value that doesn't
-resolve (typo, wrong casing) comes back as a structured, actionable error —
-field, bad value, and the valid options — instead of an opaque box 400, because
+resolve (typo, wrong casing) comes back as a structured, actionable error --
+field, bad value, and the valid options -- instead of an opaque box 400, because
 the MCP write tools default `strict_picklists=True`:
 
 ```{doctest}
@@ -236,7 +236,7 @@ True
 ```
 
 The discovery tools (`list_modules`, `describe_module`) and picklist tools
-(`list_picklists`, `get_picklist_values`) are doctested above too — a model uses
+(`list_picklists`, `get_picklist_values`) are doctested above too -- a model uses
 `list_modules` → `describe_module` to learn a module's fields (and which are
 picklist-backed) before it writes a record, and `list_picklists` /
 `get_picklist_values` to resolve the friendly strings a picklist accepts.
@@ -272,7 +272,7 @@ trimmed (one representative finding/hypothesis/log; all nine phase states kept):
 ### Running a single agent
 
 An investigation runs the whole pipeline. When you only need one question
-answered — enrich this indicator, query the SIEM, look up a ticket — call the
+answered -- enrich this indicator, query the SIEM, look up a ticket -- call the
 agent directly with `run_agent`. It is far cheaper, and returns the agent's own
 `outputformat` (`answer` / `evidence` / `confidence`) rather than an
 investigation's `summary`/`hypotheses`.
@@ -302,20 +302,20 @@ Two things that bite:
 
 - The trigger goes to `/api/ai/agents/{name}/trigger` (**plural**). The service
   mounts the same router under `/ai/triage` too, but the front door only
-  authorises the `agents` form — the `triage` form is rejected with a bare
+  authorises the `agents` form -- the `triage` form is rejected with a bare
   `Access Denied` no matter what role you hold.
 - The caller needs `execute.ai_agents` (and `read.ai_agents` to read the input
   schema). A missing permission looks identical to a wrong path.
 
 With `wait=True`, a timeout returns the latest result with a non-terminal
-`status` rather than raising — check `result.status` before trusting `answer`.
+`status` rather than raising -- check `result.status` before trusting `answer`.
 See [`examples/run_single_ai_agent.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/run_single_ai_agent.py).
 
 ## Use case: triage an alert end-to-end
 
 A SOC analyst asks an agent *"Triage the latest critical alert and tell me if
 it's a real threat."* With the registry attached, the model can carry out the
-whole workflow itself — no bespoke code per step:
+whole workflow itself -- no bespoke code per step:
 
 1. `query_records` on `alerts` filtered by `severity = Critical`, sorted newest
    first, `summary=true` → finds the alert without flooding its context.
@@ -338,7 +338,7 @@ tool_schemas()      # raw JSON-Schema definitions
 ```
 
 Every result is JSON-serializable, and **every failure is returned as a
-structured `{"error": {...}}` dict — never a raised exception** — so an agent
+structured `{"error": {...}}` dict -- never a raised exception** -- so an agent
 can read the message and self-correct.
 
 ## Anthropic (Claude) tool-use
@@ -375,7 +375,7 @@ while True:
     messages.append({"role": "assistant", "content": resp.content})
 
     if resp.stop_reason != "tool_use":
-        # No more tools requested — Claude's final answer is in resp.content.
+        # No more tools requested -- Claude's final answer is in resp.content.
         print(resp.content[-1].text)
         break
 
@@ -394,14 +394,14 @@ while True:
 
 A typical run of the prompt above has Claude call `query_records` (filter alerts
 by `severity = Critical`, newest first), then `get_record` to read it, then
-`create_record` on `comments` with its summary — each step a tool call pyfsr
+`create_record` on `comments` with its summary -- each step a tool call pyfsr
 executes against the live appliance. Because `dispatch()` returns errors as
 `{"error": {...}}` data rather than raising, a bad call just comes back as a
 tool result Claude can read and correct, and the loop keeps going.
 
 ```{tip}
 Install the SDK with `pip install anthropic`. The same loop works against the
-bundled MCP server or OpenAI's function calling — only the transport changes,
+bundled MCP server or OpenAI's function calling -- only the transport changes,
 not the registry.
 ```
 
@@ -446,7 +446,7 @@ configure connectors, run connector actions, and build playbooks* uses **both**:
 
 pyfsr owns discovery, record CRUD, module admin, connector config, connector
 *run*, and playbook *run* inspection/debugging. fsr_playbooks owns the playbook
-DSL — compile/validate/push/dry-run, step-type and connector-op *discovery*
+DSL -- compile/validate/push/dry-run, step-type and connector-op *discovery*
 (`get_step_type`, `get_op_schema`, `find_operation`), single-step `step_test`,
 and recipes. The two don't overlap on the four tasks, so running both gives an
 agent the full create-configure-run-build loop with no gaps.
@@ -459,7 +459,7 @@ for the complete tool list and dispatch signatures.
 ## Authoring your own AI agent
 
 Everything above drives the agents FortiSOAR *already ships*. FortiSOAR 8.0 also
-lets you install **your own** agentic-AI agent — a reusable "skill" the
+lets you install **your own** agentic-AI agent -- a reusable "skill" the
 investigation orchestrator can route work to (compute a metric, retrieve records,
 enrich an indicator, summarize a case). You'd author one when the built-in agents
 don't cover a step your SOC repeats: a bespoke scoring formula, an in-house
@@ -488,30 +488,30 @@ metric-computation/
 
 What each file does:
 
-- **`info.json`** — the manifest. `name` must equal the folder name; `agentclass`
+- **`info.json`** -- the manifest. `name` must equal the folder name; `agentclass`
   must name a class defined in `agent.py`; `configuration.fields` is the config
   form the UI renders (config-type toggle, LLM-provider picker, MCP-server
   multiselect, masking agent); `inputformat`/`outputformat` document the JSON the
   agent consumes and returns.
-- **`agent.py`** — subclasses the platform's `BaseAgent` and implements
+- **`agent.py`** -- subclasses the platform's `BaseAgent` and implements
   `act(input_data)`. It pulls a prompt by uuid
   (`self.get_prompt_by_uuid("<uuid>")`), `.format(**inputs)`s the templates, and
   calls the LLM. The uuid it references **must** exist in `prompt.yaml`.
-- **`prompt.yaml`** — the prompts, keyed by uuid. Each entry is exactly what the
+- **`prompt.yaml`** -- the prompts, keyed by uuid. Each entry is exactly what the
   UI's *Edit Prompt* screen edits: `name`, `description`, `system_instruction`
   (System Prompt Template), `user_instruction` (User Prompt Template),
   `response_format` (the JSON schema the model must return), and
-  `validation_instruction`. Any `{placeholder}` in a template — `{query}`,
-  `{data}`, `{verdict}`, `{key_findings}` — is filled by `act()` at call time.
-- **`config/memory.yaml`** — the agent's MCP-tool allowlist: a map of registered
+  `validation_instruction`. Any `{placeholder}` in a template -- `{query}`,
+  `{data}`, `{verdict}`, `{key_findings}` -- is filled by `act()` at call time.
+- **`config/memory.yaml`** -- the agent's MCP-tool allowlist: a map of registered
   **MCP-configuration uuid** → the list of tool names on that server the agent may
-  call. This is the safety boundary — an agent can only reach tools it's explicitly
+  call. This is the safety boundary -- an agent can only reach tools it's explicitly
   granted here. An empty list binds the server without (yet) allowing any tool.
 
 ### Validate, pack, and upload
 
 `pyfsr` models the whole package ({class}`~pyfsr.models.AgentPackage`) and checks
-the mistakes that otherwise fail *silently on the appliance* — an `agentclass`
+the mistakes that otherwise fail *silently on the appliance* -- an `agentclass`
 that isn't in `agent.py`, a prompt uuid the code references but the yaml omits, a
 manifest icon that isn't in the bundle:
 
@@ -526,7 +526,7 @@ print(pkg.memory.mcp_configuration_uuids())   # which MCP servers it's wired to
 
 client = FortiSOAR("soar.example.com", token="<api-key>")
 
-# Import straight from a source directory — pyfsr validates + packs it on the fly:
+# Import straight from a source directory -- pyfsr validates + packs it on the fly:
 result = client.ai.import_agent("./my-agents/incident-scorer", replace=True)
 agent_uuid = result["uuid"]
 
@@ -554,13 +554,13 @@ then `import_agent` the folder back.
 An imported agent lands **inactive** and on the default config. Three things make
 the orchestrator route to it:
 
-1. **Activate it** — an inactive agent is never selected:
+1. **Activate it** -- an inactive agent is never selected:
 
    ```{code-block} python
    client.ai.activate_agent([agent_uuid])          # active=True by default
    ```
 
-2. **Give it an LLM + MCP config** — if it shouldn't inherit the default, set its
+2. **Give it an LLM + MCP config** -- if it shouldn't inherit the default, set its
    config so it has a reasoning profile and can reach the MCP tools its
    `memory.yaml` allowlist names:
 
@@ -575,7 +575,7 @@ the orchestrator route to it:
    Confirm what's live with `client.ai.get_agent_config("incident-scorer", "1.0.0")`
    and `client.ai.describe_agent_mcp_servers(...)`.
 
-3. **Verify it's eligible** — it should now appear active in the agent list, and
+3. **Verify it's eligible** -- it should now appear active in the agent list, and
    the investigation pipeline (or a direct `run_agent`) can invoke it:
 
    ```{code-block} python
@@ -585,5 +585,5 @@ the orchestrator route to it:
 
 ```{note}
 Custom agents require FortiAI to be enabled (`client.ai.enable_features()`) and an
-appliance at `fsrMinCompatibility` or newer — the shipped agents target 8.0.0.
+appliance at `fsrMinCompatibility` or newer -- the shipped agents target 8.0.0.
 ```
