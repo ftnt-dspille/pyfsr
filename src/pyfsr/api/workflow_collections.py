@@ -128,7 +128,14 @@ class WorkflowCollectionsAPI(BaseAPI):
         ident = collection.strip()
         if is_uuid(ident):
             return self.get(ident, relationships=True)
-        matches = [c for c in self.list(relationships=True) if (c.get("name") or "") == ident]
+        # Resolve the NAME against a cheap listing, then fetch only the one
+        # collection with relationships. Listing with `relationships=True`
+        # inlines every workflow of every collection so that all but one can be
+        # thrown away: on a box with 209 collections that is ~0.5-1s each, or
+        # 105-240s, against a 30s read timeout -- the call cannot complete, and
+        # it gets slower as content grows. Name resolution needs `name` and
+        # `uuid` and nothing else.
+        matches = [c for c in self.list(relationships=False) if (c.get("name") or "") == ident]
         if not matches:
             raise ResourceNotFoundError(
                 f"no workflow collection named {ident!r} (pass its uuid if the name is ambiguous)",
@@ -136,7 +143,8 @@ class WorkflowCollectionsAPI(BaseAPI):
             )
         if len(matches) > 1:
             raise ValueError(f"{len(matches)} collections named {ident!r}; pass the uuid to disambiguate")
-        return matches[0]
+        # Same path the uuid branch takes -- the caller needs `workflows` inlined.
+        return self.get(matches[0].get("uuid"), relationships=True)
 
     def create_collection(
         self,

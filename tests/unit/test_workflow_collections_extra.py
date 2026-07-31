@@ -45,9 +45,31 @@ def test_resolve_by_uuid_fetches_directly():
 
 
 def test_resolve_by_name_matches_single():
-    c = RecordingClient(responses={"/api/3/workflow_collections": {"hydra:member": [{"uuid": "c-1", "name": "Pack"}]}})
+    """Name resolution is two cheap calls, not one huge one.
+
+    Listing with `$relationships=true` inlines every workflow of every
+    collection so that all but one can be discarded -- on a box with 209
+    collections that is 105-240s against a 30s read timeout. So the name is
+    matched against a relationship-free listing, then the single collection is
+    fetched with relationships, exactly as the uuid branch does.
+    """
+    c = RecordingClient(
+        responses={
+            "/api/3/workflow_collections": {"hydra:member": [{"uuid": "c-1", "name": "Pack"}]},
+            "/api/3/workflow_collections/c-1": {"uuid": "c-1", "name": "Pack", "workflows": []},
+        }
+    )
     a = WorkflowCollectionsAPI(c)
     assert a._resolve_collection("Pack")["uuid"] == "c-1"
+
+    listing = [call for call in c.calls if call[1] == "/api/3/workflow_collections"]
+    assert listing, c.calls
+    assert "$relationships" not in (listing[0][2] or {}), "the name listing must not expand relationships"
+    # The detail fetch is what carries `workflows` back to the caller.
+    assert any(
+        call[1] == "/api/3/workflow_collections/c-1" and (call[2] or {}).get("$relationships") == "true"
+        for call in c.calls
+    ), c.calls
 
 
 def test_resolve_by_name_not_found_raises():
