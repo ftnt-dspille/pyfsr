@@ -187,7 +187,188 @@ _PACK_EXCLUDE_FILES: frozenset[str] = frozenset(
 )
 
 
-def pack_connector(source_dir: str, output: str | None = None) -> str:
+#: info.json keys the importer genuinely requires, established by probing a
+#: live 8.0.0 appliance one mutation at a time (see
+#: ``fortisoar/connectors/probe_info_json.py`` in the Miscellaneous repo).
+#: Dropping or emptying any of these is rejected. Notably *not* required:
+#: description, publisher, cs_approved, cs_compatible, category,
+#: icon_small_name, icon_large_name, ingestion_supported, tags.
+_INFO_REQUIRED_KEYS: tuple[str, ...] = ("name", "version", "label")
+
+#: The importer requires three numeric version parts. ``1.0``, ``banana`` and
+#: the integer ``1`` are each rejected.
+_SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+")
+
+
+class ConnectorPackageError(ValueError):
+    """A connector source folder will not import, and we can tell before upload.
+
+    FortiSOAR's importer wraps every failure in one catch-all message --
+    *"Connector with same name is already active."* -- regardless of the real
+    cause. That message is emitted even when no connector of that name exists,
+    so it cannot be acted on. These checks exist to name the actual problem
+    locally instead.
+    """
+
+
+def validate_connector_source(source_dir: str, *, strict: bool = True, blocking_only: bool = False) -> list[str]:
+    """Check a connector source folder against what the importer requires.
+
+    Returns the list of problems found, worst first. With ``strict`` (the
+    default) any problem raises :class:`ConnectorPackageError` instead, since
+    uploading a package with any of these produces a server-side error that
+    identifies none of them.
+
+    The blocking rules were established empirically, by installing one
+    mutation at a time against a live 8.0.0 appliance rather than by reading
+    documentation. Blocking:
+
+    * the folder is named **exactly** ``info.json``'s ``name``. The
+      ``<name>_<version>`` form (``aws_3_1_2``) is the appliance's *installed*
+      layout, not the package layout, and packing it that way fails.
+    * ``info.json`` parses and has a non-empty ``name``, ``version``, ``label``.
+    * ``version`` has three numeric parts -- ``1.0``, ``banana`` and ``1`` are
+      each rejected.
+    * ``operations`` is present and not ``null`` (an empty list is fine).
+    * ``configuration`` is not ``null`` (absent or ``{}`` is fine).
+    * every ``operations`` entry has an ``operation`` and a ``title``, and no
+      two share an ``operation``.
+
+    Advisory -- accepted by the importer but wrong or dangerous anyway:
+    a declared operation with no implementation in ``operations.py`` (installs
+    cleanly, fails at runtime), a missing ``__init__.py``, ``connector.py`` or
+    ``operations.py``, an icon named but not shipped, ``cs_approved`` left
+    ``true``, and a ``name`` with uppercase or spaces.
+
+    Not required by the importer at all, despite appearances: ``description``,
+    ``publisher``, ``cs_compatible``, ``category``, ``ingestion_supported``,
+    ``tags``, and per-operation ``description`` / ``category`` / ``annotation``
+    / ``enabled`` / ``parameters`` / ``output_schema``.
+
+    Problems are either *blocking* -- the import is guaranteed to fail, and
+    the server will not tell you why -- or advisory. ``blocking_only`` reports
+    just the former, which is what :func:`pack_connector` enforces so that a
+    rough working folder still packs.
+
+    Args:
+        source_dir: the connector folder (the one holding ``info.json``).
+        strict: raise instead of returning the list.
+        blocking_only: report only problems that guarantee an import failure.
+
+    Returns:
+        Problem descriptions; empty when the folder looks importable.
+
+    Raises:
+        ConnectorPackageError: with ``strict``, when anything is wrong.
+        FileNotFoundError: if ``source_dir`` is not a directory.
+    """
+    src = Path(source_dir).resolve()
+    if not src.is_dir():
+        raise FileNotFoundError(f"connector source folder not found: {src}")
+
+    problems: list[str] = []
+    advisories: list[str] = []
+    info_path = src / "info.json"
+    if not info_path.exists():
+        problems.append(f"{src} has no info.json -- not a connector source folder")
+        if strict:
+            raise ConnectorPackageError(problems[0])
+        return problems
+
+    try:
+        info = json.loads(info_path.read_text())
+    except ValueError as err:
+        problems.append(f"info.json is not valid JSON: {err}")
+        if strict:
+            raise ConnectorPackageError(problems[0]) from err
+        return problems
+
+    # Blocking: probed by installing one mutation at a time against a live
+    # 8.0.0 appliance. Each of these was rejected; everything not listed here
+    # was accepted, however much the docs imply otherwise.
+    for key in _INFO_REQUIRED_KEYS:
+        if not info.get(key):
+            problems.append(f"info.json {key!r} is missing or empty -- the importer rejects that")
+
+    version = info.get("version")
+    if version and not _SEMVER_RE.match(str(version)):
+        problems.append(
+            f"info.json version is {version!r} -- the importer requires three "
+            "numeric parts, e.g. '1.0.0'. '1.0', 'banana' and 1 are all rejected."
+        )
+
+    if "configuration" in info and info["configuration"] is None:
+        problems.append("info.json configuration is null -- omit the key or use {} instead")
+
+    if "operations" in info and info["operations"] is None:
+        problems.append("info.json operations is null -- omit the key or use [] instead")
+    elif "operations" not in info:
+        problems.append("info.json has no 'operations' key -- the importer rejects that")
+
+    name = info.get("name")
+    if name and src.name != name:
+        problems.append(
+            f"folder is named {src.name!r} but info.json name is {name!r} -- "
+            f"they must match exactly (rename the folder to {name!r}). "
+            "The <name>_<version> form is the installed layout, not the package layout."
+        )
+
+    for required in ("connector.py", "operations.py"):
+        if not (src / required).exists():
+            advisories.append(f"missing {required}")
+
+    if not (src / "__init__.py").exists():
+        advisories.append("missing __init__.py -- the connector will not import as a package")
+
+    for key in ("icon_small_name", "icon_large_name"):
+        icon = info.get(key)
+        if icon and not (src / "images" / icon).exists():
+            advisories.append(f"info.json {key} is {icon!r} but images/{icon} is not in the package")
+
+    operations_py = ""
+    if (src / "operations.py").exists():
+        operations_py = (src / "operations.py").read_text()
+
+    seen: set[str] = set()
+    for index, operation in enumerate(info.get("operations") or []):
+        op_name = operation.get("operation")
+        if not op_name:
+            problems.append(f"operations[{index}] has no 'operation' key")
+            continue
+        if not operation.get("title"):
+            problems.append(f"operations[{index}] ({op_name}) has no 'title' -- the importer rejects that")
+        if op_name in seen:
+            problems.append(f"duplicate operation {op_name!r}")
+        seen.add(op_name)
+        # The importer does NOT check that the code implements the operation:
+        # a name with no implementation installs cleanly and fails at runtime.
+        if operations_py and op_name not in operations_py:
+            advisories.append(
+                f"operation {op_name!r} is declared in info.json but does not appear "
+                "in operations.py -- the importer accepts this and it fails only when run"
+            )
+
+    if info.get("cs_approved"):
+        advisories.append(
+            "cs_approved is true -- a locally built package should set it false. "
+            "The importer accepts it either way, but it claims a certification the "
+            "bundle does not carry, and the appliance still needs its custom-connector "
+            "gate on (system_settings.set_development_mode(connectors=True))"
+        )
+
+    if name and (name != name.lower() or " " in name):
+        advisories.append(
+            f"name {name!r} has uppercase or spaces -- the importer accepts it, but the "
+            "name is used as an identifier throughout the platform; prefer lowercase-with-dashes"
+        )
+
+    found = problems if blocking_only else problems + advisories
+    if found and strict:
+        raise ConnectorPackageError(f"{src} will not import:\n  - " + "\n  - ".join(found))
+    return found
+
+
+def pack_connector(source_dir: str, output: str | None = None, *, validate: bool = True) -> str:
     """Bundle a connector source folder into a SOAR-importable ``.tgz``.
 
     FortiSOAR expects a connector archive to contain exactly **one top-level
@@ -208,6 +389,9 @@ def pack_connector(source_dir: str, output: str | None = None) -> str:
         source_dir: path to the connector folder (the one containing ``info.json``).
         output: destination ``.tgz`` path. Defaults to ``<source_dir>.tgz``
             alongside the folder.
+        validate: run :func:`validate_connector_source` first and refuse to
+            build a package the importer will reject. Pass ``False`` only to
+            reproduce a known-bad bundle deliberately.
 
     Returns:
         The path to the written ``.tgz``.
@@ -215,12 +399,17 @@ def pack_connector(source_dir: str, output: str | None = None) -> str:
     Raises:
         FileNotFoundError: if ``source_dir`` doesn't exist.
         ValueError: if ``source_dir`` has no ``info.json`` (not a connector).
+        ConnectorPackageError: with ``validate``, when the folder would fail to
+            import -- the importer's own error names no cause, so this catches
+            it locally instead.
     """
     src = Path(source_dir).resolve()
     if not src.is_dir():
         raise FileNotFoundError(f"connector source folder not found: {src}")
     if not (src / "info.json").exists():
         raise ValueError(f"{src} has no info.json -- not a connector source folder")
+    if validate:
+        validate_connector_source(str(src), strict=True, blocking_only=True)
     out = Path(output) if output else src.with_suffix(".tgz")
 
     def _filter(info: tarfile.TarInfo) -> tarfile.TarInfo | None:

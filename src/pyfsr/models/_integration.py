@@ -169,6 +169,14 @@ class InstalledConnector(ApiResult):
     configurations: list[ConnectorConfigSummary] = Field(default_factory=list, alias="configuration")
     ingestion_supported: bool | None = None
     tags: list[Any] = Field(default_factory=list)
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _coerce_tags(cls, v):
+        if isinstance(v, str):
+            return [v]
+        return v
+
     agent: str | None = None
     development: bool | None = None
     created: str | None = None
