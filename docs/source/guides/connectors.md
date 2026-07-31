@@ -1,7 +1,7 @@
 # Connectors
 
 `client.connectors` ({class}`~pyfsr.api.connectors.ConnectorsAPI`) wraps
-FortiSOAR's `/api/integration` surface — discovery, healthcheck, configuration,
+FortiSOAR's `/api/integration` surface -- discovery, healthcheck, configuration,
 operation execution, the Connector Studio dev workspace, and install/uninstall.
 `client.agents` ({class}`~pyfsr.api.agents.AgentsAPI`) covers the remote
 *execution agent* side: pushing, upgrading, and removing a connector on an
@@ -9,7 +9,7 @@ agent, plus a liveness heartbeat.
 
 A complete, runnable walkthrough lives in
 [`examples/manage_connectors.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/manage_connectors.py)
-— it defaults to read-only and exercises every method below.
+-- it defaults to read-only and exercises every method below.
 
 ## Discovery & health
 
@@ -30,9 +30,9 @@ True
 ('Available', 'mitre-attack', '2.0.2')
 ```
 
-`connector_detail` fetches a connector's full record — its operations (each with
+`connector_detail` fetches a connector's full record -- its operations (each with
 parameters + output_schema) and configurations. Captured live and trimmed to a
-doctest-friendly slice (the `config` dict on each configuration is dropped — it
+doctest-friendly slice (the `config` dict on each configuration is dropped -- it
 carries connection details):
 
 ```{doctest}
@@ -47,10 +47,10 @@ carries connection details):
 
 ## Executing an operation
 
-`execute()` returns a typed {class}`~pyfsr.models.ExecuteResult` — `.ok` is the
+`execute()` returns a typed {class}`~pyfsr.models.ExecuteResult` -- `.ok` is the
 `status == "Success"` check, `.data` is the connector's own output (shape varies
 by connector/operation). Live-verified against `cisa-advisory`'s
-`get_known_exploited_vulnerability_cves` — a public, read-only, parameter-less
+`get_known_exploited_vulnerability_cves` -- a public, read-only, parameter-less
 feed lookup safe to demo against a real vendor connector (the only side effect
 is CISA's public catalog serving one GET):
 
@@ -65,15 +65,66 @@ True
 ```
 
 ⚠️ For an **agent-bound** connector (see the module warning), `execute()` is
-fire-and-forget — it returns immediately with an in-progress status and empty
+fire-and-forget -- it returns immediately with an in-progress status and empty
 `data`; the real result is pushed over a websocket, not pollable here.
+
+## Dynamic operation parameters (`apiOperation`)
+
+A `select`/`multiselect` parameter can declare `apiOperation` -- the name of a
+sibling connector operation whose result populates the dropdown at render time.
+This lets an operation's choices come from the live remote system (VMs,
+severities, locations, ...) instead of a hardcoded `options` list. The
+populating operation is `visible: false` (hidden from the playbook palette) and
+receives the connector `config` so it can authenticate.
+
+`action_ui_schema()` returns the params with their `apiOperation` and
+`apiOnchange` fields, so a UI or agent can detect which params are dynamic:
+
+```python
+params = conn.action_ui_schema("cisco-threatgrid", "submit_sample")
+for p in params:
+    if p.apiOperation:
+        print(f"{p.name}: type={p.type} -> call {p.apiOperation}")
+    else:
+        print(f"{p.name}: type={p.type} (static)")
+```
+
+To resolve the choices for a dynamic param, call the populating operation via
+{meth}`~pyfsr.api.connectors.ConnectorsAPI.execute` -- the result is a plain
+string list or `[{"title": "...", "value": "..."}]` objects:
+
+```python
+defn = conn.definition("cisco-threatgrid")
+op = next(o for o in defn.operations if o.operation == "submit_sample")
+vm_param = next(p for p in op.parameters if p.apiOperation == "get_available_vms")
+
+result = conn.execute("cisco-threatgrid", vm_param.apiOperation, config="<config-uuid>")
+choices = result.data  # ["Windows 7 64-bit", "Linux 64-bit", ...]
+```
+
+When `apiOnchange=True`, the populating operation also receives the current
+values of all sibling parameters in `params` (for cascading dropdowns like
+sap-rfc's pick-a-module-then-its-params-appear). Pass them as the `params`
+argument to `execute`:
+
+```python
+result = conn.execute(
+    "sap-rfc", "get_rfc_function_params",
+    config="<config-uuid>",
+    params={"function_name": "RFC_READ_TABLE"},  # sibling value
+)
+# result.data = {"options": "RFC_READ_TABLE", "onchange": {"RFC_READ_TABLE": [param, ...]}}
+```
+
+See the Connector Building Guide (section "Dynamic Options from an Operation")
+for the full `info.json` declaration + Python handler patterns.
 
 ## Creating, rotating, and deleting a configuration
 
 `create_configuration`/`update_configuration`/`delete_configuration` write
 credentials via `POST`/`PUT`/`DELETE /api/integration/configuration/`. Captured
 live against a throwaway `virustotal` config (`api_key` is a placeholder value,
-never a real credential) — created, rotated, then deleted, leaving the box with
+never a real credential) -- created, rotated, then deleted, leaving the box with
 0 `virustotal` configs afterwards, same as before:
 
 ```{doctest}
@@ -89,14 +140,14 @@ never a real credential) — created, rotated, then deleted, leaving the box wit
 ```
 
 Note `config["api_key"]` comes back as the literal string `"NULL"` regardless of
-what was sent — the server never echoes a stored secret, only this sentinel:
+what was sent -- the server never echoes a stored secret, only this sentinel:
 
 ```{doctest}
 >>> created.config["api_key"]
 'NULL'
 ```
 
-`update_configuration` sends the config whole — include every field, not just
+`update_configuration` sends the config whole -- include every field, not just
 the one you're rotating:
 
 ```{doctest}
@@ -112,7 +163,7 @@ the one you're rotating:
 ```
 
 ```{note}
-The `PUT` response omits `connector_name`/`connector_version` — present on
+The `PUT` response omits `connector_name`/`connector_version` -- present on
 `create_configuration`'s response, absent on `update_configuration`'s. Don't
 rely on either field being there after an update.
 ```
@@ -125,7 +176,7 @@ True
 ## Connector Studio dev workspace
 
 Edit a checked-out connector's source, then publish it onto the running
-appliance — the same flow as the in-product Studio editor.
+appliance -- the same flow as the in-product Studio editor.
 
 ```python
 dev = conn.dev_list()                       # connectors checked out for editing
@@ -139,7 +190,7 @@ conn.dev_publish(entity_id, replace=True)    # land changes + refresh integratio
 
 ```{note}
 `dev_publish()` is also the supported escape hatch when a same-version `.tgz`
-upload left stale code cached in the integrations service — it triggers a
+upload left stale code cached in the integrations service -- it triggers a
 service refresh the standard `$replace=true` install path does not.
 ```
 
