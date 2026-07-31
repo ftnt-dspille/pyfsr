@@ -2,9 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.18.5] - 2026-07-31
 
 ### Added
+- **`pyfsr.exports` module** -- read and validate FortiSOAR Export Wizard
+  bundles offline (no appliance needed). `Export.open()`, `Finding`, the
+  `Installer` dataclass, and structural `problems()`/`validate()` checks.
 - **`AIApi.upsert_llm_config()`** -- idempotent create-or-update an LLM
   reasoning profile by name. Looks up existing configs, reuses the found
   UUID (or generates one), then `POST /api/ai/llm/config`; safe to re-run any
