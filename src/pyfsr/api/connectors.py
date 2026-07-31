@@ -3,7 +3,7 @@
 Wraps FortiSOAR's ``/api/integration`` surface so callers don't hand-build
 execute payloads or hunt for a connector's configured version / config UUID.
 Covers discovery, healthcheck, operation execution, and writing a connector's
-*configuration* (its credentials) — see :meth:`ConnectorsAPI.create_configuration`.
+*configuration* (its credentials) -- see :meth:`ConnectorsAPI.create_configuration`.
 
 Accessed as ``client.connectors``.
 
@@ -38,7 +38,7 @@ Example:
     ``/api/integration/execute/`` call is fire-and-forget: it returns
     immediately with an in-progress status and an empty ``data``, and the real
     result is pushed over a websocket (not pollable here). ``execute()`` does
-    not — and cannot — wait for those; don't treat an empty ``data`` from an
+    not -- and cannot -- wait for those; don't treat an empty ``data`` from an
     agent-bound connector as failure.
 """
 
@@ -90,7 +90,7 @@ def _resolve_config_kwarg(
     """Resolve the configuration argument for :meth:`ConnectorsAPI.execute` /
     :meth:`ConnectorsAPI.healthcheck`.
 
-    ``config=`` is canonical — it accepts either a configuration **UUID** or a
+    ``config=`` is canonical -- it accepts either a configuration **UUID** or a
     display **name**; the FortiSOAR server resolves both in the wire ``config``
     field (live-verified on 8.0.0: a name and a UUID both select the right
     configuration). ``config_id=`` and ``config_name=`` are deprecated aliases
@@ -108,21 +108,21 @@ def _resolve_config_kwarg(
     if len(given) > 1:
         names = ", ".join(k for k, _ in given)
         raise ValueError(
-            "Pass a configuration UUID or name as config= — not together with "
+            "Pass a configuration UUID or name as config= -- not together with "
             f"config_id= or config_name= (those are deprecated aliases). Got: {names}"
         )
     for label, value in given:
         if not isinstance(value, str):
             raise TypeError(
                 f"{label!r} on execute/healthcheck takes a configuration UUID or name "
-                f"(str), got {type(value).__name__} — the field-map 'config=' on "
+                f"(str), got {type(value).__name__} -- the field-map 'config=' on "
                 "create_configuration/upsert_configuration is a dict; use config= "
                 "for the UUID or name here."
             )
     if config_id is not None:
         warnings.warn(
             "The 'config_id' keyword is deprecated; use config= (it accepts a "
-            "UUID or a name — the server resolves both).",
+            "UUID or a name -- the server resolves both).",
             DeprecationWarning,
             stacklevel=3,  # 3: caller -> public method -> here
         )
@@ -130,7 +130,7 @@ def _resolve_config_kwarg(
     if config_name is not None:
         warnings.warn(
             "The 'config_name' keyword is deprecated; use config= (it accepts a "
-            "UUID or a name — the server resolves both).",
+            "UUID or a name -- the server resolves both).",
             DeprecationWarning,
             stacklevel=3,
         )
@@ -138,16 +138,71 @@ def _resolve_config_kwarg(
     return config
 
 
+#: Directory names never shipped to the appliance -- virtualenvs, test suites,
+#: caches, VCS / IDE metadata, and build artifacts that bloat the tgz (a .venv
+#: alone can add hundreds of MB) and have no place in a running connector.
+_PACK_EXCLUDE_DIRS: frozenset[str] = frozenset(
+    {
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".env",
+        "env",
+        "tests",
+        "test",
+        ".pytest_cache",
+        ".tox",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".git",
+        ".hg",
+        ".svn",
+        ".idea",
+        ".vscode",
+        "node_modules",
+        "dist",
+        "build",
+        ".eggs",
+        ".DS_Store",
+    }
+)
+
+#: File names / suffixes never shipped -- OS metadata, bytecode, editor swap,
+#: VCS config. Suffixes are matched on the file's own name.
+_PACK_EXCLUDE_SUFFIXES: tuple[str, ...] = (".pyc", ".pyo", ".DS_Store", ".swp", ".swo", ".egg-info")
+
+#: Exact file names never shipped (dotfile / VCS metadata that has no place
+#: in a running connector).
+_PACK_EXCLUDE_FILES: frozenset[str] = frozenset(
+    {
+        ".DS_Store",
+        ".gitignore",
+        ".gitattributes",
+        ".gitmodules",
+        ".editorconfig",
+        ".python-version",
+        ".flake8",
+        ".env",
+    }
+)
+
+
 def pack_connector(source_dir: str, output: str | None = None) -> str:
     """Bundle a connector source folder into a SOAR-importable ``.tgz``.
 
     FortiSOAR expects a connector archive to contain exactly **one top-level
     directory** (named for the connector) holding ``info.json``, ``connector.py``,
-    ``operations.py``, etc. — e.g. ``flatten-json/info.json``. This packs
+    ``operations.py``, etc. -- e.g. ``flatten-json/info.json``. This packs
     ``source_dir`` as that top-level directory, preserving its own name.
 
-    ``__pycache__`` directories and ``*.pyc`` files are excluded so a freshly
-    built bundle doesn't smuggle stale bytecode onto the appliance.
+    Non-deployment artifacts are excluded so the bundle stays small and clean:
+
+    * **Virtualenvs** -- ``.venv``, ``venv``, ``.env``, ``env``
+    * **Test suites** -- ``tests``, ``test``, ``.pytest_cache``, ``.tox``
+    * **Caches** -- ``__pycache__``, ``.mypy_cache``, ``.ruff_cache``
+    * **VCS / IDE** -- ``.git``, ``.hg``, ``.svn``, ``.idea``, ``.vscode``
+    * **Build output** -- ``dist``, ``build``, ``.eggs``, ``node_modules``
+    * **OS / editor cruft** -- ``.DS_Store``, ``*.pyc``, ``*.pyo``, ``*.swp``
 
     Args:
         source_dir: path to the connector folder (the one containing ``info.json``).
@@ -165,12 +220,18 @@ def pack_connector(source_dir: str, output: str | None = None) -> str:
     if not src.is_dir():
         raise FileNotFoundError(f"connector source folder not found: {src}")
     if not (src / "info.json").exists():
-        raise ValueError(f"{src} has no info.json — not a connector source folder")
+        raise ValueError(f"{src} has no info.json -- not a connector source folder")
     out = Path(output) if output else src.with_suffix(".tgz")
 
     def _filter(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
-        name = Path(info.name).name
-        if "__pycache__" in Path(info.name).parts or name.endswith(".pyc"):
+        parts = Path(info.name).parts
+        # Exclude any path component in the blocklist (e.g. .venv/lib/...).
+        if any(p in _PACK_EXCLUDE_DIRS for p in parts):
+            return None
+        name = parts[-1]
+        if name in _PACK_EXCLUDE_FILES:
+            return None
+        if name.endswith(_PACK_EXCLUDE_SUFFIXES):
             return None
         return info
 
@@ -188,7 +249,7 @@ _INSTALL_FIELDS = "errorMessage,status,progressPercent,file,currentlyImporting,o
 
 
 def _field_label(field: dict[str, Any]) -> str:
-    """Human label for a config field — its ``title``, falling back to ``name``."""
+    """Human label for a config field -- its ``title``, falling back to ``name``."""
     return field.get("title") or field.get("name") or "?"
 
 
@@ -205,8 +266,8 @@ def _option_values(field: dict[str, Any]) -> list[Any]:
 
 
 def _value_fits_type(ftype: str, value: Any) -> bool:
-    """Best-effort type check for a *present* config value. Lenient on purpose —
-    FortiSOAR stores most values as strings — flagging only clearly-wrong ones.
+    """Best-effort type check for a *present* config value. Lenient on purpose --
+    FortiSOAR stores most values as strings -- flagging only clearly-wrong ones.
     Emptiness is handled separately by the required check."""
     if ftype == "integer":
         if isinstance(value, bool):
@@ -228,7 +289,7 @@ def _value_fits_type(ftype: str, value: Any) -> bool:
             except (ValueError, TypeError):
                 return False
         return False
-    # text / password / select(no options) / email / etc. — no value constraint here.
+    # text / password / select(no options) / email / etc. -- no value constraint here.
     return True
 
 
@@ -300,7 +361,7 @@ class ConnectorsAPI(BaseAPI):
     ) -> dict[str, Any]:
         """Install a connector from Content Hub by ``name`` + ``version``.
 
-        Posts ``{"name", "version"}`` to ``POST /api/3/solutionpacks/install`` —
+        Posts ``{"name", "version"}`` to ``POST /api/3/solutionpacks/install`` --
         the same call the Content Hub *Install* button makes. The install runs
         asynchronously as an *import job*; the response carries that job's id
         (poll it with :meth:`install_status`). Discover installable
@@ -316,7 +377,7 @@ class ConnectorsAPI(BaseAPI):
 
         Returns:
             With ``wait=False``, the install response (carrying the import-job
-            id). With ``wait=True``, the final :meth:`install_status` payload —
+            id). With ``wait=True``, the final :meth:`install_status` payload --
             check its ``status`` (``"Import Complete"`` means success). The
             configured-connector cache is dropped on a successful wait.
         """
@@ -347,7 +408,7 @@ class ConnectorsAPI(BaseAPI):
         same endpoint :meth:`install` posts a name to). Sends the archive as
         ``file`` with the required ``$type=connector`` query parameter; pass
         ``replace=True`` to re-install over an existing version (``$replace=true``).
-        The response carries the full connector record — including the integer
+        The response carries the full connector record -- including the integer
         ``id`` other calls need.
 
         Use this for connectors not in Content Hub (a locally built or
@@ -389,7 +450,7 @@ class ConnectorsAPI(BaseAPI):
         # NOTE: kept on the mimetypes-guessed content-type (unlike widgets, which
         # default to the live-verified "application/gzip") to avoid changing this
         # long-working path's wire behavior without re-verifying live against a
-        # real connector bundle — see upload_solutionpack's docstring.
+        # real connector bundle -- see upload_solutionpack's docstring.
         resp = upload_solutionpack(self.client, path, type_="connector", replace=replace, content_type=mime_type)
         self.clear_cache()
         if not wait:
@@ -447,7 +508,7 @@ class ConnectorsAPI(BaseAPI):
     def uninstall(self, connector: str, *, refresh: bool = True) -> None:
         """Uninstall a connector from the **appliance** (its self-agent).
 
-        ``DELETE /api/integration/connectors/{id}/`` — the integer install id is
+        ``DELETE /api/integration/connectors/{id}/`` -- the integer install id is
         resolved from ``connector`` (a name-only call won't work). The trailing
         slash is mandatory; the endpoint returns 204 on success. To remove a
         connector from a remote *agent* instead, use
@@ -481,7 +542,7 @@ class ConnectorsAPI(BaseAPI):
     ) -> dict[str, Any]:
         """Make ``name`` be installed at exactly ``version``, preserving configs.
 
-        The safe way to change a connector's version — including a **downgrade** —
+        The safe way to change a connector's version -- including a **downgrade** --
         without losing its saved configurations. An in-place install (upgrade or
         downgrade) preserves configs on its own; this method additionally takes a
         Configuration-Export backup first and, if the version swap drops or
@@ -493,7 +554,7 @@ class ConnectorsAPI(BaseAPI):
         1. If already at ``version``, no-op.
         2. If installed *and* configured, export a backup ``.zip`` (configs +
            encrypted secrets) via ``client.export_config.export_connector``.
-        3. Install ``version`` in place — from ``bundle_path`` if given (a local
+        3. Install ``version`` in place -- from ``bundle_path`` if given (a local
            ``.tgz``/zip), else by name from Content Hub; if Content Hub won't
            serve that version and ``auto_fetch`` is set (default), the exact-
            version ``.tgz`` is downloaded from the public repo and installed.
@@ -507,7 +568,7 @@ class ConnectorsAPI(BaseAPI):
             name: connector machine name (e.g. ``"code-snippet"``).
             version: target version (e.g. ``"2.1.5"``).
             bundle_path: optional local connector archive to install instead of
-                pulling ``version`` from Content Hub. Usually unnecessary now —
+                pulling ``version`` from Content Hub. Usually unnecessary now --
                 when Content Hub won't serve the target, ``auto_fetch`` downloads
                 the exact-version ``.tgz`` from the public repo for you.
             auto_fetch: when no ``bundle_path`` is given and the by-name Content
@@ -517,7 +578,7 @@ class ConnectorsAPI(BaseAPI):
             backup_dir: directory to write the backup ``.zip`` into (default cwd).
             allow_uninstall_fallback: permit the destructive uninstall→reinstall
                 path if an in-place install can't reach ``version``. Off by
-                default — leaving the connector untouched is safer than a wipe.
+                default -- leaving the connector untouched is safer than a wipe.
             wait: block on installs/imports (default True).
             interval: poll interval for the install wait.
             timeout: per-install/-import timeout in seconds.
@@ -559,7 +620,7 @@ class ConnectorsAPI(BaseAPI):
             try:
                 self.install(name, version, wait=wait, interval=interval, timeout=timeout)
             except Exception:
-                # Content Hub wouldn't serve ``version`` in place — fall back to
+                # Content Hub wouldn't serve ``version`` in place -- fall back to
                 # downloading the exact-version .tgz from the public repo and
                 # installing that, so the caller doesn't have to fetch by hand.
                 if not auto_fetch:
@@ -574,7 +635,7 @@ class ConnectorsAPI(BaseAPI):
         new = self.resolve_version(name)
         configs_after = self.configurations(name)
 
-        # In-place install reached the target — restore configs only if the swap
+        # In-place install reached the target -- restore configs only if the swap
         # lost some (a clean in-place change keeps them).
         if new == version:
             if backup_path and len(configs_after) < len(configs_before):
@@ -584,7 +645,7 @@ class ConnectorsAPI(BaseAPI):
                 return self._ensure_summary("restored", cur, version, backup_path, configs_before, configs_after)
             return self._ensure_summary("in_place", cur, version, backup_path, configs_before, configs_after)
 
-        # In-place didn't take — destructive fallback, only if allowed.
+        # In-place didn't take -- destructive fallback, only if allowed.
         if allow_uninstall_fallback:
             if self.resolve_connector_id(name) is not None:
                 self.uninstall(name)
@@ -623,7 +684,7 @@ class ConnectorsAPI(BaseAPI):
     def connector_detail(self, connector: str) -> dict[str, Any]:
         """Fetch a connector's full record by id (operations-discovery endpoint).
 
-        ``POST /api/integration/connectors/{id}/`` with a ``{}`` body — the
+        ``POST /api/integration/connectors/{id}/`` with a ``{}`` body -- the
         spec-canonical way to enumerate a connector's installed operations.
         Returns the full record: ``operations[]`` (each with ``operation``,
         ``title``, ``description``, ``parameters[]``, ``output_schema``),
@@ -663,7 +724,7 @@ class ConnectorsAPI(BaseAPI):
         if self._configured is not None and not refresh:
             return self._configured
         # The endpoint pages at ``page_size`` (default 30) and ignores ``$limit``
-        # — walk every page so a connector past the first 30 isn't silently
+        # -- walk every page so a connector past the first 30 isn't silently
         # dropped (which would make resolve_version/healthcheck miss it).
         out: list[InstalledConnector] = []
         page = 1
@@ -711,11 +772,11 @@ class ConnectorsAPI(BaseAPI):
 
         Filters:
 
-        * ``name`` — the **configuration's** name (e.g. ``"Branch FortiManager"``),
+        * ``name`` -- the **configuration's** name (e.g. ``"Branch FortiManager"``),
           i.e. what you passed as ``name`` to :meth:`upsert_configuration`.
-        * ``connector`` — every configuration of one connector, by machine name
+        * ``connector`` -- every configuration of one connector, by machine name
           (``"fortinet-fortimanager-json-rpc"``) or integer install id.
-        * ``active`` — active configurations only.
+        * ``active`` -- active configurations only.
 
         .. warning::
            ``name`` filters the CONFIGURATION name, **not** the connector name.
@@ -725,7 +786,7 @@ class ConnectorsAPI(BaseAPI):
            silently ignores filters it doesn't understand and this one simply
            matches nothing. Use ``connector=`` for that.
 
-        ``connector`` resolves a name to its install id before querying — the
+        ``connector`` resolves a name to its install id before querying -- the
         endpoint's ``connector`` filter is the numeric id, and a name passed
         straight through errors ("Unknown error occurred"). A not-installed
         connector yields ``[]``: it cannot have configurations.
@@ -740,7 +801,7 @@ class ConnectorsAPI(BaseAPI):
         if name is not None:
             params["name"] = name
         if connector is not None:
-            # bool is an int subclass — connector=True would query id 1.
+            # bool is an int subclass -- connector=True would query id 1.
             if isinstance(connector, bool):
                 raise TypeError("connector must be a machine name or install id, not a bool")
             if isinstance(connector, int):
@@ -762,17 +823,17 @@ class ConnectorsAPI(BaseAPI):
         """Search *installed* connectors by partial, case-insensitive match.
 
         Scoped to connectors installed on this appliance (the
-        :meth:`list_configured` set) — it does **not** see the Content Hub
+        :meth:`list_configured` set) -- it does **not** see the Content Hub
         catalog of installable-but-not-installed connectors. For that, use
         ``client.content_hub.search_available_connectors(...)``.
 
         Matches ``query`` as a substring of either the connector ``name`` or its
-        ``label`` — so ``"fortigate"`` finds ``fortigate-firewall`` (label
+        ``label`` -- so ``"fortigate"`` finds ``fortigate-firewall`` (label
         ``"Fortinet FortiGate"``) regardless of hyphen/underscore or casing.
         Returns the matching :meth:`list_configured` entries (possibly empty),
         ordered with exact ``name`` matches first.
 
-        Useful when you don't know a connector's exact machine name — note that
+        Useful when you don't know a connector's exact machine name -- note that
         :meth:`resolve_version` and friends require the exact ``name``, while the
         human-facing label differs (``"Fortinet FortiGate"`` vs
         ``"fortigate-firewall"``).
@@ -801,7 +862,7 @@ class ConnectorsAPI(BaseAPI):
     def resolve_connector_id(self, connector: str) -> int | None:
         """The integer install id of ``connector`` (``None`` if not installed).
 
-        Required by :meth:`create_configuration` — the
+        Required by :meth:`create_configuration` -- the
         ``/api/integration/configuration/`` endpoint 500s on a name-only body
         and needs this numeric id.
         """
@@ -839,13 +900,13 @@ class ConnectorsAPI(BaseAPI):
         ``status="no-config"`` meaning the connector isn't configured.
 
         ``config`` selects which configuration to check. It accepts either a
-        configuration **UUID** or a display **name** — the FortiSOAR server
+        configuration **UUID** or a display **name** -- the FortiSOAR server
         resolves both (live-verified on 8.0.0). Omit it to check the connector's
         *default* configuration.
 
         .. deprecated::
            ``config_id=`` is a deprecated alias for ``config=``. It still works
-           (and emits a warning) but gains nothing — ``config=`` accepts both a
+           (and emits a warning) but gains nothing -- ``config=`` accepts both a
            UUID and a name. Passing both raises.
 
         Example:
@@ -884,7 +945,7 @@ class ConnectorsAPI(BaseAPI):
 
         With ``connectors=None`` (default), checks every configured connector
         (the :meth:`list_configured` set with a resolvable version). Each check is
-        an independent ``GET``, so they run in a bounded thread pool — a fleet
+        an independent ``GET``, so they run in a bounded thread pool -- a fleet
         status sweep that was N round-trips becomes roughly one. A connector whose
         check raises lands as a ``status="error"``
         :class:`~pyfsr.models._integration.HealthcheckResult` so
@@ -929,7 +990,7 @@ class ConnectorsAPI(BaseAPI):
         """List a connector's operations (the ``operations`` of :meth:`definition`).
 
         Returns typed, dict-compatible
-        :class:`~pyfsr.models._integration.Operation` objects — each carries
+        :class:`~pyfsr.models._integration.Operation` objects -- each carries
         ``operation`` (the api name), ``title``, ``description``, typed
         ``parameters`` (:class:`~pyfsr.models._integration.OperationParam`), and
         ``output_schema``.
@@ -949,7 +1010,7 @@ class ConnectorsAPI(BaseAPI):
         """The input params a UI/agent must render to stage one connector action.
 
         Resolves ``connector``'s definition, finds ``operation`` by its api name,
-        and returns its :meth:`~pyfsr.models.Operation.ui_params` —
+        and returns its :meth:`~pyfsr.models.Operation.ui_params` --
         the visible params, required-first, deduped across conditional groups,
         each carrying its ``type``/``title``/``required`` and (for a ``select``)
         its :meth:`~pyfsr.models.OperationParam.select_options`.
@@ -959,7 +1020,7 @@ class ConnectorsAPI(BaseAPI):
 
         Pass ``selections`` (a ``{param_name: chosen_value}`` map of what the
         user has picked so far) to also include the sub-params those choices
-        reveal via each ``select``'s ``onchange`` map — so you render only the
+        reveal via each ``select``'s ``onchange`` map -- so you render only the
         fields needed for the current state. Without it, only the base form is
         returned. Pass ``required_only=True`` for just the required inputs. See
         :meth:`~pyfsr.models.Operation.ui_params` for the reveal
@@ -975,8 +1036,8 @@ class ConnectorsAPI(BaseAPI):
         """Return a connector's configuration field schema (its ``config_schema``).
 
         Each field carries ``name``, ``type`` (``text``/``password``/``select``/
-        ``checkbox``/…), ``title``, ``required``, a default ``value``, and — for
-        ``select`` fields — an ``onchange`` map whose keys are option values and
+        ``checkbox``/…), ``title``, ``required``, a default ``value``, and -- for
+        ``select`` fields -- an ``onchange`` map whose keys are option values and
         whose values are the *sub-fields* that become active when that option is
         chosen (e.g. FortiSIEM's ``fsm_type`` reveals ``server``/``username``/
         ``password`` only when set to ``"FortiSIEM"``). Feed the same shape to
@@ -990,7 +1051,7 @@ class ConnectorsAPI(BaseAPI):
         """Build a schema-complete **default** configuration dict for ``connector``.
 
         Walks the config schema and fills every field with its declared default
-        ``value`` (or a type-appropriate empty default — ``False`` for checkbox,
+        ``value`` (or a type-appropriate empty default -- ``False`` for checkbox,
         ``0`` for integer, ``""`` otherwise), **including the conditional
         sub-fields that** ``onchange`` **reveals for those defaults**. That last
         part is the point: a connector like ``code-snippet`` requires
@@ -1074,10 +1135,10 @@ class ConnectorsAPI(BaseAPI):
 
         Returns a :class:`~pyfsr.models.ConfigValidationResult` with:
 
-        - ``missing`` — required fields absent or blank in ``config``.
-        - ``invalid`` — fields with wrong values (bad select option, wrong type).
-        - ``unknown`` — keys in ``config`` not declared by the active schema.
-        - ``errors`` — one structured entry per problem with ``field``, ``code``,
+        - ``missing`` -- required fields absent or blank in ``config``.
+        - ``invalid`` -- fields with wrong values (bad select option, wrong type).
+        - ``unknown`` -- keys in ``config`` not declared by the active schema.
+        - ``errors`` -- one structured entry per problem with ``field``, ``code``,
           ``message``, and (for select fields) ``valid_options``.
 
         ``valid`` is ``True`` only when ``missing`` and ``invalid`` are empty.
@@ -1129,7 +1190,7 @@ class ConnectorsAPI(BaseAPI):
         """Walk a config schema collecting required/invalid/known field info.
 
         Recurses only into a ``select`` field's ``onchange`` branch that matches
-        the value currently in ``config`` — so conditionally-revealed fields are
+        the value currently in ``config`` -- so conditionally-revealed fields are
         evaluated only when their controlling selection is active. ``condition``
         carries the controlling field that revealed the current branch, for
         guidance messages.
@@ -1204,12 +1265,12 @@ class ConnectorsAPI(BaseAPI):
         exist_ok: bool = False,
         refresh: bool = True,
     ) -> ConnectorConfig:
-        """Create (or update) a connector configuration — write its credentials.
+        """Create (or update) a connector configuration -- write its credentials.
 
         Persists a named configuration for ``connector`` via
         ``POST /api/integration/configuration/`` (the same endpoint the UI's
         connector-config form uses). ``config`` is the connector's own field
-        map — for ``fortinet-fortisiem`` that's
+        map -- for ``fortinet-fortisiem`` that's
         ``{"server", "username", "password", "organization", "verify_ssl"}``;
         inspect :meth:`definition` (its ``config_schema``) for any connector's
         fields. Secrets (e.g. ``password``) are encrypted server-side, so always
@@ -1225,16 +1286,16 @@ class ConnectorsAPI(BaseAPI):
                 already-configured connectors). If invalid, the appliance falls
                 back to the latest installed version.
             default: mark this the connector's default configuration.
-            config_id: reuse a specific UUID — passing an existing config's id
+            config_id: reuse a specific UUID -- passing an existing config's id
                 **updates** that configuration instead of creating a new one
                 (the endpoint upserts on ``config_id``); omit to mint a new one.
             agent: run the connector on a remote *agent* (its uuid); omit to use
                 the appliance's self-agent.
             validate: structurally check ``config`` against the connector's
                 schema first (via :meth:`validate_config`) and raise on a missing
-                required field — turns the server's opaque 500 into a clear
+                required field -- turns the server's opaque 500 into a clear
                 error. Pass ``False`` to skip (default ``True``).
-            autofill: fill any schema-defaulted fields ``config`` omits — including
+            autofill: fill any schema-defaulted fields ``config`` omits -- including
                 the ``onchange``-revealed sub-fields that are otherwise required
                 only at *playbook runtime* (see :meth:`default_config`). Your
                 explicit values always win. Pass ``False`` to send ``config``
@@ -1336,7 +1397,7 @@ class ConnectorsAPI(BaseAPI):
 
         ``PUT /api/integration/configuration/{config_id}/`` (the POST create path
         *rejects* a known ``config_id`` rather than upserting). Use this to
-        rotate credentials on a configured connector — e.g. re-stamp a FortiSIEM
+        rotate credentials on a configured connector -- e.g. re-stamp a FortiSIEM
         ``password`` or a refreshed token. ``config`` is sent whole, so include
         every field, not just the changed one.
 
@@ -1397,14 +1458,14 @@ class ConnectorsAPI(BaseAPI):
         # NB: FortiSOAR 8.0's PUT echoes the saved row but puts an async
         # op-envelope in ``status`` (``{"status":"finished","message":...}``)
         # instead of 7.x's int active-flag. ``ConnectorConfig.status`` tolerates
-        # this (coerced to None) — see its validator in models/_integration.py.
+        # this (coerced to None) -- see its validator in models/_integration.py.
         return ConnectorConfig.model_validate(raw)
 
     def delete_configuration(self, config_id: str, *, refresh: bool = True) -> None:
         """Delete a connector configuration by id
         (``DELETE /api/integration/configuration/{config_id}/``).
 
-        The trailing slash is mandatory — without it the gateway rejects the
+        The trailing slash is mandatory -- without it the gateway rejects the
         call with ``403 Could not validate HMAC fingerprint``.
         """
         self.client.delete(f"/api/integration/configuration/{config_id}/")
@@ -1421,7 +1482,7 @@ class ConnectorsAPI(BaseAPI):
     def dev_list(self) -> list[dict[str, Any]]:
         """List connectors checked out into the Connector Studio dev workspace.
 
-        ``GET /api/integration/connector/development/entity/`` — the same set
+        ``GET /api/integration/connector/development/entity/`` -- the same set
         shown in the Studio's left-hand tree. Returns the ``data[]`` entries.
         """
         resp = self.client.get(f"{self._DEV_BASE}/") or {}
@@ -1491,7 +1552,7 @@ class ConnectorsAPI(BaseAPI):
         """Delete a dev-workspace connector twin (Studio *discard*).
 
         ``DELETE .../entity/{id}/``. Use to tear down an orphaned ``_dev``
-        workspace left by a failed :meth:`dev_publish` — an unreadable file in
+        workspace left by a failed :meth:`dev_publish` -- an unreadable file in
         an orphaned ``_dev`` dir can wedge DAS's HA file-sync, so cleanup matters.
         """
         self.client.delete(f"{self._DEV_BASE}/{entity_id}/")
@@ -1508,7 +1569,7 @@ class ConnectorsAPI(BaseAPI):
         stale worker and same-named-module edits silently don't take). This is the
         supported, SSH-free recycle: open the installed connector in the Connector
         Studio dev workspace (cloning the current installed state), then publish
-        that twin back — which copies it into the live dir **and** touches the dev
+        that twin back -- which copies it into the live dir **and** touches the dev
         config ini, recycling every worker within ~5s.
 
         ``discard`` makes a *successful* publish destroy the dev twin server-side
@@ -1529,7 +1590,7 @@ class ConnectorsAPI(BaseAPI):
         dev = self.dev_edit(connector_id)
         dev_id = dev.get("id")
         # Defensive: edit-mode sometimes echoes the installed id rather than the
-        # twin's — find the real dev twin (development=true) by name.
+        # twin's -- find the real dev twin (development=true) by name.
         if dev_id == connector_id or not dev.get("development"):
             twin = next(
                 (m for m in self.dev_list() if m.get("name") == connector and m.get("development")),
@@ -1541,11 +1602,11 @@ class ConnectorsAPI(BaseAPI):
         try:
             self.dev_publish(dev_id, replace=replace, discard=discard)
         except Exception:
-            # Publish didn't run its discard (failed/timed out) — delete the twin
+            # Publish didn't run its discard (failed/timed out) -- delete the twin
             # explicitly so no `_dev` dir is left to wedge HA file-sync.
             try:
                 self.dev_delete(dev_id)
-            except Exception:  # noqa: BLE001 — best-effort teardown
+            except Exception:  # noqa: BLE001 -- best-effort teardown
                 pass
             raise
         return {"ok": True, "dev_id": dev_id}
@@ -1573,14 +1634,14 @@ class ConnectorsAPI(BaseAPI):
         autofill: bool = True,
     ) -> ConnectorConfig:
         """Create a named configuration, or update it in place if one already
-        exists with the same ``name`` — the idempotent write the UI's *Save*
+        exists with the same ``name`` -- the idempotent write the UI's *Save*
         button performs, safe to re-run from a deploy script.
 
         Finds an existing config by ``name`` (via :meth:`connector_detail`) and
         ``PUT``s to its ``config_id`` (preserving the existing ``agent`` unless
         ``agent`` is given), else ``POST``s a new one. Unlike calling
-        :meth:`create_configuration` twice — which 400s on
-        ``"name, connector, agent must be unique"`` — this updates the second time.
+        :meth:`create_configuration` twice -- which 400s on
+        ``"name, connector, agent must be unique"`` -- this updates the second time.
 
         Tolerates the platform's *persisted-despite-500* case: a connector's own
         ``on_add_config`` / ``on_update_config`` hook can raise **after** the row
@@ -1638,7 +1699,7 @@ class ConnectorsAPI(BaseAPI):
         try:
             return _write()
         except Exception:
-            # The write may have persisted before a post-save hook raised — verify
+            # The write may have persisted before a post-save hook raised -- verify
             # by re-fetch rather than trusting the status code.
             confirmed = self._find_configuration_by_name(connector, name)
             if confirmed is not None:
@@ -1663,8 +1724,8 @@ class ConnectorsAPI(BaseAPI):
     ) -> ConnectorConfig:
         """Ensure ``connector`` is installed **and** has the named configuration.
 
-        Consolidates the common setup sequence — "install from Content Hub if it
-        isn't here yet, then create-or-update the config" — into one idempotent
+        Consolidates the common setup sequence -- "install from Content Hub if it
+        isn't here yet, then create-or-update the config" -- into one idempotent
         call, joining the existing :meth:`ensure_version` in the ``ensure_*``
         family. Re-running it is safe: an already-installed connector is not
         reinstalled, and :meth:`upsert_configuration` updates the named config in
@@ -1722,29 +1783,29 @@ class ConnectorsAPI(BaseAPI):
         """Run a single connector operation via ``POST /api/integration/execute/``.
 
         ``config`` selects which connector configuration to run against. It
-        accepts either a configuration **UUID** or a display **name** — the
+        accepts either a configuration **UUID** or a display **name** -- the
         FortiSOAR server resolves both in the wire ``config`` field
         (live-verified on 8.0.0). Omit it to use the connector's *default*
         configuration (resolved client-side from the cached connector listing).
 
         .. deprecated::
            ``config_id=`` and ``config_name=`` are deprecated aliases for
-           ``config=``. They still work (and emit a warning) but gain nothing —
+           ``config=``. They still work (and emit a warning) but gain nothing --
            ``config=`` accepts both a UUID and a name. Passing more than one
            raises.
 
         ``version`` is resolved from the configured connector when omitted.
 
-        Returns a typed :class:`~pyfsr.models.ExecuteResult` — dict-compatible
+        Returns a typed :class:`~pyfsr.models.ExecuteResult` -- dict-compatible
         (``result["data"]`` still works), with a ``.ok`` property for the
         recurring ``status == "Success"`` check.
 
         See the module-level warning: for agent-bound connectors this call is
-        fire-and-forget and ``data`` comes back empty — that is not a failure.
+        fire-and-forget and ``data`` comes back empty -- that is not a failure.
 
         Live-verified on FortiSOAR 8.0.0-6034 against ``cisa-advisory``'s
         ``get_known_exploited_vulnerability_cves`` (a public, read-only,
-        parameter-less feed lookup — safe to demo against a real connector,
+        parameter-less feed lookup -- safe to demo against a real connector,
         no side effect beyond an outbound GET to CISA's public catalog):
 
             >>> client = demo_client()
@@ -1802,7 +1863,7 @@ class ConnectorsAPI(BaseAPI):
     ) -> dict[str, Any]:
         """Retry the Python-dependency install for a connector.
 
-        ``POST`` to the same URL :meth:`dependencies_status` reads — the
+        ``POST`` to the same URL :meth:`dependencies_status` reads -- the
         *Retry* button next to a failed *Requirements* badge. Pass ``agent`` to
         install the dependencies on a remote agent instead of the appliance.
         """
@@ -1822,7 +1883,7 @@ class ConnectorsAPI(BaseAPI):
     def ingestion_sources(self) -> list[InstalledConnector]:
         """Installed connectors that support data ingestion.
 
-        ``POST /api/integration/connector_details/?ingestion_supported=true`` —
+        ``POST /api/integration/connector_details/?ingestion_supported=true`` --
         the list backing the *Data Ingestion* page's connector picker. These are
         the connectors :meth:`data_ingest_wizard` can meaningfully target.
         """
@@ -1849,7 +1910,7 @@ class ConnectorsAPI(BaseAPI):
     ) -> dict[str, Any]:
         """Infer an operation's output schema.
 
-        ``POST /api/integration/connector_output_schema/<name>/<version>/`` —
+        ``POST /api/integration/connector_output_schema/<name>/<version>/`` --
         what the playbook editor calls to populate step-output pickers. Note the
         UI resolves this endpoint's *failures* as successes too (it returns
         whatever body came back), so check the payload rather than trusting a 2xx.
@@ -1879,7 +1940,7 @@ class ConnectorsAPI(BaseAPI):
 
         ``POST`` (first assignment) or ``PUT`` (replacing an existing one) to
         ``/api/integration/connectors/operations/<operation_id>/roles/``. The UI
-        picks the verb by whether the operation already has roles — mirror that
+        picks the verb by whether the operation already has roles -- mirror that
         with ``replace``.
 
         Args:
@@ -1898,7 +1959,7 @@ class ConnectorsAPI(BaseAPI):
 
         ``GET /api/integration/data-import/?configuration=<config_id>``. This is
         how the UI re-finds an existing ingestion schedule for a configuration
-        (via ``metadata.scheduleId``) — an ingestion set up without one of these
+        (via ``metadata.scheduleId``) -- an ingestion set up without one of these
         looks unconfigured in the UI even though the schedule runs fine.
 
         Example:
@@ -1936,7 +1997,7 @@ class ConnectorsAPI(BaseAPI):
             config_id: the connector configuration's ``config_id``.
             connector: connector name.
             version: connector version.
-            name: record name — the UI uses the schedule name, falling back to
+            name: record name -- the UI uses the schedule name, falling back to
                 the ``config_id``.
             schedule_id: the periodic task's id, once it exists.
             schedule_name: display name of that schedule.
@@ -2017,7 +2078,7 @@ class ConnectorsAPI(BaseAPI):
     def _dataingestion_playbooks(self, collection_uuid: str, connector: str) -> list[Workflow]:
         """Every ``#dataingestion``-tagged playbook for ``connector`` in a collection.
 
-        The four *roles* (fetch/ingest/create/update) are not the whole set — a
+        The four *roles* (fetch/ingest/create/update) are not the whole set -- a
         connector's ingestion often includes helper playbooks that carry only
         ``#dataingestion`` (FortiSIEM ships a *Fetch Associated events for
         Incident* that the ingest playbook calls). The UI clones **all** of
@@ -2036,7 +2097,7 @@ class ConnectorsAPI(BaseAPI):
         """Sort playbooks into the fetch/ingest/create/update ingestion roles.
 
         Matches on ``recordTags`` (and the ``#tag`` string) case-insensitively.
-        A playbook may fill several roles at once — FortiSIEM's
+        A playbook may fill several roles at once -- FortiSIEM's
         *FortiSIEM > Ingest* is tagged both ``ingest`` and ``create``.
         """
         buckets: dict[str, Workflow | None] = {"fetch": None, "ingest": None, "create": None, "update": None}
@@ -2126,19 +2187,19 @@ class ConnectorsAPI(BaseAPI):
         reuse_existing: bool = True,
         dry_run: bool = False,
     ) -> IngestionSetupResult:
-        """Set up data ingestion for a connector configuration — the whole wizard.
+        """Set up data ingestion for a connector configuration -- the whole wizard.
 
         Reproduces every write the UI's *Configure Data Ingestion* wizard makes,
         in the order it makes them:
 
         1. resolve the configuration and (unless ``require_health=False``)
-           refuse to proceed on anything but ``Available`` health — the UI gates
+           refuse to proceed on anything but ``Available`` health -- the UI gates
            the wizard behind a green health check;
         2. find-or-create the per-configuration playbook collection, whose
            **uuid is the ``config_id``** and whose name follows the UI's
            ``"<label> <version> <config>Ingestion(<config_id>)"`` convention;
         3. clone the connector's sample ingestion playbooks into it, rewriting
-           each clone the way the UI does — ``arguments.config`` stamped with
+           each clone the way the UI does -- ``arguments.config`` stamped with
            the ``config_id`` on that connector's own steps, ``globalVars``
            suffixed with the config id so two configurations of the same
            connector don't share variables, cross-playbook references remapped
@@ -2151,7 +2212,7 @@ class ConnectorsAPI(BaseAPI):
 
         Args:
             connector: connector name (e.g. ``"fortinet-fortisiem"``).
-            config: which configuration to set ingestion up for — a config
+            config: which configuration to set ingestion up for -- a config
                 **name** or a ``config_id`` uuid. Defaults to the connector's
                 default configuration.
             version: connector version; resolved from the install when omitted.
@@ -2160,7 +2221,7 @@ class ConnectorsAPI(BaseAPI):
                 scheduling anything.
             schedule_name: schedule display name. Defaults to the platform's
                 own convention, ``"Ingestion_<connector>_<config>_<config_id>"``
-                — the UI matches on this string, so overriding it makes the
+                -- the UI matches on this string, so overriding it makes the
                 ingestion look unconfigured in the *Data Ingestion* screen.
             enabled: create the schedule enabled (default ``True``).
             timezone: IANA timezone for the crontab.
@@ -2172,7 +2233,7 @@ class ConnectorsAPI(BaseAPI):
             require_health: refuse to run unless configuration health is
                 ``Available`` (default, matching the UI). Set ``False`` to build
                 the ingestion pipeline against a connector you know is
-                unreachable — useful when staging a box before credentials exist.
+                unreachable -- useful when staging a box before credentials exist.
             activate: set ``isActive`` on the cloned playbooks (default ``True``).
             reuse_existing: if the per-config collection already holds ingestion
                 playbooks, reuse them instead of re-cloning (default ``True``).
@@ -2201,7 +2262,7 @@ class ConnectorsAPI(BaseAPI):
 
         summaries = self.configurations(connector)
         if not summaries:
-            raise ValueError(f"{connector!r} has no configuration — create one before setting up ingestion")
+            raise ValueError(f"{connector!r} has no configuration -- create one before setting up ingestion")
         chosen = None
         if config:
             chosen = next((c for c in summaries if c.config_id == config or c.name == config), None)
@@ -2251,7 +2312,7 @@ class ConnectorsAPI(BaseAPI):
             samples = self._bucket_by_tag(source_playbooks)
             if samples.ingest is None:
                 raise ValueError(
-                    f"no 'ingest'-tagged playbook for {connector!r} in collection {source_collection!r} — "
+                    f"no 'ingest'-tagged playbook for {connector!r} in collection {source_collection!r} -- "
                     "the connector's sample playbooks must carry the #ingest and #dataingestion tags"
                 )
             if dry_run:
@@ -2280,7 +2341,7 @@ class ConnectorsAPI(BaseAPI):
         result.ingest_playbook_iri = ingest_iri
 
         # The UI's _getSchedularName(): "Ingestion_<connector>_<config name>_<config_id>".
-        # Match it exactly — the ingestion screen and the data-import record find each
+        # Match it exactly -- the ingestion screen and the data-import record find each
         # other by this string, so a differently-named schedule reads as "not configured".
         schedule_name = schedule_name or f"Ingestion_{connector}_{chosen.name or ''}_{config_id}"
         result.schedule_name = schedule_name
@@ -2312,7 +2373,7 @@ class ConnectorsAPI(BaseAPI):
     def ensure_ingestion(
         self, connector: str, *, config: str | None = None, **wizard_kwargs: Any
     ) -> IngestionSetupResult:
-        """Set up data ingestion only if it isn't already — "make it or get it".
+        """Set up data ingestion only if it isn't already -- "make it or get it".
 
         The idempotent front door to :meth:`data_ingest_wizard`, mirroring the
         ``get_or_create`` pattern elsewhere in pyfsr: it calls
@@ -2324,10 +2385,10 @@ class ConnectorsAPI(BaseAPI):
         ``**wizard_kwargs`` (``cron``, ``schedule_name``, ``agent``,
         ``require_health``, ``dry_run``, ...).
 
-        Safe to call repeatedly — the common "set ingestion up if it's not
+        Safe to call repeatedly -- the common "set ingestion up if it's not
         there" line becomes one call instead of a status-check-then-branch. It
         does **not** reconcile drift: an already-configured setup is returned
-        as-is even if it has no schedule and you passed ``cron`` — call
+        as-is even if it has no schedule and you passed ``cron`` -- call
         :meth:`data_ingest_wizard` directly to add or change a schedule on an
         existing setup.
 
@@ -2346,9 +2407,9 @@ class ConnectorsAPI(BaseAPI):
 
             first = client.connectors.ensure_ingestion(
                 "fortinet-fortisiem", config="prod", cron="*/15 * * * *")
-            first.existed        # False — the wizard built it
+            first.existed        # False -- the wizard built it
             again = client.connectors.ensure_ingestion("fortinet-fortisiem", config="prod")
-            again.existed        # True — returned as-is, no writes
+            again.existed        # True -- returned as-is, no writes
         """
         status = self.ingestion_status(connector, config=config)
         if not status.configured:
@@ -2356,7 +2417,7 @@ class ConnectorsAPI(BaseAPI):
             result.existed = False
             return result
 
-        # Already configured — describe it without writing. Dedup the role
+        # Already configured -- describe it without writing. Dedup the role
         # buckets by uuid (one playbook can fill several roles, e.g. ingest+create).
         seen: set[str] = set()
         playbooks: list[Workflow] = []
@@ -2389,7 +2450,7 @@ class ConnectorsAPI(BaseAPI):
         delete_collection: bool = True,
         dry_run: bool = False,
     ) -> IngestionTeardownResult:
-        """Tear down a configuration's data ingestion — the inverse of the wizard.
+        """Tear down a configuration's data ingestion -- the inverse of the wizard.
 
         Reverses :meth:`data_ingest_wizard`'s writes in dependency order:
 
@@ -2403,7 +2464,7 @@ class ConnectorsAPI(BaseAPI):
         Idempotent and partial-safe: a missing schedule / metadata / collection
         is simply skipped (the corresponding ``*_deleted`` stays ``False``), so
         re-running after a half-done teardown finishes the job rather than
-        erroring. Built entirely on verified primitives — ``schedules.delete``
+        erroring. Built entirely on verified primitives -- ``schedules.delete``
         and ``workflow_collections.delete`` (hard).
 
         Args:
@@ -2412,7 +2473,7 @@ class ConnectorsAPI(BaseAPI):
                 configuration.
             delete_collection: also hard-delete the per-config collection and
                 its cloned playbooks (default). ``False`` removes only the
-                schedule + metadata, leaving the playbooks in place — useful to
+                schedule + metadata, leaving the playbooks in place -- useful to
                 keep hand-edited clones while detaching the schedule.
             dry_run: report what *would* be removed without deleting anything.
 
@@ -2441,7 +2502,7 @@ class ConnectorsAPI(BaseAPI):
                     self.client.schedules.delete(status.schedule_name)
                     result.schedule_deleted = True
                 except ValueError:
-                    pass  # already gone — leave schedule_deleted False
+                    pass  # already gone -- leave schedule_deleted False
 
         for meta in self.ingestion_metadata(config_id):
             if meta.id is None:
@@ -2470,7 +2531,7 @@ class ConnectorsAPI(BaseAPI):
     def ingestion_status(
         self, connector: str, *, config: str | None = None, live_schedule: bool = False
     ) -> IngestionStatus:
-        """Report a configuration's current data-ingestion state — read-only.
+        """Report a configuration's current data-ingestion state -- read-only.
 
         The inverse-lens of :meth:`data_ingest_wizard`: it inspects the four
         pieces the wizard builds and reports whether each is present, **without
@@ -2479,8 +2540,8 @@ class ConnectorsAPI(BaseAPI):
         or triggering.
 
         The per-configuration ingestion collection has the ``config_id`` as its
-        uuid (the wizard's own convention), so this looks there — not in the
-        connector's shared ``Sample - …`` collection — for the cloned
+        uuid (the wizard's own convention), so this looks there -- not in the
+        connector's shared ``Sample - …`` collection -- for the cloned
         ``ingest``-tagged playbook. The schedule id / name / enabled state come
         from the ``data-import`` metadata record the wizard writes; pass
         ``live_schedule=True`` to re-read the periodic task itself so a schedule
@@ -2498,7 +2559,7 @@ class ConnectorsAPI(BaseAPI):
 
         Returns:
             :class:`~pyfsr.models.IngestionStatus`. When nothing is set up,
-            ``.configured`` is ``False`` and the playbook buckets are empty —
+            ``.configured`` is ``False`` and the playbook buckets are empty --
             not an error.
 
         Raises:
@@ -2541,14 +2602,14 @@ class ConnectorsAPI(BaseAPI):
         config: str | None = None,
         playbook: str | None = None,
     ) -> dict[str, Any]:
-        """Run a configuration's ingestion right now — the *Trigger Ingestion Now* button.
+        """Run a configuration's ingestion right now -- the *Trigger Ingestion Now* button.
 
         ``POST /api/triggers/1/notrigger/<ingest playbook uuid>``. Note this is
         **not** the scheduler's trigger
         (:meth:`~pyfsr.api.schedules.SchedulesAPI.trigger_now`, which posts to
         ``/api/wf/api/scheduled/trigger-now/``): the UI's ingestion button
         bypasses the periodic task entirely and fires the playbook named by the
-        schedule's ``kwargs.wf_iri``. That distinction matters — the ingestion
+        schedule's ``kwargs.wf_iri``. That distinction matters -- the ingestion
         button works on a configuration whose schedule is disabled, or that has
         no schedule at all.
 
@@ -2565,13 +2626,13 @@ class ConnectorsAPI(BaseAPI):
 
         Returns:
             The trigger response, carrying the async ``task_id``. The fire is
-            asynchronous — poll ``client.playbooks.execution_history(...)`` or
+            asynchronous -- poll ``client.playbooks.execution_history(...)`` or
             watch the target module's record count to see the result.
 
         Raises:
             ValueError: the configuration can't be resolved, or its ingestion
                 collection holds no ``ingest``-tagged playbook (i.e. ingestion
-                was never set up — run :meth:`data_ingest_wizard` first).
+                was never set up -- run :meth:`data_ingest_wizard` first).
 
         Example:
             >>> client = demo_client()
@@ -2587,7 +2648,7 @@ class ConnectorsAPI(BaseAPI):
             buckets = self._bucket_by_tag(self._ingestion_query(config_id, connector))
             if buckets.ingest is None:
                 raise ValueError(
-                    f"no ingestion playbook for {connector!r}/{config_id} — "
+                    f"no ingestion playbook for {connector!r}/{config_id} -- "
                     "run data_ingest_wizard() to set ingestion up first"
                 )
             uuid = str(buckets.ingest.uuid)
@@ -2605,7 +2666,7 @@ class ConnectorsAPI(BaseAPI):
     def _ensure_ingestion_collection(self, config_id: str, name: str) -> dict[str, Any]:
         """Find-or-create the per-configuration ingestion collection.
 
-        Its ``uuid`` is deliberately the ``config_id`` — that identity is how
+        Its ``uuid`` is deliberately the ``config_id`` -- that identity is how
         the UI locates a configuration's ingestion playbooks, so it must not be
         left to the server to generate. Created ``visible=False`` so the
         collection doesn't clutter the playbook list.
@@ -2639,7 +2700,7 @@ class ConnectorsAPI(BaseAPI):
         every ``#dataingestion`` playbook into the per-config collection
         (remapping owned uuids via
         :meth:`~pyfsr.api.playbooks.PlaybooksAPI.clone`), then patch
-        cross-playbook references — the old→new uuid map and the ``create``
+        cross-playbook references -- the old→new uuid map and the ``create``
         playbook's new uuid aren't known until every clone exists.
 
         The second pass re-reads each clone with ``get_definition(...,
@@ -2704,7 +2765,7 @@ def _import_job_id(resp: dict[str, Any]) -> str | None:
     the nested ``importJob`` object (``{"@id": "/api/3/import_jobs/<uuid>",
     "uuid": ...}``). Falls back to a top-level ``import_jobs`` IRI if present.
     Note: the response's *top-level* ``uuid`` is the solution pack's, not the
-    job's — don't use it.
+    job's -- don't use it.
     """
     job = resp.get("importJob")
     if isinstance(job, dict):
@@ -2734,12 +2795,12 @@ def _rewrite_ingestion_playbook(
 
     Two edits, both of which the UI makes before persisting a clone:
 
-    * **Global-variable namespacing** — every ``globalVars.X`` reference becomes
+    * **Global-variable namespacing** -- every ``globalVars.X`` reference becomes
       ``globalVars.X_<config_id with dashes as underscores>``, and any bare
       string equal to a renamed variable is renamed with it. Without this, two
       configurations of the same connector silently share ingestion state (last
       pull time, cursors) and interleave their fetches.
-    * **Connector binding** — steps whose ``arguments.connector`` is *this*
+    * **Connector binding** -- steps whose ``arguments.connector`` is *this*
       connector get ``arguments.config`` set to the configuration being wired
       up, plus ``arguments.agent`` when the connector runs on an agent. Steps
       calling other connectors (``cyops_utilities`` and friends) are left alone,
@@ -2776,7 +2837,7 @@ def _patch_clone_references(
     during the clone itself:
 
     * ``params.create_pb_id`` on the *Fetch and Create* step must name the
-      **cloned** ``create`` playbook, not the sample one — otherwise ingestion
+      **cloned** ``create`` playbook, not the sample one -- otherwise ingestion
       writes records through the shared sample playbook and ignores the
       per-configuration copy;
     * reference steps pointing at a sample playbook's uuid/IRI are remapped onto

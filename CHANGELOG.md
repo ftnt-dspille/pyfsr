@@ -14,6 +14,13 @@ All notable changes to this project will be documented in this file.
   (`POST /api/ai/llm/config/verify`) that sends a full `LLMConfigDTO` body so
   the appliance builds a client and pings the provider before you commit the
   profile.
+- **`pack_connector` excludes non-deployment artifacts** -- virtualenvs
+  (`.venv`/`venv`/`.env`/`env`), test suites (`tests`/`test`/`.pytest_cache`/
+  `.tox`), caches (`__pycache__`/`.mypy_cache`/`.ruff_cache`), VCS/IDE
+  metadata (`.git`/`.hg`/`.svn`/`.idea`/`.vscode`), build output (`dist`/`build`/
+  `.eggs`/`node_modules`), and OS/editor cruft (`.DS_Store`/`*.pyc`/`*.swp`).
+  Previously only `__pycache__` and `*.pyc` were skipped, so a stray `.venv`
+  could add hundreds of MB to the connector tgz.
 
 ### Fixed
 - **`AIApi.verify_llm_config()` no longer sends `model_id` as a query param.**
