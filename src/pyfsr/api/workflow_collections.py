@@ -1,6 +1,6 @@
 """Workflow-collection CRUD (``/api/3/workflow_collections``).
 
-A *workflow collection* is the container FortiSOAR groups playbooks (workflows) under — the
+A *workflow collection* is the container FortiSOAR groups playbooks (workflows) under -- the
 top-level rows in **Automation → Playbooks**. This wraps the lifecycle operations so callers
 (notably a playbook compiler/emitter) stop hand-rolling raw ``client.*`` calls and stepping on
 the load-bearing gotchas below. Accessed as ``client.workflow_collections``.
@@ -16,7 +16,7 @@ Key behaviours that match the appliance (and differ from naive expectations):
 
 Use :meth:`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export` to replay a
 FortiSOAR export file (the ``{"type": "workflow_collections", "data": [...]}`` envelope produced
-by the UI's Export button) — it extracts the inner collection objects and posts each bare.
+by the UI's Export button) -- it extracts the inner collection objects and posts each bare.
 Pass ``replace=True`` to hard-delete any existing collection with the same uuid first.
 
 Example::
@@ -87,7 +87,7 @@ class WorkflowCollectionsAPI(BaseAPI):
 
     def get(self, uuid: str, *, relationships: bool = True) -> WorkflowCollection:
         """Fetch one collection by uuid. ``relationships=True`` (default) inlines its
-        ``workflows`` — the usual reason to fetch a single collection.
+        ``workflows`` -- the usual reason to fetch a single collection.
 
         Returns a typed, dict-compatible :class:`~pyfsr.models.WorkflowCollection`.
         """
@@ -103,13 +103,13 @@ class WorkflowCollectionsAPI(BaseAPI):
     ) -> str:
         """Decompile a live collection into authored-style playbook YAML.
 
-        The inverse of :meth:`import_from_yaml` — pull a playbook collection off
+        The inverse of :meth:`import_from_yaml` -- pull a playbook collection off
         the appliance and get back the friendly YAML source, so live edits made
         in the UI can be captured into version control. ``collection`` is the
         collection's uuid, or its name (resolved against :meth:`list`).
 
         Catalog resolution is seamless (warmed from this client) so connector,
-        team, and picklist IRIs render back as friendly names — including custom
+        team, and picklist IRIs render back as friendly names -- including custom
         connectors like ``code-runner``. Pass ``db_path`` to use a specific
         pre-warmed catalog instead.
 
@@ -186,7 +186,7 @@ class WorkflowCollectionsAPI(BaseAPI):
     # Keys present in FSR export payloads that must not be forwarded on import.
     # ``@context`` is the main offender: its presence tells the API layer this is an
     # existing-resource reference and routes the POST into an update path instead of a
-    # create — producing a "null value in column name" constraint error. The audit
+    # create -- producing a "null value in column name" constraint error. The audit
     # timestamps (``createDate``/``modifyDate``) are server-assigned and rejected on
     # write; the appliance ignores ``id``/``deletedAt``/``importedBy`` but we strip
     # them for cleanliness too.
@@ -212,7 +212,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         Accepts the ``{"type": "workflow_collections", "data": [...]}`` envelope produced
         by the UI's Export button. Each ``WorkflowCollection`` object in ``data["data"]``
         (with its nested ``workflows``) is posted as a bare object to
-        ``POST /api/3/workflow_collections`` — mirroring the second call the UI makes
+        ``POST /api/3/workflow_collections`` -- mirroring the second call the UI makes
         during an import. Returns a list with one response dict per imported collection.
 
         ``replace=True`` hard-deletes any existing collection whose uuid matches an item
@@ -287,7 +287,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         """Import a FortiSOAR UI-export zip bundle in one call.
 
         This is the programmatic equivalent of the FortiSOAR UI's **Import
-        Wizard** (Settings → Application Editor → Import Wizard) — the flow that
+        Wizard** (Settings → Application Editor → Import Wizard) -- the flow that
         consumes an Export-button ``.zip``.
 
         The UI's Export button produces a zip with:
@@ -303,7 +303,7 @@ class WorkflowCollectionsAPI(BaseAPI):
              the box, via
              :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.get_or_create_module_from_metadata`,
              then publishes. Runs **first** so bundled records have a module to
-             land in. Idempotent — a module a solution pack already provides is
+             land in. Idempotent -- a module a solution pack already provides is
              left untouched.
           3. When ``strip_stale=True``, strips server-managed fields
              (``createdAlertsID``, ``createUser``, ``modifyUser``, etc.) from
@@ -313,7 +313,7 @@ class WorkflowCollectionsAPI(BaseAPI):
           5. When ``patch_picklists=True``, scans all playbook steps for
              hardcoded ``/api/3/picklists/`` IRIs and replaces them with
              Jinja ``picklist`` filter expressions that resolve dynamically
-             at runtime — eliminating the #1 portability bug.
+             at runtime -- eliminating the #1 portability bug.
           6. Imports the (optionally patched) envelope via :meth:`import_export`
              with ``replace=True`` (hard-deletes any existing collection with
              the same uuid first).
@@ -321,13 +321,13 @@ class WorkflowCollectionsAPI(BaseAPI):
         .. note::
            ``create_modules`` imports the **module schema** (all attributes and
            flags, posted verbatim from ``mmd.json``). Bundle-level picklists and
-           non-default view-template layouts are not yet imported — for those,
+           non-default view-template layouts are not yet imported -- for those,
            install the source solution pack or add the picklists first.
 
         Args:
             zip_path: path to the ``.zip`` file from the UI Export button.
             replace: hard-delete any existing collection with the same uuid
-                before re-creating (default ``True`` — matches the UI's
+                before re-creating (default ``True`` -- matches the UI's
                 "Replace existing" flow).
             strip_stale: strip server-managed fields from bundled records
                 (default ``True``).
@@ -339,7 +339,7 @@ class WorkflowCollectionsAPI(BaseAPI):
             grant_modules_to: role name(s) to grant full access on any module
                 created by ``create_modules``. A module's metadata carries no
                 RBAC grants, so without this the imported module is inaccessible
-                (403) — pass the role(s) that should own the imported content
+                (403) -- pass the role(s) that should own the imported content
                 (and that lets the subsequent record import land).
             patch_picklists: replace hardcoded picklist IRIs with Jinja
                 ``picklist`` filter expressions (default ``False``). When
@@ -351,7 +351,7 @@ class WorkflowCollectionsAPI(BaseAPI):
             A dict with keys ``collections`` (list of created collections),
             ``modules_created`` (list of module type-names newly created, or
             empty), ``records_created`` (list of created record IRIs),
-            and ``picklists_patched`` (int — number of IRIs replaced, or 0).
+            and ``picklists_patched`` (int -- number of IRIs replaced, or 0).
 
         Example::
 
@@ -376,7 +376,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         children = [p for p in tmp_dir.iterdir() if p.is_dir()]
         export_dir = children[0] if children else tmp_dir
 
-        # 2. Build envelope from playbooks/ (optional — a bundle may carry only
+        # 2. Build envelope from playbooks/ (optional -- a bundle may carry only
         #    modules and/or records, e.g. an Export-Wizard module backup).
         pb_dir = export_dir / "playbooks"
         collections = []
@@ -403,7 +403,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         }
 
         # 2b. Create custom modules the bundle defines (before records, which
-        #     need a module to land in). Idempotent — skips modules already on
+        #     need a module to land in). Idempotent -- skips modules already on
         #     the box (e.g. provided by a solution pack).
         if create_modules:
             modules_dir = export_dir / "modules"
@@ -490,7 +490,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         Scans all step argument string values for ``/api/3/picklists/<uuid>``
         patterns, reverse-resolves each to ``(picklist_name, item_value)``, and
         replaces the literal IRI with ``{{ "Name" | picklist("Value", "@id") }}``.
-        Only patches string values — dict/list structures are left intact.
+        Only patches string values -- dict/list structures are left intact.
         """
         import re
 
@@ -543,23 +543,23 @@ class WorkflowCollectionsAPI(BaseAPI):
 
         ``refresh_catalog`` (default ``True``) re-warms the local reference
         catalog from **this** appliance before compiling, so connector / operation
-        / team / picklist tokens resolve against what is *currently* installed —
+        / team / picklist tokens resolve against what is *currently* installed --
         including a connector you just imported that the cached catalog has never
         seen. Without a fresh warm, a connector step compiles with no
         ``name``/``version``/``operationTitle`` and the playbook editor renders it
         as "undefined". Set it to ``False`` to skip the network round-trip and
         compile offline (against ``db_path`` if given, else the packaged slim
-        catalog) — faster, but it won't know about connectors added since the last
+        catalog) -- faster, but it won't know about connectors added since the last
         warm. ``db_path`` always wins: an explicit catalog is used verbatim with no
         warm regardless of this flag.
 
         ``lax_codes`` downgrades the given diagnostic codes from error to warning
-        so they don't block emission — accepts the friendly code string
+        so they don't block emission -- accepts the friendly code string
         (``{"unknown_param"}``), the enum name, or the ``ErrorCode`` enum. Use it
         for known false-positives (e.g. a conditional connector param the catalog
         can't model) when you've verified the value is valid at runtime.
 
-        Requires the optional compiler — install with ``pip install
+        Requires the optional compiler -- install with ``pip install
         "pyfsr[playbooks]"`` (raises
         :class:`~pyfsr.authoring.PlaybooksExtraNotInstalled` otherwise).
         """
@@ -584,7 +584,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         """Compile playbook YAML and import the result onto the appliance.
 
         Compiles ``source`` (YAML text or a ``.yaml`` path) via :meth:`compile_yaml`
-        then hands the envelope to :meth:`import_export` — the same write path the
+        then hands the envelope to :meth:`import_export` -- the same write path the
         UI's import uses, with its recycle-bin and clean-key handling.
 
         ``replace=True`` hard-deletes any existing collection whose uuid matches
@@ -663,7 +663,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         """
         try:
             detail = self.get(col_uuid.strip(), relationships=True)
-        except Exception:  # noqa: BLE001 — let delete() report the real problem
+        except Exception:  # noqa: BLE001 -- let delete() report the real problem
             return
         for wf in detail.get("workflows") or []:
             if not wf.get("isPrivate"):
@@ -673,13 +673,13 @@ class WorkflowCollectionsAPI(BaseAPI):
                 continue
             try:
                 self.client.put(f"/api/3/workflows/{wf_uuid}", data={"isPrivate": False, "owners": []})
-            except Exception:  # noqa: BLE001 — best-effort; delete() will report if this mattered
+            except Exception:  # noqa: BLE001 -- best-effort; delete() will report if this mattered
                 pass
 
     def delete(self, uuid: str, *, hard: bool = True) -> None:
         """Delete a collection. ``hard=True`` (default) bypasses the recycle bin.
 
-        Sends **no request body** — the appliance silently no-ops a delete with a ``{}``
+        Sends **no request body** -- the appliance silently no-ops a delete with a ``{}``
         body and leaks the collection, so this never passes one. ``hard=False`` does a soft
         (recycle-bin) delete.
         """
@@ -700,7 +700,7 @@ def _require_uuid(uuid: str, op: str) -> str:
 
 
 def _read_yaml_source(source: str | Path) -> str:
-    """Return YAML text from ``source`` — a ``Path``, a ``*.yaml``/``*.yml`` path
+    """Return YAML text from ``source`` -- a ``Path``, a ``*.yaml``/``*.yml`` path
     string (read from disk), or raw YAML text (returned as-is)."""
     if isinstance(source, Path):
         return source.read_text(encoding="utf-8")

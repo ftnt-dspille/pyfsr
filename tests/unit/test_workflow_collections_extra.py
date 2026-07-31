@@ -130,7 +130,7 @@ def test_replace_makes_private_playbooks_public_before_delete():
         "workflows": [
             {"uuid": "wf-priv", "isPrivate": True},
             {"uuid": "wf-pub", "isPrivate": False},
-            {"isPrivate": True},  # no uuid — skipped
+            {"isPrivate": True},  # no uuid -- skipped
         ],
     }
     c = RecordingClient(responses={f"/api/3/workflow_collections/{UUID}": detail})
