@@ -130,8 +130,11 @@ class FakeAudit:
             entity_type="alerts",
             concurrent_changes=[
                 LifecycleEntry(
-                    timestamp_ms=1500, kind="audit", operation="Update",
-                    user="Playbook", playbook_name="Other PB",
+                    timestamp_ms=1500,
+                    kind="audit",
+                    operation="Update",
+                    user="Playbook",
+                    playbook_name="Other PB",
                 ),
             ],
             concurrent_runs=[{"name": "Other PB", "timestamp": 1500}],
@@ -139,13 +142,25 @@ class FakeAudit:
             window_seconds=window_seconds,
         )
 
-    def all_activities(self, *, entity_uuid=None, start_date=None, end_date=None, operation=None,
-                       entity_type=None, page_size=100, max_pages=50):
+    def all_activities(
+        self,
+        *,
+        entity_uuid=None,
+        start_date=None,
+        end_date=None,
+        operation=None,
+        entity_type=None,
+        page_size=100,
+        max_pages=50,
+    ):
         return [
             {"operation": "Create", "transactionDate": 1000, "user": "CS Admin", "entityUuid": entity_uuid},
             {
-                "operation": "Link", "transactionDate": 2000,
-                "user": "Playbook", "playbookName": "Enrich", "entityUuid": entity_uuid,
+                "operation": "Link",
+                "transactionDate": 2000,
+                "user": "Playbook",
+                "playbookName": "Enrich",
+                "entityUuid": entity_uuid,
             },
         ]
 
