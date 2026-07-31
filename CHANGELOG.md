@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.18.6] - 2026-07-31
+
 ### Added
 - **Typed STIX 2.1 object models** -- `StixObject` base with typed subclasses
   (`StixIndicator`, `StixMalware`, `StixThreatActor`, `StixCampaign`,
@@ -18,6 +20,44 @@ All notable changes to this project will be documented in this file.
 - **`StixBundleResult`** -- `client.feeds.stix_bundle()` now returns a typed
   result (`status`, `message`, `objects_processed`, `.ok`) instead of an
   unparsed `Any`.
+- **`validate_connector_source()` + `ConnectorPackageError`** -- offline
+  validation of connector `info.json` before a package is built, wired into
+  `pack_connector()`. The FortiSOAR importer reports every rejection with the
+  same opaque string ("Connector with same name is already active.") even when
+  no connector of that name exists, so a failed import cannot be diagnosed from
+  the response. Blocking rules (folder name matches `info.json` name, non-empty
+  name/label/version, three-part numeric version, non-null operations, every
+  operation has `operation`+`title` with no duplicates) were established
+  empirically by installing 51 one-at-a-time `info.json` mutations against a
+  live 8.0.0 appliance. Non-blocking advisories cover wrong types the importer
+  accepts and operations declared in `info.json` with no `operations.py`
+  implementation. Also coerces `InstalledConnector.tags` from a bare string
+  (the platform accepts one; the model required a list, so such a connector
+  made `list_configured()` raise).
+- **Audit tools in the agent registry** -- `record_lifecycle`,
+  `execution_context`, and `audit_activities` exposed as agent-callable tools.
+  The audit API was the headline 0.18.0 investment but had no surface in the
+  tool registry; an agent could run a playbook and see that a run failed but
+  could not ask "what happened to this record?" or "what else was running when
+  this playbook failed?". Each tool returns a one-line summary alongside the
+  full typed data.
+
+### Fixed
+- **`OperationParam.apiOperation`/`apiOnchange` promoted to declared fields.**
+  Previously left in `__pydantic_extra__` (undocumented, only reachable via
+  `param['apiOperation']`). Now declared typed fields, matching
+  `ConfigSchemaField`. Live-grounded across ~30 connectors (cisco-threatgrid,
+  salesforce, symantec-mss, fortinet-fortimanager, misp, sap-rfc, ...) that
+  use `apiOperation` for dynamic dropdowns on operation parameters.
+- **STIX model docstrings split `first_seen`/`last_seen` onto separate lines**
+  to avoid Napoleon rendering `first_seen` as a `py:class` xref that failed
+  the nitpicky `-W` docs build.
+
+### Documentation
+- **Dynamic operation parameters (`apiOperation`) guide section** -- documents
+  how to discover and resolve dynamic connector params that use `apiOperation`:
+  detecting them via `action_ui_schema()`, calling the populating operation via
+  `execute()`, and handling cascading dropdowns with `apiOnchange`.
 
 ## [0.18.5] - 2026-07-31
 
