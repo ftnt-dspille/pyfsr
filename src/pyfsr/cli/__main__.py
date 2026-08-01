@@ -11,6 +11,7 @@ import json
 import sys
 
 from . import _output
+from . import instances as instances_cmds
 from . import jinja as jinja_cmds
 from . import playbook as playbook_cmds
 from . import repo as repo_cmds
@@ -43,7 +44,7 @@ def _add_connection_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--password", help="SSH/sudo password (or PYFSR_APPLIANCE_PASSWORD)")
     g.add_argument(
         "--sudo-password",
-        help="sudo password when SSH uses key auth (no SSH password) — or PYFSR_APPLIANCE_SUDO_PASSWORD. "
+        help="sudo password when SSH uses key auth (no SSH password) -- or PYFSR_APPLIANCE_SUDO_PASSWORD. "
         "Distinct from --password: a key-auth box logs in without one but still needs sudo creds for csadm.",
     )
     g.add_argument("--port", type=int, default=22, help="SSH port (default: 22)")
@@ -64,7 +65,7 @@ def _add_target_args(p: argparse.ArgumentParser) -> None:
 def _make_transport(args: argparse.Namespace) -> Transport:
     instance = getattr(args, "instance", None)
     if instance:
-        # Named profile from ~/.pyfsr/instances.toml — the SSH counterpart of the
+        # Named profile from ~/.pyfsr/instances.toml -- the SSH counterpart of the
         # MCP server's --instance. Takes precedence over --host/--user/--password.
         from ..instances import InstanceRegistry
 
@@ -339,7 +340,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_lic_flex.add_argument(
         "--public",
         action="store_true",
-        help="use a no-auth client for the public license endpoint — required on a "
+        help="use a no-auth client for the public license endpoint -- required on a "
         "fresh or license-locked box (FSR-Auth-018) where no credential authenticates",
     )
     p_lic_flex.add_argument("--node-id", dest="node_id", help="cluster node id (multi-node)")
@@ -446,6 +447,15 @@ def build_parser() -> argparse.ArgumentParser:
     pbsub = p_pb.add_subparsers(dest="pb_command", required=True)
     playbook_cmds.build_subparser(pbsub)
 
+    # --- instances group (top-level; reads the registry, no appliance needed
+    # except for `check`, which is the whole point of it) ---
+    p_inst = sub.add_parser(
+        "instances",
+        help="inspect ~/.pyfsr/instances.toml: which boxes are registered, and do they answer",
+    )
+    inst_sub = p_inst.add_subparsers(dest="instances_command", required=True)
+    instances_cmds.build_subparser(inst_sub)
+
     # --- repo group (top-level; public content repo, no appliance) ---
     p_repo = sub.add_parser(
         "repo",
@@ -498,7 +508,7 @@ def build_parser() -> argparse.ArgumentParser:
     # --- mcp group (top-level; the appliance's own native /mcp/* gateway) ---
     p_mcp = sub.add_parser(
         "mcp",
-        help="call FortiSOAR's own native MCP tool gateway (client.mcp) — "
+        help="call FortiSOAR's own native MCP tool gateway (client.mcp) -- "
         "not client.ai's external-server registration, see pyfsr.api.native_mcp",
     )
     mcpsub = p_mcp.add_subparsers(dest="mcp_command", required=True)
@@ -625,7 +635,7 @@ def cmd_db_indexes(args: argparse.Namespace) -> int:
 
 def cmd_db_exec(args: argparse.Namespace) -> int:
     if not args.write:
-        print("error: `db exec` mutates — pass --write to acknowledge", file=sys.stderr)
+        print("error: `db exec` mutates -- pass --write to acknowledge", file=sys.stderr)
         return 2
     facts = _make_facts(args)
     target = facts.resolve_db(role=args.role, db=args.db)
