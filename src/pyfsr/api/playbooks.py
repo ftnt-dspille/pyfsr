@@ -104,12 +104,12 @@ def _build(model_cls: Any, op: str, **kwargs: Any) -> Any:
     except ValidationError as e:
         first = e.errors()[0]
         loc = ".".join(str(p) for p in first.get("loc", ())) or "?"
-        raise ValueError(f"{op}(): invalid {loc} — {first.get('msg')}") from e
+        raise ValueError(f"{op}(): invalid {loc} -- {first.get('msg')}") from e
 
 
 _TERMINAL_STATUSES = frozenset({"finished", "failed", "error", "cancelled", "aborted"})
 
-# Statuses that mean a step actually FAILED — used by ``why_failed`` to pick the
+# Statuses that mean a step actually FAILED -- used by ``why_failed`` to pick the
 # real failing step. Deliberately excludes ``incipient``/``pending``/``skipped``/
 # ``running``: when a non-last step fails, its downstream steps stay ``incipient``,
 # and those must NOT be mistaken for the failure (live-confirmed on run 686500).
@@ -120,7 +120,7 @@ _RUN_PATHS = ("/api/wf/api/workflows/", "/api/wf/api/historical-workflows/")
 _WORKFLOWS = "/api/3/workflows"
 _WORKFLOWS_BULKUPSERT = "/api/3/bulkupsert/workflows"
 # Saved playbook *snapshots* (the editor's "Versions" tab). A version is a
-# frozen copy of a workflow stringified into ``json`` — not a revision/diff
+# frozen copy of a workflow stringified into ``json`` -- not a revision/diff
 # resource. Live-verified on 8.0.0 (.159); wire traced from the editor bundle's
 # ``playbookService.saveVersion``/``loadVersion``/``loadVersionsForPlaybook``.
 _WORKFLOW_VERSIONS = "/api/3/workflow_versions"
@@ -131,7 +131,7 @@ _VERSION_STRIP_FIELDS = ("versions", "collection", "modifyUser", "modifyDate")
 _HARD_DELETE = {"$hardDelete": "true", "$showDeleted": "true"}
 
 # Friendly step-type aliases -> the step-type *name the API filters on*
-# (``steps.stepType.name``). These are the names the server actually stores —
+# (``steps.stepType.name``). These are the names the server actually stores --
 # live-verified against /api/3/workflows, so a few differ from the names the
 # fsr_playbooks compiler emits (e.g. query name ``ApprovalManualInput`` vs the
 # compiler's ``Approval``; the product's ``CyopsUtilites`` is misspelled on the
@@ -164,7 +164,7 @@ STEP_TYPE_NAMES: dict[str, str] = {
 
 # Friendly trigger aliases -> the start step's ``triggerStep.stepType.name``.
 # The trigger step uses the engine's internal ``cybersponse.*`` names (NOT the
-# friendly step names above) — live-verified. Unknown values pass through.
+# friendly step names above) -- live-verified. Unknown values pass through.
 TRIGGER_TYPE_NAMES: dict[str, str] = {
     "manual": "cybersponse.action",  # right-click / Execute menu
     "referenced": "cybersponse.abstract_trigger",  # called by another playbook
@@ -272,7 +272,7 @@ def _pk(pk: str) -> str:
     return pk.strip()
 
 
-# Server-managed fields that must NOT be carried into a clone — the appliance
+# Server-managed fields that must NOT be carried into a clone -- the appliance
 # assigns them. Left in place they'd either be ignored or cause the POST to look
 # like an update of the source row.
 _CLONE_STRIP_FIELDS = (
@@ -385,7 +385,7 @@ def _diff_snapshots(a: dict[str, Any], b: dict[str, Any]) -> VersionDiff:
 # entity* and fails the whole POST with ``EntityNotFoundException`` when that uuid
 # was regenerated for the clone. The FortiSOAR playbook designer deletes the nested
 # ``@id`` on every step/route before saving a copy for exactly this reason (and
-# leaves ``stepType`` untouched — it points at a real, shared step-type row).
+# leaves ``stepType`` untouched -- it points at a real, shared step-type row).
 _CLONE_CHILD_STRIP_FIELDS = ("@id", "@type", "id", "_oldUuid")
 
 
@@ -393,7 +393,7 @@ def _prepare_clone_body(src: dict[str, Any], *, new_name: str, is_active: bool) 
     """Build the POST body for a playbook clone from a source definition.
 
     Regenerates every **owned** UUID (the workflow plus its steps, routes, and
-    groups — never the shared ``stepType``) and rewrites all references in one
+    groups -- never the shared ``stepType``) and rewrites all references in one
     pass by substituting old→new UUID strings over the serialized definition.
     Because UUIDs are globally-unique 36-char tokens, a plain string replacement
     safely catches both bare references (route ``sourceStep``/``targetStep``) and
@@ -402,7 +402,7 @@ def _prepare_clone_body(src: dict[str, Any], *, new_name: str, is_active: bool) 
 
     The nested ``@id``/``@type``/``id`` of each step/route/group is then stripped
     so the appliance creates them fresh rather than treating them as references to
-    (now-nonexistent) existing rows — mirroring what the FortiSOAR playbook
+    (now-nonexistent) existing rows -- mirroring what the FortiSOAR playbook
     designer does when it duplicates a playbook. Without this the POST fails with
     ``EntityNotFoundException`` for any definition whose steps were inlined
     (e.g. anything fetched with ``$relationships=true``, or imported via YAML).
@@ -433,7 +433,7 @@ def _prepare_clone_body(src: dict[str, Any], *, new_name: str, is_active: bool) 
 
 def _run_failure_from_full(full: Any, pk: str | None) -> RunFailure:
     """Project a full run record (``get_execution(step_detail=True)``) into a
-    typed :class:`RunFailure` — the first failing step and its error message
+    typed :class:`RunFailure` -- the first failing step and its error message
     (step-level preferred, else the run's top-level result). Shared by
     :meth:`PlaybooksAPI.why_failed` (most-recent run for a playbook) and
     :meth:`PlaybooksAPI.run_failure` (a specific run)."""
@@ -444,7 +444,7 @@ def _run_failure_from_full(full: Any, pk: str | None) -> RunFailure:
             continue
         status = (step.get("status") or "").lower()
         # Only ACTUAL failure statuses: a non-last step failing leaves its
-        # downstream steps incipient/pending/skipped — not failures.
+        # downstream steps incipient/pending/skipped -- not failures.
         if status in _STEP_FAILURE_STATUSES:
             failing_step = step.get("name")
             result = step.get("result") or {}
@@ -469,7 +469,7 @@ def _shape_run(m: dict[str, Any]) -> RunSummary:
     The curated fields (``pk``, ``error_message``, ``source``, …) are promoted to
     typed attributes; **every other field of the raw record is preserved** in the
     model's ``extra`` (``RunSummary`` is ``ApiResult`` with ``extra="allow"``), so
-    the typed view never loses data — there's no "raw vs typed" trade-off to make.
+    the typed view never loses data -- there's no "raw vs typed" trade-off to make.
     """
     res = m.get("result") if isinstance(m.get("result"), dict) else {}
     err = None
@@ -523,12 +523,12 @@ class PlaybooksAPI(BaseAPI):
         collection's) display name but not its UUID. Playbook names are unique
         within a collection, so ``collection + name`` always resolves to exactly
         one playbook. Without a collection, a name that exists in multiple
-        collections is ambiguous — the first match is returned (with a debug
+        collections is ambiguous -- the first match is returned (with a debug
         log if more than one was found).
 
         Args:
             playbook: the playbook's display name (exact match).
-            collection: optional — the collection's display name (not uuid).
+            collection: optional -- the collection's display name (not uuid).
                 When given, the collection is resolved by name first, then
                 the playbook is looked up within it.
 
@@ -625,10 +625,10 @@ class PlaybooksAPI(BaseAPI):
             tag: a tag substring (``tag$like``).
             active: ``True`` for active playbooks only, ``False`` for disabled.
             private: ``True`` for private (owner-scoped) playbooks, ``False`` for public.
-            trigger_type: filter on the **start step** — a friendly alias from
+            trigger_type: filter on the **start step** -- a friendly alias from
                 ``TRIGGER_TYPE_NAMES`` (``manual``, ``on_create``, ``on_update``,
                 ``referenced``, ``api_endpoint``) or a raw ``cybersponse.*`` name.
-            step_type: playbooks **containing** a step of this type — a friendly
+            step_type: playbooks **containing** a step of this type -- a friendly
                 alias from ``STEP_TYPE_NAMES`` (``connector``, ``decision``,
                 ``manual_input``, ``approval``, ``reference``, ``code_snippet``,
                 …) or a raw API step-type name.
@@ -652,7 +652,7 @@ class PlaybooksAPI(BaseAPI):
         Note:
             ``arguments``-substring filters (``uses_connector``, ``uses_operation``,
             ``route``, ``references``) all target the same JSON column, so at most
-            **one** may be combined with the others per call — passing two raises
+            **one** may be combined with the others per call -- passing two raises
             ``ValueError``. For richer boolean logic use :meth:`query` with a
             :class:`~pyfsr.query.Query`.
         """
@@ -715,7 +715,7 @@ class PlaybooksAPI(BaseAPI):
         self, connector: str, *, operation: str | None = None, **kwargs: Any
     ) -> builtins.list[dict[str, Any]]:
         """Playbooks with a step that invokes ``connector`` (optionally a specific
-        ``operation``). Matched as a substring of the step ``arguments`` — pass the
+        ``operation``). Matched as a substring of the step ``arguments`` -- pass the
         connector slug as it appears on the wire (e.g. ``"fortigate"``,
         ``"fortinet-fortimanager"``). ``operation`` and ``connector`` can't both be
         used here (same JSON column); pass whichever is more selective."""
@@ -743,13 +743,13 @@ class PlaybooksAPI(BaseAPI):
         Fetches playbook definitions **with steps inlined**, parses each into a
         :class:`~pyfsr.playbook_match.ParsedPlaybook`, and returns the raw
         definitions whose parse satisfies ``predicate`` (built from
-        :mod:`pyfsr.playbook_match` helpers — ``step``/``count``/``has``/
+        :mod:`pyfsr.playbook_match` helpers -- ``step``/``count``/``has``/
         ``trigger``/``all_of``/``any_of``/``none_of``).
 
         Use this for same-step precision ("fortigate AND block_ip on one step"),
         quantities ("exactly 2 set-variable steps"), or any boolean mix. Pass
         ``prefilter`` (a :meth:`find` kwargs dict) to narrow server-side first and
-        avoid pulling every playbook — e.g. ``prefilter={"trigger_type": "manual"}``.
+        avoid pulling every playbook -- e.g. ``prefilter={"trigger_type": "manual"}``.
 
         Example:
             >>> from pyfsr.playbook_match import step, count, all_of
@@ -829,9 +829,9 @@ class PlaybooksAPI(BaseAPI):
 
         Example:
             >>> for pb in client.playbooks.manual_on_module("alerts"):  # doctest: +SKIP
-            ...     print(pb["label"], "—", pb["name"])
-            VirusTotal: Get IP Reputation — Get IP Reputation
-            Get Industry List — Get Industry List
+            ...     print(pb["label"], "--", pb["name"])
+            VirusTotal: Get IP Reputation -- Get IP Reputation
+            Get Industry List -- Get Industry List
         """
         from ..playbook_match import (
             parse_playbook,
@@ -901,7 +901,7 @@ class PlaybooksAPI(BaseAPI):
 
         Fetches the playbook definition by uuid/IRI/name and runs
         :func:`pyfsr.jinja_validate.validate_jinja_expressions` over its steps,
-        catching — *before* deploy — the runtime-only failures Jinja causes:
+        catching -- *before* deploy -- the runtime-only failures Jinja causes:
         syntax errors, unknown filters, and the ``picklist``-returns-dict bug that
         400s a string field mid-run (the FortiEDR C2 scenario). Returns a list of
         :class:`~pyfsr.jinja_validate.JinjaIssue` (empty when clean); filter on
@@ -942,7 +942,7 @@ class PlaybooksAPI(BaseAPI):
 
         Args:
             name: display name of the playbook.
-            collection: the collection to place it in — a uuid or full
+            collection: the collection to place it in -- a uuid or full
                 ``/api/3/workflow_collections/<uuid>`` IRI.
             is_active: whether the playbook is active (default ``True``).
             remote_executable: allow remote agent execution (default ``False``).
@@ -982,9 +982,9 @@ class PlaybooksAPI(BaseAPI):
 
         Fetches the source playbook with its steps/routes/groups inlined, then
         **remaps every owned UUID** (the workflow itself plus each step, route,
-        and group — never the shared ``stepType``) to a fresh one, rewiring all
-        the internal references — route ``sourceStep``/``targetStep``, the
-        workflow's ``triggerStep``, and each step's ``group`` — so the copy is
+        and group -- never the shared ``stepType``) to a fresh one, rewiring all
+        the internal references -- route ``sourceStep``/``targetStep``, the
+        workflow's ``triggerStep``, and each step's ``group`` -- so the copy is
         fully self-contained and never collides with the original. Server-managed
         fields (``@id``/``id``/create+modify stamps, ``deletedAt``, ``versions``)
         are dropped at the top level, and the nested ``@id``/``@type``/``id`` of
@@ -995,7 +995,7 @@ class PlaybooksAPI(BaseAPI):
 
         Args:
             uuid: source playbook uuid.
-            new_name: display name for the clone (required — a clone must be
+            new_name: display name for the clone (required -- a clone must be
                 distinguishable from its source).
             collection: optionally re-home the clone into a different collection
                 (uuid or IRI). Defaults to the source's collection.
@@ -1003,12 +1003,12 @@ class PlaybooksAPI(BaseAPI):
                 copy never starts firing on triggers before it's been reviewed.
             record_tags: tags to set on the clone. ``clone()`` otherwise strips
                 ``recordTags`` (a copy shouldn't inherit the source's
-                user-facing labels), but some tags are *functional* — data
+                user-facing labels), but some tags are *functional* -- data
                 ingestion discovers its ``fetch``/``ingest``/``create`` playbooks
                 purely by tag, so the ingestion wizard passes them through here.
                 ``None`` (default) keeps the strip; a list (incl. ``[]``) sets it.
             transform: optional callback to mutate the prepared POST body
-                **before** it is sent — receives the body dict (already remapped,
+                **before** it is sent -- receives the body dict (already remapped,
                 stripped, and renamed) and may edit it in place or return a
                 replacement. Use it to tweak a cloned definition at create time,
                 e.g. rename a Set-Variable arg, so the change is part of the same
@@ -1055,13 +1055,13 @@ class PlaybooksAPI(BaseAPI):
         ``{"isActive": active}`` and returns the updated record.
 
         This is the idempotent alternative to :meth:`update` when the only goal
-        is to flip activation state — re-running a deploy script that activates
+        is to flip activation state -- re-running a deploy script that activates
         a playbook won't issue a redundant PUT.
 
         Args:
             playbook: uuid, ``/api/3/workflows/<uuid>`` IRI, playbook name, or a
                 playbook dict (e.g. from :meth:`list` / :meth:`find`).
-            active: the desired ``isActive`` value (default ``True`` — activate).
+            active: the desired ``isActive`` value (default ``True`` -- activate).
 
         Returns:
             The playbook definition record (current state after any update).
@@ -1086,7 +1086,7 @@ class PlaybooksAPI(BaseAPI):
     def delete(self, uuid: str, *, hard: bool = True) -> None:
         """Delete a playbook definition. ``hard=True`` (default) bypasses the recycle bin.
 
-        Sends **no request body** — the appliance silently no-ops a delete carrying a ``{}``
+        Sends **no request body** -- the appliance silently no-ops a delete carrying a ``{}``
         body and leaks the row, so this never passes one. ``hard=False`` does a soft
         (recycle-bin) delete.
         """
@@ -1158,7 +1158,7 @@ class PlaybooksAPI(BaseAPI):
         """Fetch one saved snapshot (``GET /api/3/workflow_versions/{id}``).
 
         ``version`` accepts a uuid or ``/api/3/workflow_versions/<uuid>`` IRI. The
-        snapshot's ``json`` (the stringified workflow) is always present on GET —
+        snapshot's ``json`` (the stringified workflow) is always present on GET --
         use :meth:`PlaybookVersion.parsed_json` to decode it, e.g. before a
         :meth:`restore_version`. ``include_data`` is kept for wire-faithfulness
         but the server returns ``json`` either way.
@@ -1187,7 +1187,7 @@ class PlaybooksAPI(BaseAPI):
         The server does **not** echo the large ``json`` blob back on the create
         response (it comes back ``None``); call :meth:`get_version` on the
         returned record to read ``json``. FortiSOAR caps snapshots at 20 per
-        playbook — beyond that the server rejects the POST (delete an old one
+        playbook -- beyond that the server rejects the POST (delete an old one
         first). Returns the created :class:`~pyfsr.models.PlaybookVersion`.
 
             >>> v = client.playbooks.create_version("Block IP", note="v2")  # doctest: +SKIP
@@ -1211,7 +1211,7 @@ class PlaybooksAPI(BaseAPI):
 
         FortiSOAR has no restore endpoint: the editor's flow is
         ``loadVersion -> JSON.parse(.json) -> PUT /api/3/workflows/{id}``. This
-        method does the same — it fetches the snapshot, decodes its ``json``, and
+        method does the same -- it fetches the snapshot, decodes its ``json``, and
         PUTs the workflow definition back onto ``playbook``.
 
         .. warning::
@@ -1232,7 +1232,7 @@ class PlaybooksAPI(BaseAPI):
             payload = snap.parsed_json()
         except ValueError as e:
             raise ValueError(
-                "restore_version() needs the snapshot's json; the version record has none — re-fetch via get_version()"
+                "restore_version() needs the snapshot's json; the version record has none -- re-fetch via get_version()"
             ) from e
         payload["uuid"] = uuid
         prepared = _prepare_version_body(payload)
@@ -1244,7 +1244,7 @@ class PlaybooksAPI(BaseAPI):
         """Delete a saved snapshot (``DELETE /api/3/workflow_versions/{id}``).
 
         ``version`` accepts a uuid or ``/api/3/workflow_versions/<uuid>`` IRI.
-        This deletes the snapshot record only — the playbook itself is untouched.
+        This deletes the snapshot record only -- the playbook itself is untouched.
         """
         vid = _version_id(version, "delete_version")
         self.client.delete(f"{_WORKFLOW_VERSIONS}/{vid}")
@@ -1314,7 +1314,7 @@ class PlaybooksAPI(BaseAPI):
         projection (returning trimmed dicts) for agent reads.
 
         ``relationships=True`` inlines each workflow's ``steps``/``routes``/
-        ``groups`` (heavier, but needed when inspecting step-level shape — e.g.
+        ``groups`` (heavier, but needed when inspecting step-level shape -- e.g.
         :meth:`manual_on_module` uses it to read the trigger step's label).
         """
         body = query.to_body() if isinstance(query, Query) else dict(query)
@@ -1343,7 +1343,7 @@ class PlaybooksAPI(BaseAPI):
         """Fetch + merge ``/workflows/`` and ``/historical-workflows/``.
 
         ``parent_filter`` is the run-tree scope clause appended to the query.
-        The default (``parent_wf__isnull=True``) returns only top-level runs —
+        The default (``parent_wf__isnull=True``) returns only top-level runs --
         async sub-playbook children are excluded. Pass ``parent_wf=<pk>`` to
         fetch the children of one run, or ``""`` for an unscoped list.
         """
@@ -1378,7 +1378,7 @@ class PlaybooksAPI(BaseAPI):
 
         Scope to one playbook by ``playbook`` (name, resolved to uuid) or
         ``playbook_uuid``. Returns typed :class:`~pyfsr.models.RunSummary` objects
-        — the curated fields (``task_id``/``status``/``error_message``/``pk``/…) as
+        -- the curated fields (``task_id``/``status``/``error_message``/``pk``/…) as
         typed attributes, with the full raw run record preserved in ``extra`` and
         reachable by item access (``run["created"]``).
 
@@ -1414,7 +1414,7 @@ class PlaybooksAPI(BaseAPI):
         workflow_reference) records each sub-playbook invocation as its OWN
         execution, linked to the parent by ``parent_wf``. :meth:`execution_history`
         filters these out (it scopes to ``parent_wf__isnull=True``), so this is the
-        method to retrieve them — e.g. to measure loop max-parallel concurrency by
+        method to retrieve them -- e.g. to measure loop max-parallel concurrency by
         feeding the returned runs (``created``/``modified`` timestamps) to
         :func:`pyfsr.concurrency.compute_overlap`.
 
@@ -1422,7 +1422,7 @@ class PlaybooksAPI(BaseAPI):
         children; see :meth:`has_async_children`.
 
         Args:
-            parent: the parent run — a numeric run pk (``210`` / ``"210"``), a run
+            parent: the parent run -- a numeric run pk (``210`` / ``"210"``), a run
                 ``@id``/path (``"/wf/api/workflows/210/"``), or a ``task_id`` uuid
                 (resolved to its pk via the live log).
             limit: maximum number of children to return (default 100).
@@ -1441,7 +1441,7 @@ class PlaybooksAPI(BaseAPI):
         """Whether a run dispatched async sub-playbook children.
 
         Checks for the ``#has_async_childwf_cyops`` tag FortiSOAR stamps on a run
-        once it launches an ``apply_async`` child — the same signal the UI uses to
+        once it launches an ``apply_async`` child -- the same signal the UI uses to
         decide whether to offer a child-run drill-down. ``parent`` accepts the same
         forms as :meth:`child_runs`.
         """
@@ -1466,7 +1466,7 @@ class PlaybooksAPI(BaseAPI):
         if "/" in s:  # an @id or path like /wf/api/workflows/210/
             tail = s.rstrip("/").rsplit("/", 1)[-1]
             return tail if tail.isdigit() else None
-        if _looks_like_uuid(s):  # a task_id — map to its pk via the live log
+        if _looks_like_uuid(s):  # a task_id -- map to its pk via the live log
             resp = self.log_list(task_id=s, limit=1)
             members = extract_members(resp)
             if members:
@@ -1485,7 +1485,7 @@ class PlaybooksAPI(BaseAPI):
 
         The pk is the trailing segment of a run's ``@id`` URL. Tries the live
         table first, then historical. Returns a typed
-        :class:`~pyfsr.models.RunSummary` — curated fields as attributes, the full
+        :class:`~pyfsr.models.RunSummary` -- curated fields as attributes, the full
         raw record preserved in ``extra`` (so ``run["result"]`` etc. still work).
 
         Pass ``step_detail=True`` to include the per-step execution trace; the
@@ -1544,7 +1544,7 @@ class PlaybooksAPI(BaseAPI):
             tags_exclude: tag name(s) to exclude (same format).
             status: execution status filter, e.g. ``"finished"``, ``"failed"``,
                 ``"Running"``.
-            playbook: playbook name — resolved to a uuid and forwarded as
+            playbook: playbook name -- resolved to a uuid and forwarded as
                 ``template_iri``.
             playbook_uuid: playbook uuid (use instead of ``playbook`` when you
                 already have it).
@@ -1593,7 +1593,7 @@ class PlaybooksAPI(BaseAPI):
         run record is preserved in the model's ``extra`` (e.g. ``run["@id"]``).
 
         Args:
-            playbook: the playbook name — resolved to uuid internally.
+            playbook: the playbook name -- resolved to uuid internally.
             playbook_uuid: the playbook uuid (use instead of ``playbook`` when
                 you already have it).
 
@@ -1631,7 +1631,7 @@ class PlaybooksAPI(BaseAPI):
         call :meth:`get_execution` with the returned ``pk``.
 
         Args:
-            playbook: the playbook name — resolved to uuid internally.
+            playbook: the playbook name -- resolved to uuid internally.
             playbook_uuid: the playbook uuid (use instead of ``playbook`` when
                 you already have it).
 
@@ -1659,7 +1659,7 @@ class PlaybooksAPI(BaseAPI):
         return _run_failure_from_full(self.get_execution(pk, step_detail=True), pk)
 
     def run_failure(self, run: str | int) -> RunFailure | None:
-        """Failure projection for a SPECIFIC run — by pk, ``@id`` path, or task_id.
+        """Failure projection for a SPECIFIC run -- by pk, ``@id`` path, or task_id.
 
         The by-run counterpart to :meth:`why_failed` (which locates the most
         recent run for a *playbook*). Resolves ``run`` the same way as
@@ -1681,7 +1681,7 @@ class PlaybooksAPI(BaseAPI):
         """Return a run's execution environment + per-step results.
 
         ``run`` may be a run pk, an ``@id`` path, or a ``task_id`` (what
-        :meth:`trigger`/:meth:`trigger_by_name` return) — it is resolved the
+        :meth:`trigger`/:meth:`trigger_by_name` return) -- it is resolved the
         same way as :meth:`step_status`/:meth:`child_runs`, so you can pass a
         ``task_id`` straight through without resolving the pk yourself.
 
@@ -1747,7 +1747,7 @@ class PlaybooksAPI(BaseAPI):
         the retrievable run record when **global workflow debug logging is
         enabled**, so ``run_env(...).env`` is empty for them with debug logging
         off (the default). A step's ``status`` (``"finished"``, ``"failed"``, …)
-        always survives — assert on that instead.
+        always survives -- assert on that instead.
 
         Args:
             run: a run pk / ``@id`` path / ``task_id`` (resolved like
@@ -1794,10 +1794,10 @@ class PlaybooksAPI(BaseAPI):
                 so an agent can drill into the root run's step outcomes without a
                 separate :meth:`run_env` call. Each step's ``result`` is
                 JSON-capped to ~500 chars (a preview, not the full blob).
-                Default ``False`` (cheaper — no ``step_detail`` fetch).
+                Default ``False`` (cheaper -- no ``step_detail`` fetch).
             detailed: when ``True``, populate step snapshots on **every node**
                 in the tree, not just the root. This is the one-call equivalent of
-                manually calling :meth:`run_env` on each child — useful for
+                manually calling :meth:`run_env` on each child -- useful for
                 debugging deep subplaybook chains (e.g. C2 Response →
                 Get Record IOCs → Query Record State). Implies ``steps=True``
                 on children at every depth. Default ``False`` (children stay
@@ -1836,7 +1836,7 @@ class PlaybooksAPI(BaseAPI):
                 child_pk = child.get("pk")
                 if child_pk:
                     # When detailed=True, children also get step snapshots (with
-                    # timing) — the one-call way to inspect a deep subplaybook
+                    # timing) -- the one-call way to inspect a deep subplaybook
                     # chain. Otherwise children stay slim (call run_env for detail).
                     child_steps = steps if detailed else False
                     node.children.append(
@@ -1852,7 +1852,7 @@ class PlaybooksAPI(BaseAPI):
     ) -> list[RunStepSnapshot]:
         """Return a run's steps sorted by start time, with timing + slow flags.
 
-        Answers "which step took how long?" — the most common debugging
+        Answers "which step took how long?" -- the most common debugging
         question when a playbook is slow or stuck. Fetches the run with
         ``step_detail=True`` (same as :meth:`run_env`), extracts per-step
         ``start_time`` / ``end_time`` / ``duration_ms`` from the wire's
@@ -1860,17 +1860,16 @@ class PlaybooksAPI(BaseAPI):
         by start time.
 
         Each step's ``is_slow`` property flags steps exceeding
-        ``slow_threshold_ms`` (default 30s) — useful for spotting a
+        ``slow_threshold_ms`` (default 30s) -- useful for spotting a
         ``do_until`` loop that ran the full timeout.
 
         Args:
             run: a run pk / ``@id`` path / ``task_id`` (resolved like
                 :meth:`run_env`).
             slow_threshold_ms: duration threshold in milliseconds; steps
-                taking longer get ``is_slow=True`` in the returned models
-                (the property reads this at call time, so pass it here to
-                bake it into the flag — or just check ``duration_ms``
-                yourself).
+                taking longer get ``is_slow=True`` in the returned models.
+                Set on each returned snapshot, so the flag reflects the
+                threshold you asked for.
 
         Returns:
             a list of :class:`~pyfsr.models.RunStepSnapshot` with timing
@@ -1882,6 +1881,8 @@ class PlaybooksAPI(BaseAPI):
             return []
         full = self.get_execution(str(pk), step_detail=True)
         steps = _step_snapshots(full)
+        for step in steps:
+            step.slow_threshold_ms = slow_threshold_ms
         steps.sort(key=lambda s: (s.start_time is None, s.start_time or "", s.name or ""))
         return steps
 
@@ -1916,7 +1917,7 @@ class PlaybooksAPI(BaseAPI):
         matches intent.
 
         Args:
-            playbook: the playbook name — resolved to uuid internally.
+            playbook: the playbook name -- resolved to uuid internally.
             playbook_uuid: the playbook uuid (use instead of ``playbook`` when you
                 already have it).
             run: a run pk / ``@id`` path / ``task_id`` (resolved like
@@ -2084,19 +2085,19 @@ class PlaybooksAPI(BaseAPI):
     ) -> TriggerResponse | RunSummary:
         """Manually trigger a playbook and return its run handle.
 
-        POSTs to ``/api/triggers/1/notrigger/<playbook_uuid>`` — the route the
-        FortiSOAR UI uses for the *Execute* button on a manual-trigger playbook —
+        POSTs to ``/api/triggers/1/notrigger/<playbook_uuid>`` -- the route the
+        FortiSOAR UI uses for the *Execute* button on a manual-trigger playbook --
         and returns ``{"task_id": ...}`` for the started run. The ``task_id`` is a
         **query-only** key: pass it to :meth:`get_execution` / :meth:`wait` (which
         resolve it server-side via ``log_list(task_id=...)``) to track the run. Note
-        the run *log records do not echo* ``task_id`` — it is a filter parameter, not
+        the run *log records do not echo* ``task_id`` -- it is a filter parameter, not
         a field on the returned run, so matching it against a listed run's fields will
         not work; query *by* it instead.
 
         Args:
-            playbook: the playbook to run — a uuid, or a name resolved to its
+            playbook: the playbook to run -- a uuid, or a name resolved to its
                 uuid (the playbook must have a *manual* trigger step).
-            records: **rejected — raises ValueError.** The ``notrigger`` route
+            records: **rejected -- raises ValueError.** The ``notrigger`` route
                 cannot deliver record context: the run starts but
                 ``vars.input.records`` stays empty, so a step reading
                 ``{{ vars.input.records[0]['@id'] }}`` fails with *CS-WF-35:
@@ -2107,7 +2108,7 @@ class PlaybooksAPI(BaseAPI):
                 record-blind run.
             inputs: sent as the request body's ``inputs`` key. **Caveat
                 (live-verified):** this lands in the run env as top-level
-                ``vars.inputs`` — it does NOT populate ``vars.input.params``,
+                ``vars.inputs`` -- it does NOT populate ``vars.input.params``,
                 which stays ``{}`` on this route. The notrigger handler
                 array_merges the body into the trigger step's arguments and only
                 interprets a fixed key set (``env``/``priority``/``parent_wf``/
@@ -2117,7 +2118,7 @@ class PlaybooksAPI(BaseAPI):
                 and note a playbook whose trigger declares ``inputVariables``
                 expects those values as **top-level** body keys (pass them via
                 ``env=``), not nested under ``inputs``.
-            env: keys merged into the POST body verbatim — live-verified to
+            env: keys merged into the POST body verbatim -- live-verified to
                 arrive as top-level ``vars.<key>``.
             follow: if ``True``, block until the run completes and return the
                 shaped run dict instead of the raw trigger response. Equivalent
@@ -2147,7 +2148,7 @@ class PlaybooksAPI(BaseAPI):
         if records:
             raise ValueError(
                 "trigger() cannot pass records: it posts to the manual-execute "
-                "(notrigger) route, which does NOT deliver record context — the run "
+                "(notrigger) route, which does NOT deliver record context -- the run "
                 "starts, but `vars.input.records` is empty and any step reading "
                 "`{{ vars.input.records[0]['@id'] }}` fails with "
                 "'CS-WF-35: Record IRI is empty'. Confirmed in the appliance source: "
@@ -2155,7 +2156,7 @@ class PlaybooksAPI(BaseAPI):
                 "trigger step's arguments (it never fetches a record), so the route "
                 "ignores records even given the full action envelope. Use "
                 "trigger_action(route_uuid, module=..., record_uuid=...) for a "
-                "record-scoped run — its route uuid is the trigger step's "
+                "record-scoped run -- its route uuid is the trigger step's "
                 "`arguments.route` (see get_definition(..., relationships=True))."
             )
         uuid = playbook if _looks_like_uuid(playbook) else self._resolve_uuid(playbook)
@@ -2214,9 +2215,9 @@ class PlaybooksAPI(BaseAPI):
 
         The cheap, non-raising counterpart to :meth:`wait`: one
         :meth:`log_list` read keyed by ``task_id`` (what :meth:`trigger`
-        returns), returning the lowercased status string — ``"running"``,
+        returns), returning the lowercased status string -- ``"running"``,
         ``"finished"``, ``"failed"``, ``"error"``, ``"cancelled"``,
-        ``"aborted"`` — or ``None`` if no run has appeared for this ``task_id``
+        ``"aborted"`` -- or ``None`` if no run has appeared for this ``task_id``
         yet (just triggered, or unknown id). Use it to poll many runs on your
         own cadence, or to read a last-known status after :meth:`wait` times
         out. Compare against :attr:`TERMINAL_STATUSES` to test for completion.
@@ -2251,15 +2252,15 @@ class PlaybooksAPI(BaseAPI):
         newest first) and polls until the most recent run *newer than* ``since``
         reaches a terminal state (status in finished/failed/error/cancelled/aborted).
 
-        This is useful for verifying that a triggered playbook has completed —
+        This is useful for verifying that a triggered playbook has completed --
         more ergonomic than manually tracking ``task_id`` when the playbook's
         definition (by name) is the natural reference.
 
         Args:
-            playbook: the playbook name — resolved to uuid internally.
+            playbook: the playbook name -- resolved to uuid internally.
             playbook_uuid: the playbook uuid (use instead of ``playbook`` when
                 you already have it).
-            since: an optional timestamp (ISO string or UNIX float) — only polls
+            since: an optional timestamp (ISO string or UNIX float) -- only polls
                 runs *newer* than this. Useful when the playbook may have old
                 runs already in a terminal state. Default ``None`` (polls the
                 absolute newest run, which is often still running).
@@ -2352,7 +2353,7 @@ class PlaybooksAPI(BaseAPI):
 
         Use this when you've already triggered a playbook (via :meth:`trigger`
         or :meth:`trigger_action`) and hold the ``task_id``, but need to do work
-        *between* the trigger and the wait — e.g. patch a record mid-flight to
+        *between* the trigger and the wait -- e.g. patch a record mid-flight to
         unblock an SLA gate. :meth:`run_and_wait` triggers and waits atomically,
         leaving no such window; :meth:`wait_for_run` polls by playbook *name*
         via execution history rather than by ``task_id``. This method is the
@@ -2362,15 +2363,15 @@ class PlaybooksAPI(BaseAPI):
             task_id: the trigger's task id (``TriggerResponse.task_ids[0]``).
             timeout: seconds to wait before raising :exc:`TimeoutError`.
             poll_interval: seconds between polls.
-            steps: pass through to :meth:`run_tree` — include per-step snapshots.
-            detailed: pass through to :meth:`run_tree` — recurse child runs and
+            steps: pass through to :meth:`run_tree` -- include per-step snapshots.
+            detailed: pass through to :meth:`run_tree` -- recurse child runs and
                 surface per-step timing on every node.
             on_poll: optional callback invoked once per poll with a
                 :class:`~pyfsr.models.WaitProgress` (the freshly-fetched tree,
                 poll count, elapsed seconds, and whether this is the terminal
-                poll). Use it to act on the *live* run — answer a pending
+                poll). Use it to act on the *live* run -- answer a pending
                 manual-input gate, patch a field to unblock an SLA timer, log
-                progress — without re-implementing the poll loop. Returning
+                progress -- without re-implementing the poll loop. Returning
                 ``False`` stops the wait early and returns the current tree.
 
         Returns:
@@ -2442,7 +2443,7 @@ class PlaybooksAPI(BaseAPI):
         The all-in-one convenience for the most common test pattern:
         trigger → wait → inspect. Returns a :class:`~pyfsr.models.RunResult` with the
         run's status, per-step outcomes (with timing), failure details,
-        and child runs — everything an agent needs to debug a playbook
+        and child runs -- everything an agent needs to debug a playbook
         in one call.
 
         Picks the trigger route automatically:
@@ -2452,11 +2453,11 @@ class PlaybooksAPI(BaseAPI):
           - Otherwise, uses :meth:`trigger` (manual-execute / ``notrigger``).
 
         Args:
-            playbook: the playbook name — resolved to uuid if needed.
+            playbook: the playbook name -- resolved to uuid if needed.
                 When ``collection`` is also given, the lookup is scoped to
                 that collection (by name, not uuid).
             playbook_uuid: the playbook uuid (use instead of ``playbook``).
-            collection: the collection's display name — used to scope the
+            collection: the collection's display name -- used to scope the
                 playbook name lookup. Optional but recommended when the
                 playbook name might exist in multiple collections.
             record_uuid: for record-action triggers, the record to run against.
@@ -2835,16 +2836,16 @@ class PlaybooksAPI(BaseAPI):
 
         .. deprecated::
             Use :meth:`client.manual_input.list <pyfsr.api.manual_input.ManualInputAPI.list>`
-            — the same endpoint, but typed, filterable (``is_approval=``), paginated,
+            -- the same endpoint, but typed, filterable (``is_approval=``), paginated,
             and assignment-scoped. This raw-dict form is retained as a thin delegate.
 
         Each entry carries ``id`` (the ``manual_input_id`` for :meth:`resume`) and
-        ``step_id``. Buttons/options are omitted here — fetch them per-record with
+        ``step_id``. Buttons/options are omitted here -- fetch them per-record with
         :meth:`retrieve_manual_input`. (POST-only; GET 405s.)
         """
         warnings.warn(
             "playbooks.manual_inputs() is deprecated; use client.manual_input.list("
-            "assigned_to='all') — same endpoint, typed and filterable.",
+            "assigned_to='all') -- same endpoint, typed and filterable.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -2858,17 +2859,17 @@ class PlaybooksAPI(BaseAPI):
 
         .. deprecated::
             Use :meth:`client.manual_input.retrieve <pyfsr.api.manual_input.ManualInputAPI.retrieve>`
-            — the same endpoint, but typed and able to scope the retrieve with
+            -- the same endpoint, but typed and able to scope the retrieve with
             ``owners=``. This raw-dict form is retained as a thin delegate.
 
         ``POST .../manual-wf-input/{pk}/retrieve_wfinput/``. Returns the full
         record including ``response_mapping.options[]`` (each option's label and
-        ``step_iri``) — which :meth:`manual_inputs` omits, so you need this to know
+        ``step_iri``) -- which :meth:`manual_inputs` omits, so you need this to know
         what to send when resuming via :meth:`resume`.
         """
         warnings.warn(
             "playbooks.retrieve_manual_input() is deprecated; use "
-            "client.manual_input.retrieve() — same endpoint, typed.",
+            "client.manual_input.retrieve() -- same endpoint, typed.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -2898,17 +2899,17 @@ class PlaybooksAPI(BaseAPI):
 
         ``POST /api/triggers/1/{name}`` (or ``/api/triggers/1/deferred/{name}``
         when ``deferred=True``, which always 202s and runs on a worker). This is
-        the named-webhook trigger route — distinct from :meth:`trigger`, which
+        the named-webhook trigger route -- distinct from :meth:`trigger`, which
         uses the manual-execute (``notrigger``) route by playbook uuid. Returns
         the trigger response (typically ``{"task_id": ...}``).
 
         With ``raise_on_status=False`` returns the raw
         :class:`requests.Response` (``.status_code`` / ``.json()``) instead of a
-        :class:`~pyfsr.models.TriggerResponse` — for access-control probes that need to
+        :class:`~pyfsr.models.TriggerResponse` -- for access-control probes that need to
         distinguish a permit (200) from a denial (401/403) without catching.
 
         ``request_timeout`` bounds the POST itself (default ``None`` = the client's
-        configured timeout) — set it to fail fast on a stalled submit.
+        configured timeout) -- set it to fail fast on a stalled submit.
 
         Example:
             >>> client = demo_client()
@@ -2944,7 +2945,7 @@ class PlaybooksAPI(BaseAPI):
         """Fire a record-context action trigger (``POST /api/triggers/1/action/{route_uuid}``).
 
         This is the route FortiSOAR uses for playbooks with a *record-action*
-        (``cybersponse.action``) trigger step — distinct from :meth:`trigger`, which
+        (``cybersponse.action``) trigger step -- distinct from :meth:`trigger`, which
         uses the manual-execute (``notrigger``) route. The ``route_uuid`` is the
         trigger step's ``route`` field on the playbook definition; retrieve it via
         ``client.playbooks.get_definition(uuid, relationships=True)`` and look under
@@ -2959,8 +2960,8 @@ class PlaybooksAPI(BaseAPI):
             env: extra keys merged into the POST body verbatim.
 
         Returns:
-            The trigger response. Live-verified — **this route answers**
-            ``{"task_ids": [...]}`` — plural, a list — where :meth:`trigger`'s
+            The trigger response. Live-verified -- **this route answers**
+            ``{"task_ids": [...]}`` -- plural, a list -- where :meth:`trigger`'s
             ``notrigger`` route answers a scalar ``{"task_id": ...}``.
             :class:`~pyfsr.models.TriggerResponse` folds the plural key into
             ``task_id``, so :attr:`~pyfsr.models.TriggerResponse.task_ids` is the
@@ -3001,7 +3002,7 @@ class PlaybooksAPI(BaseAPI):
 
         Keyed by ``task_id`` (what :meth:`trigger` returns). Steps are ordered
         by creation time (oldest first). This endpoint only populates after a run
-        reaches a terminal state — on a live run, check :meth:`get` with
+        reaches a terminal state -- on a live run, check :meth:`get` with
         ``step_detail=True`` instead.
 
         Supported filters beyond ``task_id``: ``status``, ``name`` (step display
