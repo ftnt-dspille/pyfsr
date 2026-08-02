@@ -1839,3 +1839,19 @@ def test_set_default_configuration_rejects_an_unknown_config_id():
     api, _ = _api(get_map={})
     with pytest.raises(ValueError, match="not found"):
         api.set_default_configuration("fortigate-firewall", "nope")
+
+
+def test_set_default_configuration_refuses_the_null_secret_sentinel():
+    """Some responses return "NULL" instead of the stored secret.
+
+    Echoing that back writes the four characters N-U-L-L over a live
+    credential -- the wipe this method exists to prevent -- so it must refuse
+    rather than "successfully" destroy the config.
+    """
+    import pytest
+
+    masked = dict(_FG_RECORD, config={"address": "fw.example.com", "api_key": "NULL"})
+    api, client = _api(get_map={"/api/integration/configuration/fg-1/": masked})
+    with pytest.raises(ValueError, match="api_key"):
+        api.set_default_configuration("fortigate-firewall", "fg-1")
+    assert client.put_calls == []
