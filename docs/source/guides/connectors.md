@@ -173,6 +173,48 @@ rely on either field being there after an update.
 True
 ```
 
+## Making a configuration the default
+
+A connector whose configuration isn't marked default fails its healthcheck with
+`Could not find a configuration matching the id get_default_config or the
+default configuration` -- the config is there and usable by name, but anything
+resolving by default gets nothing.
+
+There is no flag-only route: `PUT /api/integration/configuration/{config_id}/`
+replaces the whole record. That makes the obvious fix dangerous, because the
+**listing** returns `config: null` while only the **single-record GET** carries
+the real field map -- build the `PUT` body from the listing and you wipe the
+credentials. `set_default_configuration` does the read-then-echo for you:
+
+```python
+conn.set_default_configuration("fortigate-firewall")             # the only config
+conn.set_default_configuration("fortigate-firewall", "a5fb56f2") # by config_id
+conn.set_default_configuration("fortigate-firewall", name="fortigate-lab")
+```
+
+It deliberately skips `validate`/`autofill` -- the stored config is already what
+the appliance accepted, and materializing it against the schema would rewrite
+fields this call has no business touching. A remote-agent binding is carried
+over explicitly; omitting `agent` on the `PUT` silently moves execution back to
+the self-agent. If the appliance returns the `"NULL"` secret sentinel instead of
+a stored value, the call raises rather than writing that sentinel over a live
+credential.
+
+```{note}
+The stored ciphertext for a secret legitimately **changes** across this call --
+the appliance re-encrypts on save while the plaintext does not change. Verified
+on a live 8.0.0 appliance: a FortiGate configuration that could not be
+health-checked reported `Available` afterwards, with the upstream still
+reachable. Don't read the changed value as corruption.
+```
+
+```{warning}
+The trailing slash on `/api/integration/configuration/{config_id}/` is
+mandatory. Without it the gateway rejects the call with `403 Could not validate
+HMAC fingerprint`, which reads like a permissions or auth problem rather than a
+URL typo.
+```
+
 ## Connector Studio dev workspace
 
 Edit a checked-out connector's source, then publish it onto the running

@@ -1717,6 +1717,22 @@ class ConnectorsAPI(BaseAPI):
         if not isinstance(cur, dict) or "config" not in cur:
             raise ValueError(f"configuration {config_id!r} not found on this appliance")
 
+        stored = cur.get("config") or {}
+        # Some responses substitute the literal string "NULL" for a stored
+        # secret rather than echoing it -- create_configuration's POST response
+        # always does. Re-sending that sentinel would write the four characters
+        # N-U-L-L over a live credential: the exact wipe this method exists to
+        # prevent. The single-record GET returns the real encrypted value on
+        # 8.0.0, so this is a guard on an unexpected shape, not the normal path.
+        masked = sorted(k for k, v in stored.items() if v == "NULL")
+        if masked:
+            raise ValueError(
+                f"refusing to promote {config_id!r}: the appliance returned the "
+                f"'NULL' secret sentinel for {', '.join(masked)}, so re-sending this "
+                f"config would overwrite the stored credential. Set the default in "
+                f"the UI, or re-send the real values via update_configuration(default=True)."
+            )
+
         body: dict[str, Any] = {
             "connector": cur.get("connector"),
             "connector_name": connector,

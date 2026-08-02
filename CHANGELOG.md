@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`connectors.set_default_configuration()`** -- mark an existing configuration
+  the connector's default without changing anything else, plus a
+  `set_default_connector_config` agent tool. A connector whose configuration
+  isn't default fails its healthcheck with `Could not find a configuration
+  matching the id get_default_config or the default configuration`, and there is
+  no flag-only route to fix it: `PUT /api/integration/configuration/{id}/`
+  replaces the whole record. Doing that by hand wipes credentials, because the
+  connector *listing* returns `config: null` while only the *single-record GET*
+  carries the real field map. This reads the record first and re-sends it
+  verbatim with `default=True`, skipping `validate`/`autofill` (which would
+  rewrite encrypted secrets) and preserving any remote-agent binding. Refuses
+  outright when the appliance returns the `"NULL"` secret sentinel in place of a
+  stored value. Verified on a live 8.0.0 appliance.
+
 ## [0.18.8] - 2026-08-02
 
 ### Fixed
