@@ -15,6 +15,7 @@ class FakeClient:
         self.posts = []
         self.gets = []
         self.deletes = []
+        self.puts = []
         self._post_resp = post_resp or {}
         self._get_resp = get_resp or {}
         self.files = FakeFiles()
@@ -26,6 +27,10 @@ class FakeClient:
     def get(self, endpoint, params=None, **kw):
         self.gets.append((endpoint, params))
         return self._get_resp.get(endpoint, self._get_resp.get("*", {}))
+
+    def put(self, endpoint, data=None, params=None, **kw):
+        self.puts.append((endpoint, data))
+        return {"@id": endpoint, "name": "n", **(data or {})}
 
     def delete(self, endpoint, params=None, **kw):
         self.deletes.append(endpoint)
@@ -136,3 +141,27 @@ def test_execute_result_ok_property():
     assert ExecuteResult(status="success").ok is True
     assert ExecuteResult(status="Failed").ok is False
     assert ExecuteResult(status=None).ok is False
+
+
+def test_export_template_update_puts_only_changed_fields():
+    c = FakeClient()
+    api = ExportTemplatesAPI(c)
+    tmpl = api.update("/api/3/export_templates/t-1", options={"connectors": [{"install_mode": "tgz"}]})
+    assert isinstance(tmpl, ExportTemplate)
+    endpoint, body = c.puts[0]
+    # IRI in, uuid-normalised endpoint out -- same as get()/delete().
+    assert endpoint == "/api/3/export_templates/t-1"
+    assert body == {"options": {"connectors": [{"install_mode": "tgz"}]}}
+
+
+def test_export_template_update_accepts_plain_fields():
+    c = FakeClient()
+    ExportTemplatesAPI(c).update("t-1", name="renamed")
+    assert c.puts[0] == ("/api/3/export_templates/t-1", {"name": "renamed"})
+
+
+def test_export_template_update_rejects_an_empty_change():
+    import pytest
+
+    with pytest.raises(ValueError):
+        ExportTemplatesAPI(FakeClient()).update("t-1")
