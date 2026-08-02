@@ -1,13 +1,22 @@
 name: Tests
 
+# The `protect-main` ruleset requires exactly the six contexts this workflow
+# produces (lint, test (3.10..3.13), docs / docs). Two consequences shape the
+# triggers below, and both are load-bearing:
+#
+#   1. No `paths` filter. A required status check that never runs never
+#      reports, and GitHub treats "not reported" as "not satisfied" -- so a
+#      docs-only change would be unmergeable rather than trivially green. Path
+#      filters and required checks do not combine; the checks win.
+#   2. `push` on main is listed. Without it these six jobs have no trigger that
+#      fires on a direct push, so every push to main bypassed all six -- not
+#      because the bypass was wanted, but because the checks were structurally
+#      unreachable. See RELEASING.md.
 on:
   pull_request:
     branches: [ main ]
-    paths:
-      - 'src/pyfsr/**'
-      - 'tests/**'
-      - 'pyproject.toml'
-      - '.github/workflows/**'
+  push:
+    branches: [ main ]
   workflow_call:
     inputs:
       ref:
@@ -57,7 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # hatch-vcs derives the version from tags — need full history + tags.
+          # hatch-vcs derives the version from tags -- need full history + tags.
           fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
@@ -72,7 +81,7 @@ jobs:
           pip install -e '.[test]' tomli
           # The playbooks extra (fsr_playbooks) floor was lowered to Python
           # >=3.10. Until that release is on PyPI the pin may still resolve to a
-          # 3.12-only build on older Pythons, so install best-effort — authoring
+          # 3.12-only build on older Pythons, so install best-effort -- authoring
           # tests run where the extra installs and skip elsewhere.
           pip install '.[playbooks]' || echo "playbooks extra unavailable on this Python; authoring tests will skip"
 
