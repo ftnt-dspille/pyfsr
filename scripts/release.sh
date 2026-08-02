@@ -41,6 +41,22 @@ command -v gh >/dev/null || die "gh CLI not found (brew install gh)"
 gh auth status >/dev/null 2>&1 || die "gh is not authenticated (gh auth login)"
 ok "gh authenticated"
 
+# Resolve the installability prober NOW, not at the final wait. `pip` is not on
+# PATH in every shell (a venv may expose only `python3 -m pip`), and the wait
+# loop treats a failed probe as "not published yet" -- so an absent `pip` there
+# is indistinguishable from PyPI lagging, and burns the full timeout after the
+# release has already gone out. Cheaper to fail here, before anything is tagged.
+if python3 -m pip --version >/dev/null 2>&1; then
+    PROBE=(python3 -m pip download --no-deps --quiet --dest)
+    PROBE_NAME="python3 -m pip"
+elif command -v uv >/dev/null; then
+    PROBE=(uv pip download --no-deps --quiet --dest)
+    PROBE_NAME="uv pip"
+else
+    die "no pip or uv available to verify the published version is installable"
+fi
+ok "installability prober: ${PROBE_NAME}"
+
 # Guard the repo itself. Every check below reads git through $(...), where a
 # failure is swallowed by set -e -- outside a repo, `git status --porcelain`
 # fails, expands to empty, and reads as "clean".
@@ -154,15 +170,23 @@ ok "JSON API reports ${VERSION}"
 step "Confirming ${VERSION} is installable"
 TMPDIR_DL="$(mktemp -d -t pyfsr-verify)"
 trap 'rm -f "$NOTES_FILE"; rm -rf "$TMPDIR_DL"' EXIT
+PROBE_LOG="${TMPDIR_DL}/probe.log"
 DEADLINE=$(( $(date +%s) + 900 ))
-until pip download --no-deps --quiet --dest "$TMPDIR_DL" "pyfsr==${VERSION}" >/dev/null 2>&1; do
-    [[ $(date +%s) -lt $DEADLINE ]] \
-        || die "timed out after 15m -- ${VERSION} is in the JSON API but not resolvable from the index"
+# Keep the probe's own stderr: on timeout it is the difference between "PyPI is
+# lagging" and "the prober itself is broken", which otherwise look identical
+# from out here.
+until "${PROBE[@]}" "$TMPDIR_DL" "pyfsr==${VERSION}" >"$PROBE_LOG" 2>&1; do
+    if [[ $(date +%s) -ge $DEADLINE ]]; then
+        echo >&2
+        echo "last probe output:" >&2
+        tail -5 "$PROBE_LOG" >&2
+        die "timed out after 15m -- ${VERSION} is in the JSON API but not resolvable from the index"
+    fi
     printf '.'
     sleep 20
 done
 echo
-ok "pip resolved and downloaded pyfsr==${VERSION}"
+ok "resolved and downloaded pyfsr==${VERSION}"
 
 echo
 echo "Released pyfsr ${VERSION}: https://pypi.org/project/pyfsr/${VERSION}/"
