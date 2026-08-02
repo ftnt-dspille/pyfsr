@@ -1,0 +1,272 @@
+pyfsr.query_models
+==================
+
+.. py:module:: pyfsr.query_models
+
+.. autoapi-nested-parse::
+
+   Pydantic models + operator knowledge base for the FortiSOAR query DSL.
+
+   This is the validated, typed backing for :class:`pyfsr.query.Query`. The fluent
+   builder assembles a :class:`QueryBody`, which round-trips to the exact dict the
+   ``POST /api/query/{module}`` endpoint expects.
+
+   The **operator knowledge base** (:data:`OPERATOR_SPECS`) records each leaf
+   operator's *arity* (does it take no value, a scalar, a list, or a bool?) and
+   *category* (a normal leaf filter vs a trigger-condition operator only valid in
+   playbook start/update filters). :data:`DEPRECATED_OPERATORS` maps common
+   mistakes to the operator that actually works (e.g. ``isnotnull`` 400s on the
+   appliance — use ``isnull`` with ``value=False``).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.query_models.OPERATOR_SPECS
+   pyfsr.query_models.OPERATORS
+   pyfsr.query_models.DEPRECATED_OPERATORS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.query_models.Arity
+   pyfsr.query_models.OperatorSpec
+   pyfsr.query_models.SortSpec
+   pyfsr.query_models.FilterLeaf
+   pyfsr.query_models.FilterGroup
+   pyfsr.query_models.QueryBody
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.query_models.operator_error
+   pyfsr.query_models.validate_leaf_value
+
+
+Module Contents
+---------------
+
+.. py:class:: Arity
+
+   Bases: :py:obj:`str`, :py:obj:`enum.Enum`
+
+
+   How many/what kind of value an operator's leaf carries.
+
+
+   .. py:attribute:: NONE
+      :value: 'none'
+
+
+
+   .. py:attribute:: SCALAR
+      :value: 'scalar'
+
+
+
+   .. py:attribute:: LIST
+      :value: 'list'
+
+
+
+   .. py:attribute:: BOOL
+      :value: 'bool'
+
+
+
+.. py:class:: OperatorSpec(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One entry in the operator knowledge base.
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: arity
+      :type:  Arity
+
+
+   .. py:attribute:: category
+      :type:  Literal['leaf', 'trigger']
+
+
+   .. py:attribute:: summary
+      :type:  str
+
+
+.. py:data:: OPERATOR_SPECS
+   :type:  dict[str, OperatorSpec]
+
+.. py:data:: OPERATORS
+
+.. py:data:: DEPRECATED_OPERATORS
+   :type:  dict[str, str]
+
+.. py:function:: operator_error(operator: str) -> str
+
+   Build a helpful error message for an unknown/unsupported operator.
+
+
+.. py:function:: validate_leaf_value(operator: str, value: Any) -> None
+
+   Raise ``ValueError`` if ``value`` doesn't match ``operator``'s arity.
+
+
+.. py:class:: SortSpec(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A single ``sort`` entry.
+
+
+   .. py:attribute:: field
+      :type:  str
+
+
+   .. py:attribute:: direction
+      :type:  Literal['ASC', 'DESC']
+      :value: 'DESC'
+
+
+
+.. py:class:: FilterLeaf(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A leaf condition: ``{field, operator, value?}``.
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: field
+      :type:  str
+
+
+   .. py:attribute:: operator
+      :type:  str
+
+
+   .. py:attribute:: value
+      :type:  Any
+      :value: None
+
+
+
+.. py:class:: FilterGroup(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A nested group: ``{logic, filters[]}`` of leaves and/or sub-groups.
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: logic
+      :type:  Literal['AND', 'OR']
+      :value: 'AND'
+
+
+
+   .. py:attribute:: filters
+      :type:  list[FilterLeaf | FilterGroup]
+      :value: None
+
+
+
+.. py:class:: QueryBody(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   The full body POSTed to ``/api/query/{module}``.
+
+   ``to_body()`` renders the appliance-shaped dict (aliased ``__selectFields`` /
+   ``__ignoreFields``, empty ``sort`` dropped).
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: logic
+      :type:  Literal['AND', 'OR']
+      :value: 'AND'
+
+
+
+   .. py:attribute:: filters
+      :type:  list[FilterLeaf | FilterGroup]
+      :value: None
+
+
+
+   .. py:attribute:: sort
+      :type:  list[SortSpec]
+      :value: None
+
+
+
+   .. py:attribute:: select_fields
+      :type:  list[str] | None
+      :value: None
+
+
+
+   .. py:attribute:: ignore_fields
+      :type:  list[str] | None
+      :value: None
+
+
+
+   .. py:attribute:: limit
+      :type:  int | None
+      :value: None
+
+
+
+   .. py:attribute:: search
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: show_deleted
+      :type:  bool | None
+      :value: None
+
+
+
+   .. py:method:: to_body() -> dict[str, Any]
+
+      Render the appliance-shaped query dict.
+
+
+

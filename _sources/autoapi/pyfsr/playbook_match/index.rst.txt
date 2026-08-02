@@ -1,0 +1,262 @@
+pyfsr.playbook_match
+====================
+
+.. py:module:: pyfsr.playbook_match
+
+.. autoapi-nested-parse::
+
+   Client-side structural matching over playbook definitions.
+
+   The server-side filter language (:meth:`pyfsr.api.playbooks.PlaybooksAPI.find`)
+   covers single-dimension and cross-relationship-AND queries cheaply, but three
+   classes of question it *cannot* express, because ``steps.arguments`` is one JSON
+   column matched by substring:
+
+     * **same-step precision** -- "a step that is fortigate AND block_ip" (find()
+       would also match a playbook with fortigate in one step and block_ip in
+       another).
+     * **quantities** -- "exactly 2 set-variable steps and at least 1 code-snippet".
+     * **parent/child joins** -- "a manual playbook whose referenced child blocks an
+       IP".
+     * **trigger metadata** -- "manual playbooks tied to the ``alerts`` module", and
+       surfacing the Execute-menu button label (:func:`manual_on` /
+       :func:`trigger_label` / :func:`trigger_resources`).
+
+   This module parses each playbook's steps into :class:`StepInfo` and evaluates
+   composable predicates against the parsed shape. The pure functions here are
+   appliance-free (unit-testable on fixture dicts); ``PlaybooksAPI`` wires them
+   to live fetches via ``match`` / ``match_across`` / ``manual_on_module``.
+
+   Example::
+
+       from pyfsr.playbook_match import step, count, trigger, all_of, manual_on
+       # 2 set-variable steps AND exactly 1 code-snippet:
+       pred = all_of(count(step(step_type="set_variable"), n=2),
+                     count(step(step_type="code_snippet"), n=1))
+       hits = client.playbooks.match(pred)
+       # manual playbooks tied to the alerts module, with their button labels:
+       for pb in client.playbooks.manual_on_module("alerts"):
+           print(pb["label"], "-", pb["name"])
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.playbook_match.StepMatcher
+   pyfsr.playbook_match.PlaybookPredicate
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.playbook_match.StepInfo
+   pyfsr.playbook_match.ParsedPlaybook
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.playbook_match.parse_playbook
+   pyfsr.playbook_match.step
+   pyfsr.playbook_match.count
+   pyfsr.playbook_match.has
+   pyfsr.playbook_match.trigger
+   pyfsr.playbook_match.trigger_step
+   pyfsr.playbook_match.trigger_label
+   pyfsr.playbook_match.trigger_resources
+   pyfsr.playbook_match.manual_on
+   pyfsr.playbook_match.all_of
+   pyfsr.playbook_match.any_of
+   pyfsr.playbook_match.none_of
+   pyfsr.playbook_match.join_parent_child
+
+
+Module Contents
+---------------
+
+.. py:class:: StepInfo(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One parsed playbook step (the fields structural predicates match on).
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: name
+      :type:  str | None
+
+
+   .. py:attribute:: step_type_raw
+      :type:  str | None
+
+
+   .. py:attribute:: connector
+      :type:  str | None
+
+
+   .. py:attribute:: operation
+      :type:  str | None
+
+
+   .. py:attribute:: arguments
+      :type:  dict[str, Any]
+      :value: None
+
+
+
+.. py:class:: ParsedPlaybook(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A playbook definition reduced to the shape predicates evaluate against.
+
+
+   .. py:attribute:: name
+      :type:  str | None
+
+
+   .. py:attribute:: uuid
+      :type:  str | None
+
+
+   .. py:attribute:: trigger_type
+      :type:  str | None
+
+
+   .. py:attribute:: steps
+      :type:  list[StepInfo]
+
+
+   .. py:attribute:: raw
+      :type:  dict[str, Any]
+      :value: None
+
+
+
+   .. py:method:: references() -> list[str]
+
+      UUIDs of child playbooks this playbook references (reference steps).
+
+      A WorkflowReference step targets its child by IRI in the ``workflowReference``
+      argument (``/api/3/workflows/<uuid>``) — live-verified, not by name.
+
+
+
+.. py:function:: parse_playbook(workflow: dict[str, Any]) -> ParsedPlaybook
+
+   Reduce a ``/api/3/workflows`` definition (with ``steps``) to a :class:`ParsedPlaybook`.
+
+   Pass a workflow fetched with relationships (``find(..., relationships=True)``
+   or ``get_definition``); without inlined ``steps`` the parsed step list is empty.
+
+
+.. py:data:: StepMatcher
+
+.. py:data:: PlaybookPredicate
+
+.. py:function:: step(*, step_type: str | None = None, connector: str | None = None, operation: str | None = None) -> StepMatcher
+
+   A matcher for a SINGLE step -- all given facets must hold on the same step.
+
+   ``step_type`` accepts a friendly alias (``set_variable``/``connector``/
+   ``code_snippet``/...; see ``STEP_TYPE_NAMES``) or a raw engine name.
+   ``connector``/``operation`` are matched case-insensitively as substrings of
+   the step's ``arguments.connector``/``arguments.operation`` (so ``block_ip``
+   matches ``block_ip`` and ``connector="fortigate"`` matches
+   ``fortigate-firewall``).
+
+
+.. py:function:: count(matcher: StepMatcher, *, n: int | None = None, min: int | None = None, max: int | None = None) -> PlaybookPredicate
+
+   True when the number of steps satisfying ``matcher`` meets the bound.
+
+   Pass ``n`` for an exact count, or ``min``/``max`` (inclusive) for a range.
+
+
+.. py:function:: has(matcher: StepMatcher) -> PlaybookPredicate
+
+   True when at least one step satisfies ``matcher`` (``count(min=1)``).
+
+
+.. py:function:: trigger(trigger_type: str) -> PlaybookPredicate
+
+   True when the playbook's start step is ``trigger_type`` (friendly or raw).
+
+
+.. py:function:: trigger_step(pb: ParsedPlaybook) -> StepInfo | None
+
+   The playbook's start/trigger step (the first ``cybersponse.*`` step).
+
+   The trigger step carries the playbook's activation metadata in its
+   ``arguments``: ``resources`` (the modules it's tied to), ``title`` (the
+   Execute-menu button label), and ``executeButtonText`` (the manual-input
+   dialog button). Returns ``None`` for a definition with no recognized trigger
+   step (e.g. fetched without relationships, or malformed).
+
+
+.. py:function:: trigger_label(pb: ParsedPlaybook) -> str | None
+
+   The UI label shown for a manual playbook's Execute-menu entry.
+
+   A manual trigger's display label is its ``arguments.title`` when set,
+   falling back to the playbook ``name``. Returns ``None`` only when neither
+   is present (a definition with no trigger step and no name).
+
+
+.. py:function:: trigger_resources(pb: ParsedPlaybook) -> list[str]
+
+   The module name-slugs a manual trigger is tied to (``arguments.resources``).
+
+   Live-verified: the list holds module names like ``"alerts"``, ``"incidents"``,
+   ``"threat_intel_feeds"`` -- not IRIs. Empty for a trigger with no module tie
+   (or no trigger step); a manual playbook started only from the playbook page,
+   not a module's Execute menu, has no ``resources``.
+
+
+.. py:function:: manual_on(module: str) -> PlaybookPredicate
+
+   True when the playbook is a manual trigger tied to ``module``.
+
+   ``module`` is matched case-insensitively against the trigger step's
+   ``arguments.resources`` list (module name-slugs like ``"alerts"`` or
+   ``"incidents"``). A manual playbook with no ``resources`` (one started only
+   from the playbook page, not a module's Execute menu) never matches.
+
+
+.. py:function:: all_of(*preds: PlaybookPredicate) -> PlaybookPredicate
+
+   Logical AND of playbook predicates.
+
+
+.. py:function:: any_of(*preds: PlaybookPredicate) -> PlaybookPredicate
+
+   Logical OR of playbook predicates.
+
+
+.. py:function:: none_of(*preds: PlaybookPredicate) -> PlaybookPredicate
+
+   Logical NOR -- true when none of ``preds`` hold.
+
+
+.. py:function:: join_parent_child(corpus: list[ParsedPlaybook], parent_pred: PlaybookPredicate, child_pred: PlaybookPredicate) -> list[ParsedPlaybook]
+
+   Parents satisfying ``parent_pred`` that reference a child satisfying ``child_pred``.
+
+   Pure: ``corpus`` is the full parsed playbook set; reference steps are resolved
+   to children by uuid within the corpus. A parent with no resolvable matching
+   child is excluded.
+
+

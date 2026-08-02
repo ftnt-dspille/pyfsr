@@ -1,0 +1,57 @@
+pyfsr.models
+============
+
+.. py:module:: pyfsr.models
+
+.. autoapi-nested-parse::
+
+   Typed Pydantic models for FortiSOAR records and API result shapes.
+
+   ``BaseRecord`` is the dict-compatible base for entity records; concrete models
+   live in :mod:`pyfsr.models._generated`.  ``ApiResult`` is the lighter base for
+   typed integration API response shapes (connector configs, job statuses, etc.)
+   defined in :mod:`pyfsr.models._integration`.
+
+   ``MODEL_REGISTRY`` maps a module (collection) name to its model so
+   :class:`~pyfsr.records.RecordSet` can parse responses into the right type,
+   falling back to ``BaseRecord`` for modules without a curated model.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/pyfsr/models/base/index
+   /autoapi/pyfsr/models/types/index
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.models.MODEL_REGISTRY
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.models.model_for
+
+
+Package Contents
+----------------
+
+.. py:data:: MODEL_REGISTRY
+   :type:  dict[str, type[base.BaseRecord]]
+
+.. py:function:: model_for(module: str) -> type[base.BaseRecord]
+
+   Return the registered model for ``module``, or ``BaseRecord`` if none.
+
+

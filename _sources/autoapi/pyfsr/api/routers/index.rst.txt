@@ -1,0 +1,64 @@
+pyfsr.api.routers
+=================
+
+.. py:module:: pyfsr.api.routers
+
+.. autoapi-nested-parse::
+
+   Agent router records (``/api/3/routers``).
+
+   A *router* is a secure-message-exchange endpoint an execution agent dials into; an agent
+   record references one at create time (see :meth:`~pyfsr.api.agents.AgentsAPI.create`). On a
+   single-master appliance there is typically exactly one, created by
+   ``sudo csadm secure-message-exchange enable``. Accessed as ``client.routers``.
+
+   Example::
+
+       router = client.routers.first()          # the one configured router, or None
+       client.agents.create("edge-1", router=router)
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.routers.RoutersAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: RoutersAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   List the agent secure-message routers.
+
+
+   .. py:method:: list(*, limit: int = 2147483647) -> list[dict[str, Any]]
+
+      Return router records (the ``hydra:member`` array). Each carries ``@id``,
+      ``uuid``, ``name``, ``address``, ``sni``, and the broker ``certificate`` PEM.
+
+      Doctest:
+
+          >>> from pyfsr._testing import demo_client
+          >>> client = demo_client()
+          >>> routers = client.routers.list()
+          >>> len(routers)
+          0
+
+
+
+   .. py:method:: first() -> dict[str, Any] | None
+
+      Return the first router by name (the usual single configured router), or None.
+
+      Raises nothing if none exist — callers that require one (e.g. creating an agent)
+      should check for ``None`` and prompt to enable the secure message exchange.
+
+
+

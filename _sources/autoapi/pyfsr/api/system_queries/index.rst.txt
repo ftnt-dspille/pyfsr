@@ -1,0 +1,197 @@
+pyfsr.api.system_queries
+========================
+
+.. py:module:: pyfsr.api.system_queries
+
+.. autoapi-nested-parse::
+
+   Saved datasets — ``/api/3/system_queries``.
+
+   A *system query* is a named, module-scoped filter — what the UI calls a
+   **dataset**. Two reasons to care:
+
+   1. Saved views: run one with :meth:`~pyfsr.api.search.SearchAPI.run_persisted`.
+   2. **A dataset on ``threat_intel_feeds`` is a TAXII collection.** The id served
+      at ``/api/taxii/1/collections/<id>/objects`` *is* the dataset uuid, so
+      creating one here is how you publish an outgoing threat feed that a FortiGate
+      (or any TAXII client) can pull. See :class:`~pyfsr.api.taxii.TaxiiAPI` and
+      ``examples/taxii_threat_feed_to_fortigate.py``.
+
+   .. warning::
+      **A filter without ``type``, or a query body without ``logic``, is silently
+      ignored** — FortiSOAR returns *every* record instead of raising. Build filters
+      with :meth:`SystemQueriesAPI.filter` and bodies with :meth:`SystemQueriesAPI.query`
+      (or pass :class:`~pyfsr.models.QueryDefinition`), which always emit both.
+
+   Accessed as ``client.system_queries``.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> datasets = client.system_queries.list()
+   >>> datasets[0]["name"]
+   'Block List (IP Address)'
+   >>> datasets[0].module
+   'threat_intel_feeds'
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.system_queries.SystemQueriesAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: SystemQueriesAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Create, read, and run saved datasets (``/api/3/system_queries``).
+
+
+   .. py:method:: filter(field: str, operator: str, value: Any, *, type: str | None = None) -> pyfsr.models.QueryFilter
+      :staticmethod:
+
+
+      Build one filter condition, inferring ``type`` when you don't pass it.
+
+      ``type`` is required by the appliance in practice — a filter without it
+      is dropped silently. Inference: IRI strings (``/api/3/...``) → ``object``
+      (picklists, lookups), everything else → ``primitive``. Pass ``type``
+      explicitly for dates (``datetime``).
+
+      .. rubric:: Example
+
+      >>> SystemQueriesAPI.filter("confidence", "gte", 70).type
+      'primitive'
+      >>> SystemQueriesAPI.filter(
+      ...     "reputation", "eq", "/api/3/picklists/7074e547"
+      ... ).type
+      'object'
+
+
+
+   .. py:method:: query(filters: list[pyfsr.models.QueryFilter | dict[str, Any]] | None = None, *, logic: str = 'AND', limit: int | None = 30, **extra: Any) -> pyfsr.models.QueryDefinition
+      :staticmethod:
+
+
+      Build a query body with ``logic`` always set.
+
+      .. rubric:: Example
+
+      >>> q = SystemQueriesAPI.query([SystemQueriesAPI.filter("confidence", "gte", 70)])
+      >>> q.logic, len(q.filters)
+      ('AND', 1)
+
+
+
+   .. py:method:: model_iri(module: str) -> str
+
+      Resolve a module slug to its ``model_metadatas`` IRI (needed by :meth:`create`).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.system_queries.model_iri("threat_intel_feeds")
+      '/api/3/model_metadatas/acbac353-3593-41d2-af46-67951cfab083'
+
+
+
+   .. py:method:: list(*, module: str | None = None, limit: int = 200) -> list[pyfsr.models.SystemQuery]
+
+      List datasets, optionally only those targeting ``module``.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> [d["name"] for d in client.system_queries.list(module="threat_intel_feeds")]
+      ['Block List (IP Address)']
+
+
+
+   .. py:method:: get(uuid: str) -> pyfsr.models.SystemQuery
+
+      Fetch one dataset by uuid.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.system_queries.get("7d245801-38d7-4400-9453-7bf7c42b7353")["name"]
+      'Block List (IP Address)'
+
+
+
+   .. py:method:: find_by_name(name: str, *, module: str | None = None) -> pyfsr.models.SystemQuery | None
+
+      Return the dataset called ``name`` (optionally scoped to ``module``), else None.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.system_queries.find_by_name("Block List (IP Address)")["uuid"]
+      '7d245801-38d7-4400-9453-7bf7c42b7353'
+
+
+
+   .. py:method:: create(*, name: str, module: str, query: pyfsr.models.QueryDefinition | dict[str, Any] | None = None, filters: list[pyfsr.models.QueryFilter | dict[str, Any]] | None = None, **fields: Any) -> pyfsr.models.SystemQuery
+
+      Create a dataset targeting ``module``.
+
+      Pass either a built ``query`` or bare ``filters`` (wrapped via
+      :meth:`query`, so ``logic`` is always set). ``module`` is a slug — the
+      ``model_metadatas`` IRI is resolved for you.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> ds = client.system_queries.create(
+      ...     name="Block List (IP Address)",
+      ...     module="threat_intel_feeds",
+      ...     filters=[SystemQueriesAPI.filter("confidence", "gte", 70)],
+      ... )
+      >>> ds["name"]
+      'Block List (IP Address)'
+
+
+
+   .. py:method:: ensure(*, name: str, module: str, query: pyfsr.models.QueryDefinition | dict[str, Any] | None = None, filters: list[pyfsr.models.QueryFilter | dict[str, Any]] | None = None, **fields: Any) -> pyfsr.models.SystemQuery
+
+      Idempotent :meth:`create` — reuse the dataset named ``name`` if present.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.system_queries.ensure(
+      ...     name="Block List (IP Address)", module="threat_intel_feeds"
+      ... )["uuid"]
+      '7d245801-38d7-4400-9453-7bf7c42b7353'
+
+
+
+   .. py:method:: update(uuid: str, **fields: Any) -> pyfsr.models.SystemQuery
+
+      Partially update a dataset (``PUT``). Pass only the keys to change.
+
+
+
+   .. py:method:: delete(uuid: str) -> None
+
+      Delete a dataset.
+
+
+
+   .. py:method:: run(uuid: str, *, limit: int | None = None, page: int | None = None) -> dict[str, Any]
+
+      Execute a saved dataset and return the matching records.
+
+      Delegates to :meth:`~pyfsr.api.search.SearchAPI.run_persisted`, resolving
+      the dataset's own module for you.
+
+
+

@@ -1,0 +1,121 @@
+pyfsr.jinja_validate
+====================
+
+.. py:module:: pyfsr.jinja_validate
+
+.. autoapi-nested-parse::
+
+   Static validation of the Jinja expressions embedded in playbook step arguments.
+
+   FortiSOAR renders Jinja inside step ``arguments`` at execution time, so a
+   malformed expression — or one whose *type* is wrong for the field it feeds —
+   surfaces only as a runtime 400/500 mid-run, long after deployment. This module
+   lints those expressions *before* deploy, catching the classes of bug that
+   motivated it (see ``AGENT_OBSERVABILITY_TOOLING_PLAN.md`` Track D4):
+
+   - **Syntax errors** — an unclosed ``{{``/``{%``, a bad filter call, etc.
+   - **Unknown filters** — a filter name FortiSOAR does not register (a typo, or a
+     stock-Jinja filter FSR omits), checked against the appliance's filter catalog.
+   - **``picklist``-returns-dict** — the exact bug from the FortiEDR C2 scenario: a
+     whole-value ``{{ "X" | picklist("V") }}`` with no key argument evaluates to the
+     *dict* picklist item, not a string, so the field POST fails with a 400. The fix
+     is a key extraction: ``picklist("V", "@id")``.
+
+   The core (:func:`validate_jinja_expressions`) is pure — it takes a list of step
+   dicts and returns issues, with no client or network — so it validates compiled
+   output before it is ever posted. :meth:`pyfsr.api.playbooks.PlaybooksAPI.validate_jinja`
+   wraps it to lint a live playbook by uuid.
+
+   ``jinja2`` is an optional dependency (not required by the client). When present,
+   expressions get a real parse; when absent, a delimiter-balance check stands in so
+   validation still runs everywhere — only the precise syntax-error messages are lost.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.jinja_validate.FSR_JINJA_FILTERS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.jinja_validate.JinjaIssue
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.jinja_validate.validate_jinja_expressions
+
+
+Module Contents
+---------------
+
+.. py:data:: FSR_JINJA_FILTERS
+   :type:  frozenset[str]
+
+.. py:class:: JinjaIssue(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One problem found in a step's Jinja expression.
+
+   ``severity`` is ``"error"`` for things that will definitely fail (syntax,
+   unbalanced delimiters) and ``"warning"`` for likely-wrong-but-not-certain
+   findings (unknown filter, ``picklist`` with no key). ``path`` locates the
+   argument within the step (e.g. ``"arguments.request.ip"``).
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: step
+      :type:  str
+
+
+   .. py:attribute:: path
+      :type:  str
+
+
+   .. py:attribute:: expression
+      :type:  str
+
+
+   .. py:attribute:: severity
+      :type:  str
+
+
+   .. py:attribute:: kind
+      :type:  str
+
+
+   .. py:attribute:: message
+      :type:  str
+
+
+.. py:function:: validate_jinja_expressions(steps: list[dict[str, Any]], *, known_filters: frozenset[str] | set[str] | None = None) -> list[JinjaIssue]
+
+   Lint the Jinja in a list of playbook step dicts. Pure — no client/network.
+
+   :param steps: step dicts, each with a ``name`` and an ``arguments`` mapping (the
+                 shape from ``Workflow.steps`` / a compiled playbook envelope).
+   :param known_filters: the set of filter names to treat as valid. Defaults to
+                         :data:`FSR_JINJA_FILTERS` (the appliance catalog). Pass a set derived
+                         from a specific box to validate against that box's registered filters.
+
+   :returns: A list of :class:`JinjaIssue`, in step-then-argument order (empty if
+             clean). Errors and warnings are interleaved by position; filter on
+             ``severity`` to separate them.
+
+

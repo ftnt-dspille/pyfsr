@@ -1,0 +1,141 @@
+pyfsr.cli.playbook
+==================
+
+.. py:module:: pyfsr.cli.playbook
+
+.. autoapi-nested-parse::
+
+   ``pyfsr playbook`` command group — author playbooks in YAML and deploy them.
+
+   Unlike the SSH-based ``appliance`` group, these subcommands talk to the
+   FortiSOAR **API**, so they build a :class:`~pyfsr.client.FortiSOAR` from the
+   ``FSR_*`` environment (see :class:`~pyfsr.config.EnvConfig`) with optional CLI
+   overrides.
+
+   Subcommands (this group is the authoring "start here" index):
+
+   - ``steps`` — list every friendly ``type:`` keyword with its canonical FSR
+     name and one-line purpose (offline).
+   - ``step-help <type> [--schema]`` — keys + a real compiling friendly-YAML
+     example for one step type (offline).
+   - ``examples [--intent ".."] [--stage S] [--manifest]`` -- list the foundational
+     playbook library (whole, compiling, use-case-shaped worked examples an agent
+     retrieves and adapts); ``--manifest`` emits the retrieval JSON payload (offline).
+   - ``show <slug>`` — print one library playbook's metadata + full friendly YAML (offline).
+   - ``compile <file.yaml> [-o out.json]`` — compile only (no network); emit the
+     ``workflow_collections`` envelope, diagnostics to stderr.
+   - ``validate <file.yaml>`` — compile and report diagnostics; nonzero exit on
+     blocking errors.
+   - ``lint <file.yaml>`` — live preflight: warn about connector steps with no
+     config on the target.
+   - ``deploy <file.yaml> [--replace] [--dry-run]`` — compile then import via the
+     API client.
+
+   ``compile``/``validate``/``deploy``/``lint`` accept ``--refresh-catalog``: warm
+   the reference catalog from the live instance before compiling so connector and
+   operation tokens (including custom connectors like ``code-runner``) resolve to
+   real labels/versions. Without it the offline slim catalog carries no connector
+   rows, so connector steps compile without a ``name``/``version`` and the playbook
+   editor renders them as "undefined".
+
+   Runtime helper (Python SDK, not a CLI command): ``client.manual_input.answer()``
+   drives a paused Manual Input / Approval step in one call.
+
+   The compiler is the optional ``pyfsr[playbooks]`` extra; handlers import it
+   lazily so the rest of the CLI works without it.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.playbook.add_connection_args
+   pyfsr.cli.playbook.add_refresh_catalog_arg
+   pyfsr.cli.playbook.cmd_compile
+   pyfsr.cli.playbook.cmd_validate
+   pyfsr.cli.playbook.cmd_deploy
+   pyfsr.cli.playbook.cmd_lint
+   pyfsr.cli.playbook.cmd_steps
+   pyfsr.cli.playbook.cmd_step_help
+   pyfsr.cli.playbook.cmd_examples
+   pyfsr.cli.playbook.cmd_show
+   pyfsr.cli.playbook.cmd_versions_list
+   pyfsr.cli.playbook.cmd_versions_get
+   pyfsr.cli.playbook.cmd_versions_create
+   pyfsr.cli.playbook.cmd_versions_restore
+   pyfsr.cli.playbook.cmd_versions_delete
+   pyfsr.cli.playbook.cmd_versions_diff
+   pyfsr.cli.playbook.build_subparser
+
+
+Module Contents
+---------------
+
+.. py:function:: add_connection_args(p: argparse.ArgumentParser) -> None
+
+   API-connection overrides; anything omitted falls back to ``FSR_*`` env.
+
+
+.. py:function:: add_refresh_catalog_arg(p: argparse.ArgumentParser) -> None
+
+   Opt-in: warm the reference catalog live before compiling.
+
+
+.. py:function:: cmd_compile(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_validate(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_deploy(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_lint(args: argparse.Namespace) -> int
+
+   Compile, then warn about connector steps with no config on the target.
+
+   Exit 0 = clean, 2 = warnings, 1 = compile/connection error. Never blocks:
+   a playbook may be deployed before its connector configs are created.
+
+
+.. py:function:: cmd_steps(args: argparse.Namespace) -> int
+
+   List every friendly ``type:`` keyword with its canonical name + purpose.
+
+
+.. py:function:: cmd_step_help(args: argparse.Namespace) -> int
+
+   Show authoring help + a real compiling example for one step type.
+
+
+.. py:function:: cmd_examples(args: argparse.Namespace) -> int
+
+   List the foundational playbook library (the worked-examples layer).
+
+   Prints every library playbook with its stage, intent (goal), step types, and
+   compile status — the table an agent scans to find the closest worked example to
+   adapt. With ``--intent`` filters by goal substring; ``--manifest`` emits the
+   retrieval JSON payload instead of a table; ``--stage`` filters by stage.
+
+
+.. py:function:: cmd_show(args: argparse.Namespace) -> int
+
+   Print one library playbook: its metadata + the full friendly YAML.
+
+
+.. py:function:: cmd_versions_list(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_versions_get(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_versions_create(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_versions_restore(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_versions_delete(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_versions_diff(args: argparse.Namespace) -> int
+
+.. py:function:: build_subparser(asub: argparse._SubParsersAction) -> None
+
+   Wire the ``playbook`` subcommands onto an existing subparsers object.
+
+
