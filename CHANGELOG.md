@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.18.7] - 2026-08-01
+
+### Added
+- **`client.export_templates.update()`** -- change an export template that
+  already exists. The API covered create/get/list/find_by_name/get_or_create/
+  delete, but `get_or_create` deliberately leaves an existing template's
+  `options` alone, so editing them meant hand-PUTting
+  `/api/3/export_templates/<uuid>`. `options` is sent whole and **replaces**
+  the stored value (the server does not deep-merge it), so the docstring shows
+  the read-edit-write shape. Live-verified on 8.0.0: options replaced and
+  re-read, a nested `connectors[].install_mode` round-tripped, and a plain
+  field updated.
+
+### Fixed
+- **`workflow_collections._resolve_collection` no longer times out.** Resolving
+  a collection *by name* listed every collection with `$relationships=true` --
+  inlining every workflow of every collection -- then matched on the name and
+  discarded the rest. Measured against a live appliance with 209 collections,
+  the relationship-free listing takes 2.8s while expansion costs 0.5-1.1s per
+  collection, projecting 105-240s against a 30s read timeout: `export_to_yaml(
+  <name>)` could not complete at all, and it degraded as content grew. It now
+  matches against a relationship-free listing and then fetches the single
+  collection with relationships, exactly as the by-uuid branch already did.
+
 ## [0.18.6] - 2026-07-31
 
 ### Added
