@@ -230,11 +230,11 @@ def test_execute_defaults_empty_params_and_config():
 
 
 def test_execute_config_accepts_name_passthrough():
-    """config= accepts a display NAME — passed straight to the wire (server resolves)."""
+    """config= accepts a display NAME -- passed straight to the wire (server resolves)."""
     api, _client = _api()
     api.execute("virustotal", "op", config="Alt")
     _, body = _client.post_calls[0]
-    assert body["config"] == "Alt"  # name, not a UUID — server resolves it
+    assert body["config"] == "Alt"  # name, not a UUID -- server resolves it
 
 
 # -- install / import-job helpers -------------------------------------------
@@ -378,7 +378,7 @@ def test_create_configuration_unknown_connector_raises():
         api.create_configuration("brand-new", {"k": "v"}, name="c", version="1.0", validate=False)
 
 
-# A realistic POST response from /api/integration/configuration/ — the saved
+# A realistic POST response from /api/integration/configuration/ -- the saved
 # config record (status is the int active-flag, not a string "Success").
 _CREATED_CONFIG = {"config_id": "cfg-1", "name": "c", "status": 1, "connector": 16}
 
@@ -831,7 +831,7 @@ def test_action_ui_schema_reveal_respects_required_only():
 
 def test_operation_tolerates_empty_dict_parameters():
     # Live-grounded: fortinet-fortiai-proxy ships an op with ``parameters: {}``
-    # (a dict, not a list) — it must not sink the whole definition parse.
+    # (a dict, not a list) -- it must not sink the whole definition parse.
     from pyfsr.models import Operation
 
     defn = {
@@ -889,7 +889,7 @@ def test_connector_detail_posts_empty_body_to_id():
 def test_list_configurations_filters_by_configuration_name():
     """`name` is the CONFIGURATION's name, not the connector's.
 
-    This test used to pass name="virustotal" — a connector name — which read as
+    This test used to pass name="virustotal" -- a connector name -- which read as
     though it filtered by connector and quietly encoded the wrong belief (it only
     ever asserted passthrough, so it could not catch the mismatch). Live-checked:
     the endpoint's `name` matches the configuration name, and a connector name
@@ -935,7 +935,7 @@ def test_list_configurations_unknown_connector_returns_empty_without_querying():
 
 
 def test_list_configurations_rejects_bool_connector():
-    # bool is an int subclass — connector=True would otherwise query id 1.
+    # bool is an int subclass -- connector=True would otherwise query id 1.
     api, _ = _api()
     with pytest.raises(TypeError, match="not a bool"):
         api.list_configurations(connector=True)
@@ -1655,7 +1655,7 @@ def test_ensure_configured_installed_version_optional(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# ensure_version auto_fetch fallback (T3.6) — Content Hub fails -> repo download
+# ensure_version auto_fetch fallback (T3.6) -- Content Hub fails -> repo download
 # ---------------------------------------------------------------------------
 
 
@@ -1754,7 +1754,7 @@ def test_healthcheck_config_id_kwarg_warns():
 
 
 def test_execute_config_kwarg_is_canonical_no_warning():
-    """config= is the canonical param — it must NOT warn."""
+    """config= is the canonical param -- it must NOT warn."""
     import warnings as _w
 
     api, _ = _api()
@@ -1788,7 +1788,54 @@ def test_passing_multiple_config_params_raises(call):
 
 
 def test_execute_config_rejects_dict():
-    """A dict passed as config= is the field-map sense — catch it loudly."""
+    """A dict passed as config= is the field-map sense -- catch it loudly."""
     api, _ = _api()
     with pytest.raises(TypeError, match="field-map"):
         api.execute("acme", "op", version="9.9", config={"server": "x"})
+
+
+# -- set_default_configuration ---------------------------------------------
+_FG_RECORD = {
+    "id": 38,
+    "config_id": "fg-1",
+    "name": "fortigate-lab",
+    "default": False,
+    "status": 1,
+    "connector": 15,
+    "connector_version": "5.4.0",
+    "agent": "agent-uuid",
+    "config": {"address": "fw.example.com", "api_key": "<ciphertext>", "vdom": "root"},
+}
+
+
+def test_set_default_configuration_resends_the_stored_config_verbatim():
+    """The whole point: promote the flag without touching live credentials.
+
+    A caller who builds the PUT body from the connector LISTING sends
+    ``config: null`` (the field map is only on the single-record GET) and wipes
+    the secrets. This must read the record first and echo ``config`` back.
+    """
+    api, client = _api(get_map={"/api/integration/configuration/fg-1/": _FG_RECORD})
+    api.set_default_configuration("fortigate-firewall", "fg-1")
+    endpoint, body = client.put_calls[0]
+    assert endpoint == "/api/integration/configuration/fg-1/"
+    assert body["default"] is True
+    assert body["config"] == _FG_RECORD["config"]
+    assert body["name"] == "fortigate-lab"
+    assert body["connector"] == 15
+
+
+def test_set_default_configuration_preserves_the_agent_binding():
+    """Omitting ``agent`` on the PUT silently moves execution to the self-agent."""
+    api, client = _api(get_map={"/api/integration/configuration/fg-1/": _FG_RECORD})
+    api.set_default_configuration("fortigate-firewall", "fg-1")
+    _, body = client.put_calls[0]
+    assert body["agent"] == "agent-uuid"
+
+
+def test_set_default_configuration_rejects_an_unknown_config_id():
+    import pytest
+
+    api, _ = _api(get_map={})
+    with pytest.raises(ValueError, match="not found"):
+        api.set_default_configuration("fortigate-firewall", "nope")

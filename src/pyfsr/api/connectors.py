@@ -1650,6 +1650,92 @@ class ConnectorsAPI(BaseAPI):
         # this (coerced to None) -- see its validator in models/_integration.py.
         return ConnectorConfig.model_validate(raw)
 
+    def set_default_configuration(
+        self,
+        connector: str,
+        config_id: str | None = None,
+        *,
+        name: str | None = None,
+        refresh: bool = True,
+    ) -> ConnectorConfig:
+        """Mark an existing configuration the connector's default, changing nothing else.
+
+        There is no flag-only route: the API only exposes
+        ``PUT /api/integration/configuration/{config_id}/``, which replaces the
+        whole record. Doing that by hand is how credentials get wiped -- the
+        connector listing returns ``config: null`` (the field map is only on the
+        single-record GET), so a caller who builds the body from the listing
+        PUTs an empty ``config`` over live secrets. This reads the current
+        record first and re-sends it verbatim with ``default=True``.
+
+        ``validate``/``autofill`` are deliberately NOT applied. The stored
+        ``config`` is already whatever the appliance accepted, and secrets come
+        back encrypted at rest; materializing it against the schema would
+        rewrite fields this call has no business touching.
+
+        The appliance re-encrypts secrets on save, so the stored ciphertext for
+        a field like ``api_key`` legitimately DIFFERS after this call while the
+        plaintext is unchanged -- do not read that as corruption. Verified on a
+        live 8.0.0 appliance: a FortiGate configuration that could not be
+        health-checked (``Could not find a configuration matching the id
+        get_default_config or the default configuration``) reported
+        ``Available`` afterwards, with the upstream still reachable.
+
+        Args:
+            connector: connector machine name, e.g. ``"fortigate-firewall"``.
+            config_id: the configuration to promote. Omit when the connector has
+                exactly one configuration and it should be the default.
+            name: select the configuration by its label instead of ``config_id``.
+            refresh: drop the cached configured-connector listing afterwards.
+
+        Returns:
+            The updated :class:`~pyfsr.models.ConnectorConfig`.
+
+        Raises:
+            ValueError: if the connector isn't installed, if neither
+                ``config_id`` nor ``name`` is given and the connector has zero or
+                more than one configuration, or if ``name`` matches no
+                configuration.
+        """
+        if config_id is None:
+            configs = self.list_configurations(connector=connector)
+            if name is not None:
+                configs = [c for c in configs if getattr(c, "name", None) == name]
+                if not configs:
+                    raise ValueError(f"{connector!r} has no configuration named {name!r}")
+            if not configs:
+                raise ValueError(f"{connector!r} has no configurations to make default")
+            if len(configs) > 1:
+                labels = ", ".join(repr(getattr(c, "name", "?")) for c in configs)
+                raise ValueError(
+                    f"{connector!r} has {len(configs)} configurations ({labels}); "
+                    f"pass config_id= or name= to choose one"
+                )
+            config_id = configs[0].config_id
+
+        cur = self.client.get(f"/api/integration/configuration/{config_id}/")
+        if not isinstance(cur, dict) or "config" not in cur:
+            raise ValueError(f"configuration {config_id!r} not found on this appliance")
+
+        body: dict[str, Any] = {
+            "connector": cur.get("connector"),
+            "connector_name": connector,
+            "connector_version": cur.get("connector_version") or self.resolve_version(connector),
+            "name": cur.get("name"),
+            "default": True,
+            "config_id": config_id,
+            "config": cur.get("config"),
+        }
+        if cur.get("agent"):
+            # A connector bound to a remote agent loses that binding if the PUT
+            # omits it, which silently moves execution back to the self-agent.
+            body["agent"] = cur["agent"]
+        resp = self.client.put(f"/api/integration/configuration/{config_id}/", data=body)
+        if refresh:
+            self.clear_cache()
+        raw = resp if isinstance(resp, dict) else {"result": resp}
+        return ConnectorConfig.model_validate(raw)
+
     def delete_configuration(self, config_id: str, *, refresh: bool = True) -> None:
         """Delete a connector configuration by id
         (``DELETE /api/integration/configuration/{config_id}/``).

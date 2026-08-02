@@ -418,6 +418,16 @@ def _h_update_connector_configuration(
     )
 
 
+def _h_set_default_connector_config(
+    client,
+    *,
+    connector,
+    config_id=None,
+    name=None,
+) -> Any:
+    return to_jsonable(client.connectors.set_default_configuration(connector, config_id, name=name))
+
+
 def _h_upsert_connector_configuration(
     client,
     *,
@@ -1205,6 +1215,29 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["connector", "config_id", "config", "name"],
         ),
         _h_update_connector_configuration,
+    ),
+    ToolSpec(
+        "set_default_connector_config",
+        "Mark an existing configuration the connector's default, changing nothing else. Use this instead of "
+        "update_connector_configuration when the ONLY change is the default flag: there is no flag-only route, "
+        "so a hand-built PUT replaces the whole record, and the connector listing returns config:null -- which "
+        "wipes live credentials. This re-reads the stored config and echoes it back verbatim. Fixes a connector "
+        "whose healthcheck fails with 'Could not find a configuration matching the id get_default_config'.",
+        _obj(
+            {
+                "connector": _CONNECTOR,
+                "config_id": {
+                    "type": "string",
+                    "description": "The configuration to promote. Omit when the connector has exactly one.",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Select the configuration by its label instead of config_id.",
+                },
+            },
+            ["connector"],
+        ),
+        _h_set_default_connector_config,
     ),
     ToolSpec(
         "upsert_connector_configuration",
