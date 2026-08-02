@@ -1,12 +1,11 @@
 name: Documentation
 
+# No `push` trigger of its own. pr-tests.yml now runs on pushes to main and
+# calls this workflow as its `docs` job, which is what produces the required
+# `docs / docs` context. A standalone push trigger here would build the docs a
+# second time on every main push and report under the name `docs`, which is not
+# the context the ruleset asks for.
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'src/pyfsr/**'
-      - 'docs/**'
-      - '.github/workflows/docs.yml'
   workflow_call:
     inputs:
       ref:
@@ -99,7 +98,7 @@ jobs:
       - name: Deploy to GitHub Pages
         # Deploy on release so the public site always reflects the published
         # version (hatch-vcs derives a clean ``X.Y.Z`` only at the tagged commit).
-        # A plain main push builds for verification but does not deploy — that
+        # A plain main push builds for verification but does not deploy -- that
         # would re-publish a ``X.Y.Z+1.devN`` title between releases. A manual
         # workflow_dispatch deploys on demand for docs-only fixes.
         if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
