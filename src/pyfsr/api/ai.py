@@ -678,16 +678,21 @@ class AIApi(BaseAPI):
 
         .. note::
            On fsr-ai 8.0.0 the ``GET .../{uuid}/verify`` handler declares
-           ``model_id`` as a **path** parameter (same slot as ``uuid``), so
-           passing it as a query param triggers a 422. This method sends it as
-           part of the path instead. If the endpoint is unreachable or 500s
-           (known on some builds), use :meth:`test_llm_config` which calls the
-           ``POST /config/verify`` body-based endpoint instead.
+           ``model_id`` as a **path** parameter occupying the same slot as
+           ``uuid``, so there is no way to send both. ``uuid`` wins: it is what
+           selects the config, and the config's own ``modelname`` is what gets
+           tested. ``model_id`` is therefore **accepted and ignored** -- it is
+           sent neither as a query param (which 422s) nor in the path. It is
+           kept only so callers do not break, and so the argument is here if a
+           later build gives it a slot of its own. If the endpoint is
+           unreachable or 500s (known on some builds), use
+           :meth:`test_llm_config`, which calls the ``POST /config/verify``
+           body-based endpoint instead.
 
         Args:
             uuid: the LLM config UUID (from :meth:`list_llm_configs`).
-            model_id: optional model identifier (unused on some builds -- the
-                config's own ``modelname`` is what gets tested).
+            model_id: ignored -- see the note above. The config's own
+                ``modelname`` is what gets tested.
 
         Returns:
             The verification result dict from the appliance.
