@@ -69,6 +69,30 @@ class ExportTemplatesAPI(BaseAPI):
             return existing, False
         return self.create(name, options=options, **fields), True
 
+    def update(self, ref: str, *, options: dict[str, Any] | None = None, **fields: Any) -> ExportTemplate:
+        """Update an export template by uuid or IRI (``PUT``), returning it typed.
+
+        Pass only what changes. ``options`` is sent whole and **replaces** the
+        stored value rather than merging into it -- the server does not deep-merge
+        it, so read the current template, edit its ``options``, and send the
+        result back:
+
+            tmpl = client.export_templates.get(uuid)
+            opts = tmpl.options
+            opts["connectors"][0]["install_mode"] = "tgz"
+            client.export_templates.update(uuid, options=opts)
+
+        This is the one operation :meth:`get_or_create` deliberately does not do:
+        it leaves an existing template's ``options`` alone, so changing them was
+        previously only possible by hand-PUTting the raw endpoint.
+        """
+        payload: dict[str, Any] = dict(fields)
+        if options is not None:
+            payload["options"] = options
+        if not payload:
+            raise ValueError("update() requires at least one field to change")
+        return ExportTemplate.model_validate(self.client.put(f"{_BASE}/{iri_to_uuid(ref)}", data=payload))
+
     def delete(self, ref: str) -> None:
         """Delete an export template by uuid or IRI."""
         self.client.delete(f"{_BASE}/{iri_to_uuid(ref)}")
