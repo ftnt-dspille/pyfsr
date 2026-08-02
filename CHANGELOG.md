@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.18.8] - 2026-08-02
+
+### Fixed
+- **`RunStep.is_slow` / `RunStepSnapshot.is_slow` now honour a configurable
+  threshold.** Both were declared as `@property def is_slow(self,
+  threshold_ms=30000)`. A property getter is only ever invoked as `fget(self)`,
+  so `threshold_ms` could never be supplied by anyone -- the signature advertised
+  a knob that did not exist and the flag was permanently pinned to 30s. Nothing
+  raised, because the default filled the parameter in on every call, so it read
+  as working. The threshold now lives in a `slow_threshold_ms` field (default
+  `30_000`, excluded from serialization -- it is a client-side view setting, not
+  appliance data) and `is_slow` compares against it.
+- **`playbooks.step_timeline(slow_threshold_ms=...)` applies the argument it
+  documents.** It was accepted, documented as being "baked into the flag", and
+  then never used -- it had nowhere to go, given the above. It is now set on each
+  returned snapshot, so `is_slow` reflects the threshold that was asked for.
+  Passing `slow_threshold_ms=5_000` previously left every step flagged against
+  30s, silently under-reporting slow steps.
+
 ## [0.18.7] - 2026-08-01
 
 ### Added

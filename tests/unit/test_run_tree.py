@@ -144,7 +144,7 @@ def test_wait_for_task_times_out():
 
 
 def test_wait_for_task_on_poll_drives_run_to_terminal(monkeypatch):
-    """The callback acts on the live run (flips it terminal) — the mid-flight
+    """The callback acts on the live run (flips it terminal) -- the mid-flight
     gate-driving pattern collapsed into one loop."""
     runs = {"10": {"name": "P", "status": "executing", "parent": None}}
     api = PlaybooksAPI(TreeClient(runs))
@@ -210,7 +210,7 @@ def test_step_status_returns_step_state():
 # --- run_tree(steps=True): per-step I/O snapshots on the root ---------------
 def test_run_tree_steps_true_enriches_root_with_snapshots():
     """steps=True fetches the root with step_detail and attaches slim
-    RunStepSnapshots (name/status/result_preview) — enough to drill in without a
+    RunStepSnapshots (name/status/result_preview) -- enough to drill in without a
     separate run_env call. Children stay slim (no steps)."""
     runs = {
         "10": {
@@ -237,7 +237,7 @@ def test_run_tree_steps_true_enriches_root_with_snapshots():
 
 
 def test_run_tree_steps_false_default_no_step_detail_fetch():
-    """Default (steps=False) does not request step_detail — the root carries no
+    """Default (steps=False) does not request step_detail -- the root carries no
     snapshots, and the fetch URL omits step_detail=true."""
     runs = {
         "10": {
@@ -256,7 +256,7 @@ def test_run_tree_steps_false_default_no_step_detail_fetch():
 
 def test_run_tree_steps_trims_large_result_to_preview():
     """A step with a huge result gets a capped result_preview (~500 chars + …),
-    not the full blob — keeps the tree lean for an agent context."""
+    not the full blob -- keeps the tree lean for an agent context."""
     big = {"rows": [{"k": i} for i in range(200)]}  # ~1.5KB JSON
     runs = {
         "10": {
@@ -287,3 +287,48 @@ def test_run_tree_steps_none_result_preview_is_none():
     tree = PlaybooksAPI(TreeClient(runs)).run_tree(10, steps=True)
     assert tree.steps[0].result_preview is None
     assert tree.steps[0].status == "incipient"
+
+
+def test_is_slow_honours_a_configured_threshold():
+    """``is_slow`` reads the per-snapshot threshold.
+
+    It was declared as ``@property def is_slow(self, threshold_ms=30000)``. A
+    property getter is only ever called with ``self``, so the threshold was
+    unreachable -- permanently 30s -- and no caller could ever supply one.
+    """
+    from pyfsr.models._playbooks import RunStep, RunStepSnapshot
+
+    snap = RunStepSnapshot(name="Hunt", duration_ms=5_000)
+    assert snap.is_slow is False  # under the 30s default
+    snap.slow_threshold_ms = 1_000
+    assert snap.is_slow is True  # over the configured threshold
+    assert RunStep(duration_ms=5_000, slow_threshold_ms=1_000).is_slow is True
+
+
+def test_slow_threshold_ms_is_not_serialized():
+    """The threshold is a client-side view setting, not appliance data."""
+    from pyfsr.models._playbooks import RunStepSnapshot
+
+    snap = RunStepSnapshot(name="Hunt", duration_ms=5_000, slow_threshold_ms=1_000)
+    assert "slow_threshold_ms" not in snap.to_dict(by_alias=True)
+
+
+def test_step_timeline_applies_slow_threshold_ms():
+    """The documented ``slow_threshold_ms`` argument reaches the returned models."""
+    runs = {
+        "10": {
+            "name": "P",
+            "status": "finished",
+            "parent": None,
+            "steps": {
+                "Hunt": {
+                    "status": "finished",
+                    "started": "2026-01-01T00:00:00Z",
+                    "completed": "2026-01-01T00:00:05Z",  # 5s
+                }
+            },
+        }
+    }
+    api = PlaybooksAPI(TreeClient(runs))
+    assert api.step_timeline(10)[0].is_slow is False  # 5s < 30s default
+    assert api.step_timeline(10, slow_threshold_ms=1_000)[0].is_slow is True  # 5s > 1s

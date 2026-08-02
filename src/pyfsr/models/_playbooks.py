@@ -2,14 +2,14 @@
 
 Two families live here:
 
-- **Output shapes** (``ApiResult`` subclasses) — the flattened dicts that
+- **Output shapes** (``ApiResult`` subclasses) -- the flattened dicts that
   :class:`~pyfsr.api.playbooks.PlaybooksAPI` returns by default. They stay
   dict-compatible (``r["status"]`` / ``r.get(...)`` / ``"pk" in r``) so callers
   written against the old dict API keep working, while new code gets typed
   fields and IDE completion. The full, unshaped run entity is
   :class:`~pyfsr.models.WorkflowRun`; these are the curated *views* of it.
 
-- **Input requests** (``BaseModel`` subclasses) — typed, validated argument
+- **Input requests** (``BaseModel`` subclasses) -- typed, validated argument
   bundles for the write verbs (trigger / resume / approval / create). Each
   exposes :meth:`to_body` to build the wire payload. ``PlaybooksAPI`` constructs
   these internally from keyword args (mapping pydantic ``ValidationError`` back
@@ -62,7 +62,7 @@ class RunStep(ApiResult):
     """One step's outcome within a run, as reshaped by :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_env`.
 
     Timing fields (``start_time`` / ``end_time`` / ``duration_ms``) are parsed
-    from the wire's ``started`` / ``completed`` ISO timestamps — available
+    from the wire's ``started`` / ``completed`` ISO timestamps -- available
     when ``step_detail=True`` (which :meth:`~pyfsr.api.playbooks.PlaybooksAPI.run_env` always sets).
     """
 
@@ -71,11 +71,14 @@ class RunStep(ApiResult):
     start_time: str | None = None
     end_time: str | None = None
     duration_ms: int | None = None
+    #: Threshold :attr:`is_slow` compares against. Excluded from serialization --
+    #: it is a client-side view setting, not a field the appliance sends.
+    slow_threshold_ms: int = Field(default=30_000, exclude=True)
 
     @property
-    def is_slow(self, threshold_ms: int = 30000) -> bool:
-        """``True`` when ``duration_ms`` exceeds ``threshold_ms`` (default 30s)."""
-        return self.duration_ms is not None and self.duration_ms > threshold_ms
+    def is_slow(self) -> bool:
+        """``True`` when ``duration_ms`` exceeds :attr:`slow_threshold_ms` (default 30s)."""
+        return self.duration_ms is not None and self.duration_ms > self.slow_threshold_ms
 
 
 class RunStepSnapshot(ApiResult):
@@ -96,11 +99,14 @@ class RunStepSnapshot(ApiResult):
     start_time: str | None = None
     end_time: str | None = None
     duration_ms: int | None = None
+    #: Threshold :attr:`is_slow` compares against. Excluded from serialization --
+    #: it is a client-side view setting, not a field the appliance sends.
+    slow_threshold_ms: int = Field(default=30_000, exclude=True)
 
     @property
-    def is_slow(self, threshold_ms: int = 30000) -> bool:
-        """``True`` when ``duration_ms`` exceeds ``threshold_ms`` (default 30s)."""
-        return self.duration_ms is not None and self.duration_ms > threshold_ms
+    def is_slow(self) -> bool:
+        """``True`` when ``duration_ms`` exceeds :attr:`slow_threshold_ms` (default 30s)."""
+        return self.duration_ms is not None and self.duration_ms > self.slow_threshold_ms
 
 
 class RunEnv(ApiResult):
@@ -144,8 +150,8 @@ class WaitProgress(BaseModel):
     """A single poll snapshot handed to the ``on_poll`` callback of
     :meth:`~pyfsr.api.playbooks.PlaybooksAPI.wait_for_task`.
 
-    Lets a caller act on the live run *between* polls — answer a pending
-    manual-input gate, patch a field to unblock an SLA timer, log progress —
+    Lets a caller act on the live run *between* polls -- answer a pending
+    manual-input gate, patch a field to unblock an SLA timer, log progress --
     without re-implementing the poll loop. ``tree`` is the freshly-fetched
     :class:`RunNode`; ``poll_count`` counts polls so far (1-based);
     ``elapsed_s`` is seconds since the wait began; ``is_terminal`` is ``True``
@@ -202,7 +208,7 @@ class RunResult(ApiResult):
 
     @property
     def slow_steps(self) -> list[RunStepSnapshot]:
-        """Steps that took longer than 30s (the default ``is_slow`` threshold)."""
+        """Steps flagged slow by each step's own :attr:`RunStepSnapshot.slow_threshold_ms` (default 30s)."""
         return [s for s in self.steps if s.is_slow]
 
 
@@ -211,17 +217,17 @@ class TriggerResponse(ApiResult):
 
     Normally ``{"task_id": "<run-uuid>"}``, but a trigger that starts more than
     one run (e.g. an API-endpoint route bound to several playbooks) returns
-    ``task_id`` as a **list** of run-uuids — so this accepts either. Extra keys
+    ``task_id`` as a **list** of run-uuids -- so this accepts either. Extra keys
     (e.g. a deferred 202 envelope) are preserved. Use :attr:`task_ids` for a
     uniform list, or :attr:`task_id` to track the started run with
     :meth:`~pyfsr.api.playbooks.PlaybooksAPI.wait`.
 
     The routes do not agree on the key. Live-verified on the record-action route
-    (``/api/triggers/1/action/<route>``): it answers ``{"task_ids": [...]}`` —
-    **plural** — where the manual-execute route (``notrigger``) answers
+    (``/api/triggers/1/action/<route>``): it answers ``{"task_ids": [...]}`` --
+    **plural** -- where the manual-execute route (``notrigger``) answers
     ``{"task_id": "..."}``. Because only ``task_id`` was declared, a wire
     ``task_ids`` used to land in ``model_extra`` while the :attr:`task_ids`
-    *property* (which normalizes ``task_id``) shadowed it and returned ``[]`` —
+    *property* (which normalizes ``task_id``) shadowed it and returned ``[]`` --
     so ``trigger_action`` callers could not reach the run they had just started
     through either accessor. ``_absorb_plural_task_ids`` folds the plural wire
     key into ``task_id`` before validation, making both accessors work for both
@@ -417,7 +423,7 @@ class PlaybookVersion(ApiResult):
     version is either a manual snapshot (``autosave=False``, a caller-supplied
     ``note``) or an editor auto-save (``autosave=True``).
 
-    ``json`` is the snapshot payload — the full workflow definition
+    ``json`` is the snapshot payload -- the full workflow definition
     stringified (``steps`` / ``routes`` / ``groups`` / ``triggerStep`` / …).
     It is populated on ``list_versions`` / ``get_version`` but **not** echoed
     back by ``create_version`` (the server omits the blob on the POST
@@ -453,7 +459,7 @@ class PlaybookVersion(ApiResult):
         """Decode the snapshot's ``json`` field into the workflow dict.
 
         Raises ``ValueError`` if ``json`` is absent (e.g. a ``create_version``
-        response, which does not echo the blob) — call ``get_version`` first.
+        response, which does not echo the blob) -- call ``get_version`` first.
         """
         if not self.snapshot_json:
             raise ValueError(
@@ -470,7 +476,7 @@ class VersionStepDelta(ApiResult):
 
     ``field`` is the top-level step key that differs (``arguments``,
     ``name``, ``stepType``…); ``from`` / ``to`` are the old / new values
-    (``Any`` — may be dicts, strings, or ``None``).
+    (``Any`` -- may be dicts, strings, or ``None``).
     """
 
     step: str | None = None
