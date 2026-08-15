@@ -3,6 +3,7 @@
 import pytest
 
 from pyfsr.api.connectors import ConnectorsAPI, _import_job_id
+from pyfsr.exceptions import ConnectorConfigNotFoundError
 
 _CONFIGURED = {
     "data": [
@@ -127,6 +128,20 @@ def test_resolve_config_default_and_named():
     assert api.resolve_config("virustotal") == "vt-default"  # default flag
     assert api.resolve_config("virustotal", "Alt") == "vt-alt"
     assert api.resolve_config("fortigate") is None  # no configs
+
+
+def test_resolve_config_raises_on_an_unknown_name():
+    """It must NOT fall back to the default -- that talks to the wrong tenant.
+
+    The default config is frequently a stale or reclaimed instance, so a typo'd
+    (or forgotten) `config=` used to surface as a DNS/auth error from somewhere
+    else entirely instead of "that config doesn't exist".
+    """
+    api, _ = _api()
+    with pytest.raises(ConnectorConfigNotFoundError) as ei:
+        api.resolve_config("virustotal", "Workshop PDI")
+    assert "Workshop PDI" in str(ei.value)
+    assert ei.value.available == ["Default", "Alt"]
 
 
 def test_configurations():
