@@ -20,7 +20,7 @@ Two checks:
    word-by-word and check the trailing ``--flags`` against the deepest
    subcommand's real ``--help`` output. Shell ``#`` comments are stripped first.
 
-The script does NOT execute example bodies (most need a live appliance) — it
+The script does NOT execute example bodies (most need a live appliance) -- it
 only proves the named symbols/flags exist. Exit code is 1 if any drift is
 found, 0 otherwise.
 
@@ -37,6 +37,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import glob
 import importlib
 import json
@@ -346,6 +347,55 @@ def help_for(cmd_words):
     return res
 
 
+def shell_commands(lines):
+    """Return the ``pyfsr`` token lists (flags stripped) in one shell block."""
+    out = []
+    for ln in lines:
+        s = ln.strip().lstrip("$>").strip()
+        s = re.sub(r"\s#.*$", "", s)
+        m = re.match(r"pyfsr\s+(.*)$", s)
+        if m:
+            toks = [t for t in m.group(1).split() if not t.startswith("-")]
+            if toks:
+                out.append(toks)
+    return out
+
+
+def warm_help_cache(token_lists, max_workers=8):
+    """Prefetch ``--help`` for every command chain the docs use, in parallel.
+
+    Each spawn pays ~0.4s importing pyfsr, and the docs name ~60 distinct
+    chains, so fetching them one at a time cost ~24s of this gate's ~32s.
+    A chain's children are only known after its own help is read, so this
+    walks depth-by-depth and fans out each level: depth stays serial (it has
+    to), width does not. ``help_for`` then hits a warm cache.
+
+    Only prefixes the docs actually use are fetched. Walking the real
+    subcommand tree instead would not terminate: ``_SUB_RE`` also matches the
+    two-space-indented option descriptions in help output, so every node
+    appears to have children and the walk invents chains forever.
+    """
+    level = {()}
+    depth = 0
+    while level:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+            pool.map(help_for, level)
+        nxt = set()
+        for toks in token_lists:
+            if len(toks) <= depth:
+                continue
+            cmd = tuple(toks[:depth])
+            if cmd not in _HELP_CACHE:
+                continue
+            ok, _flags, subs = _HELP_CACHE[cmd]
+            if ok and toks[depth] in subs:
+                child = cmd + (toks[depth],)
+                if child not in _HELP_CACHE:
+                    nxt.add(child)
+        level = nxt
+        depth += 1
+
+
 def check_shell_lines(lines):
     issues = []
     for ln in lines:
@@ -426,13 +476,23 @@ def main():
 
     total_issues = 0
     total_py = total_sh = 0
-    # Scan the guides plus the root README — its CLI/python blocks live outside
+    # Scan the guides plus the root README -- its CLI/python blocks live outside
     # docs/source, so without this a renamed flag or invalid command in README
     # would never be linted.
     scan_files = sorted(glob.glob(os.path.join(GUIDES_DIR, "*.md")))
     _readme = os.path.join(REPO_ROOT, "README.md")
     if os.path.exists(_readme):
         scan_files.append(_readme)
+    if do_cli:
+        # Prefetch every `--help` the scan below will ask for, concurrently.
+        # Without this the scan spawns them one at a time, ~0.4s each.
+        cmds = []
+        for g in scan_files:
+            if args.guide and os.path.basename(g) != args.guide:
+                continue
+            for _start, slines in iter_blocks(open(g).read().splitlines(), is_shell):
+                cmds.extend(shell_commands(slines))
+        warm_help_cache(cmds)
     for g in scan_files:
         if args.guide and os.path.basename(g) != args.guide:
             continue
