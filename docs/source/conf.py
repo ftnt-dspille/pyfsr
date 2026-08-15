@@ -46,7 +46,7 @@ version = ".".join(release.split("+")[0].split(".")[:3])
 # sets it: AutoAPI parses every module under src/pyfsr and is ~70% of that
 # build's wall clock, yet contributes ZERO doctests. `>>>` blocks in docstrings
 # aren't collected (doctest_test_doctest_blocks = "" below) and no docstring
-# carries an explicit ``.. doctest::`` directive — tests/unit/test_docstring_doctests.py
+# carries an explicit ``.. doctest::`` directive -- tests/unit/test_docstring_doctests.py
 # is what covers docstring examples. The doctest count is identical either way;
 # if that ever stops being true, --check-floor fails and this gate is the reason.
 _skip_autoapi = os.environ.get("DOCS_SKIP_AUTOAPI")
@@ -56,7 +56,12 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.doctest",  # execute doctest blocks via `make doctest`
     "sphinx.ext.napoleon",
-    "sphinx.ext.viewcode",
+    # linkcode, not viewcode: both put a ``[source]`` link on every documented
+    # object (linkcode reuses viewcode's own CSS class), but viewcode builds a
+    # syntax-highlighted copy of every module into _modules/ -- 102 extra pages
+    # and ~45s of the ~103s build, for source the reader can already reach on
+    # GitHub. linkcode points the same link at the repo instead, for ~0s.
+    "sphinx.ext.linkcode",
     "sphinx.ext.intersphinx",
     *([] if _skip_autoapi else ["autoapi.extension"]),
     "myst_parser",  # author guides in Markdown (.md) alongside .rst
@@ -67,11 +72,11 @@ extensions = [
 # Suppress the Python-domain "more than one target found for cross-reference"
 # ambiguity only (Sphinx emits it as ``type='ref', subtype='python'``). This
 # fires when two attributes share a name that also appears as a bare builtin
-# in a ``type[...]`` annotation — e.g. ``ModuleField.type`` and
+# in a ``type[...]`` annotation -- e.g. ``ModuleField.type`` and
 # ``LicenseDetails.type`` both shadowing the builtin ``type`` used in
 # ``model_for() -> type[BaseRecord]``. Missing-reference warnings are emitted
 # with a *role* subtype (``ref.meth`` / ``ref.class`` / ...), so they are NOT
-# masked here — the nitpicky ``-n`` gate still catches unresolved xrefs.
+# masked here -- the nitpicky ``-n`` gate still catches unresolved xrefs.
 suppress_warnings = ["ref.python"]
 
 # index.md's toctree lists the reference pages excluded from doctest builds
@@ -87,7 +92,7 @@ source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 myst_enable_extensions = ["colon_fence", "deflist"]
 myst_heading_anchors = 3
 
-# `make doctest` — every doctest block runs with these names pre-imported, so
+# `make doctest` -- every doctest block runs with these names pre-imported, so
 # guide examples stay focused on the API rather than boilerplate imports.
 # `demo_box()` builds a healthy Appliance over a replay transport seeded with
 # verified-live captures, so appliance return-example doctests run offline.
@@ -97,7 +102,7 @@ doctest_global_setup = "from pyfsr import Query\nfrom pyfsr._testing import demo
 
 # Only execute *explicit* doctest directives (```{doctest} / .. doctest::). The
 # many illustrative `>>>` snippets in API docstrings reference live clients and
-# undefined names — they document shape, not runnable code — so don't collect
+# undefined names -- they document shape, not runnable code -- so don't collect
 # them. As guide/docstring examples are converted to real doctests, they opt in
 # via the directive and start getting verified by CI.
 doctest_test_doctest_blocks = ""
@@ -168,7 +173,7 @@ nitpick_ignore = [
     # which isn't part of the docs intersphinx set.
     ("py:class", "mcp.server.lowlevel.Server"),
     ("py:class", "Server"),
-    # Bare TypeVar in generic signatures (RecordSet[T], HydraPage[T]) — autoapi
+    # Bare TypeVar in generic signatures (RecordSet[T], HydraPage[T]) -- autoapi
     # emits the TypeVar name as an xref with no resolvable target under `-n`.
     ("py:class", "T"),
     # Short re-export / nested-class names autoapi renders from annotations but
@@ -249,7 +254,7 @@ autoapi_dirs = ["../../src/pyfsr"]
 # `pyfsr.resources` is a data-only package (ships the bundled OpenAPI spec); it
 # has no public Python API, so AutoAPI would emit an all-but-empty page. Skip it.
 # `pyfsr._testing` is the doctest/test harness (replay transport + fixtures), not
-# a feature of the appliance API — it backs the doctested return examples but
+# a feature of the appliance API -- it backs the doctested return examples but
 # shouldn't surface as a top-level API page.
 # `pyfsr/playbook_library.py` indexes the in-repo `examples/playbooks/library/`
 # corpus for the `pyfsr playbook examples` CLI; it's repo-only (never packaged),
@@ -329,3 +334,50 @@ exclude_patterns = ["build", "autoapi/pyfsr/index.rst"]
 # holds a doctest, so nothing is lost from the run.
 if _skip_autoapi:
     exclude_patterns += ["autoapi/**", "reference.md", "reference-advanced.md"]
+
+
+# -- linkcode: [source] links to GitHub --------------------------------------
+_GITHUB_REPO = "https://github.com/ftnt-dspille/pyfsr"
+# Pin the link to the tag being built when the version is clean (a release
+# build), so published docs always point at the code they document. Dev builds
+# carry a ``+`` local suffix and fall back to main.
+_LINKCODE_REF = f"v{version}" if "+" not in release else "main"
+
+
+def linkcode_resolve(domain, info):
+    """Return the GitHub URL for a documented object, with a line anchor.
+
+    Resolving the line number needs the object in hand, so this imports the
+    module and walks to the attribute. Both steps are best-effort: anything
+    that fails degrades to a file-level link, and a module that will not
+    import at all gets no link rather than a broken one.
+    """
+    if domain != "py" or not info.get("module"):
+        return None
+    module = info["module"]
+    if not module.startswith("pyfsr"):
+        return None
+    path = module.replace(".", "/")
+    url = f"{_GITHUB_REPO}/blob/{_LINKCODE_REF}/src/{path}.py"
+
+    import importlib
+    import inspect
+
+    try:
+        obj = importlib.import_module(module)
+        for part in (info.get("fullname") or "").split("."):
+            if part:
+                obj = getattr(obj, part)
+        obj = inspect.unwrap(obj)
+        source_file = inspect.getsourcefile(obj)
+        lineno = inspect.getsourcelines(obj)[1]
+    except Exception:
+        return url
+    if not source_file or not lineno:
+        return url
+    # A re-exported object lives in its defining module, not the one it is
+    # documented under, so derive the path from the source file itself.
+    rel = os.path.relpath(source_file, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+    if rel.startswith(".."):
+        return url
+    return f"{_GITHUB_REPO}/blob/{_LINKCODE_REF}/src/{rel}#L{lineno}"
