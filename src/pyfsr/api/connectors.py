@@ -54,7 +54,13 @@ import warnings
 from pathlib import Path
 from typing import Any
 
-from ..exceptions import APIError, ConfigurationExistsError, ConfigValidationError, ResourceNotFoundError
+from ..exceptions import (
+    APIError,
+    ConfigurationExistsError,
+    ConfigValidationError,
+    ConnectorConfigNotFoundError,
+    ResourceNotFoundError,
+)
 from ..models._integration import (
     ConfigValidationResult,
     ConnectorConfig,
@@ -1063,6 +1069,17 @@ class ConnectorsAPI(BaseAPI):
 
         With ``config_name`` given, matches by name; otherwise picks the
         configuration flagged default (falling back to the first one).
+
+        An unknown ``config_name`` raises
+        :class:`~pyfsr.exceptions.ConnectorConfigNotFoundError` -- it does NOT
+        fall back to the default. The default is often a stale or reclaimed
+        instance, so falling back turns a typo into a call against the wrong
+        tenant that fails later as something unrelated (a DNS error, an empty
+        result) instead of "that config doesn't exist".
+
+        Raises:
+            ConnectorConfigNotFoundError: ``config_name`` was given and no
+                configuration of ``connector`` carries that name.
         """
         configs = self.configurations(connector)
         if not configs:
@@ -1070,6 +1087,8 @@ class ConnectorsAPI(BaseAPI):
         chosen = None
         if config_name:
             chosen = next((c for c in configs if c.name == config_name), None)
+            if chosen is None:
+                raise ConnectorConfigNotFoundError(connector, config_name, [c.name for c in configs if c.name])
         if chosen is None:
             chosen = next((c for c in configs if c.default), None) or configs[0]
         return chosen.config_id if chosen else None

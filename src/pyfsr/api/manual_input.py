@@ -30,6 +30,8 @@ from __future__ import annotations
 import builtins
 from typing import Any, Literal, overload
 
+import requests
+
 from ..models._system import ManualInput, ManualInputOption, ManualInputResume
 from ..pagination import paginate_offset
 from ..utils.iri import uuid_from_iri
@@ -37,6 +39,14 @@ from .base import BaseAPI
 
 _BASE = "/api/wf/api/manual-wf-input/"
 _LIST = f"{_BASE}list_wfinput/"
+
+# `wfinput_resume` is NOT a fire-and-forget submit: FortiSOAR runs the resumed
+# branch inline and only answers once the run yields again -- at the next gate, a
+# delay, or the end of the branch. Answering a gate whose branch runs straight to
+# a terminal step therefore holds the connection for the whole branch, which
+# routinely outruns the client's 30s default. The answer has LANDED; only the
+# response is late. Give it a window sized for a branch, not for a REST call.
+_RESUME_TIMEOUT = 180
 
 AssignedTo = Literal["me", "myTeams", "all"]
 
@@ -349,13 +359,25 @@ class ManualInputAPI(BaseAPI):
         manual_input_id: int,
         user: str,
         input: dict[str, Any] | None = None,
+        timeout: float | None = None,
     ) -> ManualInputResume:
         """Submit a manual input and resume its paused playbook.
 
         ``POST /api/wf/api/workflows/<workflow_id>/wfinput_resume/`` with the
         chosen button (``step_iri``) and any collected input values. Returns a
-        :class:`~pyfsr.models.ManualInputResume` (``task_id`` + ``message``); the
-        resume is asynchronous.
+        :class:`~pyfsr.models.ManualInputResume` (``task_id`` + ``message``).
+
+        .. note::
+           The submit is synchronous in the part that matters: FortiSOAR executes
+           the resumed branch inline and answers only when the run next yields --
+           at another gate, a delay, or the end of the branch. A branch that runs
+           straight to a terminal step is executed in full inside this call, so it
+           can take far longer than an ordinary REST call. This method therefore
+           uses its own generous timeout (180s) instead of the client default,
+           and treats a read timeout as "submitted, still running" rather than as
+           a failure -- it re-checks whether the input was consumed and only
+           raises if it is genuinely still pending. The request is never retried:
+           a retry would risk resuming the run twice.
 
         Args:
             workflow_id: the numeric run id -- the ``workflow`` field from
@@ -368,6 +390,9 @@ class ManualInputAPI(BaseAPI):
             user: the submitting user's IRI (``/api/3/people/<uuid>``).
             input: collected input values keyed by variable name, e.g.
                 ``{"test": "def"}`` -- omit for an approval/button-only step.
+            timeout: read timeout in seconds for this submit. Defaults to
+                ``max(client.timeout, 180)`` -- see the note above. Pass a larger
+                value when a branch is known to be slow (a package install, say).
 
         Example:
             >>> client = demo_client()
@@ -393,8 +418,47 @@ class ManualInputAPI(BaseAPI):
             "manual_input_id": manual_input_id,
             "user": user,
         }
-        resp = self.client.post(f"/api/wf/api/workflows/{workflow_id}/wfinput_resume/", data=body)
+        if timeout is None:
+            # getattr: BaseAPI is handed anything client-shaped (test doubles included).
+            timeout = max(float(getattr(self.client, "timeout", 0) or 0), float(_RESUME_TIMEOUT))
+        try:
+            resp = self.client.post(
+                f"/api/wf/api/workflows/{workflow_id}/wfinput_resume/",
+                data=body,
+                timeout=timeout,
+            )
+        except requests.exceptions.ReadTimeout:
+            # The submit reached the server -- what timed out is waiting for the
+            # branch it kicked off. Deliberately NOT retried: a second POST could
+            # resume the run twice. Instead ask the server whether the input was
+            # consumed, which is the fact the caller actually needs.
+            if self._still_pending(manual_input_id):
+                raise
+            return ManualInputResume(
+                task_id=None,
+                message=(
+                    f"Manual input {manual_input_id} was accepted and the playbook "
+                    f"resumed, but the resumed branch was still running when the "
+                    f"read timed out after {timeout:g}s. The input is no longer "
+                    f"pending. Poll the run for its outcome, or pass a larger "
+                    f"timeout= if this branch is expected to be slow."
+                ),
+            )
         return ManualInputResume.model_validate(resp)
+
+    def _still_pending(self, manual_input_id: int) -> bool:
+        """Is this manual input still waiting on a human?
+
+        Used to tell "the submit never landed" from "the submit landed and the
+        branch outran the read timeout". A lookup failure is reported as still
+        pending, so an ambiguous case surfaces the original timeout rather than a
+        false all-clear.
+        """
+        try:
+            rows = self.list(assigned_to="all", typed=False)
+        except Exception:
+            return True
+        return any(int(r.get("id", -1)) == int(manual_input_id) for r in rows)
 
     def answer(
         self,
@@ -406,6 +470,7 @@ class ManualInputAPI(BaseAPI):
         user: str | None = None,
         option: int | str = 0,
         assigned_to: AssignedTo = "all",
+        timeout: float | None = None,
     ) -> ManualInputResume:
         """Find a pending manual input, fill it, and resume its playbook -- one call.
 
@@ -463,7 +528,8 @@ class ManualInputAPI(BaseAPI):
 
         See also:
             :meth:`resume` for the low-level form when you already hold the
-            ``step_iri`` / numeric run id.
+            ``step_iri`` / numeric run id -- and for why ``timeout=`` exists and
+            what a read timeout here does and does not mean.
         """
         if (by_title is None) == (input_id is None):
             raise ValueError("pass exactly one of by_title= or input_id=")
@@ -524,6 +590,7 @@ class ManualInputAPI(BaseAPI):
             manual_input_id=int(input_id),
             user=user_iri,
             input=inputs,
+            timeout=timeout,
         )
 
     def _resolve_user_iri(self) -> str:

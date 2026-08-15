@@ -10,7 +10,7 @@ class FortiSOARException(Exception):
 
     Carries the originating ``response`` plus, when available, the HTTP
     ``status_code`` and the FortiSOAR error ``error_type`` (the ``type`` field
-    of the error body) so callers — and agents — can branch on them without
+    of the error body) so callers -- and agents -- can branch on them without
     re-parsing the response.
     """
 
@@ -60,7 +60,7 @@ class ConfigurationExistsError(FortiSOARException):
         self.connector = connector
         self.name = name
         msg = message or (
-            f"a configuration named {name!r} already exists for this connector — "
+            f"a configuration named {name!r} already exists for this connector -- "
             f"use upsert_configuration(...) or create_configuration(..., exist_ok=True)"
         )
         super().__init__(msg, response, error_type=error_type)
@@ -80,6 +80,28 @@ class PicklistResolutionError(ValidationError):
         self.valid_values = valid_values
         shown = ", ".join(valid_values[:25]) + ("  …" if len(valid_values) > 25 else "")
         super().__init__(f"{field}={value!r} is not a valid '{picklist}' value. Valid ({len(valid_values)}): {shown}")
+
+
+class ConnectorConfigNotFoundError(ValidationError):
+    """Raised when a named connector configuration doesn't exist.
+
+    Falling back to the connector's *default* configuration on an unknown name
+    is worse than failing: the default is frequently a stale or reclaimed
+    instance, so a caller with a typo'd (or forgotten) ``config=`` silently
+    talks to the WRONG tenant and fails much later with something unrelated --
+    a DNS error, an auth error, an empty result set.
+
+    Carries the connector, the requested name, and the names that do exist.
+    """
+
+    def __init__(self, connector: str, config_name: str, available: list[str]):
+        self.connector = connector
+        self.config_name = config_name
+        self.available = available
+        shown = ", ".join(repr(n) for n in available) or "(none)"
+        super().__init__(
+            f"{connector!r} has no configuration named {config_name!r}. Available ({len(available)}): {shown}"
+        )
 
 
 class AuthenticationError(FortiSOARException):
@@ -113,8 +135,8 @@ class ResponseParseError(FortiSOARException):
     balancer, a truncated stream, an empty body where JSON was expected) used
     to surface as a raw ``json.JSONDecodeError`` pointing at ``client.py``, not
     at the caller's actual problem. This carries the status code and a text
-    preview so the real cause — usually "the request never reached FortiSOAR
-    at all" — is visible without re-running with a debugger.
+    preview so the real cause -- usually "the request never reached FortiSOAR
+    at all" -- is visible without re-running with a debugger.
     """
 
     def __init__(self, response=None, *, preview: str | None = None):
@@ -138,7 +160,7 @@ class ApikeyCreateUnavailable(APIError):
     ``encrypt() got an unexpected keyword argument 'preserve_compatibility'``.
     pyfsr no longer toggles ``retrievable_mode`` on (the trigger), but it can
     still be on for other reasons (manual toggle, another tool, a prior pyfsr
-    version) — so ``api_users.create()`` detects the signature and raises this
+    version) -- so ``api_users.create()`` detects the signature and raises this
     so the caller gets the workaround instead of a cryptic encrypt traceback.
 
     Fix: ``client.auth_config.set_api_key_retrievable(False)``, then retry.
@@ -175,8 +197,8 @@ class RepoUnreachableError(RepoError):
     """The public content repository could not be reached.
 
     Raised by the :mod:`pyfsr.repo` download helpers when a connectivity
-    preflight (or the download itself) fails with a connection/timeout error —
-    i.e. no FDN access, an air-gapped box, or a firewall — as opposed to the
+    preflight (or the download itself) fails with a connection/timeout error --
+    i.e. no FDN access, an air-gapped box, or a firewall -- as opposed to the
     repo being reachable but not having the requested artifact
     (:class:`RepoArtifactNotFoundError`). Callers can branch on the two to tell
     "can't reach the repo" from "that version doesn't exist".
@@ -190,7 +212,7 @@ class RepoUnreachableError(RepoError):
 class RepoArtifactNotFoundError(RepoError):
     """The repo is reachable but has no artifact at the requested name/version.
 
-    A genuine 404 — the host answered, the path just doesn't exist (bad slug or
+    A genuine 404 -- the host answered, the path just doesn't exist (bad slug or
     a version that was never published / has been pulled).
     """
 
@@ -210,7 +232,7 @@ class WidgetUploadConflict(WidgetError):
 
     Raised when ``POST /api/3/solutionpacks/install?$type=widget`` 400s with
     ``"Widget with Name - <n> Version - <v> already exists in widget
-    workspace."`` — i.e. ``upload(..., replace=False)`` against a version
+    workspace."`` -- i.e. ``upload(..., replace=False)`` against a version
     that's already sitting in the development workspace. Retry with
     ``replace=True`` to overwrite it.
     """
@@ -225,7 +247,7 @@ class WidgetPublishError(WidgetError):
     """A widget publish did not settle live (``draft:false, installed:true``).
 
     Raised by :meth:`~pyfsr.api.widgets.WidgetsAPI.deploy` when the post-publish
-    settle-poll times out without observing the target version live — either
+    settle-poll times out without observing the target version live -- either
     the publish silently reverted or the asset extraction lagged past
     ``timeout``. Includes the target host and the last-observed record so
     callers can tell "never went live" from "stuck on an old version".
@@ -250,7 +272,7 @@ class WidgetPublishError(WidgetError):
 
 
 # Substrings the appliance returns (as 5xx bodies / error messages) while it is
-# mid-migrate — a publish *or* a module-bearing import runs a full backup + DB
+# mid-migrate -- a publish *or* a module-bearing import runs a full backup + DB
 # migrate + cache-rebuild cycle, during which the API is briefly unavailable and
 # surfaces transient state strings ("System Backup", "Clearing Cache", "Schema
 # Update", "Decrypt Database", …) instead of real errors.
@@ -300,7 +322,7 @@ def is_migrate_transient(exc: Exception) -> bool:
 def describe_migrate_failure(status, message) -> str:
     """Build an actionable message for a failed publish/import migrate.
 
-    ``status`` / ``message`` come from the failure's source of truth — an import
+    ``status`` / ``message`` come from the failure's source of truth -- an import
     job record (``status``/``errorMessage``) or a ``/api/publish/error`` body
     (``status``/``message``). For the half-applied-migration wedge (Postgres
     ``42P07`` / "already exists" / "Duplicate table") it appends remediation
@@ -316,7 +338,7 @@ def describe_migrate_failure(status, message) -> str:
             "\nThis is a half-applied migration: a prior migrate created a DB object "
             "(often an index, e.g. from a tableName rename) without recording it, so the "
             "appliance's CREATE (no IF NOT EXISTS) now fails on every publish/import. "
-            "pyfsr cannot fix appliance DB state over the API — drop the orphaned relation "
+            "pyfsr cannot fix appliance DB state over the API -- drop the orphaned relation "
             "named in the error on the FortiSOAR Postgres node (or restore a pre-migrate "
             "backup), then retry. To avoid re-triggering it, import the offending module "
             "with resolve='skip_schema' (don't re-apply the schema change)."
@@ -329,8 +351,8 @@ def _extract_message(error_data):
 
     FortiSOAR returns at least two error shapes:
 
-    - ``{"message": "..."}`` — the simple form.
-    - Symfony validation errors — ``{"title": "Validation Failed", "detail": "...",
+    - ``{"message": "..."}`` -- the simple form.
+    - Symfony validation errors -- ``{"title": "Validation Failed", "detail": "...",
       "violations": [{"propertyPath": "...", "title": "..."}]}`` with **no** ``message``
       key. Reading only ``message`` collapsed these to "Unknown error occurred", hiding the
       real cause (e.g. an invalid attribute ``type`` rejected at ``/api/publish``).
@@ -396,13 +418,13 @@ def handle_api_error(response):
         # Enrich 403 PermissionError with RBAC guidance for newly-created modules
         module_hint = _extract_module_from_url(response)
         hint = (
-            "If this is a newly created module, it may have no role permissions yet — "
+            "If this is a newly created module, it may have no role permissions yet -- "
             "grant with client.roles.grant_module_permissions(role, module='<module>') "
             "or pass grant_to=[...] to create_module()."
         )
         if module_hint:
             hint = (
-                f"If this is a newly created module, it may have no role permissions yet — "
+                f"If this is a newly created module, it may have no role permissions yet -- "
                 f"grant with client.roles.grant_module_permissions(role, module='{module_hint}') "
                 f"or pass grant_to=[...] to create_module()."
             )
