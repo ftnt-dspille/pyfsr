@@ -4,7 +4,7 @@ A broken example teaches the wrong shape, so every library playbook must compile
 and round-trip. This test:
 
 * compiles every ``.yaml`` under ``examples/playbooks/library/`` and asserts no
-  *real* blocking errors (``unknown_connector`` is catalog-cold — the offline slim
+  *real* blocking errors (``unknown_connector`` is catalog-cold -- the offline slim
   catalog has no connector rows; it resolves with ``--refresh-catalog`` on a live
   box, so it is NOT a shape defect and is allowed);
 * round-trips a sample (one per stage): decompile -> recompile is byte-stable on
@@ -45,7 +45,7 @@ def _declares_known_remaining_errors(path: Path) -> bool:
     """A decompiled library playbook may carry a header NOTE declaring N known
     non-connector blocking errors remain after cleaning (e.g. one keeping the
     legacy ``ApprovalManualInput`` step type, whose ``response_mapping`` button
-    branches the resolver cannot promote to friendly edges — so the strict
+    branches the resolver cannot promote to friendly edges -- so the strict
     step-reference check reports a false-positive undefined reference). Such
     playbooks are documented + accepted (the NOTE itself says so); the strict
     compile-clean gate is skipped for them. Re-decompiling to the friendly
@@ -55,13 +55,48 @@ def _declares_known_remaining_errors(path: Path) -> bool:
     return "blocking error(s) remain after cleaning" in head
 
 
+_TEAMS_UNSYNCED = "`teams` reference table is unsynced"
+# Emitted only because the team above failed to resolve, so nothing landed in
+# assignedToTeam. Exempt solely when the team error is present -- on its own it
+# is a real authoring bug (isAssigned set with no assignee) and must still fail.
+_UNASSIGNED_CASCADE = "owner_detail.isAssigned=true requires exactly one of"
+
+
+def _real_errors(blocking: list[dict]) -> list[dict]:
+    """Drop the blocking errors that only exist because we compiled offline.
+
+    ``unknown_connector``: the packaged slim catalog ships 0 connector rows.
+
+    An unresolvable team: fsr_playbooks 0.6.22 resolves ``assign_to.team`` name
+    -> IRI through the catalog's ``teams`` table and refuses a name it cannot
+    resolve, because emitting the bare name creates the approval gate UNOWNED
+    and invisible to whoever should answer it. That table is only populated by
+    a warmup against a live SOAR, so offline every named team looks unresolvable.
+    Matched on the message rather than the bare ``bad_value`` code, so other
+    bad_value errors still fail -- but a library playbook naming a team that
+    does not exist on the target box will not be caught here either.
+    """
+    cold_team = any(_TEAMS_UNSYNCED in (e.get("message") or "") for e in blocking)
+    out = []
+    for e in blocking:
+        msg = e.get("message") or ""
+        if e.get("code") == "unknown_connector":
+            continue
+        if _TEAMS_UNSYNCED in msg:
+            continue
+        if cold_team and _UNASSIGNED_CASCADE in msg:
+            continue
+        out.append(e)
+    return out
+
+
 @_SKIP_NO_EXTRA
 @pytest.mark.parametrize("path", _FILES, ids=lambda p: str(p.relative_to(_LIBRARY)))
 def test_library_playbook_compiles_clean(path):
     """Every library playbook compiles with no real (non-catalog-cold) errors.
 
     A playbook whose header NOTE declares known remaining blocking errors (a
-    documented decompiler artifact, not a shape defect) is skipped here — see
+    documented decompiler artifact, not a shape defect) is skipped here -- see
     :func:`_declares_known_remaining_errors`. The front-matter + manifest tests
     below still run on it, so it stays covered structurally.
     """
@@ -70,7 +105,7 @@ def test_library_playbook_compiles_clean(path):
     from pyfsr.authoring import compile_playbook_yaml
 
     result = compile_playbook_yaml(path.read_text(encoding="utf-8"))
-    real = [e for e in result.blocking if e.get("code") != "unknown_connector"]
+    real = _real_errors(result.blocking)
     assert not real, (
         f"{path.relative_to(_ROOT)} has {len(real)} real blocking error(s) (excluding "
         f"catalog-cold unknown_connector):\n" + "\n".join(f"  - {e.get('code')}: {e.get('message', '')}" for e in real)
