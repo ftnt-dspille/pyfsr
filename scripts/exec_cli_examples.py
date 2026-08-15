@@ -8,14 +8,14 @@ the layer that proves the examples "work right" rather than merely exist.
 
 What runs (no live appliance / API needed):
 
-- ``pyfsr playbook steps`` / ``step-help <type> [--schema]`` — offline catalog.
-- ``pyfsr playbook examples [--intent ..] [--stage ..]`` — library listing.
+- ``pyfsr playbook steps`` / ``step-help <type> [--schema]`` -- offline catalog.
+- ``pyfsr playbook examples [--intent ..] [--stage ..]`` -- library listing.
 - ``pyfsr playbook show <slug>`` -- print one playbook's metadata + YAML.
-- ``pyfsr playbook validate <file>`` — compile + diagnostics; exit 0 on a
+- ``pyfsr playbook validate <file>`` -- compile + diagnostics; exit 0 on a
   clean playbook, nonzero on a broken one (the error path is asserted too).
-- ``pyfsr playbook compile <file> -o <out>`` — emit envelope JSON; output is
+- ``pyfsr playbook compile <file> -o <out>`` -- emit envelope JSON; output is
   parsed as JSON to prove it's real.
-- ``pyfsr playbook deploy <file> --dry-run`` — show the import plan without
+- ``pyfsr playbook deploy <file> --dry-run`` -- show the import plan without
   posting (offline).
 
 What does NOT run here (needs a live box / API): every ``pyfsr appliance ...``
@@ -31,6 +31,7 @@ Exit code 1 if any command misbehaves, 0 otherwise.
 from __future__ import annotations
 
 import atexit
+import concurrent.futures
 import json
 import os
 import subprocess
@@ -168,7 +169,7 @@ def main():
             dict(stdout_test=lambda o: "playbook" in o.lower() or len(o) > 0),
         ),
     ]
-    # Validate EVERY library playbook the manifest flags compiles_ok — proves the
+    # Validate EVERY library playbook the manifest flags compiles_ok -- proves the
     # whole offline-compilable set works, not just the one fixture above. The
     # 5 documented-residual playbooks (NOTE headers) are compiles_ok=False and so
     # are skipped here; their nonzero exit is asserted by the broken-path check.
@@ -182,14 +183,25 @@ def main():
                 dict(expect_exit=0),
             )
         )
-    # run the success-path checks
-    for label, args, kw in checks:
+
+    # Run the success-path checks concurrently. Each one is an independent
+    # read-only CLI invocation -- they share only the fixture catalog, which is
+    # built before this point and only read from here on -- and each spawn pays
+    # ~0.4s importing pyfsr, so serially this dominated the script's runtime.
+    # Failures are collected in `checks` order, not completion order, so the
+    # report stays deterministic.
+    def _run_check(item):
+        label, args, kw = item
         try:
             check(label, args, **kw)
         except Fail as e:
-            failures.append(str(e))
+            return str(e)
         except Exception as e:
-            failures.append(f"{label}: unexpected {type(e).__name__}: {e}")
+            return f"{label}: unexpected {type(e).__name__}: {e}"
+        return None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        failures.extend(f for f in pool.map(_run_check, checks) if f)
 
     # compile output must be valid JSON with the expected envelope shape
     try:
