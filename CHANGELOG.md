@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-08-15
+
 ### Added
 - **`connectors.set_default_configuration()`** -- mark an existing configuration
   the connector's default without changing anything else, plus a
@@ -18,6 +20,33 @@ All notable changes to this project will be documented in this file.
   rewrite encrypted secrets) and preserving any remote-agent binding. Refuses
   outright when the appliance returns the `"NULL"` secret sentinel in place of a
   stored value. Verified on a live 8.0.0 appliance.
+
+### Changed
+- **`connectors.resolve_config()` raises `ConnectorConfigNotFoundError` instead
+  of falling back to the connector's default configuration.** Asking for a
+  config name that does not exist used to silently return the default one, so a
+  caller that typo'd (or forgot) `config=` talked to the wrong tenant and failed
+  much later as something unrelated -- a DNS error, an auth error, an empty
+  result set. The error names the connector, the config that was asked for, and
+  the ones that exist. Callers relying on the old fallback must now omit
+  `config=` explicitly to get the default.
+
+### Fixed
+- **`manual_input.resume()` / `answer()` no longer fail a slow gate answer.**
+  `wfinput_resume` is not fire-and-forget: FortiSOAR runs the resumed branch
+  inline and answers only when the run next yields -- at another gate, a delay,
+  or the end of the branch. Answering a gate whose branch runs straight through
+  therefore held the connection for the whole branch and routinely outran the
+  30s client default, surfacing as a failure when the answer had in fact landed.
+  Both methods now take `timeout=` and default to `max(client.timeout, 180)`,
+  rather than raising the client-wide default and slowing every genuinely-hung
+  call in the session. A read timeout is no longer treated as a failure by
+  default: the submit reached the server, so the input is checked for
+  consumption and a normal result reports the branch as still running. It is
+  re-raised only if the input is genuinely still pending. The request is never
+  retried -- a second POST could resume the run twice -- and an ambiguous lookup
+  reports "still pending" so the original timeout surfaces instead of a false
+  all-clear.
 
 ## [0.18.8] - 2026-08-02
 
