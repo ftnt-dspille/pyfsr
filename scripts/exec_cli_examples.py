@@ -90,9 +90,20 @@ class Fail(Exception):
     pass
 
 
-def check(label, args, expect_exit=0, stdout_test=None, stderr_test=None):
+# fsr_playbooks resolves `assign_to.team` name -> IRI through the catalog's
+# `teams` table and refuses a name it cannot resolve (a bare name creates the
+# approval gate unowned and invisible). That table is only populated by a warmup
+# against a live SOAR, so offline a playbook assigning a team by name always
+# fails to validate. Same catalog-cold allowance as tests/unit/test_playbook_library.py.
+_TEAMS_UNSYNCED = "`teams` reference table is unsynced"
+
+
+def check(label, args, expect_exit=0, stdout_test=None, stderr_test=None, allow_cold_team=False):
     rc, out, err = _run(args)
     detail = f"rc={rc}" + (f"\n--stdout--\n{out[:400]}" if out else "") + (f"\n--stderr--\n{err[:400]}" if err else "")
+    if rc != expect_exit and allow_cold_team and _TEAMS_UNSYNCED in err:
+        print(f"  ok  {label}  (exit {rc}: catalog-cold team, needs a live-SOAR warmup)")
+        return out
     if rc != expect_exit:
         raise Fail(f"{label}: expected exit {expect_exit}, got {rc}\n{detail}")
     if stdout_test and not stdout_test(out):
@@ -180,7 +191,7 @@ def main():
             (
                 f"validate {pb['slug']}",
                 ["playbook", "validate", os.path.join(REPO_ROOT, pb["path"])],
-                dict(expect_exit=0),
+                dict(expect_exit=0, allow_cold_team=True),
             )
         )
 
