@@ -29,12 +29,17 @@ def render(
     headers: Sequence[str] | None = None,
     *,
     fmt: str = "table",
-    file: TextIO = sys.stdout,
+    file: TextIO | None = None,
 ) -> None:
     """Render tabular ``rows`` in the requested format (``table``/``json``/``csv``).
 
     Columns whose header looks like a secret (password/token/...) are masked.
+    ``file`` defaults to whatever ``sys.stdout`` is *at call time*, so a caller
+    that redirects stdout -- a test harness, a ``contextlib.redirect_stdout``
+    block -- sees the output. Binding it as a default argument would capture the
+    stream that existed at import.
     """
+    file = sys.stdout if file is None else file
     rows = [[("" if c is None else str(c)) for c in row] for row in rows]
     if headers:
         secret_cols = [i for i, h in enumerate(headers) if _redact_key(h)]
@@ -72,8 +77,12 @@ def _render_table(rows: Sequence[Sequence[Any]], headers: Sequence[str] | None, 
         file.write("  ".join(str(cell).ljust(width[i]) for i, cell in enumerate(row)) + "\n")
 
 
-def kv(pairs: dict[str, Any], *, fmt: str = "table", file: TextIO = sys.stdout) -> None:
-    """Render a key/value identity card. Values under secret-looking keys are masked."""
+def kv(pairs: dict[str, Any], *, fmt: str = "table", file: TextIO | None = None) -> None:
+    """Render a key/value identity card. Values under secret-looking keys are masked.
+
+    ``file`` resolves to ``sys.stdout`` at call time -- see :func:`render`.
+    """
+    file = sys.stdout if file is None else file
     pairs = _scrub(pairs)
     if fmt == "json":
         json.dump(pairs, file, indent=2, default=str)
