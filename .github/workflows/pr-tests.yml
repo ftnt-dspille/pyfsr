@@ -188,16 +188,28 @@ jobs:
         uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
 
       - name: Install runtime deps at their declared floors
+        # `--python 3.10` is required, not decorative: a bare `uv venv` ignores
+        # the setup-python interpreter and picks uv's own default, which lands on
+        # a Python new enough that the floor releases have no wheels. uv then
+        # source-builds pydantic-core and dies in cargo/maturin -- a toolchain
+        # failure that says nothing about whether the floors work.
         run: |
-          uv venv
+          uv venv --python 3.10
           uv pip install --resolution lowest-direct -e .
           uv pip install pytest pytest-mock tomli
+
+      - name: Confirm the interpreter is the requires-python floor
+        # Call the venv interpreter directly rather than via `uv run --no-sync`,
+        # which warns about an "incompatible environment" here and resolves its
+        # own Python preference on top of the venv we just built.
+        run: |
+          .venv/bin/python -c "import sys; assert sys.version_info[:2] == (3, 10), sys.version; print(sys.version)"
 
       - name: Show what resolved
         run: uv pip list | grep -iE '^(requests|pydantic|pyyaml) '
 
       - name: Run tests against the floors
-        run: uv run --no-sync python -m pytest tests/ -q
+        run: .venv/bin/python -m pytest tests/ -q
 
   docs:
     needs: test
