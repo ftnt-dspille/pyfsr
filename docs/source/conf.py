@@ -154,6 +154,10 @@ nitpick_ignore = [
     ("py:obj", "pyfsr.models.ApiResult"),
     ("py:obj", "pyfsr.models._generated"),
     ("py:mod", "pyfsr.models._generated"),
+    # Same shape: the instances CLI docstring cites the module that implements
+    # its secret redaction, but autoapi does not emit pages for private modules,
+    # so the `:mod:` xref has no target under `-n`.
+    ("py:mod", "pyfsr.cli._output"),
     ("py:class", "pydantic.main.BaseModel"),
     ("py:class", "pydantic.BaseModel"),
     ("py:obj", "pydantic.BaseModel"),
