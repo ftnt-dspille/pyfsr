@@ -63,6 +63,10 @@ jobs:
     strategy:
       matrix:
         python-version: [ "3.10", "3.11", "3.12", "3.13" ]
+    # Pin uv to the matrix interpreter; left unset it picks its own and the
+    # matrix would silently test one Python four times.
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -76,18 +80,31 @@ jobs:
           cache: pip
           cache-dependency-path: '**/pyproject.toml'
 
-      - name: Install dependencies
-        run: |
-          pip install -e '.[test]' tomli
-          # The playbooks extra (fsr_playbooks) floor was lowered to Python
-          # >=3.10. Until that release is on PyPI the pin may still resolve to a
-          # 3.12-only build on older Pythons, so install best-effort -- authoring
-          # tests run where the extra installs and skip elsewhere.
-          pip install '.[playbooks]' || echo "playbooks extra unavailable on this Python; authoring tests will skip"
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+
+      # PR and push runs install the LOCKED set. Dependencies here are declared
+      # as ranges (correct for a library), so resolving fresh on every run means
+      # an upstream release lands in whatever CI run happens next -- an unrelated
+      # PR goes red for something nobody in it touched. That is exactly how
+      # fsr_playbooks 0.6.22 broke main twice in one session. `--locked` fails
+      # rather than silently updating if uv.lock has drifted from pyproject.
+      - name: Install dependencies (locked)
+        if: github.event_name != 'schedule'
+        run: uv sync --locked --extra test --extra playbooks
+
+      # The weekly run re-resolves to the newest versions the ranges allow. That
+      # is the point of the schedule (see the trigger comment): drift surfaces
+      # here, in a run whose only job is to find it, instead of ambushing a PR.
+      # A failure here means a dependency moved -- bump the floor deliberately.
+      - name: Install dependencies (latest)
+        if: github.event_name == 'schedule'
+        run: uv sync --upgrade --extra test --extra playbooks
 
       - name: Run tests
-        run: |
-          pytest tests/ --cov=pyfsr --cov-report=xml
+        run: uv run --no-sync pytest tests/ --cov=pyfsr --cov-report=xml
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
