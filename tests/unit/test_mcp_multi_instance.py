@@ -2,8 +2,13 @@
 
 import json
 
+import pytest
+
 from pyfsr.agent import mcp as mcp_mod
 from pyfsr.agent import tools
+
+# Every test here builds a real MCP server, so the whole module needs the extra.
+pytestmark = pytest.mark.requires_extra("mcp")
 
 
 class FakeClient:

@@ -26,7 +26,12 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.31.0",
-    "pydantic>=2"
+    "pydantic>=2",
+    # `pack_agent` / `AgentPackage.from_dir` are core exports (pyfsr.__all__) and
+    # read prompt.yaml / memory.yaml, so PyYAML is a core requirement -- not an
+    # extra. It used to arrive only transitively via `pyfsr[playbooks]`, which
+    # made `pip install pyfsr` + `pack_agent(...)` raise ModuleNotFoundError.
+    "pyyaml>=6"
 ]
 
 [project.optional-dependencies]

@@ -8,14 +8,9 @@ optional ``fsr_playbooks`` extra is absent.
 
 from __future__ import annotations
 
-import importlib.util
-
 import pytest
 
-requires_compiler = pytest.mark.skipif(
-    importlib.util.find_spec("fsr_playbooks") is None,
-    reason="fsr_playbooks (playbooks extra) not installed",
-)
+requires_compiler = pytest.mark.requires_extra("playbooks")
 
 # Clean playbook (compiles + verifies).
 GOOD_YAML = """collection: PyfsrTest Pack

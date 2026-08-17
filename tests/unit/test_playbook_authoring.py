@@ -6,8 +6,6 @@ Covers ``pyfsr.authoring`` (the compile bridge) and the
 
 from __future__ import annotations
 
-import importlib.util
-
 import pytest
 
 from pyfsr.api.workflow_collections import WorkflowCollectionsAPI
@@ -15,10 +13,7 @@ from pyfsr.api.workflow_collections import WorkflowCollectionsAPI
 # The YAML compiler lives in the optional ``fsr_playbooks`` extra, which requires
 # Python >=3.12. Tests that exercise real compilation skip when it is absent;
 # the missing-extra test below stubs the import and always runs.
-requires_compiler = pytest.mark.skipif(
-    importlib.util.find_spec("fsr_playbooks") is None,
-    reason="fsr_playbooks (playbooks extra) not installed",
-)
+requires_compiler = pytest.mark.requires_extra("playbooks")
 
 # A minimal playbook that compiles cleanly against the packaged reference catalog.
 GOOD_YAML = """collection: PyfsrTest Pack
@@ -263,7 +258,7 @@ class _FakePicklists:
     def __init__(self, data):
         from pyfsr.models import PicklistItem
 
-        # {name: [PicklistItem]} — warm_catalog reads typed items via .all().
+        # {name: [PicklistItem]} -- warm_catalog reads typed items via .all().
         self._data = {
             name: [PicklistItem(itemValue=it["itemValue"], **{"@id": it["iri"]}) for it in items]
             for name, items in data.items()
@@ -460,7 +455,7 @@ def test_warm_catalog_records_conditional_params(tmp_path):
 
 @requires_compiler
 def test_warm_catalog_incremental_skips_fresh_sections(tmp_path):
-    """With max_age set, a second warm skips sections warmed within the window —
+    """With max_age set, a second warm skips sections warmed within the window --
     no client calls, cached counts reported, <section>_skipped flagged."""
     from pyfsr.authoring import warm_catalog
 
@@ -633,7 +628,7 @@ def test_warm_catalog_enables_name_based_owner_resolution(tmp_path, monkeypatch)
         picklists={},
         tags_resp={"hydra:member": []},
     )
-    # Keep the seamless warm off the real ~/.cache — point it at tmp_path.
+    # Keep the seamless warm off the real ~/.cache -- point it at tmp_path.
     monkeypatch.setattr("pyfsr.authoring._default_cache_db", lambda: tmp_path / "cache.db")
 
     yaml = """

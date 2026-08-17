@@ -10,7 +10,14 @@ import argparse
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from pyfsr.cli import playbook as pb
+
+# The step-catalog handlers patch `pyfsr.playbook_catalog`, a lazy attribute that
+# only exists when the playbooks extra is installed -- so unlike the rest of this
+# module they cannot run fully offline.
+requires_catalog = pytest.mark.requires_extra("playbooks")
 
 
 def _args(**kw) -> argparse.Namespace:
@@ -146,6 +153,7 @@ def test_cmd_lint_compile_failure_returns_1():
 
 
 # -- cmd_steps ---------------------------------------------------------------
+@requires_catalog
 def test_cmd_steps_lists_types(capfd):
     infos = [SimpleNamespace(short="set_var", canonical="SetVariable", modeled=True, purpose="set a var")]
     with patch("pyfsr.playbook_catalog.list_step_types", return_value=infos):
@@ -168,6 +176,7 @@ def _help(**kw):
     return SimpleNamespace(**base)
 
 
+@requires_catalog
 def test_cmd_step_help_full(capfd):
     with patch("pyfsr.playbook_catalog.step_help", return_value=_help()):
         assert pb.cmd_step_help(_args(type="set_var", schema=True)) == 0
@@ -175,12 +184,14 @@ def test_cmd_step_help_full(capfd):
     assert "example" in out and "arguments JSON schema" in out
 
 
+@requires_catalog
 def test_cmd_step_help_no_example(capfd):
     with patch("pyfsr.playbook_catalog.step_help", return_value=_help(example_yaml=None)):
         assert pb.cmd_step_help(_args(type="set_var", schema=False)) == 0
     assert "no bundled example" in capfd.readouterr().err
 
 
+@requires_catalog
 def test_cmd_step_help_unknown_type(capfd):
     with patch("pyfsr.playbook_catalog.step_help", side_effect=KeyError("no such type")):
         assert pb.cmd_step_help(_args(type="bogus", schema=False)) == 1
