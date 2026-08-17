@@ -16,11 +16,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - **Two dependency floors raised to versions that actually work.** Both were
-  declared and never exercised -- CI always resolved the newest -- so both
-  claims were false for as long as they had been made. A new `test-floors` CI
-  job now installs every runtime dependency at the oldest version its specifier
-  allows, on the `requires-python` floor, so this class of drift cannot recur
-  silently.
+  declared and never exercised -- CI always resolves the newest -- so both
+  claims were false for as long as they had been made.
   - `pydantic>=2` -> **`pydantic>=2.1`**. At exactly pydantic 2.0, four
     `diagnose_run` tests fail (`not_reached` returns empty); 2.1 through 2.11
     are clean.

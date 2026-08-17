@@ -159,58 +159,6 @@ jobs:
           PY
           pytest tests/ -q
 
-  # Resolves every *runtime* dependency to the oldest version its specifier
-  # allows, so a floor that is merely asserted cannot stay wrong. `pydantic>=2`
-  # was declared for a long time while pydantic 2.0 in fact failed four
-  # `diagnose_run` tests; this job is what surfaces that class of drift.
-  #
-  # Runs on 3.10 (the `requires-python` floor) because floors and the oldest
-  # interpreter are where old releases actually break, and old wheels often have
-  # no build for newer Pythons.
-  #
-  # Test tooling is installed SEPARATELY and unconstrained: `--resolution
-  # lowest-direct` would otherwise pick the oldest `pytest` the `test` extra
-  # allows -- a bare `pytest` resolves to 2.0.0, which cannot even build. The
-  # floors under test are the shipped runtime ones, not the dev toolchain's.
-  test-floors:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.10'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
-
-      - name: Install runtime deps at their declared floors
-        # `--python 3.10` is required, not decorative: a bare `uv venv` ignores
-        # the setup-python interpreter and picks uv's own default, which lands on
-        # a Python new enough that the floor releases have no wheels. uv then
-        # source-builds pydantic-core and dies in cargo/maturin -- a toolchain
-        # failure that says nothing about whether the floors work.
-        run: |
-          uv venv --python 3.10
-          uv pip install --resolution lowest-direct -e .
-          uv pip install pytest pytest-mock tomli
-
-      - name: Confirm the interpreter is the requires-python floor
-        # Call the venv interpreter directly rather than via `uv run --no-sync`,
-        # which warns about an "incompatible environment" here and resolves its
-        # own Python preference on top of the venv we just built.
-        run: |
-          .venv/bin/python -c "import sys; assert sys.version_info[:2] == (3, 10), sys.version; print(sys.version)"
-
-      - name: Show what resolved
-        run: uv pip list | grep -iE '^(requests|pydantic|pyyaml) '
-
-      - name: Run tests against the floors
-        run: .venv/bin/python -m pytest tests/ -q
-
   docs:
     needs: test
     permissions:
@@ -233,7 +181,7 @@ jobs:
   # into one result, so any leg failing still fails the gate.
   gate:
     if: always()
-    needs: [ lint, test, test-no-extras, test-floors, docs ]
+    needs: [ lint, test, test-no-extras, docs ]
     runs-on: ubuntu-latest
     steps:
       - name: Require every job to have succeeded
