@@ -9,12 +9,12 @@ so an app (or the bundled MCP server) never hand-wires host/auth/port::
 
 Recognized variables:
 
-- ``FSR_BASE_URL`` — appliance host or URL (required; ``FSR_HOST`` also accepted).
-- ``FSR_API_KEY`` — API-key auth, or ``FSR_USERNAME`` + ``FSR_PASSWORD``.
-- ``FSR_PORT`` — optional port override.
-- ``FSR_VERIFY_SSL`` — ``false``/``0``/``no``/``off`` disables TLS verification.
-- ``FSR_SUPPRESS_INSECURE_WARNINGS`` — silence urllib3 warnings when SSL is off.
-- ``FSR_TIMEOUT`` — per-request timeout in seconds (default 30).
+- ``FSR_BASE_URL`` -- appliance host or URL (required; ``FSR_HOST`` also accepted).
+- ``FSR_API_KEY`` -- API-key auth, or ``FSR_USERNAME`` + ``FSR_PASSWORD``.
+- ``FSR_PORT`` -- optional port override.
+- ``FSR_VERIFY_SSL`` -- ``false``/``0``/``no``/``off`` disables TLS verification.
+- ``FSR_SUPPRESS_INSECURE_WARNINGS`` -- silence urllib3 warnings when SSL is off.
+- ``FSR_TIMEOUT`` -- per-request timeout in seconds (default 30).
 
 This is the generic, infra-free counterpart of fsrpb's ``probes/_env.py`` (which
 also carries SSH/e2e knobs that don't belong in the transport SDK).
@@ -50,14 +50,28 @@ def _load_toml(path: str | Path) -> dict[str, Any]:
 
 
 def _parse_env_text(text: str) -> dict[str, str]:
-    """Parse ``KEY=VALUE`` lines (``#`` comments, blanks ignored) into a dict."""
+    """Parse ``KEY=VALUE`` lines (``#`` comments, blanks ignored) into a dict.
+
+    A value wrapped in matching single or double quotes is unwrapped, matching
+    what ``python-dotenv``, docker's ``--env-file``, and shell ``export`` all do.
+    Without this, ``FSR_API_KEY="abc"`` authenticates as the 5-character string
+    ``"abc"`` -- quotes included -- and the appliance answers 401 with nothing to
+    suggest the quotes are the problem. ``FSR_VERIFY_SSL="false"`` fails the same
+    way but silently: the flag never matches a falsey word, so TLS verification
+    stays *on* against a self-signed lab box.
+    """
     out: dict[str, str] = {}
     for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")
-        out[key.strip()] = value.strip()
+        value = value.strip()
+        # Only a matched pair, and only when there is something between them --
+        # a lone quote is part of the value, and `"` alone must stay `"`.
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        out[key.strip()] = value
     return out
 
 
@@ -134,7 +148,7 @@ class EnvConfig(BaseModel):
 
         Real environment variables win over the file unless ``override=True``.
         This loads only the ``FSR_*`` keys this class understands; it is **not** a
-        general ``.env`` loader — for that, use ``python-dotenv`` and then call
+        general ``.env`` loader -- for that, use ``python-dotenv`` and then call
         :meth:`from_env`.
         """
         file_vars = _parse_env_text(Path(path).read_text(encoding="utf-8"))
@@ -167,8 +181,8 @@ class EnvConfig(BaseModel):
         """Build configuration from an already-parsed ``[fortisoar]`` mapping.
 
         Accepts either the full document (with a top-level ``fortisoar`` table) or
-        the inner table directly, so callers holding a sub-table — e.g. one entry
-        of an instance registry — can reuse the same auth/host parsing as
+        the inner table directly, so callers holding a sub-table -- e.g. one entry
+        of an instance registry -- can reuse the same auth/host parsing as
         :meth:`from_config_file` without re-reading a file. ``source`` only labels
         error messages.
         """
