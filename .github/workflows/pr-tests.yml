@@ -1,15 +1,25 @@
 name: Tests
 
-# The `protect-main` ruleset requires exactly the six contexts this workflow
-# produces (lint, test (3.10..3.13), docs / docs). Two consequences shape the
-# triggers below, and both are load-bearing:
+# The `gate` job at the bottom aggregates every other job in this workflow, so
+# `protect-main` can require ONE context (`gate`) instead of enumerating them.
+# Enumerating is what made this header necessary in the first place: each new or
+# renamed job meant a branch-protection edit, and a required context that never
+# reports blocks the merge. With the aggregate, adding a job here is a
+# code-only change.
+#
+# NOTE: the ruleset currently still requires the six original contexts (lint,
+# test (3.10..3.13), docs / docs) and does not yet require `gate`. Collapsing it
+# is a ruleset edit, not a code change -- until then `gate` reports without
+# blocking. See RELEASING.md.
+#
+# Two consequences shape the triggers below, and both are load-bearing:
 #
 #   1. No `paths` filter. A required status check that never runs never
 #      reports, and GitHub treats "not reported" as "not satisfied" -- so a
 #      docs-only change would be unmergeable rather than trivially green. Path
 #      filters and required checks do not combine; the checks win.
-#   2. `push` on main is listed. Without it these six jobs have no trigger that
-#      fires on a direct push, so every push to main bypassed all six -- not
+#   2. `push` on main is listed. Without it these jobs have no trigger that
+#      fires on a direct push, so every push to main bypassed them all -- not
 #      because the bypass was wanted, but because the checks were structurally
 #      unreachable. See RELEASING.md.
 on:
@@ -117,8 +127,7 @@ jobs:
   # hard-failed with ModuleNotFoundError on an install without the extra. This
   # job runs the suite with NO extras, so a test that needs one must be gated
   # (`@pytest.mark.requires_extra` / module-level `importorskip`) or this goes
-  # red. Not in the `protect-main` ruleset's six required contexts, so it reports
-  # without blocking until it is added there.
+  # red. Rolled up by `gate` below.
   test-no-extras:
     runs-on: ubuntu-latest
     steps:
@@ -150,6 +159,58 @@ jobs:
           PY
           pytest tests/ -q
 
+  # Resolves every *runtime* dependency to the oldest version its specifier
+  # allows, so a floor that is merely asserted cannot stay wrong. `pydantic>=2`
+  # was declared for a long time while pydantic 2.0 in fact failed four
+  # `diagnose_run` tests; this job is what surfaces that class of drift.
+  #
+  # Runs on 3.10 (the `requires-python` floor) because floors and the oldest
+  # interpreter are where old releases actually break, and old wheels often have
+  # no build for newer Pythons.
+  #
+  # Test tooling is installed SEPARATELY and unconstrained: `--resolution
+  # lowest-direct` would otherwise pick the oldest `pytest` the `test` extra
+  # allows -- a bare `pytest` resolves to 2.0.0, which cannot even build. The
+  # floors under test are the shipped runtime ones, not the dev toolchain's.
+  test-floors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
+
+      - name: Install runtime deps at their declared floors
+        # `--python 3.10` is required, not decorative: a bare `uv venv` ignores
+        # the setup-python interpreter and picks uv's own default, which lands on
+        # a Python new enough that the floor releases have no wheels. uv then
+        # source-builds pydantic-core and dies in cargo/maturin -- a toolchain
+        # failure that says nothing about whether the floors work.
+        run: |
+          uv venv --python 3.10
+          uv pip install --resolution lowest-direct -e .
+          uv pip install pytest pytest-mock tomli
+
+      - name: Confirm the interpreter is the requires-python floor
+        # Call the venv interpreter directly rather than via `uv run --no-sync`,
+        # which warns about an "incompatible environment" here and resolves its
+        # own Python preference on top of the venv we just built.
+        run: |
+          .venv/bin/python -c "import sys; assert sys.version_info[:2] == (3, 10), sys.version; print(sys.version)"
+
+      - name: Show what resolved
+        run: uv pip list | grep -iE '^(requests|pydantic|pyyaml) '
+
+      - name: Run tests against the floors
+        run: .venv/bin/python -m pytest tests/ -q
+
   docs:
     needs: test
     permissions:
@@ -160,3 +221,30 @@ jobs:
       # workflow_call runs, which have no pull_request context.
       ref: ${{ github.event.pull_request.head.sha || github.sha }}
     secrets: inherit
+
+  # The single context `protect-main` should require. `if: always()` is what
+  # makes it meaningful: without it this job would be skipped whenever a
+  # dependency failed, and a skipped required check reports nothing -- the exact
+  # "not reported = not satisfied" trap described at the top of this file.
+  #
+  # `skipped` counts as a failure on purpose. `docs` needs `test`, so a failing
+  # matrix leg skips `docs` rather than failing it; treating that as a pass would
+  # let a broken build through. Note `needs: test` collapses all four matrix legs
+  # into one result, so any leg failing still fails the gate.
+  gate:
+    if: always()
+    needs: [ lint, test, test-no-extras, test-floors, docs ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job to have succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "upstream results: $RESULTS"
+          for r in $RESULTS; do
+            if [ "$r" != "success" ]; then
+              echo "::error::a required job did not succeed (saw '$r')"
+              exit 1
+            fi
+          done
+          echo "all upstream jobs succeeded"
