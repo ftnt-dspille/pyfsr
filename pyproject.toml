@@ -27,9 +27,10 @@ requires-python = ">=3.10"
 dependencies = [
     "requests>=2.31.0",
     # Floor is 2.1, not 2.0: at exactly pydantic 2.0 four `diagnose_run` tests
-    # fail (`not_reached` comes back empty), and 2.1 through 2.11 are clean. The
-    # `test-floors` CI job resolves these floors so a claim like this cannot go
-    # stale unnoticed -- `>=2` was asserted for a long time and was never true.
+    # fail (`not_reached` comes back empty), and 2.1 through 2.11 are clean.
+    # (`>=2` was asserted here for a long time and was never true. Nothing
+    # resolves these floors in CI, so verify by hand if you change one:
+    # `uv pip install --resolution lowest-direct -e .` on Python 3.10.)
     "pydantic>=2.1",
     # `pack_agent` / `AgentPackage.from_dir` are core exports (pyfsr.__all__) and
     # read prompt.yaml / memory.yaml, so PyYAML is a core requirement -- not an
@@ -39,7 +40,7 @@ dependencies = [
     # Floor is 6.0.1, not 6.0: PyYAML 6.0's sdist cannot build against Cython 3
     # ("'build_ext' object has no attribute 'cython_sources'"), so `>=6` admits a
     # version that fails to install anywhere a prebuilt wheel is unavailable.
-    # 6.0.1 is the first release that builds. Found by the `test-floors` job.
+    # 6.0.1 is the first release that builds.
     "pyyaml>=6.0.1"
 ]
 
