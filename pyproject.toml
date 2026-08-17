@@ -26,7 +26,11 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.31.0",
-    "pydantic>=2",
+    # Floor is 2.1, not 2.0: at exactly pydantic 2.0 four `diagnose_run` tests
+    # fail (`not_reached` comes back empty), and 2.1 through 2.11 are clean. The
+    # `test-floors` CI job resolves these floors so a claim like this cannot go
+    # stale unnoticed -- `>=2` was asserted for a long time and was never true.
+    "pydantic>=2.1",
     # `pack_agent` / `AgentPackage.from_dir` are core exports (pyfsr.__all__) and
     # read prompt.yaml / memory.yaml, so PyYAML is a core requirement -- not an
     # extra. It used to arrive only transitively via `pyfsr[playbooks]`, which
