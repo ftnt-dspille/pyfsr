@@ -12,7 +12,7 @@
 
 **pyfsr** is a batteries-included Python client for the FortiSOAR REST API. It
 gives you a typed query/CRUD layer over any module, picklist resolution,
-connector execution, playbook-run history, safe deletes — and a ready-made
+connector execution, playbook-run history, safe deletes -- and a ready-made
 **AI/agent surface** (tool-schema registry + an optional MCP server) so an agent
 can drive FortiSOAR with no glue code.
 
@@ -70,30 +70,30 @@ client = EnvConfig.from_env().client()
 
 ## Features
 
-- **Generic record access** — `client.records(module)` for CRUD on any module;
+- **Generic record access** -- `client.records(module)` for CRUD on any module;
   no hand-built `/api/3/...` URLs or Hydra unwrapping.
-- **Query DSL** — `Query().eq(...).in_(...).group(...).sort(...).limit(...)`,
+- **Query DSL** -- `Query().eq(...).in_(...).group(...).sort(...).limit(...)`,
   compiled to the FortiSOAR query-body shape (pagination handled for you).
-- **Typed models** — Alert/Incident/Task/Comment come back as Pydantic v2
+- **Typed models** -- Alert/Incident/Task/Comment come back as Pydantic v2
   models that are also dict-compatible; unknown modules fall back to a lenient
   `BaseRecord`, so custom fields/modules never break.
-- **Picklists** — `client.picklists` resolves friendly values (`"High"`) to
+- **Picklists** -- `client.picklists` resolves friendly values (`"High"`) to
   IRIs and discovers which picklist a `(module, field)` binds to.
-- **Connectors** — `client.connectors` lists configured connectors, runs
+- **Connectors** -- `client.connectors` lists configured connectors, runs
   healthchecks, and executes operations.
-- **Playbooks** — `client.playbooks` merges live + historical run history and
+- **Playbooks** -- `client.playbooks` merges live + historical run history and
   resumes manual-input steps.
-- **Safe deletes** — soft-delete/restore + guarded single-row hard delete.
-- **Schema discovery** — `client.list_modules()` / `client.describe_module()`.
-- **Resilient transport** — configurable `timeout=`, automatic retry with
+- **Safe deletes** -- soft-delete/restore + guarded single-row hard delete.
+- **Schema discovery** -- `client.list_modules()` / `client.describe_module()`.
+- **Resilient transport** -- configurable `timeout=`, automatic retry with
   backoff on idempotent requests (429/5xx), and secrets masked in verbose logs.
-- **Bundled OpenAPI spec** — `pyfsr.spec.load_spec()` for offline reference and
+- **Bundled OpenAPI spec** -- `pyfsr.spec.load_spec()` for offline reference and
   `drift(client)` to compare the spec against a live appliance.
 
 ## AI / agent-friendly
 
 pyfsr ships a transport-neutral **tool registry** for the core operations, with
-token-efficient results and structured (never-raised) errors — feed it to
+token-efficient results and structured (never-raised) errors -- feed it to
 Anthropic tool-use, OpenAI function calling, your own agent loop, or the bundled
 MCP server.
 
@@ -124,14 +124,28 @@ FSR_BASE_URL=soar.example.com FSR_API_KEY=... python -m pyfsr.agent.mcp
 ```
 
 It exposes the same registry (record CRUD, schema discovery, picklists,
-connectors, playbook runs) as MCP tools — generic and dependency-light,
+connectors, playbook runs) as MCP tools -- generic and dependency-light,
 distinct from any domain-specific FortiSOAR MCP.
 
 ## Command-line tools
 
-Installing pyfsr puts a `pyfsr` command on your path with six groups.
+Installing pyfsr puts a `pyfsr` command on your path with seven groups.
 
-**`pyfsr appliance`** — operational verbs against a FortiSOAR box (most run over
+**`pyfsr instances`** -- inspect the named-instance registry
+(`~/.pyfsr/instances.toml`), which is what every `--instance` flag resolves
+against:
+
+```bash
+pyfsr instances list                 # every alias: base URL, auth kind, SSH profile
+pyfsr instances show 206             # one instance's resolved settings (no secrets)
+pyfsr instances check                # connect to each box; exit 1 if any fails
+```
+
+`check` probes the version endpoint and then an authenticated read, so a
+registered-but-broken alias shows up as `unreachable` or `auth-failed` before a
+script fails on it.
+
+**`pyfsr appliance`** -- operational verbs against a FortiSOAR box (most run over
 SSH/sudo and stay dependency-light on the far end):
 
 ```bash
@@ -147,7 +161,7 @@ pyfsr appliance content-hub sync     # pull the Content Hub catalog + artifacts
 Other appliance subgroups: `mq` (RabbitMQ), `ha`, `certs`, `logs`, and
 `diagnose` (runs `fsr_diagnose.sh`). `--help` on any of them lists the verbs.
 
-**`pyfsr playbook`** — author playbooks as YAML and deploy them:
+**`pyfsr playbook`** -- author playbooks as YAML and deploy them:
 
 ```bash
 pyfsr playbook steps                 # list every step type you can write
@@ -160,7 +174,7 @@ pyfsr playbook lint flow.yaml        # live preflight: connector steps missing c
 pyfsr playbook deploy flow.yaml      # compile and create it on the appliance
 ```
 
-**`pyfsr records`** — query and manage FortiSOAR records over the API:
+**`pyfsr records`** -- query and manage FortiSOAR records over the API:
 
 ```bash
 pyfsr records alerts [--status Open] [--severity High]
@@ -168,12 +182,12 @@ pyfsr records incidents '<field=value or Query DSL JSON>'
 pyfsr records delete <module> <uuid...> [--yes]
 ```
 
-**`pyfsr repo`** — discover and download from Fortinet's content repo (no
+**`pyfsr repo`** -- discover and download from Fortinet's content repo (no
 appliance needed).
 
-**`pyfsr widget`** — upload and publish widgets on a live appliance.
+**`pyfsr widget`** -- upload and publish widgets on a live appliance.
 
-**`pyfsr mcp`** — call FortiSOAR's own native MCP tool gateway
+**`pyfsr mcp`** -- call FortiSOAR's own native MCP tool gateway
 (`list-tools` / `call`), distinct from the generic `pyfsr.agent.mcp` server.
 
 ## Development
@@ -189,4 +203,4 @@ Live integration tests run with `pytest -m integration` and need an
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT -- see [LICENSE](LICENSE).

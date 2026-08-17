@@ -146,6 +146,36 @@ def test_from_env_file_override(tmp_path, monkeypatch):
     assert cfg.auth == "filekey"  # file wins when override=True
 
 
+def test_from_env_file_strips_matched_quotes(tmp_path, monkeypatch):
+    """Quoted values must not carry their quotes into the auth header.
+
+    An env file written with shell/dotenv habits (`KEY="value"`) used to
+    authenticate as the literal `"value"` and get a 401 that blamed the
+    credential, not the quoting.
+    """
+    monkeypatch.delenv("FSR_API_KEY", raising=False)
+    monkeypatch.delenv("FSR_BASE_URL", raising=False)
+    monkeypatch.delenv("FSR_VERIFY_SSL", raising=False)
+    p = tmp_path / ".env"
+    p.write_text('FSR_BASE_URL="https://quoted.example.com"\nFSR_API_KEY=\'singlequoted\'\nFSR_VERIFY_SSL="false"\n')
+    cfg = EnvConfig.from_env_file(p)
+    assert cfg.base_url == "https://quoted.example.com"
+    assert cfg.auth == "singlequoted"
+    # The silent half: a quoted flag never matched a falsey word, so TLS
+    # verification stayed on against a self-signed box.
+    assert cfg.verify_ssl is False
+
+
+def test_from_env_file_keeps_unmatched_and_inner_quotes(tmp_path, monkeypatch):
+    """Only a *matched* wrapping pair is stripped -- quotes can be real data."""
+    monkeypatch.delenv("FSR_API_KEY", raising=False)
+    monkeypatch.delenv("FSR_BASE_URL", raising=False)
+    p = tmp_path / ".env"
+    p.write_text('FSR_BASE_URL=https://plain.example.com\nFSR_API_KEY="mismatched\n')
+    cfg = EnvConfig.from_env_file(p)
+    assert cfg.auth == '"mismatched'
+
+
 # -- client() ---------------------------------------------------------------
 def test_client_passes_config_through(recorder):
     EnvConfig(base_url="h", auth="k", port=9000, timeout=12).client()
