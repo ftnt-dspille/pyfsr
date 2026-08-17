@@ -1,9 +1,53 @@
+import importlib.util
 import json
 from pathlib import Path
 
 import pytest
 import requests
 from requests import Response
+
+# Optional-extra gating -------------------------------------------------------
+#
+# Tests that need an optional extra declare it once:
+#
+#     @pytest.mark.requires_extra("playbooks")     # one test
+#     pytestmark = pytest.mark.requires_extra("playbooks")   # whole module
+#
+# and the hook below turns a missing extra into a *skip*. This is the single
+# source of truth: gating by hand (bare imports, per-file `skipif`, ad-hoc
+# `importorskip`) is what let three modules hard-fail with ModuleNotFoundError
+# on an install without the extra, while CI's install step assumed they would
+# skip. The `no-extras` CI job runs the suite on a bare install to keep that
+# assumption enforced rather than merely intended.
+#
+# Maps the extra name in pyproject's [project.optional-dependencies] to the
+# module that proves it is installed.
+EXTRA_IMPORTS = {
+    "playbooks": "fsr_playbooks",
+    "mcp": "mcp",
+}
+
+
+def _extra_missing(extra: str) -> bool:
+    """True when ``extra``'s proof module cannot be imported."""
+    try:
+        module = EXTRA_IMPORTS[extra]
+    except KeyError:
+        raise pytest.UsageError(
+            f"unknown extra {extra!r} in requires_extra; add it to EXTRA_IMPORTS in tests/conftest.py"
+        ) from None
+    return importlib.util.find_spec(module) is None
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip tests marked ``requires_extra`` when that extra is not installed."""
+    for item in items:
+        for mark in item.iter_markers(name="requires_extra"):
+            for extra in mark.args:
+                if _extra_missing(extra):
+                    item.add_marker(
+                        pytest.mark.skip(reason=f"requires the {extra!r} extra (pip install 'pyfsr[{extra}]')")
+                    )
 
 
 @pytest.fixture
@@ -82,3 +126,7 @@ def mock_responses():
 def pytest_configure(config):
     """Register custom markers."""
     config.addinivalue_line("markers", "integration: mark test as requiring integration with real FortiSOAR instance")
+    config.addinivalue_line(
+        "markers",
+        "requires_extra(name): skip unless the named optional extra (see EXTRA_IMPORTS) is installed",
+    )

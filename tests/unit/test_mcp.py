@@ -33,6 +33,7 @@ def test_client_from_env_missing_config_raises():
 
 
 # -- tool mapping -----------------------------------------------------------
+@pytest.mark.requires_extra("mcp")
 def test_mcp_tools_mirror_registry():
     mcp_tools = mcp_mod._mcp_tools()
     assert len(mcp_tools) == len(tools.list_tools())
@@ -49,6 +50,7 @@ class FakeClient:
         return [{"type": "alerts", "label": "Alerts", "plural": "alerts"}]
 
 
+@pytest.mark.requires_extra("mcp")
 def test_call_wraps_result_as_text_json():
     content = mcp_mod._call(FakeClient(), "list_modules", {})
     assert len(content) == 1
@@ -57,6 +59,7 @@ def test_call_wraps_result_as_text_json():
     assert payload["modules"][0]["type"] == "alerts"
 
 
+@pytest.mark.requires_extra("mcp")
 def test_call_dispatches_new_admin_tool_as_text_json():
     # The new registry tools (module admin / connector config / run-debug / upsert)
     # flow through the same _call -> dispatch path as the originals.
@@ -79,10 +82,11 @@ def test_call_dispatches_new_admin_tool_as_text_json():
     assert payload == {"server": "", "verify_ssl": True}
 
 
+@pytest.mark.requires_extra("mcp")
 def test_call_caps_large_output_with_valid_json_envelope():
     # A list tool whose result serializes past the cap is trimmed list-aware:
     # whole leading items are kept (still valid, parseable JSON) with a
-    # `_truncated` marker reporting shown/total — not a blindly-sliced fragment.
+    # `_truncated` marker reporting shown/total -- not a blindly-sliced fragment.
     class BigClient:
         def list_modules(self, refresh=False):
             return [{"type": f"m{i}", "label": "x" * 100} for i in range(500)]
@@ -99,12 +103,14 @@ def test_call_caps_large_output_with_valid_json_envelope():
     assert out["_truncated"]["shown"] < out["_truncated"]["total"]
 
 
+@pytest.mark.requires_extra("mcp")
 def test_call_small_output_passes_through_verbatim():
     content = mcp_mod._call(FakeClient(), "list_modules", {})
     payload = json.loads(content[0].text)
     assert "truncated" not in payload  # untouched small result
 
 
+@pytest.mark.requires_extra("mcp")
 def test_call_unknown_tool_returns_structured_error():
     content = mcp_mod._call(FakeClient(), "does_not_exist", {})
     payload = json.loads(content[0].text)
@@ -112,6 +118,7 @@ def test_call_unknown_tool_returns_structured_error():
 
 
 # -- server wiring ----------------------------------------------------------
+@pytest.mark.requires_extra("mcp")
 def test_build_server_registers_handlers():
     server = mcp_mod.build_server(FakeClient())
     assert server.name == "pyfsr"
