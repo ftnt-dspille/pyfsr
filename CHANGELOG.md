@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **`pack_agent()` / `AgentPackage.from_dir()` now work on a plain
+  `pip install pyfsr`.** Both are core exports (`pyfsr.__all__`) and both read
+  `prompt.yaml` / `config/memory.yaml`, but PyYAML was never declared as a core
+  dependency -- it arrived only transitively via the unrelated
+  `pyfsr[playbooks]` extra. Installing without that extra left a documented
+  public API raising `ModuleNotFoundError: No module named 'yaml'`. No test
+  could catch it, because CI always installed the extra. **PyYAML (`>=6`) is
+  now a core dependency**, so a default install gains one requirement.
+
 ## [0.19.0] - 2026-08-15
 
 ### Added
