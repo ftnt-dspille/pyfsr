@@ -36,6 +36,9 @@ test = [
     "pytest-cov",
     "pytest-mock",
     "mcp>=1.0,<2", # exercise the optional pyfsr[mcp] server in CI (2.0 renamed APIs)
+    # tomllib is stdlib from 3.11; the tests import this backport below that.
+    # Declared here rather than installed ad hoc in CI so the extra is complete.
+    "tomli; python_version < '3.11'",
 ]
 
 typecheck = [

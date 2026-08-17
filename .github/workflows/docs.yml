@@ -44,13 +44,34 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install package and dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .
-          # `[playbooks]` so the playbook-authoring doctests (compile_yaml →
-          # CompiledPlaybook shape) can run under `make doctest`.
-          python -m pip install ".[docs,playbooks]"
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+
+      # Locked, for the same reason as pr-tests.yml: this job resolved fresh on
+      # every run, so the day fsr_playbooks published 0.6.22 the docs gate went
+      # red on a commit that touched neither docs nor playbooks. `[playbooks]`
+      # is needed so the playbook-authoring doctests (compile_yaml ->
+      # CompiledPlaybook shape) can run under `make doctest`.
+      #
+      # Called by pr-tests.yml, so `github.event_name` is the CALLER's event and
+      # the weekly schedule re-resolves here too -- drift still surfaces, in the
+      # run meant to find it.
+      - name: Install package and dependencies (locked)
+        if: github.event_name != 'schedule'
+        run: uv sync --locked --extra docs --extra playbooks
+
+      - name: Install package and dependencies (latest)
+        if: github.event_name == 'schedule'
+        run: uv sync --upgrade --extra docs --extra playbooks
+
+      # Every step below invokes `python`, `make` (-> sphinx-build) or the
+      # `pyfsr` console script directly. uv syncs into .venv without activating
+      # it, so without this they would run against the runner's system Python
+      # and miss the whole dependency set.
+      - name: Put the synced environment on PATH
+        run: echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Verify package installation
         run: |
