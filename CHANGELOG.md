@@ -11,8 +11,23 @@ All notable changes to this project will be documented in this file.
   dependency -- it arrived only transitively via the unrelated
   `pyfsr[playbooks]` extra. Installing without that extra left a documented
   public API raising `ModuleNotFoundError: No module named 'yaml'`. No test
-  could catch it, because CI always installed the extra. **PyYAML (`>=6`) is
-  now a core dependency**, so a default install gains one requirement.
+  could catch it, because CI always installed the extra. **PyYAML (`>=6.0.1`)
+  is now a core dependency**, so a default install gains one requirement.
+
+### Changed
+- **Two dependency floors raised to versions that actually work.** Both were
+  declared and never exercised -- CI always resolved the newest -- so both
+  claims were false for as long as they had been made. A new `test-floors` CI
+  job now installs every runtime dependency at the oldest version its specifier
+  allows, on the `requires-python` floor, so this class of drift cannot recur
+  silently.
+  - `pydantic>=2` -> **`pydantic>=2.1`**. At exactly pydantic 2.0, four
+    `diagnose_run` tests fail (`not_reached` returns empty); 2.1 through 2.11
+    are clean.
+  - `pyyaml>=6` -> **`pyyaml>=6.0.1`**. PyYAML 6.0's sdist cannot build against
+    Cython 3 (`'build_ext' object has no attribute 'cython_sources'`), so `>=6`
+    admitted a version that fails to install wherever no prebuilt wheel is
+    available. 6.0.1 is the first release that builds.
 
 ## [0.19.0] - 2026-08-15
 
