@@ -3,6 +3,8 @@ normalization, cache-db resolution, and catalog resolution."""
 
 from pathlib import Path
 
+import pytest
+
 from pyfsr.authoring import (
     _default_cache_db,
     _normalize_lax_codes,
@@ -41,8 +43,11 @@ def test_normalize_lax_codes_passes_through_unknown_strings():
     assert "definitely_not_a_real_code" in {str(c) for c in out}
 
 
+@pytest.mark.requires_extra("playbooks")
 def test_normalize_lax_codes_resolves_known_value():
-    # accepts both the friendly value and the enum NAME form for the same code
+    # Equivalence of the value/NAME forms is what the compiler's ErrorCode enum
+    # buys; without the extra `_normalize_lax_codes` passes strings through
+    # verbatim by design, so the two forms legitimately differ.
     from pyfsr.authoring import _normalize_lax_codes as norm
 
     by_value = norm(["unknown_param"])
@@ -64,11 +69,15 @@ def test_default_cache_db_falls_back_to_home(monkeypatch):
 
 
 # -- _resolve_catalog --------------------------------------------------------
+# `_resolve_catalog` goes through `_load_compiler`, which raises
+# PlaybooksExtraNotInstalled without the extra.
+@pytest.mark.requires_extra("playbooks")
 def test_resolve_catalog_explicit_db_path_wins():
     p = _resolve_catalog(client=None, db_path="/some/catalog.db")
     assert p == Path("/some/catalog.db")
 
 
+@pytest.mark.requires_extra("playbooks")
 def test_resolve_catalog_no_client_uses_packaged_default():
     p = _resolve_catalog(client=None, db_path=None)
     # packaged slim catalog path from the compiler
