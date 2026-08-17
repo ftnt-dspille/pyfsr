@@ -70,12 +70,24 @@ mcp = [
 
 # Author playbooks in YAML and deploy them (`pyfsr playbook`, import_from_yaml).
 # Pulls in the fsr_playbooks compiler; the core library never imports it.
-# Floor is 0.4.10: the authoring-DX surface (manual_input.answer, do_until
-# example) relies on the compiler's step-level manual_input inputs/title/
+# Floor was 0.4.10 for the authoring-DX surface (manual_input.answer, do_until
+# example): it relies on the compiler's step-level manual_input inputs/title/
 # description hoist (F3) + the default-on reference lint, both first shipped in
 # 0.4.10 -- older versions silently drop those inputs.
+#
+# Raised to 0.6.22 and capped at <0.7. 0.6.22 is what the gates are verified
+# against: it made `assign_to.team` refuse an unresolvable team name (emitting
+# the bare name created the approval gate UNOWNED), which both playbook gates
+# now allow for offline as catalog-cold. Below it they would not need that
+# allowance; above a minor bump, assume they need re-verifying.
+#
+# The cap is a floor-and-ceiling, not determinism: 0.6.22 arrived as a PATCH
+# bump and broke main twice in one session, and <0.7 would not have stopped
+# that. uv.lock does pin an exact version, but no workflow installs from it --
+# they all `pip install` and resolve fresh -- so the lock constrains nothing in
+# CI today.
 playbooks = [
-    "fsr_playbooks>=0.4.11",
+    "fsr_playbooks>=0.6.22,<0.7",
 ]
 
 [project.scripts]
