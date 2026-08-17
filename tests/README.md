@@ -2,6 +2,40 @@
 
 This document explains how to run tests for the pyfsr library against a real FortiSOAR instance.
 
+## Optional extras: gate every test that needs one
+
+The unit suite must pass on a **bare** install (`pip install -e .`), with no
+optional extras present. A test that needs an extra declares it with the
+`requires_extra` marker, and `tests/conftest.py` turns a missing extra into a
+skip:
+
+```python
+@pytest.mark.requires_extra("playbooks")     # a single test
+def test_needs_the_compiler(): ...
+
+pytestmark = pytest.mark.requires_extra("mcp")   # a whole module
+```
+
+Known extra names live in `EXTRA_IMPORTS` in `tests/conftest.py`, which maps each
+extra to the module that proves it is installed; an unknown name is a `UsageError`
+rather than a silent pass. Prefer marking individual tests over a whole module --
+several of these files mock their dependencies and run fine offline apart from a
+few tests, and a module-level mark throws that coverage away.
+
+One exception: when a module **imports** extra-gated code at module scope, a
+marker cannot help (collection fails before marks are evaluated). Use
+`pytest.importorskip("fsr_playbooks")` there, as `test_playbook_catalog.py` and
+`test_playbook_library.py` do.
+
+The `test-no-extras` CI job runs the suite on a bare install, so an ungated test
+turns that job red instead of only failing for users who installed without the
+extra. Reproduce it locally with:
+
+```bash
+python -m venv .venv-bare && .venv-bare/bin/pip install -e . && .venv-bare/bin/pip install pytest pytest-mock tomli
+.venv-bare/bin/python -m pytest tests/ -q
+```
+
 ## Prerequisites
 
 1. Access to a FortiSOAR instance

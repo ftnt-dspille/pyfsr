@@ -1,4 +1,4 @@
-"""Unit tests for client.mcp — the native FortiSOAR MCP gateway client."""
+"""Unit tests for client.mcp -- the native FortiSOAR MCP gateway client."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ class FakeCallResult:
 
 
 class FakeSession:
-    """Stands in for ``mcp.ClientSession`` — also its own async context manager."""
+    """Stands in for ``mcp.ClientSession`` -- also its own async context manager."""
 
     def __init__(self, tools=None, call_result_text='{"ok": true}', raise_on=None):
         self._tools = tools or [FakeTool("get_alert", "desc")]
@@ -132,6 +132,7 @@ def _patch_mcp(monkeypatch, session):
 
 
 # -- list_tools / call_tool happy paths ----------------------------------------
+@pytest.mark.requires_extra("mcp")
 def test_list_tools_returns_name_description_schema(monkeypatch):
     session = FakeSession(tools=[FakeTool("get_alert", "fetch an alert", {"type": "object"})])
     _patch_mcp(monkeypatch, session)
@@ -153,6 +154,7 @@ def test_list_tools_returns_name_description_schema(monkeypatch):
     assert session.initialized
 
 
+@pytest.mark.requires_extra("mcp")
 def test_call_tool_parses_json_result(monkeypatch):
     session = FakeSession(call_result_text='{"status": "success", "result": {"a": 1}}')
     _patch_mcp(monkeypatch, session)
@@ -164,6 +166,7 @@ def test_call_tool_parses_json_result(monkeypatch):
     assert session.calls == [("get_alert", {"uuid": ["x"]})]
 
 
+@pytest.mark.requires_extra("mcp")
 def test_call_tool_falls_back_to_raw_text_on_bad_json(monkeypatch):
     session = FakeSession(call_result_text="not json")
     _patch_mcp(monkeypatch, session)
@@ -172,6 +175,7 @@ def test_call_tool_falls_back_to_raw_text_on_bad_json(monkeypatch):
     assert api.call_tool("soc", "get_alert") == "not json"
 
 
+@pytest.mark.requires_extra("mcp")
 def test_call_tool_returns_none_on_empty_content(monkeypatch):
     session = FakeSession(call_result_text=None)
     _patch_mcp(monkeypatch, session)
@@ -180,6 +184,7 @@ def test_call_tool_returns_none_on_empty_content(monkeypatch):
     assert api.call_tool("soc", "get_alert") is None
 
 
+@pytest.mark.requires_extra("mcp")
 def test_call_tool_defaults_arguments_to_empty_dict(monkeypatch):
     session = FakeSession()
     _patch_mcp(monkeypatch, session)
@@ -191,6 +196,7 @@ def test_call_tool_defaults_arguments_to_empty_dict(monkeypatch):
 
 
 # -- call_tool_result (typed MCPToolResult) ------------------------------------
+@pytest.mark.requires_extra("mcp")
 def test_call_tool_result_wraps_success_envelope(monkeypatch):
     session = FakeSession(call_result_text='{"status": "success", "result": {"a": 1}, "error": null}')
     _patch_mcp(monkeypatch, session)
@@ -207,6 +213,7 @@ def test_call_tool_result_wraps_success_envelope(monkeypatch):
     assert r.get("status") == "success"
 
 
+@pytest.mark.requires_extra("mcp")
 def test_call_tool_result_wraps_non_envelope_payload(monkeypatch):
     # an in-band failure that comes back as a bare string still yields a model
     session = FakeSession(call_result_text="not json")
@@ -220,6 +227,7 @@ def test_call_tool_result_wraps_non_envelope_payload(monkeypatch):
     assert r.result == "not json"
 
 
+@pytest.mark.requires_extra("mcp")
 def test_call_tool_result_wraps_none_content(monkeypatch):
     session = FakeSession(call_result_text=None)
     _patch_mcp(monkeypatch, session)
@@ -255,6 +263,7 @@ def test_build_mcp_auth_headers_unsupported_raises():
         build_mcp_auth_headers({"type": "OAUTH2"})
 
 
+@pytest.mark.requires_extra("mcp")
 def test_new_httpx_client_follows_redirects():
     from pyfsr.api.native_mcp import _new_httpx_client
 
@@ -268,6 +277,7 @@ def test_new_httpx_client_follows_redirects():
 
 
 # -- call_tool_at / list_tools_at (arbitrary registered server) ----------------
+@pytest.mark.requires_extra("mcp")
 def test_call_tool_at_reaches_arbitrary_url(monkeypatch):
     session = FakeSession(call_result_text='{"status": "success", "result": {"n": 1}}')
     _patch_mcp(monkeypatch, session)
@@ -281,6 +291,7 @@ def test_call_tool_at_reaches_arbitrary_url(monkeypatch):
     assert session.calls == [("get_incident", {"id": "1"})]
 
 
+@pytest.mark.requires_extra("mcp")
 def test_list_tools_at_returns_typed_tools(monkeypatch):
     session = FakeSession(tools=[FakeTool("get_incident", "desc")])
     _patch_mcp(monkeypatch, session)
@@ -298,6 +309,7 @@ class _AuthError(Exception):
         self.status_code = status_code
 
 
+@pytest.mark.requires_extra("mcp")
 def test_retries_once_on_auth_error_when_auth_can_refresh(monkeypatch):
     """First session raises 401; a fresh session (post-refresh) succeeds."""
     good_session = FakeSession(call_result_text='{"ok": true}')
@@ -319,10 +331,11 @@ def test_retries_once_on_auth_error_when_auth_can_refresh(monkeypatch):
     assert auth.refresh_calls == 1
 
 
+@pytest.mark.requires_extra("mcp")
 def test_retries_on_exceptiongroup_wrapped_httpx_status_error(monkeypatch):
     """The real shape observed live: anyio wraps the actual httpx.HTTPStatusError
     (which carries the 401) in an ExceptionGroup whose own str() says nothing
-    about a status code at all — a naive top-level/string check misses it."""
+    about a status code at all -- a naive top-level/string check misses it."""
 
     class FakeResponse:
         status_code = 401
@@ -352,6 +365,7 @@ def test_retries_on_exceptiongroup_wrapped_httpx_status_error(monkeypatch):
     assert auth.refresh_calls == 1
 
 
+@pytest.mark.requires_extra("mcp")
 def test_does_not_retry_when_auth_cannot_refresh(monkeypatch):
     session = FakeSession(raise_on={"call_tool": _AuthError(401)})
     _patch_mcp(monkeypatch, session)
@@ -364,6 +378,7 @@ def test_does_not_retry_when_auth_cannot_refresh(monkeypatch):
     assert auth.refresh_calls == 0
 
 
+@pytest.mark.requires_extra("mcp")
 def test_non_auth_error_propagates_without_retry(monkeypatch):
     session = FakeSession(raise_on={"call_tool": RuntimeError("boom")})
     _patch_mcp(monkeypatch, session)
@@ -386,6 +401,7 @@ def test_missing_mcp_dependency_raises_clear_error(monkeypatch):
 
 
 # -- MCPSession (batched calls, one handshake) ---------------------------------
+@pytest.mark.requires_extra("mcp")
 def test_session_reuses_one_handshake_across_calls(monkeypatch):
     session_obj = FakeSession(
         tools=[FakeTool("get_alert")],
@@ -419,6 +435,7 @@ def test_session_reuses_one_handshake_across_calls(monkeypatch):
     assert session_obj.initialized
 
 
+@pytest.mark.requires_extra("mcp")
 def test_session_closes_transport_and_session_on_exit(monkeypatch):
     closed = {"session": False, "transport": False}
 
