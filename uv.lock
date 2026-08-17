@@ -1391,7 +1391,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'" },
     { name = "pytest-cov", marker = "extra == 'test'" },
     { name = "pytest-mock", marker = "extra == 'test'" },
-    { name = "pyyaml", specifier = ">=6" },
+    { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "requests", specifier = ">=2.31.0" },
     { name = "sphinx", marker = "python_full_version >= '3.12' and extra == 'docs'", specifier = ">=9.1,<10" },
     { name = "sphinx-autoapi", marker = "extra == 'docs'", specifier = ">=3.8,<4" },

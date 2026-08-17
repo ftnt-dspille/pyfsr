@@ -35,7 +35,12 @@ dependencies = [
     # read prompt.yaml / memory.yaml, so PyYAML is a core requirement -- not an
     # extra. It used to arrive only transitively via `pyfsr[playbooks]`, which
     # made `pip install pyfsr` + `pack_agent(...)` raise ModuleNotFoundError.
-    "pyyaml>=6"
+    #
+    # Floor is 6.0.1, not 6.0: PyYAML 6.0's sdist cannot build against Cython 3
+    # ("'build_ext' object has no attribute 'cython_sources'"), so `>=6` admits a
+    # version that fails to install anywhere a prebuilt wheel is unavailable.
+    # 6.0.1 is the first release that builds. Found by the `test-floors` job.
+    "pyyaml>=6.0.1"
 ]
 
 [project.optional-dependencies]
