@@ -539,6 +539,10 @@ def _h_trigger_schedule_now(client, *, name=None, task_id=None) -> Any:
     return to_jsonable(client.schedules.trigger_now(name=name, task_id=task_id))
 
 
+def _h_schedule_audit(client, *, name, run_limit=10) -> Any:
+    return to_jsonable(client.schedules.audit(name, run_limit=run_limit))
+
+
 def _h_delete_schedule(client, *, name) -> Any:
     client.schedules.delete(name)
     return {"deleted": True, "name": name}
@@ -1524,6 +1528,27 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["name"],
         ),
         _h_delete_schedule,
+    ),
+    ToolSpec(
+        "schedule_audit",
+        "Health-check a schedule by name: is it enabled, does its target workflow still exist, "
+        "has the cron actually fired (beat's last_run_at / total_run_count), and what did its "
+        "recent playbook runs do. Returns a 'problems' list -- empty means the schedule is "
+        "firing and its runs finish. Use after schedule_playbook to confirm the schedule is "
+        "live, and whenever a schedule 'does not seem to run': the common findings are a "
+        "disabled schedule, a deleted target workflow (the cron fires into nothing, silently), "
+        "and run logs already purged (beat's counter is the durable evidence).",
+        _obj(
+            {
+                "name": {"type": "string", "description": "Schedule display name to audit."},
+                "run_limit": {
+                    "type": "integer",
+                    "description": "Max recent runs to include (default 10).",
+                },
+            },
+            ["name"],
+        ),
+        _h_schedule_audit,
     ),
     ToolSpec(
         "map_use_case",
