@@ -741,9 +741,9 @@ class WorkflowCollectionsAPI(BaseAPI):
                 box-only steps to match the source.
 
         Returns:
-            a report dict: ``{"collection", "collection_uuid", "backup",
-            "created", "updated", "unchanged", "pruned", "new", "changed",
-            "orphans", "dry_run"}``.
+            dict: a report with keys ``collection``, ``collection_uuid``,
+            ``backup``, ``created``, ``updated``, ``unchanged``, ``pruned``,
+            ``new``, ``changed``, ``diverged``, ``orphans``, ``dry_run``.
 
         Raises:
             ValueError: if ``data`` is malformed, or a workflow uuid lives in
