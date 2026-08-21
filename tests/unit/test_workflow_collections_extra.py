@@ -337,3 +337,88 @@ def test_import_export_zip_module_only_no_playbooks(tmp_path):
 
     assert res["collections"] == []  # nothing to import, no error
     assert res["modules_created"] == ["scenario"]
+
+
+# -- deploy(): non-destructive, ownership pre-flight -------------------------
+class _DeployClient(RecordingClient):
+    """Adds the surface deploy() touches: query members + a playbooks stub."""
+
+    def __init__(self, query_members):
+        super().__init__()
+        self._query_members = query_members
+
+        class _PB:
+            def __init__(self, parent):
+                self.parent = parent
+                self.upserted = None
+
+            def upsert_playbooks(self, rows):
+                self.upserted = rows
+                return {"created": [r["uuid"] for r in rows], "updated": []}
+
+            def delete(self, uuid, hard=True):
+                self.parent.calls.append(("PB_DELETE", uuid, hard))
+
+        self.playbooks = _PB(self)
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("POST", endpoint, data))
+        if endpoint == "/api/query/workflows":
+            return {"hydra:member": self._query_members, "hydra:totalItems": len(self._query_members)}
+        return {"ok": True}
+
+
+def test_deploy_aborts_when_uuid_lives_in_another_collection():
+    """The exact fault that could wipe a collection under replace=True: a workflow
+    uuid already living in a DIFFERENT collection must abort BEFORE any change."""
+    wf_uuid = "11111111-1111-1111-1111-111111111111"
+    envelope = {
+        "type": "workflow_collections",
+        "data": [
+            {
+                "uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                "name": "Target Coll",
+                "workflows": [{"uuid": wf_uuid, "name": "Shared WF", "steps": []}],
+            }
+        ],
+    }
+    # the box says that workflow lives in some OTHER collection
+    c = _DeployClient(
+        query_members=[
+            {
+                "uuid": wf_uuid,
+                "name": "Shared WF",
+                "collection": "/api/3/workflow_collections/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            }
+        ]
+    )
+    a = WorkflowCollectionsAPI(c)
+    with pytest.raises(ValueError, match="DIFFERENT collection"):
+        a.deploy(envelope)
+    # nothing was upserted or deleted
+    assert a.client.playbooks.upserted is None
+
+
+def test_deploy_upserts_in_place_and_never_hard_deletes(tmp_path):
+    """A clean deploy upserts workflows in place and writes a backup; it never
+    calls the destructive collection delete."""
+    wf_uuid = "22222222-2222-2222-2222-222222222222"
+    col_uuid = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    envelope = {
+        "type": "workflow_collections",
+        "data": [
+            {
+                "uuid": col_uuid,
+                "name": "Fresh Coll",
+                "workflows": [{"uuid": wf_uuid, "name": "New WF", "steps": []}],
+            }
+        ],
+    }
+    # no live rows -> nothing owned elsewhere; collection resolves as absent (fresh create)
+    c = _DeployClient(query_members=[])
+    a = WorkflowCollectionsAPI(c)
+    rep = a.deploy(envelope, backup_dir=str(tmp_path))
+    assert rep["created"] == [wf_uuid]
+    assert a.client.playbooks.upserted[0]["uuid"] == wf_uuid
+    # the collection was never hard-deleted
+    assert not any(call[0] == "DELETE" for call in c.calls)
