@@ -1,7 +1,7 @@
 """Compile playbook YAML to the FortiSOAR import envelope.
 
 This is the bridge between the **fsr_playbooks** compiler (YAML → IR → FSR JSON)
-and pyfsr's write path. It deliberately does **no** network I/O — it turns YAML
+and pyfsr's write path. It deliberately does **no** network I/O -- it turns YAML
 text into the ``{"type": "workflow_collections", "data": [...]}`` envelope that
 :meth:`pyfsr.api.workflow_collections.WorkflowCollectionsAPI.import_export`
 already knows how to push. The deploy step lives next to the client; this module
@@ -50,8 +50,8 @@ class _AuthoringClient(Protocol):
     A ``Protocol`` instead of a concrete ``FortiSOAR`` import: this module is
     also driven by lightweight structural test doubles (see
     ``tests/unit/test_playbook_authoring.py``'s ``_WarmFakeClient``) that don't
-    subclass the real client. A ``Protocol`` type-checks either — the real
-    client via structural match, a test fake the same way — without a runtime
+    subclass the real client. A ``Protocol`` type-checks either -- the real
+    client via structural match, a test fake the same way -- without a runtime
     import of :mod:`pyfsr.client` (and without callers needing ``# type:
     ignore`` just to pass a fake into a test). Prefer this over the ``Any``
     that used to sit here: ``Any`` disables type-checking on every attribute
@@ -104,7 +104,7 @@ class PlaybooksExtraNotInstalled(ImportError):
     """Raised when the optional ``fsr_playbooks`` compiler is not installed."""
 
     def __init__(self, original: Exception | None = None) -> None:
-        super().__init__('the playbook compiler is not installed — run: pip install "pyfsr[playbooks]"')
+        super().__init__('the playbook compiler is not installed -- run: pip install "pyfsr[playbooks]"')
         self.original = original
 
 
@@ -135,7 +135,7 @@ def decompile_playbook_yaml(
 ) -> str:
     """Decompile a FortiSOAR WorkflowCollection export envelope into authored YAML.
 
-    The inverse of :func:`compile_playbook_yaml` — turns the JSON a live playbook
+    The inverse of :func:`compile_playbook_yaml` -- turns the JSON a live playbook
     exports as back into the friendly YAML shape (so you can pull a playbook off
     an appliance and edit/version it as source). Catalog resolution mirrors
     compile: explicit ``db_path`` > warm-from-``client`` > packaged slim catalog,
@@ -171,7 +171,7 @@ def warm_catalog(
     names, picklist values, tags) to IRIs against a local SQLite catalog. The
     stable tables (step types, handlers, jinja) ship populated in the wheel;
     the **per-install** tables (``teams``/``picklists``/``tags``) are empty
-    until warmed. This function fills them from a live client — the native
+    until warmed. This function fills them from a live client -- the native
     equivalent of the dev-only ``fsrpb probe modules`` warmup, callable from
     the installed wheel.
 
@@ -182,13 +182,13 @@ def warm_catalog(
     site-packages is read-only and must not be warmed in place.
 
     With ``connectors=True`` (default) it also syncs the **installed connector
-    catalog** — ``connectors``/``operations``/``operation_params`` — from the live
+    catalog** -- ``connectors``/``operations``/``operation_params`` -- from the live
     box, so the compiler validates connector/operation/param tokens against what
     is actually installed, INCLUDING custom connectors the packaged catalog can
     never know (e.g. a locally built ``code-runner``). Each installed connector is
     upserted from its live definition; other catalog connectors are left intact.
 
-    Each section is synced independently — a failure in one (e.g. an empty
+    Each section is synced independently -- a failure in one (e.g. an empty
     picklists response) does not abort the others, mirroring the probe.
 
     Args:
@@ -199,7 +199,7 @@ def warm_catalog(
             definition fetches).
         max_age: incremental warm. When set (seconds), a section whose last warm
             (recorded in the ``_catalog_meta`` table) is younger than ``max_age``
-            is **skipped** — its existing rows are kept and no HTTP is done, so
+            is **skipped** -- its existing rows are kept and no HTTP is done, so
             repeated warms in a session cost nothing for unchanged surfaces. The
             default ``None`` always re-pulls every section (so freshly-created
             teams/tags are picked up immediately). A skipped section reports its
@@ -210,7 +210,7 @@ def warm_catalog(
         ``operations``/``operation_params`` included when ``connectors=True``),
         plus per-section wall-clock under ``<section>_ms`` keys
         (``teams_ms``/``picklists_ms``/``tags_ms``/``connectors_ms``) and the
-        overall ``total_ms`` — so a caller can see where warm time goes (the
+        overall ``total_ms`` -- so a caller can see where warm time goes (the
         connector-definition fan-out is almost always the dominant cost).
 
     Raises:
@@ -227,7 +227,7 @@ def warm_catalog(
     src_path = str(getattr(client, "base_url", "") or "")
     # Incremental-warm bookkeeping is best-effort: the _catalog_meta table is DDL,
     # and the fsr_playbooks compiler keeps a cached read connection to the same
-    # cache DB. If that connection is open, the CREATE can't get its lock — in
+    # cache DB. If that connection is open, the CREATE can't get its lock -- in
     # which case we degrade to a full (non-incremental) warm rather than failing.
     meta_ok = [False]
 
@@ -259,7 +259,7 @@ def warm_catalog(
     conn = sqlite3.connect(db)
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
-        # Provenance + incremental-warm bookkeeping (P2/P3) — best-effort (see above).
+        # Provenance + incremental-warm bookkeeping (P2/P3) -- best-effort (see above).
         # NOTE: pyfsr's warm-state table is `_pyfsr_warm_meta`, NOT `_catalog_meta`.
         # The fsr_playbooks slim DB ships its own `_catalog_meta(key, value, updated_at)`
         # for provenance; `CREATE TABLE IF NOT EXISTS _catalog_meta (...)` was a no-op
@@ -273,7 +273,7 @@ def warm_catalog(
             meta_ok[0] = True
         except sqlite3.OperationalError:
             meta_ok[0] = False
-        # `teams` — playbook owners (name -> /api/3/teams/<uuid>).
+        # `teams` -- playbook owners (name -> /api/3/teams/<uuid>).
         conn.execute("CREATE TABLE IF NOT EXISTS teams (name TEXT PRIMARY KEY, iri TEXT NOT NULL)")
         if _fresh("teams"):
             summary["teams"] = _count("teams")
@@ -299,7 +299,7 @@ def warm_catalog(
                 _stamp("teams")
             _lap("teams", _t)
 
-        # `picklists` — record-field picklist values (list, value -> item IRI).
+        # `picklists` -- record-field picklist values (list, value -> item IRI).
         conn.execute(
             "CREATE TABLE IF NOT EXISTS picklists ("
             "  list_name TEXT NOT NULL,"
@@ -314,7 +314,7 @@ def warm_catalog(
         else:
             _t = time.perf_counter()
             try:
-                # One bulk fetch (2 HTTP calls) backs every picklist + its items —
+                # One bulk fetch (2 HTTP calls) backs every picklist + its items --
                 # was 1 list() + N values(). See PicklistsAPI.all().
                 item_rows: list[tuple[str, str, str]] = []
                 for nm, items in client.picklists.all().items():
@@ -335,7 +335,7 @@ def warm_catalog(
                 _stamp("picklists")
             _lap("picklists", _t)
 
-        # `tags` — set_variable.message.tags (name -> /api/3/tags/<uuid>).
+        # `tags` -- set_variable.message.tags (name -> /api/3/tags/<uuid>).
         conn.execute("CREATE TABLE IF NOT EXISTS tags (name TEXT PRIMARY KEY, iri TEXT NOT NULL)")
         if _fresh("tags"):
             summary["tags"] = _count("tags")
@@ -355,7 +355,7 @@ def warm_catalog(
                 _stamp("tags")
             _lap("tags", _t)
 
-        # `connectors`/`operations`/`operation_params` — the INSTALLED connector
+        # `connectors`/`operations`/`operation_params` -- the INSTALLED connector
         # catalog, so the compiler validates connector/operation/param tokens
         # against what is actually on this box, INCLUDING custom connectors the
         # packaged catalog can never know (e.g. a locally built code-runner). Each
@@ -372,7 +372,7 @@ def warm_catalog(
             _t = time.perf_counter()
             try:
                 n_conn = n_ops = n_params = n_cfg = 0
-                # Per-appliance configured connector instances (config UUIDs) —
+                # Per-appliance configured connector instances (config UUIDs) --
                 # the `connector_configs` table the compiler's
                 # `resolve_config_id` (resolver/catalog.py) reads to fill a
                 # step's default config offline. Empty in the packaged slim
@@ -400,7 +400,7 @@ def warm_catalog(
                 # `_fetch_connector_defs` returns ``ConnectorDefinition`` models
                 # (validated at the API boundary), so display fields are already
                 # coerced to scalars by ``OperationParam._coerce_display_text``
-                # — including onchange sub-params, now that ``onchange`` is typed
+                # -- including onchange sub-params, now that ``onchange`` is typed
                 # recursively (sub-params validate as ``OperationParam`` too, not
                 # raw ``__pydantic_extra__`` dicts). The earlier list-valued
                 # placeholder (activedirectory object_dn) and list description are
@@ -436,7 +436,7 @@ def warm_catalog(
                         ),
                     )
                     n_conn += 1
-                    # Configured instances (per-appliance config UUIDs) — seeds
+                    # Configured instances (per-appliance config UUIDs) -- seeds
                     # the compiler's default-config fill. Replaces this connector's
                     # rows (a re-configured box drops stale UUIDs); other connectors
                     # are untouched. `default` is stored as 0/1 so the fill can pick
@@ -537,7 +537,7 @@ def warm_catalog(
             else:
                 if n_fetch_failed:
                     # Some installed connectors' definition fetches failed
-                    # (map_threaded's default policy swallows per-item errors —
+                    # (map_threaded's default policy swallows per-item errors --
                     # see _fetch_connector_defs) even though nothing raised here.
                     # Don't cache this as a complete warm or a retry within
                     # max_age would skip forever on a silently-partial catalog.
@@ -567,9 +567,9 @@ def _flatten_op_params(params: Any) -> Iterator[tuple[dict[str, Any], str | None
     option is chosen (e.g. ``smtp_ng.send_email_new`` reveals ``to``/``cc`` only
     after Recipient Type is set, and ``subject``/``content`` after Body Type).
     The connector's flat ``parameters`` list omits these, so a playbook that sets
-    one looks like it passes an ``unknown_param``. Recording them — each tagged
+    one looks like it passes an ``unknown_param``. Recording them -- each tagged
     with its parent param name and the option value that reveals it (the
-    ``parent_param_name``/``condition_value`` catalog columns) — lets the compiler
+    ``parent_param_name``/``condition_value`` catalog columns) -- lets the compiler
     accept them without globally requiring them. Top-level params yield
     ``(param, None, None)``. Params lacking ``.get`` or a ``name`` are skipped.
     """
@@ -623,27 +623,27 @@ def _fetch_connector_defs(client: _AuthoringClient, *, max_workers: int = 8) -> 
     """Fetch each installed connector's full definition concurrently.
 
     Enumerates the installed set via ``client.connectors.list_configured()`` and
-    pulls each definition via ``client.connectors.definition()`` — the public,
+    pulls each definition via ``client.connectors.definition()`` -- the public,
     typed API, no raw endpoints. Each definition fetch is an independent network
     call, so they run through the shared :func:`~pyfsr._concurrency.map_threaded`
     pool (requests sessions are safe for concurrent calls).
 
     ``map_threaded``'s default error policy swallows a per-item failure to
-    ``None`` rather than aborting the whole fan-out — good for resilience, but
+    ``None`` rather than aborting the whole fan-out -- good for resilience, but
     it means a transient blip on a handful of connectors previously produced a
     silently-partial warm that the caller (:func:`warm_catalog`) could not tell
     apart from "every installed connector was fetched." That let a partial warm
     get stamped fresh and stay stuck incomplete until a caller noticed and
     forced a re-warm (the exact failure mode a matrix-run investigation traced
-    to a *caller-side* staleness heuristic — see MASTER_TRACKER.md). Returning
+    to a *caller-side* staleness heuristic -- see MASTER_TRACKER.md). Returning
     ``.failed`` here lets ``warm_catalog`` refuse to stamp a partial fetch as
     fresh, fixing it at the source instead of in every caller.
 
     ``configurations`` is the connector's configured-instance list carried
     straight off the ``InstalledConnector`` that ``list_configured()`` already
-    populated inline — so recording it adds NO extra network call. They're
+    populated inline -- so recording it adds NO extra network call. They're
     per-appliance (a config UUID is specific to one box), so the warm store
-    seeds the compiler's default-config fill (connector_args.py) — the
+    seeds the compiler's default-config fill (connector_args.py) -- the
     packaged slim catalog has none.
     """
     from ._concurrency import map_threaded
@@ -719,7 +719,7 @@ def _normalize_lax_codes(lax_codes: Any) -> set | None:
     (``"UNKNOWN_PARAM"``), or the ``ErrorCode`` enum itself. The compiler's demote
     pass matches on ``str(ErrorCode.X)`` (== ``"ErrorCode.UNKNOWN_PARAM"``), so a
     bare ``.value`` string silently never matches. Resolving every entry to the
-    enum here makes all three forms work — including against compiler builds whose
+    enum here makes all three forms work -- including against compiler builds whose
     own matching only accepts the enum form. Unknown strings pass through verbatim.
     """
     if not lax_codes:
@@ -758,7 +758,7 @@ def compile_playbook_yaml(
 ) -> CompiledPlaybook:
     """Compile playbook YAML text into a :class:`CompiledPlaybook`.
 
-    By default this is **offline** — it compiles against the packaged slim
+    By default this is **offline** -- it compiles against the packaged slim
     catalog (no network I/O), which resolves the stable token set (step types,
     handlers) but not per-install tokens (team names, picklist values, tags).
 
@@ -772,13 +772,13 @@ def compile_playbook_yaml(
         text: the playbook YAML source.
         client: optional connected :class:`pyfsr.FortiSOAR` client. When given,
             the reference catalog is warmed from the instance before compiling
-            (overrides nothing — pass ``db_path`` to use a specific catalog).
+            (overrides nothing -- pass ``db_path`` to use a specific catalog).
         db_path: explicit path to a reference catalog. Takes precedence over
             ``client``/the default. Use this to compile against a pre-warmed or
             custom catalog without a live client.
         lax_codes: optional set of diagnostic codes to downgrade from error to
             warning. Accepts the friendly code string (``"unknown_param"``), the
-            ``ErrorCode`` enum, or the enum name (``"UNKNOWN_PARAM"``) — all are
+            ``ErrorCode`` enum, or the enum name (``"UNKNOWN_PARAM"``) -- all are
             normalized to the enum the compiler matches on (see
             ``_normalize_lax_codes``).
 
@@ -831,7 +831,7 @@ class VerifiedPlaybook(BaseModel):
     """Result of running a playbook YAML through the fsr_playbooks verify gate.
 
     ``ready`` is the single go/no-go (the gate's ``ready_to_push``). ``suppressed``
-    holds any diagnostics silenced via ``skip=`` — never dropped silently.
+    holds any diagnostics silenced via ``skip=`` -- never dropped silently.
     Truthy iff ``ready``.
     """
 
@@ -844,7 +844,7 @@ class VerifiedPlaybook(BaseModel):
 
     @property
     def ok(self) -> bool:
-        """Alias for :attr:`ready` — ``True`` when the playbook has no blocking issues."""
+        """Alias for :attr:`ready` -- ``True`` when the playbook has no blocking issues."""
         return self.ready
 
     def __bool__(self) -> bool:
@@ -856,7 +856,7 @@ class VerifiedPlaybook(BaseModel):
         bits = [f"{len(self.required_fixes)} blocking", f"{len(self.warnings)} warning(s)"]
         if self.suppressed:
             bits.append(f"{len(self.suppressed)} suppressed")
-        return f"{head} — {', '.join(bits)}"
+        return f"{head} -- {', '.join(bits)}"
 
 
 def verify_playbook_yaml(
@@ -868,7 +868,7 @@ def verify_playbook_yaml(
     skip: list[str] | None = None,
     playbook: str | None = None,
 ) -> VerifiedPlaybook:
-    """Run playbook YAML through the fsr_playbooks **verify gate** — the single
+    """Run playbook YAML through the fsr_playbooks **verify gate** -- the single
     forcing-function pre-submit check (compile → typed walk → per-step schema →
     optional live probe). This is the method to call before showing or pushing a
     playbook.
@@ -904,7 +904,7 @@ def verify_playbook_yaml(
 
 
 class DeployedPlaybook(BaseModel):
-    """Outcome of :func:`build_and_deploy` — verify → compile → push, as one step."""
+    """Outcome of :func:`build_and_deploy` -- verify → compile → push, as one step."""
 
     verified: VerifiedPlaybook
     compiled: CompiledPlaybook | None = None
@@ -930,24 +930,62 @@ def build_and_deploy(
     live_probe: bool = False,
     force: bool = False,
     replace: bool = False,
+    prune: bool = False,
+    backup_dir: str | Path | None = None,
+    overwrite_changed: bool = False,
 ) -> DeployedPlaybook:
-    """Build-then-push in one call: **verify → compile → import**. Stops (without
+    """Build-then-push in one call: **verify → compile → deploy**. Stops (without
     pushing) at the first hard failure and tells you where via ``stopped_at``.
 
     The verify gate is the guard rail: a not-ready playbook is *not* pushed
-    unless ``force=True``. ``skip`` forwards to the gate (same groups/codes as
-    :func:`verify_playbook_yaml`). The catalog is warmed once from ``client`` and
-    reused for both verify and compile. ``replace=True`` overwrites an existing
-    collection on import.
+    unless ``force=True``. ``skip`` forwards to the verify gate (same
+    groups/codes as :func:`verify_playbook_yaml`) AND to the compiler's
+    ``lax_codes`` (so pre-existing diagnostics on decompiled YAML don't
+    block the compile step). The catalog is warmed once from ``client`` and
+    reused for both verify and compile.
+
+    The push goes through the **non-destructive**
+    :meth:`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI.deploy`: each
+    workflow is upserted in place (the editor's save flow), the collection is
+    never hard-deleted, and a workflow uuid that lives in another collection
+    aborts the deploy instead of silently colliding. Pass ``backup_dir`` to snap
+    the live collection before the change, and ``prune=True`` to soft-delete
+    workflows that are on the box but absent from the source.
+
+    ``overwrite_changed=True`` lets the deploy overwrite workflows whose live copy
+    differs from the source; by default such divergence fails closed (a live UI
+    edit is never clobbered unnoticed).
+
+    ``replace`` is **deprecated and ignored** -- it selected the old destructive
+    hard-delete-then-recreate import, which could wipe a collection on any
+    failure. Passing ``replace=True`` now maps to ``prune=True`` (delete orphans)
+    and emits a ``DeprecationWarning``; the collection is still never
+    hard-deleted.
     """
+    if replace:
+        import warnings
+
+        warnings.warn(
+            "build_and_deploy(replace=True) is deprecated: the destructive "
+            "hard-delete-then-recreate import is gone. Deploy is now in-place; "
+            "replace=True maps to prune=True (soft-delete orphans).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        prune = True
     catalog = _resolve_catalog(client, db_path)
     verified = verify_playbook_yaml(text, db_path=catalog, live_probe=live_probe, skip=skip)
     if not verified.ready and not force:
         return DeployedPlaybook(verified=verified, stopped_at="verify")
-    compiled = compile_playbook_yaml(text, db_path=catalog)
+    # Pass skip as lax_codes so the compile gate doesn't hard-stop on the
+    # same diagnostics the verify gate already suppressed.
+    lax = set(skip) if skip else None
+    compiled = compile_playbook_yaml(text, client=client, db_path=catalog, lax_codes=lax)
     if not compiled.ok:
         return DeployedPlaybook(verified=verified, compiled=compiled, stopped_at="compile")
-    response = client.workflow_collections.import_export(compiled.fsr_json, replace=replace)
+    response = client.workflow_collections.deploy(
+        compiled.fsr_json, prune=prune, backup_dir=backup_dir, overwrite_changed=overwrite_changed
+    )
     return DeployedPlaybook(verified=verified, compiled=compiled, deployed=True, response=response)
 
 
@@ -959,7 +997,7 @@ def find_operation(
     db_path: str | Path | None = None,
     limit: int = 10,
 ) -> dict[str, Any]:
-    """Discover a connector's operations from the reference catalog — the
+    """Discover a connector's operations from the reference catalog -- the
     fastest way to find *what to call* when authoring a connector step.
 
     Wraps the fsr_playbooks discovery surface (``find_operation``) against the

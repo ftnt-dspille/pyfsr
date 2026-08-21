@@ -54,6 +54,7 @@ class _FakeDeployClient:
 
     def __init__(self):
         self.imported = []
+        self.deployed_calls = []
         self.workflow_collections = self._WC(self)
 
     class _WC:
@@ -63,6 +64,17 @@ class _FakeDeployClient:
         def import_export(self, data, *, replace=False):
             self.parent.imported.append((data, replace))
             return [{"name": "PyfsrTest Pack", "uuid": "col-1"}]
+
+        def deploy(self, data, *, prune=False, backup_dir=None, dry_run=False, overwrite_changed=False):
+            # build_and_deploy now routes through the non-destructive deploy()
+            self.parent.deployed_calls.append({"data": data, "prune": prune, "backup_dir": backup_dir})
+            return {
+                "collection": "PyfsrTest Pack",
+                "collection_uuid": "col-1",
+                "created": ["wf-1"],
+                "updated": [],
+                "pruned": [],
+            }
 
 
 # --- verify_playbook_yaml -------------------------------------------------
@@ -106,7 +118,9 @@ def test_deploy_good_pushes():
     d = build_and_deploy(GOOD_YAML, client=client, db_path=_slim_db())
     assert d.deployed and bool(d)
     assert d.stopped_at is None
-    assert len(client.imported) == 1
+    # routes through the non-destructive deploy(), NOT the destructive import_export
+    assert len(client.deployed_calls) == 1
+    assert client.imported == []
 
 
 @requires_compiler

@@ -4,15 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed
-- **`pack_agent()` / `AgentPackage.from_dir()` now work on a plain
-  `pip install pyfsr`.** Both are core exports (`pyfsr.__all__`) and both read
-  `prompt.yaml` / `config/memory.yaml`, but PyYAML was never declared as a core
-  dependency -- it arrived only transitively via the unrelated
-  `pyfsr[playbooks]` extra. Installing without that extra left a documented
-  public API raising `ModuleNotFoundError: No module named 'yaml'`. No test
-  could catch it, because CI always installed the extra. **PyYAML (`>=6.0.1`)
-  is now a core dependency**, so a default install gains one requirement.
+## [0.19.1] - 2026-08-21
+
+### Added
+- **`workflow_collections.deploy()`** -- non-destructive collection deploy that
+  replaces `import_export(replace=True)`. The old path hard-deleted the whole
+  collection then re-POSTed it atomically, so a single failure (e.g. a workflow
+  uuid that already lives in another collection) left the collection GONE and
+  discarded live UI edits. `deploy()` resolves the target collection by name,
+  backs it up first, aborts on cross-collection uuid ownership, and upserts each
+  workflow IN PLACE via `upsert_playbooks` (the editor's save flow). A
+  directional divergence guard fails closed when the live playbook has steps the
+  source YAML lacks (a UI edit the in-place upsert would delete), unless
+  `overwrite_changed=True`. `build_and_deploy` routes through it;
+  `replace=`/`import_export(replace=True)` are deprecated.
+- **`playbooks.find(trigger_module=...)`** -- filter playbooks by the module their
+  start step is bound to (composes with `trigger_type` to answer "what runs when
+  an asset is created?").
+- **`schedules.audit()` + `schedule_audit` tool** -- is this schedule actually
+  firing? Cross-checks schedule definitions against recent run history.
 
 ### Changed
 - **Two dependency floors raised to versions that actually work.** Both were
@@ -25,6 +35,23 @@ All notable changes to this project will be documented in this file.
     Cython 3 (`'build_ext' object has no attribute 'cython_sources'`), so `>=6`
     admitted a version that fails to install wherever no prebuilt wheel is
     available. 6.0.1 is the first release that builds.
+
+### Fixed
+- **`pack_agent()` / `AgentPackage.from_dir()` now work on a plain
+  `pip install pyfsr`.** Both are core exports (`pyfsr.__all__`) and both read
+  `prompt.yaml` / `config/memory.yaml`, but PyYAML was never declared as a core
+  dependency -- it arrived only transitively via the unrelated
+  `pyfsr[playbooks]` extra. Installing without that extra left a documented
+  public API raising `ModuleNotFoundError: No module named 'yaml'`. **PyYAML
+  (`>=6.0.1`) is now a core dependency**, so a default install gains one
+  requirement.
+- **`create_playbooks` ensures the parent collection exists** before the
+  bulkupsert, so a workflow no longer fails with an opaque foreign-key error on
+  `collection`. Bulk endpoint (`/api/3/bulkupsert/*`) failures are unwrapped into
+  one readable message (the embedded JSON type/message) instead of a raw index
+  dump.
+- **`build_and_deploy` passes `skip` + `client` to `compile_playbook_yaml`**, so
+  the compile gate uses the warmed catalog and honours suppressed diagnostics.
 
 ## [0.19.0] - 2026-08-15
 

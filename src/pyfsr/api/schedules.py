@@ -265,9 +265,9 @@ class SchedulesAPI(BaseAPI):
 
         Args:
             name: schedule display name (the lookup key).
-            workflow_iri: the workflow IRI — used on create (and on update if
+            workflow_iri: the workflow IRI -- used on create (and on update if
                 ``update_if_exists=True``).
-            cron: 5-field cron expression — used on create (and on update if
+            cron: 5-field cron expression -- used on create (and on update if
                 ``update_if_exists=True``).
             timezone: IANA timezone (default ``"UTC"``).
             enabled: create the task enabled (default ``True``).
@@ -280,7 +280,7 @@ class SchedulesAPI(BaseAPI):
             typed: parse the result into a :class:`~pyfsr.models.ScheduledTask`.
 
         Returns:
-            ``(ScheduledTask, created)`` — the existing task with
+            ``(ScheduledTask, created)`` -- the existing task with
             ``created=False``, or the newly-created task with ``created=True``.
         """
         existing = self.get(name, typed=False)
@@ -341,3 +341,115 @@ class SchedulesAPI(BaseAPI):
                 raise ValueError(f"No scheduled task named {name!r}")
             task_id = task["id"]
         return self.client.post(_TRIGGER_NOW, data={"id": task_id}, params={"format": "json"})
+
+    def audit(self, name: str, *, run_limit: int = 10) -> dict[str, Any]:
+        """One-call health report for a schedule: config + whether it FIRES.
+
+        A schedule can look configured and still never run (created disabled,
+        cron narrower than its name implies, workflow deleted out from under
+        it), and a firing schedule is invisible unless you correlate it with
+        playbook-run rows by hand. This folds both halves together:
+
+        - the schedule row (``enabled``, cron, ``last_run_at``,
+          ``total_run_count``, the target ``wf_iri``)
+        - the target workflow's current name (or the fact that it is GONE)
+        - its most recent playbook runs, matched by workflow name via the run
+          list's ``search=`` filter (run rows carry no workflow uuid, and the
+          ``wf_uuid`` query param is silently ignored on 8.0 -- verified live)
+        - derived verdicts: ``ever_fired``, ``firing`` (a cron fire newer than
+          the last two cron windows is not attempted -- ``firing`` simply
+          means ``enabled and ever_fired``), and ``last_run_status``
+
+        Returns a plain dict shaped for direct display::
+
+            {"name", "enabled", "cron", "timezone", "last_run_at",
+             "total_run_count", "workflow_iri", "workflow_name",
+             "workflow_exists", "ever_fired", "firing", "last_run_status",
+             "runs": [{"status", "created", "name"}, ...],
+             "problems": ["..."]}
+
+        Example:
+            >>> client.schedules.audit("nightly-recon")["problems"]
+            []
+        """
+        row = self.get(name, typed=False)
+        if row is None:
+            raise ValueError(f"No scheduled task named {name!r}")
+        kwargs = row.get("kwargs") or {}
+        if isinstance(kwargs, str):
+            import json as _json
+
+            try:
+                kwargs = _json.loads(kwargs)
+            except ValueError:
+                kwargs = {}
+        wf_iri = kwargs.get("wf_iri") or ""
+        crontab = row.get("crontab") or {}
+        cron = " ".join(
+            str(crontab.get(k, "?")) for k in ("minute", "hour", "day_of_month", "month_of_year", "day_of_week")
+        )
+
+        wf_name: str | None = None
+        wf_exists = False
+        if wf_iri:
+            try:
+                wf = self.client.get(wf_iri)
+                wf_name = wf.get("name")
+                wf_exists = True
+            except Exception:  # noqa: BLE001 - a 404'd workflow IS the finding
+                wf_exists = False
+
+        runs: list[dict[str, Any]] = []
+        if wf_name:
+            # Live table first; the box archives runs to historical-workflows
+            # (hourly on stock schedules), so a daily cron's last fire is often
+            # ONLY there.
+            for path in ("/api/wf/api/workflows/", "/api/wf/api/historical-workflows/"):
+                resp = self.client.get(
+                    path,
+                    params={"search": wf_name, "ordering": "-id", "limit": run_limit},
+                )
+                members = resp.get("hydra:member") or resp.get("results") or []
+                runs.extend(
+                    {"status": m.get("status"), "created": m.get("created"), "name": m.get("name")}
+                    for m in members
+                    if m.get("name") == wf_name  # search= is fuzzy; pin exact
+                )
+                if len(runs) >= run_limit:
+                    break
+            runs = runs[:run_limit]
+
+        ever_fired = bool(row.get("total_run_count"))
+        enabled = bool(row.get("enabled"))
+        problems: list[str] = []
+        if not enabled:
+            problems.append("schedule is DISABLED -- the cron will never fire it")
+        if not wf_exists:
+            problems.append(f"target workflow {wf_iri or '<none>'} does not exist (deleted?)")
+        if enabled and not ever_fired:
+            problems.append("enabled but has never fired -- created recently, or beat is not picking it up")
+        if runs and runs[0]["status"] not in ("finished",):
+            problems.append(f"most recent run is {runs[0]['status']!r}, not finished")
+        if wf_name and not runs and ever_fired:
+            problems.append(
+                "schedule has fired (per beat's last_run_at) but no run rows survive -- "
+                "run logs purged/archived by the stock purge schedules, or the workflow "
+                "was renamed since. Beat's counter is the durable evidence here."
+            )
+
+        return {
+            "name": row.get("name"),
+            "enabled": enabled,
+            "cron": cron,
+            "timezone": crontab.get("timezone"),
+            "last_run_at": row.get("last_run_at"),
+            "total_run_count": row.get("total_run_count"),
+            "workflow_iri": wf_iri,
+            "workflow_name": wf_name,
+            "workflow_exists": wf_exists,
+            "ever_fired": ever_fired,
+            "firing": enabled and ever_fired,
+            "last_run_status": runs[0]["status"] if runs else None,
+            "runs": runs,
+            "problems": problems,
+        }

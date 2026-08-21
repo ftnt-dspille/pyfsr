@@ -315,3 +315,115 @@ def test_tool_delete_schedule_calls_delete_by_name():
     out = dispatch(c, "delete_schedule", {"name": "nightly-recon"})
     assert out == {"deleted": True, "name": "nightly-recon"}
     assert c.schedules.delete_calls == ["nightly-recon"]
+
+
+# -- audit ----------------------------------------------------------------------
+class _AuditClient:
+    """Routes GETs by path: schedule list, workflow lookup, run tables."""
+
+    def __init__(self, *, sched_row, wf=None, live_runs=None, hist_runs=None):
+        self._sched = {"hydra:member": [sched_row]}
+        self._wf = wf
+        self._live = {"hydra:member": live_runs or []}
+        self._hist = {"hydra:member": hist_runs or []}
+        self.calls = []
+
+    def get(self, endpoint, params=None, **kw):
+        self.calls.append(("GET", endpoint, params))
+        if endpoint.startswith("/api/wf/api/scheduled"):
+            return self._sched
+        if endpoint.startswith("/api/3/workflows/"):
+            if self._wf is None:
+                raise RuntimeError("404")
+            return self._wf
+        if endpoint.startswith("/api/wf/api/historical-workflows/"):
+            return self._hist
+        if endpoint.startswith("/api/wf/api/workflows/"):
+            return self._live
+        raise AssertionError(f"unexpected GET {endpoint}")
+
+    @property
+    def schedules(self):  # what dispatch handlers reach for on a real client
+        return SchedulesAPI(self)
+
+
+def _sched_row(**over):
+    row = {
+        "name": "nightly",
+        "id": "tok",
+        "enabled": True,
+        "total_run_count": 5,
+        "last_run_at": "2026-08-19T02:07:00Z",
+        "crontab": {
+            "minute": "7",
+            "hour": "2",
+            "day_of_month": "*",
+            "month_of_year": "*",
+            "day_of_week": "*",
+            "timezone": "UTC",
+        },
+        "kwargs": {"wf_iri": "/api/3/workflows/abc"},
+    }
+    row.update(over)
+    return row
+
+
+def test_audit_healthy_schedule_has_no_problems():
+    c = _AuditClient(
+        sched_row=_sched_row(),
+        wf={"name": "Nightly Recon"},
+        live_runs=[
+            {"name": "Nightly Recon", "status": "finished", "created": "t1"},
+            {"name": "other wf", "status": "failed", "created": "t0"},
+        ],
+    )
+    a = SchedulesAPI(c).audit("nightly")
+    assert a["problems"] == []
+    assert a["firing"] is True
+    assert a["cron"] == "7 2 * * *"
+    # fuzzy search results for OTHER workflows are pinned out
+    assert [r["name"] for r in a["runs"]] == ["Nightly Recon"]
+    assert a["last_run_status"] == "finished"
+
+
+def test_audit_flags_disabled_and_deleted_workflow():
+    c = _AuditClient(sched_row=_sched_row(enabled=False, total_run_count=0), wf=None)
+    a = SchedulesAPI(c).audit("nightly")
+    assert a["firing"] is False
+    assert any("DISABLED" in p for p in a["problems"])
+    assert any("does not exist" in p for p in a["problems"])
+
+
+def test_audit_falls_back_to_historical_runs_and_notes_purge():
+    c = _AuditClient(
+        sched_row=_sched_row(),
+        wf={"name": "Nightly Recon"},
+        live_runs=[],
+        hist_runs=[{"name": "Nightly Recon", "status": "finished", "created": "t1"}],
+    )
+    a = SchedulesAPI(c).audit("nightly")
+    assert a["runs"] and a["problems"] == []
+    # and when BOTH tables are empty, the purge explanation appears
+    c2 = _AuditClient(sched_row=_sched_row(), wf={"name": "Nightly Recon"})
+    a2 = SchedulesAPI(c2).audit("nightly")
+    assert any("purged" in p for p in a2["problems"])
+
+
+def test_audit_flags_failing_last_run():
+    c = _AuditClient(
+        sched_row=_sched_row(),
+        wf={"name": "Nightly Recon"},
+        live_runs=[{"name": "Nightly Recon", "status": "failed", "created": "t1"}],
+    )
+    a = SchedulesAPI(c).audit("nightly")
+    assert any("'failed'" in p for p in a["problems"])
+
+
+def test_schedule_audit_tool_dispatches():
+    c = _AuditClient(
+        sched_row=_sched_row(),
+        wf={"name": "Nightly Recon"},
+        live_runs=[{"name": "Nightly Recon", "status": "finished", "created": "t1"}],
+    )
+    out = dispatch(c, "schedule_audit", {"name": "nightly"})
+    assert out["firing"] is True and out["problems"] == []
