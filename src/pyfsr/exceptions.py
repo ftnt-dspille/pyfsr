@@ -346,6 +346,40 @@ def describe_migrate_failure(status, message) -> str:
     return msg
 
 
+def _rollup_bulk_failures(failures: list) -> str | None:
+    """Turn a bulk endpoint's ``failure`` array into one readable message.
+
+    Each entry looks like::
+
+        POST method for object at index #0 in the request payload failed with
+        error: {"type":"ForeignKeyConstraintViolationException","message":"Foreign
+        key violation on field 'collection' with data '<uuid>' is not a valid
+        entry of type 'workflow_collections'."}
+
+    The useful part is the embedded JSON, so unwrap it when present.
+    """
+    import json as _json
+
+    parts: list[str] = []
+    for entry in failures:
+        text = entry if isinstance(entry, str) else str(entry)
+        inner = None
+        marker = "failed with error:"
+        if marker in text:
+            candidate = text.split(marker, 1)[1].strip()
+            try:
+                inner = _json.loads(candidate)
+            except Exception:
+                inner = None
+        if isinstance(inner, dict):
+            etype, emsg = inner.get("type"), inner.get("message")
+            parts.append(f"{etype}: {emsg}" if etype and emsg else (emsg or etype or text))
+        else:
+            parts.append(text)
+    rolled = "; ".join(p for p in parts if p)
+    return rolled or None
+
+
 def _extract_message(error_data):
     """Pull a human-readable message out of a FortiSOAR/Symfony error body.
 
@@ -362,6 +396,16 @@ def _extract_message(error_data):
     """
     if not isinstance(error_data, dict):
         return str(error_data) or None
+    # Bulk endpoints (/api/3/bulkupsert/*) answer with {"success": [...],
+    # "failure": ["POST method for object at index #N ... failed with error: {json}"]}
+    # and carry NO top-level "message", so this used to collapse to "Unknown error
+    # occurred" -- hiding, for example, a foreign-key violation naming the exact
+    # missing collection. Unwrap the embedded JSON so the real cause survives.
+    failures = error_data.get("failure")
+    if isinstance(failures, list) and failures:
+        rolled = _rollup_bulk_failures(failures)
+        if rolled:
+            return rolled
     if error_data.get("message"):
         return error_data["message"]
     if error_data.get("detail"):
