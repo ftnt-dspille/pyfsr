@@ -99,6 +99,16 @@ class _ConnectorsLike(Protocol):
 class _WorkflowCollectionsLike(Protocol):
     def import_export(self, data: Any, *, replace: bool = False) -> Any: ...
 
+    def deploy(
+        self,
+        data: Any,
+        *,
+        prune: bool = ...,
+        backup_dir: Any = ...,
+        dry_run: bool = ...,
+        overwrite_changed: bool = ...,
+    ) -> Any: ...
+
 
 class PlaybooksExtraNotInstalled(ImportError):
     """Raised when the optional ``fsr_playbooks`` compiler is not installed."""
