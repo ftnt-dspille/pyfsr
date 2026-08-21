@@ -4,7 +4,7 @@ hide-toc: false
 
 # pyfsr
 
-A modern, typed Python client for the **FortiSOAR** REST API — record CRUD, a
+A modern, typed Python client for the **FortiSOAR** REST API -- record CRUD, a
 fluent query DSL, Pydantic models, and a framework-agnostic tool registry for
 driving FortiSOAR from an LLM agent.
 
@@ -87,6 +87,13 @@ Bundle schema, records, connectors, and more into a `.zip` and re-apply it safel
 Author playbooks in YAML, compile them, and deploy through the API or CLI.
 :::
 
+:::{grid-item-card} Finding Playbooks
+:link: guides/playbook-discovery
+:link-type: doc
+
+Search by trigger, module, step type, or connector -- server-side where possible.
+:::
+
 :::{grid-item-card} AI & Agents
 :link: guides/ai-agents
 :link-type: doc
@@ -106,7 +113,7 @@ Administer the appliance over SSH: services, DB, queues, logs, HA, certs.
 :link-type: doc
 
 Discover and download connectors, widgets, and solution packs from Fortinet's
-public content repo — no appliance needed.
+public content repo -- no appliance needed.
 :::
 
 :::{grid-item-card} API Reference
@@ -131,6 +138,7 @@ guides/module-field-schema
 guides/connectors
 guides/export-import
 guides/playbook-authoring
+guides/playbook-discovery
 guides/playbook-yaml-reference
 guides/ai-agents
 guides/appliance-cli
