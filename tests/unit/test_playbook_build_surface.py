@@ -70,7 +70,7 @@ class _FakeDeployClient:
             self.parent.imported.append((data, replace))
             return [{"name": "PyfsrTest Pack", "uuid": "col-1"}]
 
-        def deploy(self, data, *, prune=False, backup_dir=None, dry_run=False):
+        def deploy(self, data, *, prune=False, backup_dir=None, dry_run=False, overwrite_changed=False):
             # build_and_deploy now routes through the non-destructive deploy()
             self.parent.deployed_calls.append({"data": data, "prune": prune, "backup_dir": backup_dir})
             return {

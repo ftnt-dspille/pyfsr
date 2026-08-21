@@ -422,3 +422,79 @@ def test_deploy_upserts_in_place_and_never_hard_deletes(tmp_path):
     assert a.client.playbooks.upserted[0]["uuid"] == wf_uuid
     # the collection was never hard-deleted
     assert not any(call[0] == "DELETE" for call in c.calls)
+
+
+def test_deploy_blocks_only_when_box_has_steps_the_yaml_lacks():
+    """Directional guard: YAML-ahead (our new step) deploys fine; box-ahead (the
+    live playbook has a step our YAML lacks) fails closed -- upsert would delete
+    it -- unless overwrite_changed=True."""
+    wf_uuid = "33333333-3333-3333-3333-333333333333"
+    col_uuid = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+
+    def _client(live_steps):
+        live_coll = {
+            "uuid": col_uuid,
+            "name": "Drift Coll",
+            "workflows": [{"uuid": wf_uuid, "name": "Drift WF", "steps": live_steps}],
+        }
+
+        class _C(_DeployClient):
+            def get(self, endpoint, params=None, **kw):
+                self.calls.append(("GET", endpoint, params))
+                if endpoint.endswith(col_uuid):
+                    return live_coll
+                return super().get(endpoint, params=params, **kw)
+
+        c = _C(
+            query_members=[
+                {"uuid": wf_uuid, "name": "Drift WF", "collection": f"/api/3/workflow_collections/{col_uuid}"}
+            ]
+        )
+        c.responses["/api/3/workflow_collections"] = {"hydra:member": [{"uuid": col_uuid, "name": "Drift Coll"}]}
+        return c
+
+    # local source has steps A + B (B is our new update the box lacks)
+    local_wf = {
+        "uuid": wf_uuid,
+        "name": "Drift WF",
+        "steps": [
+            {"uuid": "s1", "name": "A", "stepType": "t", "arguments": {}},
+            {"uuid": "s2", "name": "B", "stepType": "t", "arguments": {}},
+        ],
+    }
+    envelope = {
+        "type": "workflow_collections",
+        "data": [{"uuid": col_uuid, "name": "Drift Coll", "workflows": [local_wf]}],
+    }
+
+    # YAML-ahead: box has only A -> our extra step B deploys fine (no block)
+    a = WorkflowCollectionsAPI(_client([{"uuid": "s1", "name": "A", "stepType": "t", "arguments": {}}]))
+    rep = a.deploy(envelope)
+    assert rep["diverged"] == {}
+    assert a.client.playbooks.upserted[0]["uuid"] == wf_uuid
+
+    # box-ahead: box has A + Z (Z not in YAML) -> deploying would delete Z -> block
+    a2 = WorkflowCollectionsAPI(
+        _client(
+            [
+                {"uuid": "s1", "name": "A", "stepType": "t", "arguments": {}},
+                {"uuid": "sZ", "name": "Z-live-edit", "stepType": "t", "arguments": {}},
+            ]
+        )
+    )
+    with pytest.raises(ValueError, match="box-only step|has STEPS that"):
+        a2.deploy(envelope)
+    assert a2.client.playbooks.upserted is None  # nothing written
+
+    # with overwrite_changed=True it proceeds (Z will be deleted)
+    a3 = WorkflowCollectionsAPI(
+        _client(
+            [
+                {"uuid": "s1", "name": "A", "stepType": "t", "arguments": {}},
+                {"uuid": "sZ", "name": "Z-live-edit", "stepType": "t", "arguments": {}},
+            ]
+        )
+    )
+    rep3 = a3.deploy(envelope, overwrite_changed=True)
+    assert "Drift WF" in rep3["diverged"]
+    assert a3.client.playbooks.upserted[0]["uuid"] == wf_uuid
