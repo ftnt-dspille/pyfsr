@@ -4,7 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-08-21
+
 ### Added
+- **`workflow_collections.deploy()`** -- non-destructive collection deploy that
+  replaces `import_export(replace=True)`. The old path hard-deleted the whole
+  collection then re-POSTed it atomically, so a single failure (e.g. a workflow
+  uuid that already lives in another collection) left the collection GONE and
+  discarded live UI edits. `deploy()` resolves the target collection by name,
+  backs it up first, aborts on cross-collection uuid ownership, and upserts each
+  workflow IN PLACE via `upsert_playbooks` (the editor's save flow). A
+  directional divergence guard fails closed when the live playbook has steps the
+  source YAML lacks (a UI edit the in-place upsert would delete), unless
+  `overwrite_changed=True`. `build_and_deploy` routes through it;
+  `replace=`/`import_export(replace=True)` are deprecated.
+- **`playbooks.find(trigger_module=...)`** -- filter playbooks by the module their
+  start step is bound to (composes with `trigger_type` to answer "what runs when
+  an asset is created?").
+- **`schedules.audit()` + `schedule_audit` tool** -- is this schedule actually
+  firing? Cross-checks schedule definitions against recent run history.
+
 - **`connectors.set_default_configuration()`** -- mark an existing configuration
   the connector's default without changing anything else, plus a
   `set_default_connector_config` agent tool. A connector whose configuration
@@ -18,6 +37,15 @@ All notable changes to this project will be documented in this file.
   rewrite encrypted secrets) and preserving any remote-agent binding. Refuses
   outright when the appliance returns the `"NULL"` secret sentinel in place of a
   stored value. Verified on a live 8.0.0 appliance.
+
+### Fixed
+- **`create_playbooks` ensures the parent collection exists** before the
+  bulkupsert, so a workflow no longer fails with an opaque foreign-key error on
+  `collection`. Bulk endpoint (`/api/3/bulkupsert/*`) failures are unwrapped into
+  one readable message (the embedded JSON type/message) instead of a raw index
+  dump.
+- **`build_and_deploy` passes `skip` + `client` to `compile_playbook_yaml`**, so
+  the compile gate uses the warmed catalog and honours suppressed diagnostics.
 
 ## [0.18.8] - 2026-08-02
 
