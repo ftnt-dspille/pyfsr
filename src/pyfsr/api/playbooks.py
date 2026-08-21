@@ -107,6 +107,12 @@ def _build(model_cls: Any, op: str, **kwargs: Any) -> Any:
         raise ValueError(f"{op}(): invalid {loc} -- {first.get('msg')}") from e
 
 
+# ``finished with error`` is deliberately NOT here. Measured on 8.0.0: a run
+# whose step failed under ``ignore_errors`` reports that status while the rest
+# of the branch is still executing -- the step timeline of such a run shows
+# every later step reaching ``finished`` after the status had already flipped.
+# Treating it as terminal makes ``wait()`` return mid-flight, and the caller
+# reads a world the run has not finished building.
 _TERMINAL_STATUSES = frozenset({"finished", "failed", "error", "cancelled", "aborted"})
 
 # Statuses that mean a step actually FAILED -- used by ``why_failed`` to pick the
@@ -600,6 +606,7 @@ class PlaybooksAPI(BaseAPI):
         active: bool | None = None,
         private: bool | None = None,
         trigger_type: str | None = None,
+        trigger_module: str | None = None,
         step_type: str | None = None,
         uses_connector: str | None = None,
         uses_operation: str | None = None,
@@ -628,6 +635,14 @@ class PlaybooksAPI(BaseAPI):
             trigger_type: filter on the **start step** -- a friendly alias from
                 ``TRIGGER_TYPE_NAMES`` (``manual``, ``on_create``, ``on_update``,
                 ``referenced``, ``api_endpoint``) or a raw ``cybersponse.*`` name.
+            trigger_module: module the trigger is bound to (``"assets"``,
+                ``"alerts"``). Combine with ``trigger_type`` to answer "what runs
+                when an asset is created?"::
+
+                    find(trigger_type="on_create", trigger_module="assets")
+
+                This is the ``on_create``/``on_update`` counterpart to
+                :meth:`manual_on_module`.
             step_type: playbooks **containing** a step of this type -- a friendly
                 alias from ``STEP_TYPE_NAMES`` (``connector``, ``decision``,
                 ``manual_input``, ``approval``, ``reference``, ``code_snippet``,
@@ -671,6 +686,12 @@ class PlaybooksAPI(BaseAPI):
             q["singleRecordExecution"] = "true" if single_record else "false"
         if trigger_type is not None:
             q["triggerStep.stepType.name"] = TRIGGER_TYPE_NAMES.get(trigger_type.lower(), trigger_type)
+        if trigger_module is not None:
+            # The bound module lives in the trigger step's own ``arguments.resources``
+            # list. That is a different JSON column from ``steps.arguments``, so this
+            # composes freely with uses_connector/uses_operation/route/references.
+            # Quoted to keep ``assets`` from also matching ``asset_change_activities``.
+            q["triggerStep.arguments$like"] = f'%"{trigger_module}"%'
         if step_type is not None:
             q["steps.stepType.name"] = STEP_TYPE_NAMES.get(step_type.lower(), step_type)
 
@@ -1287,12 +1308,222 @@ class PlaybooksAPI(BaseAPI):
             return self.get_version(vid)
         return self.get_version(version)
 
-    def create_playbooks(self, rows: builtins.list[dict[str, Any]]) -> dict[str, Any]:
-        """Create or re-push many playbook definitions (``POST /api/3/bulkupsert/workflows``).
+    def _ensure_collections(self, rows: builtins.list[dict[str, Any]]) -> None:
+        """Create any ``collection`` a row points at that does not exist yet.
+
+        Workflows carry ``collection`` as an IRI. If that collection is absent the
+        server rejects the whole bulk POST with a ForeignKeyConstraintViolation
+        naming only the uuid -- which is a poor experience when the caller has done
+        nothing wrong (compiling a YAML whose ``collection:`` names a new collection
+        produces exactly this: the compiler mints a deterministic uuid for the
+        collection but only the *workflow* rows get posted).
+
+        An IRI alone has no name, so the placeholder is named from the row's
+        ``_collection_name`` hint when present, else from the uuid. Callers that
+        care about the display name should pass ``collection=``.
+        """
+        seen: dict[str, str] = {}
+        for row in rows:
+            col = row.get("collection")
+            iri = col.get("@id") if isinstance(col, dict) else col
+            if not isinstance(iri, str) or "/workflow_collections/" not in iri:
+                continue
+            uuid = iri.rsplit("/", 1)[-1]
+            if uuid in seen:
+                continue
+            seen[uuid] = row.get("_collection_name") or f"Imported collection {uuid[:8]}"
+        for uuid, name in seen.items():
+            try:
+                if self.client.workflow_collections.exists(uuid):
+                    continue
+                self.client.workflow_collections.create_collection(name, uuid=uuid)
+            except Exception:
+                # Leave it to the server to complain -- the error surfacing in
+                # exceptions._rollup_bulk_failures now names the real cause.
+                pass
+
+    def create_playbooks(
+        self,
+        rows: builtins.list[dict[str, Any]],
+        *,
+        collection: str | dict[str, Any] | None = None,
+        ensure_collection: bool = True,
+    ) -> dict[str, Any]:
+        """Create many playbook definitions (``POST /api/3/bulkupsert/workflows``).
 
         Pass the workflow rows exactly as they would appear in a collection payload.
+
+        ``collection`` optionally names the collection the rows belong to (a name, or
+        a dict with ``name``/``uuid``/``description``); it is created if missing so a
+        first-time deploy does not fail on a collection that does not exist yet. With
+        ``ensure_collection=True`` (default) any collection referenced by a row's
+        ``collection`` IRI is created as a placeholder if absent.
+
+        Raises :class:`~pyfsr.exceptions.APIError` when the server reports per-row
+        ``failure`` entries -- the endpoint can answer HTTP 200 with a partly failed
+        batch, which would otherwise be returned as if it had succeeded.
+
+        .. warning::
+            Despite the endpoint's name, ``bulkupsert/workflows`` is
+            **create-only** (live-verified on 8.0.0): a row whose ``uuid``
+            already exists fails with a foreign-key/uniqueness violation on the
+            existing workflow's own step rows instead of updating it. To push a
+            changed definition over an existing playbook, use
+            :meth:`upsert_playbooks`.
         """
-        return self.client.post(_WORKFLOWS_BULKUPSERT, data=rows)
+        if collection is not None:
+            spec = {"name": collection} if isinstance(collection, str) else dict(collection)
+            name = spec.get("name")
+            uuid = spec.get("uuid")
+            if uuid and not self.client.workflow_collections.exists(uuid):
+                self.client.workflow_collections.create_collection(
+                    name or f"Imported collection {str(uuid)[:8]}", uuid=uuid, description=spec.get("description", "")
+                )
+            elif not uuid and name:
+                existing = next(
+                    (
+                        x
+                        for x in self.client.workflow_collections.list()
+                        if (x.name if hasattr(x, "name") else x.get("name")) == name
+                    ),
+                    None,
+                )
+                if existing is None:
+                    created = self.client.workflow_collections.create_collection(
+                        name, description=spec.get("description", "")
+                    )
+                    uuid = created.uuid if hasattr(created, "uuid") else created.get("uuid")
+                else:
+                    uuid = existing.uuid if hasattr(existing, "uuid") else existing.get("uuid")
+            if uuid:
+                for row in rows:
+                    row.setdefault("collection", f"/api/3/workflow_collections/{uuid}")
+        elif ensure_collection:
+            self._ensure_collections(rows)
+
+        resp = self.client.post(_WORKFLOWS_BULKUPSERT, data=rows)
+        failures = resp.get("failure") if isinstance(resp, dict) else None
+        if failures:
+            from ..exceptions import APIError, _rollup_bulk_failures
+
+            raise APIError(
+                _rollup_bulk_failures(failures) or f"bulkupsert reported {len(failures)} failure(s)",
+                None,
+                error_type="BulkUpsertFailure",
+            )
+        return resp
+
+    def upsert_playbooks(self, rows: builtins.list[dict[str, Any]]) -> dict[str, Any]:
+        """Create-or-update playbook definitions, keyed by workflow ``uuid``.
+
+        For each row: if no workflow with that ``uuid`` exists, it is created via
+        :meth:`create_playbooks`. If it exists, the definition is updated
+        **in place** -- which the server offers no single endpoint for
+        (``bulkupsert/workflows`` is create-only, and a whole-row ``PUT`` with
+        nested ``steps`` dicts fails because the step children are treated as
+        inserts of already-existing uuids; both live-verified on 8.0.0). The
+        update is therefore performed piecewise:
+
+        1. ``PUT /api/3/workflows/<uuid>`` with the scalar fields only
+           (``steps``/``triggerStep`` excluded),
+        2. each step: ``PUT /api/3/workflow_steps/<uuid>`` if it exists, else
+           ``POST /api/3/workflow_steps`` with the workflow IRI attached,
+        3. live steps absent from the new definition are deleted,
+        4. ``triggerStep`` is set last (it references a step that must exist).
+
+        The playbook keeps its uuid, routes, and collection membership, so
+        record-action routes and triggers stay registered.
+
+        Returns ``{"created": [uuids], "updated": [uuids]}``.
+        """
+        created: builtins.list[str] = []
+        updated: builtins.list[str] = []
+        to_create: builtins.list[dict[str, Any]] = []
+        for row in rows:
+            wf_uuid = row.get("uuid")
+            existing = None
+            if wf_uuid:
+                try:
+                    existing = self.client.get(f"/api/3/workflows/{wf_uuid}")
+                except Exception:
+                    existing = None
+            if not existing:
+                to_create.append(row)
+                continue
+
+            new_steps = row.get("steps") or []
+            scalar = {
+                k: v
+                for k, v in row.items()
+                if k
+                not in (
+                    # child collections whose rows carry their own uuids -- a PUT
+                    # embedding them is treated as inserts of existing rows and
+                    # dies on the uuid uniqueness constraint (live-verified):
+                    "steps",
+                    "routes",
+                    "groups",
+                    "versions",
+                    "owners",
+                    "triggerStep",
+                    "uuid",
+                    "@context",
+                    "@id",
+                    "@type",
+                    "id",
+                    "createDate",
+                    "createUser",
+                    "modifyDate",
+                    "modifyUser",
+                    "deletedAt",
+                )
+            }
+            if scalar:
+                self.client.put(f"/api/3/workflows/{wf_uuid}", data=scalar)
+
+            wf_iri = f"/api/3/workflows/{wf_uuid}"
+            live = self.client.get(f"{wf_iri}?$relationships=true")
+            live_step_uuids = set()
+            for s in live.get("steps") or []:
+                sid = s.get("uuid") if isinstance(s, dict) else uuid_from_iri(str(s))
+                if not sid and isinstance(s, dict):
+                    sid = uuid_from_iri(s.get("@id", ""))
+                if sid:
+                    live_step_uuids.add(sid)
+
+            new_step_uuids = set()
+            for step in new_steps:
+                body = {
+                    k: v
+                    for k, v in step.items()
+                    if k not in ("@context", "@id", "@type", "id", "uuid", "createDate", "modifyDate")
+                }
+                body["workflow"] = wf_iri
+                sid = step.get("uuid") or uuid_from_iri(step.get("@id", ""))
+                if sid and sid in live_step_uuids:
+                    self.client.put(f"/api/3/workflow_steps/{sid}", data=body)
+                    new_step_uuids.add(sid)
+                else:
+                    if sid:
+                        body["uuid"] = sid
+                    resp = self.client.post("/api/3/workflow_steps", data=body)
+                    new_step_uuids.add(sid or uuid_from_iri(resp.get("@id", "")))
+
+            for orphan in live_step_uuids - new_step_uuids:
+                try:
+                    self.client.delete(f"/api/3/workflow_steps/{orphan}")
+                except Exception:
+                    pass
+
+            trigger = row.get("triggerStep")
+            if trigger:
+                self.client.put(f"/api/3/workflows/{wf_uuid}", data={"triggerStep": trigger})
+            updated.append(wf_uuid)
+
+        if to_create:
+            self.create_playbooks(to_create)
+            created.extend(str(r.get("uuid") or "") for r in to_create)
+        return {"created": created, "updated": updated}
 
     def query(
         self,
