@@ -930,8 +930,10 @@ def build_and_deploy(
     live_probe: bool = False,
     force: bool = False,
     replace: bool = False,
+    prune: bool = False,
+    backup_dir: str | Path | None = None,
 ) -> DeployedPlaybook:
-    """Build-then-push in one call: **verify → compile → import**. Stops (without
+    """Build-then-push in one call: **verify → compile → deploy**. Stops (without
     pushing) at the first hard failure and tells you where via ``stopped_at``.
 
     The verify gate is the guard rail: a not-ready playbook is *not* pushed
@@ -939,9 +941,33 @@ def build_and_deploy(
     groups/codes as :func:`verify_playbook_yaml`) AND to the compiler's
     ``lax_codes`` (so pre-existing diagnostics on decompiled YAML don't
     block the compile step). The catalog is warmed once from ``client`` and
-    reused for both verify and compile. ``replace=True`` overwrites an
-    existing collection on import.
+    reused for both verify and compile.
+
+    The push goes through the **non-destructive**
+    :meth:`~pyfsr.api.workflow_collections.WorkflowCollectionsAPI.deploy`: each
+    workflow is upserted in place (the editor's save flow), the collection is
+    never hard-deleted, and a workflow uuid that lives in another collection
+    aborts the deploy instead of silently colliding. Pass ``backup_dir`` to snap
+    the live collection before the change, and ``prune=True`` to soft-delete
+    workflows that are on the box but absent from the source.
+
+    ``replace`` is **deprecated and ignored** -- it selected the old destructive
+    hard-delete-then-recreate import, which could wipe a collection on any
+    failure. Passing ``replace=True`` now maps to ``prune=True`` (delete orphans)
+    and emits a ``DeprecationWarning``; the collection is still never
+    hard-deleted.
     """
+    if replace:
+        import warnings
+
+        warnings.warn(
+            "build_and_deploy(replace=True) is deprecated: the destructive "
+            "hard-delete-then-recreate import is gone. Deploy is now in-place; "
+            "replace=True maps to prune=True (soft-delete orphans).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        prune = True
     catalog = _resolve_catalog(client, db_path)
     verified = verify_playbook_yaml(text, db_path=catalog, live_probe=live_probe, skip=skip)
     if not verified.ready and not force:
@@ -952,7 +978,7 @@ def build_and_deploy(
     compiled = compile_playbook_yaml(text, client=client, db_path=catalog, lax_codes=lax)
     if not compiled.ok:
         return DeployedPlaybook(verified=verified, compiled=compiled, stopped_at="compile")
-    response = client.workflow_collections.import_export(compiled.fsr_json, replace=replace)
+    response = client.workflow_collections.deploy(compiled.fsr_json, prune=prune, backup_dir=backup_dir)
     return DeployedPlaybook(verified=verified, compiled=compiled, deployed=True, response=response)
 
 

@@ -242,6 +242,18 @@ class WorkflowCollectionsAPI(BaseAPI):
             raise ValueError(
                 "import_export() expects an export envelope with a 'data' key; got keys: " + ", ".join(sorted(data))
             )
+        if replace:
+            import warnings
+
+            warnings.warn(
+                "import_export(replace=True) hard-deletes the whole collection before "
+                "re-POSTing it -- a failure (e.g. a workflow uuid that lives in another "
+                "collection) leaves the collection GONE, and it discards live UI edits. "
+                "Prefer workflow_collections.deploy() (in-place upsert, backup, ownership "
+                "pre-flight) for deploys and restores.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         results: list[WorkflowCollection] = []
         for raw_col in data["data"]:
             col = self._clean_item(raw_col)
@@ -626,6 +638,185 @@ class WorkflowCollectionsAPI(BaseAPI):
             detail = "; ".join(format_diagnostic(d) for d in blocking) or "no envelope produced"
             raise ValueError(f"playbook YAML failed to compile: {detail}")
         return self.import_export(result.fsr_json, replace=replace)
+
+    def _live_workflows_by_uuid(self, uuids: list[str]) -> dict[str, dict[str, Any]]:
+        """Return the live workflow rows for the given uuids, keyed by uuid.
+
+        Uses ``POST /api/query/workflows`` rather than ``GET /workflows/<uuid>``:
+        a bare GET 404s for some framework playbooks (verified live), while the
+        query endpoint returns them reliably. Rows carry ``collection`` so the
+        caller can check cross-collection ownership.
+        """
+        if not uuids:
+            return {}
+        out: dict[str, dict[str, Any]] = {}
+        for i in range(0, len(uuids), 200):
+            chunk = uuids[i : i + 200]
+            body = {"logic": "AND", "filters": [{"field": "uuid", "operator": "in", "value": chunk}], "limit": 500}
+            resp = self.client.post("/api/query/workflows", data=body)
+            for m in extract_members(resp):
+                out[m["uuid"]] = m
+        return out
+
+    def deploy(
+        self,
+        data: dict[str, Any],
+        *,
+        prune: bool = False,
+        backup_dir: str | Path | None = None,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        """Deploy a collection **non-destructively**, mirroring the editor's save.
+
+        This is the safe replacement for ``import_export(replace=True)``. That
+        destructive path hard-deletes the entire collection (purging every
+        workflow, bypassing the recycle bin, discarding any live UI edit) and
+        then re-POSTs it atomically -- so a single failure (e.g. one workflow
+        uuid that already lives in another collection) leaves the collection
+        gone. ``deploy`` never deletes the collection and never uses
+        ``replace``: it updates each workflow **in place** via
+        :meth:`~pyfsr.api.playbooks.PlaybooksAPI.upsert_playbooks` (the same
+        PUT-scalars / PUT-or-POST-steps / delete-removed-steps flow the editor
+        bundle runs), so uuids, routes, and collection membership survive.
+
+        Safety steps, in order:
+
+        1. **Resolve the target collection by NAME** on the box (falling back to
+           the envelope uuid). A collection created by an earlier tool may carry
+           a different uuid than the compiler derives; matching by name finds the
+           real one so ownership checks and workflow membership use it.
+        2. **Back up** the live collection (if it exists) to ``backup_dir`` as a
+           re-importable envelope, before any change.
+        3. **Ownership pre-flight**: if any workflow uuid already lives in a
+           *different* collection, raise ``ValueError`` listing them -- deploying
+           would collide on the uuid. Reconcile first (this is exactly the fault
+           that can wipe a collection under the old ``replace`` path).
+        4. **Upsert** each workflow in place (create if new, update if present).
+        5. **Prune** orphans (live workflows absent from ``data``) only when
+           ``prune=True`` -- and only via a soft (recycle-bin) delete.
+
+        Args:
+            data: an export envelope ``{"type": "workflow_collections", "data": [col]}``
+                (e.g. from :meth:`compile_yaml` / the compiler's ``fsr_json``).
+            prune: soft-delete live workflows that are absent from ``data``.
+            backup_dir: directory to write the pre-change backup into (created if
+                missing). ``None`` skips the backup (not recommended for --apply).
+            dry_run: compute and return the plan without changing anything.
+
+        Returns:
+            a report dict: ``{"collection", "collection_uuid", "backup",
+            "created", "updated", "unchanged", "pruned", "new", "changed",
+            "orphans", "dry_run"}``.
+
+        Raises:
+            ValueError: if ``data`` is malformed, or a workflow uuid lives in
+                another collection (ownership conflict).
+        """
+        if not isinstance(data, dict) or not data.get("data"):
+            raise ValueError("deploy() expects an export envelope with a non-empty 'data' list")
+        col = self._clean_item(data["data"][0])
+        col_name = col.get("name") or ""
+        local_wfs = {w["uuid"]: w for w in (col.get("workflows") or [])}
+
+        # 1) resolve the real target collection by name (fall back to envelope uuid)
+        target_uuid = col.get("uuid")
+        target_live = None
+        try:
+            resolved = self._resolve_collection(col_name) if col_name else None
+            if resolved is not None:
+                target_live = resolved
+                target_uuid = resolved.uuid if hasattr(resolved, "uuid") else resolved.get("uuid")
+        except Exception:
+            target_live = None  # not found by name -> fresh create under envelope uuid
+
+        # 2) backup the live collection before any change
+        backup_path = None
+        if target_live is not None and backup_dir is not None:
+            from datetime import datetime, timezone
+
+            bdir = Path(backup_dir)
+            bdir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            safe_name = (col_name or target_uuid).replace("/", "_").replace(" ", "_")
+            backup_path = bdir / f"{safe_name}-{stamp}.json"
+            live_dict = target_live.to_dict() if hasattr(target_live, "to_dict") else target_live
+            backup_path.write_text(
+                json.dumps({"type": "workflow_collections", "data": [live_dict]}, default=str, indent=2)
+            )
+
+        # 3) ownership pre-flight -- any local uuid living in a DIFFERENT collection?
+        live_by_uuid = self._live_workflows_by_uuid(list(local_wfs))
+        misowned = []
+        for u, row in live_by_uuid.items():
+            coll = row.get("collection")
+            coll_u = coll.rsplit("/", 1)[-1] if isinstance(coll, str) else (coll or {}).get("uuid")
+            if coll_u and coll_u != target_uuid:
+                misowned.append((local_wfs[u].get("name"), u, coll_u))
+        if misowned:
+            lines = "\n".join(f"    - {n!r} ({u}) is in collection {c}" for n, u, c in misowned)
+            raise ValueError(
+                "deploy aborted -- these workflows already live in a DIFFERENT collection "
+                f"(deploying would collide on their uuid):\n{lines}\n"
+                "  Reconcile first: move them into the target collection, or remove them "
+                "from this source."
+            )
+
+        # diff (uses the live rows we already hold; membership only, not deep-equality)
+        live_uuids = {
+            u
+            for u, row in live_by_uuid.items()
+            if (
+                (row.get("collection") or {}).get("uuid")
+                if isinstance(row.get("collection"), dict)
+                else (row.get("collection") or "").rsplit("/", 1)[-1]
+            )
+            == target_uuid
+        }
+        new = [w.get("name") for u, w in local_wfs.items() if u not in live_uuids]
+        existing = [w.get("name") for u, w in local_wfs.items() if u in live_uuids]
+        orphans = []
+        if target_live is not None:
+            live_members = getattr(target_live, "to_dict", lambda: target_live)().get("workflows") or []
+            orphans = [(w["uuid"], w.get("name")) for w in live_members if w["uuid"] not in local_wfs]
+
+        report: dict[str, Any] = {
+            "collection": col_name,
+            "collection_uuid": target_uuid,
+            "backup": str(backup_path) if backup_path else None,
+            "new": sorted(n for n in new if n),
+            "changed": sorted(n for n in existing if n),  # would be overwritten in place
+            "orphans": sorted(n or u for u, n in orphans),
+            "created": [],
+            "updated": [],
+            "pruned": [],
+            "dry_run": dry_run,
+        }
+        if dry_run:
+            return report
+
+        # 4) ensure the collection exists, then upsert workflows in place
+        if target_live is None:
+            self.create_collection(
+                col_name,
+                description=col.get("description", ""),
+                visible=col.get("visible", True),
+                uuid=target_uuid,
+            )
+        for w in local_wfs.values():
+            w["collection"] = f"/api/3/workflow_collections/{target_uuid}"
+        res = self.client.playbooks.upsert_playbooks(list(local_wfs.values()))
+        report["created"] = res.get("created", [])
+        report["updated"] = res.get("updated", [])
+
+        # 5) prune orphans (soft delete -> recycle bin, recoverable)
+        if prune and orphans:
+            for u, _n in orphans:
+                try:
+                    self.client.playbooks.delete(u, hard=False)
+                    report["pruned"].append(u)
+                except Exception:
+                    pass
+        return report
 
     def restore(self, uuid: str) -> WorkflowCollection:
         """Restore a soft-deleted collection from the recycle bin.
