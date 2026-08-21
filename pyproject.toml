@@ -58,6 +58,9 @@ test = [
 
 typecheck = [
     "mypy>=1.13",
+    # PyYAML is a core dep (agent packaging reads prompt.yaml); the checked
+    # surface (playbook_library.py) imports it, so mypy needs its stubs.
+    "types-PyYAML",
 ]
 
 # Sphinx is bound to a single major (>=9.1,<10): the nitpicky `-W -n` docs gate
