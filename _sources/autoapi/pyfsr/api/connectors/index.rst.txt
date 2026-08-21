@@ -1,0 +1,1397 @@
+pyfsr.api.connectors
+====================
+
+.. py:module:: pyfsr.api.connectors
+
+.. autoapi-nested-parse::
+
+   Connector discovery, health, and operation execution.
+
+   Wraps FortiSOAR's ``/api/integration`` surface so callers don't hand-build
+   execute payloads or hunt for a connector's configured version / config UUID.
+   Covers discovery, healthcheck, operation execution, and writing a connector's
+   *configuration* (its credentials) -- see :meth:`ConnectorsAPI.create_configuration`.
+
+   Accessed as ``client.connectors``.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> conn = client.connectors
+   >>> [c.name for c in conn.list_configured()[:3]]   # installed + configured
+   ['smtp', 'code-snippet', 'mitre-attack']
+   >>> conn.resolve_version("mitre-attack")            # the configured version
+   '2.0.2'
+   >>> conn.healthcheck("mitre-attack").status         # "Available" is green
+   'Available'
+
+   Writes (install, create_configuration, execute) need a live appliance; see
+   the connectors guide for those::
+
+       conn.install("fortinet-fortisiem", "6.1.0", wait=True)
+       conn.create_configuration("fortinet-fortisiem", {...}, name="prod")
+       conn.execute("virustotal", "get_reputation_ip", params={"ip": "8.8.8.8"})
+
+   .. note::
+       Setting up **data ingestion** (the *Configure Data Ingestion* wizard) is
+       automated by :meth:`ConnectorsAPI.data_ingest_wizard`, which reproduces what
+       the UI writes: a per-configuration playbook collection, the connector's
+       sample ingestion playbooks cloned and rewritten into it, the periodic task
+       that fires the ``ingest`` playbook, and the ``data-import`` metadata record
+       that ties them together.
+
+   .. warning::
+       Execution is **synchronous only for connectors that run on the FortiSOAR
+       appliance itself**. For connectors bound to a remote *agent*, the
+       ``/api/integration/execute/`` call is fire-and-forget: it returns
+       immediately with an in-progress status and an empty ``data``, and the real
+       result is pushed over a websocket (not pollable here). ``execute()`` does
+       not -- and cannot -- wait for those; don't treat an empty ``data`` from an
+       agent-bound connector as failure.
+
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   pyfsr.api.connectors.ConnectorPackageError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.connectors.ConnectorsAPI
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.api.connectors.validate_connector_source
+   pyfsr.api.connectors.pack_connector
+
+
+Module Contents
+---------------
+
+.. py:exception:: ConnectorPackageError
+
+   Bases: :py:obj:`ValueError`
+
+
+   A connector source folder will not import, and we can tell before upload.
+
+   FortiSOAR's importer wraps every failure in one catch-all message --
+   *"Connector with same name is already active."* -- regardless of the real
+   cause. That message is emitted even when no connector of that name exists,
+   so it cannot be acted on. These checks exist to name the actual problem
+   locally instead.
+
+
+.. py:function:: validate_connector_source(source_dir: str, *, strict: bool = True, blocking_only: bool = False) -> list[str]
+
+   Check a connector source folder against what the importer requires.
+
+   Returns the list of problems found, worst first. With ``strict`` (the
+   default) any problem raises :class:`ConnectorPackageError` instead, since
+   uploading a package with any of these produces a server-side error that
+   identifies none of them.
+
+   The blocking rules were established empirically, by installing one
+   mutation at a time against a live 8.0.0 appliance rather than by reading
+   documentation. Blocking:
+
+   * the folder is named **exactly** ``info.json``'s ``name``. The
+     ``<name>_<version>`` form (``aws_3_1_2``) is the appliance's *installed*
+     layout, not the package layout, and packing it that way fails.
+   * ``info.json`` parses and has a non-empty ``name``, ``version``, ``label``.
+   * ``version`` has three numeric parts -- ``1.0``, ``banana`` and ``1`` are
+     each rejected.
+   * ``operations`` is present and not ``null`` (an empty list is fine).
+   * ``configuration`` is not ``null`` (absent or ``{}`` is fine).
+   * every ``operations`` entry has an ``operation`` and a ``title``, and no
+     two share an ``operation``.
+
+   Advisory -- accepted by the importer but wrong or dangerous anyway:
+   a declared operation with no implementation in ``operations.py`` (installs
+   cleanly, fails at runtime), a missing ``__init__.py``, ``connector.py`` or
+   ``operations.py``, an icon named but not shipped, ``cs_approved`` left
+   ``true``, and a ``name`` with uppercase or spaces.
+
+   Not required by the importer at all, despite appearances: ``description``,
+   ``publisher``, ``cs_compatible``, ``category``, ``ingestion_supported``,
+   ``tags``, and per-operation ``description`` / ``category`` / ``annotation``
+   / ``enabled`` / ``parameters`` / ``output_schema``.
+
+   Problems are either *blocking* -- the import is guaranteed to fail, and
+   the server will not tell you why -- or advisory. ``blocking_only`` reports
+   just the former, which is what :func:`pack_connector` enforces so that a
+   rough working folder still packs.
+
+   :param source_dir: the connector folder (the one holding ``info.json``).
+   :param strict: raise instead of returning the list.
+   :param blocking_only: report only problems that guarantee an import failure.
+
+   :returns: Problem descriptions; empty when the folder looks importable.
+
+   :raises ConnectorPackageError: with ``strict``, when anything is wrong.
+   :raises FileNotFoundError: if ``source_dir`` is not a directory.
+
+
+.. py:function:: pack_connector(source_dir: str, output: str | None = None, *, validate: bool = True) -> str
+
+   Bundle a connector source folder into a SOAR-importable ``.tgz``.
+
+   FortiSOAR expects a connector archive to contain exactly **one top-level
+   directory** (named for the connector) holding ``info.json``, ``connector.py``,
+   ``operations.py``, etc. -- e.g. ``flatten-json/info.json``. This packs
+   ``source_dir`` as that top-level directory, preserving its own name.
+
+   Non-deployment artifacts are excluded so the bundle stays small and clean:
+
+   * **Virtualenvs** -- ``.venv``, ``venv``, ``.env``, ``env``
+   * **Test suites** -- ``tests``, ``test``, ``.pytest_cache``, ``.tox``
+   * **Caches** -- ``__pycache__``, ``.mypy_cache``, ``.ruff_cache``
+   * **VCS / IDE** -- ``.git``, ``.hg``, ``.svn``, ``.idea``, ``.vscode``
+   * **Build output** -- ``dist``, ``build``, ``.eggs``, ``node_modules``
+   * **OS / editor cruft** -- ``.DS_Store``, ``*.pyc``, ``*.pyo``, ``*.swp``
+
+   :param source_dir: path to the connector folder (the one containing ``info.json``).
+   :param output: destination ``.tgz`` path. Defaults to ``<source_dir>.tgz``
+                  alongside the folder.
+   :param validate: run :func:`validate_connector_source` first and refuse to
+                    build a package the importer will reject. Pass ``False`` only to
+                    reproduce a known-bad bundle deliberately.
+
+   :returns: The path to the written ``.tgz``.
+
+   :raises FileNotFoundError: if ``source_dir`` doesn't exist.
+   :raises ValueError: if ``source_dir`` has no ``info.json`` (not a connector).
+   :raises ConnectorPackageError: with ``validate``, when the folder would fail to
+       import -- the importer's own error names no cause, so this catches
+       it locally instead.
+
+
+.. py:class:: ConnectorsAPI(client)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Live connector listing, healthcheck, and operation execution.
+
+
+   .. py:method:: clear_cache() -> None
+
+      Drop the cached configured-connector listing.
+
+
+
+   .. py:method:: install(name: str, version: str, *, wait: bool = False, interval: float = 3.0, timeout: float = 300.0) -> dict[str, Any]
+
+      Install a connector from Content Hub by ``name`` + ``version``.
+
+      Posts ``{"name", "version"}`` to ``POST /api/3/solutionpacks/install`` --
+      the same call the Content Hub *Install* button makes. The install runs
+      asynchronously as an *import job*; the response carries that job's id
+      (poll it with :meth:`install_status`). Discover installable
+      ``name``/``version`` pairs via
+      ``client.content_hub.search_available_connectors(...)``.
+
+      :param name: connector name (e.g. ``"fortinet-fortisiem"``).
+      :param version: the Content Hub version to install (e.g. ``"6.1.0"``).
+      :param wait: block until the import job reaches a terminal status.
+      :param interval: seconds between polls when ``wait`` (default 3).
+      :param timeout: give up waiting after this many seconds (default 300).
+
+      :returns: With ``wait=False``, the install response (carrying the import-job
+                id). With ``wait=True``, the final :meth:`install_status` payload --
+                check its ``status`` (``"Import Complete"`` means success). The
+                configured-connector cache is dropped on a successful wait.
+
+
+
+   .. py:method:: install_from_file(path: str, *, replace: bool = False, wait: bool = False, interval: float = 3.0, timeout: float = 300.0) -> dict[str, Any]
+
+      Install a connector by uploading its ``.tgz`` bundle.
+
+      The multipart-upload form of ``POST /api/3/solutionpacks/install`` (the
+      same endpoint :meth:`install` posts a name to). Sends the archive as
+      ``file`` with the required ``$type=connector`` query parameter; pass
+      ``replace=True`` to re-install over an existing version (``$replace=true``).
+      The response carries the full connector record -- including the integer
+      ``id`` other calls need.
+
+      Use this for connectors not in Content Hub (a locally built or
+      custom ``.tgz``); use :meth:`install` to pull a published one by name.
+
+      :param path: filesystem path to the connector ``.tgz``.
+      :param replace: overwrite an already-installed version of the same name.
+      :param wait: block until the import job reaches a terminal status.
+      :param interval: seconds between polls when ``wait`` (default 3).
+      :param timeout: give up waiting after this many seconds (default 300).
+
+      :returns: With ``wait=False``, the install response (the connector record,
+                carrying any import-job id). With ``wait=True``, the final
+                :meth:`install_status` payload. The configured-connector cache is
+                dropped on a successful upload/wait.
+
+      :raises FileNotFoundError: if ``path`` doesn't exist.
+
+      .. rubric:: Example
+
+      >>> import io, tarfile, tempfile
+      >>> from pathlib import Path
+      >>> client = demo_client()
+      >>> with tempfile.TemporaryDirectory() as tmp:
+      ...     tgz = Path(tmp) / "demo-connector.tgz"
+      ...     with tarfile.open(tgz, "w:gz") as tar:
+      ...         info = tarfile.TarInfo("demo-connector/info.json")
+      ...         data = b'{"name": "demo-connector", "version": "1.0.0"}'
+      ...         info.size = len(data)
+      ...         tar.addfile(info, io.BytesIO(data))
+      ...     resp = client.connectors.install_from_file(str(tgz))
+      >>> result = (resp["id"], resp["name"], resp["version"])
+      >>> result
+      (42, 'demo-connector', '1.0.0')
+
+
+
+   .. py:method:: install_from_dir(source_dir: str, *, replace: bool = True, wait: bool = False, interval: float = 3.0, timeout: float = 300.0) -> dict[str, Any]
+
+      Pack a connector source folder and upload it in one step.
+
+      Bundles ``source_dir`` with :func:`pack_connector` into a temporary
+      ``.tgz`` and hands it to :meth:`install_from_file`. Convenience for the
+      build-test loop on a locally edited connector; defaults to
+      ``replace=True`` since you're almost always re-pushing the same name.
+
+      Args mirror :meth:`install_from_file` plus ``source_dir`` (the connector
+      folder containing ``info.json``). Returns the install response.
+
+
+
+   .. py:method:: install_status(job_id: str) -> pyfsr.models._integration.InstallJobStatus
+
+      Fetch a connector install's import-job progress.
+
+      ``GET /api/3/import_jobs/{job_id}`` (selecting just the progress fields).
+      ``status == "Import Complete"`` means the install finished.
+
+
+
+   .. py:method:: wait_for_install(job_id: str, *, interval: float = 3.0, timeout: float = 300.0) -> pyfsr.models._integration.InstallJobStatus
+
+      Poll an install import job until it reaches a terminal status.
+
+      Returns the latest :meth:`install_status` payload. On timeout, returns
+      the last poll with a non-terminal ``status`` rather than raising.
+
+
+
+   .. py:method:: uninstall(connector: str, *, refresh: bool = True) -> None
+
+      Uninstall a connector from the **appliance** (its self-agent).
+
+      ``DELETE /api/integration/connectors/{id}/`` -- the integer install id is
+      resolved from ``connector`` (a name-only call won't work). The trailing
+      slash is mandatory; the endpoint returns 204 on success. To remove a
+      connector from a remote *agent* instead, use
+      :meth:`~pyfsr.api.agents.AgentsAPI.uninstall_connector`.
+
+      Raises ``ValueError`` if the connector isn't installed.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.connectors.uninstall("virustotal")
+
+
+
+   .. py:method:: ensure_version(name: str, version: str, *, bundle_path: str | None = None, auto_fetch: bool = True, backup_dir: str | None = None, allow_uninstall_fallback: bool = False, wait: bool = True, interval: float = 3.0, timeout: float = 600.0) -> dict[str, Any]
+
+      Make ``name`` be installed at exactly ``version``, preserving configs.
+
+      The safe way to change a connector's version -- including a **downgrade** --
+      without losing its saved configurations. An in-place install (upgrade or
+      downgrade) preserves configs on its own; this method additionally takes a
+      Configuration-Export backup first and, if the version swap drops or
+      shrinks the config set, restores it from that backup (re-creating configs
+      with their original ``config_id`` so playbook references survive).
+
+      Steps:
+
+      1. If already at ``version``, no-op.
+      2. If installed *and* configured, export a backup ``.zip`` (configs +
+         encrypted secrets) via ``client.export_config.export_connector``.
+      3. Install ``version`` in place -- from ``bundle_path`` if given (a local
+         ``.tgz``/zip), else by name from Content Hub; if Content Hub won't
+         serve that version and ``auto_fetch`` is set (default), the exact-
+         version ``.tgz`` is downloaded from the public repo and installed.
+      4. Verify. If configs survived, done. If they didn't (downgrade schema
+         drift, or a forced replace), re-import the backup.
+      5. Only if the in-place install didn't reach ``version`` *and*
+         ``allow_uninstall_fallback`` is set: uninstall (destroys configs),
+         reinstall, then restore configs from the backup.
+
+      :param name: connector machine name (e.g. ``"code-snippet"``).
+      :param version: target version (e.g. ``"2.1.5"``).
+      :param bundle_path: optional local connector archive to install instead of
+                          pulling ``version`` from Content Hub. Usually unnecessary now --
+                          when Content Hub won't serve the target, ``auto_fetch`` downloads
+                          the exact-version ``.tgz`` from the public repo for you.
+      :param auto_fetch: when no ``bundle_path`` is given and the by-name Content
+                         Hub install fails, download ``version`` from the public content
+                         repository (:mod:`pyfsr.repo`) and install that. On by default;
+                         set False to require Content Hub / an explicit bundle.
+      :param backup_dir: directory to write the backup ``.zip`` into (default cwd).
+      :param allow_uninstall_fallback: permit the destructive uninstall→reinstall
+                                       path if an in-place install can't reach ``version``. Off by
+                                       default -- leaving the connector untouched is safer than a wipe.
+      :param wait: block on installs/imports (default True).
+      :param interval: poll interval for the install wait.
+      :param timeout: per-install/-import timeout in seconds.
+
+      :returns:
+
+                A summary dict::
+
+                    {"action": "noop"|"in_place"|"restored"|"reinstalled"|"failed",
+                     "from": <old version or None>, "to": <resolved version>,
+                     "target": version, "backup": <path or None>,
+                     "configs_before": N, "configs_after": M}
+
+
+
+   .. py:method:: connector_detail(connector: str) -> dict[str, Any]
+
+      Fetch a connector's full record by id (operations-discovery endpoint).
+
+      ``POST /api/integration/connectors/{id}/`` with a ``{}`` body -- the
+      spec-canonical way to enumerate a connector's installed operations.
+      Returns the full record: ``operations[]`` (each with ``operation``,
+      ``title``, ``description``, ``parameters[]``, ``output_schema``),
+      ``configuration[]`` (each with ``config_id``, ``name``, ``config``,
+      ``agent``), and ``config_schema``. GET is forbidden and an empty body
+      415s, so this always POSTs ``{}``.
+
+      Prefer this over :meth:`definition` when you have an installed connector
+      and want exactly what the appliance reports for it. Raises ``ValueError``
+      if the connector isn't installed.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> detail = client.connectors.connector_detail("smtp")
+      >>> (detail["name"], detail["version"])
+      ('smtp', '2.6.0')
+      >>> [op["operation"] for op in detail["operations"][:2]]
+      ['send_email_new', 'send_email']
+
+
+
+   .. py:method:: list_configured(*, refresh: bool = False) -> list[pyfsr.models._integration.InstalledConnector]
+
+      Installed + configured connectors.
+
+      Cached after the first call; pass ``refresh=True`` to re-fetch.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> [c.name for c in client.connectors.list_configured()[:3]]
+      ['smtp', 'code-snippet', 'mitre-attack']
+
+
+
+   .. py:method:: list_configurations(*, name: str | None = None, connector: str | int | None = None, active: bool | None = None, page: int = 1, page_size: int = 100) -> list[pyfsr.models._integration.ConnectorConfig]
+
+      List connector configuration records via ``GET /api/integration/configuration/``.
+
+      The dedicated, filterable configurations endpoint (distinct from the
+      connector-derived view of :meth:`configurations`). Each entry carries
+      ``id`` (int), ``config_id`` (uuid), ``connector`` (int connector id),
+      ``agent`` (set when remote), and ``config`` (the field map). Returns the
+      ``data[]`` array (this endpoint is the custom ``{status, totalItems,
+      data[]}`` envelope, not Hydra).
+
+      Filters:
+
+      * ``name`` -- the **configuration's** name (e.g. ``"Branch FortiManager"``),
+        i.e. what you passed as ``name`` to :meth:`upsert_configuration`.
+      * ``connector`` -- every configuration of one connector, by machine name
+        (``"fortinet-fortimanager-json-rpc"``) or integer install id.
+      * ``active`` -- active configurations only.
+
+      .. warning::
+         ``name`` filters the CONFIGURATION name, **not** the connector name.
+         This docstring claimed "connector name" until it was checked against a
+         live appliance. The mistake is invisible at runtime: a connector name
+         in ``name`` returns ``[]`` rather than raising, because the endpoint
+         silently ignores filters it doesn't understand and this one simply
+         matches nothing. Use ``connector=`` for that.
+
+      ``connector`` resolves a name to its install id before querying -- the
+      endpoint's ``connector`` filter is the numeric id, and a name passed
+      straight through errors ("Unknown error occurred"). A not-installed
+      connector yields ``[]``: it cannot have configurations.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> configs = client.connectors.list_configurations()
+      >>> [(c.name, c.connector) for c in configs]
+      [('localhost-postfix', 3), ('Demo', 21)]
+
+
+
+   .. py:method:: find_installed_connectors(query: str) -> list[pyfsr.models._integration.InstalledConnector]
+
+      Search *installed* connectors by partial, case-insensitive match.
+
+      Scoped to connectors installed on this appliance (the
+      :meth:`list_configured` set) -- it does **not** see the Content Hub
+      catalog of installable-but-not-installed connectors. For that, use
+      ``client.content_hub.search_available_connectors(...)``.
+
+      Matches ``query`` as a substring of either the connector ``name`` or its
+      ``label`` -- so ``"fortigate"`` finds ``fortigate-firewall`` (label
+      ``"Fortinet FortiGate"``) regardless of hyphen/underscore or casing.
+      Returns the matching :meth:`list_configured` entries (possibly empty),
+      ordered with exact ``name`` matches first.
+
+      Useful when you don't know a connector's exact machine name -- note that
+      :meth:`resolve_version` and friends require the exact ``name``, while the
+      human-facing label differs (``"Fortinet FortiGate"`` vs
+      ``"fortigate-firewall"``).
+
+
+
+   .. py:method:: configurations(connector: str) -> list[pyfsr.models._integration.ConnectorConfigSummary]
+
+      List a connector's configurations (``[{config_id, name, default}]``).
+
+
+
+   .. py:method:: resolve_version(connector: str) -> str | None
+
+      The configured version of ``connector`` (``None`` if not configured).
+
+
+
+   .. py:method:: resolve_connector_id(connector: str) -> int | None
+
+      The integer install id of ``connector`` (``None`` if not installed).
+
+      Required by :meth:`create_configuration` -- the
+      ``/api/integration/configuration/`` endpoint 500s on a name-only body
+      and needs this numeric id.
+
+
+
+   .. py:method:: resolve_config(connector: str, config_name: str | None = None) -> str | None
+
+      Return a config UUID for ``connector``.
+
+      With ``config_name`` given, matches by name; otherwise picks the
+      configuration flagged default (falling back to the first one).
+
+      An unknown ``config_name`` raises
+      :class:`~pyfsr.exceptions.ConnectorConfigNotFoundError` -- it does NOT
+      fall back to the default. The default is often a stale or reclaimed
+      instance, so falling back turns a typo into a call against the wrong
+      tenant that fails later as something unrelated (a DNS error, an empty
+      result) instead of "that config doesn't exist".
+
+      :raises ConnectorConfigNotFoundError: ``config_name`` was given and no
+          configuration of ``connector`` carries that name.
+
+
+
+   .. py:method:: healthcheck(connector: str, *, version: str | None = None, config: str | None = None, config_id: str | None = None) -> pyfsr.models._integration.HealthcheckResult
+
+      Live-check whether a connector configuration is reachable.
+
+      ``status="Available"`` is green. A 404 is normalized to
+      ``status="no-config"`` meaning the connector isn't configured.
+
+      ``config`` selects which configuration to check. It accepts either a
+      configuration **UUID** or a display **name** -- the FortiSOAR server
+      resolves both (live-verified on 8.0.0). Omit it to check the connector's
+      *default* configuration.
+
+      .. deprecated::
+         ``config_id=`` is a deprecated alias for ``config=``. It still works
+         (and emits a warning) but gains nothing -- ``config=`` accepts both a
+         UUID and a name. Passing both raises.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.connectors.healthcheck("mitre-attack").status
+      'Available'
+
+
+
+   .. py:method:: healthcheck_all(connectors: list[str] | None = None, *, max_workers: int = 8) -> dict[str, pyfsr.models._integration.HealthcheckResult]
+
+      Healthcheck many connectors **concurrently**, keyed by connector name.
+
+      With ``connectors=None`` (default), checks every configured connector
+      (the :meth:`list_configured` set with a resolvable version). Each check is
+      an independent ``GET``, so they run in a bounded thread pool -- a fleet
+      status sweep that was N round-trips becomes roughly one. A connector whose
+      check raises lands as a ``status="error"``
+      :class:`~pyfsr.models._integration.HealthcheckResult` so
+      one failure never sinks the whole sweep.
+
+
+
+   .. py:method:: definition(connector: str, *, version: str | None = None) -> pyfsr.models._integration.ConnectorDefinition
+
+      Fetch a connector's full definition (config schema + operations).
+
+      ``POST /api/integration/connectors/<name>/<version>/?format=json`` (the
+      endpoint forbids GET). ``version`` is resolved from the configured
+      connector when omitted. The returned
+      :class:`~pyfsr.models._integration.ConnectorDefinition` carries
+      ``config_schema``, ``configuration``, and typed ``operations`` (each an
+      :class:`~pyfsr.models._integration.Operation` with ``operation``,
+      ``title``, typed ``parameters``, ``output_schema``). Dict-compatible, so
+      ``defn["operations"][0]["operation"]`` still works.
+
+      Raises ``ValueError`` if the version can't be resolved.
+
+
+
+   .. py:method:: operations(connector: str, *, version: str | None = None) -> list[pyfsr.models._integration.Operation]
+
+      List a connector's operations (the ``operations`` of :meth:`definition`).
+
+      Returns typed, dict-compatible
+      :class:`~pyfsr.models._integration.Operation` objects -- each carries
+      ``operation`` (the api name), ``title``, ``description``, typed
+      ``parameters`` (:class:`~pyfsr.models._integration.OperationParam`), and
+      ``output_schema``.
+
+
+
+   .. py:method:: action_ui_schema(connector: str, operation: str, *, version: str | None = None, required_only: bool = False, selections: dict[str, Any] | None = None) -> list[pyfsr.models._integration.OperationParam]
+
+      The input params a UI/agent must render to stage one connector action.
+
+      Resolves ``connector``'s definition, finds ``operation`` by its api name,
+      and returns its :meth:`~pyfsr.models.Operation.ui_params` --
+      the visible params, required-first, deduped across conditional groups,
+      each carrying its ``type``/``title``/``required`` and (for a ``select``)
+      its :meth:`~pyfsr.models.OperationParam.select_options`.
+
+      This is the "connector action UI schema" widget and tooling authors were
+      re-deriving by hand from the raw definition.
+
+      Pass ``selections`` (a ``{param_name: chosen_value}`` map of what the
+      user has picked so far) to also include the sub-params those choices
+      reveal via each ``select``'s ``onchange`` map -- so you render only the
+      fields needed for the current state. Without it, only the base form is
+      returned. Pass ``required_only=True`` for just the required inputs. See
+      :meth:`~pyfsr.models.Operation.ui_params` for the reveal
+      semantics. Raises :class:`ValueError` if the operation is not found on
+      the connector.
+
+
+
+   .. py:method:: config_schema(connector: str, *, version: str | None = None) -> list[dict[str, Any]]
+
+      Return a connector's configuration field schema (its ``config_schema``).
+
+      Each field carries ``name``, ``type`` (``text``/``password``/``select``/
+      ``checkbox``/…), ``title``, ``required``, a default ``value``, and -- for
+      ``select`` fields -- an ``onchange`` map whose keys are option values and
+      whose values are the *sub-fields* that become active when that option is
+      chosen (e.g. FortiSIEM's ``fsm_type`` reveals ``server``/``username``/
+      ``password`` only when set to ``"FortiSIEM"``). Feed the same shape to
+      :meth:`validate_config` to check a config before saving.
+
+
+
+   .. py:method:: default_config(connector: str, *, version: str | None = None) -> dict[str, Any]
+
+      Build a schema-complete **default** configuration dict for ``connector``.
+
+      Walks the config schema and fills every field with its declared default
+      ``value`` (or a type-appropriate empty default -- ``False`` for checkbox,
+      ``0`` for integer, ``""`` otherwise), **including the conditional
+      sub-fields that** ``onchange`` **reveals for those defaults**. That last
+      part is the point: a connector like ``code-snippet`` requires
+      ``restrict_imports`` only when ``allow_imports`` is unchecked, and that
+      requirement is invisible until the *playbook run* fails with a
+      ``KeyError``. Start from this dict, override what you need, and pass it to
+      :meth:`create_configuration` / :meth:`upsert_configuration`.
+
+      .. rubric:: Example
+
+      >>> cfg = client.connectors.default_config("code-snippet")  # doctest: +SKIP
+      >>> cfg                                   # doctest: +SKIP
+      {'allow_imports': False, 'restrict_imports': ''}
+
+      :param connector: connector name (e.g. ``"code-snippet"``).
+      :param version: connector version (resolved from configured instance if omitted).
+
+      :returns: A dict with every config field populated with its default value,
+                including onchange-revealed sub-fields for the default selections.
+
+
+
+   .. py:method:: required_config_fields(connector: str, config: dict[str, Any], *, version: str | None = None) -> list[str]
+
+      The config field names *required* given the selections in ``config``.
+
+      Resolves ``select`` / ``checkbox`` ``onchange`` branches against the
+      values already in ``config`` (so for FortiSIEM with ``fsm_type="FortiSIEM"``
+      you get ``server``/``username``/``password``, and for ``code-snippet`` with
+      ``allow_imports=False`` you get ``restrict_imports``). Use it to know which
+      fields a user must supply.
+
+
+
+   .. py:method:: validate_config(connector: str, config: dict[str, Any], *, version: str | None = None) -> pyfsr.models._integration.ConfigValidationResult
+
+      Check ``config`` against a connector's schema *before* saving it.
+
+      Returns a :class:`~pyfsr.models.ConfigValidationResult` with:
+
+      - ``missing`` -- required fields absent or blank in ``config``.
+      - ``invalid`` -- fields with wrong values (bad select option, wrong type).
+      - ``unknown`` -- keys in ``config`` not declared by the active schema.
+      - ``errors`` -- one structured entry per problem with ``field``, ``code``,
+        ``message``, and (for select fields) ``valid_options``.
+
+      ``valid`` is ``True`` only when ``missing`` and ``invalid`` are empty.
+      ``unknown`` keys are reported but don't make the config invalid.
+
+
+
+   .. py:method:: create_configuration(connector: str, config: dict[str, Any], *, name: str, version: str | None = None, default: bool = False, config_id: str | None = None, agent: str | None = None, validate: bool = True, autofill: bool = True, exist_ok: bool = False, refresh: bool = True) -> pyfsr.models._integration.ConnectorConfig
+
+      Create (or update) a connector configuration -- write its credentials.
+
+      Persists a named configuration for ``connector`` via
+      ``POST /api/integration/configuration/`` (the same endpoint the UI's
+      connector-config form uses). ``config`` is the connector's own field
+      map -- for ``fortinet-fortisiem`` that's
+      ``{"server", "username", "password", "organization", "verify_ssl"}``;
+      inspect :meth:`definition` (its ``config_schema``) for any connector's
+      fields. Secrets (e.g. ``password``) are encrypted server-side, so always
+      create configs through this API rather than writing the table directly.
+
+      :param connector: connector *name* (e.g. ``"fortinet-fortisiem"``).
+      :param config: the connector's configuration field values.
+      :param name: a label for this configuration (required; what the UI shows).
+      :param version: connector version; resolved from an already-configured
+                      connector when omitted. Pass it explicitly the first time a
+                      connector is configured (``resolve_version`` only sees
+                      already-configured connectors). If invalid, the appliance falls
+                      back to the latest installed version.
+      :param default: mark this the connector's default configuration.
+      :param config_id: reuse a specific UUID -- passing an existing config's id
+                        **updates** that configuration instead of creating a new one
+                        (the endpoint upserts on ``config_id``); omit to mint a new one.
+      :param agent: run the connector on a remote *agent* (its uuid); omit to use
+                    the appliance's self-agent.
+      :param validate: structurally check ``config`` against the connector's
+                       schema first (via :meth:`validate_config`) and raise on a missing
+                       required field -- turns the server's opaque 500 into a clear
+                       error. Pass ``False`` to skip (default ``True``).
+      :param autofill: fill any schema-defaulted fields ``config`` omits -- including
+                       the ``onchange``-revealed sub-fields that are otherwise required
+                       only at *playbook runtime* (see :meth:`default_config`). Your
+                       explicit values always win. Pass ``False`` to send ``config``
+                       verbatim (default ``True``).
+      :param exist_ok: when ``True``, if a configuration with the same ``name``
+                       already exists for this connector/agent pair, delegate to
+                       :meth:`upsert_configuration` instead of raising
+                       :exc:`~pyfsr.exceptions.ConfigurationExistsError` (default ``False``).
+      :param refresh: drop the cached configured-connector listing afterwards so
+                      the new config is visible to :meth:`resolve_config` etc.
+                      (default ``True``).
+
+      The integer ``connector`` id the endpoint requires (a name-only body
+      500s) is resolved automatically from ``connector``.
+
+      :returns: The persisted configuration record (including its ``config_id``).
+
+      :raises ValueError: if the connector isn't installed or ``version`` can't be
+          resolved.
+      :raises ConfigValidationError: when ``validate=True`` and the configuration
+          fails structural validation (missing required fields, invalid
+          option values, or wrong field types). Includes field-level error
+          details so callers can programmatically handle them.
+      :raises ConfigurationExistsError: when ``exist_ok=False`` (the default) and
+          the server rejects the write with a unique constraint violation
+          on ``(name, connector, agent)``.
+
+
+
+   .. py:method:: update_configuration(connector: str, config_id: str, config: dict[str, Any], *, name: str, version: str | None = None, default: bool = False, agent: str | None = None, validate: bool = True, autofill: bool = True, refresh: bool = True) -> pyfsr.models._integration.ConnectorConfig
+
+      Update an existing connector configuration by ``config_id``.
+
+      ``PUT /api/integration/configuration/{config_id}/`` (the POST create path
+      *rejects* a known ``config_id`` rather than upserting). Use this to
+      rotate credentials on a configured connector -- e.g. re-stamp a FortiSIEM
+      ``password`` or a refreshed token. ``config`` is sent whole, so include
+      every field, not just the changed one.
+
+      Like :meth:`create_configuration`, the integer ``connector`` id is
+      resolved automatically, and ``config`` is structurally validated first
+      unless ``validate=False``.
+
+      :param connector: connector name.
+      :param config_id: the UUID of the configuration to update.
+      :param config: the new connector configuration field values.
+      :param name: the configuration's label.
+      :param version: connector version (resolved if omitted).
+      :param default: mark this the connector's default configuration.
+      :param agent: run the connector on a remote agent (omit to keep existing).
+      :param validate: structurally check ``config`` against the schema first
+                       (default ``True``).
+      :param autofill: fill any schema-defaulted fields ``config`` omits (default ``True``).
+      :param refresh: drop the cached configured-connector listing afterwards
+                      (default ``True``).
+
+      :returns: The updated :class:`~pyfsr.models.ConnectorConfig`.
+
+      :raises ValueError: if the connector isn't installed or version can't be resolved.
+      :raises ConfigValidationError: when ``validate=True`` and the configuration
+          fails structural validation.
+
+
+
+   .. py:method:: set_default_configuration(connector: str, config_id: str | None = None, *, name: str | None = None, refresh: bool = True) -> pyfsr.models._integration.ConnectorConfig
+
+      Mark an existing configuration the connector's default, changing nothing else.
+
+      There is no flag-only route: the API only exposes
+      ``PUT /api/integration/configuration/{config_id}/``, which replaces the
+      whole record. Doing that by hand is how credentials get wiped -- the
+      connector listing returns ``config: null`` (the field map is only on the
+      single-record GET), so a caller who builds the body from the listing
+      PUTs an empty ``config`` over live secrets. This reads the current
+      record first and re-sends it verbatim with ``default=True``.
+
+      ``validate``/``autofill`` are deliberately NOT applied. The stored
+      ``config`` is already whatever the appliance accepted, and secrets come
+      back encrypted at rest; materializing it against the schema would
+      rewrite fields this call has no business touching.
+
+      The appliance re-encrypts secrets on save, so the stored ciphertext for
+      a field like ``api_key`` legitimately DIFFERS after this call while the
+      plaintext is unchanged -- do not read that as corruption. Verified on a
+      live 8.0.0 appliance: a FortiGate configuration that could not be
+      health-checked (``Could not find a configuration matching the id
+      get_default_config or the default configuration``) reported
+      ``Available`` afterwards, with the upstream still reachable.
+
+      :param connector: connector machine name, e.g. ``"fortigate-firewall"``.
+      :param config_id: the configuration to promote. Omit when the connector has
+                        exactly one configuration and it should be the default.
+      :param name: select the configuration by its label instead of ``config_id``.
+      :param refresh: drop the cached configured-connector listing afterwards.
+
+      :returns: The updated :class:`~pyfsr.models.ConnectorConfig`.
+
+      :raises ValueError: if the connector isn't installed, if neither
+          ``config_id`` nor ``name`` is given and the connector has zero or
+          more than one configuration, or if ``name`` matches no
+          configuration.
+
+
+
+   .. py:method:: delete_configuration(config_id: str, *, refresh: bool = True) -> None
+
+      Delete a connector configuration by id
+      (``DELETE /api/integration/configuration/{config_id}/``).
+
+      The trailing slash is mandatory -- without it the gateway rejects the
+      call with ``403 Could not validate HMAC fingerprint``.
+
+
+
+   .. py:method:: dev_list() -> list[dict[str, Any]]
+
+      List connectors checked out into the Connector Studio dev workspace.
+
+      ``GET /api/integration/connector/development/entity/`` -- the same set
+      shown in the Studio's left-hand tree. Returns the ``data[]`` entries.
+
+
+
+   .. py:method:: dev_edit(entity_id: str) -> dict[str, Any]
+
+      Open a dev-workspace connector for editing (Studio's *Edit* action).
+
+      ``POST .../entity/{id}/`` with ``{"edit_repo_connector": true}``. Returns
+      the entity's full operations + configuration schema + file tree. Follow
+      with :meth:`dev_read_file`/:meth:`dev_write_file`, then :meth:`dev_publish`.
+
+
+
+   .. py:method:: dev_read_file(entity_id: str, xpath: str) -> dict[str, Any]
+
+      Read one source file from a dev-workspace connector.
+
+      ``POST .../entity/{id}/files/`` with ``{"xpath": ...}``. ``xpath`` is
+      relative to the connector's dev-workspace root and starts with
+      ``/<name>_<vtag>_dev/...``. Returns the file payload.
+
+
+
+   .. py:method:: dev_write_file(entity_id: str, file_data: dict[str, Any]) -> dict[str, Any]
+
+      Write one source file in a dev-workspace connector (Studio *Save*).
+
+      ``PUT .../entity/{id}/files/`` with ``{"fileData": ...}``. ``file_data``
+      is the editor's file object (path + contents). Saved changes are staged
+      in the workspace and do **not** affect playbook execution until
+      :meth:`dev_publish` is called.
+
+
+
+   .. py:method:: dev_publish(entity_id: str, *, replace: bool = False, discard: bool = False, refresh: bool = True) -> dict[str, Any]
+
+      Publish a dev-workspace connector onto the running appliance.
+
+      ``POST .../entity/{id}/publish/``. Lands the workspace contents into the
+      live installed-connectors area and refreshes the integrations service so
+      subsequent playbook runs pick up the new code immediately. ``replace``
+      overwrites an existing installed version of the same name + version.
+      ``discard`` controls the dev-workspace twin's lifecycle (not whether
+      edits are published). This is also the supported escape hatch when a
+      same-version tgz upload left stale code cached in the integrations
+      service (the standard ``$replace=true`` install path does not refresh it).
+
+
+
+   .. py:method:: dev_delete(entity_id: str, *, refresh: bool = True) -> None
+
+      Delete a dev-workspace connector twin (Studio *discard*).
+
+      ``DELETE .../entity/{id}/``. Use to tear down an orphaned ``_dev``
+      workspace left by a failed :meth:`dev_publish` -- an unreadable file in
+      an orphaned ``_dev`` dir can wedge DAS's HA file-sync, so cleanup matters.
+
+
+
+   .. py:method:: republish(connector: str, *, replace: bool = True, discard: bool = True) -> dict[str, Any]
+
+      Recycle the integrations workers onto a connector's installed code.
+
+      A same-version ``$replace`` tgz install (see :meth:`install_from_file`)
+      writes the new files but does **not** refresh the long-lived integrations
+      uwsgi workers, so they keep serving the previously-imported module object
+      from ``sys.modules`` (the "ghost bytecode" bug: a request randomly hits a
+      stale worker and same-named-module edits silently don't take). This is the
+      supported, SSH-free recycle: open the installed connector in the Connector
+      Studio dev workspace (cloning the current installed state), then publish
+      that twin back -- which copies it into the live dir **and** touches the dev
+      config ini, recycling every worker within ~5s.
+
+      ``discard`` makes a *successful* publish destroy the dev twin server-side
+      so no orphan ``_dev`` dir is left; on a publish failure the twin is
+      deleted explicitly here (an unreadable file in an orphaned ``_dev`` can
+      wedge HA file-sync). ``replace`` overwrites the same name+version.
+
+      Run this after a same-version ``install_from_file(..., replace=True)`` so
+      every worker imports the new code. Returns ``{"ok": True, "dev_id": ...}``.
+
+      Raises ``ValueError`` if ``connector`` isn't installed, or re-raises the
+      publish error (after cleaning up the twin) if the publish itself fails.
+
+
+
+   .. py:method:: upsert_configuration(connector: str, config: dict[str, Any], *, name: str, version: str | None = None, default: bool = False, agent: str | None = None, validate: bool = True, autofill: bool = True) -> pyfsr.models._integration.ConnectorConfig
+
+      Create a named configuration, or update it in place if one already
+      exists with the same ``name`` -- the idempotent write the UI's *Save*
+      button performs, safe to re-run from a deploy script.
+
+      Finds an existing config by ``name`` (via :meth:`connector_detail`) and
+      ``PUT``s to its ``config_id`` (preserving the existing ``agent`` unless
+      ``agent`` is given), else ``POST``s a new one. Unlike calling
+      :meth:`create_configuration` twice -- which 400s on
+      ``"name, connector, agent must be unique"`` -- this updates the second time.
+
+      Tolerates the platform's *persisted-despite-500* case: a connector's own
+      ``on_add_config`` / ``on_update_config`` hook can raise **after** the row
+      is written (e.g. a post-save warmup), surfacing a 500 even though the
+      config saved. On a write error this re-fetches by ``name`` and returns the
+      row if it landed, rather than failing a re-runnable deploy.
+
+      :param connector: connector name.
+      :param config: the connector's configuration field values.
+      :param name: a label for this configuration (required).
+      :param version: connector version (resolved if omitted).
+      :param default: mark this the connector's default configuration.
+      :param agent: run the connector on a remote agent (omit for self-agent).
+      :param validate: structurally check ``config`` against the schema first
+                       (default ``True``).
+      :param autofill: fill any schema-defaulted fields ``config`` omits,
+                       including onchange-revealed sub-fields (default ``True``).
+
+      :returns: The persisted :class:`~pyfsr.models.ConnectorConfig`.
+
+      :raises ValueError: if the connector isn't installed or version can't be resolved.
+      :raises ConfigValidationError: when ``validate=True`` and the configuration
+          fails structural validation.
+
+
+
+   .. py:method:: ensure_configured(connector: str, config: dict[str, Any], *, config_name: str, version: str | None = None, default: bool = True, agent: str | None = None, validate: bool = True, autofill: bool = True, wait: bool = True, interval: float = 3.0, timeout: float = 300.0) -> pyfsr.models._integration.ConnectorConfig
+
+      Ensure ``connector`` is installed **and** has the named configuration.
+
+      Consolidates the common setup sequence -- "install from Content Hub if it
+      isn't here yet, then create-or-update the config" -- into one idempotent
+      call, joining the existing :meth:`ensure_version` in the ``ensure_*``
+      family. Re-running it is safe: an already-installed connector is not
+      reinstalled, and :meth:`upsert_configuration` updates the named config in
+      place rather than duplicating it.
+
+      ``version`` is only needed to *install* a missing connector (it is passed
+      to :meth:`install`); when the connector is already installed it may be
+      omitted and the configuration is applied against the installed version. If
+      the connector is absent and ``version`` is ``None``, a clear ``ValueError``
+      is raised rather than guessing.
+
+      ``config_name`` is the configuration's display name (passed through as
+      ``name=`` to :meth:`upsert_configuration`); ``default=True`` (the default)
+      makes it the connector's default config so a config-less connector step
+      picks it up. Returns the resulting :class:`~pyfsr.models.ConnectorConfig`.
+
+      Example::
+
+          cfg = client.connectors.ensure_configured(
+              "servicenow",
+              {"server_url": "...", "username": "...", "password": "..."},
+              config_name="pilot",
+              version="1.0.0",
+          )
+
+
+
+   .. py:method:: execute(connector: str, operation: str, *, version: str | None = None, config: str | None = None, params: dict[str, Any] | None = None, config_id: str | None = None, config_name: str | None = None) -> pyfsr.models._integration.ExecuteResult
+
+      Run a single connector operation via ``POST /api/integration/execute/``.
+
+      ``config`` selects which connector configuration to run against. It
+      accepts either a configuration **UUID** or a display **name** -- the
+      FortiSOAR server resolves both in the wire ``config`` field
+      (live-verified on 8.0.0). Omit it to use the connector's *default*
+      configuration (resolved client-side from the cached connector listing).
+
+      .. deprecated::
+         ``config_id=`` and ``config_name=`` are deprecated aliases for
+         ``config=``. They still work (and emit a warning) but gain nothing --
+         ``config=`` accepts both a UUID and a name. Passing more than one
+         raises.
+
+      ``version`` is resolved from the configured connector when omitted.
+
+      Returns a typed :class:`~pyfsr.models.ExecuteResult` -- dict-compatible
+      (``result["data"]`` still works), with a ``.ok`` property for the
+      recurring ``status == "Success"`` check.
+
+      See the module-level warning: for agent-bound connectors this call is
+      fire-and-forget and ``data`` comes back empty -- that is not a failure.
+
+      Live-verified on FortiSOAR 8.0.0-6034 against ``cisa-advisory``'s
+      ``get_known_exploited_vulnerability_cves`` (a public, read-only,
+      parameter-less feed lookup -- safe to demo against a real connector,
+      no side effect beyond an outbound GET to CISA's public catalog):
+
+          >>> client = demo_client()
+          >>> result = client.connectors.execute(
+          ...     "cisa-advisory", "get_known_exploited_vulnerability_cves"
+          ... )
+          >>> result.ok
+          True
+          >>> result.data["title"]
+          'CISA Catalog of Known Exploited Vulnerabilities'
+          >>> result.data["vulnerabilities"][0]["cveID"]
+          'CVE-2026-45659'
+
+
+
+   .. py:method:: dependencies_status(connector: str, *, version: str | None = None) -> pyfsr.models._integration.DependencyStatus
+
+      Whether a connector's Python dependencies finished installing.
+
+      ``GET /api/integration/connectors/dependencies_check/<name>/<version>/``.
+      The connector card's *Requirements* badge reads this: a false
+      ``dependencies_installed`` is the ``Failed`` state, and is a common
+      reason a freshly installed connector's operations blow up at runtime
+      even though its configuration health is green.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.connectors.dependencies_status("mitre-attack").dependencies_installed
+      True
+
+
+
+   .. py:method:: install_dependencies(connector: str, *, version: str | None = None, agent: str | None = None) -> dict[str, Any]
+
+      Retry the Python-dependency install for a connector.
+
+      ``POST`` to the same URL :meth:`dependencies_status` reads -- the
+      *Retry* button next to a failed *Requirements* badge. Pass ``agent`` to
+      install the dependencies on a remote agent instead of the appliance.
+
+
+
+   .. py:method:: ingestion_sources() -> list[pyfsr.models._integration.InstalledConnector]
+
+      Installed connectors that support data ingestion.
+
+      ``POST /api/integration/connector_details/?ingestion_supported=true`` --
+      the list backing the *Data Ingestion* page's connector picker. These are
+      the connectors :meth:`data_ingest_wizard` can meaningfully target.
+
+
+
+   .. py:method:: output_schema(connector: str, operation: str, *, version: str | None = None, config: str | None = None, params: dict[str, Any] | None = None) -> dict[str, Any]
+
+      Infer an operation's output schema.
+
+      ``POST /api/integration/connector_output_schema/<name>/<version>/`` --
+      what the playbook editor calls to populate step-output pickers. Note the
+      UI resolves this endpoint's *failures* as successes too (it returns
+      whatever body came back), so check the payload rather than trusting a 2xx.
+
+
+
+   .. py:method:: set_operation_roles(operation_id: str, roles: list[str], *, replace: bool = True) -> dict[str, Any]
+
+      Restrict a connector operation to a set of roles.
+
+      ``POST`` (first assignment) or ``PUT`` (replacing an existing one) to
+      ``/api/integration/connectors/operations/<operation_id>/roles/``. The UI
+      picks the verb by whether the operation already has roles -- mirror that
+      with ``replace``.
+
+      :param operation_id: the operation's ``id`` from :meth:`operations`.
+      :param roles: role uuids allowed to run the operation.
+      :param replace: ``True`` (default) sends ``PUT``; ``False`` sends ``POST``
+                      for an operation that currently has no roles.
+
+
+
+   .. py:method:: ingestion_metadata(config_id: str) -> list[pyfsr.models._integration.IngestionMetadata]
+
+      The ``data-import`` records for a connector configuration.
+
+      ``GET /api/integration/data-import/?configuration=<config_id>``. This is
+      how the UI re-finds an existing ingestion schedule for a configuration
+      (via ``metadata.scheduleId``) -- an ingestion set up without one of these
+      looks unconfigured in the UI even though the schedule runs fine.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> meta = client.connectors.ingestion_metadata(
+      ...     "01e4e6b4-c34e-4fc1-b692-bb08591f1fe5")[0]
+      >>> meta.metadata["scheduleStatus"]
+      True
+
+
+
+   .. py:method:: save_ingestion_metadata(config_id: str, *, connector: str, version: str, name: str, schedule_id: str | None = None, schedule_name: str = '', schedule_enabled: bool = False, sample_data: Any = None, actor: str | None = None, created: bool = True) -> dict[str, Any]
+
+      Write the ``data-import`` record that links a config to its schedule.
+
+      ``POST /api/integration/data-import/``. Called twice by the UI: once
+      with ``sample_data`` after the fetch step, and once with the
+      ``metadata.scheduleId`` after the schedule is saved.
+
+      :param config_id: the connector configuration's ``config_id``.
+      :param connector: connector name.
+      :param version: connector version.
+      :param name: record name -- the UI uses the schedule name, falling back to
+                   the ``config_id``.
+      :param schedule_id: the periodic task's id, once it exists.
+      :param schedule_name: display name of that schedule.
+      :param schedule_enabled: whether ingestion is scheduled to run.
+      :param sample_data: parsed sample payload to store alongside the mapping.
+      :param actor: ``people`` uuid to stamp as creator/modifier; resolved from
+                    the current actor when omitted.
+      :param created: include ``created_by`` (the UI only sets it on first write).
+
+
+
+   .. py:method:: find_sample_ingestion_collection(connector: str, *, version: str | None = None) -> str | None
+
+      Locate the connector's bundled ``Sample - <Label> - <version>`` collection.
+
+      Installing a connector that ships playbooks creates one of these; it is
+      the source :meth:`data_ingest_wizard` clones from. Returns its uuid, or
+      ``None`` when the connector ships no sample playbooks (in which case
+      there is nothing to ingest with and the wizard cannot proceed).
+
+
+
+   .. py:method:: ingestion_playbooks(connector: str, *, collection: str | None = None, version: str | None = None) -> pyfsr.models._integration.IngestionPlaybooks
+
+      The connector's ingestion playbooks, bucketed by role.
+
+      Looks inside ``collection`` (defaulting to the connector's bundled
+      ``Sample - …`` collection) for playbooks tagged with the connector name
+      and sorts them into ``fetch`` / ``ingest`` / ``create`` / ``update``.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> pbs = client.connectors.ingestion_playbooks("mitre-attack")
+      >>> pbs.ingest.name              # a typed Workflow, not a dict
+      'MITRE ATT&CK > Ingest'
+      >>> pbs.ingest.uuid == pbs.create.uuid   # one playbook, two roles
+      True
+      >>> pbs.missing()
+      ['update']
+
+
+
+   .. py:method:: data_ingest_wizard(connector: str, *, config: str | None = None, version: str | None = None, cron: str | None = None, schedule_name: str | None = None, enabled: bool = True, timezone: str = 'UTC', exit_if_running: bool = True, source_collection: str | None = None, agent: str | None = None, require_health: bool = True, activate: bool = True, reuse_existing: bool = True, dry_run: bool = False) -> pyfsr.models._integration.IngestionSetupResult
+
+      Set up data ingestion for a connector configuration -- the whole wizard.
+
+      Reproduces every write the UI's *Configure Data Ingestion* wizard makes,
+      in the order it makes them:
+
+      1. resolve the configuration and (unless ``require_health=False``)
+         refuse to proceed on anything but ``Available`` health -- the UI gates
+         the wizard behind a green health check;
+      2. find-or-create the per-configuration playbook collection, whose
+         **uuid is the ``config_id``** and whose name follows the UI's
+         ``"<label> <version> <config>Ingestion(<config_id>)"`` convention;
+      3. clone the connector's sample ingestion playbooks into it, rewriting
+         each clone the way the UI does -- ``arguments.config`` stamped with
+         the ``config_id`` on that connector's own steps, ``globalVars``
+         suffixed with the config id so two configurations of the same
+         connector don't share variables, cross-playbook references remapped
+         onto the clones, and ``params.create_pb_id`` on the *Fetch and
+         Create* step pointed at the cloned ``create`` playbook;
+      4. activate the clones;
+      5. create the periodic task that fires the ``ingest`` playbook;
+      6. write the ``data-import`` metadata record that links configuration →
+         schedule, so the UI shows the ingestion as configured.
+
+      :param connector: connector name (e.g. ``"fortinet-fortisiem"``).
+      :param config: which configuration to set ingestion up for -- a config
+                     **name** or a ``config_id`` uuid. Defaults to the connector's
+                     default configuration.
+      :param version: connector version; resolved from the install when omitted.
+      :param cron: 5-field cron expression for the ingestion schedule (e.g.
+                   ``"*/15 * * * *"``). Omit to build the playbooks without
+                   scheduling anything.
+      :param schedule_name: schedule display name. Defaults to the platform's
+                            own convention, ``"Ingestion_<connector>_<config>_<config_id>"``
+                            -- the UI matches on this string, so overriding it makes the
+                            ingestion look unconfigured in the *Data Ingestion* screen.
+      :param enabled: create the schedule enabled (default ``True``).
+      :param timezone: IANA timezone for the crontab.
+      :param exit_if_running: skip a fire while the previous run is still going.
+      :param source_collection: uuid of the collection to clone sample playbooks
+                                from. Defaults to the connector's bundled ``Sample - …``.
+      :param agent: stamp ``arguments.agent`` on the connector's steps so the
+                    cloned playbooks run the connector on a remote agent.
+      :param require_health: refuse to run unless configuration health is
+                             ``Available`` (default, matching the UI). Set ``False`` to build
+                             the ingestion pipeline against a connector you know is
+                             unreachable -- useful when staging a box before credentials exist.
+      :param activate: set ``isActive`` on the cloned playbooks (default ``True``).
+      :param reuse_existing: if the per-config collection already holds ingestion
+                             playbooks, reuse them instead of re-cloning (default ``True``).
+                             Set ``False`` to rebuild from the samples.
+      :param dry_run: resolve and report what *would* be written without making
+                      any change.
+
+      :returns: :class:`~pyfsr.models.IngestionSetupResult` describing the
+                collection, playbooks, schedule, and health at the end of the run.
+
+      :raises ValueError: the connector isn't installed, the configuration can't
+          be resolved, health isn't ``Available`` (with ``require_health``),
+          or the connector ships no ``ingest``-tagged playbook.
+
+      Example (needs a live appliance)::
+
+          result = client.connectors.data_ingest_wizard(
+              "fortinet-fortisiem", config="prod", cron="*/15 * * * *")
+          result.scheduled        # True
+
+
+
+   .. py:method:: ensure_ingestion(connector: str, *, config: str | None = None, **wizard_kwargs: Any) -> pyfsr.models._integration.IngestionSetupResult
+
+      Set up data ingestion only if it isn't already -- "make it or get it".
+
+      The idempotent front door to :meth:`data_ingest_wizard`, mirroring the
+      ``get_or_create`` pattern elsewhere in pyfsr: it calls
+      :meth:`ingestion_status` first and, when ingestion is already
+      ``configured`` (per-config collection + an ``ingest``-tagged playbook),
+      returns an :class:`~pyfsr.models.IngestionSetupResult` describing the
+      existing setup **without writing anything** (``existed=True``).
+      Otherwise it delegates to the wizard (``existed=False``), forwarding any
+      ``**wizard_kwargs`` (``cron``, ``schedule_name``, ``agent``,
+      ``require_health``, ``dry_run``, ...).
+
+      Safe to call repeatedly -- the common "set ingestion up if it's not
+      there" line becomes one call instead of a status-check-then-branch. It
+      does **not** reconcile drift: an already-configured setup is returned
+      as-is even if it has no schedule and you passed ``cron`` -- call
+      :meth:`data_ingest_wizard` directly to add or change a schedule on an
+      existing setup.
+
+      :param connector: connector name.
+      :param config: config name or ``config_id``; defaults to the default
+                     configuration.
+      :param \*\*wizard_kwargs: forwarded verbatim to :meth:`data_ingest_wizard`
+                                when a setup is actually built.
+
+      :returns: :class:`~pyfsr.models.IngestionSetupResult`; ``existed`` distinguishes
+                the "get" path (already configured) from the "make" path.
+
+      Example (needs a live appliance)::
+
+          first = client.connectors.ensure_ingestion(
+              "fortinet-fortisiem", config="prod", cron="*/15 * * * *")
+          first.existed        # False -- the wizard built it
+          again = client.connectors.ensure_ingestion("fortinet-fortisiem", config="prod")
+          again.existed        # True -- returned as-is, no writes
+
+
+
+   .. py:method:: remove_ingestion(connector: str, *, config: str | None = None, delete_collection: bool = True, dry_run: bool = False) -> pyfsr.models._integration.IngestionTeardownResult
+
+      Tear down a configuration's data ingestion -- the inverse of the wizard.
+
+      Reverses :meth:`data_ingest_wizard`'s writes in dependency order:
+
+      1. delete the periodic task (by the name recorded in the metadata), so
+         nothing fires mid-teardown;
+      2. delete the ``data-import`` metadata record(s) that linked the config
+         to that schedule;
+      3. (when ``delete_collection``) hard-delete the per-configuration
+         collection, which **cascades** the cloned ingestion playbooks.
+
+      Idempotent and partial-safe: a missing schedule / metadata / collection
+      is simply skipped (the corresponding ``*_deleted`` stays ``False``), so
+      re-running after a half-done teardown finishes the job rather than
+      erroring. Built entirely on verified primitives -- ``schedules.delete``
+      and ``workflow_collections.delete`` (hard).
+
+      :param connector: connector name.
+      :param config: config name or ``config_id``; defaults to the default
+                     configuration.
+      :param delete_collection: also hard-delete the per-config collection and
+                                its cloned playbooks (default). ``False`` removes only the
+                                schedule + metadata, leaving the playbooks in place -- useful to
+                                keep hand-edited clones while detaching the schedule.
+      :param dry_run: report what *would* be removed without deleting anything.
+
+      :returns: :class:`~pyfsr.models.IngestionTeardownResult` recording what was
+                (or, under ``dry_run``, would be) removed.
+
+      :raises ValueError: the configuration can't be resolved.
+
+      Example (needs a live appliance)::
+
+          client.connectors.remove_ingestion("fortinet-fortisiem", config="prod")
+
+
+
+   .. py:method:: ingestion_status(connector: str, *, config: str | None = None, live_schedule: bool = False) -> pyfsr.models._integration.IngestionStatus
+
+      Report a configuration's current data-ingestion state -- read-only.
+
+      The inverse-lens of :meth:`data_ingest_wizard`: it inspects the four
+      pieces the wizard builds and reports whether each is present, **without
+      writing anything**. Use it to answer "is ingestion set up for this
+      config, and is its schedule running?" before setting up, tearing down,
+      or triggering.
+
+      The per-configuration ingestion collection has the ``config_id`` as its
+      uuid (the wizard's own convention), so this looks there -- not in the
+      connector's shared ``Sample - …`` collection -- for the cloned
+      ``ingest``-tagged playbook. The schedule id / name / enabled state come
+      from the ``data-import`` metadata record the wizard writes; pass
+      ``live_schedule=True`` to re-read the periodic task itself so a schedule
+      toggled off since setup reports ``schedule_enabled=False`` rather than
+      the recorded write-time value.
+
+      :param connector: connector name.
+      :param config: config name or ``config_id``; defaults to the default
+                     configuration.
+      :param live_schedule: re-read the periodic task named in the metadata
+                            record for its current ``enabled`` state, instead of trusting
+                            the ``scheduleStatus`` the metadata recorded at setup time. One
+                            extra request; off by default.
+
+      :returns: :class:`~pyfsr.models.IngestionStatus`. When nothing is set up,
+                ``.configured`` is ``False`` and the playbook buckets are empty --
+                not an error.
+
+      :raises ValueError: the configuration can't be resolved.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> status = client.connectors.ingestion_status("mitre-attack")
+      >>> status.configured          # no per-config collection in the demo box
+      False
+
+
+
+   .. py:method:: trigger_ingestion(connector: str, *, config: str | None = None, playbook: str | None = None) -> dict[str, Any]
+
+      Run a configuration's ingestion right now -- the *Trigger Ingestion Now* button.
+
+      ``POST /api/triggers/1/notrigger/<ingest playbook uuid>``. Note this is
+      **not** the scheduler's trigger
+      (:meth:`~pyfsr.api.schedules.SchedulesAPI.trigger_now`, which posts to
+      ``/api/wf/api/scheduled/trigger-now/``): the UI's ingestion button
+      bypasses the periodic task entirely and fires the playbook named by the
+      schedule's ``kwargs.wf_iri``. That distinction matters -- the ingestion
+      button works on a configuration whose schedule is disabled, or that has
+      no schedule at all.
+
+      Resolves the ``ingest``-tagged playbook inside the configuration's own
+      ingestion collection, so it fires the per-config clone rather than the
+      shared sample playbook.
+
+      :param connector: connector name.
+      :param config: config name or ``config_id``; defaults to the default
+                     configuration.
+      :param playbook: fire this playbook uuid/IRI instead of resolving one
+                       (escape hatch for a non-standard ingestion layout).
+
+      :returns: The trigger response, carrying the async ``task_id``. The fire is
+                asynchronous -- poll ``client.playbooks.execution_history(...)`` or
+                watch the target module's record count to see the result.
+
+      :raises ValueError: the configuration can't be resolved, or its ingestion
+          collection holds no ``ingest``-tagged playbook (i.e. ingestion
+          was never set up -- run :meth:`data_ingest_wizard` first).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.connectors.trigger_ingestion("mitre-attack")
+      {'task_id': '9e7df03a-29d9-4b90-a4a7-6e61810efd88'}
+
+
+

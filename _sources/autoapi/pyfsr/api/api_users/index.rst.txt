@@ -1,0 +1,195 @@
+pyfsr.api.api_users
+===================
+
+.. py:module:: pyfsr.api.api_users
+
+.. autoapi-nested-parse::
+
+   API-key user management (``/api/auth/users``).
+
+   The lifecycle of *API-key users* — the user records that carry key material,
+   distinct from the people/roles/teams of :class:`~pyfsr.api.users.UsersAPI`.
+   Accessed as ``client.api_users``.
+
+   Creating a usable key is two steps, mirroring the product: create the API-key
+   user here (:meth:`ApiKeyUsersAPI.create`), then attach roles/teams by POSTing its
+   ``uuid`` to ``/api/3/api_keys``. The ``uuid`` used throughout is the ``userId``
+   returned by ``GET /api/3/api_keys``.
+
+   .. rubric:: Example
+
+   >>> client = demo_client_jwt()
+   >>> u = client.api_users.create(api_key_validity=365)
+   >>> u["user_type"]
+   9
+   >>> u["status"]
+   1
+
+   .. note::
+       Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+       ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.api_users.ApiKeyUsersAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: ApiKeyUsersAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Create, inspect, and run lifecycle ops on API-key users.
+
+
+   .. py:method:: get(uuid: str, *, show_api_key: bool = False) -> pyfsr.models.ApiKeyUser
+
+      Look up an API-key user by uuid (``GET /api/auth/users?uuid=``).
+
+      The response masks the key by default; ``show_api_key=True`` returns the
+      plaintext — but only when the key was created with ``retrievable_mode``
+      (the per-key ``api_key.retrievable`` flag is set at creation; toggling the
+      global flag on later does **not** retroactively unmask existing keys).
+      Unwraps the ``{"usersresp": [user]}`` envelope and parses the user into an
+      :class:`~pyfsr.models.ApiKeyUser` (dict-compatible: ``u["uuid"]``,
+      ``u["api_key"]["key"]`` still work).
+
+      .. rubric:: Example
+
+      >>> client = demo_client_jwt()
+      >>> u = client.api_users.get("550e8400-e29b-41d4-a716-446655440007")
+      >>> u["uuid"]
+      '550e8400-e29b-41d4-a716-446655440007'
+      >>> u["user_type"]
+      9
+
+      .. note::
+          Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+          ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
+
+
+
+   .. py:method:: query(uuids: list[str], *, show_api_key: bool = False) -> list[pyfsr.models.ApiKeyUser]
+
+      Bulk-fetch API-key users by uuid (``POST /api/auth/query/users``).
+
+      ``uuids`` are ``userId`` values from ``GET /api/3/api_keys``. Keys are
+      masked unless ``show_api_key=True`` (and the user was ``retrievable_mode``).
+      Returns typed :class:`~pyfsr.models.ApiKeyUser` records.
+
+      .. rubric:: Example
+
+      >>> client = demo_client_jwt()
+      >>> users = client.api_users.query(["550e8400-e29b-41d4-a716-446655440007"])
+      >>> len(users)
+      1
+      >>> users[0]["uuid"]
+      '550e8400-e29b-41d4-a716-446655440007'
+
+      .. note::
+          Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+          ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
+
+
+
+   .. py:method:: create(*, api_key_validity: int, type: int = _TYPE_API_KEY, status: int = _STATUS_ACTIVE) -> pyfsr.models.ApiKeyUser
+
+      Create an API-key user (``POST /api/auth/users``).
+
+      Creates the user record carrying the key material; its returned ``uuid``
+      feeds ``POST /api/3/api_keys`` to attach roles/teams. ``api_key_validity``
+      is the key's validity in days. ``type=9`` (API-key user) and ``status=1``
+      (active) are the defaults — all three fields are required by the endpoint.
+
+      :raises ApikeyCreateUnavailable: when the box has the 7.6.5/8.0.0
+          ``encrypt(preserve_compatibility)`` product bug (global
+          ``retrievable_mode`` on). The exception carries the workaround
+          (``client.auth_config.set_api_key_retrievable(False)``) instead
+          of surfacing the cryptic encrypt 400.
+
+      .. rubric:: Example
+
+      >>> client = demo_client_jwt()
+      >>> u = client.api_users.create(api_key_validity=365)
+      >>> u["uuid"]
+      '550e8400-e29b-41d4-a716-446655440007'
+      >>> u["user_type"]
+      9
+      >>> u["status"]
+      1
+
+      .. note::
+          Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+          ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
+
+
+
+   .. py:method:: lifecycle(uuid: str, operation: str, *, key_type: str = 'API_KEY', api_key_validity: int | None = None) -> pyfsr.models.ApiKeyUser
+
+      Run a lifecycle operation on an API-key user (``PUT /api/auth/users``).
+
+      One endpoint, discriminated by ``operation``:
+
+      - ``REVOKE`` — permanent deactivation.
+      - ``ACTIVATE`` / ``DEACTIVATE`` — toggle active state.
+      - ``REGENERATE`` — mint a new key value.
+      - ``RESET_VALIDITY`` — extend/reset validity (pass ``api_key_validity``).
+
+      Prefer the named convenience wrappers (:meth:`revoke`, :meth:`activate`,
+      …) over calling this directly.
+
+      .. rubric:: Example
+
+      >>> client = demo_client_jwt()
+      >>> u = client.api_users.lifecycle("550e8400-e29b-41d4-a716-446655440007", "REVOKE")
+      >>> u["uuid"]
+      '550e8400-e29b-41d4-a716-446655440007'
+
+      .. note::
+          Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+          ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
+
+
+
+   .. py:method:: revoke(uuid: str, *, key_type: str = 'API_KEY') -> pyfsr.models.ApiKeyUser
+
+      Permanently revoke an API-key user (lifecycle ``REVOKE``).
+
+
+
+   .. py:method:: activate(uuid: str, *, key_type: str = 'API_KEY') -> pyfsr.models.ApiKeyUser
+
+      Activate an API-key user (lifecycle ``ACTIVATE``).
+
+
+
+   .. py:method:: deactivate(uuid: str, *, key_type: str = 'API_KEY') -> pyfsr.models.ApiKeyUser
+
+      Deactivate an API-key user (lifecycle ``DEACTIVATE``).
+
+
+
+   .. py:method:: regenerate(uuid: str, *, api_key_validity: int = 365, key_type: str = 'API_KEY') -> pyfsr.models.ApiKeyUser
+
+      Regenerate an API-key user's key (lifecycle ``REGENERATE``).
+
+      ``api_key_validity`` (days) is **required by the server** for a
+      regenerate — omitting it errors — so it carries a default here. The
+      fresh plaintext is returned under ``api_key.key`` in the response.
+
+
+
+   .. py:method:: reset_validity(uuid: str, api_key_validity: int, *, key_type: str = 'API_KEY') -> pyfsr.models.ApiKeyUser
+
+      Reset an API-key user's validity window (lifecycle ``RESET_VALIDITY``).
+
+
+

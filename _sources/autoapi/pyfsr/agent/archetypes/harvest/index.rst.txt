@@ -1,0 +1,80 @@
+pyfsr.agent.archetypes.harvest
+==============================
+
+.. py:module:: pyfsr.agent.archetypes.harvest
+
+.. autoapi-nested-parse::
+
+   Harvest a draft archetype from a real FortiSOAR solution pack.
+
+   A solution pack (whether the git source tree under
+   ``corpus_builder/repos/fortisoar/solution-pack-*`` or the ``.zip`` returned by
+   :meth:`pyfsr.api.solution_packs.SolutionPackAPI.export_pack`) is a directory of JSON:
+   ``info.json`` (pack metadata), ``modules/<mod>/mmd.json`` (module field/relationship/picklist
+   schema), ``playbooks/<collection>/*.json`` (playbook step graphs), and ``picklists/*.json``.
+
+   The harvester turns that into a draft :class:`~pyfsr.agent.archetypes.record.Archetype` -- a honest
+   extraction of the module fields, the connector/operation pairs the playbooks use, and a step
+   skeleton per playbook. It does **not** parameterize (no ``{{param}}`` slots), assign connector
+   *roles*, or write a ``when_to_use`` -- that curation is step 3. Call ``store.put(draft)`` to
+   persist a draft for later curation.
+
+   Pure stdlib (``zipfile`` / ``json`` / ``pathlib``); the only network I/O is the optional
+   ``export_pack`` call inside :func:`harvest_archetype_from_pack`.
+
+   Example::
+
+       from pyfsr.agent.archetypes import harvest_from_dir, ArchetypeStore
+
+       draft = harvest_from_dir("path/to/solution-pack-servicenow-...", name="snow-sir-draft")
+       ArchetypeStore().put(draft)
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.agent.archetypes.harvest.harvest_from_dir
+   pyfsr.agent.archetypes.harvest.harvest_from_zip
+   pyfsr.agent.archetypes.harvest.harvest_archetype_from_pack
+
+
+Module Contents
+---------------
+
+.. py:function:: harvest_from_dir(pack_dir: str | pathlib.Path, *, name: str | None = None) -> pyfsr.agent.archetypes.record.Archetype
+
+   Harvest a draft archetype from an unpacked solution-pack directory.
+
+   Works on both the git source tree and an unpacked export ``.zip`` (discovery uses ``rglob``,
+   so a top-level prefix directory in the export is tolerated). Parses ``info.json``,
+   ``modules/*/mmd.json``, and ``playbooks/**/*.json`` into a draft :class:`~pyfsr.agent.archetypes.record.Archetype`.
+
+   :param pack_dir: path to the unpacked pack.
+   :param name: the archetype name (key). Defaults to the pack's ``info.json`` ``name``, falling
+                back to the directory name.
+
+   :returns: A draft :class:`~pyfsr.agent.archetypes.record.Archetype` (``when_to_use`` empty, ``parameters`` empty).
+
+
+.. py:function:: harvest_from_zip(zip_path: str | pathlib.Path, *, name: str | None = None) -> pyfsr.agent.archetypes.record.Archetype
+
+   Harvest a draft archetype from a solution-pack export ``.zip``.
+
+   Extracts the archive to a temporary directory and delegates to :func:`harvest_from_dir`.
+   Use this with the path returned by
+   :meth:`pyfsr.api.solution_packs.SolutionPackAPI.export_pack`.
+
+
+.. py:function:: harvest_archetype_from_pack(client: Any, pack_identifier: str, archetype_name: str) -> pyfsr.agent.archetypes.record.Archetype
+
+   Harvest a draft archetype from a live appliance's solution pack.
+
+   Wraps :meth:`pyfsr.api.solution_packs.SolutionPackAPI.export_pack` (which finds the
+   installed pack, triggers the export, and downloads the ``.zip``) and parses it with
+   :func:`harvest_from_zip`. Returns the draft named ``archetype_name`` -- curate it, then
+   ``ArchetypeStore().put(draft)`` to persist.
+
+

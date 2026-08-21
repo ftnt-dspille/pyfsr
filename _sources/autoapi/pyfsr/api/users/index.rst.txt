@@ -1,0 +1,249 @@
+pyfsr.api.users
+===============
+
+.. py:module:: pyfsr.api.users
+
+.. autoapi-nested-parse::
+
+   The users module — ``client.users``.
+
+   Manage FortiSOAR users (People records + auth credentials) via ``/api/3/people``.
+   Each user is two linked records — a **People** profile and an internal **auth
+   user** — which ``/api/3/people`` creates atomically when the ``user`` and
+   ``roles`` keys are supplied. Roles and teams may be given as UUIDs or friendly
+   names; names are resolved via a per-instance cache populated on first use.
+
+   .. note::
+       Not to be confused with ``/api/auth/users`` — that is the **API-key user**
+       surface (key material + lifecycle, wrapped by
+       :class:`~pyfsr.api.api_users.ApiKeyUsersAPI` as ``client.api_users``).
+       ``/api/3/people`` here is the **People module**: a Hydra collection of
+       Person records (human profiles with name, email, department, roles,
+       teams). The two are not aliases — different paths, different record
+       shapes (Hydra vs ``{"usersresp": [...]}``), different concepts.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.users.UsersAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: UsersAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Manage FortiSOAR users (People records + auth credentials) via ``/api/3/people``.
+
+   Each FortiSOAR user has two linked records:
+   - A **People** record (profile — name, email, department, …)
+   - An **auth user** record (login credentials, managed internally by the auth service)
+
+   The ``/api/3/people`` endpoint creates both atomically when the ``user`` and
+   ``roles`` keys are supplied in the payload.
+
+   Roles and teams can be specified as UUIDs **or** friendly names — the API resolves
+   names automatically using a per-instance cache populated on first use.
+
+   Example::
+
+       from pyfsr import FortiSOAR
+
+       client = FortiSOAR("https://your-fsr", username="csadmin", password="password", verify_ssl=False)
+
+       # Create a user using friendly role/team names
+       person = client.users.create(
+           loginid="j.smith",
+           password="Str0ng!Pass",
+           firstname="Jane",
+           lastname="Smith",
+           email="j.smith@corp.example",
+           roles=["SOC Analyst"],
+           teams=["Tier 1 SOC"],
+       )
+
+
+   .. py:method:: role_map() -> dict[str, str]
+
+      Return ``{name: uuid}`` for all roles (delegates to :class:`~pyfsr.api.roles.RolesAPI`).
+
+
+
+   .. py:method:: team_map() -> dict[str, str]
+
+      Return ``{name: uuid}`` for all teams (delegates to :class:`~pyfsr.api.teams.TeamsAPI`).
+
+
+
+   .. py:method:: create(loginid: str, password: str, firstname: str, lastname: str, email: str, roles: list[str], *, access_type: str = 'Named', active: bool = True, department: str | None = None, phone_work: str | None = None, phone_mobile: str | None = None, teams: list[str] | None = None, role_uuids: list[str] | None = None, team_uuids: list[str] | None = None, typed: bool = True) -> pyfsr.models.User | dict[str, Any]
+
+      Create a FortiSOAR user (People record + auth credentials).
+
+      :param loginid: Login username (must be unique).
+      :param password: Initial password (must meet the appliance password policy).
+      :param firstname: First name.
+      :param lastname: Last name.
+      :param email: Email address.
+      :param roles: Role UUIDs **or** friendly names (e.g. ``["SOC Analyst"]``).
+                    At least one required.
+      :param access_type: ``"Named"`` (default) or ``"Concurrent"``.
+      :param active: Whether the account is active on creation. Defaults to ``True``.
+      :param department: Optional department name.
+      :param phone_work: Optional work phone number.
+      :param phone_mobile: Optional mobile phone number.
+      :param teams: Optional team UUIDs **or** friendly names (e.g. ``["Tier 1 SOC"]``).
+      :param role_uuids: Deprecated alias for ``roles``.
+      :param team_uuids: Deprecated alias for ``teams``.
+      :param typed: parse the result into a :class:`~pyfsr.models.User` (default);
+                    pass ``False`` for the raw dict.
+
+      :returns: The created People record.
+
+      :raises ValueError: If a role or team name cannot be resolved.
+      :raises pyfsr.exceptions.APIError: If the payload is invalid or a user with the
+          same ``loginid`` already exists.
+
+
+
+   .. py:method:: find_by_email(email: str, *, typed: bool = True) -> pyfsr.models.User | None
+
+      Find a user by email address (``GET /api/3/people?email=``).
+
+      Returns ``None`` if no user has that email. ``email`` is the filterable
+      unique key for People records (unlike ``loginid``, which lives on the
+      nested auth-user and is not queryable on ``/api/3/people``).
+
+      :param email: the email address to look up.
+      :param typed: parse the result into a :class:`~pyfsr.models.User` (default);
+                    pass ``False`` for the raw dict.
+
+      :returns: The matching :class:`~pyfsr.models.User`, or ``None``.
+
+
+
+   .. py:method:: get_or_create(loginid: str, password: str, firstname: str, lastname: str, email: str, roles: list[str], **kwargs: Any) -> tuple[pyfsr.models.User, bool]
+
+      Idempotently ensure a user with ``email`` exists; return ``(user, created)``.
+
+      Looks up by ``email`` (the filterable unique key on ``/api/3/people`` —
+      ``loginid`` is not queryable). If found, the existing user is returned
+      unchanged (``created=False``); otherwise a new user is created with the
+      given credentials, roles, and profile fields (``created=True``).
+
+      Accepts the same keyword arguments as :meth:`create` (``access_type``,
+      ``active``, ``department``, ``teams``, etc.).
+
+      :param loginid: Login username (must be unique). Used only on the create path.
+      :param password: Initial password. Used only on the create path.
+      :param firstname: First name. Used only on the create path.
+      :param lastname: Last name. Used only on the create path.
+      :param email: Email address — the lookup key and the create-time email.
+      :param roles: Role UUIDs or friendly names. Used only on the create path.
+      :param \*\*kwargs: Additional :meth:`create` arguments (``access_type``,
+                         ``active``, ``department``, ``teams``, etc.).
+
+      :returns: ``(User, created)`` — the existing user with ``created=False``, or
+                the newly-created user with ``created=True``.
+
+
+
+   .. py:method:: list(params: dict | None = None, *, typed: bool = True) -> list[pyfsr.models.User] | dict[str, Any]
+
+      List People records.
+
+      :param params: Optional query parameters (e.g. ``{"csActive": True}``).
+      :param typed: parse rows into :class:`~pyfsr.models.User` (default); pass
+                    ``False`` for the raw Hydra collection dict.
+
+      :returns: Typed :class:`~pyfsr.models.User` records, or the raw Hydra
+                collection dict (``hydra:member`` list of People records) when
+                ``typed=False``.
+
+      Doctest:
+
+          >>> from pyfsr._testing import demo_client
+          >>> client = demo_client()
+          >>> users = client.users.list()
+          >>> len(users)
+          2
+          >>> users[0].firstname
+          'CS'
+          >>> users[0].lastname
+          'Admin'
+
+
+
+   .. py:method:: get(person_uuid: str, *, typed: bool = True) -> pyfsr.models.User | dict[str, Any]
+
+      Get a single People record by UUID.
+
+      :param person_uuid: The UUID of the person.
+      :param typed: parse the result into a :class:`~pyfsr.models.User` (default);
+                    pass ``False`` for the raw dict.
+
+      :returns: The People record.
+
+
+
+   .. py:method:: update(person_uuid: str, *, typed: bool = True, **data: Any) -> pyfsr.models.User | dict[str, Any]
+
+      Update a People record.
+
+      :param person_uuid: UUID of the person to update.
+      :param typed: parse the result into a :class:`~pyfsr.models.User` (default);
+                    pass ``False`` for the raw dict.
+      :param \*\*data: Fields to update (e.g. ``department="SOC"``, ``csActive=False``).
+
+      :returns: The updated People record.
+
+
+
+   .. py:method:: deactivate(person_uuid: str, *, typed: bool = True) -> pyfsr.models.User | dict[str, Any]
+
+      Deactivate a user account (sets ``csActive=False``).
+
+      :param person_uuid: UUID of the person to deactivate.
+      :param typed: parse the result into a :class:`~pyfsr.models.User` (default);
+                    pass ``False`` for the raw dict.
+
+      :returns: The updated People record.
+
+
+
+   .. py:method:: list_roles(params: dict | None = None) -> list[pyfsr.models.Role]
+
+      List all roles available for assignment (delegates to :class:`~pyfsr.api.roles.RolesAPI`).
+
+      Returns typed :class:`~pyfsr.models.Role` records (dict-compatible:
+      ``r["name"]`` / ``r["uuid"]`` still work).
+
+
+
+   .. py:method:: list_teams(params: dict | None = None) -> list[pyfsr.models.Team]
+
+      List all teams available for assignment (delegates to :class:`~pyfsr.api.teams.TeamsAPI`).
+
+      Returns typed :class:`~pyfsr.models.Team` records (dict-compatible:
+      ``t["name"]`` / ``t["uuid"]`` still work).
+
+
+
+   .. py:method:: role_uuid_by_name(name: str) -> str | None
+
+      Look up a role UUID by display name (case-sensitive); ``None`` if not found.
+
+
+
+   .. py:method:: team_uuid_by_name(name: str) -> str | None
+
+      Look up a team UUID by display name (case-sensitive); ``None`` if not found.
+
+
+

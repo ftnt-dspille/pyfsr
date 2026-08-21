@@ -1,0 +1,209 @@
+pyfsr.api.api_keys
+==================
+
+.. py:module:: pyfsr.api.api_keys
+
+.. autoapi-nested-parse::
+
+   API-key bindings — ``/api/3/api_keys``.
+
+   An *API key* is the binding that attaches roles/teams to an **API-key user**
+   — the user record created via :class:`~pyfsr.api.api_users.ApiKeyUsersAPI`,
+   which carries the key material. Creating a usable key is two steps,
+   mirroring the product:
+
+   1. ``client.api_users.create(api_key_validity=...)`` → ``POST /api/auth/users``
+      returns ``{"uuid", "api_key": {"key": "<plaintext>", "retrievable": bool}}``.
+      The plaintext ``key`` is available **only here, at creation time** (unless
+      the user was created while global ``retrievable_mode`` was on, in which
+      case :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.get` with
+      ``show_api_key=True`` recovers it).
+   2. ``client.api_keys.create(name=..., user_uuid=..., roles=..., teams=...)``
+      → ``POST /api/3/api_keys`` binds roles/teams to that user.
+
+   ``roles`` / ``teams`` accept IRIs (``/api/3/roles/<uuid>``,
+   ``/api/3/teams/<uuid>``) **or** friendly names — resolved via the shared
+   :class:`~pyfsr.api.users.UsersAPI` maps, the same convention as
+   :meth:`~pyfsr.api.users.UsersAPI.create`.
+
+   Accessed as ``client.api_keys``.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> keys = client.api_keys.list()
+   >>> len(keys)
+   1
+   >>> keys[0]["name"]
+   'api-key-demo'
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.api_keys.ApiKeysAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: ApiKeysAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Create and inspect API-key bindings (roles/teams on an API-key user).
+
+
+   .. py:method:: list(params: dict[str, Any] | None = None) -> list[pyfsr.models.ApiKey]
+
+      List API-key bindings (``GET /api/3/api_keys``) as typed :class:`~pyfsr.models.ApiKey` records.
+
+      Each member carries ``name``, ``userId``, ``roles``, ``teams`` (the key
+      value itself is masked).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> keys = client.api_keys.list()
+      >>> len(keys)
+      1
+      >>> keys[0]["name"]
+      'api-key-demo'
+
+
+
+   .. py:method:: get(uuid: str) -> pyfsr.models.ApiKey
+
+      Fetch one API-key binding by uuid (``GET /api/3/api_keys/{uuid}``).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> key = client.api_keys.get("660e8400-e29b-41d4-a716-446655440008")
+      >>> key["name"]
+      'api-key-demo'
+      >>> key["userId"]
+      '550e8400-e29b-41d4-a716-446655440007'
+
+
+
+   .. py:method:: create(*, name: str, user_uuid: str, roles: list[str] | None = None, teams: list[str] | None = None) -> pyfsr.models.ApiKey
+
+      Bind roles/teams to an API-key user (``POST /api/3/api_keys``).
+
+      :param name: friendly identifier for the key binding.
+      :param user_uuid: the API-key user's uuid (from
+                        :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.create`).
+      :param roles: optional role IRIs or names (resolved via
+                    :meth:`~pyfsr.api.roles.RolesAPI.role_uuid_by_name`).
+      :param teams: optional team IRIs or names (resolved via
+                    :meth:`~pyfsr.api.teams.TeamsAPI.team_uuid_by_name`).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> key = client.api_keys.create(
+      ...     name="test-key",
+      ...     user_uuid="550e8400-e29b-41d4-a716-446655440007"
+      ... )
+      >>> key["name"]
+      'api-key-demo'
+
+
+
+   .. py:method:: update(uuid: str, **fields: Any) -> pyfsr.models.ApiKey
+
+      Partially update an API-key binding (``PUT /api/3/api_keys/{uuid}``).
+
+      Pass only the keys to change, e.g. ``teams=[...]``, ``roles=[...]``.
+      ``roles``/``teams`` accept IRIs or names, like :meth:`create`.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> key = client.api_keys.update("660e8400-e29b-41d4-a716-446655440008", name="updated-key")
+      >>> key["name"]
+      'api-key-demo'
+
+
+
+   .. py:method:: delete(uuid: str) -> None
+
+      Delete an API-key binding (``DELETE /api/3/api_keys/{uuid}``).
+
+      Removes the role/team binding. The underlying API-key *user* is separate
+      — revoke it via
+      :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.revoke` if it should no longer
+      authenticate.
+
+
+
+   .. py:method:: get_plaintext(user_uuid: str) -> str | None
+
+      Recover an API-key user's plaintext key, or ``None`` if it is masked.
+
+      Public wrapper over the ``GET /api/auth/users?show_api_key`` recovery flow.
+      Returns ``None`` when the key's per-key ``retrievable`` flag is false (it was
+      minted while global ``retrievable_mode`` was off) — a masked key is non-empty
+      but useless, so ``None`` signals "regenerate it" rather than "no key". Toggling
+      ``retrievable_mode`` on does **not** retroactively unmask existing keys, so a
+      ``None`` here means :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.regenerate`.
+
+
+
+   .. py:method:: get_or_create(*, name: str, user_uuid: str, roles: list[str] | None = None, teams: list[str] | None = None) -> tuple[pyfsr.models.ApiKey, bool]
+
+      Find an existing binding by ``name``, or create if absent.
+
+      Returns ``(binding, created)`` — idempotent by ``name`` (the natural
+      key for an API-key binding). When an existing binding is reused, the
+      plaintext key is **not** available here; capture it from
+      :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.create` or recover via
+      ``show_api_key=True`` (requires ``retrievable_mode``).
+
+      NB: this matches on ``name`` only; a pre-existing binding bound to a
+      *different* user or teams is returned as-is. Call :meth:`update` to
+      reconcile teams/roles if a stale binding must be repaired.
+
+
+
+   .. py:method:: ensure_usable(*, name: str, teams: list[str] | None = None, roles: list[str] | None = None, api_key_validity: int = 365) -> tuple[pyfsr.models.ApiKey, str]
+
+      Find or create an API-key binding by ``name`` and return its plaintext.
+
+      The one-call version of the two-step key lifecycle for callers that need
+      to *use* a key (e.g. to build a second client that authenticates as a
+      specific team). Coordinates the pieces :meth:`get_or_create` leaves to
+      the caller:
+
+      1. Finds an existing binding by ``name``; if none, creates the API-key
+         user (:meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.create`) and binds it
+         (:meth:`create`). A freshly created user returns its plaintext key in
+         the create response.
+      2. On a *reused* binding the original plaintext is gone (a masked key can
+         never be unmasked after the fact), so
+         :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.regenerate` mints a fresh
+         key — its plaintext comes back in the regenerate **response**. This
+         invalidates the previous key value for that binding.
+      3. Reconciles ``teams``/``roles`` on a reused binding.
+
+      This deliberately does **not** touch the global ``retrievable_mode``
+      flag. ``retrievable_mode`` only enables recovering a key *later* via
+      ``GET …?show_api_key=true``; capturing the plaintext from the
+      create/regenerate response makes it unnecessary. Toggling it on also
+      activates a broken ``apikeys_helper`` branch that calls
+      ``encrypt(preserve_compatibility=...)`` — unsupported by the shipped
+      ``PasswordModule`` on FortiSOAR 7.6.5 / 8.0.0 — which makes *all*
+      API-key creation fail with HTTP 400 on those builds.
+
+      Idempotent by ``name`` (reuse regenerates). Returns ``(binding, plaintext)``.
+      ``teams``/``roles`` accept IRIs or names (resolved like :meth:`create`).
+
+      :raises RuntimeError: if the create/regenerate response carries no plaintext.
+
+
+
