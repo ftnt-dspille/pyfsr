@@ -57,6 +57,29 @@ _REUSABLE_BLOCKS = "/api/3/workflow_groups"
 _HARD_DELETE = {"$hardDelete": "true", "$showDeleted": "true"}
 
 
+def _wf_fingerprint(wf: dict[str, Any]) -> str:
+    """A stable hash of a workflow's shape -- name/active-flag plus each step's
+    name, type, and arguments -- used to tell whether a live copy DIFFERS from
+    the local one without drowning in uuid / timestamp / ordering noise.
+
+    Steps are sorted by name so ordering does not register as a change; step
+    ``stepType`` is normalised to a bare uuid (the live row carries an IRI, the
+    compiled row a bare uuid or IRI) so the same step type on both sides matches.
+    """
+    import hashlib
+
+    def _type(s: dict[str, Any]) -> str:
+        t = s.get("stepType") or s.get("type") or ""
+        return t.rsplit("/", 1)[-1] if isinstance(t, str) else str(t)
+
+    steps = [
+        {"name": s.get("name"), "type": _type(s), "args": s.get("arguments")}
+        for s in sorted(wf.get("steps") or [], key=lambda x: str(x.get("name", "")))
+    ]
+    shape = {"name": wf.get("name"), "isActive": wf.get("isActive"), "steps": steps}
+    return hashlib.sha256(json.dumps(shape, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
 class WorkflowCollectionsAPI(BaseAPI):
     """CRUD for playbook (workflow) collections."""
 
@@ -665,6 +688,7 @@ class WorkflowCollectionsAPI(BaseAPI):
         prune: bool = False,
         backup_dir: str | Path | None = None,
         dry_run: bool = False,
+        overwrite_changed: bool = False,
     ) -> dict[str, Any]:
         """Deploy a collection **non-destructively**, mirroring the editor's save.
 
@@ -691,8 +715,17 @@ class WorkflowCollectionsAPI(BaseAPI):
            *different* collection, raise ``ValueError`` listing them -- deploying
            would collide on the uuid. Reconcile first (this is exactly the fault
            that can wipe a collection under the old ``replace`` path).
-        4. **Upsert** each workflow in place (create if new, update if present).
-        5. **Prune** orphans (live workflows absent from ``data``) only when
+        4. **Divergence guard (directional)**: the YAML being ahead of the box
+           (steps you added/edited in source) is the normal update case and is
+           allowed. The guarded case is the box being AHEAD -- a live workflow
+           that has STEPS the YAML does not (a UI edit not captured in source).
+           Because the in-place upsert deletes live steps absent from the new
+           definition, that edit would be lost, so the deploy raises
+           ``ValueError`` and changes nothing unless ``overwrite_changed=True``.
+           Reconcile by exporting the live collection into the YAML first. (The
+           backup from step 2 makes an intentional overwrite recoverable.)
+        5. **Upsert** each workflow in place (create if new, update if present).
+        6. **Prune** orphans (live workflows absent from ``data``) only when
            ``prune=True`` -- and only via a soft (recycle-bin) delete.
 
         Args:
@@ -702,6 +735,10 @@ class WorkflowCollectionsAPI(BaseAPI):
             backup_dir: directory to write the pre-change backup into (created if
                 missing). ``None`` skips the backup (not recommended for --apply).
             dry_run: compute and return the plan without changing anything.
+            overwrite_changed: proceed even when the box is ahead -- a live
+                workflow has steps the YAML lacks. Default ``False`` fails closed
+                so a live UI edit is never deleted unnoticed; ``True`` deletes the
+                box-only steps to match the source.
 
         Returns:
             a report dict: ``{"collection", "collection_uuid", "backup",
@@ -761,30 +798,51 @@ class WorkflowCollectionsAPI(BaseAPI):
                 "from this source."
             )
 
-        # diff (uses the live rows we already hold; membership only, not deep-equality)
-        live_uuids = {
-            u
-            for u, row in live_by_uuid.items()
-            if (
-                (row.get("collection") or {}).get("uuid")
-                if isinstance(row.get("collection"), dict)
-                else (row.get("collection") or "").rsplit("/", 1)[-1]
-            )
-            == target_uuid
-        }
-        new = [w.get("name") for u, w in local_wfs.items() if u not in live_uuids]
-        existing = [w.get("name") for u, w in local_wfs.items() if u in live_uuids]
-        orphans = []
+        # diff: compare each local workflow against its LIVE copy. The divergence
+        # that matters is DIRECTIONAL. The YAML being ahead of the box (new/edited
+        # steps we are shipping) is the normal update case -- allowed. The
+        # dangerous case is the box being ahead: the live playbook has STEPS the
+        # YAML does not, because upsert_playbooks deletes live steps absent from
+        # the new definition. That is a live edit not captured in source, so it
+        # must be reconciled into the YAML first -- we fail closed on it.
+        live_members = []
         if target_live is not None:
             live_members = getattr(target_live, "to_dict", lambda: target_live)().get("workflows") or []
-            orphans = [(w["uuid"], w.get("name")) for w in live_members if w["uuid"] not in local_wfs]
+        live_by_uuid_full = {w["uuid"]: w for w in live_members}
+
+        def _step_ids(wf: dict[str, Any]) -> set[str]:
+            return {s.get("uuid") for s in (wf.get("steps") or []) if s.get("uuid")}
+
+        new, changed, unchanged = [], [], []
+        diverged: list[tuple[str, list[str]]] = []  # (workflow, [box-only step names])
+        for u, w in local_wfs.items():
+            if u not in live_by_uuid_full:
+                new.append(w.get("name"))
+                continue
+            live = live_by_uuid_full[u]
+            local_ids = _step_ids(w)
+            box_only = [
+                s.get("name") or s.get("uuid")
+                for s in (live.get("steps") or [])
+                if s.get("uuid") and s.get("uuid") not in local_ids
+            ]
+            if box_only:  # box has steps the YAML lacks -> upsert would delete them
+                diverged.append((w.get("name"), sorted(str(b) for b in box_only)))
+            if _wf_fingerprint(w) != _wf_fingerprint(live):
+                changed.append(w.get("name"))
+            else:
+                unchanged.append(w.get("name"))
+        orphans = [(w["uuid"], w.get("name")) for w in live_members if w["uuid"] not in local_wfs]
 
         report: dict[str, Any] = {
             "collection": col_name,
             "collection_uuid": target_uuid,
             "backup": str(backup_path) if backup_path else None,
             "new": sorted(n for n in new if n),
-            "changed": sorted(n for n in existing if n),  # would be overwritten in place
+            "changed": sorted(n for n in changed if n),  # live differs (args/steps) -- informational
+            "unchanged": sorted(n for n in unchanged if n),
+            # box-ahead: the live workflow has steps the YAML does not -> update source first
+            "diverged": {n: steps for n, steps in sorted(diverged) if n},
             "orphans": sorted(n or u for u, n in orphans),
             "created": [],
             "updated": [],
@@ -793,6 +851,20 @@ class WorkflowCollectionsAPI(BaseAPI):
         }
         if dry_run:
             return report
+
+        # divergence guard (directional): fail closed only when the BOX has steps
+        # the YAML lacks -- deploying would delete a live edit not captured in
+        # source. YAML-ahead changes (our new update) are allowed through.
+        if diverged and not overwrite_changed:
+            lines = "\n".join(f"    - {n}: box-only steps {steps}" for n, steps in report["diverged"].items())
+            where = f" A backup of the live state is at {backup_path}." if backup_path else ""
+            raise ValueError(
+                "deploy aborted -- the live box copy of these workflows has STEPS that "
+                "your source YAML does NOT, so deploying would DELETE them (a live edit not "
+                f"captured in source):\n{lines}\n"
+                "  Update your source first (export the live collection to YAML and merge), "
+                f"or pass overwrite_changed=True to delete them deliberately.{where}"
+            )
 
         # 4) ensure the collection exists, then upsert workflows in place
         if target_live is None:

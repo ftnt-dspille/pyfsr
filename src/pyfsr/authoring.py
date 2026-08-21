@@ -932,6 +932,7 @@ def build_and_deploy(
     replace: bool = False,
     prune: bool = False,
     backup_dir: str | Path | None = None,
+    overwrite_changed: bool = False,
 ) -> DeployedPlaybook:
     """Build-then-push in one call: **verify → compile → deploy**. Stops (without
     pushing) at the first hard failure and tells you where via ``stopped_at``.
@@ -950,6 +951,10 @@ def build_and_deploy(
     aborts the deploy instead of silently colliding. Pass ``backup_dir`` to snap
     the live collection before the change, and ``prune=True`` to soft-delete
     workflows that are on the box but absent from the source.
+
+    ``overwrite_changed=True`` lets the deploy overwrite workflows whose live copy
+    differs from the source; by default such divergence fails closed (a live UI
+    edit is never clobbered unnoticed).
 
     ``replace`` is **deprecated and ignored** -- it selected the old destructive
     hard-delete-then-recreate import, which could wipe a collection on any
@@ -978,7 +983,9 @@ def build_and_deploy(
     compiled = compile_playbook_yaml(text, client=client, db_path=catalog, lax_codes=lax)
     if not compiled.ok:
         return DeployedPlaybook(verified=verified, compiled=compiled, stopped_at="compile")
-    response = client.workflow_collections.deploy(compiled.fsr_json, prune=prune, backup_dir=backup_dir)
+    response = client.workflow_collections.deploy(
+        compiled.fsr_json, prune=prune, backup_dir=backup_dir, overwrite_changed=overwrite_changed
+    )
     return DeployedPlaybook(verified=verified, compiled=compiled, deployed=True, response=response)
 
 
