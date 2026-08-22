@@ -2,7 +2,7 @@
 
 :class:`ReplaySession` is a :class:`requests.Session` whose ``request()`` answers
 by matching ``(method, path)`` against the recorded ``/api/3`` captures in
-:mod:`pyfsr._testing.client_captures` — no sockets, no TLS, no network. It is the
+:mod:`pyfsr._testing.client_captures` -- no sockets, no TLS, no network. It is the
 doctest/test analogue of the real ``requests.Session`` a live
 :class:`pyfsr.client.FortiSOAR` uses: same call shapes in, same real JSON out.
 
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 __all__ = ["ReplaySession", "demo_client"]
 
 
-# The dispatch table — keyed by (METHOD, path-without-/api/3-prefix...). Paths
+# The dispatch table -- keyed by (METHOD, path-without-/api/3-prefix...). Paths
 # are matched as stored (leading slash stripped, trailing uuid ignored for the
 # single-record GET/DELETE so any uuid resolves to the one Alert capture).
 def _entry(
@@ -57,13 +57,13 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("POST", "/api/3/bulkupsert/alerts", cap.BULK_UPSERT_ALERTS_MIXED_RESPONSE),
         _entry("POST", "/api/3/upsert/alerts", cap.UPSERT_ALERT_RESPONSE),
         _entry("POST", "/api/3/insert/alerts", cap.BULK_INSERT_ALERTS_RESPONSE),
-        # Comments on a record — keyed by the collapsed alert uuid path.
+        # Comments on a record -- keyed by the collapsed alert uuid path.
         _entry(
             "GET",
             "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39/comments",
             cap.ALERT_COMMENTS_RESPONSE,
         ),
-        # Incidents — the generic-record-path example in getting-started.md.
+        # Incidents -- the generic-record-path example in getting-started.md.
         _entry("GET", "/api/3/incidents/0740411d-e852-4eee-b33b-596210d09a9b", cap.INCIDENT_GET_RESPONSE),
         _entry("POST", "/api/3/incidents", cap.INCIDENT_CREATE_RESPONSE),
         # Connector discovery + health (the connectors guide's read-only calls).
@@ -72,7 +72,7 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry(
             "GET", "/api/integration/connectors/healthcheck/mitre-attack/2.0.2/", cap.CONNECTOR_HEALTHCHECK_RESPONSE
         ),
-        # connector_detail: POST /api/integration/connectors/<id>/ — one fixture
+        # connector_detail: POST /api/integration/connectors/<id>/ -- one fixture
         # regardless of which connector id the doctest resolves (id collapsed below).
         _entry("POST", "/api/integration/connectors/3/", cap.CONNECTOR_DETAIL_RESPONSE),
         # Data ingestion: dependency status, the sample-collection lookup, the
@@ -92,11 +92,11 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             "/api/triggers/1/notrigger/26191d34-e980-40b0-bfc1-0e7bfb04dab5",
             cap.INGESTION_TRIGGER_RESPONSE,
         ),
-        # execute(): POST /api/integration/execute/ — one fixture regardless of
+        # execute(): POST /api/integration/execute/ -- one fixture regardless of
         # which connector/operation the doctest names (the body varies, the path
         # doesn't; matching ignores the body, same as every other POST fixture here).
         _entry("POST", "/api/integration/execute/", cap.CONNECTOR_EXECUTE_CISA_ADVISORY_RESPONSE),
-        # create_configuration / update_configuration / delete_configuration —
+        # create_configuration / update_configuration / delete_configuration --
         # one fixture regardless of config_id (the body varies, the path shape
         # doesn't, matching this module's convention for other POST/PUT fixtures).
         _entry("POST", "/api/integration/configuration/", cap.CONNECTOR_CREATE_CONFIG_RESPONSE),
@@ -106,7 +106,7 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             cap.CONNECTOR_UPDATE_CONFIG_RESPONSE,
         ),
         _entry("DELETE", "/api/integration/configuration/0e75640a-ba4a-4bc2-be41-524a9e47fa3f/", {}, status=204),
-        # FortiAI agentic investigation — start (POST /api/ai/triage/alert), then
+        # FortiAI agentic investigation -- start (POST /api/ai/triage/alert), then
         # poll status + result by task_id. The task_id in the start response is
         # the recorded one, so a doctest that passes ``started["task_id"]`` through
         # to get_investigation_result resolves directly; the canonicalization below
@@ -132,10 +132,10 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             cap.PUBLISHED_ALERTS_RESPONSE,
         ),
         _entry("GET", "/api/publish/error", cap.PUBLISH_ERROR_RESPONSE),
-        # Picklists — the two bulk calls ``_load_bulk`` makes (names + flat items).
+        # Picklists -- the two bulk calls ``_load_bulk`` makes (names + flat items).
         _entry("GET", "/api/3/picklist_names", cap.PICKLIST_NAMES_RESPONSE),
         _entry("GET", "/api/3/picklists", cap.PICKLISTS_RESPONSE),
-        # Widgets — list, the dev-manifest GET publish() reads, and the publish
+        # Widgets -- list, the dev-manifest GET publish() reads, and the publish
         # PUT response. The widget upload (POST /api/3/solutionpacks/install
         # with $type=widget) is keyed alongside the connector/SP install variants
         # below (it shares that path, disambiguated by $type query param).
@@ -146,7 +146,7 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             cap.WIDGET_DEV_MANIFEST_RESPONSE,
         ),
         _entry("PUT", "/api/3/widgets/5fef77ad-8917-40c6-82a2-fdd753bdf41c", cap.WIDGET_PUBLISH_RESPONSE),
-        # User settings — actors/current backs all()/get(); the /current/<key>
+        # User settings -- actors/current backs all()/get(); the /current/<key>
         # path backs get_direct()/set()/delete() (and the view-template
         # convenience wrappers built on top of them).
         _entry("GET", "/api/3/actors/current", cap.ACTOR_CURRENT_RESPONSE),
@@ -166,10 +166,10 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             None,
             status=204,
         ),
-        # ViewTemplatesAPI.list_templates — backs resolve_view_template() /
+        # ViewTemplatesAPI.list_templates -- backs resolve_view_template() /
         # get_view_template_name() / set_view_template(module, <name>).
         _entry("GET", "/api/3/system_view_templates", cap.SYSTEM_VIEW_TEMPLATES_RESPONSE),
-        # Audit API — query and manage audit activity records.
+        # Audit API -- query and manage audit activity records.
         _entry("GET", "/api/gateway/audit/operations", cap.AUDIT_OPERATIONS_RESPONSE),
         _entry(
             "GET",
@@ -180,14 +180,14 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("POST", "/api/gateway/audit/activities/count", cap.AUDIT_COUNT_RESPONSE),
         _entry("DELETE", "/api/gateway/audit/activities/ttl", {}, status=204),
         _entry("DELETE", "/api/gateway/audit/activities", {}, status=204),
-        # SystemAPI — version/permissions/feature-access/daily-action-count.
+        # SystemAPI -- version/permissions/feature-access/daily-action-count.
         _entry("GET", "/api/version", cap.VERSION_RESPONSE),
         _entry("GET", "/api/permissions/current", cap.PERMISSIONS_RESPONSE),
         _entry("GET", "/api/product/feature-access", cap.FEATURE_ACCESS_RESPONSE),
         _entry("GET", "/api/auth/cluster/health", cap.CLUSTER_HEALTH_RESPONSE),
         _entry("GET", "/api/auth/license", cap.LICENSE_RESPONSE),
         _entry("GET", "/api/wf/workflow/config/", cap.DAILY_ACTION_COUNT_RESPONSE),
-        # TaxiiAPI — discovery/collections/manifest/objects.
+        # TaxiiAPI -- discovery/collections/manifest/objects.
         _entry("GET", "/api/taxii/1/", cap.TAXII_DISCOVERY_RESPONSE),
         _entry("GET", "/api/taxii/1/collections", cap.TAXII_COLLECTIONS_RESPONSE),
         _entry("GET", "/api/taxii/1/collections/malware-samples", cap.TAXII_COLLECTION_RESPONSE),
@@ -198,16 +198,16 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             "/api/taxii/1/collections/malware-samples/objects/malware--31b7aa16-6a19-4d5e-9e1a-3a5c9f6a2b40",
             cap.TAXII_OBJECTS_RESPONSE,
         ),
-        # AuthConfigAPI — username/password auth only, all doctests are +SKIP.
+        # AuthConfigAPI -- username/password auth only, all doctests are +SKIP.
         _entry("GET", "/api/auth/config", cap.AUTH_CONFIG_TOKEN_ROWS),
-        # SearchAPI — global search + persisted-query execution.
+        # SearchAPI -- global search + persisted-query execution.
         _entry("POST", "/api/search", cap.GLOBAL_SEARCH_RESPONSE),
         _entry(
             "POST",
             "/api/query/alerts/6f1c9e2a-6b7a-4b0a-9a1e-2f6a5c9b3d10",
             cap.PERSISTED_QUERY_RESPONSE,
         ),
-        # FeedsAPI — bulk trigger-bypassing ingest for threat-intel + records.
+        # FeedsAPI -- bulk trigger-bypassing ingest for threat-intel + records.
         _entry("POST", "/api/ingest-feeds/indicators", cap.INDICATORS_INGEST_RESPONSE),
         _entry("POST", "/api/ingest-feeds/observables", cap.OBSERVABLES_INGEST_RESPONSE),
         _entry("POST", "/api/ingest-feeds/reputation", cap.REPUTATION_INGEST_RESPONSE),
@@ -217,13 +217,13 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         # resolves to the same fixture regardless of record_type (the body varies,
         # the path structure is matched generically).
         _entry("POST", "/api/ingest-feeds/alerts", cap.INSERT_RECORDS_RESPONSE),
-        # ApiKeyUsersAPI — API-key user lifecycle management.
+        # ApiKeyUsersAPI -- API-key user lifecycle management.
         _entry("POST", "/api/auth/users", cap.APIKEY_USER_CREATE_RESPONSE),
         _entry("GET", "/api/auth/users", cap.APIKEY_USER_GET_RESPONSE),
         _entry("POST", "/api/auth/query/users", cap.APIKEY_USER_QUERY_RESPONSE),
         _entry("PUT", "/api/auth/users", cap.APIKEY_USER_LIFECYCLE_RESPONSE),
-        # ApiKeysAPI — API-key binding (roles/teams on a user).
-        # System queries (datasets) — client.system_queries
+        # ApiKeysAPI -- API-key binding (roles/teams on a user).
+        # System queries (datasets) -- client.system_queries
         _entry("GET", "/api/3/system_queries", cap.SYSTEM_QUERY_LIST_RESPONSE),
         _entry("POST", "/api/3/system_queries", cap.SYSTEM_QUERY_CREATE_RESPONSE),
         _entry(
@@ -244,46 +244,46 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         ),
         _entry("GET", "/api/3/api_keys", cap.APIKEY_LIST_RESPONSE),
         _entry("POST", "/api/3/api_keys", cap.APIKEY_CREATE_RESPONSE),
-        # get() / update() / delete() for any api_key uuid — collapse to recorded uuid.
+        # get() / update() / delete() for any api_key uuid -- collapse to recorded uuid.
         _entry("GET", "/api/3/api_keys/660e8400-e29b-41d4-a716-446655440008", cap.APIKEY_GET_RESPONSE),
         _entry("PUT", "/api/3/api_keys/660e8400-e29b-41d4-a716-446655440008", cap.APIKEY_UPDATE_RESPONSE),
         _entry("DELETE", "/api/3/api_keys/660e8400-e29b-41d4-a716-446655440008", {}, status=204),
-        # ManualInputAPI — pending manual workflow inputs.
+        # ManualInputAPI -- pending manual workflow inputs.
         _entry("POST", "/api/wf/api/manual-wf-input/list_wfinput/", cap.MANUAL_INPUT_LIST_RESPONSE),
         _entry("POST", "/api/wf/api/manual-wf-input/1/retrieve_wfinput/", cap.MANUAL_INPUT_RETRIEVE_RESPONSE),
-        # delete() — DELETE on a pending input by id (204, no body). Pinned to
+        # delete() -- DELETE on a pending input by id (204, no body). Pinned to
         # the doctest's pk=2; the retrieve fixture above is pk=1 (different path).
         _entry("DELETE", "/api/wf/api/manual-wf-input/2/", {}, status=204),
         _entry("POST", "/api/wf/api/workflows/1/wfinput_resume/", cap.MANUAL_INPUT_RESUME_RESPONSE),
-        # AttachmentsAPI — attachment record management.
+        # AttachmentsAPI -- attachment record management.
         _entry("POST", "/api/3/attachments", cap.ATTACHMENT_CREATE_RESPONSE),
         _entry("GET", "/api/3/attachments/770e8400-e29b-41d4-a716-446655440009", cap.ATTACHMENT_GET_RESPONSE),
         _entry("DELETE", "/api/3/attachments/770e8400-e29b-41d4-a716-446655440009", {}, status=204),
-        # SolutionPackAPI — solution pack management.
+        # SolutionPackAPI -- solution pack management.
         _entry("POST", "/api/3/solutionpacks/install", cap.SOLUTION_PACK_INSTALL_RESPONSE),
         # Multipart connector/widget uploads hit the same path as the by-name
         # solution-pack install above, distinguished only by the ``$type`` query
         # param ($type=connector vs $type=widget). _path_and_match canonicalizes
         # those two variants to a path-tagged key so each lands on its own
-        # fixture here — the by-name SP install keeps the bare path key above.
+        # fixture here -- the by-name SP install keeps the bare path key above.
         _entry("POST", "/api/3/solutionpacks/install?type=connector", cap.CONNECTOR_INSTALL_RESPONSE),
         _entry("POST", "/api/3/solutionpacks/install?type=widget", cap.WIDGET_UPLOAD_RESPONSE),
-        # Connector lifecycle — DELETE on an installed connector (uninstall).
+        # Connector lifecycle -- DELETE on an installed connector (uninstall).
         # The canonicalization in _path_and_match collapses any connector id
         # (POST or DELETE) to the recorded id=3, so this single fixture serves
         # both the connector_detail POST and the uninstall DELETE.
         _entry("DELETE", "/api/integration/connectors/3/", {}, status=204),
-        # The dedicated configurations endpoint — list_configurations() GET.
+        # The dedicated configurations endpoint -- list_configurations() GET.
         _entry("GET", "/api/integration/configuration/", cap.CONNECTOR_CONFIGURATIONS_LIST_RESPONSE),
-        # ImportConfigAPI — configuration import management.
+        # ImportConfigAPI -- configuration import management.
         _entry("POST", "/api/3/import_jobs", cap.IMPORT_JOB_CREATE_RESPONSE),
         _entry("GET", "/api/3/import_jobs/aa0e8400-e29b-41d4-a716-446655440013", cap.IMPORT_JOB_GET_RESPONSE),
         _entry("GET", "/api/import/aa0e8400-e29b-41d4-a716-446655440013", {"status": "generating"}),
-        # FileOperations — ``client.files.upload`` multipart POST. The response
+        # FileOperations -- ``client.files.upload`` multipart POST. The response
         # is a FileRecord; the canonicalization below collapses any /api/3/files
         # GET by uuid (the export download) onto the recorded file.
         _entry("POST", "/api/3/files", cap.FILE_UPLOAD_RESPONSE),
-        # ExportConfigAPI — the four-step export lifecycle:
+        # ExportConfigAPI -- the four-step export lifecycle:
         #   1. create_template  -> POST /api/3/export_templates
         #   2. export_by_template_name's name lookup -> GET /api/3/export_templates
         #   3. trigger          -> PUT /api/export (any fileName/template query string)
@@ -302,9 +302,9 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             content_type="application/octet-stream",
         ),
         _entry("DELETE", f"/api/3/export_templates/{cap._EXPORT_TEMPLATE_UUID}", {}, status=204),
-        # PlaybooksAPI — playbook run history and manual input management.
+        # PlaybooksAPI -- playbook run history and manual input management.
         _entry("GET", "/api/wf/api/workflows/", cap.EXECUTION_HISTORY_RESPONSE),
-        # get_execution — single run (any pk resolves to one of the run records).
+        # get_execution -- single run (any pk resolves to one of the run records).
         _entry("GET", "/api/wf/api/workflows/1/", cap.GET_EXECUTION_RESPONSE),
         _entry("GET", "/api/wf/api/workflows/2/", cap.GET_EXECUTION_AWAITING_RESPONSE),
         _entry("GET", "/api/wf/api/workflows/3/", cap.GET_EXECUTION_FAILED_RESPONSE),
@@ -312,16 +312,22 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("POST", "/api/wf/api/workflows/log_list/", cap.LOG_LIST_RESPONSE),
         _entry("POST", "/api/wf/api/query/workflow_logs/", cap.QUERY_LOGS_RESPONSE),
         _entry("POST", "/api/wf/api/jinja-editor/", cap.RENDER_JINJA_RESPONSE),
+        # WfToolsAPI -- global variables. Reads list the whole set; the write
+        # routes key on the numeric id and require the trailing slash.
+        _entry("GET", "/api/wf/api/dynamic-variable/", cap.DYNAMIC_VARIABLES_RESPONSE),
+        _entry("POST", "/api/wf/api/dynamic-variable/", cap.DYNAMIC_VARIABLE_CREATE_RESPONSE),
+        _entry("PUT", "/api/wf/api/dynamic-variable/9/", cap.DYNAMIC_VARIABLE_UPDATE_RESPONSE),
+        _entry("DELETE", "/api/wf/api/dynamic-variable/9/", None, status=204),
         # start/retry on any workflow pk.
         _entry("POST", "/api/wf/api/workflows/1/start/", cap.WORKFLOW_CONTROL_RESPONSE),
         _entry("POST", "/api/wf/api/workflows/3/retry/", cap.WORKFLOW_CONTROL_RESPONSE),
-        # wfinput_resume — resume response on any workflow pk.
+        # wfinput_resume -- resume response on any workflow pk.
         _entry("POST", "/api/wf/api/workflows/2/wfinput_resume/", cap.WFINPUT_RESUME_RESPONSE),
         # Manual input list (GET for approval workflows).
         _entry("GET", "/api/wf/api/manual-wf-input/", cap.APPROVAL_MANUAL_INPUT_LIST_RESPONSE),
         # Approval manual input retrieve.
         _entry("POST", "/api/wf/api/manual-wf-input/2/retrieve_wfinput/", cap.APPROVAL_MANUAL_INPUT_RETRIEVE_RESPONSE),
-        # Named/action triggers — any name/route_uuid resolves to the same fixture.
+        # Named/action triggers -- any name/route_uuid resolves to the same fixture.
         _entry("POST", "/api/triggers/1/my-hook", cap.TRIGGER_BY_NAME_RESPONSE),
         _entry("POST", "/api/triggers/1/deferred/my-hook", cap.TRIGGER_BY_NAME_RESPONSE),
         _entry(
@@ -329,7 +335,7 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             "/api/triggers/1/action/2b6a1e8e-6f0a-4c6b-9e29-6c2f6a1d8b30",
             cap.TRIGGER_ACTION_RESPONSE,
         ),
-        # Playbook versions (workflow_versions snapshots) — the editor's "Versions"
+        # Playbook versions (workflow_versions snapshots) -- the editor's "Versions"
         # tab. list (bare collection), get/create/delete on <id> (collapsed below so
         # any version uuid resolves to the v1 fixture; the diff doctest needs v2, so
         # a specific second uuid is pinned). list_versions resolves the playbook by
@@ -348,7 +354,7 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             "/api/3/workflow_versions/00000000-0000-0000-0000-000000000002",
             cap.WORKFLOW_VERSION_GET_RESPONSE_2,
         ),
-        # The fixture playbook's definition — backs list_versions' name lookup
+        # The fixture playbook's definition -- backs list_versions' name lookup
         # (GET /api/3/workflows?name=...) and create_version's get_definition
         # (GET /api/3/workflows/<uuid>?$relationships=true, collapsed below to
         # the fixture uuid), plus restore_version's PUT.
@@ -363,7 +369,7 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
             "/api/3/workflows/00000000-0000-0000-0000-0000000000aa",
             cap.WORKFLOW_DEFINITION_PUT_RESPONSE,
         ),
-        # AgentsAPI — execution-agent lifecycle + installer + agent-scoped connectors.
+        # AgentsAPI -- execution-agent lifecycle + installer + agent-scoped connectors.
         _entry("GET", "/api/3/agents", cap.AGENT_LIST_RESPONSE),
         _entry("GET", "/api/3/agents/6f5e4d3c-2b1a-4c9d-8e7f-1a2b3c4d5e6f", cap.AGENT_RECORD),
         _entry("POST", "/api/3/agents", cap.AGENT_RECORD),
@@ -517,7 +523,7 @@ def _path_and_match(method: str, url: str, params: Any = None) -> tuple[str, str
     # /api/integration/connectors/<id>/  (connector_detail POST, uninstall
     # DELETE)  ->  collapse any connector id to the recorded id=3. The trailing
     # slash is stripped by rstrip above, so the path has 5 segments here (not 6
-    # as an earlier comment claimed — that stale count meant this rule never
+    # as an earlier comment claimed -- that stale count meant this rule never
     # fired and the fixture only matched when the doctest happened to name a
     # connector whose install id was already 3). The 7-segment healthcheck path
     # and the 4-segment bare collection are left alone by this 5-segment rule.
@@ -637,7 +643,7 @@ def demo_client(
     and get real return shapes with zero network. The session is a
     :class:`ReplaySession` seeded from :mod:`pyfsr._testing.client_captures`.
 
-    ``overrides`` is passed through to :class:`ReplaySession` — a per-call
+    ``overrides`` is passed through to :class:`ReplaySession` -- a per-call
     ``{(METHOD, path): fixture}`` overlay for doctests that need a scoped,
     stateful view (a staged-but-unpublished module, say) without touching the
     shared fixture table.
@@ -646,8 +652,8 @@ def demo_client(
     with a live ``GET /api/3/people``, so ``demo_client`` briefly neutralises
     that one validation call (it would otherwise hit the network before the
     replay session is installed). The neutralisation is scoped to construction
-    only; once the replay session is swapped in, every subsequent call —
-    including the validation GET — replays from fixtures.
+    only; once the replay session is swapped in, every subsequent call --
+    including the validation GET -- replays from fixtures.
     """
     from ..auth.api_key import APIKeyAuth
     from ..client import FortiSOAR
