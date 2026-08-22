@@ -1,18 +1,18 @@
 """Execute + output-match the ``>>>`` doctests in curated ``src/`` module docstrings.
 
 ``make doctest`` (Sphinx) only runs *explicit* ``{doctest}`` directives in the
-guide docs — it does **not** collect ``>>>`` blocks from Python docstrings
+guide docs -- it does **not** collect ``>>>`` blocks from Python docstrings
 (``conf.py`` sets ``doctest_test_doctest_blocks = ""``). That is deliberate for
 the many *illustrative* docstring snippets that assume a live client and are not
 runnable. But it also means a *real* return-shape example added to a docstring
-(the kind the autoapi reference renders) is never enforced — it can drift
+(the kind the autoapi reference renders) is never enforced -- it can drift
 silently.
 
 This test closes that gap for a **whitelist** of modules: it runs each module's
 docstring ``>>>`` examples through the stdlib ``doctest`` runner with
 ``demo_client`` / ``demo_box`` / ``Query`` in scope, and fails on any mismatch.
 Modules are opted in individually so the existing illustrative ``>>>`` snippets
-elsewhere (which reference undefined live clients) stay untouched — every
+elsewhere (which reference undefined live clients) stay untouched -- every
 example in a whitelisted module must either run green or carry
 ``# doctest: +SKIP``.
 
@@ -68,6 +68,7 @@ WHITELIST = [
     "pyfsr.api.api_users",
     "pyfsr.api.api_keys",
     "pyfsr.api.manual_input",
+    "pyfsr.api.wf_tools",
     "pyfsr.api.attachments",
     "pyfsr.api.solution_packs",
     "pyfsr.api.import_config",
