@@ -3,7 +3,7 @@
 These are **real captures** (or faithful trimmed slices of real captures) of the
 FortiSOAR REST API, not hand-authored shapes. They back the doctested return
 examples in the API guides (records, querying, …) so those examples can't
-silently drift from what the appliance actually returns — the same role
+silently drift from what the appliance actually returns -- the same role
 :mod:`pyfsr._testing.appliance_captures` plays for the appliance-CLI verbs.
 
 How to read this module:
@@ -13,17 +13,17 @@ How to read this module:
   nested objects (full ``createUser``/``modifyUser`` people records, SLA
   picklist blocks) are dropped, but the shapes a reader cares about ���
   ``hydra:member`` / ``hydra:totalItems`` / ``hydra:view`` for collections,
-  ``@id`` / ``@type`` / picklist ``itemValue`` for single records — are real.
+  ``@id`` / ``@type`` / picklist ``itemValue`` for single records -- are real.
 - :class:`pyfsr._testing.replay_http.ReplaySession` answers ``Session.request``
   calls by matching ``(method, path)`` against these captures.
 - :func:`pyfsr._testing.replay_http.demo_client` builds a :class:`pyfsr.FortiSOAR`
-  whose ``session`` is a ``ReplaySession`` — the object the doctests call.
+  whose ``session`` is a ``ReplaySession`` -- the object the doctests call.
 
 Refreshing on a version bump: the canonical raw captures live in
 ``tests/resources/mock_responses/``; this module trims them to a stable,
 doctest-friendly slice. Re-capture the raw files from a live box (needs creds),
 then re-trim here. Do **not** edit a capture by hand to "fix" a failing doctest
-— that defeats the point; re-capture, or mask volatile fields with
+-- that defeats the point; re-capture, or mask volatile fields with
 ``# doctest: +ELLIPSIS`` and a comment saying why.
 """
 
@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json as _json
 
-# Provenance — captured from a live FortiSOAR appliance, trimmed to a stable,
+# Provenance -- captured from a live FortiSOAR appliance, trimmed to a stable,
 # doctest-friendly slice. Drift across FortiSOAR releases is visible at a glance
 # via CAPTURE_VERSION. Re-capture the raw files from a live box (needs creds),
 # then re-trim here; never hand-edit a capture to "fix" a failing doctest.
@@ -79,7 +79,7 @@ ALERT_CREATE_RESPONSE = dict(ALERT_GET_RESPONSE)
 
 # A mixed-outcome bulk upsert (``POST /api/3/bulkupsert/alerts``), captured live
 # on 8.0.0-6034 from a two-row batch: one valid alert + one whose ``severity`` is
-# not a real picklist value. FortiSOAR replies with a multi-status envelope —
+# not a real picklist value. FortiSOAR replies with a multi-status envelope --
 # ``success`` holds each created/updated record, ``failure`` holds a bare error
 # STRING per rejected row (not a structured object) with the 0-based input index
 # embedded as ``index #<n>``. This backs the ``bulk_upsert(parse=True)`` ->
@@ -119,7 +119,7 @@ BULK_UPSERT_ALERTS_MIXED_RESPONSE = {
 # pending_changes()==[]). Trimmed to the doctest-relevant surface: the module
 # identity (``type``/``displayName``/``descriptions``) + its single seeded ``name``
 # field under ``attributes`` (itself trimmed to the shape a reader inspects). The
-# ``@type`` is ``StagingModelMetadata`` — the draft store, not yet ``model_metadatas``.
+# ``@type`` is ``StagingModelMetadata`` -- the draft store, not yet ``model_metadatas``.
 MODULE_CREATE_STAGING_RESPONSE = {
     "@context": "/api/3/contexts/StagingModelMetadata",
     "@id": "/api/3/staging_model_metadatas/5f8ba8e9-10e6-4acc-8b6a-9860f373e1c1",
@@ -144,7 +144,7 @@ MODULE_CREATE_STAGING_RESPONSE = {
     "uuid": "5f8ba8e9-10e6-4acc-8b6a-9860f373e1c1",
 }
 
-# A collection page (``GET /api/3/alerts`` and ``POST /api/query/alerts``) — the
+# A collection page (``GET /api/3/alerts`` and ``POST /api/query/alerts``) -- the
 # Hydra envelope: ``hydra:member`` list + ``hydra:totalItems`` + ``hydra:view``.
 ALERT_LIST_RESPONSE = {
     "@context": "/api/3/contexts/Alert",
@@ -160,7 +160,7 @@ ALERT_LIST_RESPONSE = {
 
 # Comments on a record (``GET /api/3/alerts/<uuid>/comments``). The server scopes
 # the query to the parent record; the response is a Hydra collection of comment
-# objects. Synthetic (no live capture needed — the shape is trivial and stable).
+# objects. Synthetic (no live capture needed -- the shape is trivial and stable).
 ALERT_COMMENTS_RESPONSE = {
     "@context": "/api/3/contexts/Comment",
     "@id": "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39/comments",
@@ -183,7 +183,7 @@ UPSERT_ALERT_RESPONSE = dict(ALERT_GET_RESPONSE)
 
 # Bulk insert all-succeeded response (``POST /api/3/insert/alerts``). When every
 # row succeeds, the server replies 201 with a bare hydra:Collection (no
-# ``success``/``failure`` keys) — ``bulk_insert`` normalizes this to a
+# ``success``/``failure`` keys) -- ``bulk_insert`` normalizes this to a
 # ``BulkUpsertResult``. The member records have the same shape as a single alert.
 BULK_INSERT_ALERTS_RESPONSE = {
     "@context": "/api/3/contexts/Alert",
@@ -195,7 +195,7 @@ BULK_INSERT_ALERTS_RESPONSE = {
 
 
 # A single Incident record (``GET``/``POST /api/3/incidents``), captured live
-# from a throwaway record (created, fetched, deleted in the same session —
+# from a throwaway record (created, fetched, deleted in the same session --
 # box left with no extra incidents). Trimmed the same way as the Alert
 # captures: real ``@id``/``uuid``/picklist shapes, volatile SLA/state/phase
 # picklist blocks reduced to one representative each.
@@ -232,7 +232,7 @@ INCIDENT_CREATE_RESPONSE = dict(INCIDENT_GET_RESPONSE)
 # Connector discovery + health captures
 # ---------------------------------------------------------------------------
 # Real ``GET /api/integration/connectors/`` (page 1, page_size 100). Trimmed to
-# the stable fields :class:`~pyfsr.models.InstalledConnector` types — the base64
+# the stable fields :class:`~pyfsr.models.InstalledConnector` types -- the base64
 # icons, help links, and verbose descriptions are dropped, but ``name``,
 # ``version``, ``label``, ``config_count``, and ``configuration`` are real so
 # ``resolve_version``/``resolve_connector_id``/``configurations`` behave like
@@ -331,7 +331,7 @@ CONNECTOR_HEALTHCHECK_RESPONSE = {
 # slice: the full ``operations[]`` (each carries ``parameters[]`` +
 # ``output_schema``) is reduced to ``operation``/``title`` for the first four,
 # and each ``configuration[]`` entry's ``config`` dict is dropped (it carries
-# connection details — host/port/credentials — that aren't doctest material and
+# connection details -- host/port/credentials -- that aren't doctest material and
 # must not ship). ``config_id`` is a box-specific uuid left real, matching the
 # healthcheck capture's convention.
 CONNECTOR_DETAIL_RESPONSE = {
@@ -358,7 +358,7 @@ CONNECTOR_DETAIL_RESPONSE = {
 
 
 # Synthesized ``POST /api/3/solutionpacks/install?$type=connector`` response
-# (no live capture for a connector tgz upload — this is shaped to match the
+# (no live capture for a connector tgz upload -- this is shaped to match the
 # fields ``ConnectorsAPI.install_from_file`` documents: the integer ``id`` other
 # calls need, plus the connector name/version and the import-job reference for
 # wait_for_install polling). Mirrors the SolutionPack install envelope's shape
@@ -385,7 +385,7 @@ CONNECTOR_INSTALL_RESPONSE = _CONNECTOR_INSTALL_RESPONSE
 
 
 # Synthesized ``GET /api/integration/configuration/`` response (no live capture
-# for the dedicated configurations endpoint — this is shaped to validate the
+# for the dedicated configurations endpoint -- this is shaped to validate the
 # ``ConnectorConfig`` model and exercise the ``name``/``connector`` filters at
 # the doctest level). Two rows mirroring the connectors in ``_CONNECTOR_ROWS``
 # (smtp id=3 and mitre-attack id=21) so a doctest filtering by either connector
@@ -425,7 +425,7 @@ CONNECTOR_CONFIGURATIONS_LIST_RESPONSE = _CONNECTOR_CONFIGURATIONS_LIST_RESPONSE
 
 
 # Real ``POST /api/integration/execute/`` for the ``cisa-advisory`` connector's
-# ``get_known_exploited_vulnerability_cves`` operation — a public, read-only,
+# ``get_known_exploited_vulnerability_cves`` operation -- a public, read-only,
 # parameter-less feed lookup (safe to demo against a real vendor connector; the
 # only side effect is CISA's public catalog serving one GET). Trimmed from
 # 1631 real entries to 2, keeping every field on both so the doctest shape is
@@ -537,8 +537,8 @@ CONNECTOR_CREATE_CONFIG_RESPONSE = {
 }
 
 # Same config after ``update_configuration`` rotates its ``api_key``. Note the
-# PUT response omits ``connector_name``/``connector_version`` — present on
-# create, absent on update — an asymmetry callers should not rely on either
+# PUT response omits ``connector_name``/``connector_version`` -- present on
+# create, absent on update -- an asymmetry callers should not rely on either
 # field being there.
 CONNECTOR_UPDATE_CONFIG_RESPONSE = {
     "id": 269,
@@ -558,15 +558,15 @@ CONNECTOR_UPDATE_CONFIG_RESPONSE = {
 # ---------------------------------------------------------------------------
 # Module-admin (staging/published schema) + picklist captures
 # ---------------------------------------------------------------------------
-# Real read-only captures trimmed from a live 8.0 appliance — no write ops.
+# Real read-only captures trimmed from a live 8.0 appliance -- no write ops.
 # ``staging_model_metadatas`` is the editable draft; ``model_metadatas`` is the
 # committed/published schema. Both *list* envelopes are trimmed to 5 modules,
 # and only the ``alerts`` member carries ``attributes`` (the 3 fields the
 # doctests show) so ``describe_module`` / ``get_field`` resolve; the other 4 are
 # lite-only. The two lists are kept semantically identical (same modules, same
-# alerts attributes) so ``pending_changes()`` — which diffs staging vs published
+# alerts attributes) so ``pending_changes()`` -- which diffs staging vs published
 # after canonicalizing store-IRI segments and stripping ``@id``/``@type``/
-# ``@context`` — reports ``[]`` (an honest fully-published box). Single-record
+# ``@context`` -- reports ``[]`` (an honest fully-published box). Single-record
 # captures back ``get_staging`` / ``get_published`` / ``get_field``.
 
 # The ``alerts`` fields the doctests exercise. ``severity`` and ``status`` are
@@ -637,7 +637,7 @@ _ALERTS_ATTRIBUTES = [
 # the ``pending_changes`` module-set comparison). Real uuids.
 _MODULE_ROWS = [
     {
-        # Threat intel feeds — the module a TAXII collection (dataset) targets.
+        # Threat intel feeds -- the module a TAXII collection (dataset) targets.
         "type": "threat_intel_feeds",
         "module": "threat_intel_feeds",
         "uuid": "acbac353-3593-41d2-af46-67951cfab083",
@@ -711,7 +711,7 @@ def _with_store(row: dict, store_path: str, store_type: str) -> dict:
     """Return a copy of a ``_MODULE_ROWS`` entry stamped for one store.
 
     ``staging_model_metadatas`` / ``StagingModelMetadata`` vs ``model_metadatas``
-    / ``ModelMetadata`` — the only fields ``_differs`` strips, so both lists are
+    / ``ModelMetadata`` -- the only fields ``_differs`` strips, so both lists are
     semantically identical and ``pending_changes()`` stays empty.
     """
     out = dict(row)
@@ -735,7 +735,7 @@ def pending_create_overlay(modules: str | list[str] = "crew") -> dict:
     """A ``demo_client(overrides=...)`` overlay staging brand-new module(s).
 
     Adds each name in ``modules`` (a single string or a list) to the **staging**
-    list only — published is left as the shared fixture — so
+    list only -- published is left as the shared fixture -- so
     :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.pending_changes` reports each
     as ``change="created"``: the exact state right after ``create_module()`` and
     before ``publish()``. The overlay is scoped to the one session it's passed to;
@@ -743,7 +743,7 @@ def pending_create_overlay(modules: str | list[str] = "crew") -> dict:
     doctest that reads it) is untouched.
 
     Each new row reuses the live staging-list envelope shape (``_with_store`` +
-    ``_hydra_collection``) — the same fields the appliance returns — with a
+    ``_hydra_collection``) -- the same fields the appliance returns -- with a
     synthetic demo uuid, so nothing about the wire shape is invented.
     """
     names = [modules] if isinstance(modules, str) else list(modules)
@@ -775,7 +775,7 @@ def pending_create_overlay(modules: str | list[str] = "crew") -> dict:
     return {("GET", "api/3/staging_model_metadatas"): {"status": 200, "body": staging_list}}
 
 
-# Single-record ``GET /api/3/{staging_,}model_metadatas/<alerts-uuid>`` — the full
+# Single-record ``GET /api/3/{staging_,}model_metadatas/<alerts-uuid>`` -- the full
 # metadata record (incl. ``attributes``) that ``get_staging``/``get_published``
 # return and ``get_field`` reads. Same 3 attributes as the list's alerts member.
 _ALERTS_TOP = {
@@ -793,7 +793,7 @@ STAGING_ALERTS_RESPONSE["@context"] = "/api/3/contexts/StagingModelMetadata"
 PUBLISHED_ALERTS_RESPONSE = _with_store(_ALERTS_TOP, "model_metadatas", "ModelMetadata")
 PUBLISHED_ALERTS_RESPONSE["@context"] = "/api/3/contexts/ModelMetadata"
 
-# ``GET /api/publish/error`` — the last publish's outcome. ``status="Success"`` +
+# ``GET /api/publish/error`` -- the last publish's outcome. ``status="Success"`` +
 # a present body means nothing is mid-fail; ``pending_changes()`` is the cleaner
 # "what's uncommitted" view. ``last_publish_time`` is the appliance's own epoch.
 PUBLISH_ERROR_RESPONSE = {
@@ -810,8 +810,8 @@ PUBLISH_ERROR_RESPONSE = {
 # the listName-IRI→name map) and ``GET /api/3/picklists`` (every item, each
 # carrying its own ``listName`` IRI). The nested ``picklists`` array on each
 # picklist_names member is NOT read by ``_load_bulk`` (it uses the flat call), so
-# it is dropped here. Two picklists are retained — Severity (5 items) and
-# AlertStatus (5) — with real IRIs/uuids/colors so ``values("Severity")`` returns
+# it is dropped here. Two picklists are retained -- Severity (5 items) and
+# AlertStatus (5) -- with real IRIs/uuids/colors so ``values("Severity")`` returns
 # the real itemValue/uuid/iri/ordinal tuples.
 
 _PICKLIST_NAME_ROWS = [
@@ -870,7 +870,7 @@ _PICKLIST_ITEM_ROWS = [
 PICKLISTS_RESPONSE = _hydra_collection("/api/3/picklists", "/api/3/contexts/Picklist", _PICKLIST_ITEM_ROWS)
 
 
-# FortiAI agentic investigation — captured from a live appliance (8.0). The
+# FortiAI agentic investigation -- captured from a live appliance (8.0). The
 # pipeline is ``POST /api/ai/triage/alert`` (start) ��� poll
 # ``GET /api/ai/agents/<task_id>/status`` → ``GET /api/ai/agents/<task_id>/result``.
 # The result is the full 9-phase verdict payload (normalization → context_enrichment
@@ -960,18 +960,18 @@ FORTIAI_RESULT_RESPONSE = {
 }
 
 # ---------------------------------------------------------------------------
-# Widgets — client.widgets (upload / publish / list)
+# Widgets -- client.widgets (upload / publish / list)
 # ---------------------------------------------------------------------------
 # Captured live against fsr-ga (8.0.0-6034) 2026-07-08 exercising the real
 # upload -> dev-manifest -> publish round trip with a genuine widget package
-# (jinjaEditorWidget 1.1.3, sourced from an internal widget dev kit — not a
+# (jinjaEditorWidget 1.1.3, sourced from an internal widget dev kit -- not a
 # FortiSOAR-shipped widget), then removed; the box's 44-widget catalog was
 # unaffected. createUser/modifyUser (full Person records) and the upload
 # response's full asset ``tree`` are dropped per this module's trim
 # convention; WIDGET_DEV_MANIFEST_RESPONSE keeps a 2-file slice of ``tree``
 # so a doctest can show the shape without the real ~30-entry asset tree.
 
-# GET /api/3/widgets — 3 of the real 44 installed/published widgets.
+# GET /api/3/widgets -- 3 of the real 44 installed/published widgets.
 WIDGET_LIST_RESPONSE = {
     "@context": "/api/3/contexts/Widget",
     "@id": "/api/3/widgets",
@@ -1046,7 +1046,7 @@ WIDGET_LIST_RESPONSE = {
     ],
 }
 
-# POST /api/3/solutionpacks/install?$type=widget&$replace=true — the widget
+# POST /api/3/solutionpacks/install?$type=widget&$replace=true -- the widget
 # record right after upload: staged in the dev workspace, NOT live yet
 # (draft:true, installed:false). Real values from uploading jinjaEditorWidget
 # 1.1.3 for the first time on the capture box.
@@ -1083,9 +1083,9 @@ WIDGET_UPLOAD_RESPONSE = {
     "uuid": "5fef77ad-8917-40c6-82a2-fdd753bdf41c",
 }
 
-# GET /api/3/widgets/development/<uuid> — the dev-workspace manifest publish()
+# GET /api/3/widgets/development/<uuid> -- the dev-workspace manifest publish()
 # reads, then strips ``tree`` from before PUTting it back. ``tree`` here is a
-# 2-file slice (real capture has ~30 entries covering every asset) — enough to
+# 2-file slice (real capture has ~30 entries covering every asset) -- enough to
 # show the shape a doctest needs without the noise.
 WIDGET_DEV_MANIFEST_RESPONSE = {
     "@type": "hydra:Collection",
@@ -1140,7 +1140,7 @@ WIDGET_DEV_MANIFEST_RESPONSE = {
     ],
 }
 
-# PUT /api/3/widgets/<uuid> — the published widget: draft:false, installed:true.
+# PUT /api/3/widgets/<uuid> -- the published widget: draft:false, installed:true.
 # Real response from publishing the uploaded jinjaEditorWidget above.
 WIDGET_PUBLISH_RESPONSE = {
     "@context": "/api/3/contexts/Widget",
@@ -1176,7 +1176,7 @@ WIDGET_PUBLISH_RESPONSE = {
 }
 
 # 400 body from POST .../solutionpacks/install?$type=widget&$replace=false when
-# that exact name+version is already staged in the dev workspace — the real
+# that exact name+version is already staged in the dev workspace -- the real
 # text WidgetsAPI.upload matches to raise WidgetUploadConflict. Captured live
 # by re-uploading jinjaEditorWidget 1.1.3 with replace=False right after the
 # upload above.
@@ -1186,7 +1186,7 @@ WIDGET_UPLOAD_CONFLICT_MESSAGE = (
 
 
 # ---------------------------------------------------------------------------
-# User settings — client.user_settings (GET/PUT/DELETE /api/3/user_settings)
+# User settings -- client.user_settings (GET/PUT/DELETE /api/3/user_settings)
 # ---------------------------------------------------------------------------
 # Live-verified on 8.0.0 against a real user's ``@settings`` blob: read via
 # ``GET /api/3/actors/current``, write/delete via ``/api/3/user_settings/current/<key>``.
@@ -1207,7 +1207,7 @@ ACTOR_CURRENT_RESPONSE = {
 }
 
 # PUT /api/3/user_settings/current/<key> echoes the whole, newly-merged
-# ``@settings`` blob (not just the written key) — real wire behavior captured
+# ``@settings`` blob (not just the written key) -- real wire behavior captured
 # setting the alerts viewTemplate back to its already-current value.
 USER_SETTINGS_PUT_RESPONSE = ACTOR_CURRENT_RESPONSE["@settings"]
 
@@ -1215,12 +1215,12 @@ USER_SETTINGS_PUT_RESPONSE = ACTOR_CURRENT_RESPONSE["@settings"]
 # directly, unwrapped (a bare string here, not a dict).
 USER_SETTINGS_GET_VIEW_TEMPLATE_RESPONSE = USER_SETTINGS_VIEW_TEMPLATE_UUID
 
-# DELETE /api/3/user_settings/current/<key> — 204, empty body, matching the
+# DELETE /api/3/user_settings/current/<key> -- 204, empty body, matching the
 # live capture (the SDK's ``client.delete`` returns ``None`` for this).
 
-# GET /api/3/system_view_templates — live-verified on 8.0.0: the alerts module's
-# real template rows (name/uuid/viewOptions/isDefault/type only; ``config`` —
-# the layout body — is dropped, it's not doctest material and can be large).
+# GET /api/3/system_view_templates -- live-verified on 8.0.0: the alerts module's
+# real template rows (name/uuid/viewOptions/isDefault/type only; ``config`` --
+# the layout body -- is dropped, it's not doctest material and can be large).
 # ``d77cd7b5-...`` ("CrowdStrike") is the same uuid USER_SETTINGS_VIEW_TEMPLATE_UUID
 # points at, so resolve_view_template()/get_view_template_name() round-trip it.
 _ALERTS_VIEW_TEMPLATE_ROWS = [
@@ -1267,14 +1267,14 @@ SYSTEM_VIEW_TEMPLATES_RESPONSE = {
 }
 
 # ---------------------------------------------------------------------------
-# Audit API — client.audit (query and manage audit activity records)
+# Audit API -- client.audit (query and manage audit activity records)
 # ---------------------------------------------------------------------------
 # Real audit activity endpoints: POST /api/gateway/audit/activities,
 # POST /api/gateway/audit/activities/count, GET /api/gateway/audit/activities/{audit_id},
 # GET /api/gateway/audit/operations, DELETE /api/gateway/audit/activities/ttl.
 # Captured from a live FortiSOAR appliance (8.0.x).
 
-# GET /api/gateway/audit/operations — list of valid operation values (system-level).
+# GET /api/gateway/audit/operations -- list of valid operation values (system-level).
 AUDIT_OPERATIONS_RESPONSE = [
     "login",
     "logout",
@@ -1288,7 +1288,7 @@ AUDIT_OPERATIONS_RESPONSE = [
     "publish",
 ]
 
-# GET /api/gateway/audit/operations?operationType=module_detail — per-record operations.
+# GET /api/gateway/audit/operations?operationType=module_detail -- per-record operations.
 AUDIT_MODULE_OPERATIONS_RESPONSE = [
     "Create",
     "Update",
@@ -1303,7 +1303,7 @@ AUDIT_MODULE_OPERATIONS_RESPONSE = [
 ]
 
 # A single audit activity record (GET /api/gateway/audit/activities/{id}).
-# Captured from a live 8.0.0 appliance — the real wire format.
+# Captured from a live 8.0.0 appliance -- the real wire format.
 AUDIT_ACTIVITY_RECORD = {
     "id": 9314875,
     "component": "crudhub",
@@ -1334,36 +1334,36 @@ AUDIT_ACTIVITY_RECORD = {
     },
 }
 
-# POST /api/gateway/audit/activities — Spring-paginated audit records.
+# POST /api/gateway/audit/activities -- Spring-paginated audit records.
 AUDIT_ACTIVITIES_RESPONSE = {"number": 0, "content": [AUDIT_ACTIVITY_RECORD]}
 
-# POST /api/gateway/audit/activities/count — audit record count.
+# POST /api/gateway/audit/activities/count -- audit record count.
 AUDIT_COUNT_RESPONSE = {"total": 4}
 
-# GET /api/version — build version (public).
+# GET /api/version -- build version (public).
 VERSION_RESPONSE = {"version": "8.0.0-6034"}
 
-# GET /api/permissions/current — caller's effective permissions.
+# GET /api/permissions/current -- caller's effective permissions.
 PERMISSIONS_RESPONSE = {
     "alerts": {"create": True, "read": True, "update": True, "delete": False, "execute": True},
     "people": {"create": False, "read": True, "update": False, "delete": False, "execute": False},
 }
 
-# GET /api/product/feature-access — license-tier feature-flag map.
+# GET /api/product/feature-access -- license-tier feature-flag map.
 FEATURE_ACCESS_RESPONSE = {
     "automation": True,
     "endpoint_management": False,
 }
 
-# GET /api/auth/cluster/health — per-node HA cluster health (JWT-auth only).
+# GET /api/auth/cluster/health -- per-node HA cluster health (JWT-auth only).
 CLUSTER_HEALTH_RESPONSE = [
     {"node_id": "node-1", "status": "Active", "services": [{"name": "API", "status": "running"}]}
 ]
 
-# GET /api/auth/license — deployed license state (JWT-auth only).
+# GET /api/auth/license -- deployed license state (JWT-auth only).
 LICENSE_RESPONSE = {"license_type": "FortiFlex", "max_users": 100}
 
-# GET /api/wf/workflow/config/?section=license — daily action-count license usage.
+# GET /api/wf/workflow/config/?section=license -- daily action-count license usage.
 DAILY_ACTION_COUNT_RESPONSE = {
     "daily_action_limit": 10000,
     "remaining_actions": 8756,
@@ -1371,7 +1371,7 @@ DAILY_ACTION_COUNT_RESPONSE = {
     "last_update_time": 1752408000,
 }
 
-# GET /api/taxii/1/ — TAXII 2.1 server discovery descriptor.
+# GET /api/taxii/1/ -- TAXII 2.1 server discovery descriptor.
 TAXII_DISCOVERY_RESPONSE = {
     "title": "FortiSOAR TAXII Server",
     "description": "FortiSOAR threat-intel sharing endpoint",
@@ -1379,7 +1379,7 @@ TAXII_DISCOVERY_RESPONSE = {
     "max_content_length": 10485760,
 }
 
-# GET /api/taxii/1/collections — available TAXII collections.
+# GET /api/taxii/1/collections -- available TAXII collections.
 TAXII_COLLECTIONS_RESPONSE = {
     "collections": [
         {
@@ -1399,7 +1399,7 @@ TAXII_COLLECTIONS_RESPONSE = {
     ]
 }
 
-# GET /api/taxii/1/collections/malware-samples — single collection metadata.
+# GET /api/taxii/1/collections/malware-samples -- single collection metadata.
 TAXII_COLLECTION_RESPONSE = {
     "id": "malware-samples",
     "title": "Malware Samples",
@@ -1408,7 +1408,7 @@ TAXII_COLLECTION_RESPONSE = {
     "media_types": ["application/stix+json;version=2.1"],
 }
 
-# GET /api/taxii/1/collections/malware-samples/manifest — manifest entries (no bodies).
+# GET /api/taxii/1/collections/malware-samples/manifest -- manifest entries (no bodies).
 TAXII_MANIFEST_RESPONSE = {
     "objects": [
         {
@@ -1420,7 +1420,7 @@ TAXII_MANIFEST_RESPONSE = {
     ]
 }
 
-# GET /api/taxii/1/collections/malware-samples/objects — STIX 2.1 objects envelope.
+# GET /api/taxii/1/collections/malware-samples/objects -- STIX 2.1 objects envelope.
 TAXII_OBJECTS_RESPONSE = {
     "totalItems": 1,
     "objects": [
@@ -1433,7 +1433,7 @@ TAXII_OBJECTS_RESPONSE = {
     ],
 }
 
-# GET /api/auth/config?section=TOKEN — DAS auth config rows (username/password auth only).
+# GET /api/auth/config?section=TOKEN -- DAS auth config rows (username/password auth only).
 AUTH_CONFIG_TOKEN_ROWS = {
     "hydra:member": [
         {"id": 1, "section": "TOKEN", "key": "idle_time", "dataType": "int", "value": 30},
@@ -1442,7 +1442,7 @@ AUTH_CONFIG_TOKEN_ROWS = {
     ]
 }
 
-# POST /api/search — cross-module Elasticsearch text search.
+# POST /api/search -- cross-module Elasticsearch text search.
 GLOBAL_SEARCH_RESPONSE = {
     "hits": {
         "total": 1,
@@ -1456,14 +1456,14 @@ GLOBAL_SEARCH_RESPONSE = {
     }
 }
 
-# POST /api/query/alerts/<query-uuid> — execute a saved (persisted) query.
+# POST /api/query/alerts/<query-uuid> -- execute a saved (persisted) query.
 PERSISTED_QUERY_RESPONSE = {
     "hydra:member": [ALERT_GET_RESPONSE],
     "hydra:totalItems": 1,
 }
 
 # ---------------------------------------------------------------------------
-# Feeds API — client.feeds (bulk trigger-bypassing ingest)
+# Feeds API -- client.feeds (bulk trigger-bypassing ingest)
 # ---------------------------------------------------------------------------
 # Bulk feed endpoints return a status envelope with uuids of ingested records.
 # Captured from a live 8.0.x appliance. These are used by indicators(),
@@ -1503,7 +1503,7 @@ INSERT_RECORDS_RESPONSE = {
 }
 
 # ---------------------------------------------------------------------------
-# API Users — client.api_users (API-key user lifecycle management)
+# API Users -- client.api_users (API-key user lifecycle management)
 # ---------------------------------------------------------------------------
 # API user endpoints return a {"usersresp": [user]} envelope. Captured from a
 # live 8.0.x appliance. Used by get(), create(), query(), and lifecycle().
@@ -1534,7 +1534,7 @@ APIKEY_USER_QUERY_RESPONSE = {"usersresp": [_APIKEY_USER_RESPONSE]}
 APIKEY_USER_LIFECYCLE_RESPONSE = {"usersresp": [_APIKEY_USER_RESPONSE]}
 
 # ---------------------------------------------------------------------------
-# API Keys — client.api_keys (API-key binding management)
+# API Keys -- client.api_keys (API-key binding management)
 # ---------------------------------------------------------------------------
 # API key endpoints return /api/3 records with @id, @type, and Hydra collection
 # envelopes. Captured from a live 8.0.x appliance. Used by list(), create(),
@@ -1571,7 +1571,7 @@ APIKEY_GET_RESPONSE = _APIKEY_RECORD
 APIKEY_UPDATE_RESPONSE = _APIKEY_RECORD
 
 # ---------------------------------------------------------------------------
-# Manual Input — client.manual_input (pending manual workflow inputs)
+# Manual Input -- client.manual_input (pending manual workflow inputs)
 # ---------------------------------------------------------------------------
 # Manual input endpoints return hydra collections or single manual input
 # records. Captured from a live 8.0.0 appliance. Used by list(), retrieve(),
@@ -1777,7 +1777,7 @@ UNWIRED_MANUAL_INPUT_RETRIEVE_RESPONSE = {
 }
 
 # ---------------------------------------------------------------------------
-# Attachments — client.attachments (attachment record management)
+# Attachments -- client.attachments (attachment record management)
 # ---------------------------------------------------------------------------
 # Attachment endpoints return attachment records linking file records.
 # Captured from a live 8.0.x appliance. Used by create() operation.
@@ -1809,7 +1809,7 @@ ATTACHMENT_CREATE_RESPONSE = _ATTACHMENT_RECORD
 ATTACHMENT_GET_RESPONSE = _ATTACHMENT_RECORD
 
 # ---------------------------------------------------------------------------
-# Solution Packs — client.solution_packs (solution pack management)
+# Solution Packs -- client.solution_packs (solution pack management)
 # ---------------------------------------------------------------------------
 # Solution pack install endpoints return pack records with embedded import
 # jobs. Captured from a live 8.0.x appliance. Used by install() operation.
@@ -1838,7 +1838,7 @@ _SOLUTION_PACK_INSTALL_RESPONSE = {
 SOLUTION_PACK_INSTALL_RESPONSE = _SOLUTION_PACK_INSTALL_RESPONSE
 
 # ---------------------------------------------------------------------------
-# Import Config — client.import_config (configuration import)
+# Import Config -- client.import_config (configuration import)
 # ---------------------------------------------------------------------------
 # Import config endpoints handle the configuration export/import lifecycle.
 # Captured from a live 8.0.x appliance. Used by import_file() operation.
@@ -1859,7 +1859,7 @@ IMPORT_JOB_CREATE_RESPONSE = _IMPORT_JOB_RESPONSE
 IMPORT_JOB_GET_RESPONSE = _IMPORT_JOB_RESPONSE
 
 # ---------------------------------------------------------------------------
-# FileOperations — client.files (POST /api/3/files multipart upload)
+# FileOperations -- client.files (POST /api/3/files multipart upload)
 # ---------------------------------------------------------------------------
 # The /api/3/files endpoint accepts a multipart file upload and returns the
 # created FileRecord. Shaped to match the nested ``file`` block on the live
@@ -1881,7 +1881,7 @@ _FILE_UPLOAD_RESPONSE = {
 FILE_UPLOAD_RESPONSE = _FILE_UPLOAD_RESPONSE
 
 # ---------------------------------------------------------------------------
-# ExportConfigAPI — client.export_config (configuration export lifecycle)
+# ExportConfigAPI -- client.export_config (configuration export lifecycle)
 # ---------------------------------------------------------------------------
 # The export surface threads through four endpoints: create/list templates
 # (POST/GET /api/3/export_templates), trigger an export (PUT /api/export),
@@ -1891,7 +1891,7 @@ FILE_UPLOAD_RESPONSE = _FILE_UPLOAD_RESPONSE
 # export_record_data doctests; the trigger and poll both resolve on the first
 # call so the doctest never blocks on time.sleep. The download fixture carries
 # raw bytes and an octet-stream Content-Type so client.get() returns bytes
-# (matching the live wire) — see replay_http._build_response for bytes handling.
+# (matching the live wire) -- see replay_http._build_response for bytes handling.
 
 _EXPORT_TEMPLATE_UUID = "880e8400-e29b-41d4-a716-446655440022"
 
@@ -1924,7 +1924,7 @@ _EXPORT_TEMPLATE_CREATE_RESPONSE = {
 
 EXPORT_TEMPLATE_CREATE_RESPONSE = _EXPORT_TEMPLATE_CREATE_RESPONSE
 
-# GET /api/3/export_templates?name=... — the template list lookup
+# GET /api/3/export_templates?name=... -- the template list lookup
 # ``_get_template_uuid`` runs to resolve a template name to its uuid before
 # triggering the export. One row whose ``name`` matches what the
 # ``export_by_template_name`` doctest passes; ``createDate`` makes the
@@ -1946,13 +1946,13 @@ EXPORT_TEMPLATE_LIST_RESPONSE = {
     "hydra:member": [_EXPORT_TEMPLATE_LIST_ROW],
 }
 
-# PUT /api/export?fileName=...&template=... — kicks off an export job; the
+# PUT /api/export?fileName=...&template=... -- kicks off an export job; the
 # response carries the job uuid the poll step then reads.
 _EXPORT_JOB_UUID = "880e8400-e29b-41d4-a716-446655440021"
 
 EXPORT_TRIGGER_RESPONSE = {"jobUuid": _EXPORT_JOB_UUID}
 
-# GET /api/3/export_jobs/<uuid> — the polled export job. ``status == "Export
+# GET /api/3/export_jobs/<uuid> -- the polled export job. ``status == "Export
 # Complete"`` makes the doctest's first poll return immediately (no time.sleep),
 # and ``file.@id`` points at the binary-download fixture below.
 _EXPORT_FILE_UUID = "880e8400-e29b-41d4-a716-446655440020"
@@ -1970,14 +1970,14 @@ _EXPORT_JOB_COMPLETE_RESPONSE = {
 
 EXPORT_JOB_COMPLETE_RESPONSE = _EXPORT_JOB_COMPLETE_RESPONSE
 
-# GET /api/3/files/<file-uuid> with Accept: application/octet-stream — the
+# GET /api/3/files/<file-uuid> with Accept: application/octet-stream -- the
 # produced archive bytes. The fixture is registered with content_type
 # "application/octet-stream" so client.get() returns the raw bytes (matching
 # the live wire), and ``_download_export`` writes them straight to disk.
 EXPORT_FILE_BYTES = b"ZIPBYTES"
 
 # ---------------------------------------------------------------------------
-# PlaybooksAPI — client.playbooks (playbook run history and manual input)
+# PlaybooksAPI -- client.playbooks (playbook run history and manual input)
 # ---------------------------------------------------------------------------
 # Playbook run and execution endpoints. Simplified fixtures representing
 # typical run states (pending/running/completed). Captured from a live 8.0.x
@@ -2050,6 +2050,31 @@ RENDER_JINJA_RESPONSE = {
     "result": "Rendered Jinja output",
 }
 
+# WfToolsAPI -- global ("dynamic") variables. The list endpoint takes
+# offset/limit, not page/$limit, and returns the whole set in one envelope.
+DYNAMIC_VARIABLES_RESPONSE = {
+    "hydra:totalItems": 3,
+    "hydra:member": [
+        {"id": 8, "name": "Default_Indicator_TTL_Days", "value": "20", "default_value": "20"},
+        {"id": 9, "name": "Demo_mode", "value": "false", "default_value": "false"},
+        {"id": 10, "name": "Default_Email", "value": "soc@example.com", "default_value": ""},
+    ],
+}
+
+DYNAMIC_VARIABLE_CREATE_RESPONSE = {
+    "id": 11,
+    "name": "Ingestion_Watermark",
+    "value": "0",
+    "default_value": "",
+}
+
+DYNAMIC_VARIABLE_UPDATE_RESPONSE = {
+    "id": 9,
+    "name": "Demo_mode",
+    "value": "true",
+    "default_value": "false",
+}
+
 # manual_input wfinput_resume response (resume acknowledgement).
 WFINPUT_RESUME_RESPONSE = {
     "task_id": "b0afba58-9dbe-44dd-a6e6-7227e33990dc",
@@ -2097,16 +2122,16 @@ WORKFLOW_CONTROL_RESPONSE = {
     "status": "started",
 }
 
-# POST /api/triggers/1/{name} and /api/triggers/1/deferred/{name} — named-webhook trigger.
+# POST /api/triggers/1/{name} and /api/triggers/1/deferred/{name} -- named-webhook trigger.
 TRIGGER_BY_NAME_RESPONSE = {"task_id": "c0afba58-9dbe-44dd-a6e6-7227e33990dd"}
 
-# POST /api/triggers/1/action/{route_uuid} — record-context action trigger.
-# Live-captured: this route answers `task_ids` (PLURAL, a list) — unlike the
+# POST /api/triggers/1/action/{route_uuid} -- record-context action trigger.
+# Live-captured: this route answers `task_ids` (PLURAL, a list) -- unlike the
 # notrigger/named-webhook routes, which answer a scalar `task_id`. The fixture
 # previously claimed a scalar `task_id` here, which no appliance ever sent.
 TRIGGER_ACTION_RESPONSE = {"task_ids": ["c0afba58-9dbe-44dd-a6e6-7227e33990dd"]}
 
-# GET /api/3/agents — execution-agent records.
+# GET /api/3/agents -- execution-agent records.
 AGENT_RECORD = {
     "@id": "/api/3/agents/6f5e4d3c-2b1a-4c9d-8e7f-1a2b3c4d5e6f",
     "@type": "Agent",
@@ -2125,17 +2150,17 @@ AGENT_LIST_RESPONSE = {
     "hydra:totalItems": 1,
 }
 
-# POST /api/integration/agent-installer/ — install-bundle download (real response is a
+# POST /api/integration/agent-installer/ -- install-bundle download (real response is a
 # binary .bin; a small placeholder envelope stands in since demo_client() only replays JSON).
 AGENT_INSTALLER_BLOB_RESPONSE = {"placeholder": "install-bundle-bytes"}
 
-# POST /api/integration/install-connector/ — register/activate a connector on an agent.
+# POST /api/integration/install-connector/ -- register/activate a connector on an agent.
 AGENT_INSTALL_CONNECTOR_RESPONSE = {"result": "Success"}
 
-# GET /api/integration/agent-heartbeat/{agent}/ — SME-bus liveness probe.
+# GET /api/integration/agent-heartbeat/{agent}/ -- SME-bus liveness probe.
 AGENT_HEARTBEAT_RESPONSE = {"agent": "edge-1", "status": "alive", "latency_ms": 42}
 
-# POST /api/integration/connectors/agents/{name}/{version}/ — per-agent install status.
+# POST /api/integration/connectors/agents/{name}/{version}/ -- per-agent install status.
 AGENT_CONNECTOR_INSTALL_STATUS_RESPONSE = [
     {
         "agent": "edge-1",
@@ -2150,14 +2175,14 @@ AGENT_CONNECTOR_INSTALL_STATUS_RESPONSE = [
 
 
 # ---------------------------------------------------------------------------
-# Playbook versions (``workflow_versions``) — saved snapshots, the editor's
+# Playbook versions (``workflow_versions``) -- saved snapshots, the editor's
 # "Versions" tab. Captured from a live 8.0 appliance and trimmed: the real
 # ``json`` field (a 13KB stringified workflow) is replaced with a small,
 # shape-faithful 2-step workflow so doctests stay readable. Field names,
 # types, and the ``WorkflowVersion``/``@type`` markers are the live wire.
 # ---------------------------------------------------------------------------
 
-# A minimal playbook definition stringified into a snapshot's ``json`` field —
+# A minimal playbook definition stringified into a snapshot's ``json`` field --
 # real shape (steps/routes/triggerStep/groups), synthetic content (no PII).
 _PB_VERSION_JSON = _json.dumps(
     {
@@ -2213,7 +2238,7 @@ _PB_VERSION_WORKFLOW = {
     "isActive": True,
 }
 
-# GET /api/3/workflow_versions/<id> — one saved snapshot. Real field set; the
+# GET /api/3/workflow_versions/<id> -- one saved snapshot. Real field set; the
 # ``json`` payload is the trimmed ``_PB_VERSION_JSON`` above. ``modifyDate`` is
 # an epoch-second float as on the wire.
 WORKFLOW_VERSION_GET_RESPONSE = {
@@ -2233,7 +2258,7 @@ WORKFLOW_VERSION_GET_RESPONSE = {
 }
 
 # A second snapshot of the same playbook with one step changed (``arguments``
-# on "Block the IP") — backs the diff_versions doctest's "changed" path.
+# on "Block the IP") -- backs the diff_versions doctest's "changed" path.
 _PB_VERSION_JSON_2 = _json.loads(_PB_VERSION_JSON)
 _PB_VERSION_JSON_2["steps"][1]["arguments"] = {
     "connector": "fortigate",
@@ -2251,7 +2276,7 @@ WORKFLOW_VERSION_GET_RESPONSE_2 = {
     "modifyDate": 1780000100.0,
 }
 
-# POST /api/3/workflow_versions — create response. The server does NOT echo the
+# POST /api/3/workflow_versions -- create response. The server does NOT echo the
 # large ``json`` blob on POST (it returns ``None``); callers re-fetch via GET.
 WORKFLOW_VERSION_CREATE_RESPONSE = {
     **WORKFLOW_VERSION_GET_RESPONSE,
@@ -2259,7 +2284,7 @@ WORKFLOW_VERSION_CREATE_RESPONSE = {
     "note": "v1",
 }
 
-# GET /api/3/workflow_versions?workflow=<uuid> — list (newest-first by modifyDate).
+# GET /api/3/workflow_versions?workflow=<uuid> -- list (newest-first by modifyDate).
 WORKFLOW_VERSION_LIST_RESPONSE = {
     "@context": "/api/3/context/WorkflowVersion",
     "@id": "/api/3/workflow_versions",
@@ -2280,7 +2305,7 @@ WORKFLOW_DEFINITION_LIST_RESPONSE = {
     "hydra:member": [_PB_VERSION_WORKFLOW],
 }
 
-# A definition with steps/routes inlined (relationships=true) — the source
+# A definition with steps/routes inlined (relationships=true) -- the source
 # ``create_version`` stringifies into a snapshot's ``json``. Mirrors the live
 # ``preparePlaybookForOverwrite`` input shape (steps as a list).
 WORKFLOW_DEFINITION_GET_RESPONSE = {
@@ -2304,19 +2329,19 @@ WORKFLOW_DEFINITION_GET_RESPONSE = {
     "owners": [],
 }
 
-# PUT /api/3/workflows/<uuid> — restore_version's write. Echoes the definition.
+# PUT /api/3/workflows/<uuid> -- restore_version's write. Echoes the definition.
 WORKFLOW_DEFINITION_PUT_RESPONSE = dict(WORKFLOW_DEFINITION_GET_RESPONSE)
 
-# DELETE /api/3/workflow_versions/<id> — 204 No Content (no body).
+# DELETE /api/3/workflow_versions/<id> -- 204 No Content (no body).
 WORKFLOW_VERSION_DELETE_RESPONSE = None
 
 # ---------------------------------------------------------------------------
-# System queries (datasets) — client.system_queries
+# System queries (datasets) -- client.system_queries
 # ---------------------------------------------------------------------------
 # A dataset is a named, module-scoped filter. On ``threat_intel_feeds`` a dataset
 # doubles as a TAXII collection (its uuid IS the collection id). Shape captured
 # from a live 8.0.x appliance: the vendor "Block List (IP Address)" dataset.
-# Note ``logic`` on the body and ``type`` on every filter — without them the
+# Note ``logic`` on the body and ``type`` on every filter -- without them the
 # appliance silently ignores the filters and returns all records.
 
 _TIF_MODEL_METADATA = {
@@ -2900,7 +2925,7 @@ NOTIFICATIONS_LIST_RESPONSE = {
 
 CONNECTOR_DEPENDENCIES_RESPONSE = {"dependencies_installed": True, "message": None}
 
-# GET /api/integration/data-import/?configuration=<config_id> — the custom
+# GET /api/integration/data-import/?configuration=<config_id> -- the custom
 # (non-Hydra) integration envelope, same as /api/integration/configuration/.
 INGESTION_METADATA_LIST_RESPONSE = {
     "data": [
@@ -2922,7 +2947,7 @@ INGESTION_METADATA_LIST_RESPONSE = {
 
 INGESTION_METADATA_CREATE_RESPONSE = INGESTION_METADATA_LIST_RESPONSE["data"][0]
 
-# POST /api/query/workflows — a connector's #dataingestion sample playbooks.
+# POST /api/query/workflows -- a connector's #dataingestion sample playbooks.
 # One playbook can carry several ingestion roles at once: the Ingest playbook
 # below is tagged #ingest AND #create.
 INGESTION_PLAYBOOKS_QUERY_RESPONSE = {
@@ -2949,10 +2974,10 @@ INGESTION_PLAYBOOKS_QUERY_RESPONSE = {
     "hydra:totalItems": 2,
 }
 
-# POST /api/triggers/1/notrigger/<uuid> — the "Trigger Ingestion Now" button.
+# POST /api/triggers/1/notrigger/<uuid> -- the "Trigger Ingestion Now" button.
 INGESTION_TRIGGER_RESPONSE = {"task_id": "9e7df03a-29d9-4b90-a4a7-6e61810efd88"}
 
-# GET /api/3/workflow_collections — used to find a connector's bundled
+# GET /api/3/workflow_collections -- used to find a connector's bundled
 # "Sample - <label> - <version>" collection, the source the ingestion wizard
 # clones from, plus an already-built per-config ingestion collection.
 WORKFLOW_COLLECTIONS_LIST_RESPONSE = {
