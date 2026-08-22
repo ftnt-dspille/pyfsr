@@ -12,11 +12,14 @@ _DYNVARS = {
 
 
 class FakeClient:
-    def __init__(self, *, post_resp=None, get_resp=None):
+    def __init__(self, *, post_resp=None, get_resp=None, put_resp=None):
         self.post_calls = []
         self.get_calls = []
+        self.put_calls = []
+        self.delete_calls = []
         self._post_resp = post_resp
         self._get_resp = get_resp
+        self._put_resp = put_resp
 
     def post(self, endpoint, data=None, params=None, **kwargs):
         self.post_calls.append((endpoint, data))
@@ -25,6 +28,14 @@ class FakeClient:
     def get(self, endpoint, params=None, **kwargs):
         self.get_calls.append((endpoint, params))
         return self._get_resp
+
+    def put(self, endpoint, data=None, params=None, **kwargs):
+        self.put_calls.append((endpoint, data))
+        return self._put_resp
+
+    def delete(self, endpoint, **kwargs):
+        self.delete_calls.append(endpoint)
+        return None
 
 
 def _api(**kw):
@@ -70,3 +81,54 @@ def test_dynamic_variable_resolves_value_by_name():
 def test_dynamic_variable_missing_returns_none():
     api, _ = _api(get_resp=_DYNVARS)
     assert api.dynamic_variable("Nope") is None
+
+
+# -- writing global variables -----------------------------------------------
+def test_set_dynamic_variable_creates_when_absent():
+    """No POST-or-PUT upsert route exists, so an unknown name has to POST."""
+    api, client = _api(get_resp=_DYNVARS, post_resp={"id": 10, "name": "New", "value": "1"})
+    out = api.set_dynamic_variable("New", "1")
+    assert out["name"] == "New"
+    assert client.post_calls[0][0] == "/api/wf/api/dynamic-variable/"
+    assert client.post_calls[0][1] == {"name": "New", "value": "1"}
+    assert client.put_calls == []
+
+
+def test_set_dynamic_variable_updates_in_place_when_present():
+    """POSTing a name that already exists errors, so an existing one must PUT."""
+    api, client = _api(get_resp=_DYNVARS, put_resp={"id": 8, "name": "TTL_Days", "value": "45"})
+    api.set_dynamic_variable("TTL_Days", "45")
+    assert client.post_calls == []
+    endpoint, body = client.put_calls[0]
+    # keyed on the id, not the name, and the trailing slash is mandatory
+    assert endpoint == "/api/wf/api/dynamic-variable/8/"
+    assert body == {"name": "TTL_Days", "value": "45"}
+
+
+def test_delete_dynamic_variable_resolves_the_name_to_an_id():
+    api, client = _api(get_resp=_DYNVARS)
+    assert api.delete_dynamic_variable("Region") is True
+    assert client.delete_calls == ["/api/wf/api/dynamic-variable/9/"]
+
+
+def test_delete_dynamic_variable_raises_on_unknown_name():
+    api, client = _api(get_resp=_DYNVARS)
+    try:
+        api.delete_dynamic_variable("Nope")
+    except ValueError as exc:
+        assert "Nope" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected ValueError")
+    assert client.delete_calls == []
+
+
+def test_delete_dynamic_variable_missing_ok_reports_no_deletion():
+    api, client = _api(get_resp=_DYNVARS)
+    assert api.delete_dynamic_variable("Nope", missing_ok=True) is False
+    assert client.delete_calls == []
+
+
+def test_dynamic_variable_record_exposes_the_id_the_write_routes_need():
+    api, _ = _api(get_resp=_DYNVARS)
+    assert api.dynamic_variable_record("TTL_Days")["id"] == 8
+    assert api.dynamic_variable_record("absent") is None
