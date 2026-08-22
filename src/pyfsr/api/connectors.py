@@ -1713,8 +1713,15 @@ class ConnectorsAPI(BaseAPI):
         Raises:
             ValueError: if the connector isn't installed, if neither
                 ``config_id`` nor ``name`` is given and the connector has zero or
-                more than one configuration, or if ``name`` matches no
-                configuration.
+                more than one configuration, if ``name`` matches no
+                configuration, or if the appliance answers the lookup with an
+                empty configuration record. That last case is why the check
+                exists: the endpoint keys on the configuration uuid or numeric
+                id, and answers an identifier it does not recognise -- a
+                configuration *name*, or a string matching nothing at all --
+                with ``200`` and a blank record rather than a ``404``.
+                Re-sending that record would write an empty ``name`` and
+                ``config`` over live credentials.
         """
         if config_id is None:
             configs = self.list_configurations(connector=connector)
@@ -1731,10 +1738,35 @@ class ConnectorsAPI(BaseAPI):
                     f"pass config_id= or name= to choose one"
                 )
             config_id = configs[0].config_id
+        else:
+            # A caller who passes a configuration *name* positionally lands here
+            # with a name in `config_id`. The endpoint keys on the uuid or the
+            # numeric id and does not accept a name, so resolve it first rather
+            # than letting the lookup below fall into the empty-shell case.
+            resolved = self.resolve_config(connector, config_id)
+            if resolved:
+                config_id = resolved
 
         cur = self.client.get(f"/api/integration/configuration/{config_id}/")
         if not isinstance(cur, dict) or "config" not in cur:
             raise ValueError(f"configuration {config_id!r} not found on this appliance")
+
+        # An identifier the endpoint does not recognise is answered with 200 and
+        # an EMPTY record rather than a 404 -- `name` is '', `config` is empty,
+        # and the `id` key is absent. Live-verified on two 8.0.0 appliances,
+        # including for an identifier that matches nothing at all.
+        #
+        # `"config" not in cur` above does not catch that: the shell carries the
+        # key. Re-sending the shell PUTs `name: ""` and an empty `config` over a
+        # live configuration -- the credential wipe this method exists to
+        # prevent -- so the emptiness itself has to be the check.
+        if cur.get("id") is None or not cur.get("name"):
+            raise ValueError(
+                f"refusing to promote {config_id!r}: the appliance returned an empty "
+                f"configuration record for it. The endpoint keys on the configuration "
+                f"uuid or numeric id and answers an unknown identifier with an empty "
+                f"200 rather than a 404 -- pass name= for a lookup by name."
+            )
 
         stored = cur.get("config") or {}
         # Some responses substitute the literal string "NULL" for a stored

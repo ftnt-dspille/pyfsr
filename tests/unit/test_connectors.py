@@ -1870,3 +1870,48 @@ def test_set_default_configuration_refuses_the_null_secret_sentinel():
     with pytest.raises(ValueError, match="api_key"):
         api.set_default_configuration("fortigate-firewall", "fg-1")
     assert client.put_calls == []
+
+
+# The record the appliance returns for an identifier it does not recognise:
+# HTTP 200, `name` empty, `config` empty, no `id`, plus a `remote_status` key
+# the genuine record does not carry. Captured from two live 8.0.0 appliances,
+# including for an identifier matching no configuration at all.
+_EMPTY_SHELL = {
+    "agent": None,
+    "config": {},
+    "config_id": None,
+    "connector": None,
+    "default": False,
+    "health_status": None,
+    "name": "",
+    "remote_status": None,
+}
+
+
+def test_set_default_configuration_refuses_the_empty_shell():
+    """An unknown identifier must not be echoed back as a PUT.
+
+    The endpoint answers an unrecognised config id with 200 and a blank record
+    instead of a 404. Re-sending it writes ``name: ""`` and an empty ``config``
+    over a live configuration -- the credential wipe this method exists to
+    prevent -- and the older ``"config" not in cur`` guard did not catch it,
+    because the shell carries that key.
+    """
+    api, client = _api(get_map={"/api/integration/configuration/not-a-config/": _EMPTY_SHELL})
+    with pytest.raises(ValueError, match="empty configuration record"):
+        api.set_default_configuration("fortigate-firewall", "not-a-config")
+    assert client.put_calls == [], "an empty record must never reach the PUT"
+
+
+def test_set_default_configuration_resolves_a_name_passed_positionally():
+    """`config_id` is positional, so a name lands in it -- resolve, don't wipe.
+
+    Without this the name goes straight into the URL, the lookup returns the
+    empty shell, and the call takes the destructive path.
+    """
+    api, client = _api(get_map={"/api/integration/configuration/fg-1/": _FG_RECORD})
+    api.resolve_config = lambda connector, ident: "fg-1"
+    api.set_default_configuration("fortigate-firewall", "fortigate-lab")
+    endpoint, body = client.put_calls[0]
+    assert endpoint == "/api/integration/configuration/fg-1/"
+    assert body["config"] == _FG_RECORD["config"]
