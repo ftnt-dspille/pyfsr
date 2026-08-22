@@ -53,7 +53,7 @@ class WfToolsAPI(BaseAPI):
     def dynamic_variables(self) -> list[dict[str, Any]]:
         """List every FortiSOAR global ("dynamic") variable.
 
-        ``GET /api/wf/api/dynamic-variable/`` — returns
+        ``GET /api/wf/api/dynamic-variable/`` -- returns
         ``[{id, name, value, default_value}, ...]`` (referenced in playbooks as
         ``{{ globalVars.<name> }}``).
         """
@@ -66,3 +66,59 @@ class WfToolsAPI(BaseAPI):
             if v.get("name") == name:
                 return v.get("value")
         return None
+
+    def dynamic_variable_record(self, name: str) -> dict[str, Any] | None:
+        """Return the whole record for one global variable, or ``None``.
+
+        :meth:`dynamic_variable` gives only the value; the ``id`` is what the
+        update and delete routes key on, so callers that write need this.
+        """
+        for v in self.dynamic_variables():
+            if v.get("name") == name:
+                return v
+        return None
+
+    def set_dynamic_variable(self, name: str, value: str) -> dict[str, Any]:
+        """Create a global variable, or update it in place if it already exists.
+
+        ``POST /api/wf/api/dynamic-variable/`` to create,
+        ``PUT /api/wf/api/dynamic-variable/{id}/`` to update -- there is no
+        upsert route, and POSTing a name that already exists is an error, so the
+        current value is looked up first.
+
+        The trailing slash on the update is mandatory; without it the gateway
+        rejects the call.
+
+        Returns the appliance's response record for the created or updated
+        variable.
+        """
+        existing = self.dynamic_variable_record(name)
+        body = {"name": name, "value": value}
+        if existing is None:
+            resp = self.client.post("/api/wf/api/dynamic-variable/", data=body)
+        else:
+            resp = self.client.put(f"/api/wf/api/dynamic-variable/{existing['id']}/", data=body)
+        return resp if isinstance(resp, dict) else {"name": name, "value": value}
+
+    def delete_dynamic_variable(self, name: str, *, missing_ok: bool = False) -> bool:
+        """Delete a global variable by ``name``. Returns whether one was deleted.
+
+        ``DELETE /api/wf/api/dynamic-variable/{id}/`` -- the route keys on the
+        id, so the name is resolved first. The trailing slash is mandatory.
+
+        Playbooks that keep an ingestion watermark in a global variable name it
+        after their own uuid, so cloning or re-running a data-ingestion wizard
+        leaves the previous variable behind pointing at a playbook that no
+        longer exists. Deleting one is how such a watermark gets reset.
+
+        Raises:
+            ValueError: if no variable of that name exists and ``missing_ok``
+                is false.
+        """
+        existing = self.dynamic_variable_record(name)
+        if existing is None:
+            if missing_ok:
+                return False
+            raise ValueError(f"no global variable named {name!r}")
+        self.client.delete(f"/api/wf/api/dynamic-variable/{existing['id']}/")
+        return True
