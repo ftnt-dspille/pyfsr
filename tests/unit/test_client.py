@@ -237,7 +237,7 @@ def test_request_reauths_and_retries_on_expired_token(mock_client, mock_response
 
 def test_request_reauth_failure_is_logged_not_swallowed(mock_client, mock_response, monkeypatch, caplog):
     """If auth.refresh() itself raises (network error, rotated creds, bug), the
-    failure must be logged, not silently discarded — otherwise only the
+    failure must be logged, not silently discarded -- otherwise only the
     original 401/403 is ever visible and the real cause is invisible."""
     import logging as _logging
 
@@ -317,7 +317,7 @@ def test_post_and_delete_raise_on_status_false_return_response(mock_client, mock
 
 
 def test_raise_on_status_default_still_raises(mock_client, mock_response, monkeypatch):
-    """The default (raise_on_status=True) is unchanged — 4xx still raises."""
+    """The default (raise_on_status=True) is unchanged -- 4xx still raises."""
 
     def mock_request(*args, **kwargs):
         return mock_response(status_code=404, json_data={"message": "Not found"})
@@ -667,3 +667,32 @@ def test_retry_defaults_unchanged(mock_client):
     retry = mock_client.session.get_adapter("https://test.fortisoar.com").max_retries
     assert retry.backoff_factor == 0.5
     assert retry.status_forcelist == (429, 500, 502, 503, 504)
+
+
+def test_request_bulkupsert_blocked_for_api_key(monkeypatch):
+    """API-key clients must fail fast on /api/3/bulkupsert/* with a clear message,
+    never forwarding the misleading 'Invalid credentials.' 500 the box returns
+    (product bug BUG-bulkupsert-api-key-invalid-credentials). No network call
+    should be made."""
+    from pyfsr import FortiSOAR
+    from pyfsr.exceptions import UnsupportedAuthOperationError
+
+    # API-key auth validates by GET /api/3/people at construction -> allow it.
+    monkeypatch.setattr(requests, "get", lambda *a, **k: type("R", (), {"status_code": 200, "text": ""})())
+
+    def explode(*a, **k):  # any real request would be a test failure
+        raise AssertionError("network request must not be made for a blocked op")
+
+    monkeypatch.setattr(requests.Session, "request", explode)
+
+    client = FortiSOAR(
+        base_url="https://test.fortisoar.com",
+        api_key="test-key-123",
+        verify_ssl=False,
+        suppress_insecure_warnings=True,
+    )
+
+    with pytest.raises(UnsupportedAuthOperationError) as exc:
+        client.post("/api/3/bulkupsert/workflows", data=[{"name": "x"}])
+    assert "bulkupsert" in str(exc.value)
+    assert "JWT" in str(exc.value) or "username" in str(exc.value)

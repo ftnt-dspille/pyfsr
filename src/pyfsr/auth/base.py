@@ -14,6 +14,7 @@ class BaseAuth(ABC):
     OPERATION_CONFIG_IMPORT = "config_import"  # Import configuration
     OPERATION_PLAYBOOK = "playbook"  # Playbook operations
     OPERATION_SOLUTION_PACK = "solution_pack"  # Solution pack operations
+    OPERATION_BULKUPSERT = "bulkupsert"  # /api/3/bulkupsert/* endpoints
 
     def __init__(self):
         """Initialize base auth class"""
@@ -32,7 +33,7 @@ class BaseAuth(ABC):
     def refresh(self) -> dict:
         """Re-establish credentials and return fresh auth headers.
 
-        Default is a no-op (returns the current headers) — correct for static
+        Default is a no-op (returns the current headers) -- correct for static
         credentials like an API key. Token-based auth (username/password)
         overrides this to re-authenticate, so a long-lived client can recover
         from an expired session token mid-run instead of failing the request.

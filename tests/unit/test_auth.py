@@ -77,7 +77,7 @@ def test_api_key_validation_failed_auth(mocker):
 
 def test_api_key_validation_accepts_403_restricted_key(mocker):
     """A 403 on the probe means the key authenticated but lacks People-read
-    permission — a valid, least-privilege key. It must NOT raise."""
+    permission -- a valid, least-privilege key. It must NOT raise."""
     mock_get = mocker.patch("requests.get")
     mock_get.return_value.status_code = 403
     mock_get.return_value.text = '{"type":"AccessDeniedException","message":"Access Denied."}'
@@ -140,6 +140,12 @@ def test_api_key_unsupported_operations(mocker):
     with pytest.raises(UnsupportedAuthOperationError) as exc_info:
         auth.check_operation_supported(BaseAuth.OPERATION_CONFIG_EXPORT)
     assert "Operation 'config_export' is not supported" in str(exc_info.value)
+
+    # Check that bulkupsert is blocked (product bug: /api/3/bulkupsert/* rejects
+    # API keys on 8.0.0 with a misleading "Invalid credentials." 500)
+    with pytest.raises(UnsupportedAuthOperationError) as exc_info:
+        auth.check_operation_supported(BaseAuth.OPERATION_BULKUPSERT)
+    assert "Operation 'bulkupsert' is not supported" in str(exc_info.value)
 
     # Check that other operations are allowed
     auth.check_operation_supported(BaseAuth.OPERATION_PLAYBOOK)

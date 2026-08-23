@@ -14,6 +14,7 @@ class APIKeyAuth(BaseAuth):
     API key authentication has several limitations:
     - Cannot use /auth endpoints
     - Cannot export configurations
+    - Cannot use /api/3/bulkupsert/* endpoints (product bug on 8.0.0; use JWT)
 
     Args:
         base_url: Base URL of the FortiSOAR instance
@@ -41,6 +42,12 @@ class APIKeyAuth(BaseAuth):
         self._unsupported_operations = {
             self.OPERATION_AUTH,
             self.OPERATION_CONFIG_EXPORT,
+            # /api/3/bulkupsert/* rejects API-key auth on 8.0.0 with a
+            # misleading `Invalid credentials.` 500 (product bug: the
+            # sub-request short-circuit in ApiKeyProvider::validateFingerprint
+            # returns bool `true` instead of the user id). Fail fast and
+            # legibly here instead of letting that 500 surface. JWT works.
+            self.OPERATION_BULKUPSERT,
         }
 
         self._validate_api_key()
@@ -59,7 +66,7 @@ class APIKeyAuth(BaseAuth):
 
             # 401 is the only status that means the key itself is bad. A 403
             # (Access Denied) means the key authenticated successfully but its
-            # role/team simply can't read the People module — a valid, merely
+            # role/team simply can't read the People module -- a valid, merely
             # restricted key (e.g. a low-privilege team-scoped key). Treat that
             # as valid; surfacing it as a validation failure would make every
             # least-privilege key unusable.
@@ -69,7 +76,7 @@ class APIKeyAuth(BaseAuth):
                 hint = ""
                 if not response.text and response.status_code in (404, 405, 502, 503):
                     hint = (
-                        " (empty response body — check the port (FSR_PORT / "
+                        " (empty response body -- check the port (FSR_PORT / "
                         "port=), scheme, and that base_url points at the "
                         "appliance itself, not a proxy/load balancer)"
                     )

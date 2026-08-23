@@ -1,18 +1,18 @@
-"""The users module — ``client.users``.
+"""The users module -- ``client.users``.
 
 Manage FortiSOAR users (People records + auth credentials) via ``/api/3/people``.
-Each user is two linked records — a **People** profile and an internal **auth
-user** — which ``/api/3/people`` creates atomically when the ``user`` and
+Each user is two linked records -- a **People** profile and an internal **auth
+user** -- which ``/api/3/people`` creates atomically when the ``user`` and
 ``roles`` keys are supplied. Roles and teams may be given as UUIDs or friendly
 names; names are resolved via a per-instance cache populated on first use.
 
 .. note::
-    Not to be confused with ``/api/auth/users`` — that is the **API-key user**
+    Not to be confused with ``/api/auth/users`` -- that is the **API-key user**
     surface (key material + lifecycle, wrapped by
     :class:`~pyfsr.api.api_users.ApiKeyUsersAPI` as ``client.api_users``).
     ``/api/3/people`` here is the **People module**: a Hydra collection of
     Person records (human profiles with name, email, department, roles,
-    teams). The two are not aliases — different paths, different record
+    teams). The two are not aliases -- different paths, different record
     shapes (Hydra vs ``{"usersresp": [...]}``), different concepts.
 """
 
@@ -30,13 +30,13 @@ class UsersAPI(BaseAPI):
     Manage FortiSOAR users (People records + auth credentials) via ``/api/3/people``.
 
     Each FortiSOAR user has two linked records:
-    - A **People** record (profile — name, email, department, …)
+    - A **People** record (profile -- name, email, department, …)
     - An **auth user** record (login credentials, managed internally by the auth service)
 
     The ``/api/3/people`` endpoint creates both atomically when the ``user`` and
     ``roles`` keys are supplied in the payload.
 
-    Roles and teams can be specified as UUIDs **or** friendly names — the API resolves
+    Roles and teams can be specified as UUIDs **or** friendly names -- the API resolves
     names automatically using a per-instance cache populated on first use.
 
     Example::
@@ -99,6 +99,8 @@ class UsersAPI(BaseAPI):
         Args:
             loginid: Login username (must be unique).
             password: Initial password (must meet the appliance password policy).
+                Set for real via the admin reset endpoint after creation, because
+                the People POST alone leaves the das login without a password.
             firstname: First name.
             lastname: Last name.
             email: Email address.
@@ -106,6 +108,8 @@ class UsersAPI(BaseAPI):
                 At least one required.
             access_type: ``"Named"`` (default) or ``"Concurrent"``.
             active: Whether the account is active on creation. Defaults to ``True``.
+                Maps to the nested ``user.status`` (1=active, 2=inactive) that das
+                requires; omitting it made das default the login to inactive.
             department: Optional department name.
             phone_work: Optional work phone number.
             phone_mobile: Optional mobile phone number.
@@ -137,6 +141,12 @@ class UsersAPI(BaseAPI):
                 "loginid": loginid,
                 "password": password,
                 "email": email,
+                # das provisions the login from this nested object and defaults
+                # the account to status 2 (INACTIVE) when `status` is omitted --
+                # cyops-api PeopleSubscriber::handlePeoplePreCreate, live-verified
+                # on 8.0.0. Without this the created user cannot log in ("User is
+                # either inactive or locked"). 1 = active, 2 = inactive.
+                "status": 1 if active else 2,
             },
         }
         if department is not None:
@@ -149,6 +159,31 @@ class UsersAPI(BaseAPI):
             payload["teams"] = self._resolve_teams(effective_teams)
 
         resp = self.client.post("/api/3/people", data=payload)
+
+        # The People POST does NOT set the das login password -- cyops-api's
+        # create flow (PeopleSubscriber::handlePeopleCreate) only generates a
+        # reset token and emails it, so the nested user.password above is inert
+        # and the account logs in with "Password not set ... reset first"
+        # (live-verified 8.0.0). Set it explicitly via the admin reset endpoint
+        # so the created user can actually authenticate. This requires the
+        # caller to be an admin other than the new user (das forbids self-reset);
+        # if it fails we surface a clear error rather than returning a user who
+        # silently cannot log in.
+        if password:
+            try:
+                self.client.post(
+                    "/api/3/resetpassword",
+                    data={"loginId": loginid, "password": password, "confirmPassword": password},
+                )
+            except Exception as exc:  # noqa: BLE001 - re-raise with context
+                from ..exceptions import APIError
+
+                raise APIError(
+                    f"user {loginid!r} was created but setting its password failed "
+                    f"({exc}); the account exists but cannot log in until an admin "
+                    f"resets its password (POST /api/3/resetpassword)."
+                ) from exc
+
         return User.model_validate(resp) if typed else resp
 
     def find_by_email(self, email: str, *, typed: bool = True) -> User | None:
@@ -183,7 +218,7 @@ class UsersAPI(BaseAPI):
     ) -> tuple[User, bool]:
         """Idempotently ensure a user with ``email`` exists; return ``(user, created)``.
 
-        Looks up by ``email`` (the filterable unique key on ``/api/3/people`` —
+        Looks up by ``email`` (the filterable unique key on ``/api/3/people`` --
         ``loginid`` is not queryable). If found, the existing user is returned
         unchanged (``created=False``); otherwise a new user is created with the
         given credentials, roles, and profile fields (``created=True``).
@@ -196,13 +231,13 @@ class UsersAPI(BaseAPI):
             password: Initial password. Used only on the create path.
             firstname: First name. Used only on the create path.
             lastname: Last name. Used only on the create path.
-            email: Email address — the lookup key and the create-time email.
+            email: Email address -- the lookup key and the create-time email.
             roles: Role UUIDs or friendly names. Used only on the create path.
             **kwargs: Additional :meth:`create` arguments (``access_type``,
                 ``active``, ``department``, ``teams``, etc.).
 
         Returns:
-            ``(User, created)`` — the existing user with ``created=False``, or
+            ``(User, created)`` -- the existing user with ``created=False``, or
             the newly-created user with ``created=True``.
         """
         existing = self.find_by_email(email)
