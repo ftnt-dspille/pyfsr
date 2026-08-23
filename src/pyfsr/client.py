@@ -143,7 +143,7 @@ class FortiSOAR:
 
         Args:
            base_url (str): The base URL for the FortiSOAR API.
-           auth (str | tuple, optional): **Deprecated.** Legacy positional auth —
+           auth (str | tuple, optional): **Deprecated.** Legacy positional auth --
                an API-key ``str`` or a ``(username, password)`` tuple. Prefer the
                explicit keywords below.
            username (str, optional): Login user, paired with ``password`` for
@@ -154,7 +154,7 @@ class FortiSOAR:
            api_key (str, optional): Alias for ``token``.
            public (bool, optional): Build a no-auth client for FortiSOAR's
                *unauthenticated* endpoints only (``version``, and the public
-               license API — ``deploy_license_public`` / ``install_flex_license``
+               license API -- ``deploy_license_public`` / ``install_flex_license``
                / ``deploy_flex_license``). Takes no credentials and makes no auth
                call on construction, so it works on a fresh or license-locked
                appliance (``FSR-Auth-018`` duplicate-license lockout) where no
@@ -185,7 +185,7 @@ class FortiSOAR:
            retry_status_forcelist (tuple[int, ...], optional): HTTP status codes
                that trigger a retry. Defaults to ``(429, 500, 502, 503, 504)``.
            dry_run (bool, optional): When True, mutating requests (POST/PUT/PATCH/
-               DELETE) are **not** sent — they are logged and a synthetic success
+               DELETE) are **not** sent -- they are logged and a synthetic success
                response is returned instead. Reads (GET/HEAD/OPTIONS) pass through
                normally. Lets callers exercise their write path without touching the
                appliance. Defaults to False.
@@ -231,7 +231,7 @@ class FortiSOAR:
         base_url = base_url.rstrip("/")
 
         # Apply explicit port, overriding any port already in the URL. If no
-        # port was passed, fall back to FSR_PORT from the environment — the
+        # port was passed, fall back to FSR_PORT from the environment -- the
         # same var EnvConfig.from_env() reads. Without this, a script that
         # builds FortiSOAR(base_url=os.environ["FSR_BASE_URL"], ...) by hand
         # (rather than going through EnvConfig) silently drops FSR_PORT when
@@ -284,7 +284,7 @@ class FortiSOAR:
             requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
 
         # Setup authentication. `public=True` builds a no-auth client for the
-        # unauthenticated endpoints (version, /api/public/license) — the only way
+        # unauthenticated endpoints (version, /api/public/license) -- the only way
         # in on a fresh or license-locked appliance, where no credential works.
         if public:
             if auth is not None or username or password or token or api_key:
@@ -473,17 +473,17 @@ class FortiSOAR:
     ) -> BaseAuth:
         """Pick the auth strategy from the (several) ways it can be supplied.
 
-        Preferred form is explicit keywords — ``username``/``password`` for
+        Preferred form is explicit keywords -- ``username``/``password`` for
         credential auth, ``token`` (or ``api_key``) for API-key auth. As a
         convenience, **a lone ``password`` with no ``username`` is read as an API
-        key** — passing a single secret almost always means a key, not half of a
+        key** -- passing a single secret almost always means a key, not half of a
         login. The legacy positional ``auth`` (``str`` key or ``(user, pass)``
         tuple) is still accepted but deprecated.
         """
-        # Legacy positional form — keep working, nudge toward keywords.
+        # Legacy positional form -- keep working, nudge toward keywords.
         if auth is not None:
             if username or password or token:
-                raise ValueError("Pass auth either positionally or via username/password/token keywords — not both.")
+                raise ValueError("Pass auth either positionally or via username/password/token keywords -- not both.")
             warnings.warn(
                 "Passing auth positionally is deprecated; use "
                 "FortiSOAR(url, username=..., password=...) or "
@@ -521,7 +521,7 @@ class FortiSOAR:
         if username and not password:
             raise ValueError("username was given without a password.")
 
-        raise ValueError("No authentication provided — pass token=<api-key> or username=<user>, password=<pass>.")
+        raise ValueError("No authentication provided -- pass token=<api-key> or username=<user>, password=<pass>.")
 
     @classmethod
     def from_config_file(cls, path: str, **overrides: Any) -> "FortiSOAR":
@@ -580,7 +580,7 @@ class FortiSOAR:
             raise_on_status: When True (default) a non-2xx response is converted
                 to a typed exception (``AuthenticationError`` / ``PermissionError`` /
                 ``ResourceNotFoundError`` / ``APIError``). Pass ``False`` to get the
-                raw :class:`requests.Response` back instead — for access-control
+                raw :class:`requests.Response` back instead -- for access-control
                 probes and "is this identity allowed to do X?" checks that need the
                 status code (200 vs 401/403) rather than a raised exception. The
                 reauth-retry for refreshable auth still runs first, so a refreshed
@@ -604,6 +604,32 @@ class FortiSOAR:
         # Check operation support based on endpoint
         if endpoint.startswith("/api/auth/"):
             self.auth.check_operation_supported(BaseAuth.OPERATION_AUTH)
+        # /api/3/bulkupsert/* rejects API-key auth on 8.0.0, answering a
+        # misleading `Invalid credentials.` 500 (product bug -- see
+        # troubleshooting/BUG-bulkupsert-api-key-invalid-credentials.md).
+        # Fail fast with an actionable message rather than forwarding that
+        # 500, which is especially treacherous for playbook creation:
+        # upsert_playbooks routes NEW rows through bulkupsert and silently
+        # creates nothing while reporting success. JWT is unaffected.
+        if "/bulkupsert/" in endpoint and BaseAuth.OPERATION_BULKUPSERT in getattr(
+            self.auth, "unsupported_operations", set()
+        ):
+            from .exceptions import UnsupportedAuthOperationError
+
+            raise UnsupportedAuthOperationError(
+                BaseAuth.OPERATION_BULKUPSERT,
+                self.auth.auth_type,
+                message=(
+                    f"{endpoint} cannot be called with API-key auth: the "
+                    "/api/3/bulkupsert/* endpoint family rejects API keys on "
+                    "FortiSOAR 8.0.0 with a misleading 'Invalid credentials.' "
+                    "500 (product bug). Use a username/password (JWT) client "
+                    "for anything that creates playbooks, collections, or "
+                    "bulk-inserts records -- e.g. FortiSOAR(base_url, "
+                    "username=..., password=...). Plain POST/PUT on "
+                    "/api/3/workflows still work with an API key."
+                ),
+            )
 
         # Ensure endpoint starts with /
         if not endpoint.startswith("/"):
@@ -611,8 +637,8 @@ class FortiSOAR:
 
         # Add API version prefix if not present. A handful of fsr-ai routes
         # (connector-backed MCP server wiring) live at the appliance root
-        # rather than under /api/3 — e.g. POST /mcp/config/export,
-        # /mcp/add/tools, /mcp/tools/{uuid}, /mcp/servers/connector — so are
+        # rather than under /api/3 -- e.g. POST /mcp/config/export,
+        # /mcp/add/tools, /mcp/tools/{uuid}, /mcp/servers/connector -- so are
         # excluded from the default prefixing, same as /auth/ and /api/public/.
         # The rule-engine app (delivery rules / channels) is served from its own
         # /rule/api/ root, likewise outside /api/3.
@@ -690,7 +716,7 @@ class FortiSOAR:
                 fresh = None
                 try:
                     fresh = self.auth.refresh()
-                except Exception as exc:  # noqa: BLE001 — fall through to normal error handling
+                except Exception as exc:  # noqa: BLE001 -- fall through to normal error handling
                     # Log the actual refresh failure instead of discarding it: without
                     # this, a broken refresh (network error, rotated creds, bug) was
                     # invisible and only the original 401/403 ever surfaced, sending
@@ -733,7 +759,7 @@ class FortiSOAR:
         A 2xx status with an unparseable body (HTML from a proxy/LB in front of
         the appliance, a truncated stream, an unexpectedly empty body) used to
         surface as a bare ``json.JSONDecodeError`` from deep inside this module.
-        That error looked like a client bug, not what it actually is — the
+        That error looked like a client bug, not what it actually is -- the
         response never carried the JSON the caller expected.
         """
         try:
@@ -868,7 +894,7 @@ class FortiSOAR:
         """Perform POST request and return JSON response.
 
         With ``raise_on_status=False`` returns the raw :class:`requests.Response`
-        instead of parsing JSON — use it for fire-and-observe-status probes.
+        instead of parsing JSON -- use it for fire-and-observe-status probes.
         """
         response = self.request(
             "POST",
@@ -1049,7 +1075,7 @@ class FortiSOAR:
         """Run several modules' aggregations **concurrently**, keyed by module.
 
         ``specs`` maps a module name to the keyword arguments for that module's
-        :meth:`RecordSet.aggregate <pyfsr.records.RecordSet.aggregate>` call —
+        :meth:`RecordSet.aggregate <pyfsr.records.RecordSet.aggregate>` call --
         e.g. ``{"alerts": {"group_by": "severity.itemValue", "count": True},
         "incidents": {"count": True}}``. Each aggregation is an independent
         ``POST /api/query/<module>``, so they run in a bounded thread pool
@@ -1077,7 +1103,7 @@ class FortiSOAR:
         """List every module on the appliance as ``[{type, label, plural}, ...]``.
 
         Discovery shortcut for :meth:`ModulesAPI.list <pyfsr.api.modules.ModulesAPI.list>`
-        — learn the right module ``type`` (and plural name) before a record lookup.
+        -- learn the right module ``type`` (and plural name) before a record lookup.
 
         Note:
             Solution-pack modules (e.g. ``scenario``) may not appear here even
@@ -1108,7 +1134,7 @@ class FortiSOAR:
         of endpoints, returning the first successful response as a version
         string or a dict with build details:
 
-        1. ``GET /cyops_version.json`` — the canonical version file, e.g.
+        1. ``GET /cyops_version.json`` -- the canonical version file, e.g.
            ``{"version": "8.0.0-6034"}``. Live-verified across releases.
         2. ``GET /api/3/appliances`` (reads ``@version`` / ``build`` if present)
         3. License details endpoint (``GET /api/auth/license``, via system API)
@@ -1138,12 +1164,12 @@ class FortiSOAR:
         return result
 
     def _version_uncached(self) -> str | dict[str, Any]:
-        """The actual fallback-chain probe behind :meth:`version` — see there
+        """The actual fallback-chain probe behind :meth:`version` -- see there
         for the endpoint order. Split out so :meth:`version` only has to
         reason about the cache, not the probe chain."""
         errors = []
 
-        # Primary: /cyops_version.json — canonical version file, served at the
+        # Primary: /cyops_version.json -- canonical version file, served at the
         # root of the configured base URL (outside /api/3).
         cyops_url = urljoin(self.base_url, "/cyops_version.json")
         try:
@@ -1232,7 +1258,7 @@ class FortiSOAR:
 
     def supports_native_mcp(self, *, refresh: bool = False) -> bool | None:
         """Whether this appliance's native MCP gateway (``/mcp/*``, ``client.mcp``)
-        is available — shipped starting FortiSOAR 8.0.0. Returns ``None`` if the
+        is available -- shipped starting FortiSOAR 8.0.0. Returns ``None`` if the
         version can't be determined (network failure, unparseable string) rather
         than guessing; check for ``None`` explicitly if that distinction matters
         to the caller (vs. treating it as "unsupported").

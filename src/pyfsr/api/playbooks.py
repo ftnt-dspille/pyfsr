@@ -1434,6 +1434,11 @@ class PlaybooksAPI(BaseAPI):
         The playbook keeps its uuid, routes, and collection membership, so
         record-action routes and triggers stay registered.
 
+        NEW rows go through ``create_playbooks()`` -> ``bulkupsert/workflows``,
+        which rejects API-key auth on 8.0.0 (misleading ``Invalid credentials.``);
+        an API-key client raises ``UnsupportedAuthOperationError`` up front. Use a
+        username/password (JWT) client whenever a deploy may create playbooks.
+
         Returns ``{"created": [uuids], "updated": [uuids]}``.
         """
         created: builtins.list[str] = []

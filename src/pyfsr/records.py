@@ -11,7 +11,7 @@ and works for every module on the appliance::
     for rec in incidents.iterate(Query().gt("createDate", ts)):
         ...
 
-Run offline against a replay capture (``demo_client``) — a typed ``Alert``:
+Run offline against a replay capture (``demo_client``) -- a typed ``Alert``:
 
 >>> client = demo_client()
 >>> alert = client.records("alerts").get("9f0eb603-ac1e-41c3-b47b-444589beed39")
@@ -53,7 +53,7 @@ class BulkUpsertFailure(BaseModel):
     ``rows`` list) when the message follows this shape; ``None`` if a future
     FortiSOAR version's message doesn't match, so a format change degrades to
     "no index" rather than raising. ``message`` is always the untouched raw
-    string — the caller doing precise error handling still has everything
+    string -- the caller doing precise error handling still has everything
     FortiSOAR returned. Live-verified against a real ``severity`` picklist
     rejection on FortiSOAR 8.0.0-6034.
     """
@@ -99,7 +99,7 @@ class BulkUpsertResult(BaseModel, Generic[T]):
 def resolve_record_path(module: str, ref: str) -> str:
     """Build the ``/api/3/<module>/<uuid>`` path for a record reference.
 
-    Accepts a full IRI (``/api/3/alerts/<uuid>`` — returned as-is), the
+    Accepts a full IRI (``/api/3/alerts/<uuid>`` -- returned as-is), the
     ``module:uuid`` shorthand, or a bare uuid (combined with ``module``).
     """
     if ref.startswith("/api/"):
@@ -223,7 +223,7 @@ class RecordSet(Generic[T]):
         """Fetch many records by id **concurrently**, results ordered like ``refs``.
 
         Each ref is fetched with the same semantics as :meth:`get` (a uuid,
-        ``module:uuid`` shorthand, or IRI), in a bounded thread pool — N
+        ``module:uuid`` shorthand, or IRI), in a bounded thread pool -- N
         independent ``GET``s collapse from N round-trips to roughly one. Use this
         when you need *full* per-record reads (relationships, soft-deleted rows,
         or :mod:`pyfsr.projection` trimming) for a known id list; for a plain
@@ -259,7 +259,7 @@ class RecordSet(Generic[T]):
     ) -> list[dict[str, Any]]:
         """List comments on a record (``GET /api/3/<module>/<uuid>/comments``).
 
-        The server scopes the comment query to the parent record for you — cheaper
+        The server scopes the comment query to the parent record for you -- cheaper
         than ``GET /api/3/comments?<module>.uuid=<uuid>``. ``ref`` is a uuid,
         ``module:uuid`` shorthand, or IRI. Returns the ``hydra:member`` array.
 
@@ -377,7 +377,7 @@ class RecordSet(Generic[T]):
             group_by: field path(s) to ``GROUP BY`` (e.g. ``"severity.itemValue"``,
                 or ``"triggerStep.stepType.name"`` on ``workflows``). Each becomes a
                 ``groupby`` aggregate aliased to the field's last path segment.
-            metrics: explicit ``(operator, field, alias)`` triples — ``operator`` is
+            metrics: explicit ``(operator, field, alias)`` triples -- ``operator`` is
                 an ``AggregateOperators`` name (``count``/``countdistinct``/``sum``/
                 ``avg``/``min``/``max``/``median``). ``field="*"`` counts rows.
             count: shorthand to append ``("countdistinct", "*", "total")``.
@@ -391,13 +391,13 @@ class RecordSet(Generic[T]):
         Returns:
             The aggregate rows as dict-compatible
             :class:`~pyfsr.models._system.AggregateRow` objects keyed by the
-            aliases — e.g. ``row["total"]`` / ``row.value("total")`` for
+            aliases -- e.g. ``row["total"]`` / ``row.value("total")`` for
             ``[{"itemValue": "high", "total": 42}, …]``.
 
         Note:
             Grouping by an association *from the child side* (e.g. grouping
             ``workflow_steps`` by ``workflow.uuid``) is rejected server-side, and
-            there is no ``HAVING`` — post-aggregate count thresholds must be applied
+            there is no ``HAVING`` -- post-aggregate count thresholds must be applied
             client-side. For per-playbook step quantities use
             :meth:`~pyfsr.api.playbooks.PlaybooksAPI.match`.
 
@@ -444,7 +444,7 @@ class RecordSet(Generic[T]):
         """Run a structured query via ``POST /api/query/<module>``.
 
         FortiSOAR paginates this endpoint with the ``$limit``/``$page``/``$search``
-        *query params* — the ``limit``/``search`` keys in the body are ignored — so
+        *query params* -- the ``limit``/``search`` keys in the body are ignored -- so
         they are lifted out of the body and sent as params. Pass
         ``show_deleted=True`` to include recycle-bin records (sent both as the
         ``$showDeleted`` param and the ``showDeleted`` body flag the endpoint wants).
@@ -526,7 +526,7 @@ class RecordSet(Generic[T]):
         typed models unless ``raw=True``. Pass ``show_deleted=True`` to include
         recycle-bin records.
 
-        Set ``prefetch=N`` to pipeline the page fetches — the next ``N`` pages
+        Set ``prefetch=N`` to pipeline the page fetches -- the next ``N`` pages
         download in a background thread pool while you process the current one,
         overlapping network latency with consumer work. Order is preserved; the
         walk may fetch up to ``N`` pages past the end (results discarded). Leave
@@ -585,7 +585,7 @@ class RecordSet(Generic[T]):
         ``data`` may be a dict or a model instance; the created record is
         returned parsed (or raw, with ``raw=True``). Friendly picklist values
         (e.g. ``"High"``) are mapped to their IRIs via ``client.picklists``
-        before sending — pass ``resolve_picklists=False`` to skip that (and the
+        before sending -- pass ``resolve_picklists=False`` to skip that (and the
         metadata lookup it needs) when every value is already an IRI.
 
         Pass ``strict_picklists=True`` to raise
@@ -698,7 +698,7 @@ class RecordSet(Generic[T]):
         Args:
             data: dict or model instance with the record to create/match.
             key: field name (str) or list of field names to match against
-                (default ``"uuid"`` — the natural key). Multiple keys are AND'ed.
+                (default ``"uuid"`` -- the natural key). Multiple keys are AND'ed.
             raw: if ``True``, returns a plain dict; otherwise a typed model.
             resolve_picklists: if ``True``, friendly picklist values are mapped to
                 IRIs before posting (see :meth:`create`).
@@ -791,7 +791,7 @@ class RecordSet(Generic[T]):
         if found, updates it with the provided ``data``; otherwise creates it.
 
         ``data`` may be a dict or a model instance; friendly picklist values
-        are mapped to IRIs first — pass ``resolve_picklists=False`` to skip that
+        are mapped to IRIs first -- pass ``resolve_picklists=False`` to skip that
         (see :meth:`create`).
 
         Args:
@@ -873,9 +873,16 @@ class RecordSet(Generic[T]):
     ) -> dict[str, Any] | BulkUpsertResult[T]:
         """Insert-or-update many records via ``POST /api/3/bulkupsert/<module>``.
 
+        .. note::
+            The ``/api/3/bulkupsert/*`` family rejects **API-key** auth on
+            8.0.0 (a product bug returns a misleading ``Invalid credentials.``
+            500). An API-key client raises
+            :class:`~pyfsr.exceptions.UnsupportedAuthOperationError` up front
+            rather than making the call; use a username/password (JWT) client.
+
         ``rows`` is a list of dicts or model instances. Each row is matched the
         same way as :meth:`upsert`. By default the raw server response is
-        returned unparsed (back-compatible) — bulk endpoints reply with a
+        returned unparsed (back-compatible) -- bulk endpoints reply with a
         multi-status envelope shaped ``{"success": [<created/updated record>,
         ...], "failure": [<raw error string>, ...]}`` (live-verified on
         FortiSOAR 8.0.0-6034) whose per-row results a caller previously had to
@@ -885,7 +892,7 @@ class RecordSet(Generic[T]):
         ``.succeeded`` (each row parsed into the module's bound model),
         ``.failed`` (one :class:`BulkUpsertFailure` per rejected row, with
         ``index`` parsed out of FortiSOAR's raw error string where possible),
-        and ``.ok`` (``True`` iff nothing failed) — so a caller checks
+        and ``.ok`` (``True`` iff nothing failed) -- so a caller checks
         ``result.ok`` instead of hand-parsing ``"failure" in raw and raw["failure"]``.
 
         Friendly picklist values are resolved on every row; pass
@@ -893,7 +900,7 @@ class RecordSet(Generic[T]):
         to raise pre-flight on the first row with an unresolvable picklist value
         (see :meth:`create`).
 
-        >>> client = demo_client()
+        >>> client = demo_client_jwt()  # bulkupsert needs JWT (API keys are rejected)
         >>> result = client.records("alerts").bulk_upsert(
         ...     [{"name": "pyfsr-bulk-doctest-ok"}], parse=True
         ... )
@@ -952,14 +959,14 @@ class RecordSet(Generic[T]):
         :meth:`bulk_upsert` when "create or update" is what you actually want.
 
         ``rows``, ``parse``, ``resolve_picklists``, and ``strict_picklists``
-        behave exactly as in :meth:`bulk_upsert` — same multi-status
+        behave exactly as in :meth:`bulk_upsert` -- same multi-status
         ``{"success": [...], "failure": [...]}`` envelope, same
         :class:`BulkUpsertResult` / :class:`BulkUpsertFailure` shapes when
         ``parse=True``.
 
         Note:
             Unlike ``bulkupsert`` (which takes a bare list), this endpoint
-            expects the rows wrapped as ``{"data": [...]}`` — passing a bare
+            expects the rows wrapped as ``{"data": [...]}`` -- passing a bare
             list 500s. Also note picklist values/attributes are **not**
             server-side validated on this "bulk feed" ingest path the way
             they are on single-record ``create()``; ``resolve_picklists``
@@ -992,7 +999,7 @@ class RecordSet(Generic[T]):
         raw_resp = resp if isinstance(resp, dict) else {}
         # All-succeeded responses come back as a bare hydra:Collection (no
         # "success"/"failure" keys) instead of the multi-status envelope a
-        # partial failure gets — normalize both to the same shape.
+        # partial failure gets -- normalize both to the same shape.
         if "success" not in raw_resp and "failure" not in raw_resp:
             raw_resp = {"success": raw_resp.get("hydra:member", []), "failure": []}
         succeeded = [self._parse(row, raw=False) for row in raw_resp.get("success", []) if isinstance(row, dict)]
@@ -1003,7 +1010,7 @@ class RecordSet(Generic[T]):
         """Resolve ``ref`` to a single-record path, refusing collection-wide refs.
 
         Guards against an empty/blank ``ref`` (or one that resolves to the bare
-        ``/api/3/<module>`` collection) ever reaching a destructive endpoint —
+        ``/api/3/<module>`` collection) ever reaching a destructive endpoint --
         FortiSOAR has no safe bulk delete here, and an empty body has bitten
         before by acting collection-wide.
         """
@@ -1026,7 +1033,7 @@ class RecordSet(Generic[T]):
         Pass ``hard=True`` to permanently delete via ``?$hardDelete=true``. This
         is a single-row, URL-scoped delete; on relationship-parent modules
         (e.g. ``workflow_collections``) the server cascades to children. An
-        empty/blank ``ref`` raises — to delete many rows by filter use
+        empty/blank ``ref`` raises -- to delete many rows by filter use
         :meth:`delete_by_query`.
 
         >>> client = demo_client()
@@ -1041,14 +1048,14 @@ class RecordSet(Generic[T]):
 
         Sends the filter as the body of ``DELETE /api/3/delete-with-query/<module>``
         (the route is DELETE-only and module-scoped). ``query`` is the same
-        structured filter :meth:`query` accepts — a :class:`~pyfsr.query.Query`
+        structured filter :meth:`query` accepts -- a :class:`~pyfsr.query.Query`
         or a raw ``{"logic": ..., "filters": [...]}`` dict; only the filter part
         is used (pagination/sort keys are irrelevant to a delete).
 
         Soft-deletes by default (rows go to the recycle bin); pass ``hard=True``
         to purge permanently via ``?$hardDelete=true``.
 
-        ⚠️ This deletes **all** matching rows server-side in one shot — there is
+        ⚠️ This deletes **all** matching rows server-side in one shot -- there is
         no per-row confirmation. An empty/missing filter would match the whole
         module, so a query with no ``filters`` is rejected.
 
@@ -1058,7 +1065,7 @@ class RecordSet(Generic[T]):
         """
         body = query.to_body() if isinstance(query, Query) else dict(query)
         if not body.get("filters"):
-            raise ValueError("delete_by_query requires a non-empty 'filters' — refusing to delete the whole module.")
+            raise ValueError("delete_by_query requires a non-empty 'filters' -- refusing to delete the whole module.")
         params = {"$hardDelete": "true"} if hard else None
         resp = self.client.request("DELETE", f"/api/3/delete-with-query/{self.module}", data=body, params=params)
         if resp.content and "application/json" in resp.headers.get("Content-Type", ""):
@@ -1073,7 +1080,7 @@ class RecordSet(Generic[T]):
         A convenience over :meth:`delete_by_query` for the common case of
         already having a list of refs (e.g. the uuids from a
         :meth:`bulk_upsert` result you're cleaning up, or a prior
-        :meth:`query`/:meth:`search`) rather than a filter — resolves each ref
+        :meth:`query`/:meth:`search`) rather than a filter -- resolves each ref
         to its bare uuid the same way :meth:`delete` does (raising on an
         empty/collection-wide ref) and issues one ``uuid in [...]`` bulk
         delete instead of a caller hand-rolling a per-ref loop.
@@ -1117,7 +1124,7 @@ class RecordSet(Generic[T]):
         """Resolve one related-record reference to a full ``/api/3/...`` IRI.
 
         Unlike :meth:`_single_record_path`, there's no ``self.module`` to fall
-        back on here — the related record is (usually) a *different* module
+        back on here -- the related record is (usually) a *different* module
         than the one this ``RecordSet`` is scoped to. A bare uuid is
         therefore ambiguous and rejected; pass a full IRI or ``module:uuid``.
         """
@@ -1135,10 +1142,10 @@ class RecordSet(Generic[T]):
         """Add one or more related records to a relationship field.
 
         Sends ``PUT /api/3/<module>/<uuid>`` with ``{"__link": {field:
-        [<iri>, ...]}}`` — the wire shape FortiSOAR uses to add objects to a
+        [<iri>, ...]}}`` -- the wire shape FortiSOAR uses to add objects to a
         relationship without resending the whole parent record. ``related``
         entries must each be a full IRI (``/api/3/assets/<uuid>``) or a
-        ``module:uuid`` shorthand — a bare uuid is ambiguous since the related
+        ``module:uuid`` shorthand -- a bare uuid is ambiguous since the related
         module usually differs from this ``RecordSet``'s own module.
 
         Example::
@@ -1158,7 +1165,7 @@ class RecordSet(Generic[T]):
         """Remove one or more related records from a relationship field.
 
         Sends ``PUT /api/3/<module>/<uuid>`` with ``{"__unlink": {field:
-        [<iri>, ...]}}`` — the inverse of :meth:`link`. Same ``related``
+        [<iri>, ...]}}`` -- the inverse of :meth:`link`. Same ``related``
         formats accepted (full IRI or ``module:uuid``).
         """
         path = self._single_record_path(ref, action="unlink")
@@ -1178,7 +1185,7 @@ class RecordSet(Generic[T]):
         fields: list[str] | tuple[str, ...] | None = None,
         summary: bool = False,
     ) -> Any:
-        """Alias for :meth:`query` — filter records with a structured query.
+        """Alias for :meth:`query` -- filter records with a structured query.
 
         Example::
 
@@ -1226,7 +1233,7 @@ class RecordSet(Generic[T]):
     ) -> int | None:
         """Return ``hydra:totalItems`` for the module (or a filtered subset).
 
-        Fetches a single-record page (``limit=1``) — cheap, just the envelope
+        Fetches a single-record page (``limit=1``) -- cheap, just the envelope
         metadata. Returns ``None`` when the server omits ``hydra:totalItems``.
 
         Example::
@@ -1252,7 +1259,7 @@ class RecordSet(Generic[T]):
     ) -> bool:
         """Return ``True`` if at least one matching record exists.
 
-        Uses a ``limit=1`` fetch — avoids pulling unnecessary data::
+        Uses a ``limit=1`` fetch -- avoids pulling unnecessary data::
 
             if client.records("alerts").exists(Query().eq("sourceId", sid)):
                 ...
@@ -1283,12 +1290,12 @@ class RecordSet(Generic[T]):
         The record-side counterpart to
         :meth:`~pyfsr.api.playbooks.PlaybooksAPI.wait_for_task`: use it when a
         downstream side effect *creates a record* you must wait on but hold no
-        ``task_id`` for — e.g. a ticket-intake playbook that mints an alert, where
+        ``task_id`` for -- e.g. a ticket-intake playbook that mints an alert, where
         the only link back is a marker the intake wrote into the alert. Replaces the
         hand-rolled ``for _ in range(n): time.sleep(); query(); check`` loop.
 
-        ``query`` narrows server-side (cheap); ``predicate`` — a callable taking one
-        record and returning bool — filters what the query can't express (e.g. a
+        ``query`` narrows server-side (cheap); ``predicate`` -- a callable taking one
+        record and returning bool -- filters what the query can't express (e.g. a
         substring in a description). With neither, waits for *any* record to exist.
 
         Args:

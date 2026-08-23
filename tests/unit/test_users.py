@@ -111,3 +111,62 @@ def test_create_typed_false_returns_raw_dict(mocker):
         typed=False,
     )
     assert out == _PERSON
+
+
+class _RecCapture:
+    """Records every post so a test can assert on the payloads."""
+
+    def __init__(self, post_response=None):
+        self._post = post_response
+        self.posts = []
+
+    def get(self, endpoint, params=None, **kw):
+        return None
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        self.posts.append((endpoint, data))
+        return self._post
+
+    def put(self, endpoint, data=None, params=None, **kw):
+        return None
+
+
+def test_create_marks_login_active_and_sets_password(mocker):
+    """create() must send user.status=1 (das defaults omitted -> 2/inactive) and
+    set the password via the admin reset endpoint (the People POST leaves it
+    unset), else the created user cannot log in."""
+    rec = _RecCapture(post_response=_PERSON)
+    api = UsersAPI(rec)
+    mocker.patch.object(api, "_resolve_roles", return_value=["role-uuid"])
+    api.create(
+        loginid="j.smith",
+        password="Str0ng!Pass",
+        firstname="Jane",
+        lastname="Smith",
+        email="j.smith@corp.example",
+        roles=["SOC Analyst"],
+        typed=False,
+    )
+    people = next(d for e, d in rec.posts if e == "/api/3/people")
+    assert people["user"]["status"] == 1
+    reset = next(d for e, d in rec.posts if e == "/api/3/resetpassword")
+    assert reset == {"loginId": "j.smith", "password": "Str0ng!Pass", "confirmPassword": "Str0ng!Pass"}
+
+
+def test_create_inactive_sets_status_2(mocker):
+    rec = _RecCapture(post_response=_PERSON)
+    api = UsersAPI(rec)
+    mocker.patch.object(api, "_resolve_roles", return_value=["role-uuid"])
+    api.create(
+        loginid="j.smith",
+        password="p",
+        firstname="J",
+        lastname="S",
+        email="j@x.example",
+        roles=["SOC Analyst"],
+        active=False,
+        typed=False,
+    )
+    people = next(d for e, d in rec.posts if e == "/api/3/people")
+    assert people["user"]["status"] == 2
+    assert people["csActive"] is False
