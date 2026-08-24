@@ -65,9 +65,26 @@ repos:
         files: '^src/pyfsr/cli/'
 
       # --- pre-push only: mirror the CI jobs that are slow but high-signal ---
+      - id: uv-lock-check
+        name: uv.lock in sync with pyproject.toml (mirrors CI --locked)
+        # `uv sync --locked` fails if the lockfile has drifted from pyproject.
+        # This is the exact check CI runs; catching it locally avoids a red
+        # CI run on a dependabot/dep bump that updated pyproject but not the lock.
+        entry: uv sync --locked --extra test --extra playbooks --extra docs
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
       - id: pytest-unit
         name: pytest unit suite (mirrors CI test jobs)
         entry: uv run --frozen pytest tests/unit -q -p no:cacheprovider
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+      - id: docs-doctest
+        name: sphinx doctests (mirrors CI doctest job; catches broken >>> examples)
+        # Runs the explicit {doctest} blocks in guides -- the ones CI runs via
+        # `make doctest`. ~30s locally vs 10+ min to find out in CI.
+        entry: bash -c 'DOCS_SKIP_AUTOAPI=1 PYTHONPATH=../src uv run --frozen sphinx-build -b doctest docs/source docs/build/doctest'
         language: system
         pass_filenames: false
         stages: [pre-push]

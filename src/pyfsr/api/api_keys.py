@@ -1,7 +1,7 @@
-"""API-key bindings — ``/api/3/api_keys``.
+"""API-key bindings -- ``/api/3/api_keys``.
 
 An *API key* is the binding that attaches roles/teams to an **API-key user**
-— the user record created via :class:`~pyfsr.api.api_users.ApiKeyUsersAPI`,
+-- the user record created via :class:`~pyfsr.api.api_users.ApiKeyUsersAPI`,
 which carries the key material. Creating a usable key is two steps,
 mirroring the product:
 
@@ -15,7 +15,7 @@ mirroring the product:
    → ``POST /api/3/api_keys`` binds roles/teams to that user.
 
 ``roles`` / ``teams`` accept IRIs (``/api/3/roles/<uuid>``,
-``/api/3/teams/<uuid>``) **or** friendly names — resolved via the shared
+``/api/3/teams/<uuid>``) **or** friendly names -- resolved via the shared
 :class:`~pyfsr.api.users.UsersAPI` maps, the same convention as
 :meth:`~pyfsr.api.users.UsersAPI.create`.
 
@@ -32,6 +32,7 @@ Example:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ..models import ApiKey
@@ -40,14 +41,16 @@ from .base import BaseAPI
 
 _BASE = "/api/3/api_keys"
 
+_logger = logging.getLogger(__name__)
+
 
 def _api_key_plaintext(client: Any, user_uuid: str) -> str | None:
     """Recover an API-key user's plaintext (``GET /api/auth/users?show_api_key``).
 
-    Returns ``None`` when the key is masked — i.e. its per-key ``retrievable``
+    Returns ``None`` when the key is masked -- i.e. its per-key ``retrievable``
     flag is false (the key was created while global ``retrievable_mode`` was off).
     A masked key is non-empty (``"xxxx…d517"``) but useless, so the ``retrievable``
-    flag — not the key's truthiness — is what decides recoverability. Callers
+    flag -- not the key's truthiness -- is what decides recoverability. Callers
     should :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.regenerate` when this
     returns ``None`` (verified live: toggling ``retrievable_mode`` on does not
     retroactively unmask existing keys).
@@ -63,7 +66,7 @@ def _response_plaintext(user: Any) -> str | None:
     """Pull the plaintext key out of a create/regenerate ``ApiKeyUser`` response.
 
     ``POST``/``PUT /api/auth/users`` echo the freshly minted key under
-    ``api_key.key`` — the *only* moment the plaintext is exposed (a masked key
+    ``api_key.key`` -- the *only* moment the plaintext is exposed (a masked key
     can never be unmasked afterwards, regardless of ``retrievable_mode``). This
     avoids the ``retrievable_mode`` global flag entirely, which on FortiSOAR
     7.6.5 / 8.0.0 activates a broken ``encrypt(preserve_compatibility=...)``
@@ -162,7 +165,7 @@ class ApiKeysAPI(BaseAPI):
         """Delete an API-key binding (``DELETE /api/3/api_keys/{uuid}``).
 
         Removes the role/team binding. The underlying API-key *user* is separate
-        — revoke it via
+        -- revoke it via
         :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.revoke` if it should no longer
         authenticate.
         """
@@ -173,7 +176,7 @@ class ApiKeysAPI(BaseAPI):
 
         Public wrapper over the ``GET /api/auth/users?show_api_key`` recovery flow.
         Returns ``None`` when the key's per-key ``retrievable`` flag is false (it was
-        minted while global ``retrievable_mode`` was off) — a masked key is non-empty
+        minted while global ``retrievable_mode`` was off) -- a masked key is non-empty
         but useless, so ``None`` signals "regenerate it" rather than "no key". Toggling
         ``retrievable_mode`` on does **not** retroactively unmask existing keys, so a
         ``None`` here means :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.regenerate`.
@@ -190,7 +193,7 @@ class ApiKeysAPI(BaseAPI):
     ) -> tuple[ApiKey, bool]:
         """Find an existing binding by ``name``, or create if absent.
 
-        Returns ``(binding, created)`` — idempotent by ``name`` (the natural
+        Returns ``(binding, created)`` -- idempotent by ``name`` (the natural
         key for an API-key binding). When an existing binding is reused, the
         plaintext key is **not** available here; capture it from
         :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.create` or recover via
@@ -227,7 +230,7 @@ class ApiKeysAPI(BaseAPI):
         2. On a *reused* binding the original plaintext is gone (a masked key can
            never be unmasked after the fact), so
            :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.regenerate` mints a fresh
-           key — its plaintext comes back in the regenerate **response**. This
+           key -- its plaintext comes back in the regenerate **response**. This
            invalidates the previous key value for that binding.
         3. Reconciles ``teams``/``roles`` on a reused binding.
 
@@ -236,9 +239,17 @@ class ApiKeysAPI(BaseAPI):
         ``GET …?show_api_key=true``; capturing the plaintext from the
         create/regenerate response makes it unnecessary. Toggling it on also
         activates a broken ``apikeys_helper`` branch that calls
-        ``encrypt(preserve_compatibility=...)`` — unsupported by the shipped
-        ``PasswordModule`` on FortiSOAR 7.6.5 / 8.0.0 — which makes *all*
+        ``encrypt(preserve_compatibility=...)`` -- unsupported by the shipped
+        ``PasswordModule`` on FortiSOAR 7.6.5 / 8.0.0 -- which makes *all*
         API-key creation fail with HTTP 400 on those builds.
+
+        **Auto-discovery of teams and roles.** FortiSOAR requires an API key
+        to be on at least one team to create records, and without roles the key
+        has no permissions at all. When ``teams`` is ``None``, the first
+        available team is auto-assigned (with a warning). When ``roles`` is
+        ``None``, ``"Full App Permissions"`` is used if it exists on the
+        instance (with a warning). Pass explicit ``teams``/``roles`` to
+        override.
 
         Idempotent by ``name`` (reuse regenerates). Returns ``(binding, plaintext)``.
         ``teams``/``roles`` accept IRIs or names (resolved like :meth:`create`).
@@ -248,12 +259,52 @@ class ApiKeysAPI(BaseAPI):
         """
         client = self.client
 
+        # ── auto-discover teams when omitted ──────────────────────────────
+        # FortiSOAR requires at least one team on an API key to create records.
+        # Without it, every write returns 403 "A user must be on at least one
+        # team in order to create records." Auto-assign the first available
+        # team so the returned key is immediately usable.
+        if teams is None:
+            available_teams = client.teams.list()
+            if available_teams:
+                teams = [available_teams[0]["name"]]
+                _logger.warning(
+                    "ensure_usable: no teams specified -- auto-assigned %r. "
+                    "Pass teams=[...] explicitly to control team membership.",
+                    teams[0],
+                )
+            else:
+                _logger.warning(
+                    "ensure_usable: no teams specified and no teams exist on "
+                    "the instance -- the key will not be able to create records."
+                )
+
+        # ── default roles when omitted ────────────────────────────────────
+        # Without roles the key authenticates but has zero permissions (every
+        # endpoint returns 403). Default to "Full App Permissions" if it exists.
+        if roles is None:
+            role_map = client.roles.role_map()
+            if "Full App Permissions" in role_map:
+                roles = ["Full App Permissions"]
+                _logger.warning(
+                    "ensure_usable: no roles specified -- defaulting to "
+                    "'Full App Permissions'. Pass roles=[...] to control "
+                    "permissions."
+                )
+            elif role_map:
+                _logger.warning(
+                    "ensure_usable: no roles specified and 'Full App "
+                    "Permissions' not found on the instance -- the key will "
+                    "have no permissions. Available roles: %s",
+                    ", ".join(sorted(role_map)),
+                )
+
         existing = next((k for k in self.list() if k.get("name") == name), None)
         if existing:
             binding = existing
             user_uuid = existing["userId"]
             created = False
-            # The original plaintext is unrecoverable on reuse — mint a fresh one
+            # The original plaintext is unrecoverable on reuse -- mint a fresh one
             # and read it straight from the regenerate response.
             plaintext = _response_plaintext(client.api_users.regenerate(user_uuid, api_key_validity=api_key_validity))
         else:
