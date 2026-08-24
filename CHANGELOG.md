@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-08-24
+
+### Fixed
+- **Doctest for `bulk_upsert`** used an API-key client (`demo_client()`) but the
+  auth fix in 0.19.1 made `bulkupsert` raise `UnsupportedAuthOperationError`
+  for API-key clients. Switched to `demo_client_jwt()` (JWT replay fixture).
+- **`ensure_usable` auto-discovery** for teams and roles: when `teams` is
+  `None`, the first available team is auto-assigned (with a warning). When
+  `roles` is `None`, `"Full App Permissions"` is used if it exists. Pass
+  explicit `teams`/`roles` to override.
+- **`api_users.create` warning**: logs that the returned key is non-functional
+  until roles and teams are bound via `api_keys.create` or `ensure_usable`.
+
+### CI
+- Added `docs-doctest` to pre-push hooks: catches broken `>>>` examples locally
+  (~30s) instead of waiting for CI's `make doctest` step (~10 min).
+- Added `uv-lock-check` to pre-push hooks: catches `uv.lock` drift before
+  CI's `--locked` install fails.
+- Merged dependabot #52: `mcp>=1.0,<3`.
+
 ## [0.19.1] - 2026-08-21
 
 ### Added
