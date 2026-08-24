@@ -1,6 +1,6 @@
 """API-key user management (``/api/auth/users``).
 
-The lifecycle of *API-key users* — the user records that carry key material,
+The lifecycle of *API-key users* -- the user records that carry key material,
 distinct from the people/roles/teams of :class:`~pyfsr.api.users.UsersAPI`.
 Accessed as ``client.api_users``.
 
@@ -18,12 +18,13 @@ Example:
     1
 
 .. note::
-    Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+    Requires JWT auth -- raises ``UnsupportedAuthOperationError`` under
     ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ..exceptions import APIError, ApikeyCreateUnavailable
@@ -31,6 +32,8 @@ from ..models import ApiKeyUser
 from .base import BaseAPI
 
 _BASE = "/api/auth/users"
+
+_logger = logging.getLogger(__name__)
 
 #: ``type`` discriminator for an API-key user.
 _TYPE_API_KEY = 9
@@ -54,7 +57,7 @@ class ApiKeyUsersAPI(BaseAPI):
         """Look up an API-key user by uuid (``GET /api/auth/users?uuid=``).
 
         The response masks the key by default; ``show_api_key=True`` returns the
-        plaintext — but only when the key was created with ``retrievable_mode``
+        plaintext -- but only when the key was created with ``retrievable_mode``
         (the per-key ``api_key.retrievable`` flag is set at creation; toggling the
         global flag on later does **not** retroactively unmask existing keys).
         Unwraps the ``{"usersresp": [user]}`` envelope and parses the user into an
@@ -70,7 +73,7 @@ class ApiKeyUsersAPI(BaseAPI):
             9
 
             .. note::
-                Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+                Requires JWT auth -- raises ``UnsupportedAuthOperationError`` under
                 ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
         """
         params: dict[str, Any] = {"uuid": uuid}
@@ -96,7 +99,7 @@ class ApiKeyUsersAPI(BaseAPI):
             '550e8400-e29b-41d4-a716-446655440007'
 
             .. note::
-                Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+                Requires JWT auth -- raises ``UnsupportedAuthOperationError`` under
                 ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
         """
         body: dict[str, Any] = {"users": list(uuids)}
@@ -117,7 +120,15 @@ class ApiKeyUsersAPI(BaseAPI):
         Creates the user record carrying the key material; its returned ``uuid``
         feeds ``POST /api/3/api_keys`` to attach roles/teams. ``api_key_validity``
         is the key's validity in days. ``type=9`` (API-key user) and ``status=1``
-        (active) are the defaults — all three fields are required by the endpoint.
+        (active) are the defaults -- all three fields are required by the endpoint.
+
+        .. warning::
+           The returned key is **non-functional** until roles and teams are
+           bound via :meth:`~pyfsr.api.api_keys.ApiKeysAPI.create` (or in one
+           call via :meth:`~pyfsr.api.api_keys.ApiKeysAPI.ensure_usable`). An
+           unbound key authenticates (200 on read endpoints) but gets 403 on
+           every write -- FortiSOAR requires at least one team to create records.
+           Prefer ``ensure_usable`` unless you need the two-step control.
 
         Raises:
             ApikeyCreateUnavailable: when the box has the 7.6.5/8.0.0
@@ -137,7 +148,7 @@ class ApiKeyUsersAPI(BaseAPI):
             1
 
             .. note::
-                Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+                Requires JWT auth -- raises ``UnsupportedAuthOperationError`` under
                 ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
         """
         body = {"type": type, "status": status, "api_key_validity": api_key_validity}
@@ -149,7 +160,15 @@ class ApiKeyUsersAPI(BaseAPI):
                 raise ApikeyCreateUnavailable(response=exc.response, original_message=exc.message) from exc
             raise
         members = self._members(resp)
-        return ApiKeyUser.model_validate(members[0] if members else (resp if isinstance(resp, dict) else {}))
+        user = ApiKeyUser.model_validate(members[0] if members else (resp if isinstance(resp, dict) else {}))
+        _logger.warning(
+            "api_users.create: key for user %s is created but has NO roles or "
+            "teams bound -- it will get 403 on all writes. Call "
+            "client.api_keys.create(name=..., user_uuid=...) or "
+            "client.api_keys.ensure_usable(name=..., ...) to bind permissions.",
+            user.get("uuid"),
+        )
+        return user
 
     def lifecycle(
         self,
@@ -163,10 +182,10 @@ class ApiKeyUsersAPI(BaseAPI):
 
         One endpoint, discriminated by ``operation``:
 
-        - ``REVOKE`` — permanent deactivation.
-        - ``ACTIVATE`` / ``DEACTIVATE`` — toggle active state.
-        - ``REGENERATE`` — mint a new key value.
-        - ``RESET_VALIDITY`` — extend/reset validity (pass ``api_key_validity``).
+        - ``REVOKE`` -- permanent deactivation.
+        - ``ACTIVATE`` / ``DEACTIVATE`` -- toggle active state.
+        - ``REGENERATE`` -- mint a new key value.
+        - ``RESET_VALIDITY`` -- extend/reset validity (pass ``api_key_validity``).
 
         Prefer the named convenience wrappers (:meth:`revoke`, :meth:`activate`,
         …) over calling this directly.
@@ -178,7 +197,7 @@ class ApiKeyUsersAPI(BaseAPI):
             '550e8400-e29b-41d4-a716-446655440007'
 
             .. note::
-                Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+                Requires JWT auth -- raises ``UnsupportedAuthOperationError`` under
                 ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
         """
         op = operation.upper()
@@ -207,7 +226,7 @@ class ApiKeyUsersAPI(BaseAPI):
         """Regenerate an API-key user's key (lifecycle ``REGENERATE``).
 
         ``api_key_validity`` (days) is **required by the server** for a
-        regenerate — omitting it errors — so it carries a default here. The
+        regenerate -- omitting it errors -- so it carries a default here. The
         fresh plaintext is returned under ``api_key.key`` in the response.
         """
         return self.lifecycle(uuid, "REGENERATE", key_type=key_type, api_key_validity=api_key_validity)

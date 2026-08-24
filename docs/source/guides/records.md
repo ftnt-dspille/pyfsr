@@ -28,7 +28,7 @@ incidents.delete("0d2c...")
 ```
 
 A record reference can be a bare uuid, the `module:uuid` shorthand, or a full
-`/api/3/<module>/<uuid>` IRI — all resolve to the same record.
+`/api/3/<module>/<uuid>` IRI -- all resolve to the same record.
 
 ### Return shapes
 
@@ -64,7 +64,7 @@ its full `itemValue` block:
 >>> alerts.delete("9f0eb603-ac1e-41c3-b47b-444589beed39")  # returns None
 ```
 
-`list` and `query` return a {class}`~pyfsr.pagination.HydraPage` — iterate it,
+`list` and `query` return a {class}`~pyfsr.pagination.HydraPage` -- iterate it,
 index `members`, or read `total` / `has_next`:
 
 ```{doctest}
@@ -107,7 +107,7 @@ See {doc}`querying` for the full DSL.
 ## Typed models
 
 `client.records("<module>")` parses each record into the module's Pydantic
-model (here `Alert`) — attribute access, validation, and picklist-IRI
+model (here `Alert`) -- attribute access, validation, and picklist-IRI
 flattening for free:
 
 ```{doctest}
@@ -117,7 +117,7 @@ flattening for free:
 ```
 
 The legacy `client.alerts` accessor (and the other package-level module APIs)
-return the **raw decoded dict** instead — handy when you want the wire shape
+return the **raw decoded dict** instead -- handy when you want the wire shape
 untouched, but without the typed niceties:
 
 ```{doctest}
@@ -134,7 +134,7 @@ Reads always come back typed; pass `raw=True` on an individual read (e.g.
 
 ## Picklist resolution
 
-Picklist fields are stored as IRIs, not friendly strings — but `create`,
+Picklist fields are stored as IRIs, not friendly strings -- but `create`,
 `update`, and `upsert` resolve friendly values for you automatically, so you
 can pass `"High"` / `"Open"` directly:
 
@@ -166,18 +166,18 @@ the valid options on a bad value).
 FortiSOAR answers with a multi-status envelope where a *partial* batch can
 half-succeed: some rows land, others are rejected with a bare error string.
 Pass `parse=True` to get a {class}`~pyfsr.records.BulkUpsertResult` instead of
-that raw dict — `.ok`, `.succeeded` (typed records), and `.failed` (one
+that raw dict -- `.ok`, `.succeeded` (typed records), and `.failed` (one
 {class}`~pyfsr.records.BulkUpsertFailure` per rejected row, with the input
 `index` parsed out of FortiSOAR's raw message):
 
 ```{doctest}
->>> client = demo_client()
+>>> client = demo_client_jwt()
 >>> result = client.records("alerts").bulk_upsert(
 ...     [{"name": "good alert", "severity": "Low"},
 ...      {"name": "bad alert", "severity": "not-a-real-severity"}],
 ...     parse=True,
 ... )
->>> result.ok                       # False — at least one row was rejected
+>>> result.ok                       # False -- at least one row was rejected
 False
 >>> len(result.succeeded), len(result.failed)
 (1, 1)

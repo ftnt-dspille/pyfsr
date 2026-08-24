@@ -299,13 +299,21 @@ class _FakeUsers:
     :class:`~pyfsr.api.roles.RolesAPI` / :class:`~pyfsr.api.teams.TeamsAPI`)."""
 
     _TEAMS = {"TeamB": "/api/3/teams/t-1"}
-    _ROLES = {"Admin": "/api/3/roles/r-1"}
+    _ROLES = {"Admin": "/api/3/roles/r-1", "Full App Permissions": "/api/3/roles/r-full"}
 
     def _resolve_roles(self, roles):
         return [self._ROLES.get(r, r) for r in roles]
 
     def _resolve_teams(self, teams):
         return [self._TEAMS.get(t, t) for t in teams]
+
+    def role_map(self):
+        return dict(self._ROLES)
+
+    def list(self):
+        from pyfsr.models import Team
+
+        return [Team.model_validate({"name": name, "uuid": "fake"}) for name in self._TEAMS]
 
 
 def _api_keys_client(*, get_resp=None, post_resp=None, put_resp=None):
@@ -444,7 +452,7 @@ def test_ensure_usable_creates_user_and_binding_and_reads_plaintext_from_respons
     assert c.calls[-1][:3] == (
         "POST",
         "/api/3/api_keys",
-        {"name": "k", "userId": "u-1", "teams": ["/api/3/teams/t-1"]},
+        {"name": "k", "userId": "u-1", "teams": ["/api/3/teams/t-1"], "roles": ["/api/3/roles/r-full"]},
     )
     # Plaintext came from the create response -- no show_api_key GET, no regenerate.
     ops = [op for op, *_ in au.calls]
@@ -478,7 +486,7 @@ def test_ensure_usable_reuses_existing_and_reconciles_teams():
     assert not any(call[0] == "POST" for call in c.calls)
     method, endpoint, data = c.calls[-1]
     assert method == "PUT" and endpoint == "/api/3/api_keys/k-9"
-    assert data == {"teams": ["/api/3/teams/t-1"]}
+    assert data == {"teams": ["/api/3/teams/t-1"], "roles": ["/api/3/roles/r-full"]}
 
 
 def test_ensure_usable_raises_when_regenerate_response_has_no_plaintext():
@@ -497,6 +505,41 @@ def test_ensure_usable_never_toggles_retrievable_mode():
     c = _ensure_client(list_members=[], auth_config=ac)
     ApiKeysAPI(c).ensure_usable(name="k")
     assert ac.toggled is False
+
+
+def test_ensure_usable_auto_discovers_teams_when_omitted():
+    au = _FakeApiUsers()
+    c = _ensure_client(list_members=[], api_users=au)
+    binding, plaintext = ApiKeysAPI(c).ensure_usable(name="k")  # no teams, no roles
+    assert plaintext == "plain"
+    # teams auto-discovered: "TeamB" is the only fake team
+    body = [call[2] for call in c.calls if call[0] == "POST" and call[1] == "/api/3/api_keys"][0]
+    assert body["teams"] == ["/api/3/teams/t-1"]
+
+
+def test_ensure_usable_auto_assigns_full_app_permissions_when_roles_omitted():
+    au = _FakeApiUsers()
+    c = _ensure_client(list_members=[], api_users=au)
+    binding, plaintext = ApiKeysAPI(c).ensure_usable(name="k", teams=["TeamB"])
+    assert plaintext == "plain"
+    body = [call[2] for call in c.calls if call[0] == "POST" and call[1] == "/api/3/api_keys"][0]
+    assert body["roles"] == ["/api/3/roles/r-full"]  # "Full App Permissions" resolved
+
+
+def test_ensure_usable_explicit_roles_override_auto_discovery():
+    au = _FakeApiUsers()
+    c = _ensure_client(list_members=[], api_users=au)
+    binding, plaintext = ApiKeysAPI(c).ensure_usable(name="k", teams=["TeamB"], roles=["Admin"])
+    body = [call[2] for call in c.calls if call[0] == "POST" and call[1] == "/api/3/api_keys"][0]
+    assert body["roles"] == ["/api/3/roles/r-1"]  # "Admin", not "Full App Permissions"
+
+
+def test_ensure_usable_explicit_teams_override_auto_discovery():
+    au = _FakeApiUsers()
+    c = _ensure_client(list_members=[], api_users=au)
+    binding, plaintext = ApiKeysAPI(c).ensure_usable(name="k", teams=["TeamB"], roles=["Admin"])
+    body = [call[2] for call in c.calls if call[0] == "POST" and call[1] == "/api/3/api_keys"][0]
+    assert body["teams"] == ["/api/3/teams/t-1"]
 
 
 # -- wire shapes (real ApiKeyUsersAPI.get + _api_key_plaintext via FakeClient) --
