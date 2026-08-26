@@ -115,6 +115,13 @@ def _build(model_cls: Any, op: str, **kwargs: Any) -> Any:
 # reads a world the run has not finished building.
 _TERMINAL_STATUSES = frozenset({"finished", "failed", "error", "cancelled", "aborted"})
 
+# ...but a run can also END in `finished with error`, and then treating it as
+# non-terminal forever costs the caller their entire timeout on a run that
+# completed in seconds. :meth:`wait` resolves the ambiguity by watching
+# `modified`: these statuses are terminal once the run has stopped changing.
+_SETTLING_STATUSES = frozenset({"finished with error"})
+_SETTLE_SECONDS = 15.0
+
 # Statuses that mean a step actually FAILED -- used by ``why_failed`` to pick the
 # real failing step. Deliberately excludes ``incipient``/``pending``/``skipped``/
 # ``running``: when a non-last step fails, its downstream steps stay ``incipient``,
@@ -2434,6 +2441,17 @@ class PlaybooksAPI(BaseAPI):
         if not isinstance(task_id, str) or not task_id.strip():
             raise ValueError("wait() requires a non-empty task_id")
         deadline = time.monotonic() + timeout
+        # `finished with error` is not terminal on its own -- see the note on
+        # _TERMINAL_STATUSES: a run wearing it may still be executing the rest
+        # of its branch. But a run can also END in it, and then this loop would
+        # poll until the caller's whole timeout expired: measured, a run that
+        # completed in 41s cost a 900s wait and reported "did not finish".
+        #
+        # So it is terminal once it STOPS CHANGING. `modified` advances while
+        # the run is still doing work, so a stable stamp across several polls
+        # means the run is done and simply wore the error status at the end.
+        settled_since: float | None = None
+        last_modified: str | None = None
         while True:
             resp = self.log_list(task_id=task_id, limit=1)
             members = extract_members(resp)
@@ -2442,6 +2460,15 @@ class PlaybooksAPI(BaseAPI):
                 status = (run.get("status") or "").lower()
                 if status in _TERMINAL_STATUSES:
                     return _shape_run(run)
+                if status in _SETTLING_STATUSES:
+                    modified = str(run.get("modified") or "")
+                    now = time.monotonic()
+                    if modified != last_modified:
+                        last_modified, settled_since = modified, now
+                    elif settled_since is not None and now - settled_since >= _SETTLE_SECONDS:
+                        return _shape_run(run)
+                else:
+                    settled_since = last_modified = None
             if time.monotonic() >= deadline:
                 raise TimeoutError(f"playbook run {task_id!r} did not finish within {timeout}s")
             time.sleep(interval)

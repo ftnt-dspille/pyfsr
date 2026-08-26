@@ -164,7 +164,7 @@ def test_trigger_by_uuid_posts_to_notrigger():
 
 
 def test_trigger_rejects_records_and_points_at_trigger_action():
-    """`records=` on the notrigger route starts a record-BLIND run — fail loudly.
+    """`records=` on the notrigger route starts a record-BLIND run -- fail loudly.
 
     Live-verified: the notrigger route leaves `vars.input.records` empty no matter
     what body it is given (records alone, or the full action envelope), so a step
@@ -261,8 +261,8 @@ def test_run_env_carries_playbook_name():
 
 
 def test_run_failure_by_pk_projects_failing_step_and_error():
-    """run_failure(run) returns a typed RunFailure for a SPECIFIC run — the first
-    real failing step and its error — without a name→run lookup."""
+    """run_failure(run) returns a typed RunFailure for a SPECIFIC run -- the first
+    real failing step and its error -- without a name→run lookup."""
     full_record = {
         "@id": "/api/wf/api/workflows/77/",
         "name": "Emitter",
@@ -745,13 +745,13 @@ def test_query_logs_body_and_logs_param():
 
 
 def test_manual_inputs_and_retrieve():
-    """Both are deprecated thin delegates to client.manual_input — same endpoints.
+    """Both are deprecated thin delegates to client.manual_input -- same endpoints.
 
     They must keep hitting the exact endpoints (and returning raw dicts) they always
     did: `manual_inputs()` posted a bare body, which the server reads as
     `assigned_to="all"` (live-verified: `{}` and `"all"` return the full queue, `"me"`
     returns none), so the delegate must pass "all" and NOT ManualInputAPI's "me"
-    default — that would silently scope the listing down to nothing.
+    default -- that would silently scope the listing down to nothing.
     """
     from pyfsr.api.manual_input import ManualInputAPI
 
@@ -839,6 +839,74 @@ def test_wait_raises_on_timeout(monkeypatch):
     c = _PollClient(["Running"] * 10)
     with pytest.raises(TimeoutError):
         PlaybooksAPI(c).wait("run-uuid", timeout=1, interval=0)
+
+
+class _StampPollClient(_PollClient):
+    """log_list where `modified` advances only while the run is doing work."""
+
+    def __init__(self, rows):
+        super().__init__([])
+        self.rows = list(rows)  # (status, modified) pairs
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("POST", endpoint, params))
+        if "log_list" in endpoint:
+            status, modified = self.rows.pop(0) if self.rows else ("finished", "z")
+            return {
+                "hydra:member": [
+                    {"@id": "/api/wf/api/workflows/42/", "name": "PB", "status": status, "modified": modified}
+                ]
+            }
+        return {}
+
+
+def _fake_clock(monkeypatch, step=5.0):
+    """A monotonic clock that advances `step` seconds per reading."""
+    state = {"t": 0.0}
+
+    def _now():
+        state["t"] += step
+        return state["t"]
+
+    monkeypatch.setattr("time.monotonic", _now)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+
+def test_wait_returns_when_finished_with_error_stops_changing(monkeypatch):
+    """A run that ENDS in `finished with error` must not cost the full timeout.
+
+    Measured on 8.0.0: a run that completed in 41s burned a 900s wait and then
+    reported "did not finish", because the status is not terminal on its own.
+    A stable `modified` says the run is done and simply wore that status at the
+    end.
+    """
+    _fake_clock(monkeypatch)
+    c = _StampPollClient([("finished with error", "same")] * 10)
+    run = PlaybooksAPI(c).wait("run-uuid", timeout=10_000, interval=0)
+    assert run["status"] == "finished with error"
+    # It waited for the stamp to settle rather than returning on sight of it.
+    assert len([x for x in c.calls if "log_list" in x[1]]) >= 3
+
+
+def test_wait_keeps_polling_while_finished_with_error_is_still_moving(monkeypatch):
+    """The status is genuinely NOT terminal mid-flight.
+
+    A step failing under `ignore_errors` flips the run to `finished with error`
+    while the rest of the branch is still executing. Returning then hands the
+    caller a world the run has not finished building -- which is the reason
+    this status was excluded from _TERMINAL_STATUSES in the first place.
+    """
+    _fake_clock(monkeypatch)
+    c = _StampPollClient(
+        [
+            ("finished with error", "t1"),
+            ("finished with error", "t2"),
+            ("finished with error", "t3"),
+            ("finished", "t4"),
+        ]
+    )
+    run = PlaybooksAPI(c).wait("run-uuid", timeout=10_000, interval=0)
+    assert run["status"] == "finished"
 
 
 def test_wait_rejects_blank_task_id():
@@ -1162,7 +1230,7 @@ def test_clone_strips_nested_entity_ids_and_keeps_steptype():
     for route in body["routes"]:
         assert "@id" not in route
         assert "@type" not in route
-    # stepType (and its real @id) is preserved verbatim — it is NOT a clone-owned uuid.
+    # stepType (and its real @id) is preserved verbatim -- it is NOT a clone-owned uuid.
     st = body["steps"][0]["stepType"]
     assert st["@id"] == "/api/3/workflow_step_types/99999999-9999-9999-9999-999999999999"
     assert st["uuid"] == "99999999-9999-9999-9999-999999999999"
@@ -1185,7 +1253,7 @@ def test_clone_transform_may_edit_in_place_without_returning():
 
     def _edit(body):
         body["description"] = "edited"
-        # returns None — clone() must fall back to the mutated body
+        # returns None -- clone() must fall back to the mutated body
 
     PlaybooksAPI(c).clone("11111111-1111-1111-1111-111111111111", "Copy", transform=_edit)
     body = c.calls[-1][2]
@@ -1376,7 +1444,7 @@ def test_why_failed_succeeding_run_has_no_error():
 
 def test_get_execution_step_detail_exposes_full_record():
     """The full step_detail record (steps/env) rides in the typed RunSummary's
-    extra — no raw flag needed; callers reach it by item access."""
+    extra -- no raw flag needed; callers reach it by item access."""
     full_record = {
         "@id": "/api/wf/api/workflows/run1/",
         "status": "failed",
@@ -1585,7 +1653,7 @@ def test_trigger_response_absorbs_the_action_routes_plural_task_ids():
     Live-verified: POST /api/triggers/1/action/<route> returns
     {"task_ids": [...]} while notrigger returns {"task_id": ...}. Only `task_id`
     was declared, so the plural key fell into model_extra while the `task_ids`
-    PROPERTY (which normalizes `task_id`) shadowed it and returned [] — leaving a
+    PROPERTY (which normalizes `task_id`) shadowed it and returned [] -- leaving a
     trigger_action caller unable to reach the run they just started.
     """
     from pyfsr.models import TriggerResponse
