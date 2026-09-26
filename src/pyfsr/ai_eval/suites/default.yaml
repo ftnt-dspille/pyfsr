@@ -1,0 +1,324 @@
+# Default FortiAI investigation evaluation suite.
+#
+# Five evidence servers and two distractors, served by the fsr-ai-eval-stub
+# connector on the appliance. Each scenario plants facts in specific tool
+# answers; a fact is only reachable by calling the right tool with the right
+# entity, and `chain: true` facts only by an entity first learned from another
+# tool's result (the pivot). Scores therefore say:
+#   * which servers/tools the agents chose (vs. `expected_calls`)
+#   * whether they queried the right entity (the rule hit, not the default)
+#   * whether they pivoted on a result (chained facts)
+#   * whether the retrieved facts reached the answers and the verdict
+#   * how much they wasted on distractors
+#
+# All names, hosts and addresses are fictional (documentation ranges).
+
+servers:
+  siem:
+    name: Eval SIEM
+    agents: [siem, alert-correlation]
+    instructions: >-
+      Security event store. Search normalized events by any entity (host, IP,
+      user, account) and fetch correlated incidents.
+    tools:
+      - name: siem_search_events
+        description: Search SIEM events for an entity (hostname, IP address, username or account name) over the last N hours.
+        params:
+          query: {type: string, description: "Entity to search for: hostname, IP, username or account."}
+          hours: {type: integer, description: "Look-back window in hours (default 24)."}
+        required: [query]
+        rules:
+          - match: {query: "198.51.100.33|fs-fin-02"}
+            result:
+              total: 3
+              events:
+                - {time: "2026-03-11T14:12:08Z", event_id: 4624, host: FS-FIN-02, src_ip: 198.51.100.117, user: j.okafor, logon_type: 3, message: "Network logon from WS-FIN-0417"}
+                - {time: "2026-03-11T14:12:31Z", event_id: 5145, host: FS-FIN-02, user: j.okafor, share: '\\FS-FIN-02\payroll', files_accessed: 1834, message: "Mass file access on payroll share"}
+                - {time: "2026-03-11T14:19:02Z", event_id: 5145, host: FS-FIN-02, user: j.okafor, share: '\\FS-FIN-02\payroll', bytes_out: 2210334720, message: "2.1 GB read from payroll share"}
+          - match: {query: "ws-fin-0417|198.51.100.117|j.okafor"}
+            result:
+              total: 2
+              events:
+                - {time: "2026-03-11T14:07:44Z", event_id: 4688, host: WS-FIN-0417, user: j.okafor, process: powershell.exe, parent: winword.exe}
+                - {time: "2026-03-11T14:08:02Z", event_type: firewall_allow, host: WS-FIN-0417, dst_ip: 185.220.101.47, dst_port: 443}
+          - match: {query: "tmp_patch_admin|srv-db-11"}
+            result:
+              total: 2
+              events:
+                - {time: "2026-03-12T01:03:10Z", event_id: 4720, host: SRV-DB-11, user: svc_deploy, target: tmp_patch_admin, src_host: JMP-01, message: "User account created"}
+                - {time: "2026-03-12T01:45:52Z", event_id: 4726, host: SRV-DB-11, user: svc_deploy, target: tmp_patch_admin, src_host: JMP-01, message: "User account deleted 42 minutes after creation"}
+          - match: {query: "svc_deploy"}
+            result:
+              total: 1
+              events:
+                - {time: "2026-03-12T01:02:55Z", event_id: 4624, host: SRV-DB-11, user: svc_deploy, src_host: JMP-01, logon_type: 10}
+          - match: {query: "m.lindqvist|lindqvist"}
+            result:
+              total: 2
+              events:
+                - {time: "2026-03-13T08:40:12Z", event_type: vpn_connect, user: m.lindqvist, device: LT-4471, public_ip: 203.0.113.77, gateway: vpn-sin-01}
+                - {time: "2026-03-13T08:58:40Z", event_type: saas_signin, user: m.lindqvist, public_ip: 198.51.100.24, geo: "Stockholm, SE", device: LT-4471}
+        default: {total: 0, events: []}
+      - name: siem_related_incidents
+        description: List other open SIEM incidents that involve an entity.
+        params:
+          entity: {type: string, description: "Hostname, IP, username or account."}
+        required: [entity]
+        rules:
+          - match: {entity: "fs-fin-02|198.51.100.33|payroll"}
+            result: {incidents: [{id: 90412, title: "Anomalous data volume from file server FS-FIN-02", severity: High, opened: "2026-03-11T14:25:00Z"}]}
+        default: {incidents: []}
+
+  edr:
+    name: Eval EDR
+    agents: [endpoint-telemetry]
+    instructions: Endpoint telemetry. Host posture, process trees and network connections per host.
+    tools:
+      - name: edr_get_host
+        description: Endpoint posture for a hostname (OS, sensor state, last user, open detections).
+        params:
+          hostname: {type: string, description: "Hostname of the endpoint."}
+        required: [hostname]
+        rules:
+          - match: {hostname: "ws-fin-0417"}
+            result: {hostname: WS-FIN-0417, ip: 198.51.100.117, os: "Windows 11 23H2", last_user: j.okafor, sensor: healthy, open_detections: 2}
+          - match: {hostname: "srv-db-11"}
+            result: {hostname: SRV-DB-11, ip: 198.51.100.11, os: "Windows Server 2022", sensor: healthy, open_detections: 0}
+          - match: {hostname: "lt-4471"}
+            result: {hostname: LT-4471, ip: 198.51.100.71, os: "macOS 15", last_user: m.lindqvist, sensor: healthy, open_detections: 0, geolocation: "Stockholm, SE", compliance: compliant}
+        default: {error: "host not found"}
+      - name: edr_process_tree
+        description: Process tree around a process on a host (parents, children, command lines, files opened).
+        params:
+          hostname: {type: string, description: "Hostname of the endpoint."}
+          process: {type: string, description: "Process image name, e.g. powershell.exe."}
+        required: [hostname]
+        rules:
+          - match: {hostname: "ws-fin-0417"}
+            result:
+              root: {image: winword.exe, pid: 7712, file_opened: 'C:\Users\j.okafor\Downloads\Invoice_Q3_8841.docm', macro: true}
+              children:
+                - {image: powershell.exe, pid: 8120, cmdline: "powershell -nop -w hidden -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA...", children: [{image: rundll32.exe, pid: 8344, cmdline: 'rundll32 C:\ProgramData\Lqmx\stager.dll,DllRegisterServer'}]}
+        default: {root: null, children: []}
+      - name: edr_network_connections
+        description: Outbound network connections made by a host in the last 24 hours.
+        params:
+          hostname: {type: string, description: "Hostname of the endpoint."}
+        required: [hostname]
+        rules:
+          - match: {hostname: "ws-fin-0417"}
+            result:
+              connections:
+                - {process: rundll32.exe, dst_ip: 185.220.101.47, dst_port: 443, bytes_out: 48211}
+                - {process: rundll32.exe, dst_ip: 198.51.100.33, dst_port: 445, protocol: SMB, bytes_in: 2210334720}
+          - match: {hostname: "lt-4471"}
+            result: {connections: [{process: vpnagent, dst_ip: 203.0.113.77, dst_port: 443}]}
+        default: {connections: []}
+
+  identity:
+    name: Eval Identity
+    agents: [identity-context]
+    instructions: Directory and sign-in data for users and service accounts.
+    tools:
+      - name: idp_get_user
+        description: Directory profile of a user or service account (department, manager, MFA, account type).
+        params:
+          username: {type: string, description: "Username or account name."}
+        required: [username]
+        rules:
+          - match: {username: "j.okafor|okafor"}
+            result: {username: j.okafor, display_name: "Jide Okafor", department: Finance, title: "AP Specialist", mfa_enrolled: false, privileged: false}
+          - match: {username: "svc_deploy"}
+            result: {username: svc_deploy, account_type: service, owner_team: "DBA Operations", allowed_logon_hosts: [JMP-01], privileged: true, mfa_enrolled: "n/a (service)"}
+          - match: {username: "m.lindqvist|lindqvist"}
+            result: {username: m.lindqvist, display_name: "Maja Lindqvist", department: Sales, title: "Regional Director", mfa_enrolled: true, location: "Stockholm, SE"}
+        default: {error: "user not found"}
+      - name: idp_signin_history
+        description: Recent interactive sign-ins for a user with source IP and geolocation.
+        params:
+          username: {type: string, description: "Username."}
+        required: [username]
+        rules:
+          - match: {username: "m.lindqvist|lindqvist"}
+            result:
+              signins:
+                - {time: "2026-03-13T08:41:03Z", ip: 203.0.113.77, geo: "Singapore, SG", app: "Office 365", device: LT-4471, mfa: satisfied}
+                - {time: "2026-03-13T08:58:40Z", ip: 198.51.100.24, geo: "Stockholm, SE", app: "Salesforce", device: LT-4471, mfa: satisfied}
+          - match: {username: "j.okafor|okafor"}
+            result: {signins: [{time: "2026-03-11T07:58:00Z", ip: 198.51.100.117, geo: internal, app: Windows, mfa: "not enrolled"}]}
+        default: {signins: []}
+      - name: idp_group_membership
+        description: Groups a user belongs to.
+        params:
+          username: {type: string, description: "Username."}
+        required: [username]
+        rules:
+          - match: {username: "m.lindqvist|lindqvist"}
+            result: {groups: [Sales-EMEA, VPN-Users, "Travel-APAC-Q3"]}
+          - match: {username: "svc_deploy"}
+            result: {groups: [DBA-Service-Accounts, "SQL-Patch-Operators"]}
+          - match: {username: "j.okafor|okafor"}
+            result: {groups: [Finance-AP, "FS-FIN-02-Payroll-Read"]}
+        default: {groups: []}
+
+  cmdb:
+    name: Eval CMDB
+    agents: [asset-enrichment, organization-context]
+    instructions: Asset inventory and change management.
+    tools:
+      - name: cmdb_lookup_asset
+        description: Asset record for a hostname or IP (business owner, criticality, data classification).
+        params:
+          asset: {type: string, description: "Hostname or IP address."}
+        required: [asset]
+        rules:
+          - match: {asset: "fs-fin-02|198.51.100.33"}
+            result: {hostname: FS-FIN-02, ip: 198.51.100.33, role: "Finance file server", criticality: Critical, data_classification: "PCI / payroll PII", owner: Finance}
+          - match: {asset: "ws-fin-0417|198.51.100.117"}
+            result: {hostname: WS-FIN-0417, ip: 198.51.100.117, role: "Finance workstation", criticality: Medium, owner: Finance}
+          - match: {asset: "srv-db-11|198.51.100.11"}
+            result: {hostname: SRV-DB-11, ip: 198.51.100.11, role: "SQL Server (ERP)", criticality: High, owner: "DBA Operations"}
+          - match: {asset: "203.0.113.77"}
+            result: {ip: 203.0.113.77, role: "Corporate VPN egress (vpn-sin-01, Singapore POP)", owner: "Network Engineering"}
+        default: {error: "asset not found"}
+      - name: cmdb_change_requests
+        description: Approved change requests touching an asset in the last 7 days.
+        params:
+          asset: {type: string, description: "Hostname or IP address."}
+        required: [asset]
+        rules:
+          - match: {asset: "srv-db-11|198.51.100.11"}
+            result:
+              changes:
+                - {id: CHG0048812, state: approved, window: "2026-03-12T01:00Z/03:00Z", implementer: svc_deploy, summary: "Temporary local admin tmp_patch_admin for SQL cumulative update KB5040437; removed after patching"}
+        default: {changes: []}
+
+  threat_intel:
+    name: Eval Threat Intel
+    agents: [ioc-enrichment]
+    instructions: Reputation for IPs, domains, URLs and file hashes.
+    tools:
+      - name: ti_lookup
+        description: Reputation and attribution for an indicator (IP, domain, URL or file hash).
+        params:
+          indicator: {type: string, description: "The indicator value."}
+        required: [indicator]
+        rules:
+          - match: {indicator: "185.220.101.47"}
+            result: {indicator: 185.220.101.47, verdict: malicious, score: 92, tags: [tor-exit, c2], attribution: "QakBot C2 infrastructure", first_seen: "2025-11-02"}
+          - match: {indicator: "203.0.113.77"}
+            result: {indicator: 203.0.113.77, verdict: benign, score: 0, note: "Registered to the organization: corporate VPN egress (Singapore POP)"}
+          - match: {indicator: "invoice_q3_8841|8841"}
+            result: {indicator: Invoice_Q3_8841.docm, verdict: malicious, family: QakBot, note: "Macro dropper seen in March 2026 invoice-themed campaign"}
+        default: {verdict: unknown, score: null}
+
+  # ---- distractors: nothing here helps any scenario ----
+  billing:
+    name: Eval Cloud Billing
+    role: distractor
+    agents: [asset-enrichment, siem]
+    instructions: Cloud cost and usage reports by service and account.
+    tools:
+      - name: billing_cost_by_service
+        description: Cloud spend grouped by service for an account and month.
+        params:
+          account: {type: string, description: "Cloud account id or name."}
+          month: {type: string, description: "YYYY-MM."}
+        default: {services: [{service: compute, usd: 18211.4}, {service: storage, usd: 4122.9}]}
+      - name: billing_anomalies
+        description: Cost anomalies detected in the last 30 days.
+        params:
+          account: {type: string, description: "Cloud account id or name."}
+        default: {anomalies: []}
+  crm:
+    name: Eval Marketing CRM
+    role: distractor
+    agents: [identity-context, organization-context]
+    instructions: Marketing contacts, campaigns and lead scores.
+    tools:
+      - name: crm_lookup_contact
+        description: Marketing contact record by name or email.
+        params:
+          contact: {type: string, description: "Name or email."}
+        default: {contacts: []}
+      - name: crm_campaign_stats
+        description: Performance of a marketing campaign.
+        params:
+          campaign: {type: string, description: "Campaign name."}
+        default: {sent: 0, opened: 0, clicked: 0}
+
+scenarios:
+  - id: fin-ws-lateral
+    title: Macro dropper on a finance workstation, pivot to the payroll share
+    kind: true-positive, needs chaining
+    alert:
+      name: "Suspicious encoded PowerShell on WS-FIN-0417"
+      description: >-
+        EDR flagged powershell.exe running with an encoded command on
+        WS-FIN-0417 (user j.okafor), spawned by winword.exe, followed by an
+        outbound connection to 185.220.101.47:443.
+      severity: High
+      hostName: WS-FIN-0417
+      userName: j.okafor
+      destinationIp: 185.220.101.47
+      processName: powershell.exe
+    verdict: {expected: [malicious, true positive], partial: [suspicious]}
+    expected_calls:
+      - {server: threat_intel, tool: ti_lookup, args: "185.220.101.47"}
+      - {server: edr, tool: edr_process_tree, args: "ws-fin-0417"}
+      - {server: edr, tool: edr_network_connections, args: "ws-fin-0417"}
+      - {server: siem, tool: siem_search_events, args: "198.51.100.33|fs-fin-02", chain: true}
+      - {server: cmdb, tool: cmdb_lookup_asset, args: "fs-fin-02|198.51.100.33", chain: true}
+      - {server: identity, tool: idp_get_user, args: "okafor", required: false}
+    facts:
+      - {id: c2, match: "qakbot|qbot", source: threat_intel, what: "185.220.101.47 is QakBot C2"}
+      - {id: dropper, match: "invoice_q3_8841", source: edr, what: "winword opened the macro document Invoice_Q3_8841.docm"}
+      - {id: pivot, match: "198.51.100.33|fs-fin-02", source: edr, what: "the host made SMB connections to FS-FIN-02 (198.51.100.33)"}
+      - {id: payroll, match: "payroll", source: siem, chain: true, what: "2.1 GB read from the payroll share"}
+      - {id: pci, match: "pci", source: cmdb, chain: true, what: "FS-FIN-02 is a critical PCI/payroll asset"}
+      - {id: nomfa, match: "mfa", source: identity, required: false, what: "j.okafor has no MFA"}
+
+  - id: db-admin-change
+    title: New local admin on a database server, covered by an approved change
+    kind: false-positive, needs business context
+    alert:
+      name: "New local administrator account on SRV-DB-11"
+      description: >-
+        Account tmp_patch_admin was created and added to the local
+        Administrators group on SRV-DB-11 by svc_deploy.
+      severity: Medium
+      hostName: SRV-DB-11
+      userName: svc_deploy
+    verdict: {expected: [benign, false positive], partial: [suspicious]}
+    expected_calls:
+      - {server: cmdb, tool: cmdb_change_requests, args: "srv-db-11"}
+      - {server: identity, tool: idp_get_user, args: "svc_deploy"}
+      - {server: siem, tool: siem_search_events, args: "tmp_patch_admin|srv-db-11"}
+      - {server: edr, tool: edr_get_host, args: "srv-db-11", required: false}
+    facts:
+      - {id: change, match: "chg0048812|kb5040437", source: cmdb, what: "approved change CHG0048812 covers the account"}
+      - {id: jump, match: "jmp-01", source: identity, what: "svc_deploy only logs on from JMP-01"}
+      - {id: removed, match: "4726|deleted", source: siem, what: "the account was deleted 42 minutes later"}
+
+  - id: vpn-travel
+    title: Impossible-travel sign-in explained by the corporate VPN
+    kind: false-positive, needs IP ownership
+    alert:
+      name: "Impossible travel for m.lindqvist (Singapore / Stockholm)"
+      description: >-
+        m.lindqvist signed in from 203.0.113.77 (Singapore) and 17 minutes
+        later from 198.51.100.24 (Stockholm).
+      severity: Medium
+      userName: m.lindqvist
+      sourceIp: 203.0.113.77
+    verdict: {expected: [benign, false positive], partial: [suspicious]}
+    expected_calls:
+      - {server: threat_intel, tool: ti_lookup, args: "203.0.113.77"}
+      - {server: identity, tool: idp_signin_history, args: "lindqvist"}
+      - {server: siem, tool: siem_search_events, args: "lindqvist"}
+      - {server: cmdb, tool: cmdb_lookup_asset, args: "203.0.113.77", required: false}
+      - {server: edr, tool: edr_get_host, args: "lt-4471", chain: true, required: false}
+    facts:
+      - {id: vpn, match: "vpn", source: threat_intel, what: "203.0.113.77 is the corporate VPN egress"}
+      - {id: device, match: "lt-4471", source: identity, what: "both sign-ins came from the same laptop LT-4471"}
+      - {id: travel, match: "travel-apac", source: identity, required: false, what: "user is in the Travel-APAC-Q3 group"}

@@ -311,6 +311,265 @@ With `wait=True`, a timeout returns the latest result with a non-terminal
 `status` rather than raising -- check `result.status` before trusting `answer`.
 See [`examples/run_single_ai_agent.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/run_single_ai_agent.py).
 
+### Chat and the Orchestrator (8.0.1)
+
+`client.ai.chat()` opens a multi-turn session with the SOC chat assistant (the
+Conversation Agent), exactly as the in-app assistant drives it:
+`POST /api/ai/agents/conversation/trigger` with an `X-CHAT-SESSION-ID` header,
+then poll the task. The session carries `previous_response_id` / `request_id`
+between turns. (`/api/ai/chat/` also exists, but the UI does not call it and its
+request shape does not match the agent's.)
+
+`client.ai.orchestrate()` is the same protocol against the Orchestrator Agent.
+It can pause a turn for a **clarification** (a missing value) or an
+**approval** (a state-changing action it inferred). A paused turn has
+`turn.is_paused`; answer it on the same session so the plan resumes rather than
+starting over.
+
+```{doctest}
+>>> s = client.ai.orchestrate()                                        # doctest: +SKIP
+>>> turn = s.ask("Block the malicious IP address on the firewall.")    # doctest: +SKIP
+>>> turn.needs_clarification, turn.pending.question                    # doctest: +SKIP
+(True, 'Cannot block ... Please specify the IP address to proceed.')
+>>> turn = s.reply("198.51.100.23")                                    # doctest: +SKIP
+>>> # an approval pause is answered with s.approve() / s.deny()
+```
+
+On 8.0.1 the Conversation Agent does not call the Orchestrator, so
+`orchestrate()` is the only way to reach it.
+
+### Traces (8.0.1)
+
+Every agent run records a trace -- the data behind the in-app Trace Flow panel.
+A run's trace id is its task id.
+
+```{doctest}
+>>> tree = client.ai.traces.execution_tree(task_id)           # doctest: +SKIP
+>>> tree.total_steps, tree.count_by_type()                    # doctest: +SKIP
+(173, {'AGENT': 57, 'LLM': 29, 'TOOL': 17, ...})
+>>> client.ai.traces.tokens(task_id)                          # doctest: +SKIP
+{'input_tokens': 35093, 'output_tokens': 5805, 'total_tokens': 40898, 'llm_calls': 29}
+>>> [(s.provider, s.model, s.usage) for s in client.ai.traces.llm_calls(task_id)][:1]  # doctest: +SKIP
+[('FSRAI', None, {...})]
+```
+
+#### An investigation, question by question
+
+`traces.investigation(task_id)` rebuilds an alert investigation from its
+traces: one `AgentRun` per sub-agent run, each with the question it was asked,
+its answer/evidence/confidence, and every tool call it made. Each call records
+the MCP server that ran it, its real output, and `selected_by` -- who decided it
+should run:
+
+| `selected_by` | Meaning |
+|---|---|
+| `code` | No LLM step asked for it; the agent's code ran a fixed lookup |
+| `llm` | An LLM step picked it without having seen any tool result |
+| `llm-chained` | An LLM step picked it after reading earlier tool results |
+
+```{doctest}
+>>> inv = client.ai.traces.investigation(task_id)                        # doctest: +SKIP
+>>> for run in inv.questions:                                              # doctest: +SKIP
+...     print(run.agent, run.answer, [(c.tool_name, c.selected_by) for c in run.tool_calls])
+Threat Intelligence Provider No [('get_indicators', 'code'), ('enrich_indicator', 'code'),
+  ('get_alerts_linked_to_indicators', 'llm'), ...]
+>>> m = inv.metrics()                                                      # doctest: +SKIP
+>>> m["selected_by"], m["questions_multi_tool"], m["questions_chained"]    # doctest: +SKIP
+({'code': 24, 'llm': 17}, 8, 0)
+```
+
+On 8.0.0 each question got exactly one LLM-chosen tool call. A raw count of tool
+calls per question overstates the change in 8.0.1, because most provider agents
+also run fixed lookups from code. `questions_chained` is the measure of an agent
+reading a result and calling again.
+
+8.0.1 no longer writes `llm_activity_logs` for investigations, so
+`investigation_tool_calls()`, `attribute_tool_calls()` and `find_investigations()`
+read the traces when the box has them (`ToolCall.source == "traces"`) and fall
+back to the logs on 8.0.0. `tool_usage()` reads only the logs.
+
+Known 8.0.1 server defects the client works around or documents:
+
+- Paging with a cursor fails server-side, so `traces.iter()` stops after the
+  first page with a warning (use `page_size=500`).
+- `/spans/{id}/tree` 404s for any non-root span; `span_subtree()` falls back to
+  the span's trace tree.
+- `/spans/{id}/lineage` always 500s.
+- LLM spans record provider `FSRAI` and an empty model for FortiAI-proxy calls.
+- `purge_older_than()` deletes **every** trace older than the cutoff -- there
+  is no per-trace delete.
+
+### Scoring investigations (`pyfsr.ai_eval`, 8.0.1)
+
+A trace shows what an investigation did, but not whether it did the right
+thing. `pyfsr.ai_eval` runs investigations against stub MCP servers with known
+answers, so each run can be scored.
+
+A **suite** (YAML; the bundled one is `pyfsr/ai_eval/suites/default.yaml`)
+defines two things:
+
+- **Stub servers**, each registered in FortiSOAR as its own MCP server:
+  - five evidence servers (SIEM, EDR, identity, CMDB, threat intel);
+  - two distractors (cloud billing, marketing CRM) that are no help in any
+    scenario.
+
+  Each tool answers from rules keyed on its arguments. A call about an entity
+  the scenario has no data for gets an empty default answer.
+- **Scenarios**. Each has:
+  - an alert;
+  - the calls a good investigation makes;
+  - the facts it should surface;
+  - the right verdict.
+
+  Some facts can only be reached by *pivoting*: the entity is learned from one
+  tool's result and then looked up in another. In `fin-ws-lateral`, the EDR
+  shows an SMB connection to a file server, and only a SIEM search on that
+  server finds the payroll exfiltration.
+
+```bash
+pyfsr ai-eval deploy --instance lab          # connector + fixtures + MCP servers + agent allowlists
+pyfsr ai-eval run --instance lab --runs 3 --out report.json
+pyfsr ai-eval log --instance lab             # the stubs' own call log
+pyfsr ai-eval teardown --instance lab
+```
+
+`deploy` installs the bundled `fsr-ai-eval-stub` connector. Like the Microsoft
+Teams connector's bot listener, the connector starts a local listener when it
+is configured. The listener is a stdlib-only MCP server on `127.0.0.1`, so no
+extra packages or network paths are needed; fsr-ai reaches it on the same box.
+Each stub is then registered and allowed for the provider agents the suite
+names. Custom connectors need connector development mode on.
+
+Each run is scored from its trace:
+
+| Score | Meaning |
+|---|---|
+| `verdict` | 1 for an expected classification, 0.5 for a partial one (e.g. *Suspicious*) |
+| `tool_recall` | Share of the required calls that were made |
+| `query_accuracy` | Share of the required calls made with the right entity |
+| `chain_recall` | Share of the pivot calls made with the right entity |
+| `precision` | Share of stub calls that found data (not a distractor, an unknown entity or a refusal) |
+| `fact_retrieval` / `fact_use` / `fact_in_summary` | Facts some tool returned / that reached an answer or the summary / that reached the summary |
+| `lost_facts` | Facts that were retrieved but never used |
+| `composite` | Weighted mean (`pyfsr.ai_eval.WEIGHTS`) |
+
+Over repeated runs, `aggregate()` reports:
+
+- the spread of each score;
+- the verdict distribution;
+- how often each expected call and fact was hit;
+- which tools were actually used, and who chose them (`selected_by`).
+
+Together these show which servers the agents should have used, which ones they
+did use, and where the evidence was lost.
+
+```{doctest}
+>>> from pyfsr.ai_eval import load_suite, deploy, run_suite           # doctest: +SKIP
+>>> suite = load_suite()                                               # doctest: +SKIP
+>>> deploy(client, suite)                                              # doctest: +SKIP
+>>> report = run_suite(client, suite, runs=3)                          # doctest: +SKIP
+>>> report["summary"]["scenarios"]["fin-ws-lateral"]["chain_recall"]   # doctest: +SKIP
+{'mean': 0.0, 'min': 0.0, 'max': 0.0, 'stdev': 0.0}
+```
+
+### Token cost of an investigation
+
+Every run also records its tokens and a price. An investigation's
+`InvestigationTrace.tokens` holds the root trace's totals, which already
+include every sub-agent run. `tokens_by_agent()` splits them per agent, so the
+parts add up to the total. When the default LLM profile goes through the
+FortiAI proxy, `run` also reads the FortiAI balance before and after each
+investigation (`client.ai.token_balance()`). The drop is the run's
+`metered_tokens`, and the cost is priced from it when present. Anything else
+using FortiAI on the appliance at the same time inflates it; pass `--no-meter`
+to skip it.
+
+`TokenPricing` defaults to FortiAI's terms: 5,000,000 tokens a month included
+per appliance, and top-ups at $100 per 500,000 tokens (`usd_per_million=200`).
+For a profile on your own OpenAI, Anthropic or Gemini key, set a blended rate,
+or separate input and output rates. The aggregate's `budget` gives:
+
+- tokens and USD per investigation;
+- how many investigations fit in the free monthly allowance.
+
+```bash
+pyfsr ai-eval balance --instance lab               # allowance, remaining, used
+pyfsr ai-eval cost --instance lab <task_id> ...     # tokens per agent + cost, any finished investigation
+pyfsr ai-eval run --instance lab --usd-per-million 200 --free-tokens 5000000
+```
+
+Which model an investigation uses comes from the LLM profiles
+(`client.ai.list_llm_configs()`) and each agent's config
+(`client.ai.get_agent_config(name, version).config.llm_provider`, a profile
+uuid). The stock 8.0.1 profiles both go through the `fortinet-fortiai-proxy`
+connector:
+
+- *Low Reasoning* (the default) runs `gpt-4.1`;
+- *High Reasoning* runs `gpt-5.4`, used by the hypothesis, verdict and
+  metric-computation agents.
+
+A profile's `provider` is one of:
+
+| `provider` | Billing | Setup |
+|---|---|---|
+| `fortisoar` | through a connector: `fortinet-fortiai-proxy` (FortiAI tokens) or `openai` (your key) | `config={"connector_name", "connector_config_id"}` |
+| `openai` / `anthropic` / `gemini` | your provider account directly | `modelname` + `apikey` |
+
+Only installed connectors on fsr-ai's allow list (`fortinet-fortiai-proxy` and
+`openai` as shipped) appear in `list_providers()`. In the fsr-ai 8.0.0
+source, the native clients pass only the API key, so a profile's `baseurl` is
+stored but not used. An Azure OpenAI or self-hosted endpoint therefore has to
+go through a connector. `verify_llm_config()` only works for `openai`
+profiles. A native profile has no FortiAI balance, so `token_balance()` raises
+`ValueError` and runs are priced from the traces.
+
+### Switching to a third-party LLM
+
+The UI path is **System Configuration → FortiAI**, which opens the *AI
+Configuration* wizard. pyfsr does the same steps:
+
+```bash
+pyfsr llm status --instance lab                     # profiles, wizard providers, each agent's profile
+OPENAI_API_KEY=... pyfsr llm setup --instance lab --profile "OpenAI GPT-4.1" --model GPT-4.1
+pyfsr llm assign --instance lab "OpenAI GPT-4.1"   # every agent; writes an undo snapshot
+pyfsr ai-eval run --instance lab --usd-per-million <your blended rate>
+pyfsr llm restore --instance lab ~/.pyfsr/llm-snapshots/<file>.json
+```
+
+`setup_connector_llm()` works in four steps:
+
+1. installs the connector from Content Hub;
+2. saves a connector configuration with the key and model;
+3. health-checks it and sends a one-line test completion (`--no-verify` skips
+   it). The health check passes on a valid key whose account has no credits;
+   the test completion catches that before any agent is switched;
+4. creates a `fortisoar` reasoning profile that points at the configuration.
+
+fsr-ai sends no model name, so the connector configuration decides the model;
+use one configuration per model. The key comes from an environment variable or
+a file (`--api-key-file`), never from the command line. For Azure OpenAI, pass
+`--azure-endpoint` and `--azure-deployment`.
+
+`assign_llm()` sets `llm_provider` in each agent's config row, which is what
+investigations use. It also writes the agent record through
+`POST /api/ai/agent/llm/config`, as the wizard does, where the API gateway
+allows it; on 8.0.1 the gateway returns 403 for API sessions. It returns the
+previous assignments for `restore_llm_assignments()`.
+
+On 8.0.1, `/api/ai/llm/allowed-providers` and the wizard list only
+`fortinet-fortiai-proxy` unless the `fortiai-configurations` key-store record
+has `bringYourLLM: {"enabled": true}`. That flag only changes the UI: with it
+off, an investigation still calls the `openai` connector
+(live-verified on 8.0.1).
+
+### Step timeout and retry (8.0.1)
+
+`client.playbooks.set_step_timeout(step, operation_timeout=5, retry=2)` writes
+the designer's *Timeout* option (`arguments.timeout`) on a connector step. On
+8.0.1, retries fire on a **timeout only**, not when the operation raises an
+error. The appliance stores any value unchecked, so the designer's rule (whole
+seconds, total under 1800s) is enforced client-side.
+
 ## Use case: triage an alert end-to-end
 
 A SOC analyst asks an agent *"Triage the latest critical alert and tell me if

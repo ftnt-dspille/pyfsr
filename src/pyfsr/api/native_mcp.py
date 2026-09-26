@@ -4,26 +4,26 @@ FortiSOAR 8.0 ships an on-appliance ``mcp-server`` service (nginx-fronted at
 ``/mcp/*``, real Streamable-HTTP MCP transport) that auto-exposes FortiSOAR's
 own modules/playbooks/SOC tools *and* every installed connector as MCP tools:
 
-- ``/mcp/modules/`` — record CRUD (``fetch_record``, ``get_alert``, ...)
-- ``/mcp/playbooks/`` — ``list_playbooks``, ``trigger_playbook``, ...
-- ``/mcp/soc/`` — bundled SOC-investigator tools (``get_alert``,
+- ``/mcp/modules/`` -- record CRUD (``fetch_record``, ``get_alert``, ...)
+- ``/mcp/playbooks/`` -- ``list_playbooks``, ``trigger_playbook``, ...
+- ``/mcp/soc/`` -- bundled SOC-investigator tools (``get_alert``,
   ``enrich_indicator``, ``block_indicator``, ``hunt_ioc_siem``, ...)
-- ``/mcp/utility/`` — ``get_current_datetime``, ...
-- ``/mcp/connector/NAME/`` — one auto-generated server per *installed* connector
+- ``/mcp/utility/`` -- ``get_current_datetime``, ...
+- ``/mcp/connector/NAME/`` -- one auto-generated server per *installed* connector
 
-This is the thing an agentic AI stack (fsr-ai, or your own agent) calls into —
+This is the thing an agentic AI stack (fsr-ai, or your own agent) calls into --
 **not** the same as:
 
-- :class:`pyfsr.api.ai.AIApi` (``client.ai``) — manages *external* MCP
+- :class:`pyfsr.api.ai.AIApi` (``client.ai``) -- manages *external* MCP
   servers (e.g. FortiSIEM's own MCP) that FortiSOAR's agents are allowed to
   call. That's registration/allowlisting; this module is the appliance
   answering as an MCP server itself.
-- :mod:`pyfsr.agent.mcp` — the reverse direction: makes *pyfsr* act as an MCP
+- :mod:`pyfsr.agent.mcp` -- the reverse direction: makes *pyfsr* act as an MCP
   server, exposing its own CRUD/schema tool registry to an external agent.
 
 Auth passes through the caller's own FortiSOAR credential: the gateway
 validates the ``Authorization`` header against ``/api/3`` and every tool call
-then runs with that identity's real RBAC — no service account, no separate
+then runs with that identity's real RBAC -- no service account, no separate
 credential to manage. This module reuses the client's ``auth`` object for
 that header, including its 401/403 refresh-and-retry behavior (see
 :meth:`pyfsr.auth.base.BaseAuth.refresh`) so a long-lived client survives a
@@ -120,7 +120,78 @@ def _basic_headers(auth: dict[str, Any]) -> dict[str, str]:
     return {"Authorization": "Basic " + base64.b64encode(raw).decode()}
 
 
+#: Minted OAuth2 tokens, keyed ``token_url:client_id`` -> ``(token, expires_at)``.
+#: ``expires_at`` is ``None`` when the token endpoint gave no ``expires_in``.
+_OAUTH2_TOKENS: dict[str, tuple[str, float | None]] = {}
+_OAUTH2_LOCK = threading.Lock()
+
+
+def _oauth2_config(auth: dict[str, Any]) -> dict[str, Any]:
+    # fsr-ai accepts the fields flat or nested under "oauth2"; flat wins.
+    nested = auth.get("oauth2")
+    return {**nested, **auth} if isinstance(nested, dict) else dict(auth)
+
+
+def _mint_oauth2_token(cfg: dict[str, Any]) -> str:
+    """Fetch (or reuse) a ``client_credentials`` token the way fsr-ai 8.0.1 does.
+
+    Form-encoded POST to ``token_url`` with ``client_id``/``client_secret`` in
+    the body (plus ``scope`` if set). The token is cached per process and
+    reused until ``expires_in`` (seconds) minus 60s. That matters for
+    FortiSIEM, which allows only one mint per credential: a second mint
+    returns 400, so pyfsr must not mint on every call. It also means pyfsr and
+    FortiSOAR cannot share one FortiSIEM credential. Whichever mints second
+    gets the 400, so give pyfsr its own credential, or pass the token you
+    already have as ``value``.
+    """
+    import time
+
+    import requests
+
+    missing = [k for k in ("token_url", "client_id", "client_secret") if not cfg.get(k)]
+    if missing:
+        raise ValueError(
+            f"OAUTH2 MCP auth is missing {', '.join(missing)}; FortiSOAR does not return the stored "
+            "client_secret, so pass it (or a ready token as 'value') yourself"
+        )
+    key = f"{cfg['token_url']}:{cfg['client_id']}"
+    with _OAUTH2_LOCK:
+        cached = _OAUTH2_TOKENS.get(key)
+        if cached and (cached[1] is None or time.time() < cached[1]):
+            return cached[0]
+        data = {
+            "grant_type": "client_credentials",
+            "client_id": cfg["client_id"],
+            "client_secret": cfg["client_secret"],
+        }
+        if cfg.get("scope"):
+            data["scope"] = cfg["scope"]
+        resp = requests.post(
+            cfg["token_url"],
+            data=data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=30,
+            verify=cfg.get("verify", True),
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        token = body.get("access_token")
+        if not token:
+            raise ValueError(f"OAuth2 token endpoint {cfg['token_url']} returned no access_token")
+        expires_in = body.get("expires_in")
+        expires_at = time.time() + float(expires_in) - 60 if expires_in else None
+        _OAUTH2_TOKENS[key] = (token, expires_at)
+        return token
+
+
+def _oauth2_headers(auth: dict[str, Any]) -> dict[str, str]:
+    # A caller-supplied token (``value``, e.g. via ``token=``) skips the mint.
+    token = auth.get("value") or _mint_oauth2_token(_oauth2_config(auth))
+    return {"Authorization": f"Bearer {token}"}
+
+
 _MCP_AUTH_HEADER_BUILDERS = {
+    "OAUTH2": _oauth2_headers,
     "BEARER": _bearer_headers,
     "FSR": _bearer_headers,
     "API_KEY": lambda a: {a["header_name"]: a["value"]},
@@ -136,7 +207,9 @@ def build_mcp_auth_headers(auth: dict[str, Any] | None) -> dict[str, str]:
     server is reached the same way the product's agent reaches it: ``BEARER``/
     ``FSR`` → ``Authorization: <prefix> <value>`` (``prefix``/``header_name``
     overridable), ``API_KEY`` → ``<header_name>: <value>``, ``BASIC`` →
-    base64, ``NONE`` → no header.
+    base64, ``OAUTH2`` → ``Authorization: Bearer <token>`` from a
+    ``client_credentials`` mint (8.0.1+; see ``_mint_oauth2_token``),
+    ``NONE`` → no header.
     """
     auth = auth or {"type": "NONE"}
     builder = _MCP_AUTH_HEADER_BUILDERS.get((auth.get("type") or "NONE").upper())
@@ -171,7 +244,7 @@ class MCPSession:
     """One open MCP session, for batching several calls without re-handshaking.
 
     ``NativeMCPApi.list_tools``/``call_tool`` each open a fresh MCP session
-    (connect, ``initialize``, one request, disconnect) — simple and safe as a
+    (connect, ``initialize``, one request, disconnect) -- simple and safe as a
     one-off, but a script calling several tools in a row pays a full
     handshake every time. Get one from :meth:`NativeMCPApi.session` instead::
 
@@ -180,19 +253,19 @@ class MCPSession:
             s.call_tool("enrich_indicator", {"indicator": ip})
 
     Unlike the one-off calls, a session does **not** retry on a stale
-    (401/403) auth token mid-batch — it authenticates once on entry. For a
+    (401/403) auth token mid-batch -- it authenticates once on entry. For a
     short-lived batch of calls right after opening (the intended use) that's
     not a real constraint; for a long-running session, catch the error and
     open a new one.
 
     Implementation note: the MCP SDK's session/transport use ``anyio`` cancel
     scopes internally, which must be entered *and exited in the same asyncio
-    Task* — so ``__enter__``/each call/``__exit__`` can't each be their own
+    Task* -- so ``__enter__``/each call/``__exit__`` can't each be their own
     ``loop.run_until_complete(...)`` (that puts every one in a fresh Task and
     anyio raises "Attempted to exit cancel scope in a different task than it
     was entered in", caught live against a real appliance 2026-07-05). A
     background thread runs one continuous coroutine that opens the
-    connection, then pulls call requests off a queue until told to stop —
+    connection, then pulls call requests off a queue until told to stop --
     the whole MCP session lives in that single task for its entire life;
     sync calls just hand off work to it and block for the answer.
     """
@@ -272,7 +345,7 @@ class MCPSession:
 
     def _dispatch(self, method: str, args: Any) -> Any:
         if self._loop is None or self._queue is None:
-            raise RuntimeError("MCPSession is not open — use it inside a 'with' block")
+            raise RuntimeError("MCPSession is not open -- use it inside a 'with' block")
         future: concurrent.futures.Future = concurrent.futures.Future()
         asyncio.run_coroutine_threadsafe(self._queue.put((method, args, future)), self._loop)
         return future.result()
@@ -326,7 +399,7 @@ class NativeMCPApi(BaseAPI):
         The transport-level core shared by the native gateway (:meth:`_run`, which
         adds the client's auth + 401/403 refresh) and the *registered-server* path
         (:meth:`~pyfsr.api.ai.AIApi.call_registered_tool`, which supplies the
-        server's own url + auth header). No auth-refresh here — a registered
+        server's own url + auth header). No auth-refresh here -- a registered
         server owns its credential.
         """
         _require_mcp_sdk()
@@ -433,12 +506,12 @@ class NativeMCPApi(BaseAPI):
 
 
 def _iter_leaf_exceptions(exc: BaseException) -> Any:
-    """Yield ``exc`` and every exception nested under it — through
+    """Yield ``exc`` and every exception nested under it -- through
     ``ExceptionGroup.exceptions`` (anyio task groups wrap failures in one of
     these) and ``__cause__``/``__context__`` chains.
 
     Checks ``exceptions`` by attribute rather than ``isinstance(...,
-    BaseExceptionGroup)`` — that type is 3.11+ only (PEP 654) and pyfsr
+    BaseExceptionGroup)`` -- that type is 3.11+ only (PEP 654) and pyfsr
     supports 3.10, where ``anyio``'s task groups still raise the
     ``exceptiongroup`` backport's equivalent, which carries the same
     ``.exceptions`` tuple.
@@ -464,13 +537,13 @@ def _looks_like_auth_error(exc: BaseException) -> bool:
     """Best-effort sniff for a 401/403 surfaced through the MCP/httpx stack.
 
     Live-verified 2026-07-05: a bad bearer token doesn't raise a flat
-    exception with a ``status_code`` — anyio's task group wraps the real
+    exception with a ``status_code`` -- anyio's task group wraps the real
     ``httpx.HTTPStatusError`` in an ``ExceptionGroup`` whose own message is
     just "unhandled errors in a TaskGroup (1 sub-exception)", which mentions
     no status code at all. A naive top-level check (or a string match on the
     group's own ``str()``) misses this entirely, silently skipping the
     retry. Walk every nested exception (group members + cause/context
-    chains) and check each one — same fail-open posture as the rest of
+    chains) and check each one -- same fail-open posture as the rest of
     pyfsr's auth-retry paths (skip the retry, not crash the caller, on
     anything ambiguous).
     """

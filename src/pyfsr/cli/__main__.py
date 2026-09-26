@@ -11,8 +11,10 @@ import json
 import sys
 
 from . import _output
+from . import ai_eval as ai_eval_cmds
 from . import instances as instances_cmds
 from . import jinja as jinja_cmds
+from . import llm as llm_cmds
 from . import playbook as playbook_cmds
 from . import repo as repo_cmds
 from . import widget as widget_cmds
@@ -455,6 +457,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     inst_sub = p_inst.add_subparsers(dest="instances_command", required=True)
     instances_cmds.build_subparser(inst_sub)
+
+    # --- ai-eval group (top-level; scored FortiAI investigation runs) ---
+    p_eval = sub.add_parser(
+        "ai-eval",
+        help="scored, repeatable FortiAI investigation runs against stub MCP servers with known ground truth",
+    )
+    eval_sub = p_eval.add_subparsers(dest="ai_eval_command", required=True)
+    ai_eval_cmds.build_subparser(eval_sub)
+
+    # --- llm group (top-level; which LLM FortiAI uses, third-party swap) ---
+    p_llm = sub.add_parser("llm", help="FortiAI reasoning profiles: status, add a third-party LLM, switch agents")
+    llm_sub = p_llm.add_subparsers(dest="llm_command", required=True)
+    llm_cmds.build_subparser(llm_sub)
 
     # --- repo group (top-level; public content repo, no appliance) ---
     p_repo = sub.add_parser(

@@ -4,6 +4,125 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`pyfsr.ai_eval` / `pyfsr ai-eval` -- scored, repeatable FortiAI
+  investigation runs (8.0.1).**
+  - A suite defines stub MCP servers with known answers and scenarios. Each
+    scenario has an alert, the expected calls including pivots, the facts to
+    surface and the right verdict. The bundled suite has five evidence servers,
+    two distractors and three scenarios.
+  - `deploy()` hosts the stubs on the appliance through the bundled
+    `fsr-ai-eval-stub` connector: a local stdlib MCP listener on 127.0.0.1,
+    started like the Teams connector's bot listener. It then registers each
+    stub as an MCP server and allowlists it for the suite's agents.
+  - `run_suite()` scores every run from its trace: verdict, tool recall, query
+    accuracy, pivot recall, precision, fact retrieval, fact use and lost facts.
+    `aggregate()` reports the spread over repeated runs and how often each
+    expected call and fact was hit.
+  - Each run records its tokens and cost. When FortiAI is the LLM, it also
+    records the FortiAI balance drop (`metered_tokens`). `TokenPricing`
+    defaults to FortiAI's 5M free tokens/month and $100 per 500k. `aggregate()`
+    adds a `budget`: tokens and USD per investigation, and how many
+    investigations fit the free allowance. `pyfsr ai-eval cost <task_id>`
+    prices any finished investigation per agent, and `pyfsr ai-eval balance`
+    shows the allowance.
+- **`pyfsr llm status|setup|assign|restore`: swap FortiAI's LLM for a
+  third-party one.**
+  - `client.ai.setup_connector_llm()` installs the LLM connector from Content
+    Hub and configures it with the key and model. It then health-checks the
+    connector and sends a one-line test completion, which catches an account
+    with no credits. Only then does it create the reasoning profile. It raises
+    `LLMSetupError` on failure.
+  - `client.ai.assign_llm()` switches agents to a profile by setting each
+    agent's config `llm_provider`, and returns the previous state. The agent
+    record write (`POST /api/ai/agent/llm/config`) is best-effort, because the
+    8.0.1 gateway returns 403 for it on API sessions.
+  - `client.ai.restore_llm_assignments()` puts the previous state back.
+  - `client.ai.llm_assignments()` shows each agent's profile.
+- **`client.ai.token_balance()`** returns the FortiAI token allowance and what
+  is left (`FortiAITokenBalance`). It uses the `fortinet-fortiai-proxy`
+  connector behind an LLM profile.
+- **`InvestigationTrace.tokens_by_agent()`**, plus a per-run `AgentRun.tokens`.
+  The root run keeps only its own share, because the root trace's totals
+  already include every sub-agent run.
+- **`client.ai.traces` -- agent traceability (FortiSOAR 8.0.1).** Wraps the
+  fsr-ai tracer store behind the Trace Flow panel: `health`, `list`/`iter`,
+  `get` (span tree), `execution_tree` (a run plus every sub-agent run it
+  submitted), `spans`, `span`, `span_subtree`, `span_children`, `span_lineage`,
+  `tokens`, `session_tokens`, `llm_calls` (every LLM call with provider/model/
+  usage) and `purge_older_than`. Typed as `TraceSummary`, `TraceSpan`,
+  `TraceNode` (`walk()`/`find()`) and `ExecutionTree` (`total_steps`,
+  `count_by_type()`). Works around two 8.0.1 server defects: cursor paging
+  (`iter` stops after page 1 with a warning) and `/spans/{id}/tree` 404ing on
+  non-root spans (`span_subtree` falls back to the trace tree).
+- **`client.ai.traces.investigation(task_id)` / `agent_run(trace_id)` (8.0.1).**
+  Rebuilds an alert investigation from its traces: an `InvestigationTrace` of
+  `AgentRun`s (question, answer, evidence, confidence, errors, TOOL/LLM step
+  order), each tool call a `TracedToolCall` with its MCP server, output, error
+  and `selected_by` (`code` = the agent's own fixed lookup, `llm` = a blind
+  one-shot pick, `llm-chained` = picked after reading an earlier tool result).
+  `InvestigationTrace.metrics()` summarises tool use per question. Live-verified
+  on 8.0.1: an alert investigation made 41 calls (24 code, 17 blind LLM picks,
+  0 chained) where the chat agent does chain.
+- **`client.ai.chat()` / `client.ai.orchestrate()` -- multi-turn agent sessions
+  (8.0.1).** `AgentSession.ask/reply/approve/deny` drive the Conversation Agent
+  or the Orchestrator exactly as the in-app assistant does (agent trigger +
+  `X-CHAT-SESSION-ID`, `previous_response_id`/`request_id` carried between
+  turns). Each turn is an `AgentTurn`; a paused turn exposes `PendingInput`
+  (`needs_clarification` / `awaiting_approval` / `is_paused`).
+- **`client.playbooks.set_step_timeout` / `clear_step_timeout` (8.0.1).**
+  Writes a connector step's `arguments.timeout` (`operation_timeout` + `retry`),
+  enforcing the designer's rules client-side because the appliance stores any
+  value. Live-verified: retries fire on timeout only, not on an operation error.
+- **OAuth2 for direct MCP calls (8.0.1).** `build_mcp_auth_headers` (and so
+  `list_registered_tools` / `call_registered_tool`) handles `OAUTH2` servers:
+  a `client_credentials` mint in the form fsr-ai 8.0.1 uses, cached per
+  process until `expires_in`. A passed `token=` skips the mint. FortiSIEM
+  allows one mint per credential, so give pyfsr its own credential or pass
+  a token.
+- **`AgentToolResult` + `TraceSpan.tool_result`.** Typed view of a TOOL span's
+  output, including 8.0.1's `mcp_server_id`/`mcp_server_name`/`tool_call_id`/
+  `cached`.
+- **`validate_agent_package` checks `requirements.txt`** against fsr-ai
+  8.0.1's import rules (`REQUIREMENTS_BLOCKED_PATTERNS`, copied verbatim:
+  custom index/trusted-host/find-links, `git+`, http(s)/ftp URLs), so a package
+  the box would refuse fails locally. `requirements_problems(text)` is exported.
+
+### Fixed
+- **`get_agent_config` / `allow_mcp_server_for_agent` failed for an agent that
+  was never configured.**
+  - fsr-ai answers `500` for an agent with no config row. `get_agent_config`
+    now returns the default config, which is what the agent runs with.
+  - Forking the default config into the agent's own row now sends a minted
+    `config_id` (the column is `NOT NULL`) and the UI's
+    `"Custom Configuration"` name and `config_type: "custom"`.
+  - Live-verified on 8.0.1, where 10 of 23 agents had no config row.
+- **`investigation_tool_calls`, `attribute_tool_calls` and `find_investigations`
+  returned nothing on 8.0.1.** They read `llm_activity_logs`, which 8.0.1 no
+  longer writes for investigations. They now read the traces when the box has
+  them (`ToolCall.source == "traces"`, with new `agent`/`question`/
+  `selected_by`/`output`/`error`/`cached`/`span_id` fields) and fall back to the
+  logs on 8.0.0. `find_investigations` matches the alert uuid in each
+  `Alert Investigation` trace's root input (newest 500 traces only, because of
+  the 8.0.1 cursor defect).
+- **`ai.register_mcp_server` sends `type: "external"` by default.** 8.0.1
+  rejects a create without it ("type: This value should not be blank."). An
+  explicit `type` is kept.
+- **`ai.update_default_agent_config` now warns that it does nothing.** fsr-ai
+  (8.0.0 and 8.0.1) saves the default config but never reads it back: the GET
+  and the agents at run time use `app_config.yaml`. The old docstring said it
+  granted the server to every agent. Use `allow_mcp_server_for_agent`.
+- **`ai.verify_llm_config` always 422'd.** fsr-ai (8.0.0 and 8.0.1 alike)
+  binds `GET /api/ai/llm/config/{uuid}/verify` to a required `?model_id=`
+  query parameter (the path `{uuid}` is ignored), so the path-only call never
+  worked. It now tries the path-only form first and, on a 422 naming
+  `model_id`, retries with `?model_id=<config uuid>`. The docstring notes that
+  only OpenAI profiles implement the connection test; FortiAI proxy, Anthropic
+  and Gemini profiles 500 server-side.
+- **`ai.enable_features` now stamps `lastModifiedDate`** (`MM/dd/yyyy`, as the
+  UI does). Without it the System Settings page shows no "acknowledged and
+  enabled" line.
+
 ## [0.19.2] - 2026-08-24
 
 ### Fixed

@@ -1829,3 +1829,74 @@ def test_status_rejects_blank_task_id():
 def test_terminal_statuses_exposed():
     assert "finished" in PlaybooksAPI.TERMINAL_STATUSES
     assert "running" not in PlaybooksAPI.TERMINAL_STATUSES
+
+
+class _ChildRowsClient(_PollClient):
+    """log_list returning a whole run TREE for one task_id.
+
+    Child playbook runs (`workflow_reference`) share their parent's task_id, so
+    a single task_id legitimately maps to many rows. Each entry is a list of
+    (name, parent_wf, status) tuples describing one poll.
+    """
+
+    def __init__(self, polls):
+        super().__init__([])
+        self.polls = list(polls)
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        self.calls.append(("POST", endpoint, params))
+        if "log_list" in endpoint:
+            rows = self.polls.pop(0) if self.polls else self.polls_last
+            self.polls_last = rows
+            return {
+                "hydra:member": [
+                    {
+                        "@id": "/api/wf/api/workflows/1/",
+                        "name": name,
+                        "parent_wf": parent,
+                        "status": status,
+                        "modified": "t",
+                    }
+                    for name, parent, status in rows
+                ]
+            }
+        return {}
+
+
+def test_wait_does_not_return_while_a_child_run_is_still_going(monkeypatch):
+    """A finished CHILD is not a finished run.
+
+    Child runs share the parent's task_id, so reading a single row returns
+    whichever sorted first. Live, a refetch loop produced twelve children under
+    one parent; the first finished in 28s while the parent had five more
+    minutes of verify leg. `wait` returned "finished" then, and the caller read
+    the record before the run had written its verdict -- a missing comment that
+    reads as a broken playbook rather than a premature wait.
+    """
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    parent_iri = "/wf/api/workflows/1/"
+    c = _ChildRowsClient(
+        [
+            # Poll 1: a child has finished, the parent has NOT.
+            [("Child", parent_iri, "finished"), ("Parent", None, "running")],
+            # Poll 2: everything is done.
+            [("Child", parent_iri, "finished"), ("Parent", None, "finished")],
+        ]
+    )
+    run = PlaybooksAPI(c).wait("run-uuid", interval=0)
+    assert run["name"] == "Parent", "wait must return the parent run, not a child"
+    log_list_calls = [call for call in c.calls if "log_list" in call[1]]
+    assert len(log_list_calls) == 2, (
+        "wait returned on the first poll -- a finished child was mistaken for a finished run"
+    )
+
+
+def test_status_reports_the_parent_not_a_child(monkeypatch):
+    """`status` keys on the same task_id and had the same flaw."""
+    parent_iri = "/wf/api/workflows/1/"
+    c = _ChildRowsClient(
+        [
+            [("Child", parent_iri, "finished"), ("Parent", None, "running")],
+        ]
+    )
+    assert PlaybooksAPI(c).status("run-uuid") == "running"

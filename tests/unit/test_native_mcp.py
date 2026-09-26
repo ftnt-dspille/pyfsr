@@ -260,7 +260,61 @@ def test_build_mcp_auth_headers_unsupported_raises():
     from pyfsr.api.native_mcp import build_mcp_auth_headers
 
     with pytest.raises(ValueError, match="unsupported MCP auth type"):
-        build_mcp_auth_headers({"type": "OAUTH2"})
+        build_mcp_auth_headers({"type": "CUSTOM"})
+
+
+def test_build_mcp_auth_headers_oauth2_mints_once_and_caches(monkeypatch):
+    import requests
+
+    from pyfsr.api import native_mcp
+
+    monkeypatch.setattr(native_mcp, "_OAUTH2_TOKENS", {})
+    posts = []
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"access_token": f"t{len(posts)}", "expires_in": 3600}
+
+    def fake_post(url, data=None, headers=None, timeout=None, verify=None):
+        posts.append((url, data, headers, verify))
+        return Resp()
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    auth = {
+        "type": "oauth2",
+        "token_url": "https://siem.example.com/token",
+        "client_id": "cid",
+        "client_secret": "sec",
+        "verify": False,
+    }
+    assert native_mcp.build_mcp_auth_headers(auth) == {"Authorization": "Bearer t1"}
+    # FortiSIEM allows one mint per credential, so a second call must reuse it.
+    assert native_mcp.build_mcp_auth_headers(auth) == {"Authorization": "Bearer t1"}
+    assert len(posts) == 1
+    url, data, headers, verify = posts[0]
+    assert url == "https://siem.example.com/token"
+    assert data == {"grant_type": "client_credentials", "client_id": "cid", "client_secret": "sec"}
+    assert headers["Content-Type"] == "application/x-www-form-urlencoded"
+    assert verify is False
+
+
+def test_build_mcp_auth_headers_oauth2_nested_config_and_token_override(monkeypatch):
+    import requests
+
+    from pyfsr.api import native_mcp
+
+    monkeypatch.setattr(native_mcp, "_OAUTH2_TOKENS", {})
+
+    def no_post(*a, **kw):
+        raise AssertionError("must not mint when a token is supplied")
+
+    monkeypatch.setattr(requests, "post", no_post)
+    assert native_mcp.build_mcp_auth_headers({"type": "OAUTH2", "value": "given"}) == {"Authorization": "Bearer given"}
+    with pytest.raises(ValueError, match="client_secret"):
+        native_mcp.build_mcp_auth_headers({"type": "OAUTH2", "oauth2": {"token_url": "u", "client_id": "c"}})
 
 
 @pytest.mark.requires_extra("mcp")
