@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import zipfile
+from types import SimpleNamespace
 
 import pytest
 
@@ -204,16 +205,65 @@ def test_export_agent_writes_bytes_to_dest(tmp_path):
     api = AIApi(client)
     dest = tmp_path / "exported.zip"
 
-    out = api.export_agent("a-99", str(dest))
+    out = api.export_agent(99, str(dest))
 
     assert out == str(dest)
     assert dest.read_bytes() == b"PK\x03\x04zipbytes"
     (call,) = client.requests
     assert call["method"] == "POST"
-    assert call["endpoint"] == "/api/ai/agent/export/a-99"
+    assert call["endpoint"] == "/api/ai/agent/export/99"
+
+
+def test_export_agent_resolves_a_uuid_or_name_to_the_numeric_id(tmp_path, monkeypatch):
+    # the endpoint looks agents up by numeric id; a uuid fails with a bigint error on 8.0.1
+    client = RecordingClient(FakeResponse(content=b"PK"))
+    api = AIApi(client)
+    agent = SimpleNamespace(id=7, uuid="29268022-e7dd-45d8-b9a2-3ce8bd828fef", name="siem")
+    monkeypatch.setattr(api, "list_agents", lambda **kw: [agent])
+    api.export_agent(agent.uuid, str(tmp_path / "a.zip"))
+    api.export_agent("siem", str(tmp_path / "b.zip"))
+    assert [c["endpoint"] for c in client.requests] == ["/api/ai/agent/export/7"] * 2
+    with pytest.raises(ValueError, match="no installed agent"):
+        api.export_agent("ghost", str(tmp_path / "c.zip"))
 
 
 def test_export_agent_requires_uuid(tmp_path):
     api = AIApi(RecordingClient())
     with pytest.raises(ValueError):
         api.export_agent("  ", str(tmp_path / "x.zip"))
+
+
+# ------------------------------------------------------- requirements.txt (8.0.1)
+
+
+def test_requirements_txt_blocked_lines_fail_validation(tmp_path):
+    root = _make_agent_dir(tmp_path)
+    (root / "requirements.txt").write_text(
+        "# private mirror\n"
+        "requests==2.32.0\n"
+        "--extra-index-url https://pypi.example.com/simple\n"
+        "mylib @ git+https://git.example.com/mylib.git\n"
+    )
+    with pytest.raises(ValueError) as exc:
+        AgentPackage.from_dir(str(root))
+    msg = str(exc.value)
+    assert "Custom index URL is not allowed" in msg
+    assert "Git repository URLs are not allowed" in msg
+    assert "requests==2.32.0" not in msg
+
+
+def test_requirements_txt_plain_pins_pass(tmp_path):
+    root = _make_agent_dir(tmp_path)
+    (root / "requirements.txt").write_text("requests==2.32.0\npyyaml>=6\n\n# a comment with https://x\n")
+    pkg = AgentPackage.from_dir(str(root))
+    assert pkg.requirements.startswith("requests")
+
+
+def test_requirements_problems_matches_server_rules_verbatim():
+    from pyfsr.models import requirements_problems
+
+    assert requirements_problems("-i https://mirror/simple") != []
+    assert requirements_problems("--TRUSTED-HOST mirror") != []  # case-insensitive, like fsr-ai
+    # The server's pattern is --find-link\s+, so pip's real --find-links slips through; mirror that.
+    assert requirements_problems("--find-links ./wheels") == []
+    assert requirements_problems("numpy==2.0") == []

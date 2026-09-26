@@ -1,8 +1,12 @@
 """Unit tests for the FortiAI investigation / LLM / MCP API (``client.ai``)."""
 
+import re
+from types import SimpleNamespace
+
 import pytest
 
 from pyfsr.api.ai import TERMINAL_STATUSES, AIApi
+from pyfsr.exceptions import APIError
 
 
 class FakeSystemSettings:
@@ -84,6 +88,9 @@ def test_enable_features_writes_ai_feature_flag():
     ai.enable_features(modified_by="CS Admin")
     assert c.system_settings.patches[0]["ai_feature"]["enable"] is True
     assert c.system_settings.patches[0]["ai_feature"]["lastModifiedBy"] == "CS Admin"
+    # the UI's acknowledgement banner needs the date too, in DEFAULT_DATE_FORMAT.DATE
+    stamped = c.system_settings.patches[0]["ai_feature"]["lastModifiedDate"]
+    assert re.fullmatch(r"\d{2}/\d{2}/\d{4}", stamped)
     assert ai.features_enabled() is True
 
 
@@ -211,6 +218,25 @@ def test_register_mcp_server_json_encodes_dict_authentication():
     ai.register_mcp_server({"name": "W", "authentication": {"type": "none"}})
     sent = [call for call in c.calls if call[0] == "POST"][0][2]
     assert sent["authentication"] == '{"type": "none"}'
+
+
+def test_register_mcp_server_defaults_type_external():
+    # 8.0.1 rejects a create without type ("type: This value should not be blank.").
+    c = RecordingClient(responses={("POST", "/api/3/mcp_configurations"): {"uuid": "m-3"}})
+    ai = AIApi(c)
+    ai.register_mcp_server({"name": "W"})
+    ai.register_mcp_server({"name": "C", "type": "connector"})
+    posts = [call[2] for call in c.calls if call[0] == "POST"]
+    assert posts[0]["type"] == "external"
+    assert posts[1]["type"] == "connector"
+
+
+def test_update_default_agent_config_warns_it_is_never_read():
+    c = RecordingClient()
+    ai = AIApi(c)
+    with pytest.warns(UserWarning, match="allow_mcp_server_for_agent"):
+        ai.update_default_agent_config({"mcp_server": ["m-1"]})
+    assert ("POST", "/api/ai/agent/config/default") in [call[:2] for call in c.calls]
 
 
 def test_update_mcp_server_puts_and_json_encodes_auth():
@@ -345,10 +371,12 @@ def test_allow_mcp_server_forks_default_config():
     ai = AIApi(c)
     ai.allow_mcp_server_for_agent("ioc-enrichment", "1_0_0", "fsiem")
     post = [call for call in c.calls if call[0] == "POST" and call[1] == "/api/ai/agent/config"][0]
-    # seeded from default (llm_provider carried over, config_type dropped) + new uuid
+    # seeded from default (llm_provider carried over) + new uuid, as the UI's
+    # "Custom Configuration" with a minted config_id (NOT NULL on create)
     assert post[2]["config"]["mcp_server"] == ["x", "fsiem"]
     assert post[2]["config"]["llm_provider"] == "p1"
-    assert "config_type" not in post[2]["config"]
+    assert post[2]["config"]["config_type"] == "custom"
+    assert post[2]["name"] == "Custom Configuration" and post[2]["config_id"]
 
 
 def test_disallow_mcp_server_removes_uuid():
@@ -1065,6 +1093,53 @@ def test_verify_llm_config_does_not_send_model_id_as_query_param():
     gets = [call for call in c.calls if call[0] == "GET" and "verify" in call[1]]
     assert len(gets) == 1
     assert gets[0][1] == "/api/ai/llm/config/abc/verify"
+
+
+class ParamRecordingClient(RecordingClient):
+    """RecordingClient whose GET also records params and can raise per-call."""
+
+    def __init__(self, get_results):
+        super().__init__()
+        self.get_results = list(get_results)
+        self.get_params = []
+
+    def get(self, endpoint, params=None, **kw):
+        self.calls.append(("GET", endpoint))
+        self.get_params.append(params)
+        result = self.get_results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+def _api_error(status, message):
+    return APIError(message, SimpleNamespace(status_code=status))
+
+
+def test_verify_llm_config_retries_with_model_id_query_on_801():
+    # fsr-ai 8.0.1: path {uuid} is ignored, ?model_id= is required and holds the config uuid
+    missing = _api_error(422, "[{'type': 'missing', 'loc': ['query', 'model_id'], 'msg': 'Field required'}]")
+    c = ParamRecordingClient([missing, {"uuid": "abc", "modelname": "gpt-4.1"}])
+    ai = AIApi(c)
+    result = ai.verify_llm_config("abc", model_id="gpt-4.1")
+    assert result == {"uuid": "abc", "modelname": "gpt-4.1"}
+    assert [call[1] for call in c.calls] == ["/api/ai/llm/config/abc/verify"] * 2
+    assert c.get_params == [None, {"model_id": "abc"}]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        _api_error(500, "Internal server error"),
+        _api_error(422, "[{'loc': ['body', 'name'], 'msg': 'Field required'}]"),
+    ],
+)
+def test_verify_llm_config_does_not_retry_other_errors(error):
+    c = ParamRecordingClient([error])
+    ai = AIApi(c)
+    with pytest.raises(APIError):
+        ai.verify_llm_config("abc")
+    assert c.get_params == [None]
 
 
 def test_test_llm_config_posts_to_config_verify():

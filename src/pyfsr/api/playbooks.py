@@ -122,6 +122,12 @@ _TERMINAL_STATUSES = frozenset({"finished", "failed", "error", "cancelled", "abo
 _SETTLING_STATUSES = frozenset({"finished with error"})
 _SETTLE_SECONDS = 15.0
 
+# How many run rows to pull per task_id. Child playbook runs share their
+# parent's task_id, so this must comfortably exceed the number of children a
+# single run can spawn -- a polling loop that calls a child per iteration is
+# the normal way to exceed a small cap.
+_RUN_ROW_LIMIT = 200
+
 # Statuses that mean a step actually FAILED -- used by ``why_failed`` to pick the
 # real failing step. Deliberately excludes ``incipient``/``pending``/``skipped``/
 # ``running``: when a non-last step fails, its downstream steps stay ``incipient``,
@@ -1073,6 +1079,58 @@ class PlaybooksAPI(BaseAPI):
         if not fields:
             raise ValueError("update() requires at least one field to change")
         return self.client.put(f"{_WORKFLOWS}/{uuid}", data=fields)
+
+    def set_step_timeout(self, step: str, *, operation_timeout: int, retry: int = 0) -> dict[str, Any]:
+        """Set a connector step's timeout and retry count (FortiSOAR 8.0.1+).
+
+        Writes ``arguments.timeout = {"operation_timeout": <s>, "retry": <n>}`` on
+        the step -- what the designer's *Timeout* step option saves. The
+        connector operation is abandoned after ``operation_timeout`` seconds and
+        re-run up to ``retry`` more times.
+
+        Live-verified on 8.0.1: retries fire on a **timeout only**. An operation
+        that raises an error is not retried, whatever ``retry`` says (the
+        designer tooltip suggests otherwise). All attempts run inside one
+        connector execute call, so the step's duration is roughly
+        ``operation_timeout * (retry + 1)``.
+
+        The appliance stores any value without checking it, so the designer's
+        rules are enforced here: whole seconds, ``operation_timeout >= 1``,
+        ``retry >= 0``, and ``operation_timeout * (retry + 1) < 1800`` (30 min).
+
+        Args:
+            step: step uuid or ``/api/3/workflow_steps/<uuid>`` IRI.
+            operation_timeout: seconds per attempt.
+            retry: extra attempts after a timeout (0 = no retry).
+
+        Returns:
+            The updated step record.
+        """
+        if isinstance(operation_timeout, bool) or not isinstance(operation_timeout, int) or operation_timeout < 1:
+            raise ValueError(f"operation_timeout must be a whole number of seconds >= 1, got {operation_timeout!r}")
+        if isinstance(retry, bool) or not isinstance(retry, int) or retry < 0:
+            raise ValueError(f"retry must be a whole number >= 0, got {retry!r}")
+        if operation_timeout * (retry + 1) >= 1800:
+            raise ValueError(
+                f"total timeout including retries must be under 1800s; "
+                f"{operation_timeout}s x {retry + 1} attempt(s) = {operation_timeout * (retry + 1)}s"
+            )
+        return self._put_step_timeout(step, {"operation_timeout": operation_timeout, "retry": retry})
+
+    def clear_step_timeout(self, step: str) -> dict[str, Any]:
+        """Remove a step's timeout/retry option (back to the connector's own timeout)."""
+        return self._put_step_timeout(step, None)
+
+    def _put_step_timeout(self, step: str, timeout: dict[str, int] | None) -> dict[str, Any]:
+        step_uuid = uuid_from_iri(step) if "/" in step else step
+        step_uuid = _require_uuid(step_uuid, "set_step_timeout")
+        current = self.client.get(f"/api/3/workflow_steps/{step_uuid}")
+        args = dict((current or {}).get("arguments") or {})
+        if timeout is None:
+            args.pop("timeout", None)
+        else:
+            args["timeout"] = timeout
+        return self.client.put(f"/api/3/workflow_steps/{step_uuid}", data={"arguments": args})
 
     def ensure_active(self, playbook: str | dict[str, Any], *, active: bool = True) -> dict[str, Any]:
         """Idempotently ensure a playbook's ``isActive`` flag is set; no-op if already correct.
@@ -2453,20 +2511,34 @@ class PlaybooksAPI(BaseAPI):
         settled_since: float | None = None
         last_modified: str | None = None
         while True:
-            resp = self.log_list(task_id=task_id, limit=1)
+            # EVERY row for this task_id, not just the first. A playbook that
+            # calls a child (`workflow_reference`) produces one row per child
+            # run SHARING the parent's task_id -- a refetch loop was measured
+            # emitting twelve. With `limit=1` this returned whichever row
+            # happened to sort first, so a child that finished in 28s reported
+            # the whole run "finished" while the parent still had five minutes
+            # of verify leg left. The caller then read the record before the
+            # run had written its verdict and saw a missing comment, which
+            # reads as a broken playbook rather than as a premature wait.
+            resp = self.log_list(task_id=task_id, limit=_RUN_ROW_LIMIT)
             members = extract_members(resp)
             if members:
-                run = members[0]
-                status = (run.get("status") or "").lower()
-                if status in _TERMINAL_STATUSES:
-                    return _shape_run(run)
-                if status in _SETTLING_STATUSES:
-                    modified = str(run.get("modified") or "")
+                # The parent is the row with no `parent_wf`; it is the run the
+                # caller triggered and the one whose shape they expect back.
+                parent = next((m for m in members if not m.get("parent_wf")), members[0])
+                statuses = [(m.get("status") or "").lower() for m in members]
+                # A run is done when NOTHING under it is still going.
+                if all(st in _TERMINAL_STATUSES for st in statuses):
+                    return _shape_run(parent)
+                if all(st in _TERMINAL_STATUSES or st in _SETTLING_STATUSES for st in statuses):
+                    # Settle on the NEWEST stamp across the whole tree, so a
+                    # quiet parent cannot mask a child still doing work.
+                    modified = max(str(m.get("modified") or "") for m in members)
                     now = time.monotonic()
                     if modified != last_modified:
                         last_modified, settled_since = modified, now
                     elif settled_since is not None and now - settled_since >= _SETTLE_SECONDS:
-                        return _shape_run(run)
+                        return _shape_run(parent)
                 else:
                     settled_since = last_modified = None
             if time.monotonic() >= deadline:
@@ -2495,10 +2567,13 @@ class PlaybooksAPI(BaseAPI):
         """
         if not isinstance(task_id, str) or not task_id.strip():
             raise ValueError("status() requires a non-empty task_id")
-        members = extract_members(self.log_list(task_id=task_id, limit=1))
+        members = extract_members(self.log_list(task_id=task_id, limit=_RUN_ROW_LIMIT))
         if not members:
             return None
-        return (members[0].get("status") or "").lower() or None
+        # The parent row, for the same reason :meth:`wait` looks for it: child
+        # runs share the parent's task_id and finish before it does.
+        parent = next((m for m in members if not m.get("parent_wf")), members[0])
+        return (parent.get("status") or "").lower() or None
 
     def wait_for_run(
         self,

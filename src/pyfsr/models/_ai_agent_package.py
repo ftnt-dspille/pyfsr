@@ -1,6 +1,6 @@
-"""Typed models for a FortiSOAR **AI agent package** — the installable bundle.
+"""Typed models for a FortiSOAR **AI agent package** -- the installable bundle.
 
-An AI agent (the FortiSOAR 8.0 *agentic AI* kind, run by the ``fsr-ai`` service —
+An AI agent (the FortiSOAR 8.0 *agentic AI* kind, run by the ``fsr-ai`` service --
 **not** the remote execution :class:`~pyfsr.models._agents.Agent`) ships as a zip
 whose top-level folder is the agent's ``name``. Both the Fortinet-published agents
 and a custom one you author share the same layout::
@@ -17,9 +17,9 @@ and a custom one you author share the same layout::
         large.png
       constants.py         # optional helper modules
 
-These models exist to (a) validate a package before you upload it — a bad
+These models exist to (a) validate a package before you upload it -- a bad
 ``agentclass`` or a prompt uuid the code references but the yaml omits is a silent
-runtime failure on the appliance — and (b) give tooling typed access to the
+runtime failure on the appliance -- and (b) give tooling typed access to the
 manifest. They stay dict-compatible (``extra="allow"``) because the manifest
 carries more keys than are curated here.
 
@@ -36,6 +36,50 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+#: fsr-ai 8.0.1's ``requirements_validation.dangerous_patterns`` (``app_config.yaml``),
+#: copied verbatim. On import, each non-blank, non-``#`` line of an agent's
+#: ``requirements.txt`` is ``re.search``-ed case-insensitively against these and
+#: the first hit rejects the package. 8.0.0 had no such check. The effect: an
+#: agent can only install from the appliance's default package index -- no
+#: private mirror, no git or URL requirement.
+#:
+#: Kept byte-for-byte, quirks included: ``--find-link\s+`` does not match the
+#: real pip spelling ``--find-links``, and ``-i\s+`` also hits any ``-i `` in a
+#: line. Matching the server exactly is the point.
+REQUIREMENTS_BLOCKED_PATTERNS: tuple[tuple[str, str], ...] = (
+    (r"--index-url\s+", "Custom index URL is not allowed"),
+    (r"--extra-index-url\s+", "Custom index URL is not allowed"),
+    (r"--trusted-host\s+", "Custom trusted host is not allowed"),
+    (r"-i\s+", "Custom index URL is not allowed"),
+    (r"-f\s+", "Custom find link is not allowed"),
+    (r"--find-link\s+", "Custom find link is not allowed"),
+    (r"git\+", "Git repository URLs are not allowed"),
+    (r"http[s]?://", "External HTTP URLs are not allowed"),
+    (r"ftp://", "FTP URLs are not allowed"),
+)
+
+
+def requirements_problems(text: str) -> list[str]:
+    """Return why FortiSOAR 8.0.1 would refuse this ``requirements.txt``, one entry per bad line.
+
+    Same rule as fsr-ai's ``_validate_requirements``: strip each line, skip
+    blanks and ``#`` comments, report the first pattern in
+    ``REQUIREMENTS_BLOCKED_PATTERNS`` that matches. The server stops at the
+    first bad line; this lists every one so they can all be fixed at once.
+    """
+    import re
+
+    problems: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        for pattern, message in REQUIREMENTS_BLOCKED_PATTERNS:
+            if re.search(pattern, line, re.IGNORECASE):
+                problems.append(f"requirements.txt: {message}: {line!r}")
+                break
+    return problems
+
 
 class _Lenient(BaseModel):
     """Base: preserve unknown manifest keys, allow population by field name."""
@@ -50,7 +94,7 @@ class AgentInfo(_Lenient):
     name a class defined in ``agent.py``; :class:`AgentPackage` cross-checks both.
     ``configuration.fields`` is the per-agent config form the FortiSOAR UI renders
     (config-type toggle, LLM-provider picker, MCP-server multiselect, masking
-    agent) — left untyped here as it's a free-form field schema.
+    agent) -- left untyped here as it's a free-form field schema.
     """
 
     name: str
@@ -78,7 +122,7 @@ class AgentPrompt(_Lenient):
     """One entry in ``prompt.yaml``'s ``prompts`` map (keyed by a uuid).
 
     ``agent.py`` pulls a prompt by that uuid (``self.get_prompt_by_uuid(...)``)
-    and ``.format(**inputs)`` s ``system_instruction`` / ``user_instruction`` — so
+    and ``.format(**inputs)`` s ``system_instruction`` / ``user_instruction`` -- so
     any ``{placeholder}`` in those strings must be supplied at call time.
     """
 
@@ -97,7 +141,7 @@ class AgentPromptFile(_Lenient):
 
 
 class AgentMemory(_Lenient):
-    """``config/memory.yaml`` — the agent's MCP-tool allowlist.
+    """``config/memory.yaml`` -- the agent's MCP-tool allowlist.
 
     ``allowed_tools`` maps a registered **MCP-configuration uuid** (see
     ``client.ai.mcp_configs()``) to the list of tool names on that server the
@@ -132,7 +176,10 @@ class AgentPackage(BaseModel):
     memory: AgentMemory = Field(default_factory=AgentMemory)
     #: Package-relative file paths present in the bundle (e.g. ``"agent.py"``).
     files: list[str] = Field(default_factory=list)
-    #: Source of ``agent.py`` when known — used to check ``agentclass`` and
+    #: Contents of ``requirements.txt`` when the package has one -- checked
+    #: against ``REQUIREMENTS_BLOCKED_PATTERNS``.
+    requirements: str | None = None
+    #: Source of ``agent.py`` when known -- used to check ``agentclass`` and
     #: cross-check referenced prompt uuids.
     agent_source: str | None = None
 
@@ -168,6 +215,7 @@ class AgentPackage(BaseModel):
             memory = AgentMemory.model_validate(yaml.safe_load(memory_path.read_text()) or {})
 
         agent_py = root / "agent.py"
+        requirements_path = root / "requirements.txt"
         files = sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
         pkg = cls(
             info=info,
@@ -175,6 +223,7 @@ class AgentPackage(BaseModel):
             memory=memory,
             files=files,
             agent_source=agent_py.read_text() if agent_py.is_file() else None,
+            requirements=requirements_path.read_text() if requirements_path.is_file() else None,
         )
         pkg.validate_consistency()
         return pkg
@@ -184,9 +233,14 @@ class AgentPackage(BaseModel):
 
         Checks the ``agentclass`` is defined in ``agent.py``, every prompt uuid
         the source references exists in ``prompt.yaml``, and manifest-named icons
-        are present. A no-op for fields it can't see (e.g. no ``agent_source``).
+        are present, and that ``requirements.txt`` passes the 8.0.1 import check
+        (see ``requirements_problems()``). A no-op for fields it can't see
+        (e.g. no ``agent_source``).
         """
         problems: list[str] = []
+
+        if self.requirements is not None:
+            problems.extend(requirements_problems(self.requirements))
 
         if self.agent_source is not None and self.info.agentclass:
             if f"class {self.info.agentclass}" not in self.agent_source:

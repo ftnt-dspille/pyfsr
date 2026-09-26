@@ -533,6 +533,17 @@ def _format_validation_error(connector: str, check: ConfigValidationResult) -> s
     return "\n".join(lines)
 
 
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-?([0-9a-fA-F]{4}-?){3}[0-9a-fA-F]{12}$")
+
+
+def _is_remote_action(raw: Any) -> bool:
+    """A queued agent action (not a health status): what the healthcheck endpoint
+    returns for a configuration bound to a remote agent."""
+    return (
+        isinstance(raw, dict) and "remote_status" in raw and raw.get("action") == "health-check" and "status" not in raw
+    )
+
+
 class ConnectorsAPI(BaseAPI):
     """Live connector listing, healthcheck, and operation execution."""
 
@@ -1101,6 +1112,7 @@ class ConnectorsAPI(BaseAPI):
         version: str | None = None,
         config: str | None = None,
         config_id: str | None = None,
+        agent_timeout: float = 120.0,
     ) -> HealthcheckResult:
         """Live-check whether a connector configuration is reachable.
 
@@ -1111,6 +1123,12 @@ class ConnectorsAPI(BaseAPI):
         configuration **UUID** or a display **name** -- the FortiSOAR server
         resolves both (live-verified on 8.0.0). Omit it to check the connector's
         *default* configuration.
+
+        A configuration bound to a remote **agent** is checked on that agent: the
+        server queues the check and this waits (up to ``agent_timeout`` seconds)
+        for the agent's answer, returning ``status="timeout"`` if none arrives.
+        Name such a configuration by name or UUID -- a name is resolved here,
+        since the server only resolves names among its own configurations.
 
         .. deprecated::
            ``config_id=`` is a deprecated alias for ``config=``. It still works
@@ -1131,9 +1149,19 @@ class ConnectorsAPI(BaseAPI):
                 message=f"{connector!r} is not configured on this instance",
             )
         path = f"/api/integration/connectors/healthcheck/{connector}/{version}/"
+        # The server resolves a config NAME only among the appliance's own
+        # configurations. Asked by name for one bound to a remote agent it never
+        # answers: the request hangs to the read timeout and was retried twice,
+        # ~90s per check (measured). So an agent-bound config is asked for by
+        # UUID; the name lookup is a fast listing.
+        name = config
+        if config and not _UUID_RE.match(config):
+            row = self._find_configuration_by_name(connector, config)
+            if row and row.get("agent") and row.get("config_id"):
+                config = row["config_id"]
         params = {"config": config} if config else None
         try:
-            return HealthcheckResult.model_validate(self.client.get(path, params=params))
+            raw = self.client.get(path, params=params)
         except Exception as e:  # noqa: BLE001 - normalize "not configured" to data
             resp = getattr(e, "response", None)
             if resp is not None and getattr(resp, "status_code", None) == 404:
@@ -1145,6 +1173,58 @@ class ConnectorsAPI(BaseAPI):
                     http_status=404,
                 )
             raise
+        if _is_remote_action(raw):
+            return self._await_remote_health(
+                connector, version, raw, name=name if name != config else None, timeout=agent_timeout
+            )
+        return HealthcheckResult.model_validate(raw)
+
+    def _await_remote_health(
+        self, connector: str, version: str, action: dict[str, Any], *, name: str | None = None, timeout: float
+    ) -> HealthcheckResult:
+        """Wait for an agent-run healthcheck to report back.
+
+        For a configuration bound to a remote agent the endpoint does not answer
+        with a health status: it queues the check on the agent and returns the
+        action record (``remote_status: in-progress``). The agent's answer lands
+        on the configuration row's ``health_status``, stamped with the action's
+        id as ``request_id``, so poll that row until it carries this request.
+        """
+        deadline = time.monotonic() + timeout
+        config_id, request_id = action.get("configuration"), action.get("id")
+        while True:
+            row = self._configuration_row(config_id, name)
+            health = dict(getattr(row, "health_status", None) or {})
+            if health and (request_id is None or (health.get("request_id") or 0) >= request_id):
+                health.setdefault("name", connector)
+                health.setdefault("version", version)
+                if health.get("request_id") is not None:  # int from the agent
+                    health["request_id"] = str(health["request_id"])
+                return HealthcheckResult.model_validate(health)
+            if time.monotonic() > deadline:
+                return HealthcheckResult(
+                    name=connector,
+                    version=version,
+                    status="timeout",
+                    message=f"agent {action.get('agent')} did not report health within {timeout:.0f}s",
+                )
+            time.sleep(2)
+
+    def _configuration_row(self, config_id: str | None, name: str | None) -> Any:
+        """The configuration record with ``config_id``: by name when known (one
+        small page), else the unfiltered listing page by page. Filtering on the
+        action's ``connector`` (the agent's install id) returns NOTHING, so a
+        wait keyed on it never saw the agent's answer and always timed out."""
+        if name:
+            rows = self.list_configurations(name=name)
+            return next((r for r in rows if getattr(r, "config_id", None) == config_id), None)
+        page = 1
+        while True:
+            rows = self.list_configurations(page=page)
+            hit = next((r for r in rows if getattr(r, "config_id", None) == config_id), None)
+            if hit is not None or len(rows) < 100:
+                return hit
+            page += 1
 
     def healthcheck_all(
         self, connectors: list[str] | None = None, *, max_workers: int = 8
@@ -1953,15 +2033,43 @@ class ConnectorsAPI(BaseAPI):
             raise
         return {"ok": True, "dev_id": dev_id}
 
-    def _find_configuration_by_name(self, connector: str, name: str) -> dict[str, Any] | None:
+    def _find_configuration_by_name(
+        self, connector: str, name: str, *, agent: str | None = None
+    ) -> dict[str, Any] | None:
         """The connector's configuration row matching ``name`` (carrying
-        ``config_id`` + ``agent``), or ``None``. Reads :meth:`connector_detail`,
-        the only view that lists full config rows."""
+        ``config_id`` + ``agent``), or ``None``.
+
+        Reads :meth:`connector_detail` first. That view only lists the
+        configurations of the appliance's OWN install of the connector: a
+        configuration bound to a remote agent lives under the agent's install,
+        which has a different connector id, so it is invisible there. Missing it
+        made :meth:`upsert_configuration` re-create an agent-bound config and
+        fail on the uniqueness check. So a miss falls back to the configuration
+        endpoint's name filter, keeping only rows whose install id resolves to
+        this connector (and, when given, this ``agent``).
+        """
         try:
             detail = self.connector_detail(connector)
         except ValueError:
+            detail = {}
+        for row in detail.get("configuration") or []:
+            if row.get("name") == name and (agent is None or row.get("agent") == agent):
+                return row
+        for cfg in self.list_configurations(name=name):
+            row = cfg.model_dump() if hasattr(cfg, "model_dump") else dict(cfg)
+            if agent is not None and row.get("agent") != agent:
+                continue
+            if row.get("connector") is not None and self._install_name(row["connector"]) == connector:
+                return row
+        return None
+
+    def _install_name(self, install_id: int) -> str | None:
+        """The connector name of an install id -- an agent's install included."""
+        try:
+            resp = self.client.post(f"/api/integration/connectors/{install_id}/", data={})
+        except Exception:  # noqa: BLE001 -- an unreadable install is simply not a match
             return None
-        return next((c for c in (detail.get("configuration") or []) if c.get("name") == name), None)
+        return resp.get("name") if isinstance(resp, dict) else None
 
     def upsert_configuration(
         self,
@@ -2012,7 +2120,7 @@ class ConnectorsAPI(BaseAPI):
                 fails structural validation.
         """
         version = version or self.resolve_version(connector)
-        existing = self._find_configuration_by_name(connector, name)
+        existing = self._find_configuration_by_name(connector, name, agent=agent)
 
         def _write() -> ConnectorConfig:
             if existing:
@@ -2043,7 +2151,7 @@ class ConnectorsAPI(BaseAPI):
         except Exception:
             # The write may have persisted before a post-save hook raised -- verify
             # by re-fetch rather than trusting the status code.
-            confirmed = self._find_configuration_by_name(connector, name)
+            confirmed = self._find_configuration_by_name(connector, name, agent=agent)
             if confirmed is not None:
                 self.clear_cache()
                 return ConnectorConfig.model_validate(confirmed)

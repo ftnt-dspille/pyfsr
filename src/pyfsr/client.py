@@ -6,6 +6,7 @@ import re
 import sys
 import time
 import warnings
+from collections import deque
 from typing import TYPE_CHECKING, Any, Literal, overload
 from urllib.parse import urljoin, urlparse, urlunparse
 
@@ -258,6 +259,11 @@ class FortiSOAR:
             logger.info(f"Logging to file: {self._log_file}")
 
         self.timeout = timeout
+        # Every request's wall time, newest last: {"method", "path", "status",
+        # "seconds", "at" (time.monotonic() at completion)}; "status" is the exception name when no response came back.
+        # A timed-out GET's entry spans all of urllib3's retries, so a call that
+        # is quietly retried shows up as one very slow line, not a fast one.
+        self.request_timings: deque[dict[str, Any]] = deque(maxlen=1000)
         self.dry_run = dry_run
         self._version_cache: str | dict[str, Any] | None = None
         self.session = requests.Session()
@@ -679,6 +685,7 @@ class FortiSOAR:
                 **kwargs,
             )
             elapsed = time.time() - start_time
+            self._record_timing(method, url, response.status_code, elapsed)
 
             # HTTP trace: log request/response bodies if enabled
             if self.http_trace:
@@ -745,12 +752,25 @@ class FortiSOAR:
 
         except requests.exceptions.RequestException as e:
             elapsed = time.time() - start_time
+            if getattr(e, "response", None) is None:
+                self._record_timing(method, url, type(e).__name__, elapsed)
             if hasattr(e, "response") and e.response is not None:
                 self._log_response(e.response, elapsed)
                 handle_api_error(e.response)
             if self.verbose:
                 logger.error(f"Request failed: {str(e)}")  # pragma: no cover
             raise
+
+    def _record_timing(self, method: str, url: str, status: int | str, elapsed: float) -> None:
+        self.request_timings.append(
+            {
+                "method": method.upper(),
+                "path": urlparse(url).path,
+                "status": status,
+                "seconds": round(elapsed, 2),
+                "at": time.monotonic(),
+            }
+        )
 
     @staticmethod
     def _safe_json(response: requests.Response) -> Any:

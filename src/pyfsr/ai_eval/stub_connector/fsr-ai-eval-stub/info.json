@@ -1,0 +1,120 @@
+{
+  "name": "fsr-ai-eval-stub",
+  "label": "FSR AI Eval Stub",
+  "version": "1.0.0",
+  "description": "Hosts scenario-driven stub MCP servers on the appliance (127.0.0.1 only) so AI investigations can be scored against known ground truth. Built and driven by pyfsr.ai_eval.",
+  "publisher": "pyfsr",
+  "cs_approved": false,
+  "cs_compatible": true,
+  "category": "Utilities",
+  "configuration": {
+    "fields": [
+      {
+        "title": "Listener Port",
+        "name": "port",
+        "type": "integer",
+        "required": true,
+        "editable": true,
+        "visible": true,
+        "tooltip": "Local TCP port the stub MCP listener binds on 127.0.0.1.",
+        "description": "Local TCP port the stub MCP listener binds on 127.0.0.1.",
+        "value": 18900
+      },
+      {
+        "title": "Bearer Token",
+        "name": "token",
+        "type": "password",
+        "required": false,
+        "editable": true,
+        "visible": true,
+        "tooltip": "Optional. When set, MCP requests must send Authorization: Bearer <token>.",
+        "description": "Optional. When set, MCP requests must send Authorization: Bearer <token>."
+      }
+    ]
+  },
+  "operations": [
+    {
+      "operation": "load_fixtures",
+      "title": "Load Fixtures",
+      "description": "Replace the stub servers' fixtures (JSON {servers:{...}}) and make sure the listener is running.",
+      "enabled": true,
+      "annotation": "load_fixtures",
+      "category": "utilities",
+      "parameters": [
+        {
+          "title": "Fixtures",
+          "name": "fixtures",
+          "type": "json",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "Fixture document: {\"servers\": {key: {name, instructions, tools: [...]}}}.",
+          "description": "Fixture document: {\"servers\": {key: {name, instructions, tools: [...]}}}."
+        }
+      ],
+      "output_schema": {}
+    },
+    {
+      "operation": "get_call_log",
+      "title": "Get Call Log",
+      "description": "Return every MCP tool call the stub servers answered, optionally since a UNIX timestamp, optionally clearing the log.",
+      "enabled": true,
+      "annotation": "get_call_log",
+      "category": "utilities",
+      "parameters": [
+        {
+          "title": "Since (UNIX seconds)",
+          "name": "since",
+          "type": "text",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "tooltip": "Only calls at or after this time.",
+          "description": "Only calls at or after this time."
+        },
+        {
+          "title": "Clear After Read",
+          "name": "clear",
+          "type": "checkbox",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "tooltip": "Truncate the log after reading.",
+          "description": "Truncate the log after reading.",
+          "value": false
+        }
+      ],
+      "output_schema": {}
+    },
+    {
+      "operation": "server_status",
+      "title": "Server Status",
+      "description": "Report whether the listener is up and which stub servers it serves.",
+      "enabled": true,
+      "annotation": "server_status",
+      "category": "utilities",
+      "parameters": [],
+      "output_schema": {}
+    },
+    {
+      "operation": "start_server",
+      "title": "Start Server",
+      "description": "Start the listener if it is not running.",
+      "enabled": true,
+      "annotation": "start_server",
+      "category": "utilities",
+      "parameters": [],
+      "output_schema": {}
+    },
+    {
+      "operation": "stop_server",
+      "title": "Stop Server",
+      "description": "Stop the listener.",
+      "enabled": true,
+      "annotation": "stop_server",
+      "category": "utilities",
+      "parameters": [],
+      "output_schema": {}
+    }
+  ]
+}

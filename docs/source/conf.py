@@ -263,7 +263,9 @@ autoapi_dirs = ["../../src/pyfsr"]
 # `pyfsr/playbook_library.py` indexes the in-repo `examples/playbooks/library/`
 # corpus for the `pyfsr playbook examples` CLI; it's repo-only (never packaged),
 # so it has no public API surface for installed-package users to reference.
-autoapi_ignore = ["*/resources/*", "*/_testing/*", "*/playbook_library.py"]
+# stub_connector/ is a FortiSOAR connector package (runs on the appliance, imports
+# connectors.core), shipped as data for pyfsr.ai_eval -- not pyfsr API.
+autoapi_ignore = ["*/resources/*", "*/_testing/*", "*/playbook_library.py", "*/stub_connector/*"]
 autoapi_keep_files = True
 # Drop AutoAPI's own top-level toctree entry; we surface it under our
 # "API Reference" section instead, so there's a single, unambiguous nav path.

@@ -95,20 +95,32 @@ its uuid to that list and ``PUT`` the config back; the high-level
 from __future__ import annotations
 
 import json
+import re
 import time
+import uuid as _uuidlib
+import warnings
 import zipfile
+from collections.abc import Iterator
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from ..exceptions import APIError, ResourceNotFoundError
+from ..exceptions import PermissionError as FortiSOARPermissionError
 from ..models._ai import (
     AgentConfig,
     AgentConfigDTO,
     AgentRecord,
+    AgentRun,
     AgentRunResult,
+    AgentTurn,
     ConnectorMcpCandidates,
+    ExecutionTree,
+    FortiAITokenBalance,
     InvestigationHandle,
     InvestigationQuestion,
     InvestigationResult,
+    InvestigationTrace,
     LLMConfig,
     LLMProvider,
     MCPServerConfig,
@@ -118,6 +130,11 @@ from ..models._ai import (
     MCPToolResult,
     MCPValidateResult,
     ToolCall,
+    TracedToolCall,
+    TraceNode,
+    TraceSpan,
+    TraceSummary,
+    sum_tokens,
 )
 from ..models._ai_agent_package import AgentPackage
 from ..pagination import extract_members
@@ -179,6 +196,542 @@ def pack_agent(source_dir: str, output: str | None = None, *, validate: bool = T
     return str(out_path)
 
 
+#: Trace/tree I/O detail levels accepted by the tracer endpoints.
+TRACE_IO_MODES = frozenset({"full", "summary", "none"})
+
+_TRACES = "/api/ai/traces"
+
+#: Root trace name of an alert investigation in the tracer store (8.0.1).
+INVESTIGATION_TRACE_NAME = "Alert Investigation"
+#: Name the UI gives an agent config forked from the default one.
+CUSTOM_AGENT_CONFIG_NAME = "Custom Configuration"
+
+
+class LLMSetupError(RuntimeError):
+    """A third-party LLM connector could not be set up or does not answer
+    (see :meth:`AIApi.setup_connector_llm`)."""
+
+
+#: the solution pack that fronts FortiAI (Fortinet-hosted LLMs, metered in FortiAI tokens)
+FORTIAI_PROXY_CONNECTOR = "fortinet-fortiai-proxy"
+
+
+class AITracesAPI(BaseAPI):
+    """Agent traceability (8.0.1) -- the tracer store behind the Trace Flow panel.
+
+    Every agent run (investigation, chat turn, orchestrator request, single-agent
+    trigger) records a trace: a tree of spans, one per agent step, LLM call, tool
+    call, skill lookup or org-context search. A run's trace id is its task id.
+
+    Accessed as ``client.ai.traces``.
+
+    Example:
+        >>> tree = client.ai.traces.execution_tree(task_id)  # doctest: +SKIP
+        >>> tree.total_steps, tree.count_by_type()  # doctest: +SKIP
+        (173, {'AGENT': 57, 'LLM': 29, ...})
+        >>> for depth, node in tree.root.walk():  # doctest: +SKIP
+        ...     print("  " * depth, node.name, node.duration_ms)
+    """
+
+    def health(self) -> bool:
+        """``True`` when the tracer store answers ``GET /api/ai/traces/health``."""
+        resp = self.client.get(f"{_TRACES}/health")
+        return isinstance(resp, dict) and resp.get("status") == "ok"
+
+    def list(
+        self,
+        *,
+        status: str | None = None,
+        session_id: str | None = None,
+        limit: int = 50,
+        cursor: str | float | None = None,
+        project_id: str = "default",
+    ) -> list[TraceSummary]:
+        """One page of top-level traces, newest first.
+
+        Args:
+            status: filter on trace status (``"OK"``, ``"ERROR"``, ``"RUNNING"``).
+            session_id: filter to one chat session.
+            limit: page size, 1-500.
+            cursor: return traces that *started before* this point -- an epoch
+                float (what the server compares against). Use :meth:`iter` rather
+                than paging by hand; it derives the cursor from each page.
+                **Broken server-side on 8.0.1** -- see :meth:`iter`.
+            project_id: tracer project (always ``"default"`` on the appliance).
+        """
+        if not 1 <= limit <= 500:
+            raise ValueError(f"limit must be 1-500, got {limit}")
+        params: dict[str, Any] = {"project_id": project_id, "limit": limit}
+        if status:
+            params["status"] = status
+        if session_id:
+            params["session_id"] = session_id
+        if cursor is not None:
+            params["cursor"] = str(cursor)
+        resp = self.client.get(f"{_TRACES}/", params=params)
+        rows = resp.get("traces", []) if isinstance(resp, dict) else []
+        return [TraceSummary.model_validate(r) for r in rows]
+
+    def iter(
+        self,
+        *,
+        status: str | None = None,
+        session_id: str | None = None,
+        page_size: int = 100,
+        max_items: int | None = None,
+    ) -> Iterator[TraceSummary]:
+        """Yield every matching trace, newest first, paging with the start-time cursor.
+
+        The server pages on ``start_time < cursor`` (an epoch float) but returns
+        ``start_time`` as ISO text, so the cursor is converted from the last row
+        of each page.
+
+        .. warning::
+           On fsr-ai 8.0.1 any ``cursor`` fails server-side (``operator does not
+           exist: timestamp with time zone < numeric`` -- the service insists on
+           a float, then compares it to a ``timestamptz`` column). When that
+           happens this stops after the first page with a :class:`UserWarning`
+           rather than raising, so only the newest ``page_size`` traces (max 500)
+           are reachable on that build. Use ``page_size=500`` to see the most.
+        """
+        cursor: float | None = None
+        yielded = 0
+        while True:
+            try:
+                page = self.list(status=status, session_id=session_id, limit=page_size, cursor=cursor)
+            except APIError as err:
+                if cursor is None or "timestamp with time zone < numeric" not in str(err):
+                    raise
+                warnings.warn(
+                    "fsr-ai rejects the trace-list cursor on this build (timestamptz < numeric); "
+                    f"stopping after the first {yielded} trace(s)",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                return
+            for trace in page:
+                yield trace
+                yielded += 1
+                if max_items is not None and yielded >= max_items:
+                    return
+            if len(page) < page_size or not page[-1].start_time:
+                return
+            cursor = datetime.fromisoformat(page[-1].start_time).timestamp()
+
+    def get(self, trace_id: str, *, depth: int = 3, io: str = "summary") -> TraceNode:
+        """One trace as a span tree (``GET /api/ai/traces/{trace_id}``).
+
+        Only this trace's own spans; use :meth:`execution_tree` to follow the
+        sub-agent runs it submitted.
+        """
+        _check_io(io)
+        resp = self.client.get(f"{_TRACES}/{trace_id}", params={"depth": depth, "io": io})
+        return TraceNode.model_validate((resp or {}).get("root") or {})
+
+    def execution_tree(
+        self, trace_id: str, *, depth: int = 10, io: str = "summary", max_traces: int = 25
+    ) -> ExecutionTree:
+        """The full run tree the Trace Flow panel renders (``.../{trace_id}/execution-tree``).
+
+        Stitches in every trace this run submitted (one per sub-agent run), up to
+        ``max_traces`` (1-100). An investigation typically spans ~10 traces.
+        """
+        _check_io(io)
+        resp = self.client.get(
+            f"{_TRACES}/{trace_id}/execution-tree", params={"depth": depth, "io": io, "max_traces": max_traces}
+        )
+        return ExecutionTree.model_validate(resp if isinstance(resp, dict) else {})
+
+    def spans(self, trace_id: str) -> list[TraceSpan]:
+        """Every span of one trace, flat, with full I/O (``.../{trace_id}/spans``)."""
+        resp = self.client.get(f"{_TRACES}/{trace_id}/spans")
+        rows = resp.get("spans", []) if isinstance(resp, dict) else []
+        return [TraceSpan.model_validate(r) for r in rows]
+
+    def span(self, span_id: str) -> TraceSpan:
+        """One span with full input/output -- the Step Details panel (``.../spans/{span_id}``)."""
+        return TraceSpan.model_validate(self.client.get(f"{_TRACES}/spans/{span_id}") or {})
+
+    def span_subtree(self, span_id: str, *, depth: int = 10, io: str = "summary") -> TraceNode:
+        """The subtree rooted at one span, e.g. a single agent's work inside a larger run.
+
+        .. note::
+           On fsr-ai 8.0.1 ``GET .../spans/{span_id}/tree`` returns 404 for every
+           span except a trace's root: it collects the subtree, then looks for a
+           row with no parent to use as the root, and a non-root span always has
+           one. On that 404 this falls back to fetching the span's own trace tree
+           and returning the matching node (``depth`` then counts from the
+           trace root, capped at 50).
+        """
+        _check_io(io)
+        try:
+            resp = self.client.get(f"{_TRACES}/spans/{span_id}/tree", params={"depth": depth, "io": io})
+            return TraceNode.model_validate((resp or {}).get("root") or {})
+        except ResourceNotFoundError:
+            trace_id = self.span(span_id).trace_id
+            if not trace_id:
+                raise
+            root = self.get(trace_id, depth=50, io=io)
+            match = next((n for _, n in root.walk() if n.span_id == span_id), None)
+            if match is None:
+                raise
+            return match
+
+    def span_children(self, span_id: str) -> list[dict[str, Any]]:
+        """Direct children of a span (``.../spans/{span_id}/children``)."""
+        resp = self.client.get(f"{_TRACES}/spans/{span_id}/children")
+        return resp.get("children", []) if isinstance(resp, dict) else []
+
+    def span_lineage(self, span_id: str, *, direction: str = "both", max_hops: int = 5) -> dict[str, Any]:
+        """Data lineage around a span: which spans fed it / consumed its output.
+
+        .. note::
+           Always fails on fsr-ai 8.0.1 (HTTP 500 ``TracerStoreService has no
+           attribute 'get_lineage'`` -- the route calls a service method that
+           does not exist). Kept for builds that implement it.
+
+        Args:
+            direction: ``"both"``, ``"upstream"`` or ``"downstream"``.
+            max_hops: 1-25.
+        """
+        if direction not in ("both", "upstream", "downstream"):
+            raise ValueError(f"direction must be both/upstream/downstream, got {direction!r}")
+        return self.client.get(
+            f"{_TRACES}/spans/{span_id}/lineage", params={"direction": direction, "max_hops": max_hops}
+        )
+
+    def tokens(self, trace_id: str) -> dict[str, Any]:
+        """Token totals for one trace (``.../tokens/{trace_id}``)."""
+        return self.client.get(f"{_TRACES}/tokens/{trace_id}")
+
+    def session_tokens(self, session_id: str) -> dict[str, Any]:
+        """Token totals across a chat session (``.../tokens/session/{session_id}``)."""
+        return self.client.get(f"{_TRACES}/tokens/session/{session_id}")
+
+    def llm_calls(self, trace_id: str) -> list[TraceSpan]:
+        """Every LLM call in a run and its sub-runs, with provider/model/usage filled in.
+
+        Walks :meth:`execution_tree` and fetches each ``LLM`` span's detail -- one
+        request per call, so expect ~30 requests for an alert investigation.
+        """
+        tree = self.execution_tree(trace_id)
+        if not tree.root:
+            return []
+        return [self.span(n.span_id) for n in tree.root.find(span_type="LLM")]
+
+    def agent_run(self, trace_id: str) -> AgentRun:
+        """One agent run (one trace) with its question, answer and labelled tool calls.
+
+        Fetches the trace's spans once. Each ``TOOL`` span becomes a
+        :class:`~pyfsr.models.TracedToolCall` whose ``selected_by`` says whether
+        agent code ran it, an LLM step picked it blind, or an LLM step picked it
+        after reading earlier tool results (``llm-chained``). Calls are matched to
+        the LLM step that named them by tool name, in time order -- the LLM span's
+        arguments are masked (``SM_..._EM`` tokens), so they can't be compared.
+        """
+        return _agent_run(trace_id, self.spans(trace_id))
+
+    def investigation(self, task_id: str, *, max_traces: int = 100) -> InvestigationTrace:
+        """An alert investigation rebuilt from its traces (8.0.1).
+
+        The investigation's ``task_id`` is its root trace id. This fetches the
+        execution tree (to list every sub-agent trace), then each trace's spans:
+        roughly one request per question, ~20 for a typical investigation. Use
+        :meth:`~pyfsr.models.InvestigationTrace.metrics` for the per-question
+        tool-use summary. One ``tokens`` request per run fills in each run's
+        token totals (the root run keeps only its own share: the root trace's
+        totals already include every sub-run, and are ``InvestigationTrace.tokens``).
+
+        This is the 8.0.1 replacement for reading ``llm_activity_logs``, which
+        8.0.1 no longer writes for investigations.
+        """
+        tree = self.execution_tree(task_id, depth=1, max_traces=max_traces)
+        ids = [task_id] + [t for t in tree.traces if isinstance(t, str) and t != task_id]
+        runs = [self.agent_run(t) for t in ids]
+        for run in runs:
+            try:
+                tokens = self.tokens(run.trace_id)
+            except APIError:
+                tokens = {}
+            run.tokens = tokens if isinstance(tokens, dict) else {}
+        total = runs[0].tokens if runs else {}
+        if runs and total:
+            # the root trace's totals already cover every sub-run; keep only its own share
+            subs = sum_tokens([r.tokens for r in runs[1:]])
+            runs[0].tokens = {k: max(int(total.get(k) or 0) - subs[k], 0) for k in subs}
+        return InvestigationTrace(
+            task_id=task_id,
+            status=runs[0].status if runs else None,
+            runs=runs,
+            tokens=total,
+        )
+
+    def purge_older_than(self, *, days: int | None = None, before: str | None = None) -> dict[str, Any]:
+        """Delete **every** trace older than a cutoff (``DELETE /api/ai/traces/delete``).
+
+        There is no per-trace delete: the endpoint queues a background cleanup of
+        all traces older than ``days`` days, or older than the ISO date/time
+        ``before``. Pass exactly one. Returns ``{"task_id", "success"}``; the
+        purge itself runs asynchronously.
+        """
+        if (days is None) == (before is None):
+            raise ValueError("pass exactly one of days= or before=")
+        body: dict[str, Any] = {"days": int(days)} if days is not None else {"date": before}
+        return self.client.delete(f"{_TRACES}/delete", data=body)
+
+
+#: Wrapper spans around every LLM call; not reasoning steps, and their errors are noise.
+_PLUMBING_SPANS = frozenset({"Data Masking", "Data Unmasking"})
+_TOOL_ROLE = re.compile(r'\\*"role\\*":\s*\\*"tool\\*"')
+_QUESTION = re.compile(r'"question":\s*"((?:[^"\\]|\\.)*)"')
+
+
+def _maybe_json(value: Any) -> Any:
+    """Decode a JSON object/array held as text; anything else comes back unchanged."""
+    if isinstance(value, str) and value.strip()[:1] in ("{", "["):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _question_from_input(root_input: Any) -> str | None:
+    """The question a provider agent was asked.
+
+    fsr-ai stores the agent input as ``{"input_data": {"preview": "<json text>"}}``
+    and cuts long previews short, so fall back to pulling ``"question"`` out of
+    the raw text when it no longer parses.
+    """
+    data = root_input.get("input_data") if isinstance(root_input, dict) else None
+    if isinstance(data, dict):
+        data = data.get("preview", data)
+    obj = _maybe_json(data)
+    if isinstance(obj, dict):
+        return obj.get("question") or None
+    m = _QUESTION.search(data if isinstance(data, str) else json.dumps(root_input, default=str))
+    if not m:
+        return None
+    try:
+        return json.loads(f'"{m.group(1)}"')
+    except ValueError:
+        return m.group(1)
+
+
+def _llm_tool_choices(span: TraceSpan) -> list[str]:
+    """Tool names an LLM span asked for (``output.tools`` / ``output.tool_name``)."""
+    out = span.output if isinstance(span.output, dict) else {}
+    names = [t.get("name") for t in (out.get("tools") or []) if isinstance(t, dict) and t.get("name")]
+    if not names and out.get("tool_name"):
+        names = [out["tool_name"]]
+    return names
+
+
+def _tool_span_name(span: TraceSpan) -> str | None:
+    out = span.output if isinstance(span.output, dict) else {}
+    return out.get("name") or span.tool_call.get("name")
+
+
+def _agent_run(trace_id: str, spans: list[TraceSpan]) -> AgentRun:
+    """Build an :class:`AgentRun` from one trace's flat span list."""
+    roots = [s for s in spans if not s.parent_span_id]
+    root = roots[0] if roots else None
+    agent = root.name if root else None
+    question = _question_from_input(root.input) if root else None
+    result = _maybe_json(root.output) if root else None
+    result = result if isinstance(result, dict) else {}
+
+    seq = sorted(
+        (s for s in spans if s.span_type in ("TOOL", "LLM") and (root is None or s.span_id != root.span_id)),
+        key=lambda s: s.start_time or "",
+    )
+    pending: list[tuple[str, str]] = []  # (tool name, label) an LLM asked for, not yet run
+    calls: list[TracedToolCall] = []
+    steps: list[str] = []
+    llm_calls = 0
+    for s in seq:
+        if s.span_type == "LLM":
+            llm_calls += 1
+            chained = bool(_TOOL_ROLE.search(json.dumps(s.input, default=str)))
+            choices = _llm_tool_choices(s)
+            pending += [(n, "llm-chained" if chained else "llm") for n in choices]
+            steps.append(f"LLM->{','.join(choices)}" if choices else "LLM")
+            continue
+        name = _tool_span_name(s)
+        label = "code"
+        for i, (want, lab) in enumerate(pending):
+            if want == name:
+                label = lab
+                del pending[i]
+                break
+        tr = s.tool_result
+        out = s.output if isinstance(s.output, dict) else {}
+        raw = tr.result if tr else out.get("result")
+        calls.append(
+            TracedToolCall(
+                span_id=s.span_id,
+                trace_id=trace_id,
+                tool_name=name,
+                args=_maybe_json((tr.args if tr else None) or s.tool_call.get("args")),
+                server=tr.mcp_server_name if tr else None,
+                server_id=tr.mcp_server_id if tr else None,
+                status=s.status,
+                error=(tr.error if tr else None) or s.error,
+                cached=bool(tr.cached) if tr else False,
+                output=_maybe_json(raw),
+                result_chars=len(raw) if isinstance(raw, str) else len(json.dumps(raw, default=str)) if raw else 0,
+                selected_by=label,
+                agent=agent,
+                question=question,
+                start_time=s.start_time,
+            )
+        )
+        steps.append(f"{'T' if label == 'code' else 'LT'}:{name}")
+
+    errors = [
+        {"span": s.name, "span_type": s.span_type, "error": s.error}
+        for s in spans
+        if (s.status or "").upper() == "ERROR" and s.name not in _PLUMBING_SPANS
+    ]
+    return AgentRun(
+        trace_id=trace_id,
+        agent=agent,
+        status=root.status if root else None,
+        question=question,
+        answer=result.get("answer"),
+        evidence=result.get("evidence"),
+        confidence=result.get("confidence"),
+        tool_calls=calls,
+        llm_calls=llm_calls,
+        steps=steps,
+        errors=errors,
+    )
+
+
+def _check_io(io: str) -> None:
+    if io not in TRACE_IO_MODES:
+        raise ValueError(f"io must be one of {sorted(TRACE_IO_MODES)}, got {io!r}")
+
+
+#: Task statuses from ``GET /api/ai/agents/{task_id}/status`` that end polling.
+_TURN_DONE = frozenset({"completed", "failed", "error", "cancelled", "success", "awaiting_approval"})
+
+
+class AgentSession:
+    """A multi-turn conversation with a chat agent (8.0.1), driven like the aiAssistant widget.
+
+    Created by :meth:`AIApi.chat` (the Conversation Agent / SOC chat) or
+    :meth:`AIApi.orchestrate` (the Orchestrator Agent). Each :meth:`ask` is one
+    turn: ``POST /api/ai/agents/{agent}/trigger`` with the session header
+    ``X-CHAT-SESSION-ID``, then poll the task to a result. The session carries
+    ``previous_response_id`` / ``request_id`` between turns, which is how the
+    agent continues the same conversation or resumes a paused request.
+
+    A paused turn (``turn.is_paused``) waits for a reply: answer a
+    clarification with :meth:`reply` and an approval with :meth:`approve` /
+    :meth:`deny`. Replies go to the same ``request_id``, which is what resumes
+    the paused plan rather than starting a new one.
+
+    Example:
+        >>> s = client.ai.orchestrate()  # doctest: +SKIP
+        >>> turn = s.ask("Block the malicious IP address on the firewall.")  # doctest: +SKIP
+        >>> turn.needs_clarification, turn.pending.question  # doctest: +SKIP
+        (True, 'Cannot block ... Please specify the IP address to proceed.')
+        >>> turn = s.reply("198.51.100.23")  # doctest: +SKIP
+    """
+
+    def __init__(
+        self,
+        api: AIApi,
+        agent: str,
+        *,
+        session_id: str | None = None,
+        context: dict[str, Any] | None = None,
+        user_id: str | None = None,
+    ) -> None:
+        self.api = api
+        self.agent = agent
+        self.session_id = session_id or str(_uuidlib.uuid4())
+        self.context: dict[str, Any] = dict(context or {})
+        self.user_id = user_id
+        self.previous_response_id = ""
+        self.request_id = ""
+        self.turns: list[AgentTurn] = []
+
+    @property
+    def last(self) -> AgentTurn | None:
+        return self.turns[-1] if self.turns else None
+
+    def start(self, question: str) -> AgentTurn:
+        """Send one turn without waiting; returns the handle (``task_id``/``status``)."""
+        payload: dict[str, Any] = {
+            "question": question,
+            "previous_response_id": self.previous_response_id,
+            "request_id": self.request_id,
+            "context": self.context,
+        }
+        if self.user_id:
+            payload["userId"] = self.user_id
+        resp = self.api.client.post(
+            f"/api/ai/agents/{self.agent}/trigger",
+            data=payload,
+            headers={"X-CHAT-SESSION-ID": self.session_id},
+        )
+        return AgentTurn.model_validate(resp if isinstance(resp, dict) else {})
+
+    def ask(self, question: str, *, wait: bool = True, interval: float = 5.0, timeout: float = 600.0) -> AgentTurn:
+        """Send ``question`` and (by default) wait for the turn's result.
+
+        On timeout the turn comes back with its non-terminal status (``pending``
+        / ``inprogress``) instead of raising -- an agent stuck on a tool call
+        looks exactly like that, so check ``turn.status`` before trusting
+        ``turn.answer``.
+        """
+        handle = self.start(question)
+        if not wait or not handle.task_id:
+            return self._record(handle)
+        deadline = time.monotonic() + timeout
+        status = handle.status
+        while status not in _TURN_DONE and time.monotonic() < deadline:
+            time.sleep(interval)
+            status = self.api.get_status(handle.task_id)
+        if status not in _TURN_DONE:
+            handle.status = status
+            return self._record(handle)
+        resp = self.api.client.get(f"/api/ai/agents/{handle.task_id}/result")
+        turn = AgentTurn.model_validate(resp if isinstance(resp, dict) else {})
+        turn.task_id = handle.task_id
+        if not turn.status:
+            turn.status = status
+        return self._record(turn)
+
+    def reply(self, text: str, **kwargs: Any) -> AgentTurn:
+        """Answer the open clarification (or any follow-up) on the same request."""
+        return self.ask(text, **kwargs)
+
+    def approve(self, **kwargs: Any) -> AgentTurn:
+        """Approve the pending state-changing action. Sent as text; the agent parses it."""
+        return self.ask("approve", **kwargs)
+
+    def deny(self, **kwargs: Any) -> AgentTurn:
+        """Deny the pending state-changing action."""
+        return self.ask("deny", **kwargs)
+
+    def trace(self) -> ExecutionTree | None:
+        """Execution tree of the last turn (its trace id is the task id)."""
+        if not self.last or not self.last.task_id:
+            return None
+        return self.api.traces.execution_tree(self.last.task_id)
+
+    def _record(self, turn: AgentTurn) -> AgentTurn:
+        if turn.response_id:
+            self.previous_response_id = turn.response_id
+        if turn.request_id:
+            self.request_id = turn.request_id
+        self.turns.append(turn)
+        return turn
+
+
 class AIApi(BaseAPI):
     """Drive the FortiAI agentic investigation service and its configuration."""
 
@@ -200,6 +753,11 @@ class AIApi(BaseAPI):
         AI terms & conditions. Must be done once before any investigation,
         LLM-config or MCP call will succeed.
 
+        Like the UI's *Acknowledge* button, it also stamps ``lastModifiedDate``
+        (``MM/dd/yyyy``, the UI's ``DEFAULT_DATE_FORMAT.DATE``) -- the System
+        Settings page renders "On {date}, user {username} acknowledged ..." from
+        these two fields, and shows no acknowledgement line without them.
+
         Args:
             enabled: ``True`` to turn features on (default), ``False`` to disable.
             modified_by: optional display name stamped as ``lastModifiedBy``.
@@ -207,10 +765,67 @@ class AIApi(BaseAPI):
         Returns:
             The updated root ``SystemSettings`` record.
         """
-        patch: dict[str, Any] = {"ai_feature": {"enable": bool(enabled)}}
+        patch: dict[str, Any] = {
+            "ai_feature": {
+                "enable": bool(enabled),
+                "lastModifiedDate": date.today().strftime("%m/%d/%Y"),
+            }
+        }
         if modified_by:
             patch["ai_feature"]["lastModifiedBy"] = modified_by
         return self.client.system_settings.update(patch)
+
+    # ----------------------------------------------------------- traces / chat (8.0.1)
+    @property
+    def traces(self) -> AITracesAPI:
+        """Agent traceability -- see :class:`AITracesAPI`."""
+        api = self.__dict__.get("_traces")
+        if api is None:
+            api = self.__dict__["_traces"] = AITracesAPI(self.client)
+        return api
+
+    def chat(
+        self,
+        *,
+        agent: str = "conversation",
+        context: dict[str, Any] | None = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+    ) -> AgentSession:
+        """Open a chat session with the SOC chat assistant (the Conversation Agent).
+
+        This is the aiAssistant widget's path: ``POST /api/ai/agents/conversation/trigger``.
+        (``/api/ai/chat/`` also exists but is not what the UI calls, and its
+        request shape does not match the agent's.)
+
+        Args:
+            agent: agent name to talk to; ``"conversation"`` is the default SOC
+                chat. ``"playbook-generator"`` and ``"connector-generation"`` use
+                the same protocol.
+            context: page context sent with every turn, e.g.
+                ``{"pageName": "alerts", "userId": "<person uuid>",
+                "recordIRI": "/api/3/alerts/<uuid>"}``.
+            session_id: reuse an existing ``X-CHAT-SESSION-ID``; a fresh one by default.
+            user_id: login id sent as ``userId`` (the widget sends the login name).
+        """
+        return AgentSession(self, agent, session_id=session_id, context=context, user_id=user_id)
+
+    def orchestrate(
+        self,
+        *,
+        context: dict[str, Any] | None = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+    ) -> AgentSession:
+        """Open a session with the Orchestrator Agent (``orchestrator``).
+
+        The orchestrator plans one request across SOPs and agents, pauses for
+        clarification or approval (``turn.is_paused``), and resumes on
+        :meth:`AgentSession.reply` / :meth:`AgentSession.approve` /
+        :meth:`AgentSession.deny`. On 8.0.1 the Conversation Agent does not call
+        it, so this direct trigger is the only way to reach it.
+        """
+        return self.chat(agent="orchestrator", context=context, session_id=session_id, user_id=user_id)
 
     # ----------------------------------------------------------- investigation
     def start_alert_investigation(self, alert: dict[str, Any] | str, *, link: bool = True) -> InvestigationHandle:
@@ -619,7 +1234,11 @@ class AIApi(BaseAPI):
             apikey: API key for native providers (``openai``/``anthropic``/``gemini``).
                 Ignored for ``fortisoar`` (auth comes from the connector).
             baseurl: base URL for native providers (e.g.
-                ``"https://api.openai.com/v1"``).
+                ``"https://api.openai.com/v1"``). Stored, but fsr-ai 8.0.0's
+                native clients pass only the API key -- reach Azure or a
+                self-hosted endpoint through a ``fortisoar`` connector profile. Stored, but fsr-ai 8.0.0's
+                native clients pass only the API key -- reach Azure or a
+                self-hosted endpoint through a ``fortisoar`` connector profile.
             config: provider-specific config dict. For ``fortisoar``:
                 ``{"connector_name": "openai", "connector_config_id": "<uuid>"}``.
                 For native providers: ``{"temperature": 0.1}``.
@@ -669,6 +1288,39 @@ class AIApi(BaseAPI):
         self.client.post("/api/ai/llm/config", data=payload)
         return self.get_llm_config(found_uuid)
 
+    def token_balance(self, llm_config: str | None = None) -> FortiAITokenBalance:
+        """FortiAI token entitlement and what is left (``get_token_balance_info``).
+
+        Runs the ``fortinet-fortiai-proxy`` connector's balance operation with
+        the connector configuration behind ``llm_config`` (a profile name or
+        uuid; default: the default profile). The balance is per device, so every
+        profile on the appliance draws from the same pool. Reading it before and
+        after an investigation gives the tokens FortiAI actually metered.
+
+        Raises:
+            ValueError: the profile is not backed by the FortiAI proxy connector
+                (a native ``openai``/``anthropic``/``gemini`` profile bills the
+                provider account, which FortiSOAR cannot read).
+        """
+        configs = self.list_llm_configs()
+        if llm_config:
+            profile = next((c for c in configs if llm_config in (c.name, c.uuid)), None)
+        else:
+            profile = next((c for c in configs if c.isdefault), None)
+        if profile is None:
+            raise ValueError(f"no LLM profile {llm_config or '(default)'!r}")
+        connector = profile.config.get("connector_name")
+        if profile.provider != "fortisoar" or connector != FORTIAI_PROXY_CONNECTOR:
+            raise ValueError(
+                f"LLM profile {profile.name!r} uses provider {profile.provider!r}"
+                f" (connector {connector!r}), not the FortiAI proxy -- no token balance to read"
+            )
+        result = self.client.connectors.execute(
+            connector, "get_token_balance_info", config=profile.config.get("connector_config_id"), params={}
+        )
+        data = getattr(result, "data", None)
+        return FortiAITokenBalance.model_validate(data if isinstance(data, dict) else {})
+
     def verify_llm_config(self, uuid: str, *, model_id: str | None = None) -> dict[str, Any]:
         """Verify a saved LLM config on the live appliance.
 
@@ -677,17 +1329,23 @@ class AIApi(BaseAPI):
         through the API gateway).
 
         .. note::
-           On fsr-ai 8.0.0 the ``GET .../{uuid}/verify`` handler declares
-           ``model_id`` as a **path** parameter occupying the same slot as
-           ``uuid``, so there is no way to send both. ``uuid`` wins: it is what
-           selects the config, and the config's own ``modelname`` is what gets
-           tested. ``model_id`` is therefore **accepted and ignored** -- it is
-           sent neither as a query param (which 422s) nor in the path. It is
-           kept only so callers do not break, and so the argument is here if a
-           later build gives it a slot of its own. If the endpoint is
-           unreachable or 500s (known on some builds), use
-           :meth:`test_llm_config`, which calls the ``POST /config/verify``
-           body-based endpoint instead.
+           The handler (identical in fsr-ai 8.0.0 and 8.0.1) is
+           ``verify_config(model_id)`` mounted on a ``{uuid}`` path, so FastAPI
+           ignores the path and requires a ``?model_id=`` **query** parameter,
+           then looks the config up by it -- it wants the config **UUID**, not
+           a model name (a model name 500s on a uuid cast). The path-only form
+           is tried first (in case a later build fixes the binding); on a 422
+           that names ``model_id`` the call is retried with
+           ``?model_id=<uuid>``. Either way the config's own ``modelname`` is
+           what gets tested, and the ``model_id`` argument stays **accepted and
+           ignored**.
+
+           Only the OpenAI client implements the connection test (8.0.0 and
+           8.0.1): a ``fortisoar`` (FortiAI proxy), ``anthropic`` or ``gemini``
+           profile raises ``NotImplementedError`` server-side, surfaced here as
+           an :class:`~pyfsr.exceptions.APIError` (HTTP 500). That is the
+           appliance, not the config -- :meth:`test_llm_config` hits the same
+           code path and fails the same way.
 
         Args:
             uuid: the LLM config UUID (from :meth:`list_llm_configs`).
@@ -698,7 +1356,12 @@ class AIApi(BaseAPI):
             The verification result dict from the appliance.
         """
         endpoint = f"/api/ai/llm/config/{uuid}/verify"
-        return self.client.get(endpoint)
+        try:
+            return self.client.get(endpoint)
+        except APIError as err:
+            if err.status_code != 422 or "model_id" not in str(err):
+                raise
+        return self.client.get(endpoint, params={"model_id": uuid})
 
     def test_llm_config(
         self,
@@ -846,6 +1509,8 @@ class AIApi(BaseAPI):
         if token is not None:
             auth["value"] = token
         verify = rec.get("verify", self.client.verify_ssl)
+        # An OAUTH2 server's token endpoint is called with the same TLS setting as the server.
+        auth.setdefault("verify", verify)
         return rec.url, build_mcp_auth_headers(auth), verify
 
     def list_registered_tools(self, name_or_uuid: str, *, token: str | None = None) -> list[MCPTool]:
@@ -857,7 +1522,10 @@ class AIApi(BaseAPI):
         than :meth:`mcp_tool_catalog` (one server, typed :class:`~pyfsr.models.MCPTool`).
 
         ``token`` supplies the credential value when the stored one is masked or
-        you want to override it. Needs ``pip install 'pyfsr[mcp]'``.
+        you want to override it. For an ``OAUTH2`` server (8.0.1+), pass a token
+        you minted; without one pyfsr mints from the stored ``token_url``/
+        ``client_id``/``client_secret``, which only works if the record returns
+        the secret unmasked. Needs ``pip install 'pyfsr[mcp]'``.
         """
         url, headers, verify = self._resolve_registered_endpoint(name_or_uuid, token)
         return self.client.mcp.list_tools_at(url, headers, verify=verify)
@@ -950,13 +1618,19 @@ class AIApi(BaseAPI):
         MCP tool). Pass a pre-built ``catalog`` to avoid re-probing every server
         across repeated calls.
 
+        On 8.0.1 the calls come from traces, which record the server that ran
+        each one, so they are returned as-is and no catalog is built.
+
         Returns the :meth:`tool_usage` dicts (``tool_name``, ``tool_args``,
         ``correlation_id``, …) each extended with ``server`` and ``server_uuid``.
         """
+        calls = self.investigation_tool_calls(task_id)
+        if calls and all(c.source == "traces" for c in calls):
+            return calls  # 8.0.1 traces already name the server that ran each call
         if catalog is None:
             catalog = self.mcp_tool_catalog()
         out: list[ToolCall] = []
-        for call in self.investigation_tool_calls(task_id):
+        for call in calls:
             owner = catalog.get(call.tool_name) or {}
             out.append(
                 ToolCall.model_validate(
@@ -977,8 +1651,14 @@ class AIApi(BaseAPI):
         automatically -- passing a raw object makes the backend stringify it to the
         literal ``"Array"``, which then breaks ``GET /api/ai/mcp/status`` for every
         server (it ``json.loads`` each row's auth).
+
+        ``type`` defaults to ``"external"`` (what the UI sends for a user-added
+        server). 8.0.1 rejects a create without it ("type: This value should not
+        be blank."); 8.0.0 accepted either. Pass ``type`` explicitly for anything
+        else (the built-ins are ``"internal"``, connector-hosted ones ``"connector"``).
         """
         config = dict(config)
+        config.setdefault("type", "external")
         auth = config.get("authentication")
         if isinstance(auth, dict):
             config["authentication"] = json.dumps(auth)
@@ -1342,19 +2022,29 @@ class AIApi(BaseAPI):
         except ValueError:
             return {}
 
-    def export_agent(self, agent_id: str, dest: str) -> str:
-        """Download an installed agent as a ``.zip`` (``POST /api/ai/agent/export/{agent_id}``).
+    def export_agent(self, agent_id: str | int, dest: str) -> str:
+        """Download an installed agent as a ``.zip`` (``POST /api/ai/agent/export/{id}``).
 
-        ``agent_id`` is the agent's uuid (from :meth:`list_agents`). Writes the
-        archive bytes to ``dest`` and returns ``dest`` -- handy for cloning a
-        published agent as the starting point for a custom one, or for backing up
-        an edited agent before re-importing.
+        ``agent_id`` is the agent's numeric ``id``, its uuid or its name (from
+        :meth:`list_agents`). The endpoint looks the agent up by numeric id: on
+        8.0.1 a uuid there fails with a Postgres ``bigint`` error, so a uuid or
+        name is resolved first. Built-in agents export too on 8.0.1 (8.0.0
+        refused them, ``CS-AI-AGENT-24``). Writes the archive bytes to ``dest``
+        and returns ``dest`` -- handy for cloning a published agent as the
+        starting point for a custom one, or for backing up an edited agent
+        before re-importing.
         """
-        if not isinstance(agent_id, str) or not agent_id.strip():
-            raise ValueError("export_agent() requires a non-empty agent uuid")
+        key = str(agent_id).strip()
+        if not key:
+            raise ValueError("export_agent() requires an agent id, uuid or name")
+        if not key.isdigit():
+            match = next((a for a in self.list_agents() if key in (a.uuid, a.name)), None)
+            if match is None or match.id is None:
+                raise ValueError(f"no installed agent {key!r}")
+            key = str(match.id)
         resp = self.client.request(
             "POST",
-            f"/api/ai/agent/export/{agent_id.strip()}",
+            f"/api/ai/agent/export/{key}",
             headers={"Accept": "application/octet-stream"},
         )
         dest_path = Path(dest)
@@ -1374,8 +2064,25 @@ class AIApi(BaseAPI):
         The ``config["mcp_server"]`` list is the per-agent allowlist of MCP
         servers the agent may call. An agent on the *default* config reports
         ``config["config_type"] == "default"``.
+
+        An agent that has never been configured has no config row, and fsr-ai
+        answers ``500 Internal server error`` for it (the service returns
+        ``None``, which fails the route's response model; source-verified on
+        8.0.0, live on 8.0.1). At run time such an agent uses the default
+        config, so that is what this returns (``default=True``,
+        ``config_type == "default"``); :meth:`update_agent_config` then creates
+        the row.
         """
-        resp = self.client.get(f"/api/ai/agent/config/{name}/{version}")
+        try:
+            resp = self.client.get(f"/api/ai/agent/config/{name}/{version}")
+        except APIError as err:
+            if err.status_code != 500:
+                raise
+            self.get_agent(name, version)  # a missing agent still raises
+            dto = self.get_default_agent_config()
+            dto.agent_name, dto.agent_version, dto.default, dto.config_id = name, version, True, None
+            dto.config.config_type = "default"
+            return dto
         return AgentConfigDTO.model_validate(resp if isinstance(resp, dict) else {})
 
     def update_agent_config(
@@ -1414,18 +2121,37 @@ class AIApi(BaseAPI):
         return AgentConfigDTO.model_validate(resp if isinstance(resp, dict) else {})
 
     def get_default_agent_config(self) -> AgentConfigDTO:
-        """Fetch the default agent configuration (``GET /api/ai/agent/config/default``)."""
+        """Fetch the default agent configuration (``GET /api/ai/agent/config/default``).
+
+        This returns the static defaults from fsr-ai's ``app_config.yaml`` (the
+        built-in MCP servers), not anything written by
+        :meth:`update_default_agent_config` -- the server never reads that back.
+        """
         resp = self.client.get("/api/ai/agent/config/default")
         return AgentConfigDTO.model_validate(resp if isinstance(resp, dict) else {})
 
     def update_default_agent_config(
         self, config: dict[str, Any] | AgentConfig, *, name: str | None = None
     ) -> AgentConfigDTO:
-        """Update the default agent configuration (``POST /api/ai/agent/config/default``).
+        """Write the default agent configuration (``POST /api/ai/agent/config/default``).
 
-        Agents left on the default config inherit this ``mcp_server`` list, so
-        appending a uuid here grants the server to *every* such agent at once.
+        .. warning::
+           This has no effect on any agent. fsr-ai stores the row, but nothing
+           reads it back: both :meth:`get_default_agent_config` and the agents at
+           run time use the static defaults in ``app_config.yaml`` (the built-in
+           MCP servers). Verified in the fsr-ai source on 8.0.0 and 8.0.1.
+
+           To give agents another MCP server, grant it per agent with
+           :meth:`allow_mcp_server_for_agent`.
+
+        Emits a :class:`UserWarning` on every call for that reason.
         """
+        warnings.warn(
+            "update_default_agent_config() is saved but never read by fsr-ai (8.0.0/8.0.1); "
+            "agents keep the app_config.yaml defaults. Use allow_mcp_server_for_agent() instead.",
+            UserWarning,
+            stacklevel=2,
+        )
         if isinstance(config, AgentConfig):
             config = config.model_dump(exclude_none=True)
         body: dict[str, Any] = {"config": config, "default": True}
@@ -1487,18 +2213,30 @@ class AIApi(BaseAPI):
         Returns the updated ``AiAgentConfigurationDTO``. Takes effect on the next
         investigation -- no service restart required.
         """
-        dto = self.get_agent_config(name, version)
-        config = dto.config
-        # An agent reported as "default" has no row of its own yet -- seed from
-        # the default config so the write creates a dedicated, non-shared row.
-        if config.config_type == "default" or config is None:
-            config = self.get_default_agent_config().config
-            config.config_type = None
+        config, config_name, config_id = self._own_agent_config(name, version)
         allowed = list(config.mcp_server or [])
         if mcp_uuid not in allowed:
             allowed.append(mcp_uuid)
         config.mcp_server = allowed
-        return self.update_agent_config(name, version, config, name=dto.name, config_id=dto.config_id)
+        return self.update_agent_config(name, version, config, name=config_name, config_id=config_id)
+
+    def _own_agent_config(self, name: str, version: str) -> tuple[AgentConfig, str | None, str | None]:
+        """The agent's config to edit, as ``(config, config_name, config_id)``.
+
+        An agent reported as "default" has no row of its own yet: it is seeded
+        from the default config so the write creates a dedicated, non-shared row.
+        """
+        dto = self.get_agent_config(name, version)
+        config = dto.config
+        config_name, config_id = dto.name, dto.config_id
+        if config is None or config.config_type == "default":
+            config = self.get_default_agent_config().config
+            config.config_type = "custom"
+            config.name = config_name = CUSTOM_AGENT_CONFIG_NAME
+            # Creating a row needs a client-minted config_id (NOT NULL; the UI
+            # generates it). Live-verified on 8.0.1.
+            config_id = config_id or str(_uuidlib.uuid4())
+        return config, config_name, config_id
 
     def disallow_mcp_server_for_agent(self, name: str, version: str, mcp_uuid: str) -> AgentConfigDTO:
         """Revoke an agent's access to an MCP server (inverse of
@@ -1507,6 +2245,164 @@ class AIApi(BaseAPI):
         config = dto.config
         config.mcp_server = [u for u in (config.mcp_server or []) if u != mcp_uuid]
         return self.update_agent_config(name, version, config, name=dto.name, config_id=dto.config_id)
+
+    # ------------------------------------------------- LLM profile switching
+    def _llm_profile(self, profile: str) -> LLMConfig:
+        found = next((c for c in self.list_llm_configs() if profile in (c.name, c.uuid)), None)
+        if found is None:
+            raise ValueError(f"no LLM profile {profile!r}")
+        return found
+
+    def llm_assignments(self) -> dict[str, dict[str, Any]]:
+        """Which LLM profile every agent uses, keyed by agent name.
+
+        Each value is ``{"uuid", "version", "llmconfig", "config_type",
+        "llm_provider"}``: ``llmconfig`` is the agent record's profile (set by
+        :meth:`assign_llm`'s ``POST /api/ai/agent/llm/config``, what the AI
+        Configuration wizard writes), ``llm_provider`` the profile in the
+        agent's config row. Save it to put everything back with
+        :meth:`restore_llm_assignments`.
+        """
+        out: dict[str, dict[str, Any]] = {}
+        for agent in self.list_agents():
+            if not agent.name or not agent.version:
+                continue
+            cfg = self.get_agent_config(agent.name, agent.version).config
+            out[agent.name] = {
+                "uuid": agent.uuid,
+                "version": agent.version,
+                "llmconfig": agent.llmconfig,
+                "config_type": cfg.config_type if cfg else None,
+                "llm_provider": cfg.llm_provider if cfg else None,
+            }
+        return out
+
+    def assign_llm(self, profile: str, agents: list[str] | None = None) -> dict[str, dict[str, Any]]:
+        """Point agents at an LLM profile (a name or uuid); default: every agent.
+
+        Writes the ``llm_provider`` of each agent's config row (forked from the
+        default config if it has none), and the agent record too
+        (``POST /api/ai/agent/llm/config``, as the AI Configuration wizard does)
+        when the API gateway allows it -- on 8.0.1 it answers 403 to API-key
+        and non-UI sessions, so that write is best-effort. Returns the
+        assignments from *before* the change, for :meth:`restore_llm_assignments`.
+        """
+        target = self._llm_profile(profile)
+        before = self.llm_assignments()
+        chosen = {n: a for n, a in before.items() if agents is None or n in agents}
+        missing = sorted(set(agents or []) - set(chosen))
+        if missing:
+            raise ValueError(f"unknown agent(s): {missing}")
+        self._set_agent_records_llm([{"uuid": a["uuid"], "llm": target.uuid} for a in chosen.values()])
+        for name, a in chosen.items():
+            config, config_name, config_id = self._own_agent_config(name, a["version"])
+            config.llm_provider = target.uuid
+            self.update_agent_config(name, a["version"], config, name=config_name, config_id=config_id)
+        return before
+
+    def _set_agent_records_llm(self, rows: list[dict[str, Any]]) -> bool:
+        """``POST /api/ai/agent/llm/config``; False when the gateway refuses it (403)."""
+        try:
+            self.client.post("/api/ai/agent/llm/config", data=rows)
+        except FortiSOARPermissionError:
+            return False
+        return True
+
+    def restore_llm_assignments(self, snapshot: dict[str, dict[str, Any]]) -> None:
+        """Put agents back on the profiles recorded by :meth:`llm_assignments`."""
+        current = self.llm_assignments()
+        self._set_agent_records_llm(
+            [{"uuid": a["uuid"], "llm": a.get("llmconfig")} for n, a in snapshot.items() if n in current]
+        )
+        for name, a in snapshot.items():
+            now = current.get(name)
+            if now is None or now["llm_provider"] == a.get("llm_provider") or now["config_type"] == "default":
+                continue
+            config, config_name, config_id = self._own_agent_config(name, now["version"])
+            config.llm_provider = a.get("llm_provider")
+            self.update_agent_config(name, now["version"], config, name=config_name, config_id=config_id)
+
+    def setup_connector_llm(
+        self,
+        profile_name: str,
+        *,
+        connector: str = "openai",
+        model: str,
+        api_key: str,
+        config_name: str | None = None,
+        extra_config: dict[str, Any] | None = None,
+        version: str | None = None,
+        install: bool = True,
+        verify: bool = True,
+    ) -> LLMConfig:
+        """Add a third-party LLM as a reasoning profile, through its connector.
+
+        The supported path (what the AI Configuration wizard does):
+
+        1. install ``connector`` from Content Hub if it isn't (``install``);
+        2. create or update a connector configuration ``config_name`` (default:
+           ``profile_name``) holding ``api_key`` and ``model`` -- fsr-ai does not
+           send a model name, so **the connector configuration picks the model**
+           and each model needs its own configuration;
+        3. health-check it and, with ``verify``, run a one-line test completion
+           (the health check passes on a valid key whose account has no credits);
+        4. create or update the reasoning profile ``profile_name``
+           (``provider="fortisoar"``, pointing at that configuration).
+
+        On 8.0.1 ``/api/ai/llm/allowed-providers`` (and the wizard's list) shows
+        only ``fortinet-fortiai-proxy`` unless the ``fortiai-configurations``
+        key-store record has ``bringYourLLM: {"enabled": true}``, but that only
+        affects the UI: fsr-ai calls the ``openai`` connector either way
+        (live-verified on 8.0.1).
+
+        Agents keep their current profile; switch them with :meth:`assign_llm`.
+        ``model`` is the connector's option label (``"GPT-4.1"`` for
+        ``openai``). ``extra_config`` adds connector fields, e.g. Azure OpenAI:
+        ``{"api_type": True, "api_base": ..., "api_version": ..., "deployment_id": ...}``.
+
+        Raises:
+            LLMSetupError: the install, the health check or the test completion failed.
+        """
+        installed = [c for c in self.client.content_hub.search_installed_connectors(connector) if c.name == connector]
+        if install and not installed:
+            hits = [c for c in self.client.content_hub.search_available_connectors(connector) if c.name == connector]
+            if not hits:
+                raise LLMSetupError(f"connector {connector!r} is not in Content Hub")
+            job = self.client.connectors.install(connector, version or hits[0].version, wait=True, timeout=600)
+            status = getattr(job, "status", None) or (job.get("status") if isinstance(job, dict) else None)
+            if status != "Import Complete":
+                raise LLMSetupError(f"installing {connector}: {status}")
+        name = config_name or profile_name
+        cfg = self.client.connectors.upsert_configuration(
+            connector, {"apiKey": api_key, "model": model, **(extra_config or {})}, name=name, version=version
+        )
+        health = self.client.connectors.healthcheck(connector, config=name)
+        if health.status != "Available":
+            raise LLMSetupError(
+                f"{connector} configuration {name!r} health check: {health.status} {health.message or ''}"
+            )
+        config_id = getattr(cfg, "config_id", None) or getattr(cfg, "id", None)
+        if verify:
+            # the health check only validates the key; a one-line completion
+            # also catches an exhausted quota or a model the account can't use
+            try:
+                result = self.client.connectors.execute(
+                    connector,
+                    "agent_chat_completions",
+                    config=config_id,
+                    params={"messages": [{"role": "user", "content": "Reply with OK."}]},
+                )
+            except APIError as exc:
+                raise LLMSetupError(f"{connector} test completion failed: {exc}") from exc
+            status = str(getattr(result, "status", "") or "")
+            if status and status.lower() not in ("success", "finished"):
+                raise LLMSetupError(f"{connector} test completion: {status} {getattr(result, 'message', '') or ''}")
+        return self.upsert_llm_config(
+            profile_name,
+            provider="fortisoar",
+            modelname=model,
+            config={"connector_name": connector, "connector_config_id": config_id},
+        )
 
     # -------------------------------------------------- tool-usage evidence
     def tool_usage(
@@ -1534,6 +2430,11 @@ class AIApi(BaseAPI):
                 (the appliance returns newest first).
 
         See :meth:`investigation_tool_calls` for the per-investigation shortcut.
+
+        .. note::
+           8.0.1 writes no ``llm_activity_logs`` for alert investigations, so this
+           returns ``[]`` for them. :meth:`investigation_tool_calls` reads the
+           traces there instead.
         """
         params: dict[str, Any] = {"$limit": limit}
         if correlation_id:
@@ -1583,7 +2484,10 @@ class AIApi(BaseAPI):
 
         Returns:
             ``[{"task_id", "log_count"}, ...]``, one per distinct investigation,
-            ordered by most-recently-seen first. Feed a ``task_id`` to
+            ordered by most-recently-seen first. On 8.0.1, which writes no
+            ``llm_activity_logs`` for investigations, the rows come from the
+            tracer store instead: ``{"task_id", "log_count": 0, "source":
+            "traces", "status", "start_time"}``, newest first. Feed a ``task_id`` to
             :meth:`investigation_tool_calls` to see what that run invoked.
         """
         uuid = _uuid_from_ref(alert)
@@ -1594,18 +2498,88 @@ class AIApi(BaseAPI):
             cid = rec.get("correlationID")
             if cid:
                 counts[cid] = counts.get(cid, 0) + 1
-        return [{"task_id": cid, "log_count": n} for cid, n in counts.items()]
+        if counts:
+            return [{"task_id": cid, "log_count": n} for cid, n in counts.items()]
+        return self._find_investigations_in_traces(uuid, limit=min(limit, 500))
+
+    def _find_investigations_in_traces(self, alert_uuid: str, *, limit: int = 500) -> list[dict[str, Any]]:
+        """8.0.1: investigations of an alert, from the tracer store.
+
+        Each ``Alert Investigation`` trace's root span input carries the alert
+        record, so the alert uuid appears in it. One ``span`` request per
+        candidate trace. Only the newest ``limit`` (max 500) traces are
+        reachable -- the trace-list cursor fails server-side on 8.0.1 (see
+        :meth:`AITracesAPI.iter`).
+        """
+        try:
+            traces = self.traces.list(limit=limit)
+        except APIError:  # 8.0.0: no tracer store
+            return []
+        found: list[dict[str, Any]] = []
+        for t in traces:
+            if t.name != INVESTIGATION_TRACE_NAME or t.parent_trace_id or not t.root_span_id:
+                continue
+            try:
+                root = self.traces.span(t.root_span_id)
+            except APIError:
+                continue
+            if alert_uuid in json.dumps(root.input, default=str):
+                found.append(
+                    {
+                        "task_id": t.trace_id,
+                        "log_count": 0,
+                        "source": "traces",
+                        "status": t.status,
+                        "start_time": t.start_time,
+                    }
+                )
+        return found
 
     def investigation_tool_calls(self, task_id: str) -> list[ToolCall]:
         """The tool calls made during one investigation (by its ``task_id``).
 
-        Shorthand for ``tool_usage(correlation_id=task_id)`` -- the triage
-        ``task_id`` returned by :meth:`investigate_alert` is the ``correlationID``
-        on that run's ``llm_activity_logs``. Pair with :meth:`list_mcp_tools` to
-        confirm a specific server's tool (e.g. a FortiSIEM tool) was actually
-        used while investigating a given alert.
+        8.0.1+: read from the investigation's traces
+        (:meth:`AITracesAPI.investigation`) -- every call the agents ran, each
+        with its MCP ``server``, ``agent``, ``question``, ``selected_by``,
+        ``output`` and ``error`` (``source == "traces"``). 8.0.1 no longer writes
+        ``llm_activity_logs`` for investigations, so the log path alone returns
+        nothing there.
+
+        8.0.0 (no tracer store, or no trace for this ``task_id``): falls back to
+        ``tool_usage(correlation_id=task_id)`` -- the triage ``task_id`` is the
+        ``correlationID`` on that run's ``llm_activity_logs``, which records only
+        the LLM-selected calls.
         """
-        return self.tool_usage(correlation_id=task_id)
+        traced = self._traced_tool_calls(task_id)
+        return traced if traced is not None else self.tool_usage(correlation_id=task_id)
+
+    def _traced_tool_calls(self, task_id: str) -> list[ToolCall] | None:
+        """The investigation's calls from its traces, or ``None`` when there is no trace."""
+        try:
+            inv = self.traces.investigation(task_id)
+        except APIError:  # 8.0.0 (no /ai/traces) or an unknown trace id
+            return None
+        if not inv.runs or not any(r.agent for r in inv.runs):
+            return None
+        return [
+            ToolCall(
+                tool_name=c.tool_name,
+                tool_args=c.args,
+                correlation_id=task_id,
+                title=c.agent,
+                server=c.server,
+                server_uuid=c.server_id,
+                source="traces",
+                agent=c.agent,
+                question=c.question,
+                selected_by=c.selected_by,
+                output=c.output,
+                error=c.error,
+                cached=c.cached,
+                span_id=c.span_id,
+            )
+            for c in inv.tool_calls
+        ]
 
     # ----------------------------------------------------------- internals
     def _fetch_alert(self, ref: str) -> dict[str, Any]:

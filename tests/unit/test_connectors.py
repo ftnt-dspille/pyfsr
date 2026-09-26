@@ -1915,3 +1915,122 @@ def test_set_default_configuration_resolves_a_name_passed_positionally():
     endpoint, body = client.put_calls[0]
     assert endpoint == "/api/integration/configuration/fg-1/"
     assert body["config"] == _FG_RECORD["config"]
+
+
+# -- remote-agent configurations ----------------------------------------------
+# A configuration bound to a remote agent lives under the AGENT's install of the
+# connector (a different install id), so connector_detail() never lists it.
+
+from types import SimpleNamespace  # noqa: E402
+
+
+def _agent_row(**kw):
+    row = {"name": "Lab", "config_id": "cfg-a", "agent": "ag-1", "connector": 163}
+    row.update(kw)
+    return SimpleNamespace(model_dump=lambda: dict(row), **row)
+
+
+def test_upsert_finds_an_agent_bound_config_and_updates_it():
+    api, client = _scripted()
+    client.detail = {"configuration": []}  # invisible on the self-agent view
+    api.list_configurations = lambda **kw: [_agent_row()]  # type: ignore[assignment]
+    api._install_name = lambda install_id: "virustotal"  # type: ignore[assignment]
+    api.upsert_configuration("virustotal", {"k": "v"}, name="Lab", agent="ag-1", validate=False)
+    assert client.put_calls[-1][0] == "/api/integration/configuration/cfg-a/"
+    assert all(e != "/api/integration/configuration/" for e, _ in client.post_calls)
+
+
+def test_a_same_named_config_of_another_connector_is_not_a_match():
+    api, client = _scripted()
+    client.detail = {"configuration": []}
+    api.list_configurations = lambda **kw: [_agent_row()]  # type: ignore[assignment]
+    api._install_name = lambda install_id: "some-other-connector"  # type: ignore[assignment]
+    api.upsert_configuration("virustotal", {"k": "v"}, name="Lab", agent="ag-1", validate=False)
+    assert client.post_calls[-1][0] == "/api/integration/configuration/"  # created
+    assert client.put_calls == []
+
+
+_CFG = "d6c3d2a1-9587-4230-a429-7fdc32e065c4"
+
+
+def _config_listing(health_answers):
+    """list_configurations as the live endpoint behaves: rows by name or
+    unfiltered, but NOTHING when filtered by an agent install's connector id."""
+
+    def listing(*, name=None, connector=None, **kw):
+        if connector is not None:
+            return []
+        return [SimpleNamespace(config_id=_CFG, name="Lab", agent="ag-1", health_status=next(health_answers))]
+
+    return listing
+
+
+def test_healthcheck_waits_for_the_agents_answer(monkeypatch):
+    queued = {
+        "id": 91,
+        "action": "health-check",
+        "remote_status": {"status": "in-progress"},
+        "connector": 165,
+        "configuration": _CFG,
+        "agent": "ag-1",
+    }
+    api, _ = _api(get_map={"healthcheck": queued})
+    api.list_configurations = _config_listing(  # type: ignore[assignment]
+        iter([{}, {"status": "Available", "request_id": 91}])
+    )
+    monkeypatch.setattr("pyfsr.api.connectors.time.sleep", lambda s: None)
+    assert api.healthcheck("virustotal", config=_CFG).status == "Available"
+
+
+def test_healthcheck_ignores_an_older_agent_answer(monkeypatch):
+    # A stale health_status from an earlier request must not pass as this one's.
+    queued = {
+        "id": 91,
+        "action": "health-check",
+        "remote_status": {},
+        "connector": 165,
+        "configuration": _CFG,
+        "agent": "ag-1",
+    }
+    api, _ = _api(get_map={"healthcheck": queued})
+    api.list_configurations = _config_listing(  # type: ignore[assignment]
+        iter(lambda: {"status": "Available", "request_id": 80}, None)
+    )
+    monkeypatch.setattr("pyfsr.api.connectors.time.sleep", lambda s: None)
+    assert api.healthcheck("virustotal", config=_CFG, agent_timeout=0).status == "timeout"
+
+
+def test_healthcheck_asks_for_an_agent_config_by_uuid_never_by_name(monkeypatch):
+    # By name, the server never answers for an agent-bound config (it hangs to
+    # the read timeout), so the name must not reach the healthcheck endpoint.
+    queued = {
+        "id": 91,
+        "action": "health-check",
+        "remote_status": {},
+        "connector": 165,
+        "configuration": _CFG,
+        "agent": "ag-1",
+    }
+    api, client = _api(get_map={"healthcheck": queued})
+    api._find_configuration_by_name = lambda c, n, **kw: {  # type: ignore[assignment]
+        "config_id": _CFG,
+        "agent": "ag-1",
+    }
+    api.list_configurations = _config_listing(  # type: ignore[assignment]
+        iter([{"status": "Available", "request_id": 91}])
+    )
+    monkeypatch.setattr("pyfsr.api.connectors.time.sleep", lambda s: None)
+    assert api.healthcheck("virustotal", config="Lab").status == "Available"
+    hc = [c for c in client.get_calls if "healthcheck" in c[0]]
+    assert [c[1] for c in hc] == [{"config": _CFG}]
+
+
+def test_healthcheck_of_a_local_config_still_goes_by_name():
+    api, client = _api()
+    api._find_configuration_by_name = lambda c, n, **kw: {  # type: ignore[assignment]
+        "config_id": _CFG,
+        "agent": None,
+    }
+    api.healthcheck("virustotal", config="Lab")
+    hc = [c for c in client.get_calls if "healthcheck" in c[0]]
+    assert hc[-1][1] == {"config": "Lab"}

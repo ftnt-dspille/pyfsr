@@ -179,6 +179,28 @@ def test_request_timeout(mock_client, monkeypatch):
         mock_client.request("GET", "/api/3/alerts")
 
 
+def test_request_timings_record_every_call(mock_client, mock_response, monkeypatch):
+    """Each call's wall time is kept -- including one that never got a response,
+    which is exactly the slow call a caller needs to find."""
+    calls = iter([mock_response(json_data={}), requests.exceptions.ReadTimeout("slow")])
+
+    def mock_request(*args, **kwargs):
+        nxt = next(calls)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return nxt
+
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+    mock_client.request("GET", "/api/3/alerts")
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        mock_client.request("GET", "/api/integration/connectors/healthcheck/x/1/")
+
+    ok, slow = list(mock_client.request_timings)[-2:]
+    assert (ok["method"], ok["path"], ok["status"]) == ("GET", "/api/3/alerts", 200)
+    assert (slow["path"], slow["status"]) == ("/api/integration/connectors/healthcheck/x/1/", "ReadTimeout")
+    assert ok["seconds"] >= 0 and slow["at"] >= ok["at"]
+
+
 def test_request_json_decode_error(mock_client, mock_response, monkeypatch):
     """Test handling of invalid JSON responses"""
 

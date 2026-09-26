@@ -17,4 +17,5 @@ autoapi/pyfsr/projection/index
 autoapi/pyfsr/query_models/index
 autoapi/pyfsr/spec/index
 autoapi/pyfsr/utils/index
+autoapi/pyfsr/ai_eval/index
 ```

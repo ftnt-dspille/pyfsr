@@ -839,6 +839,13 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 ```
 
 ```{eval-rst}
+.. autoclass:: pyfsr.models.AgentRun
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
 .. autoclass:: pyfsr.models.AgentRunResult
    :members:
    :undoc-members:
@@ -846,7 +853,35 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 ```
 
 ```{eval-rst}
+.. autoclass:: pyfsr.models.AgentToolResult
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.AgentTurn
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
 .. autoclass:: pyfsr.models.ConnectorMcpCandidates
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.ExecutionTree
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.FortiAITokenBalance
    :members:
    :undoc-members:
    :show-inheritance:
@@ -868,6 +903,13 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 
 ```{eval-rst}
 .. autoclass:: pyfsr.models.InvestigationResult
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.InvestigationTrace
    :members:
    :undoc-members:
    :show-inheritance:
@@ -930,7 +972,42 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 ```
 
 ```{eval-rst}
+.. autoclass:: pyfsr.models.PendingInput
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
 .. autoclass:: pyfsr.models.ToolCall
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.TraceNode
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.TraceSpan
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.TraceSummary
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.TracedToolCall
    :members:
    :undoc-members:
    :show-inheritance:
