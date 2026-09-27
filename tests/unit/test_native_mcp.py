@@ -256,6 +256,16 @@ def test_build_mcp_auth_headers_variants():
     assert build_mcp_auth_headers(None) == {}
 
 
+def test_build_mcp_auth_headers_without_stored_token():
+    """Built-in servers (type FSR) store no token; say so instead of a bare KeyError."""
+    from pyfsr.api.native_mcp import build_mcp_auth_headers
+
+    with pytest.raises(ValueError, match="client.mcp"):
+        build_mcp_auth_headers({"type": "FSR"})
+    with pytest.raises(ValueError, match="pass token="):
+        build_mcp_auth_headers({"type": "BEARER"})
+
+
 def test_build_mcp_auth_headers_unsupported_raises():
     from pyfsr.api.native_mcp import build_mcp_auth_headers
 

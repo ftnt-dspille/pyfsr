@@ -47,7 +47,7 @@ register an MCP server                            ``POST /api/3/mcp_configuratio
 update a registered MCP server                    ``PUT  /api/3/mcp_configurations/{uuid}``
 list AI agents                                    ``GET  /api/ai/agent/``
 get one AI agent                                  ``GET  /api/ai/agent/{name}/{version}``
-install an agent package (zip)                     ``POST /api/ai/agent/import``
+install an agent package (zip)                     ``POST /ai/agent/import``
 export an installed agent as a zip                 ``POST /api/ai/agent/export/{agent_id}``
 get an agent's configuration                      ``GET  /api/ai/agent/config/{name}/{version}``
 update an agent's configuration                   ``POST /api/ai/agent/config``
@@ -161,9 +161,11 @@ def pack_agent(source_dir: str, output: str | None = None, *, validate: bool = T
 
     ``source_dir`` is the package root -- the folder that *is* the agent (holds
     ``info.json``, ``agent.py``, ``prompt.yaml``, ``config/memory.yaml``,
-    ``images/``). The archive is written with that folder as its single
-    top-level entry (``<name>/info.json`` …), which is the layout
-    :meth:`AIApi.import_agent` expects.
+    ``images/``). The archive's single top-level folder is the agent's
+    ``info.json`` ``name`` (``<name>/info.json`` …), whatever the source folder
+    is called: fsr-ai's importer unpacks to ``temp/<name>`` and fails with
+    ``No such file or directory`` otherwise. It is the layout FortiSOAR's own
+    agent export produces.
 
     With ``validate=True`` (default) the package is parsed and consistency-checked
     (:meth:`~pyfsr.models.AgentPackage.validate_consistency`) before packing, so an
@@ -181,6 +183,10 @@ def pack_agent(source_dir: str, output: str | None = None, *, validate: bool = T
     if validate:
         AgentPackage.from_dir(str(root))  # raises on a bad manifest/consistency
 
+    try:
+        top = json.loads((root / "info.json").read_text(encoding="utf-8")).get("name") or root.name
+    except (OSError, ValueError):
+        top = root.name
     out_path = Path(output) if output else root.with_suffix(".zip")
     _excluded = {"__pycache__", ".git", ".DS_Store", ".idea", ".vscode"}
     with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -191,8 +197,7 @@ def pack_agent(source_dir: str, output: str | None = None, *, validate: bool = T
                 continue
             if path.suffix == ".pyc":
                 continue
-            # arcname keeps <name>/ as the top-level folder inside the zip
-            zf.write(path, arcname=str(Path(root.name) / path.relative_to(root)))
+            zf.write(path, arcname=str(Path(top) / path.relative_to(root)))
     return str(out_path)
 
 
@@ -1973,7 +1978,8 @@ class AIApi(BaseAPI):
     ) -> dict[str, Any]:
         """Install an AI agent package onto the appliance.
 
-        ``POST /api/ai/agent/import`` (multipart ``file``). ``path`` may be either
+        ``POST /ai/agent/import`` (multipart ``file``), sent straight to fsr-ai:
+        the ``/api/ai`` gateway route drops multipart bodies. ``path`` may be either
         an already-built ``.zip`` or an agent **source directory** -- a directory
         is packed on the fly with :func:`pack_agent` (which validates it first).
         Pass ``replace=True`` to overwrite an already-installed agent of the same
@@ -2007,9 +2013,12 @@ class AIApi(BaseAPI):
         params = {"replace": "true"} if replace else None
         try:
             with open(zip_path, "rb") as fh:
+                # Straight to fsr-ai (/ai/...): the /api/ai gateway route forwards
+                # JSON but drops a multipart body, so fsr-ai answers 422 "file:
+                # Field required" (8.0.1).
                 resp = self.client.request(
                     "POST",
-                    "/api/ai/agent/import",
+                    "/ai/agent/import",
                     files={"file": (zip_path.name, fh, "application/zip")},
                     params=params,
                 )
@@ -2021,6 +2030,48 @@ class AIApi(BaseAPI):
             return resp.json()
         except ValueError:
             return {}
+
+    def install_agent(
+        self,
+        path: str,
+        *,
+        replace: bool = True,
+        activate: bool = True,
+        allow_upload: bool = True,
+        validate: bool = True,
+    ) -> AgentRecord:
+        """Upload a custom agent and make it usable: allow, import, activate.
+
+        The one-call path for a custom agent (source directory or ``.zip``):
+
+        1. ``allow_upload`` -- turn on *Advanced Development Settings* → AI agents
+           (``allow_ai_agent``) if it is off, so the agent is also manageable in
+           the UI. The API import itself does not require it.
+        2. :meth:`import_agent` -- with ``replace=True`` (the default) an
+           installed agent of the same name+version is overwritten in place and
+           its new code is live without a service restart.
+        3. ``activate`` -- :meth:`activate_agent`, since imports land inactive.
+
+        Returns the installed agent's row from :meth:`list_agents`. Trigger it with
+        :meth:`run_agent`; the planner/orchestrator only routes to it when its
+        ``tags`` include ``Triage`` (investigation) or ``Insight`` (orchestrator).
+
+        Agent code must call ``self.initialize()`` at the top of ``act()`` (as
+        every stock agent does); fsr-ai never calls it, and without it the run
+        fails with ``'NoneType' object has no attribute 'get'``.
+        """
+        if allow_upload and not self.client.system_settings.agent_upload_allowed():
+            self.client.system_settings.allow_agent_upload(True)
+        resp = self.import_agent(path, replace=replace, validate=validate)
+        name, version, uuid = resp.get("name"), resp.get("version"), resp.get("uuid")
+        if not (name and uuid):
+            raise ValueError(f"agent import returned no name/uuid: {resp!r}")
+        if activate:
+            self.activate_agent([uuid])
+        for agent in self.list_agents():
+            if agent.uuid == uuid:
+                return agent
+        return self.get_agent(name, version or "1.0.0")
 
     def export_agent(self, agent_id: str | int, dest: str) -> str:
         """Download an installed agent as a ``.zip`` (``POST /api/ai/agent/export/{id}``).

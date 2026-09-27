@@ -198,8 +198,10 @@ uv run pytest -q                 # unit tests (live tests deselected by default)
 uvx ruff check src tests
 ```
 
-Live integration tests run with `pytest -m integration` and need an
-`examples/config.toml` pointing at a FortiSOAR instance.
+Live integration tests run with `pytest -m integration` against the instance
+named by `FSR_INSTANCE` (an alias from `~/.pyfsr/instances.toml`), the `FSR_*`
+environment variables, or `examples/config.toml`, in that order. The AI tests
+(`test_ai_integration.py`) make no LLM calls, so they spend no AI tokens.
 
 ## License
 

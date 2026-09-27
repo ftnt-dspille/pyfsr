@@ -16,10 +16,12 @@ missing entries (and lose eval servers an agent is no longer listed for).
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import requests
 from pydantic import BaseModel, Field
 
 from ..exceptions import APIError
@@ -35,7 +37,7 @@ DEFAULT_PORT = 18900
 CONFIG_NAME = "ai-eval"
 ALERT_SOURCE = "pyfsr ai_eval"
 #: alert fields every FortiSOAR alerts module has; used if the full create is rejected
-_BASIC_ALERT_FIELDS = ("name", "description", "severity", "source", "sourceId")
+_BASIC_ALERT_FIELDS = ("name", "description", "severity", "source", "sourceId", "sourcedata")
 
 
 class Deployment(BaseModel):
@@ -157,6 +159,10 @@ def create_alert(client: FortiSOAR, scenario: Scenario, *, tag: str | None = Non
     """Create the scenario's alert (a fresh ``sourceId`` each time)."""
     fields = dict(scenario.alert)
     fields.setdefault("source", ALERT_SOURCE)
+    # fsr-ai only classifies an alert (and so picks a type-specific SOP) from its
+    # raw ``sourcedata``; without it every alert is "Other/Unknown".
+    if isinstance(fields.get("sourcedata"), (dict, list)):
+        fields["sourcedata"] = json.dumps(fields["sourcedata"])
     fields["sourceId"] = f"ai-eval-{scenario.id}-{tag or int(time.time())}"
     try:
         return client.alerts.create(**fields)
@@ -165,12 +171,16 @@ def create_alert(client: FortiSOAR, scenario: Scenario, *, tag: str | None = Non
 
 
 def _trace(client: FortiSOAR, task_id: str, *, attempts: int = 4, delay: float = 5.0):
-    """The investigation trace; the tracer store can lag the result by a few seconds."""
+    """The investigation trace; the tracer store can lag the result by a few seconds.
+
+    Network errors retry too: on 8.0.1 the tracer API times out when fsr-ai's DB
+    pool is exhausted, and one slow read must not lose a whole suite.
+    """
     inv = None
     for _ in range(attempts):
         try:
             inv = client.ai.traces.investigation(task_id)
-        except APIError:
+        except (APIError, requests.RequestException):
             inv = None
         if inv is not None and inv.questions:
             return inv
@@ -233,7 +243,7 @@ def run_scenario(
             )
             score.task_id = handle.task_id
             score.status = result.status or score.status
-        except APIError as exc:
+        except (APIError, requests.RequestException) as exc:
             score = RunScore(scenario=sc.id, error=str(exc), duration_s=round(time.monotonic() - started, 1))
         scores.append(score)
         if on_run:

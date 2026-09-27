@@ -21,6 +21,7 @@ _INFO = {
     "version": "1.0.0",
     "description": "Counts things.",
     "publisher": "ACME",
+    "category": "Custom",
     "icon_small_name": "small.png",
     "icon_large_name": "large.png",
     "tags": ["Insight"],
@@ -94,6 +95,12 @@ def test_missing_info_json_raises(tmp_path):
         AgentPackage.from_dir(str(tmp_path / "empty"))
 
 
+def test_missing_required_manifest_fields_fail(tmp_path):
+    info = {k: v for k, v in _INFO.items() if k not in ("category", "publisher")}
+    with pytest.raises(ValueError, match="required field.*category, publisher"):
+        AgentPackage.from_dir(str(_make_agent_dir(tmp_path, info=info)))
+
+
 def test_bad_agentclass_fails_consistency(tmp_path):
     info = {**_INFO, "agentclass": "NotDefinedAgent"}
     with pytest.raises(ValueError, match="agentclass"):
@@ -123,6 +130,14 @@ def test_pack_agent_layout_and_excludes_pyc(tmp_path):
     assert "widget-counter/info.json" in names
     assert not any(n.endswith(".pyc") for n in names)
     assert not any("__pycache__" in n for n in names)
+
+
+def test_pack_agent_top_folder_is_manifest_name(tmp_path):
+    """fsr-ai unpacks to temp/<name>; a versioned source folder must not leak into the zip."""
+    root = _make_agent_dir(tmp_path)
+    versioned = root.rename(root.with_name("widget-counter_1_0_0"))
+    with zipfile.ZipFile(pack_agent(str(versioned))) as zf:
+        assert {n.split("/")[0] for n in zf.namelist()} == {"widget-counter"}
 
 
 def test_pack_agent_validates_before_packing(tmp_path):
@@ -173,11 +188,46 @@ def test_import_agent_from_source_dir_packs_and_posts_multipart(tmp_path):
     assert result == {"uuid": "a-1", "active": False}
     (call,) = client.requests
     assert call["method"] == "POST"
-    assert call["endpoint"] == "/api/ai/agent/import"
+    assert call["endpoint"] == "/ai/agent/import"
     assert call["params"] == {"replace": "true"}
     assert "file" in call["files"]
     # the on-the-fly zip is cleaned up (only a source dir remains)
     assert not (root.with_suffix(".zip")).exists()
+
+
+class _DevSettings:
+    def __init__(self, allowed):
+        self.allowed = allowed
+        self.set_to = []
+
+    def agent_upload_allowed(self):
+        return self.allowed
+
+    def allow_agent_upload(self, enabled=True):
+        self.set_to.append(enabled)
+
+
+@pytest.mark.parametrize("allowed", [False, True])
+def test_install_agent_allows_imports_activates_and_returns_row(tmp_path, monkeypatch, allowed):
+    client = RecordingClient(FakeResponse(payload={"uuid": "a-1", "name": "widget-counter", "version": "1.0.0"}))
+    client.system_settings = _DevSettings(allowed)
+    api = AIApi(client)
+    activated = []
+    monkeypatch.setattr(api, "activate_agent", lambda uuids, **kw: activated.append(uuids))
+    row = SimpleNamespace(uuid="a-1", name="widget-counter")
+    monkeypatch.setattr(api, "list_agents", lambda **kw: [SimpleNamespace(uuid="other"), row])
+
+    assert api.install_agent(str(_make_agent_dir(tmp_path))) is row
+    assert client.system_settings.set_to == ([] if allowed else [True])
+    assert client.requests[0]["params"] == {"replace": "true"}
+    assert activated == [["a-1"]]
+
+
+def test_install_agent_rejects_a_response_without_uuid(tmp_path):
+    client = RecordingClient(FakeResponse(payload={"detail": "nope"}))
+    client.system_settings = _DevSettings(True)
+    with pytest.raises(ValueError, match="no name/uuid"):
+        AIApi(client).install_agent(str(_make_agent_dir(tmp_path)))
 
 
 def test_import_agent_from_zip_does_not_validate_or_delete(tmp_path):
@@ -267,3 +317,14 @@ def test_requirements_problems_matches_server_rules_verbatim():
     # The server's pattern is --find-link\s+, so pip's real --find-links slips through; mirror that.
     assert requirements_problems("--find-links ./wheels") == []
     assert requirements_problems("numpy==2.0") == []
+
+
+def test_agent_record_accepts_null_collections():
+    """fsr-ai stores a custom agent's omitted manifest keys as NULL."""
+    from pyfsr.models import AgentRecord
+
+    rec = AgentRecord.model_validate(
+        {"name": "x", "outputformat": None, "additional_information": None, "tags": None, "inputformat": None}
+    )
+    assert rec.outputformat == {} and rec.inputformat == {}
+    assert rec.additional_information == [] and rec.tags == []

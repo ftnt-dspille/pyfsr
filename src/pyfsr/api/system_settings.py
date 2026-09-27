@@ -1,4 +1,4 @@
-"""System Settings — the single ``/api/3/system_settings`` configuration blob.
+"""System Settings -- the single ``/api/3/system_settings`` configuration blob.
 
 FortiSOAR keeps almost every appliance-wide UI/behaviour toggle in one root
 ``SystemSettings`` record whose ``publicValues`` is a deeply-nested dict
@@ -134,8 +134,8 @@ class SystemSettingsAPI(BaseAPI):
         """Enable/disable editing custom connectors, widgets, and AI agents.
 
         Flips the *Advanced Development Settings* flags that gate the in-product
-        editors — ``allowCustomConnector`` / ``allowCustomWidget`` /
-        ``allow_ai_agent`` — which live in their own named ``SystemSettings``
+        editors -- ``allowCustomConnector`` / ``allowCustomWidget`` /
+        ``allow_ai_agent`` -- which live in their own named ``SystemSettings``
         record (``privateValues.values[0]``), not the root blob. Each argument is
         tri-state: ``True``/``False`` to set, ``None`` (default) to leave as-is.
 
@@ -168,7 +168,7 @@ class SystemSettingsAPI(BaseAPI):
         Convenience wrapper over :meth:`set_development_mode`: in FortiSOAR the
         "Custom Code Execution" toggle in *System Settings → Advanced Development
         Features* is the SAME flag as the custom-**connector** toggle
-        (``allowCustomConnector``) — its in-product notice/risk strings are the
+        (``allowCustomConnector``) -- its in-product notice/risk strings are the
         ``..._CUSTOM_CODE_EXECUTION`` ones. With it off, a ``code_snippet`` step
         fails at runtime with *"Custom Code Execution is disabled. Enable this
         feature in Settings"*.
@@ -179,13 +179,28 @@ class SystemSettingsAPI(BaseAPI):
         """
         return self.set_development_mode(connectors=enabled)
 
+    def allow_agent_upload(self, enabled: bool = True) -> dict[str, Any]:
+        """Enable/disable custom AI agent upload (``allow_ai_agent``).
+
+        The agent counterpart of the custom connector/widget toggles, and
+        equivalent to ``set_development_mode(agents=enabled)``. Like those, it
+        gates the *UI* (the agent import button); fsr-ai's import endpoint does
+        not check it, so :meth:`~pyfsr.api.ai.AIApi.import_agent` works over the
+        API either way (8.0.1). Returns the updated record.
+        """
+        return self.set_development_mode(agents=enabled)
+
+    def agent_upload_allowed(self) -> bool:
+        """Whether custom AI agent upload (``allow_ai_agent``) is enabled."""
+        return self.get_development_mode()["agents"]
+
     def _dev_settings_record(self) -> dict[str, Any]:
         """The *Advanced Development Settings* record, created if it doesn't exist.
 
         On a freshly-installed appliance this record (an 8.0 child of the root
         ``system_settings`` whose ``privateValues.values[0]`` holds the
         ``allowCustomConnector``/``allowCustomWidget`` flags) is absent until the
-        page is first saved — the UI lazily creates it. Mirror that: create it
+        page is first saved -- the UI lazily creates it. Mirror that: create it
         with all flags off so the caller's PUT then flips the requested one.
         """
         try:
@@ -217,7 +232,7 @@ class SystemSettingsAPI(BaseAPI):
         """Set the playbook execution-log tag filter (Settings → Playbooks → Logs).
 
         ``operation`` is ``"exclude"`` or ``"include"``. Note the FortiSOAR key
-        is the (misspelled) ``filterOpration`` — handled here so callers don't
+        is the (misspelled) ``filterOpration`` -- handled here so callers don't
         have to reproduce the typo.
         """
         if operation not in ("exclude", "include"):

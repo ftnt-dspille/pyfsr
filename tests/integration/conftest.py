@@ -34,15 +34,22 @@ def client():
     """A live FortiSOAR client.
 
     Resolution order, so the suite runs anywhere with no extra files:
-      1. ``FSR_*`` environment variables (``FSR_BASE_URL`` + ``FSR_API_KEY`` or
-         ``FSR_USERNAME``/``FSR_PASSWORD``), via the SDK's own ``EnvConfig`` —
+      1. ``FSR_INSTANCE``: an alias from ``~/.pyfsr/instances.toml``, the same
+         registry the CLI's ``--instance`` uses.
+      2. ``FSR_*`` environment variables (``FSR_BASE_URL`` + ``FSR_API_KEY`` or
+         ``FSR_USERNAME``/``FSR_PASSWORD``), via the SDK's own ``EnvConfig`` --
          the same path documented for end users.
-      2. ``examples/config.toml`` (legacy).
-    If neither is present, the integration suite is skipped.
+      3. ``examples/config.toml`` (legacy).
+    If none is present, the integration suite is skipped.
     """
     import os
 
     from pyfsr import FortiSOAR
+
+    if os.environ.get("FSR_INSTANCE"):
+        from pyfsr.instances import InstanceRegistry
+
+        return InstanceRegistry.load().client(os.environ["FSR_INSTANCE"])
 
     if os.environ.get("FSR_BASE_URL") or os.environ.get("FSR_HOST"):
         from pyfsr.config import EnvConfig
