@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-27
+
 ### Added
 - **`pyfsr.ai_eval` / `pyfsr ai-eval` -- scored, repeatable FortiAI
   investigation runs (8.0.1).**
