@@ -321,7 +321,10 @@ def check_python_block(code, pyfsr):
 # --------------------------------------------------------------------------
 _HELP_CACHE = {}
 _FLAG_RE = re.compile(r"(--[\w-]+)")
-_SUB_RE = re.compile(r"^\s{2,}(\w[\w-]*)\s{2,}", re.M)
+# [ \t], not \s: \s crosses newlines, so a wrapped help word ("per\n agent")
+# was read as a subcommand and swallowed the next line's real one. A name too
+# long for its column sits alone on its line.
+_SUB_RE = re.compile(r"^[ \t]{2,}(\w[\w-]*)(?:[ \t]{2,}|[ \t]*$)", re.M)
 
 
 def help_for(cmd_words):
