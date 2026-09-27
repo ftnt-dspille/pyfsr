@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from .base import BaseRecord
 
@@ -178,6 +178,16 @@ class AgentRecord(_Lenient):
     jailbreakguard: bool | None = None
     llmconfig: Any | None = None
     piimasking: bool | None = None
+
+    @field_validator(
+        "tags", "inputformat", "outputformat", "configuration", "additional_information", "dependencies", mode="before"
+    )
+    @classmethod
+    def _null_is_empty(cls, value: Any, info: Any) -> Any:
+        # A custom agent whose info.json omits a key is stored with a SQL NULL.
+        if value is None:
+            return {} if info.field_name in ("inputformat", "outputformat") else []
+        return value
 
 
 class AgentConfig(_Lenient):

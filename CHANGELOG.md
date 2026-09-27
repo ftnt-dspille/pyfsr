@@ -87,8 +87,57 @@ All notable changes to this project will be documented in this file.
   8.0.1's import rules (`REQUIREMENTS_BLOCKED_PATTERNS`, copied verbatim:
   custom index/trusted-host/find-links, `git+`, http(s)/ftp URLs), so a package
   the box would refuse fails locally. `requirements_problems(text)` is exported.
+- **Live AI integration tests** (`tests/integration/test_ai_integration.py`):
+  agents and their configs, agent export + package validation, reasoning
+  profiles and LLM assignment (one round trip, restored), FortiAI balance, MCP
+  servers, the native `/mcp/*` gateway, Organization Context and trace reads.
+  None starts an investigation or chat, so they spend no LLM tokens. The
+  integration `client` fixture now also takes `FSR_INSTANCE` (an alias from
+  `~/.pyfsr/instances.toml`).
+- **`ai_eval` scenarios can carry raw `sourcedata`** (a mapping is sent as
+  JSON). fsr-ai only classifies an alert, and so only picks a type-specific
+  SOP, from its `sourcedata`; without it every alert is "Other/Unknown" and
+  gets the DEFAULT SOP. The bundled scenarios now include vendor-style raw
+  events, and internal scenario hosts moved to `10.0.0.x`.
+- **`client.ai.install_agent(path)`: upload a custom AI agent in one call.**
+  It turns on agent upload if it is off, imports the package (a source folder
+  or a `.zip`, replacing the same name and version in place), activates it,
+  and returns the installed agent. The new code runs without restarting fsr-ai.
+  `client.system_settings.allow_agent_upload()` / `agent_upload_allowed()`
+  set and read the *Advanced Development Settings* agent toggle
+  (`allow_ai_agent`), like the connector and widget toggles. As with those,
+  the toggle only gates the UI; the API import works either way (8.0.1).
+- **Package validation catches the manifest gaps fsr-ai can't recover from.**
+  `info.json` must have `label`, `agentclass`, `category` and `publisher`.
+  With one missing, the 8.0.1 import fails half-way. It leaves
+  `ai-agents/<name>_<version>/` on disk, and every later import of that name
+  then fails with "File exists", even with `replace=true`.
+- A live, token-free integration test builds a no-LLM echo agent, installs it,
+  runs it and deactivates it.
 
 ### Fixed
+- **Custom agent upload never worked on 8.0.1.** Three separate faults:
+  - The upload sent `Content-Type: application/json`, so the multipart body
+    was never parsed. File uploads now drop the session's JSON content type.
+  - The `/api/ai` gateway drops multipart bodies (fsr-ai answered 422 "file:
+    Field required"). `import_agent` now posts to `/ai/agent/import`, the
+    route nginx sends straight to fsr-ai. `client.request` passes `/ai/...`
+    through without the `/api/3` prefix.
+  - fsr-ai unpacks to `temp/<info.json name>`. `pack_agent` named the zip's top
+    folder after the source folder, so a folder such as `my-agent_1_0_0`
+    failed with "No such file or directory". The top folder is now the
+    manifest `name`.
+- **One custom agent could break `ai.list_agents()`.** fsr-ai stores a key the
+  manifest omits (`outputformat`, `additional_information`, ...) as NULL, and
+  `AgentRecord` rejected the null. It now reads as empty.
+- **Direct MCP calls to a built-in server said `KeyError: 'value'`.** Built-in
+  servers (auth type `FSR`) store no token: they use the caller's FortiSOAR
+  session. `list_registered_tools` / `call_registered_tool` now raise a
+  `ValueError` pointing to `client.mcp` (the native `/mcp/*` gateway).
+- **`ai-eval run` lost the whole suite on one slow trace read.** Trace reads
+  retry on network errors, a run that still fails is recorded as an error, and
+  `--out` is written after every run. (On 8.0.1 the tracer API times out once
+  fsr-ai's DB pool is exhausted.)
 - **`get_agent_config` / `allow_mcp_server_for_agent` failed for an agent that
   was never configured.**
   - fsr-ai answers `500` for an agent with no config row. `get_agent_config`

@@ -109,6 +109,14 @@ def _new_httpx_client(verify: Any, **kw: Any) -> Any:
 
 
 def _bearer_headers(auth: dict[str, Any]) -> dict[str, str]:
+    if not auth.get("value"):
+        if (auth.get("type") or "").upper() == "FSR":
+            raise ValueError(
+                "built-in FortiSOAR MCP server: it authenticates with the caller's own "
+                "FortiSOAR session, so no token is stored. Use client.mcp (the native "
+                "/mcp/* gateway), or pass token="
+            )
+        raise ValueError("MCP server auth has no stored token (masked or rotated); pass token=")
     prefix = auth.get("prefix", "Bearer")
     return {auth.get("header_name", "Authorization"): f"{prefix} {auth['value']}"}
 

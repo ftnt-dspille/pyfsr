@@ -66,7 +66,7 @@ def test_suite_rejects_unknown_tool(suite):
     "tool,args,rule",
     [
         ("siem_search_events", {"query": "FS-FIN-02"}, 0),
-        ("siem_search_events", {"query": "hostname=198.51.100.33", "hours": 48}, 0),
+        ("siem_search_events", {"query": "hostname=10.0.0.33", "hours": 48}, 0),
         ("siem_search_events", {"query": "WS-FIN-0417"}, 1),
         ("siem_search_events", {"query": "nobody"}, None),
         ("ti_lookup", {"indicator": "185.220.101.47"}, 0),
@@ -262,13 +262,13 @@ def _investigation(suite, *, chained=True):
             "edr_network_connections",
             {"hostname": "WS-FIN-0417"},
             server="Eval EDR",
-            output={"dst_ip": "198.51.100.33"},
+            output={"dst_ip": "10.0.0.33"},
         ),
     ]
     calls_siem = [
         _call(
             "siem_search_events",
-            {"query": "198.51.100.33" if chained else "WS-FIN-0417"},
+            {"query": "10.0.0.33" if chained else "WS-FIN-0417"},
             server="Eval SIEM",
             output={"share": "payroll"} if chained else {"events": []},
             by="llm-chained",

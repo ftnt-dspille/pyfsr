@@ -155,6 +155,21 @@ def test_request_with_custom_headers(mock_client, mock_response, monkeypatch):
     mock_client.request("GET", "/api/3/alerts", headers=custom_headers)
 
 
+def test_request_with_files_drops_json_content_type(mock_client, mock_response, monkeypatch):
+    """A multipart upload must not carry the auth headers' JSON Content-Type."""
+    seen = {}
+
+    def mock_request(*args, **kwargs):
+        seen.update(kwargs.get("headers") or {})
+        return mock_response()
+
+    mock_client.session.headers["Content-Type"] = "application/json"
+    monkeypatch.setattr(requests.Session, "request", mock_request)
+
+    mock_client.request("POST", "/api/ai/agent/import", files={"file": ("a.zip", b"x", "application/zip")})
+    assert seen.get("Content-Type") is None  # None tells requests to drop the session header
+
+
 def test_request_network_error(mock_client, monkeypatch):
     """Test handling of network connection errors"""
 

@@ -1,4 +1,4 @@
-"""Unit tests for SystemSettingsAPI — focused on the dev-mode toggles."""
+"""Unit tests for SystemSettingsAPI -- focused on the dev-mode toggles."""
 
 import pytest
 
@@ -104,6 +104,15 @@ def test_set_custom_code_execution_maps_to_connectors():
     api.set_custom_code_execution(True)
     _endpoint, body, _params = client.put_calls[0]
     assert body["privateValues"]["values"][0]["allowCustomConnector"] is True
+
+
+def test_allow_agent_upload_maps_to_agents_flag():
+    api, client = _api()
+    assert api.agent_upload_allowed() is True
+    api.allow_agent_upload(False)
+    entry = client.put_calls[0][1]["privateValues"]["values"][0]
+    assert entry["allow_ai_agent"] is False
+    assert entry["allowCustomConnector"] is False  # untouched
 
 
 def test_set_development_mode_creates_record_when_missing():

@@ -28,14 +28,14 @@ servers:
           hours: {type: integer, description: "Look-back window in hours (default 24)."}
         required: [query]
         rules:
-          - match: {query: "198.51.100.33|fs-fin-02"}
+          - match: {query: "10.0.0.33|fs-fin-02"}
             result:
               total: 3
               events:
-                - {time: "2026-03-11T14:12:08Z", event_id: 4624, host: FS-FIN-02, src_ip: 198.51.100.117, user: j.okafor, logon_type: 3, message: "Network logon from WS-FIN-0417"}
+                - {time: "2026-03-11T14:12:08Z", event_id: 4624, host: FS-FIN-02, src_ip: 10.0.0.117, user: j.okafor, logon_type: 3, message: "Network logon from WS-FIN-0417"}
                 - {time: "2026-03-11T14:12:31Z", event_id: 5145, host: FS-FIN-02, user: j.okafor, share: '\\FS-FIN-02\payroll', files_accessed: 1834, message: "Mass file access on payroll share"}
                 - {time: "2026-03-11T14:19:02Z", event_id: 5145, host: FS-FIN-02, user: j.okafor, share: '\\FS-FIN-02\payroll', bytes_out: 2210334720, message: "2.1 GB read from payroll share"}
-          - match: {query: "ws-fin-0417|198.51.100.117|j.okafor"}
+          - match: {query: "ws-fin-0417|10.0.0.117|j.okafor"}
             result:
               total: 2
               events:
@@ -65,7 +65,7 @@ servers:
           entity: {type: string, description: "Hostname, IP, username or account."}
         required: [entity]
         rules:
-          - match: {entity: "fs-fin-02|198.51.100.33|payroll"}
+          - match: {entity: "fs-fin-02|10.0.0.33|payroll"}
             result: {incidents: [{id: 90412, title: "Anomalous data volume from file server FS-FIN-02", severity: High, opened: "2026-03-11T14:25:00Z"}]}
         default: {incidents: []}
 
@@ -81,11 +81,11 @@ servers:
         required: [hostname]
         rules:
           - match: {hostname: "ws-fin-0417"}
-            result: {hostname: WS-FIN-0417, ip: 198.51.100.117, os: "Windows 11 23H2", last_user: j.okafor, sensor: healthy, open_detections: 2}
+            result: {hostname: WS-FIN-0417, ip: 10.0.0.117, os: "Windows 11 23H2", last_user: j.okafor, sensor: healthy, open_detections: 2}
           - match: {hostname: "srv-db-11"}
-            result: {hostname: SRV-DB-11, ip: 198.51.100.11, os: "Windows Server 2022", sensor: healthy, open_detections: 0}
+            result: {hostname: SRV-DB-11, ip: 10.0.0.11, os: "Windows Server 2022", sensor: healthy, open_detections: 0}
           - match: {hostname: "lt-4471"}
-            result: {hostname: LT-4471, ip: 198.51.100.71, os: "macOS 15", last_user: m.lindqvist, sensor: healthy, open_detections: 0, geolocation: "Stockholm, SE", compliance: compliant}
+            result: {hostname: LT-4471, ip: 10.0.0.71, os: "macOS 15", last_user: m.lindqvist, sensor: healthy, open_detections: 0, geolocation: "Stockholm, SE", compliance: compliant}
         default: {error: "host not found"}
       - name: edr_process_tree
         description: Process tree around a process on a host (parents, children, command lines, files opened).
@@ -110,7 +110,7 @@ servers:
             result:
               connections:
                 - {process: rundll32.exe, dst_ip: 185.220.101.47, dst_port: 443, bytes_out: 48211}
-                - {process: rundll32.exe, dst_ip: 198.51.100.33, dst_port: 445, protocol: SMB, bytes_in: 2210334720}
+                - {process: rundll32.exe, dst_ip: 10.0.0.33, dst_port: 445, protocol: SMB, bytes_in: 2210334720}
           - match: {hostname: "lt-4471"}
             result: {connections: [{process: vpnagent, dst_ip: 203.0.113.77, dst_port: 443}]}
         default: {connections: []}
@@ -145,7 +145,7 @@ servers:
                 - {time: "2026-03-13T08:41:03Z", ip: 203.0.113.77, geo: "Singapore, SG", app: "Office 365", device: LT-4471, mfa: satisfied}
                 - {time: "2026-03-13T08:58:40Z", ip: 198.51.100.24, geo: "Stockholm, SE", app: "Salesforce", device: LT-4471, mfa: satisfied}
           - match: {username: "j.okafor|okafor"}
-            result: {signins: [{time: "2026-03-11T07:58:00Z", ip: 198.51.100.117, geo: internal, app: Windows, mfa: "not enrolled"}]}
+            result: {signins: [{time: "2026-03-11T07:58:00Z", ip: 10.0.0.117, geo: internal, app: Windows, mfa: "not enrolled"}]}
         default: {signins: []}
       - name: idp_group_membership
         description: Groups a user belongs to.
@@ -172,12 +172,12 @@ servers:
           asset: {type: string, description: "Hostname or IP address."}
         required: [asset]
         rules:
-          - match: {asset: "fs-fin-02|198.51.100.33"}
-            result: {hostname: FS-FIN-02, ip: 198.51.100.33, role: "Finance file server", criticality: Critical, data_classification: "PCI / payroll PII", owner: Finance}
-          - match: {asset: "ws-fin-0417|198.51.100.117"}
-            result: {hostname: WS-FIN-0417, ip: 198.51.100.117, role: "Finance workstation", criticality: Medium, owner: Finance}
-          - match: {asset: "srv-db-11|198.51.100.11"}
-            result: {hostname: SRV-DB-11, ip: 198.51.100.11, role: "SQL Server (ERP)", criticality: High, owner: "DBA Operations"}
+          - match: {asset: "fs-fin-02|10.0.0.33"}
+            result: {hostname: FS-FIN-02, ip: 10.0.0.33, role: "Finance file server", criticality: Critical, data_classification: "PCI / payroll PII", owner: Finance}
+          - match: {asset: "ws-fin-0417|10.0.0.117"}
+            result: {hostname: WS-FIN-0417, ip: 10.0.0.117, role: "Finance workstation", criticality: Medium, owner: Finance}
+          - match: {asset: "srv-db-11|10.0.0.11"}
+            result: {hostname: SRV-DB-11, ip: 10.0.0.11, role: "SQL Server (ERP)", criticality: High, owner: "DBA Operations"}
           - match: {asset: "203.0.113.77"}
             result: {ip: 203.0.113.77, role: "Corporate VPN egress (vpn-sin-01, Singapore POP)", owner: "Network Engineering"}
         default: {error: "asset not found"}
@@ -187,7 +187,7 @@ servers:
           asset: {type: string, description: "Hostname or IP address."}
         required: [asset]
         rules:
-          - match: {asset: "srv-db-11|198.51.100.11"}
+          - match: {asset: "srv-db-11|10.0.0.11"}
             result:
               changes:
                 - {id: CHG0048812, state: approved, window: "2026-03-12T01:00Z/03:00Z", implementer: svc_deploy, summary: "Temporary local admin tmp_patch_admin for SQL cumulative update KB5040437; removed after patching"}
@@ -262,18 +262,32 @@ scenarios:
       userName: j.okafor
       destinationIp: 185.220.101.47
       processName: powershell.exe
+      # Raw vendor event: fsr-ai classifies the alert type (and so picks the
+      # SOP) only from sourcedata. Carries nothing the alert doesn't already say.
+      sourcedata:
+        product: Eval EDR
+        detection_id: edr-det-77120
+        detection_name: Encoded PowerShell spawned by Office application
+        tactic: Execution
+        technique: T1059.001
+        severity: high
+        timestamp: "2026-03-11T14:07:44Z"
+        device: {hostname: WS-FIN-0417, os: Windows 11}
+        user: j.okafor
+        process: {name: powershell.exe, command_line: "powershell.exe -nop -w hidden -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoA", parent: winword.exe}
+        network: {remote_ip: 185.220.101.47, remote_port: 443, direction: outbound}
     verdict: {expected: [malicious, true positive], partial: [suspicious]}
     expected_calls:
       - {server: threat_intel, tool: ti_lookup, args: "185.220.101.47"}
       - {server: edr, tool: edr_process_tree, args: "ws-fin-0417"}
       - {server: edr, tool: edr_network_connections, args: "ws-fin-0417"}
-      - {server: siem, tool: siem_search_events, args: "198.51.100.33|fs-fin-02", chain: true}
-      - {server: cmdb, tool: cmdb_lookup_asset, args: "fs-fin-02|198.51.100.33", chain: true}
+      - {server: siem, tool: siem_search_events, args: "10.0.0.33|fs-fin-02", chain: true}
+      - {server: cmdb, tool: cmdb_lookup_asset, args: "fs-fin-02|10.0.0.33", chain: true}
       - {server: identity, tool: idp_get_user, args: "okafor", required: false}
     facts:
       - {id: c2, match: "qakbot|qbot", source: threat_intel, what: "185.220.101.47 is QakBot C2"}
       - {id: dropper, match: "invoice_q3_8841", source: edr, what: "winword opened the macro document Invoice_Q3_8841.docm"}
-      - {id: pivot, match: "198.51.100.33|fs-fin-02", source: edr, what: "the host made SMB connections to FS-FIN-02 (198.51.100.33)"}
+      - {id: pivot, match: "10.0.0.33|fs-fin-02", source: edr, what: "the host made SMB connections to FS-FIN-02 (10.0.0.33)"}
       - {id: payroll, match: "payroll", source: siem, chain: true, what: "2.1 GB read from the payroll share"}
       - {id: pci, match: "pci", source: cmdb, chain: true, what: "FS-FIN-02 is a critical PCI/payroll asset"}
       - {id: nomfa, match: "mfa", source: identity, required: false, what: "j.okafor has no MFA"}
@@ -289,6 +303,16 @@ scenarios:
       severity: Medium
       hostName: SRV-DB-11
       userName: svc_deploy
+      sourcedata:
+        product: Eval SIEM
+        rule: Member added to privileged local group
+        tactic: Persistence
+        technique: T1098
+        severity: medium
+        timestamp: "2026-03-12T01:03:41Z"
+        events:
+          - {event_id: 4720, computer: SRV-DB-11, subject_user: svc_deploy, target_user: tmp_patch_admin, message: "A user account was created"}
+          - {event_id: 4732, computer: SRV-DB-11, subject_user: svc_deploy, member: tmp_patch_admin, group: Administrators, message: "A member was added to a security-enabled local group"}
     verdict: {expected: [benign, false positive], partial: [suspicious]}
     expected_calls:
       - {server: cmdb, tool: cmdb_change_requests, args: "srv-db-11"}
@@ -311,6 +335,16 @@ scenarios:
       severity: Medium
       userName: m.lindqvist
       sourceIp: 203.0.113.77
+      sourcedata:
+        product: Eval IdP
+        risk_detection: impossibleTravel
+        severity: medium
+        user_principal: m.lindqvist
+        sign_ins:
+          - {time: "2026-03-13T08:41:03Z", ip: 203.0.113.77, geo: "Singapore, SG", app: Office 365}
+          - {time: "2026-03-13T08:58:40Z", ip: 198.51.100.24, geo: "Stockholm, SE", app: Office 365}
+        distance_km: 9650
+        minutes_between: 17
     verdict: {expected: [benign, false positive], partial: [suspicious]}
     expected_calls:
       - {server: threat_intel, tool: ti_lookup, args: "203.0.113.77"}

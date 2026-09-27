@@ -647,14 +647,22 @@ class FortiSOAR:
         # /mcp/add/tools, /mcp/tools/{uuid}, /mcp/servers/connector -- so are
         # excluded from the default prefixing, same as /auth/ and /api/public/.
         # The rule-engine app (delivery rules / channels) is served from its own
-        # /rule/api/ root, likewise outside /api/3.
-        if not endpoint.startswith(("/api/3/", "/auth/", "/api/public/", "/api/", "/mcp/", "/rule/")):
+        # /rule/api/ root, likewise outside /api/3. /ai/ is fsr-ai itself (nginx
+        # proxies it straight through, bypassing the /api gateway), needed for
+        # multipart uploads the gateway would drop.
+        if not endpoint.startswith(("/api/3/", "/auth/", "/api/public/", "/api/", "/mcp/", "/rule/", "/ai/")):
             endpoint = f"/api/3{endpoint}"
 
         url = urljoin(self.base_url, endpoint)
 
         # Merge any additional headers
         request_headers = self.session.headers.copy()
+        if files is not None:
+            # The auth headers pin Content-Type to JSON on the session; a multipart
+            # upload needs requests to set its own (with the boundary), or the server
+            # sees no file. requests merges session headers back in, so None (which
+            # it drops) is the only way to remove one per request.
+            request_headers["Content-Type"] = None
         if headers:
             request_headers.update(headers)
 

@@ -130,13 +130,22 @@ def cmd_run(args: argparse.Namespace) -> int:
     from ..ai_eval import run_suite
 
     client, suite = _client(args), _suite(args)
+    done: list[RunScore] = []
+
+    def on_run(score: RunScore) -> None:
+        _print_run(score)
+        done.append(score)
+        if args.out:  # save as we go, so an interrupted suite keeps its finished runs
+            with open(args.out, "w", encoding="utf-8") as f:
+                json.dump({"partial": True, "runs": [r.model_dump() for r in done]}, f, indent=2, default=str)
+
     report = run_suite(
         client,
         suite,
         runs=args.runs,
         scenarios=args.scenario or None,
         timeout=args.timeout,
-        on_run=_print_run,
+        on_run=on_run,
         meter=not args.no_meter,
         pricing=_pricing(args),
     )

@@ -20,7 +20,7 @@ Fixtures (JSON, reloaded whenever the file changes)::
             "description": "...",
             "params": {"query": {"type": "string", "description": "..."}},
             "required": ["query"],
-            "rules": [{"match": {"query": "198.51.100.33|ws-fin-0417"}, "result": {...}}],
+            "rules": [{"match": {"query": "10.0.0.33|ws-fin-0417"}, "result": {...}}],
             "default": {"results": []}}]}}}
 
 A rule matches when every ``match`` entry hits: the argument's value (stringified,

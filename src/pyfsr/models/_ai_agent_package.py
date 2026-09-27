@@ -87,11 +87,17 @@ class _Lenient(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
+# Manifest fields behind NOT NULL ai_agent columns (name/version are always set).
+# "" is accepted: stock agents ship category "".
+_REQUIRED_INFO_FIELDS = ("label", "agentclass", "category", "publisher")
+
+
 class AgentInfo(_Lenient):
     """The ``info.json`` manifest of an AI agent package.
 
-    ``name`` must match the package's top-level folder, and ``agentclass`` must
-    name a class defined in ``agent.py``; :class:`AgentPackage` cross-checks both.
+    ``agentclass`` must name a class defined in ``agent.py`` (and be unique among
+    installed agents); :class:`AgentPackage` cross-checks it and the required
+    fields. :func:`~pyfsr.pack_agent` names the zip's top folder after ``name``.
     ``configuration.fields`` is the per-agent config form the FortiSOAR UI renders
     (config-type toggle, LLM-provider picker, MCP-server multiselect, masking
     agent) -- left untyped here as it's a free-form field schema.
@@ -164,6 +170,10 @@ class AgentPackage(BaseModel):
     or construct directly. :meth:`validate_consistency` catches the mistakes that
     fail *silently on the appliance* rather than at upload:
 
+    - a manifest field fsr-ai stores NOT NULL missing (``label``, ``agentclass``,
+      ``category``, ``publisher``) -- the import then fails half-way and leaves
+      ``ai-agents/<name>_<version>/`` behind, which blocks every later import of
+      that name, ``replace=true`` included (8.0.1);
     - ``agent.py`` missing, or not defining the class named by ``agentclass``;
     - a prompt uuid referenced in ``agent.py`` that ``prompt.yaml`` doesn't define;
     - icons named in the manifest that aren't in the package.
@@ -238,6 +248,10 @@ class AgentPackage(BaseModel):
         (e.g. no ``agent_source``).
         """
         problems: list[str] = []
+
+        missing = [f for f in _REQUIRED_INFO_FIELDS if getattr(self.info, f) is None]
+        if missing:
+            problems.append(f"info.json is missing required field(s): {', '.join(missing)}")
 
         if self.requirements is not None:
             problems.extend(requirements_problems(self.requirements))
