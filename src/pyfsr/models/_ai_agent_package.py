@@ -97,7 +97,7 @@ class AgentInfo(_Lenient):
 
     ``agentclass`` must name a class defined in ``agent.py`` (and be unique among
     installed agents); :class:`AgentPackage` cross-checks it and the required
-    fields. :func:`~pyfsr.pack_agent` names the zip's top folder after ``name``.
+    fields. :func:`~pyfsr.api.ai.pack_agent` names the zip's top folder after ``name``.
     ``configuration.fields`` is the per-agent config form the FortiSOAR UI renders
     (config-type toggle, LLM-provider picker, MCP-server multiselect, masking
     agent) -- left untyped here as it's a free-form field schema.
