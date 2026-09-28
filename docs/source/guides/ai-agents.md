@@ -338,6 +338,46 @@ starting over.
 On 8.0.1 the Conversation Agent does not call the Orchestrator, so
 `orchestrate()` is the only way to reach it.
 
+The playbook designer's and connector wizard's assistants use the same
+protocol. `client.ai.playbook_assistant()` returns an outline (and keeps its
+`playbook_context`); `generate_steps()` turns the outline into designer steps,
+the way the designer does. Nothing is saved.
+
+```{doctest}
+>>> pb = client.ai.playbook_assistant()                                 # doctest: +SKIP
+>>> outline = pb.ask("On a new Critical alert, look up the source IP in VirusTotal ...")  # doctest: +SKIP
+>>> steps = pb.generate_steps()                                         # doctest: +SKIP
+>>> steps.playbook_steps                                                # doctest: +SKIP
+```
+
+Step generation makes one LLM call per step and resends the whole context each
+time. A 7-step playbook used about 330k FortiAI tokens on 8.0.1, and one run
+failed on malformed JSON. `client.ai.connector_assistant()` is a cheap guided
+conversation (about 6k tokens a turn) that writes working connector code. Its
+own import step fails on 8.0.1, so ask it to show the files and install them
+with `client.connectors.install_from_dir`.
+
+### Insights (8.0.1)
+
+An Insight is a question about your data ("which alert sources produced the
+most Critical alerts this week?") that fsr-ai plans into agent steps, runs, and
+summarizes. `client.ai.insights` drives the Insight cards widget's flow:
+
+```{doctest}
+>>> run = client.ai.insights.create("Critical alert sources",                    # doctest: +SKIP
+...     query="Which alert sources produced the most Critical alerts in the last 7 days?")
+>>> run.result["concise_summary"], run.insight_id                               # doctest: +SKIP
+>>> run = client.ai.insights.run_template("High Risk Active Alerts")             # doctest: +SKIP
+```
+
+`create` generates a chain of thought and a plan (two LLM calls), refuses an
+infeasible plan, executes it, and saves it as an `insights` record. The shipped
+`insight_templates` carry ready plans; `run_template` executes one without the
+planning calls. `list`, `get`, `delete` and `trigger` (re-run a saved insight
+now) cover the rest. `socrole` (`SOC Analyst`, `SOC Manager`, `Threat
+Analyst`, `Infrastructure Admin`) shapes both the plan and the summary. On
+8.0.1 a create took about 45 s and 8k FortiAI tokens.
+
 ### Traces (8.0.1)
 
 Every agent run records a trace -- the data behind the in-app Trace Flow panel.
@@ -794,6 +834,12 @@ zip_path = pack_agent("./my-agents/incident-scorer")   # -> ./my-agents/incident
 client.ai.import_agent(zip_path, replace=True)
 ```
 
+For the whole install in one call, `client.ai.install_agent(path)` turns on the
+*Advanced Development Settings* agent toggle if it is off, imports with
+`replace=True`, activates the agent and returns it. A replaced agent's new code
+is live without restarting fsr-ai. `client.ai.uninstall_agent(name)` removes an
+agent's record, config and files (built-in agents need `force=True`).
+
 `import_agent` accepts either a directory (validated and packed for you) or a
 prebuilt `.zip`. `replace=True` overwrites an already-installed agent of the same
 name+version; without it, re-importing an existing version is rejected.
@@ -834,7 +880,23 @@ the orchestrator route to it:
    Confirm what's live with `client.ai.get_agent_config("incident-scorer", "1.0.0")`
    and `client.ai.describe_agent_mcp_servers(...)`.
 
-3. **Verify it's eligible** -- it should now appear active in the agent list, and
+3. **Give the investigation planner a reason to ask it** (8.0.1). Tag the agent
+   `Triage` in `info.json`, then add a row naming its source to the planner's
+   tool table. The planner writes one question per active row *before* it picks
+   agents, so without a row a custom agent never gets a question:
+
+   ```{code-block} python
+   client.ai.investigation_tools()                      # the current table
+   client.ai.set_investigation_tool("Authorized security testing", "Pentest Registry", "host")
+   client.ai.reset_investigation_tools()                # back to the built-in table
+   ```
+
+   The table lives in the Organization Context record `INFRA_INFO/TOOL_LIST` and
+   replaces the built-in one, so `set_investigation_tool` seeds it with the
+   built-in rows. Also, `act()` must call `self.initialize()` first, as the
+   shipped agents do; fsr-ai does not call it.
+
+4. **Verify it's eligible** -- it should now appear active in the agent list, and
    the investigation pipeline (or a direct `run_agent`) can invoke it:
 
    ```{code-block} python

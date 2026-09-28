@@ -78,4 +78,4 @@ for mod in list(GROUPS) + [k for k in sorted(by_mod) if k not in GROUPS]:
         ]
 print("classes:", sum(len(v) for v in by_mod.values()), "| non-class __all__ entries skipped:", len(skipped))
 print("skipped:", skipped[:10])
-open("docs/source/reference-models.md", "w").write("\n".join(lines) + "\n")
+open("docs/source/reference-models.md", "w").write("\n".join(lines).rstrip("\n") + "\n")
