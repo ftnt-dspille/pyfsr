@@ -3,7 +3,7 @@
 pyfsr can author FortiSOAR playbooks from **YAML** and deploy them through the
 same import path the UI uses. You write a collection as readable YAML, an
 optional compiler turns it into the FortiSOAR export envelope, and pyfsr pushes
-it to the appliance — no hand-building of workflow/step/route JSON.
+it to the appliance -- no hand-building of workflow/step/route JSON.
 
 ```{seealso}
 Runnable examples:
@@ -60,9 +60,9 @@ catalog of FortiSOAR step types and emits diagnostics (with `code`, `path`,
 `message`, and often a `suggestion`) when something won't import.
 
 ```{tip}
-For the **full DSL** — every top-level key, every step `type`, the friendly
+For the **full DSL** -- every top-level key, every step `type`, the friendly
 fields each accepts, and the `start_on_create` / `start_on_update` record
-triggers — see the {doc}`playbook-yaml-reference`.
+triggers -- see the {doc}`playbook-yaml-reference`.
 ```
 
 ## Deploying from Python
@@ -126,7 +126,7 @@ The `CompiledPlaybook` shape is doctested (compilation is offline, no network).
 (True, ['00 - FSR Studio'], ['Triage Alert'])
 ```
 
-A blocking error keeps `ok` `False` and leaves `fsr_json` `None` — `errors`
+A blocking error keeps `ok` `False` and leaves `fsr_json` `None` -- `errors`
 holds every diagnostic so you can surface *why* before anything is deployed:
 
 ```{doctest}
@@ -170,13 +170,13 @@ and read connection details from the `FSR_*` environment (see
 {class}`~pyfsr.config.EnvConfig`), with optional flag overrides.
 
 ```bash
-# Compile only — emit the envelope JSON, diagnostics to stderr (no network)
+# Compile only -- emit the envelope JSON, diagnostics to stderr (no network)
 pyfsr playbook compile alert_triage.yaml -o envelope.json
 
-# Validate — compile and report a diagnostics summary; nonzero exit on errors
+# Validate -- compile and report a diagnostics summary; nonzero exit on errors
 pyfsr playbook validate alert_triage.yaml
 
-# Deploy — compile then import via the API client
+# Deploy -- compile then import via the API client
 pyfsr playbook deploy alert_triage.yaml --replace
 
 # See what deploy would create without posting anything
@@ -194,7 +194,7 @@ pyfsr playbook deploy alert_triage.yaml --replace \
 ## Discovering step types
 
 You don't have to memorize the friendly `type:` keywords or their keys. The
-`pyfsr playbook` group is the authoring index — `pyfsr playbook --help` lists
+`pyfsr playbook` group is the authoring index -- `pyfsr playbook --help` lists
 every affordance, and two offline commands enumerate the step catalog:
 
 ```bash
@@ -209,11 +209,11 @@ pyfsr playbook step-help decision --schema
 The same data is available from Python via `pyfsr.playbook_catalog.list_step_types`
 and `pyfsr.playbook_catalog.step_help`.
 
-## Worked examples — the foundational library
+## Worked examples -- the foundational library
 
 `step-help` shows one *atom* (one step type). The **foundational playbook library**
 shows whole *molecules*: complete, compiling, use-case-shaped playbooks you retrieve
-by intent and adapt — the layer an agent few-shots on when translating a goal to
+by intent and adapt -- the layer an agent few-shots on when translating a goal to
 SOAR operations. It lives at `examples/playbooks/library/`, grouped by SOC stage
 (triggers / enrichment / decision / action / notify / control).
 
@@ -235,7 +235,7 @@ pyfsr playbook examples --manifest
 Every library playbook compiles and carries a `goal` / `trigger` / `inputs` /
 `outputs` / `connectors` / `adapts-to` front-matter block. `cold*` in the compile
 column means it compiles but references connectors the offline slim catalog
-doesn't carry — run `pyfsr playbook deploy <file> --refresh-catalog` to resolve
+doesn't carry -- run `pyfsr playbook deploy <file> --refresh-catalog` to resolve
 them against a live instance. The manifest and listing are available from Python
 via `pyfsr.playbook_library.list_library`,
 `pyfsr.playbook_library.library_manifest`, and
@@ -244,21 +244,38 @@ installed-package API).
 
 ## Testing interactive playbooks & inspecting runs
 
-A playbook that pauses on a **Manual Input** / **Approval** step can be driven
-end to end from Python. {meth}`~pyfsr.api.manual_input.ManualInputAPI.answer`
-finds the pending prompt, resolves the numeric run id / submit option / user, and
-resumes — in one call:
+For a **fire-and-forget** trigger, use
+{meth}`~pyfsr.api.playbooks.PlaybooksAPI.run_and_wait` -- it triggers the
+playbook and polls until it finishes (or times out), returning a
+{class}`~pyfsr.api.playbooks.RunResult` with `.status`, `.succeeded`, `.steps`,
+and `.failure`:
+
+```python
+result = client.playbooks.run_and_wait("My Playbook", timeout=60)
+if result.succeeded:
+    for step in result.steps:
+        print(f"  {step.name:30} {step.status:10} {step.duration_ms}ms")
+else:
+    print(f"failed at: {result.failure.failing_step}")
+    print(f"  error: {result.failure.error_message}")
+```
+
+A playbook that pauses on a **Manual Input** / **Approval** step needs the raw
+trigger plus a separate resume. Use
+{meth}`~pyfsr.api.playbooks.PlaybooksAPI.trigger` to fire it, then
+{meth}`~pyfsr.api.manual_input.ManualInputAPI.answer` finds the pending prompt,
+resolves the numeric run id / submit option / user, and resumes -- in one call:
 
 ```python
 client.playbooks.trigger("Loop Until Six Digits")
-# by_title matches the prompt's *schema title* — the step's `title:` — and NOT
+# by_title matches the prompt's *schema title* -- the step's `title:` -- and NOT
 # the step name, which here is "AskNumber":
 client.manual_input.answer(654321, by_title="Enter a six digit number")
 ```
 
 :::{note}
 A pending prompt's `.title` is the manual_input step's `title:`, mirrored from
-`input.schema.title` — **not** the step name. The two coincide only when the step
+`input.schema.title` -- **not** the step name. The two coincide only when the step
 declares no `title:`, in which case the schema title defaults to the step name.
 
 Titles are also not unique: the same step paused in two runs yields two
@@ -290,8 +307,8 @@ A complete worked example lives in `examples/do_until_validation_loop.py`.
 
 ## Playbook version control (saved snapshots)
 
-FortiSOAR keeps a **snapshot history** for each playbook — the editor's
-"Versions" tab — backed by the `workflow_versions` module. (This is *not* a
+FortiSOAR keeps a **snapshot history** for each playbook -- the editor's
+"Versions" tab -- backed by the `workflow_versions` module. (This is *not* a
 revision/diff resource; the word "revision" appears nowhere on the wire.) Each
 snapshot freezes the playbook definition at a point in time into a stringified
 `json` field, capped at 20 per playbook. pyfsr exposes it as
@@ -310,13 +327,13 @@ snapshot freezes the playbook definition at a point in time into a stringified
 ```
 
 `create_version` captures the playbook as it is now (the server doesn't echo the
-large `json` blob back on the POST — re-`get_version` to read it):
+large `json` blob back on the POST -- re-`get_version` to read it):
 
 ```python
 client.playbooks.create_version("Block IP", note="before-change")
 ```
 
-`diff_versions` is **client-side** (FortiSOAR has no diff endpoint) — it compares
+`diff_versions` is **client-side** (FortiSOAR has no diff endpoint) -- it compares
 two snapshots' step graphs by `uuid`, surfacing added/removed/changed steps:
 
 ```{doctest}
@@ -326,7 +343,7 @@ two snapshots' step graphs by `uuid`, surfacing added/removed/changed steps:
 ```
 
 `restore_version` overwrites the live playbook with a snapshot's content (the
-editor's flow: fetch the snapshot, parse its `json`, PUT it back) — call
+editor's flow: fetch the snapshot, parse its `json`, PUT it back) -- call
 `create_version` first if you want a rollback point. It's destructive, so the
 CLI gates it behind `--yes`:
 
@@ -346,14 +363,14 @@ pyfsr playbook versions restore "Block IP" <version-uuid> --yes
 ## Code-snippet sandbox: writing Python that runs
 
 The `code_snippet` step runs a Python snippet through the `code-snippet`
-connector. The source goes under `arguments.code:` (a friendly shorthand the
-compiler maps to the canonical `arguments.params.python_function`). Two sandbox
-constraints shape every snippet you write — both confirmed against a live box —
+connector. The source goes at the step top level as `code:` (a friendly shorthand
+the compiler maps to the canonical `params.python_function`). Two sandbox
+constraints shape every snippet you write -- both confirmed against a live box --
 so they're worth knowing up front:
 
 1. **The connector execs the snippet at module level.** A top-level `return` is a
    `SyntaxError`. Put logic inside `def` functions and call them, or run
-   statements inline — but never `return` from the top level of the snippet.
+   statements inline -- but never `return` from the top level of the snippet.
 2. **`open` (and the other filesystem builtins) are restricted.** A snippet
    cannot read or write files. To produce a document a later step emails, embed
    the content inline in that step's `body:` rather than writing a file the
@@ -364,36 +381,36 @@ so they're worth knowing up front:
 There's no `return` to receive a result. Instead, `print` a JSON document: the
 connector captures stdout and auto-deserializes the JSON into a structured
 `code_output` dict. Downstream steps read it at
-`vars.steps.<name>.data.code_output.*` — note `data.code_output`, not
+`vars.steps.<name>.data.code_output.*` -- note `data.code_output`, not
 `output.data`, and it's already a dict, so **no `| from_json` filter** is needed.
 
 ```yaml
 - name: Reconcile
   type: code_snippet
-  arguments:
-    code: |
-      import json
-      take = int("{{ vars.take }}" or 0)
-      crew = int("{{ vars.crew_count }}" or 1)
-      print(json.dumps({
-          "cut_per_member": take // max(crew, 1),
-          "risk": "high" if take > 1000000 else "low",
-      }))
+  code: |
+    import json
+    take = int("{{ vars.take }}" or 0)
+    crew = int("{{ vars.crew_count }}" or 1)
+    if crew < 1:
+        crew = 1
+    print(json.dumps({
+        "cut_per_member": take // crew,
+        "risk": "high" if take > 1000000 else "low",
+    }))
   next: Decide
 
 - name: Decide
   type: decision
   conditions:
     - condition: "{{ vars.steps.Reconcile.data.code_output.risk == 'high' }}"
-      label: big
       next: Alert
-    - label: default
+    - default: true
       next: Log
 ```
 
 ### Reading upstream step output
 
-A connector step's result lives at `vars.steps.<name>.data` — that IS the
+A connector step's result lives at `vars.steps.<name>.data` -- that IS the
 step-result dict (`{data, status, ...}`); there is no separate `.output` level.
 For a `code_snippet`, `.data.code_output` is the deserialized dict; for a
 `connector` step, `.data` holds the operation's response (e.g.
@@ -404,13 +421,12 @@ connector data without an API call:
 ```yaml
 - name: Diff
   type: code_snippet
-  arguments:
-    code: |
-      import json
-      a = {{ vars.steps.FetchFortiCloud.data.assets }}
-      b = {{ vars.steps.FetchServiceNow.data.result }}
-      # ...diff a vs b by join key...
-      print(json.dumps({"findings": findings, "matched": matched}))
+  code: |
+    import json
+    a = {{ vars.steps.FetchFortiCloud.data.assets }}
+    b = {{ vars.steps.FetchServiceNow.data.result }}
+    # ...diff a vs b by join key...
+    print(json.dumps({"findings": findings, "matched": matched}))
 ```
 
 ```{note}
@@ -423,7 +439,7 @@ above) to avoid the rewrite entirely.
 ### Imports and the connector config
 
 By default the sandbox restricts imports. To `import` from a package, the
-`code-snippet` connector's configuration must allow it — set `allow_imports` on
+`code-snippet` connector's configuration must allow it -- set `allow_imports` on
 the config (true, or a restrictive list):
 
 ```python
@@ -439,7 +455,7 @@ schema for any connector (for `code-snippet` it surfaces `allow_imports` /
 `restrict_imports`). The whole step is also gated by the appliance's *Custom Code
 Execution* system setting
 ({meth}`~pyfsr.api.system_settings.SystemSettingsAPI.set_custom_code_execution`)
-— with it off, a `code_snippet` step won't run at all.
+-- with it off, a `code_snippet` step won't run at all.
 
 ```{tip}
 If a snippet genuinely needs a top-level `return`, unrestricted file access, or
