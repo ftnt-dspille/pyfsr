@@ -285,6 +285,7 @@ html_theme = "furo"
 templates_path = ["_templates"]
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+html_favicon = "_static/favicon.svg"
 
 html_title = f"pyfsr {version}"
 

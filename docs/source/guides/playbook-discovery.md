@@ -86,9 +86,9 @@ They also share one JSON column, so passing more than one per call raises
 
 ## Client-side structural matching
 
-{mod}`pyfsr.playbook_match` parses each playbook into a `ParsedPlaybook` and
-evaluates composable predicates. Use it for the four things `find()` cannot
-express:
+{mod}`pyfsr.playbook_match` parses each playbook into a
+{class}`~pyfsr.playbook_match.ParsedPlaybook` and evaluates composable predicates.
+Use it for the four things `find()` cannot express:
 
 * **Same-step precision** -- "one step that is *both* FortiGate *and* `block_ip`".
   `find(uses_connector=..., uses_operation=...)` is not even allowed in one call,
@@ -119,6 +119,44 @@ client.playbooks.match(
 Predicates compose with `all_of`, `any_of`, and `none_of`. Note that
 `step(connector="fortigate")` matches case-insensitively as a substring, so it
 finds the installed package name `fortigate-firewall`.
+
+`parse_playbook` reduces a raw `/api/3/workflows` record (fetched with
+relationships so `steps` are inlined) into a
+{class}`~pyfsr.playbook_match.ParsedPlaybook` -- the shape predicates evaluate
+against. It is a pure function, so you can inspect the reduction offline:
+
+```{doctest}
+>>> from pyfsr.playbook_match import parse_playbook, step, has, count, trigger
+>>> wf = {
+...     "name": "Block IP on FortiGate",
+...     "uuid": "abc-123",
+...     "steps": [
+...         {"name": "Start", "stepType": {"name": "cybersponse.action"}, "arguments": {}},
+...         {"name": "Block", "stepType": {"name": "ConnectorStep"},
+...          "arguments": {"connector": "fortigate-firewall", "operation": "block_ip"}},
+...         {"name": "Set var", "stepType": {"name": "SetVariable"}, "arguments": {}},
+...         {"name": "Set var 2", "stepType": {"name": "SetVariable"}, "arguments": {}},
+...     ],
+... }
+>>> parsed = parse_playbook(wf)
+>>> parsed.name, parsed.uuid, parsed.trigger_type
+('Block IP on FortiGate', 'abc-123', 'manual')
+>>> [(s.name, s.connector, s.operation) for s in parsed.steps]  # doctest: +NORMALIZE_WHITESPACE
+[('Start', None, None), ('Block', 'fortigate-firewall', 'block_ip'),
+ ('Set var', None, None), ('Set var 2', None, None)]
+```
+
+Predicates evaluate against that parsed shape -- same-step precision and
+exact counts, the two things `find()` cannot express:
+
+```{doctest}
+>>> has(step(connector="fortigate", operation="block_ip"))(parsed)  # same step
+True
+>>> count(step(step_type="set_variable"), n=2)(parsed)               # exactly 2
+True
+>>> trigger("manual")(parsed)                                        # trigger kind
+True
+```
 
 ### Parent/child joins
 

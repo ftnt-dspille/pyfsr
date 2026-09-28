@@ -1,8 +1,8 @@
 # Configuration Export & Import
 
 FortiSOAR's **Configuration Export/Import Wizard** bundles pieces of an
-appliance — module schema and records, picklists, connectors and their configs,
-playbook collections, roles, teams, dashboards, and more — into a portable
+appliance -- module schema and records, picklists, connectors and their configs,
+playbook collections, roles, teams, dashboards, and more -- into a portable
 `.zip`, and re-applies that bundle to another (or the same) box. pyfsr wraps both
 halves:
 
@@ -11,13 +11,13 @@ halves:
 | **Export** | `client.export_config` | {class}`~pyfsr.api.export_config.ExportConfigAPI` |
 | **Import** | `client.import_config` | {class}`~pyfsr.api.import_config.ImportConfigAPI` |
 
-An export is driven by an **export template** — the wizard's saved selection of
+An export is driven by an **export template** -- the wizard's saved selection of
 what to include. pyfsr gives you a typed builder, {class}`~pyfsr.api.export_config.ExportTemplate`
 (re-exported as `pyfsr.ExportTemplate`), plus one-call convenience methods that
 build a throwaway template, run the export, and clean up after themselves.
 
 ```{note}
-Configuration export/import requires **username/password** auth — the operation
+Configuration export/import requires **username/password** auth -- the operation
 is not available with an API-key token. pyfsr raises
 {class}`~pyfsr.exceptions.UnsupportedAuthOperationError` up front if the current
 auth method can't perform it.
@@ -58,7 +58,7 @@ between export and import, then confirms it comes back) ships as
 
 The single most surprising thing about the export engine: **a record set emits
 rows only when its query carries a `limit`.** A record set with no limit exports
-an empty data file — silently. There is no "export everything unbounded" option.
+an empty data file -- silently. There is no "export everything unbounded" option.
 pyfsr injects a limit for you (default in
 {meth}`~pyfsr.api.export_config.ExportTemplate.add_record_set`), so you rarely
 set it by hand, but you **do** need to raise it above the number of matching
@@ -74,7 +74,7 @@ path = client.export_config.export_record_data(
 )
 ```
 
-On a template's `add_record_set`, pass `limit="all"` to skip the manual count —
+On a template's `add_record_set`, pass `limit="all"` to skip the manual count --
 `create_template` counts the matching records live and sets the limit to that
 count for you:
 
@@ -86,7 +86,7 @@ tmpl = ExportTemplate("Every open alert").add_record_set(
 
 ### Record data vs. module schema
 
-`export_record_data` exports **rows**. It does *not* carry the module's schema —
+`export_record_data` exports **rows**. It does *not* carry the module's schema --
 the import side assumes the target already has an `alerts` module. To move the
 *schema* (fields, picklists it references, view templates), add those categories
 to a template explicitly (next section).
@@ -98,7 +98,7 @@ For anything beyond a single record set, compose a
 {meth}`~pyfsr.api.export_config.ExportConfigAPI.create_template`, then export by
 its uuid. The builder is fluent, and name-based categories (picklists,
 connectors, playbook collections, roles, teams, …) are resolved to IRIs for you
-at `create_template` time — you work in friendly names.
+at `create_template` time -- you work in friendly names.
 
 ```python
 from pyfsr import ExportTemplate, Query
@@ -119,6 +119,33 @@ uuid = created["@id"].split("/")[-1]
 client.export_config.export_by_template_uuid(uuid, output_path="alert_backup.zip")
 ```
 
+The builder is fluent (every `add_*` returns `self`) and pure -- `build()`
+produces the template body without touching the network, so you can inspect
+exactly what `create_template` will send. Name-based categories (picklists,
+connectors, roles, teams, ...) need a live lookup and are merged in by
+`create_template`; `build()` emits only the offline categories (modules,
+record sets, dashboards, widgets), and {attr}`~pyfsr.api.export_config.ExportTemplate.needs_resolution`
+tells you when a live lookup is still pending:
+
+```{doctest}
+>>> from pyfsr import ExportTemplate, Query
+>>> tmpl = (
+...     ExportTemplate("Alert backup")
+...     .add_module("alerts")
+...     .add_record_set("alerts", query=Query(module="alerts").eq("status", "Open"))
+...     .add_picklist("AlertStatus")
+... )
+>>> body = tmpl.build()
+>>> list(body.keys())            # the offline categories
+['modules', 'recordSets']
+>>> body["modules"]              # add_module -> {value: <name>}
+[{'value': 'alerts'}]
+>>> body["recordSets"][0]["type"], body["recordSets"][0]["query"]["limit"]
+('alerts', 1000)
+>>> tmpl.needs_resolution        # True -- picklist name awaits a live IRI lookup
+True
+```
+
 Available `add_*` categories on the builder include: `add_module`,
 `add_record_set`, `add_view_templates`, `add_picklist`, `add_connector`,
 `add_playbook_collection`, `add_global_variable`, `add_playbook_block`,
@@ -129,7 +156,7 @@ Available `add_*` categories on the builder include: `add_module`,
 
 ```{note}
 `add_view_templates(module, *, list_view=, detail=, form=)` takes a **module and
-which layouts** — not a template id. The export engine resolves the real
+which layouts** -- not a template id. The export engine resolves the real
 `system_view_template` rows for that module/layout combination. `add_global_variable`
 and `add_playbook_block` validate their name/uuid against the live appliance;
 `add_app_setting` accepts the fixed set `systemSettings`, `LDAP`, `RADIUS`,
@@ -138,11 +165,11 @@ and `add_playbook_block` validate their name/uuid against the live appliance;
 
 ```{note}
 `add_ai_agent` and `add_mcp_configuration` are **8.0.0+** categories and are
-version-gated — exporting them against an older appliance raises.
+version-gated -- exporting them against an older appliance raises.
 ```
 
 To have the engine also pull each selected item's dependencies for a category,
-enable it with `auto_select_deps` — this sets the template's
+enable it with `auto_select_deps` -- this sets the template's
 `metadata.autoSelectDeps` `{<category>: bool}` map (the category key matches the
 `add_*` category, e.g. `"ai_agents"`):
 
@@ -152,8 +179,8 @@ tmpl = ExportTemplate("Agent + deps").add_ai_agent("Phishing Triage").auto_selec
 
 ### Exporting a single connector (with configs)
 
-Backing up an installed connector and its saved configurations — including the
-encrypted secrets — is common enough to have its own one-call helper:
+Backing up an installed connector and its saved configurations -- including the
+encrypted secrets -- is common enough to have its own one-call helper:
 
 ```python
 path = client.export_config.export_connector("code-snippet", output_path="code_snippet.zip")
@@ -183,10 +210,10 @@ The wizard's *"Choose Modules and Views to Import"* screen is where the applianc
 diffs your bundle against what's live and reports, per field, what would change
 and how to merge it (overwrite the live value vs. keep the existing one).
 
-Some of those changes drive a **destructive, appliance-wide schema migrate** — a
+Some of those changes drive a **destructive, appliance-wide schema migrate** -- a
 `tableName` rename, a field type change, or a change to a unique-constraint field.
 These can fail outright or *wedge* the box (e.g. a rename whose `CREATE INDEX`
-collides with the old table's index — Postgres `42P07`). Because that blast
+collides with the old table's index -- Postgres `42P07`). Because that blast
 radius is appliance-wide (exactly like
 {meth}`~pyfsr.api.modules_admin.ModulesAdminAPI.publish`), `import_file`
 **refuses by default**: if the generated options contain any risky change and you
@@ -198,7 +225,7 @@ You pick how to proceed with the `resolve=` one-shot flag:
 | --- | --- |
 | `"overwrite"` | Apply every field change from the bundle. |
 | `"keep_existing"` | Keep every existing field; add only genuinely new ones. |
-| `"skip_schema"` | Import records/views but do **not** apply schema changes — the safe way past a risky rename. |
+| `"skip_schema"` | Import records/views but do **not** apply schema changes -- the safe way past a risky rename. |
 
 ```python
 # Restore records and views without touching live schema.
@@ -209,7 +236,7 @@ To inspect the risks before committing, generate the options yourself and read
 them with {func}`~pyfsr.api.import_config.inspect_changes`, or drop to the
 step-by-step methods (`create_job`, `generate_options`, `wait_for_options`,
 `set_options`, `trigger`, `wait_for_import`). For full control over the merge,
-pass `modify_options=` — a callback that receives the options dict and returns
+pass `modify_options=` -- a callback that receives the options dict and returns
 the mutated dict; the module-level helpers
 {func}`~pyfsr.api.import_config.connectors_only`,
 {func}`~pyfsr.api.import_config.overwrite_all`,
@@ -217,8 +244,8 @@ the mutated dict; the module-level helpers
 {func}`~pyfsr.api.import_config.skip_schema_changes` are ready-made callbacks.
 
 For connector bundles specifically, {func}`~pyfsr.api.import_config.connector_flags`
-sets the two per-connector toggles — `includeInstall` (reinstall the connector)
-and `includeConfigurations` (restore its saved configs) — without disturbing the
+sets the two per-connector toggles -- `includeInstall` (reinstall the connector)
+and `includeConfigurations` (restore its saved configs) -- without disturbing the
 rest of the bundle:
 
 ```python
@@ -237,11 +264,11 @@ When a bundle's records or picklists already exist on the target, the porter
 engine gives each category a `whenExists` merge mode.
 {func}`~pyfsr.api.import_config.merge_mode` sets them:
 
-- **record sets** — `"replace"` (the default) overwrites matching records with the
+- **record sets** -- `"replace"` (the default) overwrites matching records with the
   bundle's; `"append"` keeps the existing records and adds the bundle's alongside.
-- **picklists** — `"keep"` (the default) keeps the picklist *list*: items you added
+- **picklists** -- `"keep"` (the default) keeps the picklist *list*: items you added
   locally survive and nothing is deleted. It does **not** protect the individual
-  items the bundle ships — those are still upserted by uuid, so a local edit to a
+  items the bundle ships -- those are still upserted by uuid, so a local edit to a
   bundle-shipped item is overwritten (live-verified on 8.0.0: a recoloured item
   reverted to the bundle's colour under `"keep"`). `"overwrite"` replaces the
   picklist with the bundle's version wholesale.
@@ -259,7 +286,7 @@ client.import_config.import_file(
 Module **settings and schema** merge separately, per module. On the review screen
 each existing module defaults to an additive **merge**: new fields from the import
 are added and non-conflicting setting changes (e.g. default sort, labels) are
-applied, while existing fields — and system / unique-constraint fields — are kept.
+applied, while existing fields -- and system / unique-constraint fields -- are kept.
 The module-level helpers set the equivalent of the wizard's per-module dropdown:
 {func}`~pyfsr.api.import_config.overwrite_all` applies every incoming field change
 (replace), {func}`~pyfsr.api.import_config.keep_existing` keeps every existing
@@ -274,22 +301,22 @@ A solution pack **is** an export-configuration template (`type: "SolutionPack
 Export"`), and installing one runs the *same* porter engine as
 {meth}`~pyfsr.api.import_config.ImportConfigAPI.import_file`, via
 `POST /api/3/solutionpacks/install?$type=<type>[&$replace=true]`. So the defaults
-above apply — which matters most when you **upgrade** a pack that is already
+above apply -- which matters most when you **upgrade** a pack that is already
 installed, because the upgrade can change live data and schema in place. With
 `$replace` **off (the default)** the install merges:
 
 | Category | Default on install/upgrade | What it can change |
 |---|---|---|
-| **Records** (record sets) | `whenExists = "replace"` | Existing records that **match** the pack's (by uuid) are overwritten with the pack's version; non-matching rows — including records from *other* packs and your own — are left alone. Local edits to a matched record are lost. |
-| **Picklists** | `whenExists = "keep"` | Keeps the picklist *list* — items you added survive, nothing is deleted — but the pack's own items are still **upserted by uuid**, so local edits to a pack-shipped item (colour, and by the same path display/order) are **overwritten**. `"keep"` is not "left untouched". |
-| **Module settings / schema** | additive **merge**, schema migration runs | New fields and non-conflicting module settings are applied; existing fields — including fields *you* added — are kept. A field **type change**, a `tableName` change, or a **unique-constraint** change drives a destructive migrate. |
+| **Records** (record sets) | `whenExists = "replace"` | Existing records that **match** the pack's (by uuid) are overwritten with the pack's version; non-matching rows -- including records from *other* packs and your own -- are left alone. Local edits to a matched record are lost. |
+| **Picklists** | `whenExists = "keep"` | Keeps the picklist *list* -- items you added survive, nothing is deleted -- but the pack's own items are still **upserted by uuid**, so local edits to a pack-shipped item (colour, and by the same path display/order) are **overwritten**. `"keep"` is not "left untouched". |
+| **Module settings / schema** | additive **merge**, schema migration runs | New fields and non-conflicting module settings are applied; existing fields -- including fields *you* added -- are kept. A field **type change**, a `tableName` change, or a **unique-constraint** change drives a destructive migrate. |
 
 ```{note}
 The three rows above are **live-verified on 8.0.0** by running the porter engine
 over a real solution pack's own archive against deliberately-mutated state: a
 pack-owned record reverted to the pack's value; a locally-added picklist item
 survived while a recoloured pack-shipped item reverted; a locally-added module
-field survived. Two controls held — a record belonging to a *different* pack and a
+field survived. Two controls held -- a record belonging to a *different* pack and a
 record in no pack both kept their local edits, confirming the match is scoped to
 the pack's own record set.
 
@@ -297,14 +324,14 @@ They are also **confirmed in the appliance source** (8.0.0), which is why they
 apply to a pack install and not just a hand-rolled import: `SolutionPackController::install`
 builds an ordinary `ImportJob` (`setType('SolutionPack Import')`) and delegates to the
 same `Service/ConfigExportImport/*` porter the import wizard uses, where the defaults are
-hardcoded — `RecordSetConfig` sets `whenExists = 'replace'`, `PicklistNameConfig` sets
+hardcoded -- `RecordSetConfig` sets `whenExists = 'replace'`, `PicklistNameConfig` sets
 `whenExists = 'keep'`. `$replace` is read with Symfony's `$request->query->getBoolean('$replace')`,
-which is `false` when the flag is absent — so an install/upgrade merges unless you ask
+which is `false` when the flag is absent -- so an install/upgrade merges unless you ask
 otherwise.
 
 `PicklistNameConfig::import` is also where the `"keep"` subtlety comes from: it snapshots
 the existing items, then walks the **bundle's** items and points each one at the matching
-existing row's `@id` (matching on uuid *or* `itemValue`) — so the bundle's values win —
+existing row's `@id` (matching on uuid *or* `itemValue`) -- so the bundle's values win --
 and only the leftover items the bundle doesn't ship are re-appended untouched. `"keep"`
 preserves your *additions*, not your *edits*.
 ```
@@ -316,8 +343,8 @@ this toward a wholesale overwrite of existing content with the pack's version.
 A solution-pack **upgrade** is not read-only. By default it can overwrite records
 that match the pack's record sets and run a schema migration on its modules. Before
 upgrading a pack in production, export the affected modules/records first (see the
-Exporting section above) so you have a restore point, and — if you drive the import
-yourself — inspect the generated options with
+Exporting section above) so you have a restore point, and -- if you drive the import
+yourself -- inspect the generated options with
 {func}`~pyfsr.api.import_config.inspect_changes` and steer the merge with
 {func}`~pyfsr.api.import_config.merge_mode` /
 {func}`~pyfsr.api.import_config.keep_existing` /

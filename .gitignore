@@ -23,12 +23,14 @@ docs/build/
 docs/source/_autosummary/
 docs/source/api/
 docs/source/_build/
-docs/source/_static/
+docs/source/_static/*
 docs/source/_templates/*.html
 docs/source/autoapi/
 
 # Keep these files
 !docs/source/_static/.gitkeep
+!docs/source/_static/custom.css
+!docs/source/_static/favicon.svg
 !docs/source/_templates/.gitkeep
 !docs/source/index.rst
 !docs/source/conf.py
@@ -43,22 +45,22 @@ test_export.zip
 # hatch-vcs generated
 src/pyfsr/_version.py
 
-# Planning docs (may accrue infra detail / creds) — keep local
+# Planning docs (may accrue infra detail / creds) -- keep local
 docs/plans/
 
-# Env / secret files (appliance creds) — never commit
+# Env / secret files (appliance creds) -- never commit
 .env*
 
 
-# Scratch / scratchpad: throwaway scripts, pilot data, reference DBs — keep local
+# Scratch / scratchpad: throwaway scripts, pilot data, reference DBs -- keep local
 scratch/
 
 # Generated per-box picklist option IRIs (resolved from a live appliance by
-# scripts/deploy_recon_modules.py) — box-specific, never commit
+# scripts/deploy_recon_modules.py) -- box-specific, never commit
 scripts/_recon_picklists.json
 
 # Generated investigation dumps (real incident data: internal IPs, hostnames,
-# telemetry) — keep local, never commit
+# telemetry) -- keep local, never commit
 examples/fortisiem_investigation_*.json
 examples/alert_investigation.txt
 examples/SIEM_MCP_INFLUENCE_REPORT.md
