@@ -28,10 +28,10 @@ the REST client's alias, or pass ``--appliance-instance <alias>`` when the SSH
 profile lives under a different alias. No box details live in this file.
 
     FSR_BASE_URL=https://fortisoar.example.com FSR_USERNAME=... FSR_PASSWORD=... \\
-        python export_import_wizard_roundtrip.py --instance <alias>
+        python module_export_import_wizard.py --instance <alias>
 
     # when the appliance SSH profile is under a different alias than the REST one:
-    python export_import_wizard_roundtrip.py --instance <rest> --appliance-instance <ssh>
+    python module_export_import_wizard.py --instance <rest> --appliance-instance <ssh>
 """
 
 from __future__ import annotations

@@ -21,9 +21,9 @@ exactly which questions each can (and cannot) answer.
      parent/child joins.
 
 Run:
-    python examples/playbook_structural_queries.py          # offline explainer
+    python examples/playbook_query_by_shape.py          # offline explainer
     FSR_BASE_URL=https://box:13006 FSR_USERNAME=csadmin FSR_PASSWORD=... \\
-        python examples/playbook_structural_queries.py      # + live tour
+        python examples/playbook_query_by_shape.py      # + live tour
 """
 
 from __future__ import annotations

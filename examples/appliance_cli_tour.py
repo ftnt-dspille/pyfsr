@@ -9,10 +9,10 @@ remote boxes. Use this to:
 3. Troubleshoot a live FortiSOAR appliance.
 
 Run locally on an appliance:
-    python examples/appliance_cli_live_example.py
+    python examples/appliance_cli_tour.py
 
 Run remotely against 10.0.0.1:
-    python examples/appliance_cli_live_example.py --host 10.0.0.1 --user csadmin
+    python examples/appliance_cli_tour.py --host 10.0.0.1 --user csadmin
 
 Credentials are read from the CLI args, env (PYFSR_APPLIANCE_*), or prompted.
 """

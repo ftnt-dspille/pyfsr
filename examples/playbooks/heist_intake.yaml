@@ -1,18 +1,18 @@
-# Heist intake — a richer on-create trigger playbook.
+# Heist intake -- a richer on-create trigger playbook.
 #
 # Fires automatically when a `heists` record is created and runs a full plan:
 #   Start (on create)
 #     -> Size Up The Job   (set_variable)
-#     -> Split The Take    (code_snippet — Python)
+#     -> Split The Take    (code_snippet -- Python)
 #     -> Case The Joint    (delay)
 #     -> Worth The Risk?   (decision)
 #          big  -> Mark Authorized (update_record)
 #          else -> Mark Briefed    (update_record)
-#     -> Final Go Call    (manual_input — waits for a human)
+#     -> Final Go Call    (manual_input -- waits for a human)
 #
 # Deploy with:
 #     pyfsr playbook deploy examples/playbooks/heist_intake.yaml --replace
-# or via the full walkthrough in examples/heist_tracker.py.
+# or via the full walkthrough in examples/e2e_module_playbook_demo.py.
 
 collection: Heist Tracker
 description: Plan the perfect job the moment a heist is logged.
@@ -20,7 +20,7 @@ visible: true
 
 playbooks:
   - name: Heist Intake
-    is_active: true                # live — the on-create trigger fires
+    is_active: true                # live -- the on-create trigger fires
     steps:
       - name: Start
         type: start_on_create      # cybersponse.post_create
@@ -50,7 +50,7 @@ playbooks:
             }
         next: Case The Joint
 
-      # 3. Dramatic pause — case the joint.
+      # 3. Dramatic pause -- case the joint.
       - name: Case The Joint
         type: delay
         seconds: 5

@@ -16,14 +16,14 @@ Field types covered:
   Relationships:   lookup (many-to-one), manyToMany, oneToMany
 
 Usage:
-    python examples/all_field_types_module.py \\
+    python examples/module_create_all_field_types.py \\
         --host fortisoar.example.com --user csadmin --password changeme
 
     # Keep the module after the run (skip auto-delete):
-    python examples/all_field_types_module.py ... --keep
+    python examples/module_create_all_field_types.py ... --keep
 
     # Skip the publish step (cheaper; just validates staging creation):
-    python examples/all_field_types_module.py ... --skip-publish
+    python examples/module_create_all_field_types.py ... --skip-publish
 
 Environment variables:
     FSR_BASE_URL, FSR_USERNAME, FSR_PASSWORD

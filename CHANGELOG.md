@@ -1048,7 +1048,7 @@ All notable changes to this project will be documented in this file.
   `.title` is `Enter a six digit number`. The old claim was true only by accident:
   fsr_playbooks <0.4.11 silently dropped a step's `title:` and defaulted the schema
   title to the step name, so the two strings always coincided. Once the compiler was
-  fixed the accident ended, and `examples/do_until_validation_loop.py` (which filtered
+  fixed the accident ended, and `examples/playbook_do_until_loop.py` (which filtered
   on the step name) could no longer find its own prompt. The two coincide only when a
   step declares no `title:`.
 - **`answer()` no longer posts a null `step_iri`.** A response option's `step_iri` is

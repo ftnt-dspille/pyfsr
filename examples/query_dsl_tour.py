@@ -19,9 +19,9 @@ This file is split in two:
     FSR_USERNAME / FSR_PASSWORD are set in the env.
 
 Run:
-    python examples/queries.py            # offline tour (no creds needed)
+    python examples/query_dsl_tour.py            # offline tour (no creds needed)
     FSR_BASE_URL=https://10.0.0.5 FSR_USERNAME=admin FSR_PASSWORD=... \\
-        python examples/queries.py        # offline + live tour
+        python examples/query_dsl_tour.py        # offline + live tour
 """
 
 from __future__ import annotations

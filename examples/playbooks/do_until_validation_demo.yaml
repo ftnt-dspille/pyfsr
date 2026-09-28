@@ -7,7 +7,7 @@
 # The parent re-runs the child until `is_valid_number` is true, then stamps a
 # final variable from the child's output via `vars.steps.<ref>.<child var>`.
 #
-# Deploy + drive it with: examples/do_until_validation_loop.py
+# Deploy + drive it with: examples/playbook_do_until_loop.py
 
 collection: PyFSR Do-Until Validation Demo
 description: Parent do-until loop re-prompts a child manual input until a 6-digit number validates.

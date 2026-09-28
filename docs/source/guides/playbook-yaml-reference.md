@@ -385,7 +385,7 @@ real parent as the top-level run (`parent_wf` null) and enumerate loop turns
 with `client.playbooks.child_runs(parent_pk)` (or `run_tree`) rather than
 counting runs by name. The full worked example is
 `examples/playbooks/do_until_validation_demo.yaml` (driver:
-`examples/do_until_validation_loop.py`).
+`examples/playbook_do_until_loop.py`).
 ```
 
 ### `stop` / `end`
@@ -504,6 +504,6 @@ object.
 Sample file:
 [`examples/playbooks/yaml_demo.yaml`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/playbooks/yaml_demo.yaml)
 and the end-to-end
-[`examples/heist_tracker.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/heist_tracker.py)
+[`examples/e2e_module_playbook_demo.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/e2e_module_playbook_demo.py)
 (modules → permissions → on-create playbook → triggering record).
 ```

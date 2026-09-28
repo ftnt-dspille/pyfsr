@@ -17,7 +17,7 @@ The script is idempotent: modules that already exist are reused (and missing
 fields are added), and the playbook is deployed with ``replace=True``.
 
 Usage:
-    python examples/heist_tracker.py \
+    python examples/e2e_module_playbook_demo.py \
         --server fortisoar.example.com --port 13000 --user csadmin --password '...'
 
 Or set FSR_BASE_URL / FSR_USERNAME / FSR_PASSWORD and run with no args.
