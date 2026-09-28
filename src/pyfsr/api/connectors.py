@@ -711,7 +711,7 @@ class ConnectorsAPI(BaseAPI):
             status = self.install_status(job_id)
         return status
 
-    def uninstall(self, connector: str, *, refresh: bool = True) -> None:
+    def uninstall(self, connector: str, *, version: str | None = None, refresh: bool = True) -> None:
         """Uninstall a connector from the **appliance** (its self-agent).
 
         ``DELETE /api/integration/connectors/{id}/`` -- the integer install id is
@@ -720,15 +720,30 @@ class ConnectorsAPI(BaseAPI):
         connector from a remote *agent* instead, use
         :meth:`~pyfsr.api.agents.AgentsAPI.uninstall_connector`.
 
-        Raises ``ValueError`` if the connector isn't installed.
+        ``version`` picks one install when several versions sit side by side
+        (an upgrade by package import leaves the old one installed). Without
+        it, a name with more than one installed version is REFUSED rather than
+        guessed: name-only resolution picks the newest, so a cleanup of "the
+        old version" would otherwise delete the one in use.
+
+        Raises ``ValueError`` if the connector (or that version) isn't
+        installed, or if the name is ambiguous.
 
         Example:
             >>> client = demo_client()
             >>> client.connectors.uninstall("virustotal")
         """
-        connector_id = self.resolve_connector_id(connector)
-        if connector_id is None:
-            raise ValueError(f"{connector!r} is not installed")
+        hits = [c for c in self.list_configured() if c.name == connector]
+        if version is not None:
+            hits = [c for c in hits if c.version == version]
+        if not hits:
+            what = f"{connector!r} {version}" if version else repr(connector)
+            raise ValueError(f"{what} is not installed")
+        if len(hits) > 1:
+            raise ValueError(
+                f"{connector!r} has {len(hits)} installed versions "
+                f"({', '.join(sorted(c.version or '?' for c in hits))}); pass version= to pick one")
+        connector_id = hits[0].id
         self.client.delete(f"/api/integration/connectors/{connector_id}/")
         if refresh:
             self.clear_cache()
@@ -853,8 +868,11 @@ class ConnectorsAPI(BaseAPI):
 
         # In-place didn't take -- destructive fallback, only if allowed.
         if allow_uninstall_fallback:
-            if self.resolve_connector_id(name) is not None:
-                self.uninstall(name)
+            # Every installed version, explicitly: uninstall() refuses an
+            # ambiguous name, and a leftover old install would keep answering.
+            for inst in [c for c in self.list_configured() if c.name == name]:
+                self.uninstall(name, version=inst.version, refresh=False)
+            self.clear_cache()
             _do_install()
             self.clear_cache()
             new = self.resolve_version(name)

@@ -913,6 +913,37 @@ def test_uninstall_resolves_id_and_deletes():
     assert client.delete_calls[-1][0] == "/api/integration/connectors/16/"
 
 
+_SIDE_BY_SIDE = {"data": [
+    {"id": 184, "name": "fortinet-fortisiemv2", "version": "6.0.0", "active": True, "configuration": []},
+    {"id": 733, "name": "fortinet-fortisiemv2", "version": "6.1.1", "active": True, "configuration": []},
+]}
+
+
+def test_uninstall_refuses_a_name_with_several_versions(monkeypatch):
+    # Name-only resolution picks the NEWEST, so "remove the old one" by name
+    # would delete the version in use.
+    monkeypatch.setitem(globals(), "_CONFIGURED", _SIDE_BY_SIDE)
+    api, c = _api()
+    with pytest.raises(ValueError, match="pass version="):
+        api.uninstall("fortinet-fortisiemv2")
+    assert c.delete_calls == []
+
+
+def test_uninstall_with_version_deletes_exactly_that_install(monkeypatch):
+    monkeypatch.setitem(globals(), "_CONFIGURED", _SIDE_BY_SIDE)
+    api, c = _api()
+    api.uninstall("fortinet-fortisiemv2", version="6.0.0")
+    assert c.delete_calls == [("/api/integration/connectors/184/", None)]
+
+
+def test_uninstall_of_a_version_not_installed_raises(monkeypatch):
+    monkeypatch.setitem(globals(), "_CONFIGURED", _SIDE_BY_SIDE)
+    api, c = _api()
+    with pytest.raises(ValueError, match="not installed"):
+        api.uninstall("fortinet-fortisiemv2", version="5.0.0")
+    assert c.delete_calls == []
+
+
 def test_uninstall_unknown_connector_raises():
     api, _ = _api()
     with pytest.raises(ValueError):
