@@ -16,10 +16,11 @@ repos:
       - id: check-toml
       - id: check-merge-conflict
 
-  # Lint + format with the EXACT ruff pinned in this project (run via uv), so
-  # local results match CI. Using the ruff-pre-commit mirror instead would pin a
-  # second, independent ruff version that can drift from the lockfile and pass
-  # locally while CI's `ruff format --check` fails (which is what bit us).
+  # Lint + format with the EXACT ruff pinned in uv.lock (run via uv), so local
+  # results match CI. CI's lint job also runs `uv run --frozen ruff` (not the
+  # ruff-action, which installs the latest ruff and drifts from the lockfile).
+  # Using the ruff-pre-commit mirror would pin a second, independent ruff
+  # version that can drift from the lockfile and pass locally while CI fails.
   #
   # `--frozen` is required, not optional: pyfsr uses hatch-vcs dynamic
   # versioning, so a bare `uv run` is free to re-resolve and rebuild the
@@ -65,6 +66,25 @@ repos:
         files: '^src/pyfsr/cli/'
 
       # --- pre-push only: mirror the CI jobs that are slow but high-signal ---
+      # ruff format --check on ALL files (not just staged). The commit-time
+      # ruff-format hook only formats files you stage; files committed earlier
+      # can drift if the ruff version bumps (or a formatting rule changes).
+      # CI checks the whole repo, so this catches that drift before the push
+      # instead of letting CI go red on a file nobody touched in this commit.
+      - id: ruff-check-all
+        name: ruff check --all-files (mirrors CI lint)
+        entry: uv run --frozen ruff check .
+        language: system
+        pass_filenames: false
+        require_serial: true
+        stages: [pre-push]
+      - id: ruff-format-check-all
+        name: ruff format --check --all-files (mirrors CI lint)
+        entry: uv run --frozen ruff format --check .
+        language: system
+        pass_filenames: false
+        require_serial: true
+        stages: [pre-push]
       - id: uv-lock-check
         name: uv.lock in sync with pyproject.toml (mirrors CI --locked)
         # `uv sync --locked` fails if the lockfile has drifted from pyproject.
