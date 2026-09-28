@@ -247,7 +247,7 @@ installed-package API).
 For a **fire-and-forget** trigger, use
 {meth}`~pyfsr.api.playbooks.PlaybooksAPI.run_and_wait` -- it triggers the
 playbook and polls until it finishes (or times out), returning a
-{class}`~pyfsr.api.playbooks.RunResult` with `.status`, `.succeeded`, `.steps`,
+{class}`~pyfsr.models.RunResult` with `.status`, `.succeeded`, `.steps`,
 and `.failure`:
 
 ```python
