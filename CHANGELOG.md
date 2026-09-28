@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-27
+
 ### Added
 - **`client.ai.uninstall_agent(name)`** deletes an installed agent (record,
   config and files). fsr-ai answers 200 for an unknown name and deletes
