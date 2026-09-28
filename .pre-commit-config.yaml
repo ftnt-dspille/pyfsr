@@ -66,6 +66,12 @@ repos:
         files: '^src/pyfsr/cli/'
 
       # --- pre-push only: mirror the CI jobs that are slow but high-signal ---
+      # All pre-push hooks use always_run: true + pass_filenames: false so they
+      # run on EVERY push regardless of which file types changed. Without
+      # always_run, pre-commit skips a hook when no pushed files match its
+      # types_or filter (e.g. a docs-only push would skip ruff/pytest), which
+      # silently defeats the whole point of a pre-push gate.
+      #
       # ruff format --check on ALL files (not just staged). The commit-time
       # ruff-format hook only formats files you stage; files committed earlier
       # can drift if the ruff version bumps (or a formatting rule changes).
@@ -77,6 +83,7 @@ repos:
         language: system
         pass_filenames: false
         require_serial: true
+        always_run: true
         stages: [pre-push]
       - id: ruff-format-check-all
         name: ruff format --check --all-files (mirrors CI lint)
@@ -84,6 +91,7 @@ repos:
         language: system
         pass_filenames: false
         require_serial: true
+        always_run: true
         stages: [pre-push]
       - id: uv-lock-check
         name: uv.lock in sync with pyproject.toml (mirrors CI --locked)
@@ -93,12 +101,14 @@ repos:
         entry: uv sync --locked --extra test --extra playbooks --extra docs
         language: system
         pass_filenames: false
+        always_run: true
         stages: [pre-push]
       - id: pytest-unit
         name: pytest unit suite (mirrors CI test jobs)
         entry: uv run --frozen pytest tests/unit -q -p no:cacheprovider
         language: system
         pass_filenames: false
+        always_run: true
         stages: [pre-push]
       - id: docs-doctest
         name: sphinx doctests (mirrors CI doctest job; catches broken >>> examples)
@@ -107,6 +117,7 @@ repos:
         entry: bash -c 'DOCS_SKIP_AUTOAPI=1 PYTHONPATH=../src uv run --frozen sphinx-build -b doctest docs/source docs/build/doctest'
         language: system
         pass_filenames: false
+        always_run: true
         stages: [pre-push]
       - id: docs-build
         name: sphinx docs build -W -n (mirrors CI docs job; catches broken cross-refs)
@@ -116,4 +127,5 @@ repos:
         entry: bash -c 'cd docs && SPHINX_OFFLINE=1 PYTHONPATH=../src uv run --frozen make html SPHINXOPTS="-W --keep-going -n"'
         language: system
         pass_filenames: false
+        always_run: true
         stages: [pre-push]
