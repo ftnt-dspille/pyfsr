@@ -53,6 +53,9 @@ get an agent's configuration                      ``GET  /api/ai/agent/config/{n
 update an agent's configuration                   ``POST /api/ai/agent/config``
 get/update the default agent configuration        ``GET/POST /api/ai/agent/config/default``
 activate/deactivate agents                        ``POST /api/ai/agent/activate``
+uninstall an agent                                ``DELETE /api/ai/agent/{name}/{version}``
+AI Insights (plan, execute, save, trigger)        ``/api/ai/insight/*`` (``client.ai.insights``)
+read/edit the planner's tool table                ``/api/3/organizational_contexts`` (``INFRA_INFO/TOOL_LIST``)
 which connectors can be hosted as an MCP server    ``GET  /mcp/servers/connector``
 host a connector as an MCP server                  ``POST /mcp/add/tools`` (+ ``mcp_configurations``)
 change a hosted connector server's exposed tools   ``PUT  /mcp/tools/{uuid}``
@@ -117,9 +120,13 @@ from ..models._ai import (
     ConnectorMcpCandidates,
     ExecutionTree,
     FortiAITokenBalance,
+    InsightExecution,
+    InsightPlan,
+    InsightRecord,
     InvestigationHandle,
     InvestigationQuestion,
     InvestigationResult,
+    InvestigationTool,
     InvestigationTrace,
     LLMConfig,
     LLMProvider,
@@ -219,6 +226,188 @@ class LLMSetupError(RuntimeError):
 
 #: the solution pack that fronts FortiAI (Fortinet-hosted LLMs, metered in FortiAI tokens)
 FORTIAI_PROXY_CONNECTOR = "fortinet-fortiai-proxy"
+
+
+_INSIGHT = "/api/ai/insight"
+#: ``plan/{task_id}/status`` values that end polling.
+_INSIGHT_DONE = frozenset({"completed", "failed"})
+
+
+class AIInsightsAPI(BaseAPI):
+    """AI Insights (8.0.1): a question about your data, planned and answered by agents.
+
+    The Insight cards widget's flow, step by step: :meth:`chain_of_thought`
+    (LLM), :meth:`plan` (LLM), :meth:`execute` (agents run the plan's steps,
+    then the summary agent writes the insight), then :meth:`save` to keep it as
+    an ``insights`` record. :meth:`create` does all four. The shipped
+    ``insight_templates`` carry ready plans: :meth:`run_template` executes one
+    without the two planning calls.
+
+    ``socrole`` is one of the ``SOC Role`` picklist values (``SOC Analyst``,
+    ``SOC Manager``, ``Threat Analyst``, ``Infrastructure Admin``); it shapes
+    the plan and the summary.
+
+    Accessed as ``client.ai.insights``.
+
+    Example:
+        >>> ins = client.ai.insights.create("Critical this week", query="Which critical alerts ...")  # doctest: +SKIP
+        >>> ins.result["concise_summary"]  # doctest: +SKIP
+    """
+
+    def chain_of_thought(self, query: str, *, socrole: str = "SOC Analyst") -> list[str]:
+        """Reasoning steps for ``query`` (``POST /api/ai/insight/chain_of_thoughts``, one LLM call)."""
+        resp = self.client.post(f"{_INSIGHT}/chain_of_thoughts", data={"query": query, "socrole": socrole})
+        return list((resp or {}).get("chain_of_thought") or [])
+
+    def plan(
+        self, query: str, *, chain_of_thought: list[str] | None = None, socrole: str = "SOC Analyst"
+    ) -> InsightPlan:
+        """Plan ``query`` into agent steps (``POST /api/ai/insight/plan``, one LLM call).
+
+        Generates the chain of thought first when none is given. Check
+        ``plan.feasible`` before executing; the UI refuses an infeasible plan.
+        """
+        if chain_of_thought is None:
+            chain_of_thought = self.chain_of_thought(query, socrole=socrole)
+        resp = self.client.post(
+            f"{_INSIGHT}/plan", data={"query": query, "chain_of_thought": chain_of_thought, "socrole": socrole}
+        )
+        plan = InsightPlan.model_validate(resp if isinstance(resp, dict) else {})
+        if not plan.chain_of_thought:
+            plan.chain_of_thought = list(chain_of_thought)
+        return plan
+
+    def execute(
+        self,
+        plan: InsightPlan | dict[str, Any],
+        *,
+        socrole: str = "SOC Analyst",
+        wait: bool = True,
+        interval: float = 5.0,
+        timeout: float = 900.0,
+    ) -> InsightExecution:
+        """Run a plan (``POST /api/ai/insight/plan/execute``) and, by default, wait for the insight.
+
+        Each run stores the plan and returns a new ``planid``, which is what
+        :meth:`save` records. On timeout the execution comes back with its
+        non-terminal status instead of raising.
+        """
+        body = plan.model_dump() if isinstance(plan, InsightPlan) else dict(plan)
+        resp = self.client.post(f"{_INSIGHT}/plan/execute", data={"plan": body, "socrole": socrole}) or {}
+        run = InsightExecution(task_id=resp.get("task_id"), planid=resp.get("planid"), status=resp.get("status"))
+        if not wait or not run.task_id:
+            return run
+        deadline = time.monotonic() + timeout
+        status = self.status(run.task_id)
+        while status not in _INSIGHT_DONE and time.monotonic() < deadline:
+            time.sleep(interval)
+            status = self.status(run.task_id)
+        run.status = status
+        if status in _INSIGHT_DONE:
+            result = self.result(run.task_id)
+            run.result, run.execution_log, run.last_executed = result.result, result.execution_log, result.last_executed
+        return run
+
+    def status(self, task_id: str) -> str | None:
+        """Status of a plan execution (``GET /api/ai/insight/plan/{task_id}/status``)."""
+        return (self.client.get(f"{_INSIGHT}/plan/{task_id}/status") or {}).get("status")
+
+    def result(self, task_id: str) -> InsightExecution:
+        """Result of a plan execution (``GET /api/ai/insight/plan/{task_id}/result``)."""
+        resp = self.client.get(f"{_INSIGHT}/plan/{task_id}/result")
+        run = InsightExecution.model_validate(resp if isinstance(resp, dict) else {})
+        run.task_id = run.task_id or task_id
+        return run
+
+    def save(
+        self, title: str, *, query: str, planid: str, socrole: str = "SOC Analyst", insight_id: str | None = None
+    ) -> str:
+        """Save (or update) an insight as an ``insights`` record; returns its uuid.
+
+        Mirrors the widget: ``POST /api/3/insights`` (``PUT`` with
+        ``insight_id``) with ``{title, query, socrole, planid}``. ``planid`` comes
+        from :meth:`execute`. The widget also creates a schedule for it, which is
+        not done here; :meth:`trigger` runs a saved insight on demand.
+        """
+        body = {"title": title, "query": query, "socrole": socrole, "planid": planid}
+        if insight_id:
+            resp = self.client.put(f"/api/3/insights/{insight_id}", data=body)
+        else:
+            resp = self.client.post("/api/3/insights", data=body)
+        return str((resp or {}).get("uuid") or insight_id or "")
+
+    def create(
+        self,
+        title: str,
+        *,
+        query: str,
+        socrole: str = "SOC Analyst",
+        save: bool = True,
+        interval: float = 5.0,
+        timeout: float = 900.0,
+    ) -> InsightExecution:
+        """Plan, execute and (by default) save a new insight: the widget's *Add Insight* flow.
+
+        Raises :class:`ValueError` when the plan is infeasible (the reason is in
+        the message). The returned execution carries the saved record's uuid as
+        ``insight_id`` when ``save=True``. Costs two planning LLM calls plus the
+        agents the plan runs.
+        """
+        plan = self.plan(query, socrole=socrole)
+        if not plan.feasible:
+            raise ValueError(f"insight plan is infeasible: {(plan.feasibility or {}).get('reason')}")
+        run = self.execute(plan, socrole=socrole, interval=interval, timeout=timeout)
+        if save and run.status == "completed" and run.planid:
+            run.insight_id = self.save(title, query=query, planid=run.planid, socrole=socrole)
+        return run
+
+    def list(self) -> list[InsightRecord]:
+        """The current user's active insights (``GET /api/ai/insight/``)."""
+        return [InsightRecord.model_validate(r) for r in _as_list(self.client.get(f"{_INSIGHT}/"))]
+
+    def get(self, insight_id: str) -> InsightRecord:
+        """One insight with its plan and last result (``GET /api/ai/insight/{id}``)."""
+        resp = self.client.get(f"{_INSIGHT}/{insight_id}")
+        return InsightRecord.model_validate(resp if isinstance(resp, dict) else {})
+
+    def delete(self, insight_id: str) -> None:
+        """Delete an insight (``DELETE /api/ai/insight/{id}``)."""
+        self.client.delete(f"{_INSIGHT}/{insight_id}")
+
+    def trigger(self, insight_id: str, *, user_id: str | None = None) -> str:
+        """Re-run a saved, active insight now (``POST /api/ai/insight/trigger/schedule``).
+
+        The endpoint the insight's schedule calls. ``user_id`` is the owner's
+        person uuid (the widget sends the creator's); it defaults to the saved
+        record's ``createUser``. Returns fsr-ai's message.
+        """
+        if user_id is None:
+            record = self.client.get(f"/api/3/insights/{insight_id}") or {}
+            owner = record.get("createUser")
+            user_id = owner.get("@id") if isinstance(owner, dict) else owner
+            user_id = uuid_from_iri(user_id) if user_id else None
+        if not user_id:
+            raise ValueError("cannot resolve the insight's owner; pass user_id=")
+        resp = self.client.post(f"{_INSIGHT}/trigger/schedule", data={"referenceid": insight_id, "createUser": user_id})
+        return str((resp or {}).get("message", ""))
+
+    def templates(self) -> list[Any]:
+        """The ``insight_templates`` records: ready-made questions with plans."""
+        from ..query import Query
+
+        return list(self.client.records("insight_templates").iterate(Query().limit(100)))
+
+    def run_template(self, template: Any, **kwargs: Any) -> InsightExecution:
+        """Execute an insight template's stored plan with its ``socrole`` (no planning LLM calls).
+
+        ``template`` is a record from :meth:`templates` or its title.
+        """
+        if isinstance(template, str):
+            match = [t for t in self.templates() if t.get("title") == template]
+            if not match:
+                raise ValueError(f"no insight template titled {template!r}")
+            template = match[0]
+        return self.execute(template.get("plan") or {}, socrole=template.get("socrole") or "SOC Analyst", **kwargs)
 
 
 class AITracesAPI(BaseAPI):
@@ -618,6 +807,23 @@ def _check_io(io: str) -> None:
         raise ValueError(f"io must be one of {sorted(TRACE_IO_MODES)}, got {io!r}")
 
 
+#: The planner's built-in tool table (8.0.1 ``investigation-planning``
+#: ``get_tool_list``), used whenever no ``INFRA_INFO/TOOL_LIST`` Org Context record exists.
+DEFAULT_INVESTIGATION_TOOLS: tuple[InvestigationTool, ...] = (
+    InvestigationTool(avenue="Approved activity", source="Org Context", required_field="IOCs + activity"),
+    InvestigationTool(avenue="Change authorization", source="ITSM", required_field="host + window"),
+    InvestigationTool(avenue="Detection quality", source="SIEM (raw event)", required_field="case_id + rule"),
+    InvestigationTool(avenue="Historical baseline", source="SIEM", required_field="entity"),
+    InvestigationTool(avenue="Asset criticality", source="CMDB", required_field="host"),
+    InvestigationTool(avenue="Identity status", source="IAM", required_field="user"),
+    InvestigationTool(avenue="IOC reputation", source="Threat Intel", required_field="each public IOC"),
+    InvestigationTool(avenue="Prior disposition", source="Alert Correlation", required_field="each entity"),
+    InvestigationTool(avenue="Endpoint behavior", source="EDR", required_field="process"),
+)
+
+_ORG_CONTEXTS = "organizational_contexts"
+_TOOL_LIST_TITLE = "Infrastructure - Investigation Tool List"
+
 #: Task statuses from ``GET /api/ai/agents/{task_id}/status`` that end polling.
 _TURN_DONE = frozenset({"completed", "failed", "error", "cancelled", "success", "awaiting_approval"})
 
@@ -661,19 +867,20 @@ class AgentSession:
         self.user_id = user_id
         self.previous_response_id = ""
         self.request_id = ""
+        self.playbook_context: dict[str, Any] | None = None
         self.turns: list[AgentTurn] = []
 
     @property
     def last(self) -> AgentTurn | None:
         return self.turns[-1] if self.turns else None
 
-    def start(self, question: str) -> AgentTurn:
+    def start(self, question: str, *, extra_context: dict[str, Any] | None = None) -> AgentTurn:
         """Send one turn without waiting; returns the handle (``task_id``/``status``)."""
         payload: dict[str, Any] = {
             "question": question,
             "previous_response_id": self.previous_response_id,
             "request_id": self.request_id,
-            "context": self.context,
+            "context": {**self.context, **(extra_context or {})},
         }
         if self.user_id:
             payload["userId"] = self.user_id
@@ -684,7 +891,15 @@ class AgentSession:
         )
         return AgentTurn.model_validate(resp if isinstance(resp, dict) else {})
 
-    def ask(self, question: str, *, wait: bool = True, interval: float = 5.0, timeout: float = 600.0) -> AgentTurn:
+    def ask(
+        self,
+        question: str,
+        *,
+        wait: bool = True,
+        interval: float = 5.0,
+        timeout: float = 600.0,
+        extra_context: dict[str, Any] | None = None,
+    ) -> AgentTurn:
         """Send ``question`` and (by default) wait for the turn's result.
 
         On timeout the turn comes back with its non-terminal status (``pending``
@@ -692,7 +907,7 @@ class AgentSession:
         looks exactly like that, so check ``turn.status`` before trusting
         ``turn.answer``.
         """
-        handle = self.start(question)
+        handle = self.start(question, extra_context=extra_context)
         if not wait or not handle.task_id:
             return self._record(handle)
         deadline = time.monotonic() + timeout
@@ -722,6 +937,21 @@ class AgentSession:
         """Deny the pending state-changing action."""
         return self.ask("deny", **kwargs)
 
+    def generate_steps(self, **kwargs: Any) -> AgentTurn:
+        """playbook-generator: turn the agreed outline into designer steps.
+
+        Sends ``"generate steps"`` with the ``playbook_context`` the last outline
+        turn returned, as the playbook designer does. The result's
+        ``playbook_steps`` is what the designer pastes in; nothing is saved. If
+        ``turn.is_user_input_needed``, answer with :meth:`ask` and call this again.
+
+        Expensive: one LLM call per step, each resending the whole context
+        (a 7-step playbook used about 330k FortiAI tokens on 8.0.1).
+        """
+        if not self.playbook_context:
+            raise ValueError("no playbook_context yet: ask for an outline first")
+        return self.ask("generate steps", extra_context={"playbook_context": self.playbook_context}, **kwargs)
+
     def trace(self) -> ExecutionTree | None:
         """Execution tree of the last turn (its trace id is the task id)."""
         if not self.last or not self.last.task_id:
@@ -733,6 +963,10 @@ class AgentSession:
             self.previous_response_id = turn.response_id
         if turn.request_id:
             self.request_id = turn.request_id
+        if turn.playbook_context:
+            self.playbook_context = turn.playbook_context
+        elif turn.playbook_steps is not None:
+            self.playbook_context = None
         self.turns.append(turn)
         return turn
 
@@ -781,6 +1015,14 @@ class AIApi(BaseAPI):
         return self.client.system_settings.update(patch)
 
     # ----------------------------------------------------------- traces / chat (8.0.1)
+    @property
+    def insights(self) -> AIInsightsAPI:
+        """AI Insights -- see :class:`AIInsightsAPI`."""
+        api = self.__dict__.get("_insights")
+        if api is None:
+            api = self.__dict__["_insights"] = AIInsightsAPI(self.client)
+        return api
+
     @property
     def traces(self) -> AITracesAPI:
         """Agent traceability -- see :class:`AITracesAPI`."""
@@ -831,6 +1073,42 @@ class AIApi(BaseAPI):
         it, so this direct trigger is the only way to reach it.
         """
         return self.chat(agent="orchestrator", context=context, session_id=session_id, user_id=user_id)
+
+    def playbook_assistant(self, *, session_id: str | None = None, user_id: str | None = None) -> AgentSession:
+        """Open a session with the playbook designer's assistant (``playbook-generator``).
+
+        :meth:`AgentSession.ask` with a description returns an outline (and a
+        ``playbook_context``); :meth:`AgentSession.generate_steps` turns it into
+        designer steps. The agent's tools are read-only and nothing is saved.
+
+        Example:
+            >>> pb = client.ai.playbook_assistant()  # doctest: +SKIP
+            >>> outline = pb.ask("On a new Critical alert, look up the source IP in VirusTotal ...")  # doctest: +SKIP
+            >>> steps = pb.generate_steps()  # doctest: +SKIP
+            >>> steps.playbook_steps  # doctest: +SKIP
+        """
+        return self.chat(
+            agent="playbook-generator",
+            context={"pageName": "main.playbookDetail"},
+            session_id=session_id,
+            user_id=user_id,
+        )
+
+    def connector_assistant(self, *, session_id: str | None = None, user_id: str | None = None) -> AgentSession:
+        """Open a session with the connector wizard's assistant (``connector-generation``).
+
+        A guided conversation: describe the API, confirm each step, and it
+        writes ``info.json`` / ``connector.py`` / ``operations.py`` and offers to
+        import them. On 8.0.1 the import step fails on the agent's own
+        ``info.json`` serialization; ask it to show the files and install them
+        with :meth:`~pyfsr.api.connectors.ConnectorsAPI.install_from_dir` instead.
+        """
+        return self.chat(
+            agent="connector-generation",
+            context={"pageName": "main.marketplace.workspace"},
+            session_id=session_id,
+            user_id=user_id,
+        )
 
     # ----------------------------------------------------------- investigation
     def start_alert_investigation(self, alert: dict[str, Any] | str, *, link: bool = True) -> InvestigationHandle:
@@ -2213,6 +2491,97 @@ class AIApi(BaseAPI):
     def activate_agent(self, uuids: list[str], *, active: bool = True) -> Any:
         """Activate or deactivate agents by uuid (``POST /api/ai/agent/activate``)."""
         return self.client.post("/api/ai/agent/activate", data={"uuids": uuids}, params={"active": active})
+
+    def uninstall_agent(self, name: str, *, force: bool = False) -> None:
+        """Delete an installed agent: its record, its config and its files.
+
+        ``DELETE /api/ai/agent/{name}/{version}``. fsr-ai deletes by name and
+        answers 200 even when nothing matched, so this looks the agent up first
+        and raises :class:`ValueError` if it is not installed. Built-in agents
+        (``system``) are refused unless ``force=True``; fsr-ai itself only blocks
+        them when its ``block_system_agent_delete`` setting is on.
+        """
+        agent = next((a for a in self.list_agents() if a.name == name), None)
+        if agent is None:
+            raise ValueError(f"no installed agent named {name!r}")
+        if agent.system and not force:
+            raise ValueError(f"{name!r} is a built-in agent; pass force=True to delete it anyway")
+        self.client.delete(f"/api/ai/agent/{name}/{agent.version or '1.0.0'}")
+
+    # ------------------------------------------- investigation tool table (8.0.1)
+    def _tool_list_record(self) -> Any:
+        from ..query import Query
+
+        page = self.client.records(_ORG_CONTEXTS).query(
+            Query().eq("category", "INFRA_INFO").eq("subCategory", "TOOL_LIST").limit(1)
+        )
+        members = list(page)
+        return members[0] if members else None
+
+    def investigation_tools(self) -> list[InvestigationTool]:
+        """The tool table the investigation planner writes questions from.
+
+        The planner (8.0.1 ``investigation-planning``) writes one question per
+        active row, then routes each question to a ``Triage`` agent. It reads the
+        table from the Organization Context record ``INFRA_INFO/TOOL_LIST``, or
+        uses :data:`DEFAULT_INVESTIGATION_TOOLS` when there is none. A custom
+        agent only gets questions when a row names its source; see
+        :meth:`set_investigation_tool`.
+        """
+        record = self._tool_list_record()
+        if record is None:
+            return list(DEFAULT_INVESTIGATION_TOOLS)
+        return InvestigationTool.parse_table(record.get("content") or "")
+
+    def set_investigation_tool(
+        self, avenue: str, source: str, required_field: str = "", *, active: bool = True
+    ) -> list[InvestigationTool]:
+        """Add or replace one row of the planner's tool table (matched by ``avenue``).
+
+        Creates the ``INFRA_INFO/TOOL_LIST`` record from the built-in rows on
+        first use, because the record replaces the built-in table rather than
+        extending it. Returns the new table. Example, to route questions to a
+        custom ``Triage`` agent described as a pentest registry::
+
+            client.ai.set_investigation_tool("Authorized security testing", "Pentest Registry", "host")
+        """
+        rows = [r for r in self.investigation_tools() if r.avenue.lower() != avenue.lower()]
+        rows.append(InvestigationTool(avenue=avenue, source=source, required_field=required_field, active=active))
+        self._write_tool_list(rows)
+        return rows
+
+    def remove_investigation_tool(self, avenue: str) -> list[InvestigationTool]:
+        """Drop a row from the tool table (to stop questions for it, you can also set ``active=False``)."""
+        rows = self.investigation_tools()
+        kept = [r for r in rows if r.avenue.lower() != avenue.lower()]
+        if len(kept) == len(rows):
+            raise ValueError(f"no tool-table row with avenue {avenue!r}")
+        self._write_tool_list(kept)
+        return kept
+
+    def reset_investigation_tools(self) -> None:
+        """Delete the ``TOOL_LIST`` record so the planner falls back to its built-in table."""
+        record = self._tool_list_record()
+        if record is not None:
+            self.client.records(_ORG_CONTEXTS).delete(record.uuid)
+
+    def _write_tool_list(self, rows: list[InvestigationTool]) -> None:
+        content = InvestigationTool.render_table(rows)
+        record = self._tool_list_record()
+        records = self.client.records(_ORG_CONTEXTS)
+        if record is None:
+            records.create(
+                {
+                    "title": _TOOL_LIST_TITLE,
+                    "category": "INFRA_INFO",
+                    "subCategory": "TOOL_LIST",
+                    "description": "Evidence sources the investigation planner writes questions for.",
+                    "content": content,
+                    "llmSummarize": False,
+                }
+            )
+        else:
+            records.update(record.uuid, {"content": content})
 
     # -------------------------------------------------- agent ↔ MCP binding
     def mcp_server_names(self) -> dict[str, str]:

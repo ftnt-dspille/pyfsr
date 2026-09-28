@@ -334,3 +334,39 @@ def test_trace_span_tool_result_reads_8_0_1_fields():
     assert tr.mcp_server_name == "SOC Framework"
     assert tr.cached is False
     assert TraceSpan.model_validate({"span_id": "s2", "span_type": "LLM", "output": {}}).tool_result is None
+
+
+def test_playbook_assistant_generate_steps_sends_outline_context():
+    outline = {"answer": "{...}", "response_id": "resp-1", "playbook_context": {"playbook_outline": {"Step 1": {}}}}
+    steps = {"playbook_steps": [{"name": "Start"}], "response_id": "resp-2"}
+    c = FakeClient(
+        {
+            ("POST", "/api/ai/agents/playbook-generator/trigger"): {"task_id": "task-1", "status": "pending"},
+            ("GET", "/api/ai/agents/task-1/status"): [{"status": "completed"}, {"status": "completed"}],
+            ("GET", "/api/ai/agents/task-1/result"): [outline, steps],
+        }
+    )
+    pb = AIApi(c).playbook_assistant()
+    with pytest.raises(ValueError, match="outline first"):
+        pb.generate_steps()
+    pb.ask("on a new alert ...", interval=0)
+    assert pb.playbook_context == {"playbook_outline": {"Step 1": {}}}
+    turn = pb.generate_steps(interval=0)
+    posts = [call for call in c.calls if call[0] == "POST"]
+    assert posts[0][2]["context"] == {"pageName": "main.playbookDetail"}
+    assert posts[1][2]["question"] == "generate steps"
+    assert posts[1][2]["context"] == {
+        "pageName": "main.playbookDetail",
+        "playbook_context": {"playbook_outline": {"Step 1": {}}},
+    }
+    assert turn.playbook_steps == [{"name": "Start"}]
+    assert pb.playbook_context is None  # consumed by the final steps
+    assert pb.context == {"pageName": "main.playbookDetail"}  # per-turn context not persisted
+
+
+def test_connector_assistant_page_context():
+    c = _session_client(
+        {"answer": "summary", "response_id": "r"}, status_seq=("completed",), agent="connector-generation"
+    )
+    AIApi(c).connector_assistant().ask("build a connector", interval=0)
+    assert c.calls[0][2]["context"] == {"pageName": "main.marketplace.workspace"}

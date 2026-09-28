@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`client.ai.uninstall_agent(name)`** deletes an installed agent (record,
+  config and files). fsr-ai answers 200 for an unknown name and deletes
+  built-in agents unless a server setting blocks it, so pyfsr checks that the
+  agent exists and refuses built-in agents unless `force=True`.
+- **Investigation tool table:** `client.ai.investigation_tools()`,
+  `set_investigation_tool()`, `remove_investigation_tool()`,
+  `reset_investigation_tools()` and `DEFAULT_INVESTIGATION_TOOLS`.
+  - The 8.0.1 planner writes one question per active row of this table before
+    it picks agents, so a custom `Triage` agent only gets questions when a row
+    names it.
+  - The table is the Organization Context record `INFRA_INFO/TOOL_LIST`, which
+    replaces the built-in rows. `set_investigation_tool` seeds it with them.
+  - FortiSOAR re-indexes the record on create and update, and removes it from
+    the index on delete (live-verified).
+- **AI Insights: `client.ai.insights`** (`AIInsightsAPI`) wraps the Insight
+  cards widget's flow: `chain_of_thought`, `plan`, `execute` (waits for the
+  result), `save` (the `insights` record), `create` (all four, refusing an
+  infeasible plan), `list`, `get`, `delete`, `trigger` (re-run a saved insight
+  now), `templates` and `run_template` (execute a shipped template's plan
+  without the planning LLM calls). New models are `InsightPlan`,
+  `InsightExecution` and `InsightRecord`. Live-verified on 8.0.1: a create took
+  45 s and 8,243 FortiAI tokens.
+- **Playbook and connector assistants:** `client.ai.playbook_assistant()` and
+  `connector_assistant()`, plus `AgentSession.generate_steps()`, which sends
+  "generate steps" with the outline's `playbook_context` the way the playbook
+  designer does. `AgentTurn` gains `playbook_context`, `playbook_steps` and
+  `is_user_input_needed`.
+
 ## [0.20.0] - 2026-09-27
 
 ### Added

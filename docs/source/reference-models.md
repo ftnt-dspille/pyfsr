@@ -888,6 +888,27 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 ```
 
 ```{eval-rst}
+.. autoclass:: pyfsr.models.InsightExecution
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.InsightPlan
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.InsightRecord
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
 .. autoclass:: pyfsr.models.InvestigationHandle
    :members:
    :undoc-members:
@@ -903,6 +924,13 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
 
 ```{eval-rst}
 .. autoclass:: pyfsr.models.InvestigationResult
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.InvestigationTool
    :members:
    :undoc-members:
    :show-inheritance:

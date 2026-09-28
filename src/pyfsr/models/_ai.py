@@ -769,6 +769,12 @@ class AgentTurn(_Lenient):
     error: Any = None
     phases: Any = None
     logs: Any = None
+    #: The outline state playbook-generator wants back with "generate steps".
+    playbook_context: dict[str, Any] | None = None
+    #: The designer steps playbook-generator generated (final turn).
+    playbook_steps: Any = None
+    #: True when playbook-generator stopped to ask the user something.
+    is_user_input_needed: bool | None = None
 
     @property
     def needs_clarification(self) -> bool:
@@ -787,3 +793,108 @@ class AgentTurn(_Lenient):
 
 
 TraceNode.model_rebuild()
+
+
+class InvestigationTool(BaseModel):
+    """One row of the investigation planner's tool table (8.0.1).
+
+    The planner writes one question per ``active`` row and sends it to the agent
+    whose description fits ``source`` -- a custom ``Triage`` agent only gets
+    questions when a row names it. See :meth:`pyfsr.api.ai.AIApi.investigation_tools`.
+    """
+
+    avenue: str
+    source: str
+    required_field: str = ""
+    active: bool = True
+
+    @staticmethod
+    def parse_table(text: str) -> list[InvestigationTool]:
+        """Parse the markdown table stored in an ``INFRA_INFO/TOOL_LIST`` record."""
+        rows: list[InvestigationTool] = []
+        for line in (text or "").splitlines():
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) < 4 or not cells[0] or cells[0].lower() == "avenue" or set(cells[0]) <= {"-", ":", " "}:
+                continue
+            rows.append(
+                InvestigationTool(
+                    avenue=cells[0],
+                    source=cells[1],
+                    required_field=cells[2],
+                    active=cells[3].lower() not in ("no", "false", "n"),
+                )
+            )
+        return rows
+
+    @staticmethod
+    def render_table(rows: list[InvestigationTool]) -> str:
+        """Render rows as the planner's markdown table (the stock layout)."""
+        w = [
+            max([len("Avenue")] + [len(r.avenue) for r in rows]),
+            max([len("Source")] + [len(r.source) for r in rows]),
+            max([len("Required field")] + [len(r.required_field) for r in rows]),
+        ]
+        lines = [
+            f"| {'Avenue'.ljust(w[0])} | {'Source'.ljust(w[1])} | {'Required field'.ljust(w[2])} | Active |",
+            "| -- | -- | -- | -- |",
+        ]
+        for r in rows:
+            active = ("Yes" if r.active else "No").ljust(3)
+            cells = (r.avenue.ljust(w[0]), r.source.ljust(w[1]), r.required_field.ljust(w[2]))
+            lines.append(f"| {cells[0]} | {cells[1]} | {cells[2]} |   {active}  |")
+        return "\n".join(lines) + "\n"
+
+
+class InsightPlan(_Lenient):
+    """An AI Insight plan (8.0.1 ``POST /api/ai/insight/plan``, or an insight template's ``plan``).
+
+    ``feasibility`` is ``{status, reason, clarification_questions}``; the UI
+    refuses to run a plan whose status is ``"infeasible"``. ``steps`` are the
+    agent calls the plan executes, in order.
+    """
+
+    objective: str | None = None
+    chain_of_thought: list[str] = Field(default_factory=list)
+    intent_interpretation: str | None = None
+    feasibility: dict[str, Any] | None = None
+    entities: list[Any] = Field(default_factory=list)
+    steps: list[Any] = Field(default_factory=list)
+
+    @property
+    def feasible(self) -> bool:
+        return (self.feasibility or {}).get("status") != "infeasible"
+
+
+class InsightExecution(_Lenient):
+    """A plan execution: ``task_id``/``planid`` from ``plan/execute``, then its result.
+
+    ``result`` holds the generated insight (``concise_summary``, ``summary``,
+    ``next_action_steps`` ... or ``error``); ``execution_log`` the per-step
+    agent outputs.
+    """
+
+    task_id: str | None = None
+    planid: str | None = None
+    status: str | None = None
+    result: dict[str, Any] | None = None
+    execution_log: Any = None
+    last_executed: str | None = None
+    #: The saved ``insights`` record, set by ``AIInsightsAPI.create(save=True)``.
+    insight_id: str | None = None
+
+
+class InsightRecord(_Lenient):
+    """A saved AI Insight (``GET /api/ai/insight/`` / ``GET /api/ai/insight/{id}``)."""
+
+    insight_id: str | None = None
+    title: str | None = None
+    query: str | None = None
+    active: bool | None = None
+    planid: str | None = None
+    plan: dict[str, Any] | None = None
+    result: dict[str, Any] | None = None
+    execution_log: Any = None
+    last_executed: str | None = None
+    socrole: str | None = None
+    scheduleid: str | None = None
+    createuser: str | None = None

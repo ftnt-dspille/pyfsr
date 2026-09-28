@@ -5,7 +5,7 @@ other agent work, so none spends LLM tokens. They read agents, reasoning
 profiles, MCP servers, Organization Context and existing traces. The writes put
 things back in a ``finally``: ``test_assign_llm_roundtrip`` moves one agent to
 another profile, and ``test_install_and_run_custom_agent`` installs a no-LLM
-echo agent (``pyfsr-it-echo``), runs it, then deactivates it.
+echo agent (``pyfsr-it-echo``), runs it, then uninstalls it.
 
 Needs FortiSOAR 8.0+ with AI features enabled; trace tests need 8.0.1+ and
 skip on a box that has no traces yet.
@@ -129,7 +129,7 @@ def _echo_agent_dir(tmp_path):
 
 
 def test_install_and_run_custom_agent(client, ai, tmp_path):
-    """Upload -> activate -> trigger a custom agent; the agent makes no LLM call."""
+    """Upload -> activate -> trigger -> uninstall a custom agent; the agent makes no LLM call."""
     was_allowed = client.system_settings.agent_upload_allowed()
     agent = None
     try:
@@ -143,9 +143,26 @@ def test_install_and_run_custom_agent(client, ai, tmp_path):
         assert result.answer == "echo: ping"
     finally:
         if agent is not None:
-            ai.activate_agent([agent.uuid], active=False)
+            ai.uninstall_agent("pyfsr-it-echo")
+            assert "pyfsr-it-echo" not in [a.name for a in ai.list_agents()]
         if not was_allowed:
             client.system_settings.allow_agent_upload(False)
+
+
+def test_investigation_tool_table(ai):
+    """Read-only: the planner's tool table (Org Context record or the built-in one)."""
+    rows = ai.investigation_tools()
+    assert rows, "the planner always has a tool table"
+    assert all(r.avenue and r.source for r in rows)
+    assert any(r.active for r in rows)
+
+
+def test_insight_templates_and_list(ai):
+    """Read-only: shipped insight templates carry runnable plans; the insight list parses."""
+    templates = ai.insights.templates()
+    assert templates, "8.0.1 ships insight templates"
+    assert all((t.get("plan") or {}).get("steps") for t in templates), "a template without plan steps"
+    assert isinstance(ai.insights.list(), list)
 
 
 # ---------------------------------------------------------------- LLM routing
