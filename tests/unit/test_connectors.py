@@ -96,6 +96,30 @@ def test_resolve_version():
     assert api.resolve_version("nope") is None
 
 
+def test_side_by_side_versions_resolve_to_the_newest(monkeypatch):
+    # An upgrade by package import leaves every version installed. Numeric
+    # order, not string order: "6.10.0" is newer than "6.9.0".
+    rows = {"data": [
+        {"id": 1, "name": "fortinet-fortisiemv2", "version": "6.0.0", "active": True, "configuration": []},
+        {"id": 2, "name": "fortinet-fortisiemv2", "version": "6.10.0", "active": True, "configuration": []},
+        {"id": 3, "name": "fortinet-fortisiemv2", "version": "6.9.0", "active": True, "configuration": []},
+    ]}
+    monkeypatch.setitem(globals(), "_CONFIGURED", rows)
+    api, _ = _api()
+    assert api.resolve_version("fortinet-fortisiemv2") == "6.10.0"
+    assert api.resolve_connector_id("fortinet-fortisiemv2") == 2
+
+
+def test_an_inactive_newer_version_does_not_win(monkeypatch):
+    rows = {"data": [
+        {"id": 1, "name": "x", "version": "1.0.0", "active": True, "configuration": []},
+        {"id": 2, "name": "x", "version": "2.0.0", "active": False, "configuration": []},
+    ]}
+    monkeypatch.setitem(globals(), "_CONFIGURED", rows)
+    api, _ = _api()
+    assert api.resolve_version("x") == "1.0.0"
+
+
 def test_find_installed_connectors_partial_and_label():
     api, _ = _api()
     # case-insensitive substring on name

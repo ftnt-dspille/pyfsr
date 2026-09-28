@@ -1023,7 +1023,26 @@ class ConnectorsAPI(BaseAPI):
         return [ConnectorConfig.model_validate(r) for r in env.data]
 
     def _find_configured(self, connector: str) -> InstalledConnector | None:
-        return next((c for c in self.list_configured() if c.name == connector), None)
+        """The install entry for ``connector`` -- the NEWEST when several
+        versions are installed side by side.
+
+        An upgrade by package import leaves the old version installed, active
+        and configured next to the new one, so one name lists several entries.
+        Taking the first (the oldest, by install order) made every
+        version-less call -- ``execute``, ``operations``, ``resolve_version``
+        -- run the superseded code: live, on a box with fortinet-fortisiemv2
+        6.0.0/6.1.0/6.1.1, ``execute`` ran 6.0.0 and its 58 ops, missing the
+        ops 6.1.x added.
+        """
+        hits = [c for c in self.list_configured() if c.name == connector]
+        if not hits:
+            return None
+
+        def key(c: InstalledConnector) -> tuple:
+            nums = tuple(int(p) for p in re.findall(r"\d+", c.version or ""))
+            return (c.active is not False, nums)
+
+        return max(hits, key=key)
 
     def find_installed_connectors(self, query: str) -> list[InstalledConnector]:
         """Search *installed* connectors by partial, case-insensitive match.
