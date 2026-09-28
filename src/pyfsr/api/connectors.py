@@ -742,7 +742,8 @@ class ConnectorsAPI(BaseAPI):
         if len(hits) > 1:
             raise ValueError(
                 f"{connector!r} has {len(hits)} installed versions "
-                f"({', '.join(sorted(c.version or '?' for c in hits))}); pass version= to pick one")
+                f"({', '.join(sorted(c.version or '?' for c in hits))}); pass version= to pick one"
+            )
         connector_id = hits[0].id
         self.client.delete(f"/api/integration/connectors/{connector_id}/")
         if refresh:
