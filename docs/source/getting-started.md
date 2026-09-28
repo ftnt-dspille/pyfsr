@@ -60,13 +60,13 @@ See {doc}`guides/authentication` for environment-based config.
 ```
 
 `client.alerts.list()`/`.get(uuid)` work the same way as the generic path above,
-via the typed, module-specific {class}`~pyfsr.api.alerts.AlertsAPI` — see
+via the typed, module-specific {class}`~pyfsr.api.alerts.AlertsAPI` -- see
 {doc}`guides/records` for the typed-model walkthrough.
 
 ## Creating records & picklists
 
 Picklist fields (`severity`, `status`, …) are stored as IRIs, not friendly
-strings — but pyfsr resolves friendly values for you automatically, so you can
+strings -- but pyfsr resolves friendly values for you automatically, so you can
 just pass `"High"`:
 
 ```{code-block} python
@@ -77,7 +77,7 @@ alert = client.alerts.create(
 )
 ```
 
-Same on the generic record path — captured live (created, fetched, deleted in
+Same on the generic record path -- captured live (created, fetched, deleted in
 the same session; box left with no extra incidents):
 
 ```{doctest}
@@ -93,12 +93,34 @@ the same session; box left with no extra incidents):
 ```{note}
 Resolution is on by default (the example above passes `resolve_picklists=False`
 only because this doctest replays a captured response rather than a live
-metadata lookup). Pass it yourself to skip resolution — and the metadata lookup
-it needs — when every value you send is already an IRI.
+metadata lookup). Pass it yourself to skip resolution -- and the metadata lookup
+it needs -- when every value you send is already an IRI.
 ```
+
+## Triggering playbooks
+
+Fire a playbook and wait for it to finish in one call with
+{meth}`~pyfsr.api.playbooks.PlaybooksAPI.run_and_wait`:
+
+```{code-block} python
+result = client.playbooks.run_and_wait("My Playbook", timeout=60)
+if result.succeeded:
+    for step in result.steps:
+        print(f"  {step.name:30} {step.status:10} {step.duration_ms}ms")
+else:
+    print(f"failed at: {result.failure.failing_step}")
+    print(f"  error: {result.failure.error_message}")
+```
+
+For playbooks that pause on a **Manual Input** step, use
+{meth}`~pyfsr.api.playbooks.PlaybooksAPI.trigger` then
+{meth}`~pyfsr.api.manual_input.ManualInputAPI.answer` to resume. See
+{doc}`guides/playbook-authoring` for the full interactive flow.
 
 ## Next steps
 
-- {doc}`guides/records` — generic CRUD and typed models
-- {doc}`guides/querying` — the fluent `Query` DSL
-- {doc}`guides/ai-agents` — drive FortiSOAR from an LLM
+- {doc}`guides/records` -- generic CRUD and typed models
+- {doc}`guides/querying` -- the fluent `Query` DSL
+- {doc}`guides/playbook-authoring` -- author, deploy, and trigger playbooks from YAML
+- {doc}`guides/playbook-yaml-reference` -- the full step-type syntax reference
+- {doc}`guides/ai-agents` -- drive FortiSOAR from an LLM

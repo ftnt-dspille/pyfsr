@@ -7,14 +7,14 @@ that you can iterate, slice, or introspect.
 
 ```{note}
 This guide covers the pyfsr `Query` **builder** (the Python ergonomics). For the underlying
-**wire protocol** — every filter/aggregation operator, OR/AND nesting, `$search`, Elasticsearch
-global search, pagination, and source-verified quirks — see the canonical FortiSOAR Query API
+**wire protocol** -- every filter/aggregation operator, OR/AND nesting, `$search`, Elasticsearch
+global search, pagination, and source-verified quirks -- see the canonical FortiSOAR Query API
 reference: the canonical FortiSOAR Query API doc (`<fortisoar-docs>/FortiSOAR_Query_Aggregation_and_Filter_Options.md`).
 ```
 
 ```{seealso}
 A runnable, guided tour of every builder feature lives in
-[`examples/queries.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/queries.py).
+[`examples/queries.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/queries.py).
 ```
 
 ## Quick start
@@ -45,10 +45,10 @@ FortiSOAR field paths follow a consistent pattern:
 |---|---|---|
 | Picklist (severity, status…) | `severity.itemValue` | `severity` (IRI) |
 | Single relationship (assignedTo…) | `assignedTo.name` | `assignedTo.uuid` |
-| Scalar (name, sourceId…) | `name` | — |
-| Date/epoch | `createDate` | — |
+| Scalar (name, sourceId…) | `name` | -- |
+| Date/epoch | `createDate` | -- |
 
-The `.itemValue` suffix is the most common pattern — it lets you write
+The `.itemValue` suffix is the most common pattern -- it lets you write
 `"Critical"` instead of `/api/3/picklists/<uuid>`:
 
 ```python
@@ -129,7 +129,7 @@ client.records("alerts").filter(
 ### Inline grouping with `.or_()` and `.and_()`
 
 `.group()` is explicit but verbose. `.or_()` and `.and_()` build the same nested
-groups inline — pass a pre-built `Query`, or call with no argument to open an
+groups inline -- pass a pre-built `Query`, or call with no argument to open an
 inline context that collects the following leaf filters:
 
 ```python
@@ -157,7 +157,7 @@ terminal `.to_body()` / `.model()` apply to and close out the parent query:
  .limit(50))
 ```
 
-The wire body these build is exactly what you'd hand-assemble — an `AND`
+The wire body these build is exactly what you'd hand-assemble -- an `AND`
 sub-group nested under the parent's filters:
 
 ```{doctest}
@@ -173,7 +173,7 @@ sub-group nested under the parent's filters:
 ['type.itemValue', 'severity.itemValue']
 ```
 
-Arbitrary depth is reachable by nesting `.group()` inside a pre-built sub-group —
+Arbitrary depth is reachable by nesting `.group()` inside a pre-built sub-group --
 e.g. `(A AND (B OR C)) OR (D AND E)`:
 
 ```python
@@ -217,7 +217,7 @@ if page.has_next:
     next_page = client.records("alerts").filter(Query().eq("status.itemValue", "Open").limit(30).page(2))
 ```
 
-The executed shape against a recorded response (no network — `demo_client()`
+The executed shape against a recorded response (no network -- `demo_client()`
 replays a captured `/api/query/alerts` page):
 
 ```{doctest}
@@ -238,7 +238,7 @@ replays a captured `/api/query/alerts` page):
 For processing more records than fit on one page, `iterate()` pages automatically:
 
 ```python
-# Stream every open alert — pages fetched on demand, no manual pagination
+# Stream every open alert -- pages fetched on demand, no manual pagination
 for alert in client.records("alerts").iterate(Query().eq("status.itemValue", "Open")):
     print(alert.uuid, alert.name)
 
@@ -268,7 +268,7 @@ if alerts.exists(Query().eq("sourceId", event_id)):
 
 ## Inspecting the raw query body
 
-Call `to_body()` to see the exact dict sent to the API — useful for debugging or
+Call `to_body()` to see the exact dict sent to the API -- useful for debugging or
 passing to lower-level calls:
 
 ```{doctest}

@@ -334,9 +334,9 @@ the fallback keeps a description-less prompt runnable). Set an explicit
 
 ```{note}
 When driving a paused prompt with `client.manual_input`, a pending input's
-`.title` field is the **step name** (`AskNumber` above), not the schema title.
-The one-call `client.manual_input.answer(value, by_step=...)` hides this and the
-list-token-vs-numeric-id gotcha.
+`.title` field is the prompt's **schema title** (the step's `title:`), not the
+step name. The one-call `client.manual_input.answer(value, by_title=...)` hides
+this and the list-token-vs-numeric-id gotcha.
 ```
 
 ### `workflow_reference` -- call another playbook

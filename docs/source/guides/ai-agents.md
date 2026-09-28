@@ -12,10 +12,19 @@ server, or a home-grown agent loop.
 
 ```{seealso}
 End-to-end FortiAI / FortiSIEM-MCP examples:
-[`connect_fortisiem_mcp.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/connect_fortisiem_mcp.py),
-[`trigger_ai_investigation.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/trigger_ai_investigation.py),
-and [`investigate_fortisiem_incident.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/investigate_fortisiem_incident.py).
-See the [examples index](https://github.com/dylanspille/pyfsr/blob/main/examples/README.md) for the full set.
+[`fortisiem_mcp_setup_and_test.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/fortisiem_mcp_setup_and_test.py),
+[`trigger_ai_investigation.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/trigger_ai_investigation.py),
+and [`run_single_ai_agent.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/run_single_ai_agent.py).
+See the [examples index](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/README.md) for the full set.
+```
+
+```{hint}
+Building an AI agent with **external coding tools** (GitHub Copilot, Cursor,
+Windsurf, Claude Code)? Start from the repo's
+[`AGENTS.md`](https://github.com/ftnt-dspille/pyfsr/blob/main/AGENTS.md) -- it
+covers setup (`EnvConfig.from_env`, `instances.toml`), the `run_and_wait`
+trigger-and-wait primitive, playbook authoring CLI, and the full tool registry
+in one place.
 ```
 
 ## Why use it
@@ -666,7 +675,7 @@ messages = [{
 
 while True:
     resp = llm.messages.create(
-        model="claude-opus-4-8",
+        model="claude-sonnet-4-20250514",
         max_tokens=1024,
         tools=tools,
         messages=messages,
@@ -725,6 +734,93 @@ python -m pyfsr.agent.mcp
 The server reads `FSR_*` environment variables (see
 {doc}`authentication`) to build its client, and exposes the same registry of
 tools to any MCP-compatible host.
+
+### MCP client config (Copilot, Cursor, Windsurf, Claude)
+
+The pyfsr MCP server runs over stdio, so any MCP-compatible client can drive
+it. Point your tool at `python -m pyfsr.agent.mcp` with the `FSR_*`
+environment set:
+
+**Claude Desktop / Claude Code** (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "pyfsr": {
+      "command": "python",
+      "args": ["-m", "pyfsr.agent.mcp"],
+      "env": {
+        "FSR_BASE_URL": "https://fortisoar.example.com:13000",
+        "FSR_API_KEY": "<your-api-key>"
+      }
+    }
+  }
+}
+```
+
+**Cursor / Windsurf** (`.cursor/mcp.json` or `~/.codeium/windsurf/mcp_config.json`):
+```json
+{
+  "mcpServers": {
+    "pyfsr": {
+      "command": "python",
+      "args": ["-m", "pyfsr.agent.mcp"],
+      "env": {
+        "FSR_BASE_URL": "https://fortisoar.example.com:13000",
+        "FSR_API_KEY": "<your-api-key>"
+      }
+    }
+  }
+}
+```
+
+**GitHub Copilot** (`.vscode/mcp.json` in the repo):
+```json
+{
+  "servers": {
+    "pyfsr": {
+      "command": "python",
+      "args": ["-m", "pyfsr.agent.mcp"],
+      "env": {
+        "FSR_BASE_URL": "https://fortisoar.example.com:13000",
+        "FSR_API_KEY": "<your-api-key>"
+      }
+    }
+  }
+}
+```
+
+For username/password instead of API key, use `FSR_USERNAME` and `FSR_PASSWORD`
+in place of `FSR_API_KEY`. For multiple appliances, see the
+**Multi-instance config** section below.
+
+### Multi-instance config (`instances.toml`)
+
+When you manage multiple FortiSOAR appliances, list them in
+`~/.pyfsr/instances.toml` and switch with `--instance`:
+
+```toml
+[instances.prod]
+base_url = "https://fortisoar.example.com:13000"
+username = "csadmin"
+password = "<password>"
+verify_ssl = false
+
+[instances.dev]
+base_url = "https://dev.fortisoar.example.com:13000"
+api_key = "<dev-api-key>"
+```
+
+The CLI reads this automatically:
+
+```bash
+pyfsr instances list          # show configured aliases
+pyfsr instances show prod     # resolved settings (no secrets)
+pyfsr instances check         # connect to each; exit 1 if any fails
+```
+
+Any `pyfsr` CLI command accepts `--instance prod` to target a specific
+appliance. The MCP server picks the instance marked `default = true` (or the
+first listed).
 
 ### Two MCP servers: pyfsr vs fsr_playbooks
 

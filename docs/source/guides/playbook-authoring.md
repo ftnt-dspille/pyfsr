@@ -7,11 +7,11 @@ it to the appliance -- no hand-building of workflow/step/route JSON.
 
 ```{seealso}
 Runnable examples:
-[`examples/deploy_playbook_from_yaml.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/deploy_playbook_from_yaml.py)
+[`examples/deploy_playbook_from_yaml.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/deploy_playbook_from_yaml.py)
 (YAML → compile → deploy),
-[`examples/create_safe_playbook.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/create_safe_playbook.py)
+[`examples/create_safe_playbook.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/create_safe_playbook.py)
 (hand-built JSON), and the sample
-[`examples/playbooks/yaml_demo.yaml`](https://github.com/dylanspille/pyfsr/blob/main/examples/playbooks/yaml_demo.yaml).
+[`examples/playbooks/yaml_demo.yaml`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/playbooks/yaml_demo.yaml).
 ```
 
 ## The compiler is an optional extra
@@ -236,10 +236,20 @@ Every library playbook compiles and carries a `goal` / `trigger` / `inputs` /
 `outputs` / `connectors` / `adapts-to` front-matter block. `cold*` in the compile
 column means it compiles but references connectors the offline slim catalog
 doesn't carry -- run `pyfsr playbook deploy <file> --refresh-catalog` to resolve
-them against a live instance. The manifest and listing are available from Python
-via `pyfsr.playbook_library.list_library`,
-`pyfsr.playbook_library.library_manifest`, and
-`pyfsr.playbook_library.library_show` (repo-internal, not part of the
+them against a live instance.
+
+```{note}
+The library ships in the **source repo**, not the installed wheel. If you
+`pip install pyfsr`, the `pyfsr playbook examples` / `show` commands return
+empty. Clone the
+[repo](https://github.com/ftnt-dspille/pyfsr) and run from the working copy
+to browse the library, or browse it
+[on GitHub](https://github.com/ftnt-dspille/pyfsr/tree/main/examples/playbooks/library).
+```
+
+The manifest and listing are available from Python via
+`pyfsr.playbook_library.list_library`, `pyfsr.playbook_library.library_manifest`,
+and `pyfsr.playbook_library.library_show` (repo-internal, not part of the
 installed-package API).
 
 ## Testing interactive playbooks & inspecting runs
