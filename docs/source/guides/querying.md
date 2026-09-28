@@ -14,7 +14,7 @@ reference: the canonical FortiSOAR Query API doc (`<fortisoar-docs>/FortiSOAR_Qu
 
 ```{seealso}
 A runnable, guided tour of every builder feature lives in
-[`examples/queries.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/queries.py).
+[`examples/query_dsl_tour.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/query_dsl_tour.py).
 ```
 
 ## Quick start

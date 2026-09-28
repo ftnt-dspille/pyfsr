@@ -313,7 +313,7 @@ appliance to inspect env, or assert on a step's **status** (via `step_status`),
 which is always recorded.
 ```
 
-A complete worked example lives in `examples/do_until_validation_loop.py`.
+A complete worked example lives in `examples/playbook_do_until_loop.py`.
 
 ## Playbook version control (saved snapshots)
 

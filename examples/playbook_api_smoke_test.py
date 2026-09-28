@@ -22,9 +22,9 @@ prints at the end and the process exits nonzero if anything hard-failed.
 Connection comes from ``FSR_*`` env (see ``pyfsr.config.EnvConfig``) or flags::
 
     FSR_BASE_URL=https://fortisoar.example.com FSR_USERNAME=csadmin FSR_PASSWORD='$FSR_PASSWORD' \
-        FSR_VERIFY_SSL=false python examples/playbooks_api_smoke.py --write
+        FSR_VERIFY_SSL=false python examples/playbook_api_smoke_test.py --write
 
-    python examples/playbooks_api_smoke.py \
+    python examples/playbook_api_smoke_test.py \
         --server fortisoar.example.com --username csadmin --password "$FSR_PASSWORD" --no-verify-ssl \
         --write --trigger "My Manual Playbook"
 """

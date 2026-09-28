@@ -2,7 +2,7 @@
 
 The `pyfsr repo` command group discovers and downloads artifacts from
 Fortinet's **public, unauthenticated** content repository
-(`repo.fortisoar.fortinet.com`) — no appliance, no token. It wraps
+(`repo.fortisoar.fortinet.com`) -- no appliance, no token. It wraps
 {mod}`pyfsr.repo`, the standalone counterpart to the appliance-gated
 `client.content_hub` searches.
 
@@ -27,12 +27,12 @@ The public repo exposes different surfaces per artifact type:
 | Artifact | List / search | Versions | Detail (`info.json`) |
 |---|---|---|---|
 | **Connector** | `list-connectors`, `search` | `versions` | `info connector` |
-| **Widget** | — (no public manifest) | — | `info widget` |
-| **Solution pack** | — (no public manifest) | via `info solution-pack` | `info solution-pack` |
+| **Widget** | -- (no public manifest) | -- | `info widget` |
+| **Solution pack** | -- (no public manifest) | via `info solution-pack` | `info solution-pack` |
 
 Connectors have a public manifest (`/connectors/info/connectors.json`), so
 full no-appliance discovery works. Widgets and solution-packs have **no public
-manifest** — to list or search those, use `client.content_hub.search_available_*`
+manifest** -- to list or search those, use `client.content_hub.search_available_*`
 on an appliance, then come back here for the per-version `info` and `download`.
 
 ```python
@@ -86,7 +86,7 @@ pyfsr repo search code
 
 Every published version of one connector (its `info.json` `availableVersions`).
 Note this is publish **history**, not a guarantee every version is still
-downloadable — a listed version may 404 on `download` (surfaced as
+downloadable -- a listed version may 404 on `download` (surfaced as
 `RepoArtifactNotFoundError`).
 
 ```sh
@@ -125,9 +125,9 @@ pyfsr repo download solution-pack fortindrEssentials 1.0.4 --dest packs/
 
 `pyfsr repo` distinguishes two failure modes with distinct, nonzero exits:
 
-- **unreachable** — the host can't be reached (no FDN access, air-gapped,
+- **unreachable** -- the host can't be reached (no FDN access, air-gapped,
   firewalled). All verbs surface this as `error: content repo unreachable`.
-- **no artifact** — the host answered but there's no such name/version (404).
+- **no artifact** -- the host answered but there's no such name/version (404).
   Surfaces as `error: no artifact at <url>`. This is also what a listed-but-no-
   longer-retained version returns on `download` / `info`.
 
@@ -138,10 +138,10 @@ pyfsr repo download solution-pack fortindrEssentials 1.0.4 --dest packs/
 | List / search connectors | `pyfsr repo list-connectors` / `search` | `client.content_hub.search_available_connectors` |
 | Connector version history | `pyfsr repo versions` | `client.content_hub.connector_versions` |
 | List / search widgets or solution-packs | not available | `client.content_hub.search_available_*` |
-| Per-version detail | `pyfsr repo info` | — |
+| Per-version detail | `pyfsr repo info` | -- |
 | Download an archive | `pyfsr repo download` | `client.solution_packs.install` (installs directly) |
 
 See {doc}`connectors <connectors>` for the appliance-side connector lifecycle
 (install, pin a version, configure) and the
-[`repo_discover_and_download.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/repo_discover_and_download.py)
+[`connector_repo_download.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/connector_repo_download.py)
 example for a complete no-appliance discover-and-download script.

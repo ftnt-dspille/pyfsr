@@ -29,15 +29,15 @@ proved, the bug it surfaced and fixed, and the **DB-layer blocker still open**.
 The `pyfsr appliance` CLI (phases P1 + P2) provides comprehensive diagnostics and troubleshooting for FortiSOAR appliances, with:
 
 ### P1: Transport & Database Layer (✓ complete)
-- **Transport abstraction** — `LocalTransport` (direct exec) + `SSHTransport` (remote ssh)
-- **Sudo hygiene** — passwords via stdin (`-S`), env vars re-applied inside sudo context (avoids `env_reset` stripping)
-- **Facts caching** — device UUID, content DB discovery, version
-- **Database verbs** — read-only query, list DBs, find module tables, drop tables
+- **Transport abstraction** -- `LocalTransport` (direct exec) + `SSHTransport` (remote ssh)
+- **Sudo hygiene** -- passwords via stdin (`-S`), env vars re-applied inside sudo context (avoids `env_reset` stripping)
+- **Facts caching** -- device UUID, content DB discovery, version
+- **Database verbs** -- read-only query, list DBs, find module tables, drop tables
 
 ### P2: Live Triage Verbs (✓ complete)
-- **Service diagnostics** — status, liveness (detects wedged services), restart, listeners
-- **RabbitMQ checks** — queue depth/consumers, backlogs, zero-consumer queues, vhosts, permissions
-- **Log scanning** — tail service logs, scan recent errors via journalctl
+- **Service diagnostics** -- status, liveness (detects wedged services), restart, listeners
+- **RabbitMQ checks** -- queue depth/consumers, backlogs, zero-consumer queues, vhosts, permissions
+- **Log scanning** -- tail service logs, scan recent errors via journalctl
 
 ## Test Coverage
 
@@ -77,13 +77,13 @@ Validates commands against a real appliance:
 
 ```bash
 # Local appliance (auto-detect /opt/cyops)
-python examples/appliance_cli_live_example.py
+python examples/appliance_cli_tour.py
 
 # Remote appliance
-python examples/appliance_cli_live_example.py --host 10.0.0.1 --user csadmin
+python examples/appliance_cli_tour.py --host 10.0.0.1 --user csadmin
 
 # With password (or set PYFSR_APPLIANCE_PASSWORD)
-python examples/appliance_cli_live_example.py --host 10.0.0.1 --password secret
+python examples/appliance_cli_tour.py --host 10.0.0.1 --password secret
 ```
 
 **Features**:
@@ -119,8 +119,8 @@ mq.permissions(transport)         # User → configure/write/read
 ```
 
 **Flags**:
-- "NO CONSUMERS" — queue has messages but no worker
-- "BACKLOG (>1000)" — queue depth ≥ 1000
+- "NO CONSUMERS" -- queue has messages but no worker
+- "BACKLOG (>1000)" -- queue depth ≥ 1000
 
 ### Logs (journalctl + tail)
 ```python
@@ -188,24 +188,24 @@ pyfsr appliance db list
 - **Tests**: `tests/unit/test_appliance_cli.py` (45 tests, all passing)
 - **Examples**: `examples/appliance_cli_{test_demo,live_example}.py`
 
-## Live validation (lab appliance, FSR 7.6.5 — 2026-06-20)
+## Live validation (lab appliance, FSR 7.6.5 -- 2026-06-20)
 
 First real-appliance run, read-only verbs, over `SSHTransport` (`csadmin`, sudo via
-`-S`). Drove `examples/appliance_cli_live_example.py` + the `pyfsr appliance`
+`-S`). Drove `examples/appliance_cli_tour.py` + the `pyfsr appliance`
 console group directly.
 
 **Confirmed working live:**
-- **Transport / sudo** — SSH connect, `sudo -S`, and env-in-sudo all behaved as designed.
-- **`service status`** — real `csadm services --status` table (16 services).
-- **`service liveness`** — probes ran; flagged auth `POST /auth/authenticate` 500 and
+- **Transport / sudo** -- SSH connect, `sudo -S`, and env-in-sudo all behaved as designed.
+- **`service status`** -- real `csadm services --status` table (16 services).
+- **`service liveness`** -- probes ran; flagged auth `POST /auth/authenticate` 500 and
   `GET /api/3` 403 (expected without API auth) vs `das` license 200.
-- **`service listeners`** — real `ss -tlnp` output.
-- **`mq status` / `mq vhosts`** — real `rabbitmqctl` output (13 vhosts).
-- **`logs scan`** — journalctl roll-up clean.
-- **`facts.device_uuid()`** — parsed.
+- **`service listeners`** -- real `ss -tlnp` output.
+- **`mq status` / `mq vhosts`** -- real `rabbitmqctl` output (13 vhosts).
+- **`logs scan`** -- journalctl roll-up clean.
+- **`facts.device_uuid()`** -- parsed.
 
 **Bug found and fixed:** `logs.py` `LOG_PATHS` were stale guesses. On 7.6.5 the real
-files differ — auth → `cyops-auth/das.log` (not `cyops-auth.log`), api → `prod.log`,
+files differ -- auth → `cyops-auth/das.log` (not `cyops-auth.log`), api → `prod.log`,
 workflow → `fsr-workflow.log`, postman moved under `cyops-routing-agent/`. The old
 map tailed non-existent files and returned **empty silently**. Fixed the map to the
 verified paths, added `gateway`/`notifier`/`connectors`/`celery` aliases, corrected
@@ -214,11 +214,11 @@ and made `tail` raise `FileNotFoundError` on a missing path instead of empty-str
 Re-verified live (`logs tail workflow` returns content; missing path errors). +2 unit
 tests.
 
-**`mq queues`/`consumers`/`permissions` returned empty** — not a bug: they target the
+**`mq queues`/`consumers`/`permissions` returned empty** -- not a bug: they target the
 default `/` vhost, which is empty here (real queues live in the per-tenant `vhost_*`).
 This matches the known limitation (FOLLOWUPS: "MQ commands only cover the `/` vhost").
 
-**DB layer — blocker found AND fixed (live-validated):** initially every `db` verb
+**DB layer -- blocker found AND fixed (live-validated):** initially every `db` verb
 and content-DB discovery failed on 205 with `FATAL: password authentication failed for
 user "cyberpgsql"`. Root cause: `facts.py` resolved the device UUID (= the pg/ES
 password) from `csadm license --get-device-uuid` **first**, but on a box whose
@@ -241,13 +241,13 @@ from a `pip install -e .` checkout until the appliance CLI is released.
 
 ## Next Steps
 
-1. **Orphan-table drop** — the only `db` path not yet run live (it mutates); exercise
+1. **Orphan-table drop** -- the only `db` path not yet run live (it mutates); exercise
    `db drop-module-tables` / `delete_module(drop_orphan_tables=…)` against a real orphan.
-2. **Doc updates** — fold into user guides / troubleshooting docs as reference.
+2. **Doc updates** -- fold into user guides / troubleshooting docs as reference.
 
 ---
 
-**Last validated**: 2026-06-20 (live, lab appliance, FSR 7.6.5 — read-only verbs across
+**Last validated**: 2026-06-20 (live, lab appliance, FSR 7.6.5 -- read-only verbs across
 service/mq/logs/db, incl. content-DB discovery after the device-UUID fix)
 **Test status**: full unit suite green; `logs` path fix + device-UUID file-first fix
 (+ split device-uuid test into primary/fallback)

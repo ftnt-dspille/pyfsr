@@ -10,7 +10,7 @@ Everything here was extracted from a live FortiSOAR appliance (its 64 modules an
 real fields) and verified by creating and publishing test modules.
 
 ```{seealso}
-[`examples/all_field_types_module.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/all_field_types_module.py)
+[`examples/module_create_all_field_types.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/module_create_all_field_types.py)
 builds a module exercising every field type described here.
 ```
 

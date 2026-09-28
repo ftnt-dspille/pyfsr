@@ -22,14 +22,14 @@ Requires the compiler extra::
 
 Usage::
 
-    python examples/do_until_validation_loop.py \
+    python examples/playbook_do_until_loop.py \
         --host fortisoar.example.com --user csadmin --password '...' --port 13002
 
     # answer with your own values
-    python examples/do_until_validation_loop.py --wrong 12 345 7 --right 654321
+    python examples/playbook_do_until_loop.py --wrong 12 345 7 --right 654321
 
     # leave the collection deployed afterwards
-    python examples/do_until_validation_loop.py --keep
+    python examples/playbook_do_until_loop.py --keep
 
 Environment variables (used when the matching flag is omitted):
     FSR_BASE_URL / FSR_HOST       appliance host or URL
