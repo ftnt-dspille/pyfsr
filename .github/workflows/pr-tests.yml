@@ -53,20 +53,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          args: check
-      - uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
-        with:
-          args: format --check
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.12'
+          enable-cache: true
+      # Use the LOCKED ruff/mypy from uv.lock (the same versions the local
+      # pre-commit hooks use). The ruff-action installs the LATEST ruff
+      # matching >=0.6, which drifts from the lockfile pin and passes locally
+      # while CI fails -- or vice versa.
+      - name: Install dependencies (locked)
+        run: uv sync --frozen --group dev
+      - name: ruff check
+        run: uv run --frozen ruff check .
+      - name: ruff format --check
+        run: uv run --frozen ruff format --check .
       - name: mypy (typed CLI surface)
-        run: |
-          pip install -e '.[typecheck]'
-          mypy
+        run: uv run --frozen mypy
 
   test:
     runs-on: ubuntu-latest
