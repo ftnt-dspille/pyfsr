@@ -86,6 +86,23 @@ fields = [
 admin.create_module("widgets", label="Widget", fields=fields)
 ```
 
+Each builder returns the field's metadata dict -- pure, no network -- so you
+can inspect exactly what `create_module` will stage. The storage `type` and
+display `formType` are paired correctly by construction:
+
+```{doctest}
+>>> admin = demo_client().modules_admin
+>>> f = admin.text_field("name", required=True)
+>>> f["name"], f["type"], f["formType"], f["validation"]["required"]
+('name', 'string', 'text', True)
+>>> admin.picklist_field("severity", "AlertSeverity")["type"]
+'picklists'
+>>> admin.lookup_field("owner", "people")["type"]      # storage = target module
+'people'
+>>> admin.datetime_field("detectedOn")["type"]          # stored as integer
+'integer'
+```
+
 `admin.typed_field(name, display_type, ...)` is the generic form for any scalar display
 type in the table above (e.g. `admin.typed_field("md5", "filehash")`). For the low-level
 escape hatch where you set both axes yourself, use
