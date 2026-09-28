@@ -3,20 +3,20 @@
 This is the authoring reference for the **YAML playbook DSL** that the
 `fsr_playbooks` compiler (the `pyfsr[playbooks]` extra) accepts. It is the
 companion to the narrative {doc}`playbook-authoring` guide: that page shows the
-*workflow* (write → compile → deploy); this page is the *syntax* — every
+*workflow* (write → compile → deploy); this page is the *syntax* -- every
 top-level key, every step `type`, and the friendly fields each step accepts.
 
 The DSL is a thin, friendly layer over FortiSOAR's wire format: you write short
 `type:` names and friendly keys like `module:` / `vars:` / `when:`, and the
 compiler expands them into the canonical workflow/step/route JSON the import API
 expects. Anything you don't recognise on the wire, you can usually still set by
-its canonical key — the compiler only rejects *unknown* keys, never canonical
+its canonical key -- the compiler only rejects *unknown* keys, never canonical
 ones.
 
 ```{note}
 The step catalogue is owned by the compiler and validated against a packaged
 reference DB of real FortiSOAR step types. When in doubt, `pyfsr playbook
-validate <file>` is the source of truth — it reports unknown keys, missing
+validate <file>` is the source of truth -- it reports unknown keys, missing
 fields, and wrong shapes with a `path:` into your YAML.
 ```
 
@@ -57,7 +57,7 @@ The `set_variable` step type maps to a fixed `stepType` IRI (a UUID the
 compiler resolves from its catalog); the friendly `vars:` mapping lands verbatim
 in `arguments`, and `next:` becomes a `WorkflowRoute` whose `name` is
 `"<source> -> <target>"`. The volatile fields ��� `uuid`, `top`/`left` (canvas
-position), and the `/api/3/workflow_steps/<uuid>` IRIs in each route — are
+position), and the `/api/3/workflow_steps/<uuid>` IRIs in each route -- are
 compiler-generated and stable across runs, so you only need to author the
 friendly shape on the left.
 
@@ -67,16 +67,16 @@ A playbook file describes **one collection** and the **workflows** (playbooks)
 inside it:
 
 ```yaml
-collection: My Collection          # required — the collection name
+collection: My Collection          # required -- the collection name
 description: What this does         # optional
-visible: true                       # optional — show in the UI (default true)
+visible: true                       # optional -- show in the UI (default true)
 
-playbooks:                          # required — one or more workflows
-  - name: My Playbook               # required — workflow name
-    is_active: false                # optional — live trigger? (default false)
-    trigger: start                  # optional — trigger step type (default "start")
-    parameters: []                  # optional — referenced-playbook input params
-    steps:                          # required — the step list
+playbooks:                          # required -- one or more workflows
+  - name: My Playbook               # required -- workflow name
+    is_active: false                # optional -- live trigger? (default false)
+    trigger: start                  # optional -- trigger step type (default "start")
+    parameters: []                  # optional -- referenced-playbook input params
+    steps:                          # required -- the step list
       - name: Start
         type: start
         next: Do Something
@@ -109,7 +109,10 @@ pointing at the next step's `name`:
 - name: Enrich IP          # unique within the playbook; also the jinja slug
   type: connector
   next: Decide             # name of the next step
-  arguments: {...}         # type-specific (many types have friendlier keys)
+  connector: virustotal    # type-specific keys go at the step top level
+  operation: query_ip
+  params:
+    ip: "{{ vars.input.records[0].sourceIp }}"
 ```
 
 - **`name`** is also how you reference a step's output downstream:
@@ -142,7 +145,7 @@ table). Use the friendly name on the left:
 | `workflow_reference` | `WorkflowReference` | Call another playbook. |
 | `stop` / `end` | `Connectors` (`cyops_utilities.no_op`) | First-class no-op terminal. |
 
-### `start` — manual trigger
+### `start` -- manual trigger
 
 ```yaml
 - name: Start
@@ -160,7 +163,7 @@ records:
   next: First Step
 ```
 
-### `start_on_create` / `start_on_update` — record triggers
+### `start_on_create` / `start_on_update` -- record triggers
 
 Auto-fire when a record is created (or updated) in `module:`. Set the
 playbook's `is_active: true` for it to actually fire.
@@ -168,7 +171,7 @@ playbook's `is_active: true` for it to actually fire.
 ```yaml
 - name: Start
   type: start_on_create
-  module: heists                 # required — the module to watch
+  module: heists                 # required -- the module to watch
   next: Stamp Status
 ```
 
@@ -212,7 +215,7 @@ Write a top-level `vars:` mapping (not `arguments:`):
 
 ### `decision`
 
-Branches carry their own `next:` per condition entry — there is no step-level
+Branches carry their own `next:` per condition entry -- there is no step-level
 `next:` or `branches:`:
 
 ```yaml
@@ -220,24 +223,24 @@ Branches carry their own `next:` per condition entry — there is no step-level
   type: decision
   conditions:
     - condition: "{{ vars.input.records[0].takeUsd > 1000000 }}"
-      label: big
       next: Alert The Boss
-    - label: default
+    - default: true
       next: Log It
 ```
 
 ### `connector`
 
-Connector op, operation name, and params go **under `arguments:`**. Resolve the
-exact `connector` / `operation` / param names with the discovery tools
-(`pyfsr playbook` MCP / `find_operation`) — don't guess them:
+Connector op, operation name, and params go at the **step top level** (not
+nested under `arguments:`). Resolve the exact `connector` / `operation` / param
+names with the discovery tools (`pyfsr playbook` MCP / `find_operation`) -- don't
+guess them:
 
 ```yaml
 - name: Enrich IP
   type: connector
-  arguments:
-    connector: virustotal
-    operation: get_ip_reputation
+  connector: virustotal
+  operation: query_ip
+  params:
     ip: "{{ vars.input.records[0].sourceIp }}"
   next: Decide
 ```
@@ -247,64 +250,65 @@ exact `connector` / `operation` / param names with the discovery tools
 ```yaml
 - name: Find Open Heists
   type: find_record
-  arguments:
-    module: heists
-    query: {logic: AND, filters: [{field: status, operator: eq, value: Open}]}
+  module: heists
+  query: {logic: AND, filters: [{field: status, operator: eq, value: Open}]}
 
 - name: Log It
   type: create_record
-  arguments:
-    module: heist_logs
-    resource: {note: "triggered by {{ vars.input.records[0].codename }}"}
+  module: heist_logs
+  resource: {note: "triggered by {{ vars.input.records[0].codename }}"}
 
 - name: Stamp Status
   type: update_record
-  arguments:
-    module: heists                                     # → collectionType
-    collection: "{{ vars.input.records[0]['@id'] }}"   # the record IRI to update
-    resource: {status: Briefed}
+  module: heists                                     # → collectionType
+  record: "{{ vars.steps.Find_Open_Heists[0]['@id'] }}"  # first record IRI from the find step
+  resource: {status: Briefed}
 ```
+
+A `find_record` step's result is a **list of records** at `vars.steps.<name>`
+directly (not `.data`). Index the first hit with `[0]`, then read any field
+(`['@id']`, `.status`, etc.). Use `| length` to check how many matched.
 
 `module:` is friendly-expanded: on `create_record` it becomes the target
 `collection` IRI; on `update_record` it becomes `collectionType` (and
-`collection:` stays the *record* IRI you're updating). Bare picklist labels
+`record:` stays the *record* IRI you're updating). Bare picklist labels
 (e.g. `status: Briefed`) are auto-resolved to picklist IRIs.
 
 ### `delay`, `approval`
 
-These accept their canonical `arguments:` (see `pyfsr playbook validate` /
+These use canonical step-level keys (see `pyfsr playbook validate` /
 `pyfsr playbook step-help <type>`).
 
-### `code_snippet` — run a Python snippet
+### `code_snippet` -- run a Python snippet
 
-The Python source goes under `arguments.code:` (a friendly shorthand the
-compiler maps to the canonical `arguments.params.python_function`). The snippet
+The Python source goes at the step top level as `code:` (a friendly shorthand the
+compiler maps to the canonical `params.python_function`). The snippet
 runs through the `code-snippet` connector, so a configured connector is
 required (set `allow_imports` on it to `import` anything):
 
 ```yaml
 - name: Reconcile
   type: code_snippet
-  arguments:
-    code: |
-      import json
-      print(json.dumps({"risk": "high" if ... else "low"}))
+  code: |
+    import json
+    print(json.dumps({"risk": "high" if ... else "low"}))
   next: Decide
 ```
 
 ```{important}
 The `code-snippet` sandbox execs the snippet at **module level** (a top-level
-`return` is a `SyntaxError`) and restricts `open`. Surface a result with
-`print(json.dumps(...))` — the connector auto-deserializes it into a
+`return` is a `SyntaxError`), restricts `open`, **and blocks builtins like
+`max()`, `min()`, `sum()`**. Surface a result with
+`print(json.dumps(...))` -- the connector auto-deserializes it into a
 `code_output` dict read downstream at `vars.steps.<name>.data.code_output.*`.
 See {doc}`playbook-authoring` for the full sandbox-compatible pattern, the
 upstream-output jinja paths, and the unrestricted-python escape hatch.
 ```
 
-### `manual_input` — pause for human input
+### `manual_input` -- pause for human input
 
 `manual_input` keys (`title`, `description`, `options`, `inputs`) go at the
-**step level**, not under `arguments:`. `options`, like `decision` conditions,
+**step top level** (not nested under `arguments:`). `options`, like `decision`
 carry a per-entry `next:` for branching; `inputs` declare the fields the human
 fills in. A submitted field is read downstream as
 `vars.steps.<thisStep>.input.<field>`:
@@ -335,10 +339,10 @@ The one-call `client.manual_input.answer(value, by_step=...)` hides this and the
 list-token-vs-numeric-id gotcha.
 ```
 
-### `workflow_reference` — call another playbook
+### `workflow_reference` -- call another playbook
 
-Name the target playbook under `arguments:` as `target:` (a friendly alias the
-compiler resolves to the wire `workflowReference:` IRI — prefer `target:`).
+Name the target playbook at the step top level as `target:` (a friendly alias the
+compiler resolves to the wire `workflowReference:` IRI -- prefer `target:`).
 `apply_async: false` makes the parent wait synchronously so it can read the
 child's output:
 
@@ -347,29 +351,27 @@ child's output:
   type: workflow_reference
   next: StampResult
   apply_async: false
-  arguments:
-    target: Validate Six Digit Number
+  target: Validate Six Digit Number
 ```
 
 **Cross-playbook output contract.** The child's output is whatever its *last*
 `set_variable` step sets. The parent reads it as `vars.steps.<refStep>.<childVar>`
-— so if the child ends with `set_variable` writing `is_valid_number`, the parent
+-- so if the child ends with `set_variable` writing `is_valid_number`, the parent
 reads `vars.steps.CallChild.is_valid_number`. (In Jinja, spaces in a step name
 become underscores.)
 
-### `do_until` / `retry:` — loop a step until a condition holds
+### `do_until` / `retry:` -- loop a step until a condition holds
 
 Attach a `retry:` block (`until` / `times` / `delay`) to re-run a step until the
 Jinja `until` evaluates true. On a `workflow_reference` this re-launches the
-child each turn — e.g. re-popping a `manual_input` until the answer validates:
+child each turn -- e.g. re-popping a `manual_input` until the answer validates:
 
 ```yaml
 - name: CallChild
   type: workflow_reference
   next: StampResult
   apply_async: false
-  arguments:
-    target: Validate Six Digit Number
+  target: Validate Six Digit Number
   retry:
     until: "{{ vars.steps.CallChild.is_valid_number == true }}"
     times: 8
@@ -388,7 +390,7 @@ counting runs by name. The full worked example is
 
 ### `stop` / `end`
 
-First-class no-op terminals — use them on a branch that should do nothing
+First-class no-op terminals -- use them on a branch that should do nothing
 rather than leaving it dangling:
 
 ```yaml
@@ -404,7 +406,7 @@ These are the transforms you reach for most on a list of records
 (`vars.input.records`, a `find_record` result at `vars.steps.<Step>.data`, etc.).
 All are chainable with `|`.
 
-- **`selectattr` / `rejectattr`** — keep (or drop) items whose attribute passes a
+- **`selectattr` / `rejectattr`** -- keep (or drop) items whose attribute passes a
   test. Filter a record set down to the ones that matter:
 
   ```jinja
@@ -420,19 +422,19 @@ All are chainable with `|`.
   custom `json_query` filter) before `selectattr`.
   ```
 
-- **`select` / `reject`** — same idea on scalars in a list (no attribute):
+- **`select` / `reject`** -- same idea on scalars in a list (no attribute):
   `{{ some_list | reject('equalto', '') | list }}` drops empty strings.
 
-- **`map`** — pluck one attribute from every item: `map(attribute='sourceIp')`.
+- **`map`** -- pluck one attribute from every item: `map(attribute='sourceIp')`.
   Pair with `unique`/`join` to build a deduped, comma-joined string:
 
   ```jinja
   {{ vars.input.records | map(attribute='sourceIp') | unique | join(', ') }}
   ```
 
-- **`unique`** — de-duplicate a list (order-preserving).
-- **`sort`** — order a list; `sort(attribute='severity', reverse=True)` for records.
-- **`groupby`** — bucket records by an attribute into `(grouper, items)` pairs,
+- **`unique`** -- de-duplicate a list (order-preserving).
+- **`sort`** -- order a list; `sort(attribute='severity', reverse=True)` for records.
+- **`groupby`** -- bucket records by an attribute into `(grouper, items)` pairs,
   e.g. count alerts per status:
 
   ```jinja
@@ -441,13 +443,13 @@ All are chainable with `|`.
   {% endfor %}
   ```
 
-- **`join`** — flatten a list to a string with a separator: `| join(', ')`.
+- **`join`** -- flatten a list to a string with a separator: `| join(', ')`.
 
 ```{caution}
 There is **no `split` filter** in Jinja. To split a string, call the Python
-`.split()` method on it instead — `{{ device.split(':')[0] }}`,
+`.split()` method on it instead -- `{{ device.split(':')[0] }}`,
 `{{ vars.record_metadata.get('tags').split(',') }}`. (FortiSOAR also ships a
-custom `np_split` filter, but that batches a list into chunks — a different job.)
+custom `np_split` filter, but that batches a list into chunks -- a different job.)
 ```
 
 Beyond the built-ins, FortiSOAR adds ~30 custom filters/globals (date math,
