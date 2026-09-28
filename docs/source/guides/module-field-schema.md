@@ -3,14 +3,14 @@
 This is the **authoring reference** for FortiSOAR modules and fields: every field type
 you can create, the properties each carries, and how relationship fields wire to other
 modules. It is the companion to {doc}`module-admin` (which covers the staging → publish
-*workflow*); this page is the **data model** you build with — and is written so an LLM can
+*workflow*); this page is the **data model** you build with -- and is written so an LLM can
 generate valid field definitions from it.
 
 Everything here was extracted from a live FortiSOAR appliance (its 64 modules and ~1,500
 real fields) and verified by creating and publishing test modules.
 
 ```{seealso}
-[`examples/all_field_types_module.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/all_field_types_module.py)
+[`examples/all_field_types_module.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/all_field_types_module.py)
 builds a module exercising every field type described here.
 ```
 
@@ -32,7 +32,7 @@ same thing:
 > `Attribute type 'text' does not exist as core or custom model metadata.`
 
 This is the single most common authoring mistake. Always pair the display type with its
-correct storage type — or let the typed builders do it for you (see below).
+correct storage type -- or let the typed builders do it for you (see below).
 ```
 
 The display type → storage mapping is exposed in code as
@@ -52,10 +52,10 @@ The display type → storage mapping is exposed in code as
 | `ipv4` | `string` | IP field |
 | `file` | `string` | file attachment (`dataSource.model = "files"`) |
 | `integer` | `integer` | whole number |
-| `datetime` | `integer` | **stored as epoch-millis integer** — not a bug |
+| `datetime` | `integer` | **stored as epoch-millis integer** -- not a bug |
 | `checkbox` | `boolean` | true/false |
 | `object` | `object` | arbitrary JSON object |
-| `picklist` | `picklists` | single-select — see [Picklist fields](#picklist-fields) |
+| `picklist` | `picklists` | single-select -- see [Picklist fields](#picklist-fields) |
 | `multiselectpicklist` | `picklists` | multi-select (a collection) |
 | `lookup` | *target module* | single reference (many-to-one) |
 | `manyToMany` | *target module* | collection relationship |
@@ -64,7 +64,7 @@ The display type → storage mapping is exposed in code as
 ## Building fields: typed builders vs. `field()`
 
 `client.modules_admin` gives you **typed builders** that set both axes correctly. Prefer
-them — they make the `type: "text"` mistake impossible:
+them -- they make the `type: "text"` mistake impossible:
 
 ```python
 admin = client.modules_admin
@@ -111,7 +111,7 @@ Every builder accepts these keyword options (they map 1:1 to the in-product edit
 | `bulk_edit` | `bulkAction.allow` | Allow editing this field in bulk actions. |
 
 Conditional `required`/`visibility` take a condition. Pass a {class}`~pyfsr.query.Query`
-and pyfsr renders the FortiSOAR filter shape for you — e.g. "require `emailFrom` only
+and pyfsr renders the FortiSOAR filter shape for you -- e.g. "require `emailFrom` only
 when `type` is Phishing":
 
 ```python
@@ -142,7 +142,7 @@ admin.picklist_field("threatTypes", "ThreatType", multi=True)  # multi-select (c
   `listName__name == <picklist_name>`, sorted by `orderIndex`.
 
 To create the picklist *values* themselves, manage `/api/3/picklist_names` and
-`/api/3/picklists` separately — fields only *reference* an existing picklist.
+`/api/3/picklists` separately -- fields only *reference* an existing picklist.
 
 ## Relationships
 
@@ -150,15 +150,15 @@ Three relationship display types, distinguished by cardinality and which side ow
 
 | Display type | Cardinality | `collection` | Owns join? | Reverse field on target |
 | --- | --- | --- | --- | --- |
-| `lookup` | many-to-one | `False` | no | none — one-directional pointer |
+| `lookup` | many-to-one | `False` | no | none -- one-directional pointer |
 | `manyToMany` | many-to-many | `True` | yes | always exists (see below) |
 | `oneToMany` | one-to-many | `True` | yes | a `lookup` on the target |
 
 Wiring keys on a relationship attribute:
 
-- **`type`** — the target module type (e.g. `"alerts"`), not `string`.
-- **`inversedField`** — name of the field on the target that points back.
-- **`ownsRelationship`** — `True` on the side that owns the join table.
+- **`type`** -- the target module type (e.g. `"alerts"`), not `string`.
+- **`inversedField`** -- name of the field on the target that points back.
+- **`ownsRelationship`** -- `True` on the side that owns the join table.
 
 **pyfsr keeps both sides valid for you.**
 {meth}`~pyfsr.api.modules_admin.ModulesAdminAPI.add_field` creates the reverse side on the
@@ -171,24 +171,24 @@ target whenever the platform won't, so you only declare the relationship once. P
 admin.add_field("incidents", admin.lookup_field("owner", "people"))
 ```
 
-A single pointer to one target record — not a collection, owns nothing, and intentionally
+A single pointer to one target record -- not a collection, owns nothing, and intentionally
 has **no** reverse field. Two modules can each look up `people` independently. Use it
 whenever a record just references one X.
 
 ### Many-to-many
 
 ```python
-# Default inverse — FortiSOAR mirrors the reverse field itself:
+# Default inverse -- FortiSOAR mirrors the reverse field itself:
 admin.add_field("incidents", admin.relationship_field("relatedAlerts", "alerts"))
 
-# Custom inverse name — pyfsr adds the matching reverse field to the target:
+# Custom inverse name -- pyfsr adds the matching reverse field to the target:
 admin.add_field("incidents",
     admin.relationship_field("relatedAlerts", "alerts", inversed_field="parentIncidents"))
 ```
 
 A many-to-many always ends up two-directional. With the **default** inverse the platform
 creates the reverse field (named after the source module) at staging time. With a **custom**
-`inversed_field` the platform does not — so `add_field` adds the mirror `manyToMany`
+`inversed_field` the platform does not -- so `add_field` adds the mirror `manyToMany`
 (`ownsRelationship=False`, `inversedField` pointing back) to the target for you.
 
 ### One-to-many
@@ -199,7 +199,7 @@ admin.add_field("incidents",
 ```
 
 A `oneToMany` requires a matching `lookup` (many-to-one) on the target whose name equals
-`inversed_field` — without it, publish fails with *"there is no lookup field present in
+`inversed_field` -- without it, publish fails with *"there is no lookup field present in
 '<target>'"*. `add_field` creates that lookup on the target automatically, so the single
 call above leaves both modules publishable. (The target module must already exist.)
 
@@ -220,24 +220,24 @@ print("Reverse field:", rev["name"], rev["formType"])
 ```{warning}
 **A publish that reports "started" is not a publish that committed.** `PUT /api/publish`
 only *kicks off* an asynchronous backup + migrate + commit, during which the **entire API
-(`/api/3`) returns 503** for ~30–60s. The default
+(`/api/3`) returns 503** for ~30-60s. The default
 {meth}`~pyfsr.api.modules_admin.ModulesAdminAPI.publish` waits out that outage and confirms
 the outcome via `/api/publish/error` (a fresh `last_publish_time` with `status: "Success"`),
 raising the appliance's reported error on any other state. Test reverse-field behavior
-end-to-end on a real publish — staging shows the *intended* wiring, but only a committed
+end-to-end on a real publish -- staging shows the *intended* wiring, but only a committed
 publish creates the physical join.
 ```
 
 ```{note}
-**Schema validation errors are synchronous.** A bad field — a `type` that does not exist,
-or a `oneToMany` whose target has no matching lookup — is rejected on the `PUT /api/publish`
+**Schema validation errors are synchronous.** A bad field -- a `type` that does not exist,
+or a `oneToMany` whose target has no matching lookup -- is rejected on the `PUT /api/publish`
 itself (HTTP 400) *before* any migrate runs, raised as an
 {class}`~pyfsr.exceptions.APIError` whose message is the appliance's own, e.g.:
 
 > `For many-to-one 'brokenRel' field in 'widgets' module there is no lookup field present
 > in 'alerts' module.`
 
-Surface that message verbatim — it names the offending field and module. (Each error line
+Surface that message verbatim -- it names the offending field and module. (Each error line
 is prefixed with internal `modelMetadatas[uuid].attributes[uuid].formtype:` ids you can
 strip for end users.) Because validation fails before the migrate, `/api/publish/error` is
 untouched and nothing on the appliance changes.
@@ -246,27 +246,27 @@ untouched and nothing on the appliance changes.
 ## Validation: caught early vs. caught at publish
 
 The appliance accepts a lot of *invalid* schema into **staging** and only rejects it during
-the slow, appliance-wide **publish** — or worse, publishes a broken module. To avoid that
+the slow, appliance-wide **publish** -- or worse, publishes a broken module. To avoid that
 round-trip, the builders reject the known-bad inputs **client-side**, raising `ValueError`
 before anything is sent:
 
 | Bad input | Where the appliance catches it | pyfsr guard |
 | --- | --- | --- |
-| `db_type="text"` / `"json"` / `"datetime"` | publish (*"Attribute type 'text' does not exist"*) | `field()` raises — use the typed builder |
-| field name with spaces / punctuation / leading digit | publish (bad SQL column) | `field()` raises — must match `^[A-Za-z][A-Za-z0-9_]*$` |
+| `db_type="text"` / `"json"` / `"datetime"` | publish (*"Attribute type 'text' does not exist"*) | `field()` raises -- use the typed builder |
+| field name with spaces / punctuation / leading digit | publish (bad SQL column) | `field()` raises -- must match `^[A-Za-z][A-Za-z0-9_]*$` |
 | `encrypted` **and** `searchable` both set | silently broken | `field()` raises (mutually exclusive) |
-| module name with uppercase / spaces / leading digit | publish / broken table | `create_module()` raises — must match `^[a-z][a-z0-9_]*$` |
+| module name with uppercase / spaces / leading digit | publish / broken table | `create_module()` raises -- must match `^[a-z][a-z0-9_]*$` |
 | empty `fields=[]` | invalid module | `create_module()` raises |
 | name longer than 63 chars | publish (Postgres identifier limit) | both raise |
-| **duplicate field name** in a module | **staging POST** (fast) | appliance already rejects — *"Duplicate field 'x'… names are case-insensitive"* |
-| **reserved key** `id` | **staging POST** (fast) | appliance already rejects — *"'id' is a reserved keyword"* |
+| **duplicate field name** in a module | **staging POST** (fast) | appliance already rejects -- *"Duplicate field 'x'… names are case-insensitive"* |
+| **reserved key** `id` | **staging POST** (fast) | appliance already rejects -- *"'id' is a reserved keyword"* |
 | **duplicate module** type | **staging POST** (fast) | appliance already rejects (uniqueness constraint) |
 | `oneToMany` with no lookup on target | publish | `add_field` creates the target lookup for you (see Relationships) |
 | relationship to a non-existent target module | publish | `add_field` raises a clear error naming the missing target |
 
 ```{note}
 The last group is *not* guarded client-side because the appliance already fails fast (at
-the cheap staging `POST`, not at publish) with a clear message — surface it as-is. Only the
+the cheap staging `POST`, not at publish) with a clear message -- surface it as-is. Only the
 checks that would otherwise slip through to the expensive publish are enforced in pyfsr.
 ```
 

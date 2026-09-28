@@ -158,8 +158,10 @@ pyfsr jinja examples picklist         # real-world usage examples
 pyfsr jinja idioms                    # common Jinja patterns
 ```
 
-The full DB (65MB) lives at:
-`/Users/dylanspille/PycharmProjects/fsr-playbook-framework/data/fsr_reference.db`
+The full reference DB (65MB) is bundled with the `fsr_playbooks` package, or
+can be built from the
+[fsr-playbook-framework repo](https://github.com/ftnt-dspille/fsr-playbook-framework)
+(`data/fsr_reference.db`).
 
 ## Picklist IRI resolution
 

@@ -8,7 +8,7 @@ operation execution, the Connector Studio dev workspace, and install/uninstall.
 agent, plus a liveness heartbeat.
 
 A complete, runnable walkthrough lives in
-[`examples/manage_connectors.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/manage_connectors.py)
+[`examples/manage_connectors.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/manage_connectors.py)
 -- it defaults to read-only and exercises every method below.
 
 ## Discovery & health

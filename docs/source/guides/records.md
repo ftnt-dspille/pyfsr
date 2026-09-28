@@ -6,9 +6,9 @@ module-specific APIs like `client.alerts`.
 
 ```{seealso}
 Runnable examples:
-[`examples/list_alerts.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/list_alerts.py)
+[`examples/list_alerts.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/list_alerts.py)
 (a minimal read) and
-[`examples/upload_attachment_record.py`](https://github.com/dylanspille/pyfsr/blob/main/examples/upload_attachment_record.py)
+[`examples/upload_attachment_record.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/upload_attachment_record.py)
 (file upload + linking an attachment record).
 ```
 
