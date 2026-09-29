@@ -239,6 +239,22 @@ def test_call_tool_result_wraps_none_content(monkeypatch):
     assert r.result is None
 
 
+@pytest.mark.requires_extra("mcp")
+def test_call_tool_result_wraps_non_envelope_dict(monkeypatch):
+    # A third-party MCP server (e.g. FortiSIEM) returns a JSON dict that is
+    # NOT a FortiSOAR-native envelope (no "status" key).  The data must land
+    # under ``result`` intact, not be silently dropped by model_validate.
+    session = FakeSession(call_result_text='{"_meta": null, "content": [{"type": "text", "text": "hello"}]}')
+    _patch_mcp(monkeypatch, session)
+    api = NativeMCPApi(FakeClient())
+
+    r = api.call_tool_result("soc", "get_alert")
+
+    assert r.ok is False
+    assert r.status is None
+    assert r.result == {"_meta": None, "content": [{"type": "text", "text": "hello"}]}
+
+
 # -- auth-header builder + httpx factory ---------------------------------------
 def test_build_mcp_auth_headers_variants():
     from pyfsr.api.native_mcp import build_mcp_auth_headers
