@@ -851,6 +851,100 @@ The {mod}`pyfsr.agent.tools` and {mod}`pyfsr.agent.mcp` modules in the {doc}`../
 for the complete tool list and dispatch signatures.
 ```
 
+## Calling a registered MCP server's tools
+
+Everything above is about pyfsr *acting as* an MCP server. The reverse --
+calling tools on an **external** MCP server you've registered in FortiSOAR
+(e.g. FortiSIEM, DeepWiki, or any streamable-HTTP MCP server) -- uses
+`client.ai.list_registered_tools` and `client.ai.call_registered_tool`.
+
+FortiSOAR itself has no REST endpoint that *runs* a registered server's tool;
+fsr-ai only calls them inside an agent investigation. So pyfsr resolves the
+server's url + auth from its registration record and speaks MCP `tools/call`
+client-side -- the same mechanism fsr-ai's agent uses, driven from your
+process. The appliance is not in the tool-call path (only the config lookup
+goes through it).
+
+### Example: calling a FortiSIEM MCP server
+
+FortiSIEM exposes a streamable-HTTP MCP server at `/phoenix/mcp` behind an
+OAuth2 `client_credentials` grant. Once you've registered it in FortiSOAR
+(`client.ai.register_and_verify`), you can list and call its tools:
+
+```python
+from pyfsr import FortiSOAR
+
+client = FortiSOAR("fortisoar.example.com", username="csadmin", password="<pw>")
+
+# 1. Discover what tools the registered FortiSIEM server advertises.
+tools = client.ai.list_registered_tools("FortiSIEM")
+print([t.name for t in tools])
+# ['query_fsm_postgres', 'query_fsm_clickhouse', 'get_incidents_by_entity',
+#  'get_incident_by_id', 'get_reputation_by_entity', ...]
+
+# 2. Call one. Arguments match the tool's input_schema.
+#    pyfsr reads the stored credential from the registration
+#    record and builds the auth header automatically.
+r = client.ai.call_registered_tool(
+    "FortiSIEM",
+    "get_reputation_by_entity",
+    {"params": {"ip": ["8.8.8.8"]},
+)
+
+# 3. Read the result. MCPToolResult has .ok, .result, .error:
+#    .ok  == (status == "success") -- FortiSOAR-native envelope convention.
+#    A third-party server like FortiSIEM returns its own payload, so .ok
+#    is often False even on success; use .result / .error directly.
+print(r.result)   # the tool's actual output (dict, string, or None)
+print(r.error)    # error text, if any
+```
+
+### Registering FortiSIEM in the first place
+
+If you haven't registered the server yet, `register_and_verify` does
+validate-then-save (the same sequence the UI's "Add MCP Server" form runs),
+keyed on `name` so re-running updates instead of duplicating:
+
+```python
+import httpx
+
+# Mint an OAuth2 bearer token from FortiSIEM's token endpoint.
+token_resp = httpx.post(
+    "https://fortisiem.example.com:13001/phoenix/rest/pub/security/oauth/token",
+    data={
+        "grant_type": "client_credentials",
+        "client_id": "<fortisiem-client-id>",
+        "client_secret": "<fortisiem-client-secret>",
+    },
+    verify=False,
+)
+bearer = token_resp.json()["access_token"]
+
+# Register in FortiSOAR.
+saved = client.ai.register_and_verify({
+    "name": "FortiSIEM",
+    "description": "FortiSIEM Phoenix MCP server",
+    "type": "external",            # user-registered; built-ins are "internal"
+    "transport": "http",           # FortiSOAR maps http -> streamable_http
+    "url": "https://fortisiem.example.com:13001/phoenix/mcp",
+    "active": True,
+    "authentication": {"value": bearer, "type": "BEARER"},
+})
+print(f"Registered as {saved['uuid']}, {len(saved['tools'])} tools")
+
+# Grant it to the agents that should call FortiSIEM during triage.
+for name, version in [("siem", "1.0.0"), ("ioc-enrichment", "1.0.0")]:
+    client.ai.allow_mcp_server_for_agent(name, version, saved["uuid"])
+```
+
+```{seealso}
+Complete, runnable examples:
+[`fortisiem_mcp_setup_and_test.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/fortisiem_mcp_setup_and_test.py)
+(full setup + investigation + evidence attribution),
+[`register_and_call_public_mcp_server.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/register_and_call_public_mcp_server.py)
+(no-auth DeepWiki public server, minimal register-call-cleanup loop).
+```
+
 ## Authoring your own AI agent
 
 Everything above drives the agents FortiSOAR *already ships*. FortiSOAR 8.0 also
