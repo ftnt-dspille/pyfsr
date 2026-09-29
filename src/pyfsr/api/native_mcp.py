@@ -229,11 +229,14 @@ def build_mcp_auth_headers(auth: dict[str, Any] | None) -> dict[str, str]:
 def _to_tool_result(payload: Any) -> MCPToolResult:
     """Wrap a decoded ``call_tool`` payload into :class:`~pyfsr.models.MCPToolResult`.
 
-    A dict is validated as the envelope (keeping any extra keys); any other
-    payload (bare string, list, ``None``) lands under ``result`` with
-    ``status=None`` so the return type is stable.
+    A dict *that carries the FortiSOAR-native envelope* (``{"status": "success",
+    "result": ...}``) is validated as the envelope (keeping any extra keys).
+    Any other payload -- a bare string, list, ``None``, or a dict from a
+    third-party MCP server that does not use the FortiSOAR envelope -- lands
+    under ``result`` with ``status=None`` so the return type is stable and no
+    data is silently dropped.
     """
-    if isinstance(payload, dict):
+    if isinstance(payload, dict) and "status" in payload:
         return MCPToolResult.model_validate(payload)
     return MCPToolResult(result=payload)
 
