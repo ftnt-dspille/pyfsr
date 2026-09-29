@@ -64,9 +64,86 @@ True
 'CVE-2026-45659'
 ```
 
+### Operations with input parameters
+
+Most connector operations take inputs. Pass them as `params=` -- a dict keyed
+by the parameter name (the `name` field from the operation's definition, not
+its display `title`):
+
+```python
+r = conn.execute("nist-nvd", "get_specific_cve_details", params={"cveId": "CVE-2021-44228"})
+r.ok          # True
+r.data["vulnerabilities"][0]["cve"]["id"]   # "CVE-2021-44228"
+```
+
+To discover what parameters an operation needs before calling it, use
+`action_ui_schema()` -- it returns each parameter with its `name`, `type`,
+`required`, and `title`:
+
+```python
+params = conn.action_ui_schema("nist-nvd", "get_specific_cve_details")
+for p in params:
+    print(f"  {p.name}: type={p.type}  required={p.required}  title={p.title}")
+# cveId: type=text  required=True  title=CVE ID
+```
+
+Or iterate the full operation list with `operations()`:
+
+```python
+for op in conn.operations("virustotal"):
+    required = [p.name for p in op.parameters if p.required]
+    print(f"  {op.operation}: required={required}")
+# url_re_analyze: required=['id']
+# query_url: required=['url']
+# query_ip: required=['ip']
+# file_reputation: required=['file_hash']
+# ...
+```
+
+### Selecting a configuration
+
+When a connector has multiple configurations, `execute()` uses the **default**
+one automatically. Pass `config=` to target a specific one -- it accepts either
+a configuration **name** or **UUID**:
+
+```python
+# By name:
+r = conn.execute("nist-nvd", "get_specific_cve_details",
+                 params={"cveId": "CVE-2024-3094"}, config="nvd-public")
+r.ok        # True
+
+# By UUID:
+r = conn.execute("nist-nvd", "get_specific_cve_details",
+                 params={"cveId": "CVE-2024-3094"},
+                 config="10580fb2-2693-4d9f-8408-1aa344affbf9")
+r.ok        # True
+```
+
+To list available configurations:
+
+```python
+for cfg in conn.configurations("nist-nvd"):
+    print(f"  {cfg.name}  default={cfg.default}  config_id={cfg.config_id}")
+# nvd-public  default=True  config_id=10580fb2-2693-4d9f-8408-1aa344affbf9
+```
+
 ⚠️ For an **agent-bound** connector (see the module warning), `execute()` is
 fire-and-forget -- it returns immediately with an in-progress status and empty
 `data`; the real result is pushed over a websocket, not pollable here.
+
+### Predicting the return shape
+
+`.data` varies by connector and operation. `output_schema()` returns the
+operation's declared output fields so you know what to expect before calling:
+
+```python
+schema = conn.output_schema("virustotal", "query_ip")
+# {"output_schema": [{"name": "permalink", "type": "text"},
+#                     {"name": "positives", "type": "integer"}, ...]}
+```
+
+Not every operation declares an output schema -- an empty or missing
+`output_schema` key means the connector didn't specify one.
 
 ## Dynamic operation parameters (`apiOperation`)
 
@@ -215,6 +292,118 @@ HMAC fingerprint`, which reads like a permissions or auth problem rather than a
 URL typo.
 ```
 
+## Data ingestion
+
+Connectors that support data ingestion (the *Data Ingestion* page's connector
+picker) can be wired up programmatically. `data_ingest_wizard()` reproduces
+every write the UI's *Configure Data Ingestion* wizard makes -- resolve the
+config, clone the sample ingestion playbooks into a per-configuration
+collection, activate them, create the schedule, and write the metadata record:
+
+```python
+result = conn.data_ingest_wizard(
+    "fortinet-fortisiem",
+    config="prod",
+    cron="*/15 * * * *",          # schedule; omit to build playbooks only
+)
+result.collection_uuid            # '1f9b6533-...' (the config_id)
+result.playbooks                  # [Workflow(...), Workflow(...), Workflow(...)]
+result.schedule_id                # 'Ingestion_fortinet-fortisiem_prod_1f9b6533-...'
+result.existed                    # False -- the wizard built it
+```
+
+`ensure_ingestion()` is the idempotent front door -- set up only if it isn't
+already, without writing anything on the second call:
+
+```python
+first = conn.ensure_ingestion("fortinet-fortisiem", config="prod", cron="*/15 * * * *")
+first.existed                     # False -- the wizard built it
+again = conn.ensure_ingestion("fortinet-fortisiem", config="prod")
+again.existed                     # True -- returned as-is, no writes
+```
+
+`ingestion_status()` is the read-only check -- "is ingestion set up for this
+config, and is its schedule running?" In the demo box nothing is configured:
+
+```{doctest}
+>>> status = conn.ingestion_status("mitre-attack")
+>>> status.configured
+False
+```
+
+`trigger_ingestion()` fires the ingest playbook right now -- the *Trigger
+Ingestion Now* button. It bypasses the scheduler, so it works even when the
+schedule is disabled or absent:
+
+```python
+conn.trigger_ingestion("fortinet-fortisiem", config="prod")
+# {'task_id': '9d4af948-2a04-4d1e-9ab1-b83d3252ce18'}
+```
+
+`remove_ingestion()` tears it all down -- delete the schedule, the metadata
+record, and (by default) the per-config collection with its cloned playbooks:
+
+```python
+conn.remove_ingestion("fortinet-fortisiem", config="prod")
+# IngestionTeardownResult(connector='fortinet-fortisiem', config_id='1f9b6533-...',
+#   schedule_deleted=True, metadata_deleted=1, collection_deleted=True)
+
+conn.remove_ingestion("fortinet-fortisiem", config="prod",
+                       delete_collection=False)   # keep the playbooks
+```
+
+## Idempotent configuration helpers
+
+`create_configuration` 400s on the second call with the same `name`.
+`upsert_configuration` is the idempotent write -- create-or-update by name --
+that the UI's *Save* button performs. Safe to re-run from a deploy script:
+
+```{doctest}
+>>> cfg = conn.upsert_configuration(
+...     "virustotal",
+...     {"server": "www.virustotal.com", "api_key": "test-doctest-key", "verify_ssl": True},
+...     name="pyfsr-doctest-config",
+...     validate=False,
+...     autofill=False,
+... )
+>>> (cfg.name, cfg.config["server"])
+('pyfsr-doctest-config', 'www.virustotal.com')
+>>> cfg2 = conn.upsert_configuration(
+...     "virustotal",
+...     {"server": "www.virustotal.com", "api_key": "test-rotated-key", "verify_ssl": True},
+...     name="pyfsr-doctest-config",
+...     validate=False,
+...     autofill=False,
+... )
+>>> cfg2.config_id == cfg.config_id
+True
+>>> conn.delete_configuration(cfg.config_id) is None
+True
+```
+
+`default_config()` builds a schema-complete starting point -- every field
+filled with its declared default, including `onchange`-revealed sub-fields -- so
+you only override what you need:
+
+```python
+cfg = conn.default_config("code-snippet")   # {"allow_imports": False, "restrict_imports": ""}
+cfg["allow_imports"] = True
+conn.upsert_configuration("code-snippet", cfg, name="dev")
+```
+
+`ensure_configured()` is the one-call setup: install from Content Hub if the
+connector isn't there yet, then create-or-update the named config:
+
+```python
+conn.ensure_configured(
+    "servicenow",
+    {"server_url": "https://snow.example.com", "username": "api", "password": "<pw>"},
+    config_name="prod",
+    version="4.4.5",       # only needed if the connector isn't installed yet
+    default=True,
+)
+```
+
 ## Connector Studio dev workspace
 
 Edit a checked-out connector's source, then publish it onto the running
@@ -257,4 +446,19 @@ Appliance uninstall ({meth}`~pyfsr.api.connectors.ConnectorsAPI.uninstall`) and
 agent uninstall ({meth}`~pyfsr.api.agents.AgentsAPI.uninstall_connector`) are
 distinct: the first removes the connector from the appliance's self-agent by
 integer id, the second removes it from a named remote agent.
+```
+
+A connector's Python dependencies (from its `requirements.txt`) are installed
+automatically as part of the install. If that auto-install fails, operations
+blow up at runtime even though the configuration health is green. Check with
+`dependencies_status()` and retry with `install_dependencies()`:
+
+```{doctest}
+>>> ds = conn.dependencies_status("mitre-attack")
+>>> ds.dependencies_installed
+True
+```
+
+```python
+conn.install_dependencies("mitre-attack")   # retry the failed auto-install
 ```

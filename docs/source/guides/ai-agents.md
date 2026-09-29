@@ -55,120 +55,172 @@ The registry ships these tools, grouped by what they do:
 
 ```{list-table}
 :header-rows: 1
-:widths: 18 32 50
+:widths: 16 26 43 15
 
 * - Group
   - Tool
   - What it does
+  - Safety
 * - **Discovery**
   - `list_modules`
   - List every module (type/label/plural). Start here to find the right module type.
+  - read
 * -
   - `describe_module`
   - Describe a module's fields: name, type, required-ness, and bound picklist.
+  - read
 * - **Records**
   - `get_record`
   - Fetch one record by reference; `summary`/`fields` keep the result small.
+  - read
 * -
   - `search_records`
   - Free-text search a module; returns a page of records.
+  - read
 * -
   - `query_records`
   - Structured query with `{field, operator, value}` filter conditions.
+  - read
 * -
   - `create_record`
   - Create a record; `resolve_picklists=true` accepts friendly picklist values.
+  - write
 * -
   - `update_record`
   - Update an existing record's fields by reference.
+  - write
 * -
   - `delete_record`
   - Delete one record (soft by default; `hard=true` to purge). Never collection-wide.
+  - destructive
 * - **Picklists**
   - `list_picklists`
   - List every picklist name on the appliance.
+  - read
 * -
   - `get_picklist_values`
   - List a picklist's items (itemValue, uuid, iri, ordinal).
+  - read
 * -
   - `resolve_picklist`
   - Resolve a friendly value (e.g. `"High"`) to its IRI.
+  - read
 * - **Connectors**
   - `list_connectors`
   - List installed + configured connectors with versions/configs.
+  - read
 * -
   - `healthcheck_connector`
   - Live-check whether a connector configuration is reachable.
+  - read
 * -
   - `run_connector_operation`
   - Execute one connector operation.
+  - varies
 * - **Playbooks**
   - `list_playbook_runs`
   - List recent playbook runs (live + historical, newest first).
+  - read
 * -
   - `get_playbook_run`
   - Fetch one playbook run by its pk.
+  - read
 * - **FortiAI**
   - `investigate_alert`
   - Trigger an agentic investigation of an alert (normalize → hypothesize → plan → gather evidence → verdict).
+  - write
 * -
   - `get_investigation_result`
   - Fetch the status/verdict of an investigation by `task_id`.
+  - read
 * -
   - `list_ai_config`
   - Report FortiAI config: enabled features, LLM profiles, registered MCP servers.
+  - read
 * - **Modules (admin)**
   - `create_module`
   - Create a module in staging; `grant_to` wires RBAC in one call. Call `publish` to make it live.
+  - write
 * -
   - `delete_module`
   - Delete a module (the only op that actually removes one); optionally drops orphan tables.
+  - destructive
 * -
   - `publish`
-  - Commit ALL staged schema changes appliance-wide (appliance-wide, not module-scoped).
+  - Commit ALL staged schema changes appliance-wide (not module-scoped).
+  - appliance-wide
 * - **Connector config**
   - `default_connector_config`
   - Build a complete, runtime-valid default config (handles `onchange` sub-fields). Call first, then edit.
+  - read
 * -
   - `validate_connector_config`
   - Validate a config against the schema before submitting -- returns `{valid, missing, invalid, ...}`.
+  - read
 * -
   - `create_connector_configuration`
   - Create a named config; `exist_ok=true` delegates to upsert, `autofill=true` fills schema defaults.
+  - write
 * -
   - `update_connector_configuration`
   - Update an existing config by `config_id`.
+  - write
 * -
   - `upsert_connector_configuration`
   - Idempotent create-or-replace by name -- the safe default for deploy scripts.
+  - write
 * - **Playbook runs**
   - `last_playbook_run`
   - Most recent run of a playbook (live or historical); `{run: null}` if none.
+  - read
 * -
   - `why_playbook_failed`
   - Slim failure detail `{status, failing_step, error_message, pk}` of the most recent run.
+  - read
 * -
   - `wait_for_playbook_run`
   - Block until the newest run reaches a terminal state; return its summary.
+  - read
 * - **Records (upsert)**
   - `upsert_record`
   - Insert-or-update by natural key (or a `key` field); friendly picklists resolved by default.
+  - write
 * -
   - `get_or_create_record`
   - Look up by key field(s), create if absent; returns `{record, created}`.
+  - write
 * - **Scheduling**
   - `schedule_playbook`
   - Create a periodic task that runs a playbook on a cron schedule; returns the created schedule.
+  - write
 * -
   - `trigger_schedule_now`
   - Fire a scheduled task immediately (out-of-band of its cron); pair with `wait_for_playbook_run`.
+  - write
 * -
   - `delete_schedule`
   - Delete a scheduled periodic task entirely by name (use `disable` to merely pause).
+  - destructive
 ```
 
 Inspect any tool's full JSON-Schema (parameters, defaults, enums) at runtime
 with `get_tool("query_records").input_schema`.
+
+## Discovery path
+
+On a fresh appliance, learn the schema before writing. The recommended sequence
+avoids guessing field names, picklist values, or connector configurations:
+
+1. `list_modules` -- discover what modules exist (`alerts`, `incidents`, ...).
+2. `describe_module` -- learn a module's fields, their types, and which are
+   picklist-backed.
+3. `list_picklists` → `get_picklist_values` -- resolve the friendly strings a
+   picklist field accepts before writing it.
+4. `list_connectors` → `healthcheck_connector` -- confirm a connector is
+   installed and reachable before calling `run_connector_operation`.
+
+Only then call a write tool (`create_record`, `run_connector_operation`, ...).
+Each read tool is cached, so the discovery steps are cheap to repeat.
 
 ## Calling tools
 
@@ -347,24 +399,77 @@ starting over.
 On 8.0.1 the Conversation Agent does not call the Orchestrator, so
 `orchestrate()` is the only way to reach it.
 
-The playbook designer's and connector wizard's assistants use the same
-protocol. `client.ai.playbook_assistant()` returns an outline (and keeps its
-`playbook_context`); `generate_steps()` turns the outline into designer steps,
-the way the designer does. Nothing is saved.
+### Playbook designer assistant (8.0.1)
+
+`client.ai.playbook_assistant()` opens a session with the playbook designer's
+built-in assistant (`playbook-generator`). It works in two phases: describe what
+you want, get an outline back, then ask it to generate designer steps from the
+outline. Nothing is saved -- the steps are returned as data for you to review or
+push.
 
 ```{doctest}
 >>> pb = client.ai.playbook_assistant()                                 # doctest: +SKIP
 >>> outline = pb.ask("On a new Critical alert, look up the source IP in VirusTotal ...")  # doctest: +SKIP
->>> steps = pb.generate_steps()                                         # doctest: +SKIP
->>> steps.playbook_steps                                                # doctest: +SKIP
+>>> outline.answer[:80]                                                 # doctest: +SKIP
+'1. Query VirusTotal for the source IP.\n2. If malicious, create an incident ...'
+>>> outline.is_user_input_needed                                        # doctest: +SKIP
+False
 ```
 
-Step generation makes one LLM call per step and resends the whole context each
-time. A 7-step playbook used about 330k FortiAI tokens on 8.0.1, and one run
-failed on malformed JSON. `client.ai.connector_assistant()` is a cheap guided
-conversation (about 6k tokens a turn) that writes working connector code. Its
-own import step fails on 8.0.1, so ask it to show the files and install them
-with `client.connectors.install_from_dir`.
+When `is_user_input_needed` is `True`, the assistant has a follow-up question
+before it can finalize the outline -- answer it with `pb.ask(...)` and the
+outline continues on the same session:
+
+```{doctest}
+>>> if outline.is_user_input_needed:                                    # doctest: +SKIP
+...     outline = pb.ask("Use the default VirusTotal config.")          # doctest: +SKIP
+```
+
+Once the outline is settled, `generate_steps()` turns it into designer steps:
+
+```{doctest}
+>>> steps = pb.generate_steps()                                         # doctest: +SKIP
+>>> steps.status, len(steps.playbook_steps)                             # doctest: +SKIP
+('completed', 3)
+>>> steps.playbook_steps[0]["stepName"]                                 # doctest: +SKIP
+'Query VirusTotal for source IP'
+```
+
+Step generation is expensive: one LLM call per step, each resending the whole
+context. A 7-step playbook used about 330k FortiAI tokens on 8.0.1, and one run
+failed on malformed JSON -- check `steps.status` before trusting
+`steps.playbook_steps`, and retry on a failure.
+
+### Connector wizard assistant (8.0.1)
+
+`client.ai.connector_assistant()` opens a session with the connector wizard's
+built-in assistant (`connector-generation`). It is a guided multi-turn
+conversation: you describe the API, it writes `info.json`, `connector.py`, and
+`operations.py`, and offers to import them. About 6k FortiAI tokens per turn.
+
+```{doctest}
+>>> ca = client.ai.connector_assistant()                               # doctest: +SKIP
+>>> t1 = ca.ask("Build a connector for the ACME threat feed API. "      # doctest: +SKIP
+...              "Base URL https://api.acme.example.com/v1. "
+...              "One operation: lookup_ioc, takes a single ioc parameter.")
+>>> t1.is_user_input_needed                                            # doctest: +SKIP
+True
+>>> t1.answer[:80]                                                     # doctest: +SKIP
+'Should the connector authenticate with an API key or bearer token?'
+>>> t2 = ca.ask("API key, passed as X-API-Key header.")                 # doctest: +SKIP
+>>> t2.is_user_input_needed                                            # doctest: +SKIP
+False
+```
+
+On 8.0.1 the assistant's own import step fails (its `info.json` serialization
+breaks the upload). Ask it to show the files instead, then install them with
+`client.connectors.install_from_dir`:
+
+```{doctest}
+>>> files = ca.ask("Show me the files you wrote.")                      # doctest: +SKIP
+>>> # files.answer contains the connector source; save it to a directory, then:
+>>> # client.connectors.install_from_dir("./acme-threat-feed")          # doctest: +SKIP
+```
 
 ### Insights (8.0.1)
 
@@ -375,8 +480,13 @@ summarizes. `client.ai.insights` drives the Insight cards widget's flow:
 ```{doctest}
 >>> run = client.ai.insights.create("Critical alert sources",                    # doctest: +SKIP
 ...     query="Which alert sources produced the most Critical alerts in the last 7 days?")
->>> run.result["concise_summary"], run.insight_id                               # doctest: +SKIP
+>>> run.status, run.insight_id                                                   # doctest: +SKIP
+('completed', 'a1b2c3d4-...')
+>>> run.result["concise_summary"][:80]                                           # doctest: +SKIP
+'FortiGate and FortiSIEM were the top sources of Critical alerts ...'
 >>> run = client.ai.insights.run_template("High Risk Active Alerts")             # doctest: +SKIP
+>>> run.status, len(run.result or {})                                            # doctest: +SKIP
+('completed', 5)
 ```
 
 `create` generates a chain of thought and a plan (two LLM calls), refuses an
@@ -935,6 +1045,7 @@ print(f"Registered as {saved['uuid']}, {len(saved['tools'])} tools")
 # Grant it to the agents that should call FortiSIEM during triage.
 for name, version in [("siem", "1.0.0"), ("ioc-enrichment", "1.0.0")]:
     client.ai.allow_mcp_server_for_agent(name, version, saved["uuid"])
+    # -> AgentConfigDTO(name='siem', version='1.0.0', ...)
 ```
 
 ```{seealso}
@@ -1011,13 +1122,15 @@ from pyfsr.models import AgentPackage
 # Inspect + validate a source folder before uploading (raises on any defect):
 pkg = AgentPackage.from_dir("./my-agents/incident-scorer")
 print(pkg.info.agentclass, pkg.info.version)
+# IncidentScorer 1.0.0
 print(pkg.memory.mcp_configuration_uuids())   # which MCP servers it's wired to
+# ['a1b2c3d4-...']
 
 client = FortiSOAR("soar.example.com", token="<api-key>")
 
 # Import straight from a source directory -- pyfsr validates + packs it on the fly:
 result = client.ai.import_agent("./my-agents/incident-scorer", replace=True)
-agent_uuid = result["uuid"]
+agent_uuid = result["uuid"]   # 'e5f6a7b8-...'
 
 # ...or pack once and upload the zip yourself:
 zip_path = pack_agent("./my-agents/incident-scorer")   # -> ./my-agents/incident-scorer.zip
@@ -1039,6 +1152,7 @@ starting point:
 
 ```{code-block} python
 client.ai.export_agent(agent_uuid, "./incident-scorer-backup.zip")
+# -> "./incident-scorer-backup.zip"
 ```
 
 Unzip it, rename the folder + `info.json` `name`, edit `agent.py`/`prompt.yaml`,
@@ -1053,6 +1167,7 @@ the orchestrator route to it:
 
    ```{code-block} python
    client.ai.activate_agent([agent_uuid])          # active=True by default
+   # -> {"message": "Agent activated successfully"}
    ```
 
 2. **Give it an LLM + MCP config** -- if it shouldn't inherit the default, set its
@@ -1062,6 +1177,7 @@ the orchestrator route to it:
    ```{code-block} python
    # grant one MCP server to the agent (read-modify-write of its config):
    client.ai.allow_mcp_server_for_agent("incident-scorer", "1.0.0", mcp_uuid)
+   # -> AgentConfigDTO(name='incident-scorer', version='1.0.0', ...)
    # or set the whole inner config (llm_provider, mcp_server, masking_agent):
    client.ai.update_agent_config("incident-scorer", "1.0.0",
                                  {"llm_provider": llm_uuid, "mcp_server": [mcp_uuid]})
@@ -1077,7 +1193,9 @@ the orchestrator route to it:
 
    ```{code-block} python
    client.ai.investigation_tools()                      # the current table
+   # [{'source': 'Authorized security testing', 'name': 'Pentest Registry', ...}, ...]
    client.ai.set_investigation_tool("Authorized security testing", "Pentest Registry", "host")
+   # -> [{'source': '...', 'name': '...', ...}]  (the updated table)
    client.ai.reset_investigation_tools()                # back to the built-in table
    ```
 
@@ -1091,6 +1209,7 @@ the orchestrator route to it:
 
    ```{code-block} python
    [a["name"] for a in client.ai.list_agents(active=True)]
+   # ['ioc-enrichment', 'incident-scorer', ...]
    client.ai.run_agent("incident-scorer", {"natural_language_task": "...", "data": {...}})
    ```
 
