@@ -1,0 +1,255 @@
+## Comprehensive step-type showcase.
+##
+## This playbook is a reference, not a production workflow: every step type
+## the fsr_playbooks compiler accepts appears here at least once, wired into a
+## coherent SOC-style flow. Use it as a copy-paste source when you need to see
+## the syntax for a specific step type, or compile it with:
+##
+##   pyfsr playbook compile examples/playbooks/all_step_types.yaml
+##
+## The flow: on a new Critical alert, enrich with VirusTotal, decide whether
+## to escalate, optionally ask a human, create an incident, email the team,
+## loop over each IOC, delete stale records, and stop.
+
+collection: pyfsr Step-Type Showcase
+description: >
+  Every compiler step type in one playbook. Compiles offline (no live
+  connectors needed). References to virustotal / smtp are cold -- deploy
+  with --refresh-catalog to resolve them against a live instance.
+
+playbooks:
+  - name: Triage Critical Alert
+    description: On a new Critical alert, enrich, decide, escalate, and notify.
+    is_active: true
+    priority: High
+    tags: [auto-response, critical]
+
+    parameters:
+      ip: string
+      reason: string
+
+    steps:
+      # ── start_on_create: record trigger ──
+      - name: Start
+        type: start_on_create
+        module: alerts
+        when:
+          logic: AND
+          filters:
+            - {field: severity, op: eq, value: Critical}
+        next: Set Context
+
+      # ── set_variable: define vars.* ──
+      - name: Set Context
+        type: set_variable
+        vars:
+          alert_id: "{{ vars.input.records[0]['@id'] }}"
+          source_ip: "{{ vars.input.records[0].sourceIp }}"
+          alert_name: "{{ vars.input.records[0].name }}"
+        next: Enrich IP
+
+      # ── connector: run a connector operation ──
+      - name: Enrich IP
+        type: connector
+        connector: virustotal
+        operation: query_ip
+        params:
+          ip: "{{ vars.source_ip }}"
+        next: Compute Risk
+
+      # ── code_snippet: Python in the sandbox ──
+      # NOTE: `import json` requires allow_imports=True on the code-snippet
+      # connector config. Without it, the sandbox blocks imports. On a live
+      # box: client.connectors.upsert_configuration("code-snippet",
+      #   {"allow_imports": True}, name="default", default=True, validate=False)
+      - name: Compute Risk
+        type: code_snippet
+        code: |
+          import json
+          stats = {{ vars.steps.Enrich_IP.data.last_analysis_stats }}
+          malicious = stats.get("malicious", 0)
+          risk = "high" if malicious >= 3 else "medium" if malicious >= 1 else "low"
+          print(json.dumps({"risk": risk, "malicious_count": malicious}))
+        next: Decide
+
+      # ── decision: branch on conditions ──
+      - name: Decide
+        type: decision
+        conditions:
+          - display: High Risk
+            when: "{{ vars.steps.Compute_Risk.data.code_output.risk == 'high' }}"
+            next: Ask Approval
+          - display: Medium Risk
+            when: "{{ vars.steps.Compute_Risk.data.code_output.risk == 'medium' }}"
+            next: Find Related
+        default: Log Low Risk
+
+      # ── manual_input: pause for human input ──
+      - name: Ask Approval
+        type: manual_input
+        title: Approve Escalation
+        description: >-
+          Alert {{ vars.alert_name }} from {{ vars.source_ip }} flagged as
+          high risk. Approve to create an incident and notify the team.
+        inputs:
+          - {name: justification, kind: text, label: Justification, required: true}
+        options:
+          - {option: Approve, primary: true}
+          - {option: Reject}
+        next: Check Approval
+
+      # ── set_variable: read the manual_input answer ──
+      - name: Check Approval
+        type: set_variable
+        vars:
+          approved: "{{ vars.steps.Ask_Approval.input.justification }}"
+        next: Decide After Approval
+
+      # ── decision: branch on the approval ──
+      - name: Decide After Approval
+        type: decision
+        conditions:
+          - when: "{{ vars.approved != '' }}"
+            next: Find Related
+        default: Log Rejected
+
+      # ── find_record: query records ──
+      - name: Find Related
+        type: find_record
+        module: incidents
+        filters:
+          - {field: sourceIp, op: eq, value: "{{ vars.source_ip }}"}
+        logic: AND
+        limit: 10
+        sort:
+          - {field: createDate, direction: DESC}
+        select: [name, status, severity]
+        next: Create Incident
+
+      # ── create_record: create a record ──
+      - name: Create Incident
+        type: create_record
+        module: incidents
+        resource:
+          name: "Escalated: {{ vars.alert_name }}"
+          sourceIp: "{{ vars.source_ip }}"
+          severity: Critical
+          status: Open
+          description: "Auto-created by playbook. Risk: {{ vars.steps.Compute_Risk.data.code_output.risk }}"
+        next: Extract IOCs
+
+      # ── code_snippet: produce a list to iterate ──
+      - name: Extract IOCs
+        type: code_snippet
+        code: |
+          import json
+          iocs = ["{{ vars.source_ip }}"]
+          print(json.dumps({"iocs": iocs}))
+        next: Check Each IOC
+
+      # ── connector + for_each: loop over a list ──
+      - name: Check Each IOC
+        type: connector
+        connector: virustotal
+        operation: query_ip
+        params:
+          ip: "{{ vars.for_each.item }}"
+        for_each:
+          item: "{{ vars.steps.Extract_IOCs.data.code_output.iocs }}"
+          parallel: true
+          max_parallel: 4
+        next: Notify Team
+
+      # ── send_email: email notification ──
+      - name: Notify Team
+        type: send_email
+        to: "soc-team@example.com"
+        cc: ["escalation@example.com"]
+        subject: "Critical alert: {{ vars.alert_name }}"
+        body: >-
+          An incident was created for {{ vars.source_ip }}.
+          Risk level: {{ vars.steps.Compute_Risk.data.code_output.risk }}
+        from: "soc-auto@example.com"
+        next: Create Followup Task
+
+      # ── create_task: create a task record ──
+      - name: Create Followup Task
+        type: create_task
+        resource:
+          name: "Review {{ vars.alert_name }}"
+          description: "Investigate the escalated incident"
+          status: Open
+        next: Wait Before Cleanup
+
+      # ── delay: wait ──
+      - name: Wait Before Cleanup
+        type: delay
+        minutes: 5
+        next: Delete Stale
+
+      # ── delete_record: delete by query ──
+      - name: Delete Stale
+        type: delete_record
+        module: alerts
+        query:
+          logic: AND
+          filters:
+            - {field: status, op: eq, value: Closed}
+            - {field: severity, op: eq, value: Low}
+        next: Log Outcome
+
+      # ── set_variable + post_comment: annotate the record ──
+      - name: Log Outcome
+        type: set_variable
+        vars:
+          outcome: "completed"
+        post_comment: "Auto-triaged {{ vars.alert_name }}: {{ vars.steps.Compute_Risk.data.code_output.risk }} risk"
+        next: Done
+
+      # ── end: no-op terminal ──
+      - name: Done
+        type: end
+
+      # ── end: another terminal branch ──
+      - name: Log Low Risk
+        type: end
+
+      - name: Log Rejected
+        type: end
+
+  # ── workflow_reference + retry: call a child playbook in a loop ──
+  - name: Validate Six Digit Number
+    description: A child playbook that the parent calls with retry.
+    is_active: false
+    steps:
+      - name: Start
+        type: start
+        next: Ask Number
+
+      - name: Ask Number
+        type: manual_input
+        title: Enter a six digit number
+        description: Please enter a number that is exactly 6 digits long.
+        inputs:
+          - {name: my_number, kind: integer, label: My Number, required: true}
+        options:
+          - {option: Submit, primary: true}
+        next: Validate
+
+      - name: Validate
+        type: code_snippet
+        code: |
+          import json
+          num = {{ vars.steps.Ask_Number.input.my_number }}
+          valid = 100000 <= num <= 999999
+          print(json.dumps({"is_valid_number": valid}))
+        next: Stamp Result
+
+      - name: Stamp Result
+        type: set_variable
+        vars:
+          is_valid_number: "{{ vars.steps.Validate.data.code_output.is_valid_number }}"
+        next: Done
+
+      - name: Done
+        type: end

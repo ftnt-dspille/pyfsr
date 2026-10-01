@@ -36,14 +36,27 @@ client.playbooks.find(step_type="set_variable", uses_connector="fortigate")
 
 # Everything on a collection, active only
 client.playbooks.find(collection="<uuid>", active=True)
+
+# By name (exact) or substring
+client.playbooks.find(name="Block IP")
+client.playbooks.find(name_contains="block")
+
+# By tag, private/public, or remote-executable
+client.playbooks.find(tag="auto-response")
+client.playbooks.find(private=True)
+client.playbooks.find(remote_executable=True)
 ```
+
+The full parameter set: `name`, `name_contains`, `collection`, `tag`, `active`,
+`private`, `trigger_type`, `trigger_module`, `step_type`, `uses_connector`,
+`uses_operation`, `route`, `references`, `remote_executable`, `single_record`.
 
 ### Triggers
 
 `trigger_type` takes a friendly alias from `TRIGGER_TYPE_NAMES` -- `manual`,
-`on_create`, `on_update`, `referenced`, `api_endpoint` -- or a raw
-`cybersponse.*` name. The trigger kind *is* a step type on the start step, so
-this filters exactly.
+`on_create`, `on_update`, `on_delete`, `referenced` (or `child`), `api_endpoint`
+(or `api`) -- or a raw `cybersponse.*` name. The trigger kind *is* a step type
+on the start step, so this filters exactly.
 
 `trigger_module` scopes it to the module the trigger is bound to:
 
@@ -58,18 +71,23 @@ freely with `uses_connector` and friends. The value is matched quoted, so
 
 For manual triggers specifically,
 {meth}`~pyfsr.api.playbooks.PlaybooksAPI.manual_on_module` additionally returns
-each playbook's Execute-menu button label:
+each playbook's Execute-menu button label and every tied module:
 
 ```python
 for pb in client.playbooks.manual_on_module("alerts"):
-    print(pb["label"], "-", pb["name"])
+    print(pb["label"], "-", pb["name"], "modules:", pb["resources"])
+    # VirusTotal: Get IP Reputation - Get IP Reputation modules: ['alerts']
+    # button text: pb["execute_button_text"]
 ```
 
 ### Step content
 
 `step_type` accepts a friendly alias from `STEP_TYPE_NAMES` (`connector`,
 `set_variable`, `decision`, `code_snippet`, `manual_input`, `approval`,
-`reference`, …) or a raw engine name.
+`find_record` / `find_records`, `create_record` / `insert_record`,
+`update_record`, `delay` / `wait`, `workflow_reference` / `reference` /
+`reference_playbook`, `send_mail` / `email`, `utility` / `no_op`,
+`set_api_keys`, ...) or a raw engine name.
 
 ```{warning}
 `uses_connector`, `uses_operation`, `route`, and `references` all match a

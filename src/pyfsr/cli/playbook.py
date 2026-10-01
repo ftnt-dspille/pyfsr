@@ -1,4 +1,4 @@
-"""``pyfsr playbook`` command group — author playbooks in YAML and deploy them.
+"""``pyfsr playbook`` command group -- author playbooks in YAML and deploy them.
 
 Unlike the SSH-based ``appliance`` group, these subcommands talk to the
 FortiSOAR **API**, so they build a :class:`~pyfsr.client.FortiSOAR` from the
@@ -7,21 +7,21 @@ overrides.
 
 Subcommands (this group is the authoring "start here" index):
 
-- ``steps`` — list every friendly ``type:`` keyword with its canonical FSR
+- ``steps`` -- list every friendly ``type:`` keyword with its canonical FSR
   name and one-line purpose (offline).
-- ``step-help <type> [--schema]`` — keys + a real compiling friendly-YAML
+- ``step-help <type> [--schema]`` -- keys + a real compiling friendly-YAML
   example for one step type (offline).
 - ``examples [--intent ".."] [--stage S] [--manifest]`` -- list the foundational
   playbook library (whole, compiling, use-case-shaped worked examples an agent
   retrieves and adapts); ``--manifest`` emits the retrieval JSON payload (offline).
-- ``show <slug>`` — print one library playbook's metadata + full friendly YAML (offline).
-- ``compile <file.yaml> [-o out.json]`` — compile only (no network); emit the
+- ``show <slug>`` -- print one library playbook's metadata + full friendly YAML (offline).
+- ``compile <file.yaml> [-o out.json]`` -- compile only (no network); emit the
   ``workflow_collections`` envelope, diagnostics to stderr.
-- ``validate <file.yaml>`` — compile and report diagnostics; nonzero exit on
+- ``validate <file.yaml>`` -- compile and report diagnostics; nonzero exit on
   blocking errors.
-- ``lint <file.yaml>`` — live preflight: warn about connector steps with no
+- ``lint <file.yaml>`` -- live preflight: warn about connector steps with no
   config on the target.
-- ``deploy <file.yaml> [--replace] [--dry-run]`` — compile then import via the
+- ``deploy <file.yaml> [--replace] [--dry-run]`` -- compile then import via the
   API client.
 
 ``compile``/``validate``/``deploy``/``lint`` accept ``--refresh-catalog``: warm
@@ -99,8 +99,8 @@ def add_refresh_catalog_arg(p: argparse.ArgumentParser) -> None:
         action="store_true",
         help=(
             "warm the reference catalog from the live instance before compiling "
-            "(needs a connection). Resolves connector/operation tokens — including "
-            "custom connectors like code-runner — to real labels/versions so the "
+            "(needs a connection). Resolves connector/operation tokens -- including "
+            "custom connectors like code-runner -- to real labels/versions so the "
             "playbook editor doesn't show 'undefined' for connector steps."
         ),
     )
@@ -113,7 +113,7 @@ def _compile(args: argparse.Namespace, *, client: FortiSOAR | None = None) -> Co
     the per-user reference catalog is warmed from the live instance first, so
     connector/operation tokens resolve to real labels/versions. Without it the
     compile is offline against the packaged slim catalog, which carries no
-    connector rows — connector steps then compile without a ``name``/``version``/
+    connector rows -- connector steps then compile without a ``name``/``version``/
     ``operationTitle`` and the editor canvas renders them as "undefined".
     """
     from ..authoring import compile_playbook_yaml, format_diagnostic
@@ -180,7 +180,7 @@ def cmd_deploy(args: argparse.Namespace) -> int:
         print("error: compilation failed (see diagnostics above)", file=sys.stderr)
         return 1
     if args.dry_run:
-        print("# dry-run — nothing posted", file=sys.stderr)
+        print("# dry-run -- nothing posted", file=sys.stderr)
         _output.render(
             [[c, ", ".join(_workflows_of(result, c))] for c in result.collection_names],
             ["collection", "playbooks"],
@@ -215,7 +215,7 @@ def _connector_findings(client: FortiSOAR, result: CompiledPlaybook) -> list:
 def _print_findings(findings: list) -> None:
     """Render lint findings as a table on stderr (no-op message when clean)."""
     if not findings:
-        print("connector preflight: OK — every connector step is configured.", file=sys.stderr)
+        print("connector preflight: OK -- every connector step is configured.", file=sys.stderr)
         return
     print(f"connector preflight: {len(findings)} warning(s)", file=sys.stderr)
     _output.render(
@@ -298,7 +298,7 @@ def cmd_examples(args: argparse.Namespace) -> int:
     """List the foundational playbook library (the worked-examples layer).
 
     Prints every library playbook with its stage, intent (goal), step types, and
-    compile status — the table an agent scans to find the closest worked example to
+    compile status -- the table an agent scans to find the closest worked example to
     adapt. With ``--intent`` filters by goal substring; ``--manifest`` emits the
     retrieval JSON payload instead of a table; ``--stage`` filters by stage.
     """
@@ -311,7 +311,7 @@ def cmd_examples(args: argparse.Namespace) -> int:
     entries = list_library()
     if not entries:
         print(
-            "no library found — examples/playbooks/library/ is the worked-examples layer.",
+            "no library found -- examples/playbooks/library/ is the worked-examples layer.",
             file=sys.stderr,
         )
         return 1
@@ -378,6 +378,118 @@ def cmd_show(args: argparse.Namespace) -> int:
     repo_root = _LIBRARY_DEFAULT.parents[2]
     print((repo_root / entry.path).read_text(encoding="utf-8"))
     return 0
+
+
+def cmd_test(args: argparse.Namespace) -> int:
+    """Compile, deploy, trigger, auto-answer gates, and print step results.
+
+    The end-to-end test command: compiles the YAML, imports it to the
+    appliance, triggers each playbook, auto-answers any manual_input/approval
+    gates using ``--answer key=value`` flags, and prints a step-by-step status
+    + timing + failure table. One command instead of 30 lines of Python.
+    """
+    client = _make_client(args)
+    text = _read(args.file)
+    from ..authoring import compile_playbook_yaml, format_diagnostic
+
+    result = compile_playbook_yaml(text, client=client if args.refresh_catalog else None)
+    for diag in result.errors:
+        print(format_diagnostic(diag), file=sys.stderr)
+    if not result.ok:
+        print("error: compilation failed (see diagnostics above)", file=sys.stderr)
+        return 1
+
+    # Import
+    assert result.fsr_json is not None
+    created = client.workflow_collections.import_export(result.fsr_json, replace=args.replace)
+    collection_names: list[str] = []
+    playbook_names: list[str] = []
+    for c in cast("list[Any]", created):
+        cname = c.get("name", "") if isinstance(c, dict) else getattr(c, "name", "")
+        collection_names.append(cname)
+        wfs = c.get("workflows", []) if isinstance(c, dict) else (getattr(c, "workflows", None) or [])
+        for w in wfs:
+            wname = w.get("name", "") if isinstance(w, dict) else getattr(w, "name", "")
+            playbook_names.append(wname)
+
+    print(f"imported {len(collection_names)} collection(s), {len(playbook_names)} playbook(s)", file=sys.stderr)
+
+    # Parse --answer flags into a dict
+    answers: dict[str, Any] = {}
+    for pair in args.answer or []:
+        if "=" not in pair:
+            print(f"error: --answer expects key=value (got {pair!r})", file=sys.stderr)
+            return 1
+        key, _, val = pair.partition("=")
+        # Try to coerce numeric values
+        try:
+            val = int(val)
+        except ValueError:
+            try:
+                val = float(val)
+            except ValueError:
+                pass
+        answers[key.strip()] = val
+
+    # Trigger and test each playbook
+    exit_code = 0
+    for pb_name in playbook_names:
+        print(f"\n=== {pb_name} ===", file=sys.stderr)
+        try:
+            run = client.playbooks.run_and_wait(
+                pb_name,
+                answers=answers if answers else None,
+                timeout=args.timeout,
+                poll_interval=args.poll_interval,
+            )
+        except TimeoutError as e:
+            print(f"  TIMEOUT: {e}", file=sys.stderr)
+            exit_code = 1
+            continue
+        except Exception as e:
+            print(f"  ERROR: {e}", file=sys.stderr)
+            exit_code = 1
+            continue
+
+        # Print status
+        status_str = run.status
+        if run.succeeded:
+            status_str = "finished"
+        else:
+            exit_code = 1
+        print(f"  status: {status_str}", file=sys.stderr)
+
+        # Print steps
+        if run.steps:
+            _output.render(
+                [[s.name, s.status, f"{s.duration_ms}ms"] for s in run.steps],
+                ["step", "status", "duration"],
+                fmt="table",
+            )
+
+        # Print failure
+        if run.failure:
+            print(
+                f"  failure at '{run.failure.failing_step}': {run.failure.error_message}",
+                file=sys.stderr,
+            )
+
+        # Print children (sub-playbook runs)
+        for child in run.children:
+            print(f"  child: {child.name} ({child.status})", file=sys.stderr)
+            if child.steps:
+                _output.render(
+                    [[s.name, s.status, f"{s.duration_ms}ms"] for s in child.steps],
+                    ["step", "status", "duration"],
+                    fmt="table",
+                )
+            if child.failure:
+                print(
+                    f"    failure at '{child.failure.failing_step}': {child.failure.error_message}",
+                    file=sys.stderr,
+                )
+
+    return exit_code
 
 
 def _workflows_of(result: CompiledPlaybook, collection_name: str) -> list[str]:
@@ -589,6 +701,38 @@ def build_subparser(asub: argparse._SubParsersAction) -> None:
     p_lint.add_argument("file", help="playbook YAML file")
     add_refresh_catalog_arg(p_lint)
     p_lint.set_defaults(func=cmd_lint)
+
+    p_test = asub.add_parser(
+        "test",
+        help="compile, deploy, trigger, auto-answer gates, and print step results (live)",
+        description=(
+            "End-to-end playbook test: compiles the YAML, imports it to the "
+            "appliance, triggers each playbook, auto-answers any manual_input "
+            "or approval gates, and prints a step-by-step status + timing + "
+            "failure table.\n\n"
+            "Use --answer key=value to auto-answer gates. The key matches the "
+            "prompt's title (the step's `title:`) or the input variable name. "
+            "Numeric values are coerced automatically.\n\n"
+            "Example:\n"
+            "  pyfsr playbook test examples/playbooks/all_step_types.yaml \\\n"
+            "    --answer 'Enter a six digit number=654321' \\\n"
+            "    --answer my_number=654321 --timeout 120"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    add_connection_args(p_test)
+    p_test.add_argument("file", help="playbook YAML file")
+    p_test.add_argument(
+        "--answer",
+        action="append",
+        metavar="key=value",
+        help="auto-answer a manual_input/approval gate (key = title or variable name)",
+    )
+    p_test.add_argument("--replace", action="store_true", help="hard-delete + recreate if it exists")
+    p_test.add_argument("--timeout", type=float, default=120, help="seconds to wait per playbook (default 120)")
+    p_test.add_argument("--poll-interval", type=float, default=3, help="seconds between polls (default 3)")
+    add_refresh_catalog_arg(p_test)
+    p_test.set_defaults(func=cmd_test)
 
     # --- versions: saved-snapshot history (the editor's "Versions" tab) ---
     p_ver = asub.add_parser(

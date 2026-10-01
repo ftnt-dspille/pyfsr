@@ -145,6 +145,8 @@ options:
 | `replace=True` | Hard-delete any existing collection whose uuid matches, then recreate (the UI's "Replace existing playbook collection" flow). Without it a duplicate uuid raises `409 UniqueConstraintViolationException`. |
 | `strict_warnings=True` | Treat compiler **warnings** as blocking, not just errors. |
 | `db_path=...` | Override the reference catalog (defaults to the packaged one). |
+| `refresh_catalog=True` | Re-warm the local reference catalog from this appliance before compiling, so connector/operation/team/picklist tokens resolve against what is currently installed (default `True`; set `False` to compile offline). |
+| `lax_codes={"unknown_param"}` | Downgrade the given diagnostic codes from error to warning so they don't block emission -- for known false-positives. |
 
 Compilation that produces blocking errors raises `ValueError` with the formatted
 diagnostics; a missing compiler raises `PlaybooksExtraNotInstalled`.
@@ -265,6 +267,10 @@ result = client.playbooks.run_and_wait("My Playbook", timeout=60)
 if result.succeeded:
     for step in result.steps:
         print(f"  {step.name:30} {step.status:10} {step.duration_ms}ms")
+    for child in result.children:          # sub-playbook runs
+        print(f"  child: {child.name} ({child.status})")
+    for slow in result.slow_steps:         # steps over 30s
+        print(f"  SLOW: {slow.name} ({slow.duration_ms}ms)")
 else:
     print(f"failed at: {result.failure.failing_step}")
     print(f"  error: {result.failure.error_message}")
@@ -282,6 +288,33 @@ client.playbooks.trigger("Loop Until Six Digits")
 # the step name, which here is "AskNumber":
 client.manual_input.answer(654321, by_title="Enter a six digit number")
 ```
+
+`trigger()` returns a {class}`~pyfsr.models.TriggerResponse` -- use
+`.task_id` for the single run uuid, or `.task_ids` (a list) when the trigger
+starts multiple runs (e.g. a record-action route):
+
+```python
+resp = client.playbooks.trigger("My Playbook")
+# resp.task_id  -> "a0afba58-..."  (scalar)
+# resp.task_ids -> ["a0afba58-..."] (always a list)
+```
+
+To trigger and then act mid-flight (answer an approval gate, patch a record to
+unblock an SLA), use
+{meth}`~pyfsr.api.playbooks.PlaybooksAPI.wait_for_task` with an `on_poll`
+callback:
+
+```python
+resp = client.playbooks.trigger("Approval Playbook")
+tree = client.playbooks.wait_for_task(
+    resp.task_id,
+    on_poll=lambda p: client.manual_input.answer(option=0) if p.tree.status == "awaiting"
+    else None,
+)
+```
+
+Returning `False` from `on_poll` stops the wait early and returns the current
+tree.
 
 :::{note}
 A pending prompt's `.title` is the manual_input step's `title:`, mirrored from

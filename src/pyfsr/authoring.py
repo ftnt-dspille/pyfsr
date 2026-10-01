@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from .models._integration import ConnectorConfigSummary, ConnectorDefinition, InstalledConnector
+    from .models._integration import ConnectorConfig, ConnectorConfigSummary, ConnectorDefinition, InstalledConnector
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +94,8 @@ class _ConnectorsLike(Protocol):
     def list_configured(self, *, refresh: bool = False) -> list[InstalledConnector]: ...
 
     def definition(self, connector: str, *, version: str | None = None) -> ConnectorDefinition | None: ...
+
+    def list_configurations(self, *, connector: str | int | None = None) -> list[ConnectorConfig]: ...
 
 
 class _WorkflowCollectionsLike(Protocol):
@@ -386,19 +388,30 @@ def warm_catalog(
                 # the `connector_configs` table the compiler's
                 # `resolve_config_id` (resolver/catalog.py) reads to fill a
                 # step's default config offline. Empty in the packaged slim
-                # catalog (config UUIDs are box-specific). Schema matches the
-                # framework's expected shape:
-                #   connector_configs(connector, config_id, config_name, is_default)
+                # catalog (config UUIDs are box-specific). Schema:
+                #   connector_configs(connector, config_id, config_name, is_default, allow_imports)
                 # so `resolve_config_id(connector, None)` (the default pick)
                 # resolves to the default-flagged config without a live round-trip.
+                # `allow_imports` carries the config's import setting (e.g.
+                # code-snippet's `allow_imports`), so the compiler's snippet
+                # checker can suppress the import warning when the default
+                # config on this box already allows imports.
                 conn.execute(
                     "CREATE TABLE IF NOT EXISTS connector_configs ("
                     "  connector TEXT NOT NULL,"
                     "  config_id TEXT NOT NULL,"
                     "  config_name TEXT,"
                     "  is_default INTEGER NOT NULL DEFAULT 0,"
+                    "  allow_imports INTEGER,"
                     "  PRIMARY KEY (connector, config_id))"
                 )
+                # Migration: add allow_imports to existing tables (created
+                # before the column existed).  SQLite's ALTER TABLE ADD COLUMN
+                # raises OperationalError if the column is already present.
+                try:
+                    conn.execute("ALTER TABLE connector_configs ADD COLUMN allow_imports INTEGER")
+                except sqlite3.OperationalError:
+                    pass
 
                 # Provenance (P3): each row stamps source='live' + source_path so
                 # live-synced connectors are distinguishable from packaged ones;
@@ -452,19 +465,29 @@ def warm_catalog(
                     # are untouched. `default` is stored as 0/1 so the fill can pick
                     # the default-flagged config without a live round-trip.
                     conn.execute("DELETE FROM connector_configs WHERE connector = ?", (name,))
+                    # Build a config_id -> allow_imports lookup from the full
+                    # config records (fetched with the `config` param dict).
+                    allow_imports_map: dict[str, bool | None] = {}
+                    for cd in fc.config_details:
+                        if cd.config_id:
+                            cfg_params = cd.config or {}
+                            ai = cfg_params.get("allow_imports")
+                            allow_imports_map[cd.config_id] = bool(ai) if isinstance(ai, bool) else None
                     for cfg in configs:
                         cid = cfg.config_id
                         if not cid:
                             continue
+                        ai_val = allow_imports_map.get(cid)
                         conn.execute(
                             "INSERT OR REPLACE INTO connector_configs "
-                            "(connector, config_id, config_name, is_default) "
-                            "VALUES (?, ?, ?, ?)",
+                            "(connector, config_id, config_name, is_default, allow_imports) "
+                            "VALUES (?, ?, ?, ?, ?)",
                             (
                                 name,
                                 cid,
                                 cfg.name,
                                 1 if cfg.default else 0,
+                                1 if ai_val is True else (0 if ai_val is False else None),
                             ),
                         )
                         n_cfg += 1
@@ -610,6 +633,7 @@ class _FetchedConnector:
     version: str
     definition: ConnectorDefinition
     configurations: list[ConnectorConfigSummary]
+    config_details: list[ConnectorConfig]
 
 
 @dataclass(frozen=True)
@@ -670,11 +694,20 @@ def _fetch_connector_defs(client: _AuthoringClient, *, max_workers: int = 8) -> 
         d = client.connectors.definition(name, version=ver)
         if d is None:
             return None
+        # Fetch full config records (with the `config` param dict) so the
+        # warm store can record per-config settings like code-snippet's
+        # `allow_imports`.  The listing endpoint only carries summary objects
+        # (config_id/name/default); the param dict lives on the full record.
+        try:
+            config_details = client.connectors.list_configurations(connector=name)
+        except Exception:  # noqa: BLE001
+            config_details = []
         return _FetchedConnector(
             name=name,
             version=str(ver or ""),
             definition=d,
             configurations=list(ic.configurations or []),
+            config_details=config_details,
         )
 
     results = map_threaded(_one, installed, max_workers=max_workers)

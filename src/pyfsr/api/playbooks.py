@@ -2761,6 +2761,78 @@ class PlaybooksAPI(BaseAPI):
                 )
             time.sleep(poll_interval)
 
+    def _make_auto_answer(
+        self,
+        task_id: str,
+        answers: dict[str, Any],
+    ) -> Callable[[WaitProgress], bool | None]:
+        """Build an ``on_poll`` callback that auto-answers manual_input gates.
+
+        Matches each pending prompt against ``answers`` by title (the step's
+        ``title:``) or by input variable name. When a match is found, calls
+        :meth:`~pyfsr.api.manual_input.ManualInputAPI.answer` with the
+        provided value. Logs each answer to stderr so the caller can see what
+        was answered and when.
+        """
+        import sys
+
+        answered: set[int | str] = set()
+
+        def _on_poll(p: WaitProgress) -> bool | None:
+            pending = self.client.manual_input.pending_for_run(task_id)
+            if not pending:
+                # check child runs
+                try:
+                    tree = self.run_tree(task_id)
+                    for ch in tree.children:
+                        if ch.task_id:
+                            pending = self.client.manual_input.pending_for_run(ch.task_id)
+                            if pending:
+                                break
+                except Exception:  # noqa: BLE001
+                    pass
+            if not pending:
+                return None
+            for mi in pending:
+                mi_id = mi.id if hasattr(mi, "id") else mi.get("id")
+                if mi_id is None or mi_id in answered:
+                    continue
+                # Title lives in input.schema_.title (the step's `title:` field),
+                # not on the ManualInput itself (mi.title is often None from
+                # pending_for_run).
+                title: str | None = None
+                input_vars: list[Any] = []
+                if hasattr(mi, "input") and mi.input:
+                    schema = getattr(mi.input, "schema_", None)
+                    if schema:
+                        title = getattr(schema, "title", None)
+                        iv = getattr(schema, "inputVariables", None)
+                        if iv:
+                            input_vars = iv
+                # Try matching by title first, then by input variable name
+                value = None
+                matched_key: str | None = None
+                if title and title in answers:
+                    value = answers[title]
+                    matched_key = title
+                else:
+                    for var in input_vars:
+                        vname = getattr(var, "name", None) if not isinstance(var, dict) else var.get("name")
+                        if vname and vname in answers:
+                            value = answers[vname]
+                            matched_key = vname
+                            break
+                if value is not None and matched_key is not None:
+                    print(
+                        f"  [auto-answer] {matched_key!r} -> {value!r} (input_id={mi_id})",
+                        file=sys.stderr,
+                    )
+                    self.client.manual_input.answer(value, input_id=mi_id)
+                    answered.add(mi_id)
+            return None
+
+        return _on_poll
+
     def run_and_wait(
         self,
         playbook: str | None = None,
@@ -2771,6 +2843,7 @@ class PlaybooksAPI(BaseAPI):
         module: str | None = None,
         route_uuid: str | None = None,
         inputs: dict[str, Any] | None = None,
+        answers: dict[str, Any] | None = None,
         timeout: float = 120,
         poll_interval: float = 3,
         step_detail: bool = True,
@@ -2779,16 +2852,33 @@ class PlaybooksAPI(BaseAPI):
         """Trigger a playbook and poll until it reaches a terminal status.
 
         The all-in-one convenience for the most common test pattern:
-        trigger → wait → inspect. Returns a :class:`~pyfsr.models.RunResult` with the
-        run's status, per-step outcomes (with timing), failure details,
-        and child runs -- everything an agent needs to debug a playbook
-        in one call.
+        trigger -> wait -> inspect. Returns a :class:`~pyfsr.models.RunResult`
+        with the run's status, per-step outcomes (with timing), failure details,
+        and child runs -- everything you need to debug a playbook in one call.
 
         Picks the trigger route automatically:
           - If ``route_uuid`` is given, uses :meth:`trigger_action` (record-action).
           - If ``record_uuid`` + ``module`` are given but no ``route_uuid``,
             resolves the playbook's trigger route automatically.
           - Otherwise, uses :meth:`trigger` (manual-execute / ``notrigger``).
+
+        When ``answers`` is provided, any :class:`manual_input` or approval gate
+        that pauses the run is **auto-answered** during polling -- no need for a
+        separate :meth:`~pyfsr.api.manual_input.ManualInputAPI.answer` call. The
+        dict keys match by the prompt's **title** (the step's ``title:`` field)
+        or by **input variable name** (e.g. ``"my_number"``); the value is the
+        answer to submit. For multi-button prompts (approval), pass the option
+        label or index as the value (e.g. ``"Approve"`` or ``0``)::
+
+            result = client.playbooks.run_and_wait(
+                "Validate Six Digit Number",
+                answers={"Enter a six digit number": 654321},
+            )
+            # or by variable name:
+            result = client.playbooks.run_and_wait(
+                "Validate Six Digit Number",
+                answers={"my_number": 654321},
+            )
 
         Args:
             playbook: the playbook name -- resolved to uuid if needed.
@@ -2804,6 +2894,9 @@ class PlaybooksAPI(BaseAPI):
                 When omitted but ``record_uuid`` + ``module`` are given, the
                 route is resolved from the playbook definition automatically.
             inputs: manual-input parameters (merged into trigger body).
+            answers: auto-answer manual_input/approval gates during polling.
+                Keys match the prompt's title (the step's ``title:``) or the
+                input variable name; values are the answers to submit.
             timeout: seconds to wait before raising :exc:`TimeoutError`.
             poll_interval: seconds between polls.
             step_detail: when ``True`` (default), include per-step status +
@@ -2812,10 +2905,11 @@ class PlaybooksAPI(BaseAPI):
                 include their step outcomes too.
 
         Returns:
-            A :class:`~pyfsr.models.RunResult` with ``status``, ``task_id``, ``pk``,
-            ``steps`` (list of :class:`~pyfsr.models.RunStepSnapshot` with timing),
-            ``failure`` (the :class:`~pyfsr.models.RunFailure` or ``None``), and
-            ``children`` (list of child :class:`~pyfsr.models.RunResult` for sub-playbook runs).
+            A :class:`~pyfsr.models.RunResult` with ``status``, ``task_id``,
+            ``pk``, ``steps`` (list of :class:`~pyfsr.models.RunStepSnapshot`
+            with timing), ``failure`` (the :class:`~pyfsr.models.RunFailure` or
+            ``None``), and ``children`` (list of child
+            :class:`~pyfsr.models.RunResult` for sub-playbook runs).
 
         Raises:
             TimeoutError: if the run doesn't finish within ``timeout`` seconds.
@@ -2868,7 +2962,16 @@ class PlaybooksAPI(BaseAPI):
         task_id = resp.task_ids[0]
 
         # --- poll to terminal ---
-        tree = self.wait_for_task(task_id, timeout=timeout, poll_interval=poll_interval, steps=step_detail)
+        if answers:
+            tree = self.wait_for_task(
+                task_id,
+                timeout=timeout,
+                poll_interval=poll_interval,
+                steps=step_detail,
+                on_poll=self._make_auto_answer(task_id, answers),
+            )
+        else:
+            tree = self.wait_for_task(task_id, timeout=timeout, poll_interval=poll_interval, steps=step_detail)
 
         # --- build result ---
         steps = tree.steps if step_detail else []
