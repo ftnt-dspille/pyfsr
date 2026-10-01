@@ -1,0 +1,116 @@
+pyfsr.api.teams
+===============
+
+.. py:module:: pyfsr.api.teams
+
+.. autoapi-nested-parse::
+
+   Team CRUD (``/api/3/teams``).
+
+   A FortiSOAR **team** owns records (the ``owners`` relationship) and scopes
+   visibility. Teams are their own ``/api/3/teams`` collection — first-class on the
+   client as ``client.teams`` ��� and accept uuids **or** friendly names anywhere a
+   team is referenced, resolved via a per-instance cache populated on first use.
+
+   Reads come back as typed :class:`~pyfsr.models.Team` records (dict-compatible,
+   so ``t["name"]`` / ``t.get("uuid")`` keep working). The role/team name→uuid
+   resolution helpers here are the single source of truth —
+   :meth:`pyfsr.api.users.UsersAPI.list_teams` and friends delegate to this class.
+
+   .. rubric:: Example
+
+   >>> team = client.teams.create("Tier 1 SOC", description="front-line triage")
+   >>> [t.name for t in client.teams.list() if t.description]
+   ['Tier 1 SOC']
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.teams.TeamsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: TeamsAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Team discovery and creation (``/api/3/teams``).
+
+
+   .. py:method:: team_map() -> dict[str, str]
+
+      Return ``{name: uuid}`` for all teams, cached for the instance lifetime.
+
+
+
+   .. py:method:: team_uuid_by_name(name: str) -> str | None
+
+      Look up a team UUID by display name (case-sensitive); ``None`` if absent.
+
+
+
+   .. py:method:: list(params: dict[str, Any] | None = None) -> list[pyfsr.models.Team]
+
+      List all teams (``GET /api/3/teams``) as typed :class:`~pyfsr.models.Team` records.
+
+      Doctest:
+
+          >>> from pyfsr._testing import demo_client
+          >>> client = demo_client()
+          >>> teams = client.teams.list()
+          >>> len(teams)
+          1
+          >>> teams[0].name
+          'SOC Team'
+
+
+
+   .. py:method:: get(team: str) -> pyfsr.models.Team
+
+      Fetch one team by uuid or name as a :class:`~pyfsr.models.Team`.
+
+
+
+   .. py:method:: create(name: str, *, description: str | None = None) -> pyfsr.models.Team
+
+      Create a team (``POST /api/3/teams``).
+
+      Only ``name`` is required; ``description`` is optional. The server fills
+      in the relationship arrays (``actors``/``parents``/``children``/
+      ``siblings``) as empty lists on creation.
+
+
+
+   .. py:method:: get_or_create(name: str, *, description: str | None = None) -> tuple[pyfsr.models.Team, bool]
+
+      Idempotently ensure team ``name`` exists; return ``(team, created)``.
+
+      If a team with that name already exists, it is returned unchanged (its
+      ``description`` is **not** modified). Returns ``created=True`` only when
+      the team was newly created.
+
+
+
+   .. py:method:: update(team: str, *, name: str | None = None, description: str | None = None) -> pyfsr.models.Team
+
+      Update a team's ``name`` and/or ``description`` (``PUT /api/3/teams/<uuid>``).
+
+      ``team`` is a uuid or current name. Pass at least one of ``name`` /
+      ``description``; only the given fields are sent (a partial update), and
+      the full updated :class:`~pyfsr.models.Team` is returned.
+
+
+
+   .. py:method:: delete(team: str) -> None
+
+      Delete a team (``DELETE /api/3/teams/<uuid>``). ``team`` is a uuid or name.
+
+
+

@@ -1,0 +1,78 @@
+pyfsr.utils.file_operations
+===========================
+
+.. py:module:: pyfsr.utils.file_operations
+
+.. autoapi-nested-parse::
+
+   File upload/download helpers — ``client.files``.
+
+   Wraps FortiSOAR's ``/api/3/files`` endpoint to upload a local file (mimicking a
+   browser upload) and download an attachment back to disk, returning typed
+   :class:`~pyfsr.models.FileRecord` results. Attachment records that link a file to
+   a parent module are handled by ``client.attachments``.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.utils.file_operations.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.utils.file_operations.FileOperations
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: FileOperations(client)
+
+   Utility class for handling file operations in FortiSOAR
+
+
+   .. py:attribute:: client
+
+
+   .. py:method:: upload(filename: str) -> pyfsr.models.FileRecord
+
+      Upload a file to FortiSOAR, mimicking browser file upload behavior
+
+      :param filename: Path to the file to upload
+
+      :returns: The created ``/api/3/files`` record. Stays
+                dict-compatible (``rec["@id"]``) while exposing typed fields
+                (``rec.iri``, ``rec.filename``).
+      :rtype: FileRecord
+
+      .. rubric:: Example
+
+      >>> import tempfile
+      >>> from pathlib import Path
+      >>> client = demo_client()
+      >>> with tempfile.TemporaryDirectory() as tmp:
+      ...     p = Path(tmp) / "report.csv"
+      ...     _ = p.write_text("a,b\n1,2\n")
+      ...     record = client.files.upload(str(p))
+      >>> record.filename
+      'report.csv'
+      >>> record["@id"]
+      '/api/3/files/880e8400-e29b-41d4-a716-446655440010'
+
+
+
+   .. py:method:: upload_many(filenames: list[str]) -> list[pyfsr.models.FileRecord]
+
+      Upload multiple files to FortiSOAR
+
+
+

@@ -1,0 +1,247 @@
+pyfsr.api.solution_packs
+========================
+
+.. py:module:: pyfsr.api.solution_packs
+
+.. autoapi-nested-parse::
+
+   Solution packs — ``client.solution_packs``.
+
+   Install, export, and manage FortiSOAR solution packs (bundled modules,
+   playbooks, connectors, and views shipped as one unit). Packs can be resolved by
+   name, label, or search term; install polls to completion and export writes the
+   pack archive to disk. Content discovery is delegated to
+   :class:`~pyfsr.api.content_hub.ContentHubSearch`.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> resp = client.solution_packs.install("SOAR Framework", "2.2.1")
+   >>> resp.name
+   'SOAR Framework'
+   >>> resp.job_id
+   '990e8400-e29b-41d4-a716-446655440012'
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.solution_packs.SolutionPackAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: SolutionPackAPI(client)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   API implementation for FortiSOAR Solution Pack operations
+
+
+   .. py:attribute:: export_config
+
+
+   .. py:attribute:: content_hub
+
+
+   .. py:method:: export_pack(pack_identifier: str, output_path: str | None = None, poll_interval: int = 5) -> str
+
+      Export a solution pack by name, label, or search term.
+
+      :param pack_identifier: Name, label or search term to find the pack
+      :param output_path: Optional path to save exported file
+      :param poll_interval: How often to check export status in seconds
+
+      :returns: Path where the exported file was saved
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          export_path = client.solution_packs.export_pack("SOAR Framework")
+          print(f"Exported to: {export_path}")
+
+
+
+   .. py:method:: install(name: str, version: str, *, build_number: int | str | None = None, wait: bool = False, interval: float = 3.0, timeout: float = 300.0) -> pyfsr.models._system.SolutionPackInstallResponse | pyfsr.models._integration.InstallJobStatus
+
+      Install a solution pack from Content Hub by ``name`` + ``version``.
+
+      Posts ``{"name", "version"}`` to ``POST /api/3/solutionpacks/install`` —
+      the same call the Content Hub *Install* button makes. The install runs
+      asynchronously as an import job.
+
+      ``build_number`` selects which build of ``version`` to fetch. **Omit it and
+      the appliance falls back to the repo's ``latest`` build path** — which 404s
+      on a repo that publishes numbered builds without a ``latest`` alias (a
+      self-hosted mirror typically does). The appliance reports that 404 as
+      ``Unable to download <name> file. Please check the network connection to
+      <repo>``, which blames the network for what is really a missing artifact —
+      so if you hit that error against a working repo, pass the ``buildNumber``
+      from the catalog row (``client.content_hub.search_available_packs()``)
+      rather than debugging connectivity.
+
+      Discover installable packs via
+      ``client.content_hub.search_available_packs()``.
+
+      :param name: solution pack name (e.g. ``"SOAR Framework"``).
+      :param version: the Content Hub version to install (e.g. ``"1.0.0"``).
+      :param build_number: the build of ``version`` to fetch. Omitted → the
+                           appliance uses the repo's ``latest`` build path.
+      :param wait: block until the import job reaches a terminal status.
+      :param interval: seconds between polls when ``wait`` (default 3).
+      :param timeout: give up waiting after this many seconds (default 300).
+
+      :returns: :class:`~pyfsr.models.SolutionPackInstallResponse` (the SolutionPack
+                record plus ``importJob``) when ``wait=False`` so callers can access
+                ``.job_id`` for polling. :class:`~pyfsr.models.InstallJobStatus` when
+                ``wait=True`` — check ``status == "Import Complete"`` for success.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> resp = client.solution_packs.install("SOAR Framework", "2.2.1")
+      >>> resp.name
+      'SOAR Framework'
+      >>> resp.version
+      '2.2.1'
+      >>> resp.job_id
+      '990e8400-e29b-41d4-a716-446655440012'
+
+
+
+   .. py:method:: install_status(job_id: str) -> pyfsr.models._integration.InstallJobStatus
+
+      Fetch a solution pack install's import-job progress.
+
+      ``GET /api/3/import_jobs/{job_id}`` (selecting just the progress fields).
+      ``status == "Import Complete"`` means the install finished.
+
+      A larger solution-pack import runs a schema migrate that briefly restarts
+      the API, so this endpoint can answer ``503`` for a few seconds mid-import
+      (the UI treats an ``import_jobs`` 503 the same way). That transient is
+      reported as a non-terminal ``"Importing"`` status so :meth:`wait_for_install`
+      keeps polling instead of aborting the wait.
+
+
+
+   .. py:method:: wait_for_install(job_id: str, *, interval: float = 3.0, timeout: float = 300.0) -> pyfsr.models._integration.InstallJobStatus
+
+      Poll an install import job until it reaches a terminal status.
+
+      Returns the latest :class:`~pyfsr.models.InstallJobStatus`. On timeout,
+      returns the last poll with a non-terminal ``status`` rather than raising.
+
+
+
+   .. py:method:: uninstall(name: str) -> None
+
+      Uninstall a solution pack by name.
+
+      Looks up the installed pack by ``name``, then sends
+      ``DELETE /api/3/solutionpacks/{uuid}``. The appliance marks the pack
+      as uninstalled (or removes it if it's a local/dev pack) and strips its
+      import job, export job, template, and file references.
+
+      :param name: solution pack name or search term (e.g. ``"SOAR Framework"``).
+
+      :raises ValueError: if no installed pack matching ``name`` is found.
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          client.solution_packs.uninstall("SOAR Framework")
+
+
+
+   .. py:method:: create(builder: pyfsr.api.export_config.SolutionPackBuilder, *, publish: bool = False) -> pyfsr.models._system.SolutionPackInstallResponse
+
+      Author a new local solution pack from a :class:`SolutionPackBuilder`.
+
+      Resolves the builder's content selection to a full export ``options``
+      payload, then ``POST``\s ``/api/3/solutionpacks`` with the pack metadata
+      and a nested ``SolutionPack Export`` template — the same shape the Content
+      Hub *Create Solution Pack* wizard posts. The pack is created ``local`` and
+      ``draft``; ``publish=True`` marks it ``installed`` (available) rather than
+      a development draft.
+
+      :param builder: the configured :class:`SolutionPackBuilder`.
+      :param publish: create it published/available (``installed=True``) instead of
+                      a development draft.
+
+      :returns: :class:`~pyfsr.models.SolutionPackInstallResponse` — the created pack
+                record (``.uuid``, ``.name``, ``.version``).
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          from pyfsr.api.export_config import SolutionPackBuilder
+
+          pack = (
+              SolutionPackBuilder("My SOC Pack", version="1.0.0")
+              .add_module("alerts")
+              .add_playbook_collection("Incident Response")
+              .post_install_widget("AI Assistant", "5.0.0", auto_launch=True)
+              .tags("Agentic AI")
+          )
+          created = client.solution_packs.create(pack, publish=True)
+
+
+
+   .. py:method:: install_from_file(path: str, *, replace: bool = False, wait: bool = False, interval: float = 3.0, timeout: float = 300.0) -> pyfsr.models._system.SolutionPackInstallResponse | pyfsr.models._integration.InstallJobStatus
+
+      Install a solution pack from a local ``.zip``/``.tgz`` bundle.
+
+      Uploads the archive to ``POST /api/3/solutionpacks/install`` (``$type``
+      defaults to ``solutionpack`` server-side), the same multipart endpoint the
+      Content Hub *Upload* button uses. This is the file counterpart of
+      :meth:`install` (which fetches by name/version from the repo) and returns
+      the same shape — a pack record carrying the async import job.
+
+      :param path: filesystem path to the pack bundle.
+      :param replace: overwrite an already-staged copy of this exact name+version
+                      (``$replace=true``).
+      :param wait: block until the import job reaches a terminal status.
+      :param interval: seconds between polls when ``wait`` (default 3).
+      :param timeout: give up waiting after this many seconds (default 300).
+
+      :returns: :class:`~pyfsr.models.SolutionPackInstallResponse` (with ``.job_id``
+                for polling) when ``wait=False``; :class:`~pyfsr.models.InstallJobStatus`
+                when ``wait=True`` — check ``status == "Import Complete"``.
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          client.solution_packs.install_from_file("MyPack-1.0.0.zip", wait=True)
+
+
+
+   .. py:method:: ensure_installed(name: str, version: str, *, build_number: int | str | None = None, wait: bool = True, interval: float = 3.0, timeout: float = 300.0) -> pyfsr.models._system.SolutionPackInstallResponse | pyfsr.models._integration.InstallJobStatus
+
+      Idempotently ensure solution pack ``name`` at ``version`` is installed.
+
+      If the pack is already installed at the requested version, returns its
+      record immediately (no re-install). Otherwise installs from Content Hub
+      via :meth:`install` and waits for completion (``wait=True``, default).
+
+      :param name: solution pack name (e.g. ``"SOAR Framework"``).
+      :param version: the version to ensure (e.g. ``"2.2.1"``).
+      :param build_number: the build of ``version`` to fetch (see :meth:`install`).
+      :param wait: block until the import job finishes (default ``True``).
+      :param interval: seconds between polls.
+      :param timeout: give up waiting after this many seconds.
+
+      :returns: :class:`~pyfsr.models.SolutionPackInstallResponse` when already
+                installed (``.version`` confirms the match); the install response or
+                final :class:`~pyfsr.models.InstallJobStatus` when newly installed.
+
+
+

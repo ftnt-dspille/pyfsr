@@ -1,0 +1,58 @@
+pyfsr.auth.no_auth
+==================
+
+.. py:module:: pyfsr.auth.no_auth
+
+.. autoapi-nested-parse::
+
+   No-auth strategy for FortiSOAR public endpoints.
+
+   A handful of FortiSOAR endpoints are intentionally unauthenticated — build
+   version (``GET /api/version``) and the public license API
+   (``POST /api/public/license``, used for first-time activation and FortiFlex
+   token redemption). On a *fresh* or *license-locked* appliance there are no
+   working credentials to authenticate with, so those endpoints are the only way
+   in. :class:`NoAuth` lets a client be constructed for exactly that case: it sends
+   no ``Authorization`` header and does no construction-time validation.
+
+   Build one by passing ``public=True`` to :class:`pyfsr.client.FortiSOAR`. Authenticated operations
+   are marked unsupported so a misdirected call fails with a clear message rather
+   than a confusing 401.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.auth.no_auth.NoAuth
+
+
+Module Contents
+---------------
+
+.. py:class:: NoAuth(base_url: str = '', verify_ssl: bool = True)
+
+   Bases: :py:obj:`pyfsr.auth.base.BaseAuth`
+
+
+   Unauthenticated strategy — for public endpoints only (no credentials).
+
+
+   .. py:attribute:: base_url
+      :value: ''
+
+
+
+   .. py:attribute:: verify_ssl
+      :value: True
+
+
+
+   .. py:method:: get_auth_headers() -> dict
+
+      No credentials — send no auth header.
+
+
+

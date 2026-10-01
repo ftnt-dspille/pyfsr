@@ -1,0 +1,247 @@
+pyfsr.api.widgets
+=================
+
+.. py:module:: pyfsr.api.widgets
+
+.. autoapi-nested-parse::
+
+   Widget upload + publish — ``client.widgets``.
+
+   Mirrors :class:`~pyfsr.api.connectors.ConnectorsAPI` (``install_from_file``)
+   but adds the widget-specific **publish** step connectors don't need. A widget
+   upload alone lands in the *development* workspace (``draft:true,
+   installed:false``) — it is not live until published.
+
+   REST contract, wire shapes, and the two independent ``replace`` flags are
+   live-verified on FortiSOAR 8.0; see
+   ``docs/plans/WIDGET_UPLOAD_PUBLISH_PLAN.md`` for the full write-up and
+   provenance.
+
+   .. warning::
+       Live-verified appliance bug on 8.0.0-6034: uploading a **second, different
+       version** of a widget name that already exists on the box (draft or
+       published) reliably 500s appliance-side. The *first-ever* upload of a name
+       always works, and re-uploading the exact same already-seen version always
+       works — only a genuine version bump on an existing name is affected. See
+       the plan doc's "Known appliance bug" section before relying on
+       :meth:`WidgetsAPI.deploy` to ship a new version of an already-installed
+       widget; confirm on your target build first.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> [w.name for w in client.widgets.list()]
+   ['mobileSettings', 'recordSummary', 'accessControl']
+   >>> client.widgets.get("accessControl").version
+   '2.1.0'
+
+   ``publish`` needs only a uuid (no file), so it replays from the fixture too —
+   this is the real response from publishing a genuine widget package live::
+
+       >>> record = client.widgets.publish("5fef77ad-8917-40c6-82a2-fdd753bdf41c")
+       >>> record.draft, record.installed, record.published
+       (False, True, True)
+
+   ``upload`` is runnable against the replay fixture too — it builds a minimal
+   ``.tgz`` in a ``tempfile`` and posts it (see :meth:`WidgetsAPI.upload`'s doctest).
+   ``deploy`` chains upload + publish + a settle-poll that needs the published
+   widget to land in the live list — not exercised offline::
+
+       record = client.widgets.deploy("my-widget-1.2.0.tgz")
+       assert record.published
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.widgets.WidgetsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: WidgetsAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Widget listing, upload, and publish.
+
+
+   .. py:method:: list(*, installed: bool | None = None, name: str | None = None) -> list[pyfsr.models._widgets.WidgetRecord]
+
+      List widget records via ``GET /api/3/widgets``.
+
+      :param installed: filter to ``installed==True``/``False`` client-side.
+      :param name: filter to this widget name client-side.
+
+      Returns one :class:`~pyfsr.models.WidgetRecord` per widget *version* on the box.
+
+
+
+   .. py:method:: get(name: str) -> pyfsr.models._widgets.WidgetRecord | None
+
+      The newest record for widget ``name`` (highest ``version``), or ``None``.
+
+
+
+   .. py:method:: upload(path: str, *, replace: bool = True) -> pyfsr.models._widgets.WidgetRecord
+
+      Upload a widget ``.tgz`` — step 1 of deploy.
+
+      Posts to the shared solution-pack installer (``POST
+      /api/3/solutionpacks/install?$type=widget``) — there is no dedicated
+      ``widgets/import`` endpoint. Lands the widget in the *development*
+      workspace (``draft:true, installed:false``); it is **not live** until
+      :meth:`publish`.
+
+      :param path: filesystem path to the widget ``.tgz``.
+      :param replace: overwrite an already-staged copy of this exact
+                      name+version (``$replace=true``). ``False`` + an existing
+                      name+version raises :class:`~pyfsr.exceptions.WidgetUploadConflict`.
+
+                      **Live-verified effect of ``replace=True``:** it does not just
+                      clear a *staging* collision — re-uploading an exact name+version
+                      that is currently **installed and published** replaces that
+                      installed record too, resetting it to a fresh
+                      ``draft=True, installed=False`` (a new uuid; the old uuid's
+                      record is gone). In other words, ``upload(replace=True)`` on a
+                      live widget immediately un-publishes it until :meth:`publish`
+                      runs again — this is exactly why :meth:`deploy` always pairs the
+                      two calls rather than leaving a caller to run them separately.
+
+      :returns: The created :class:`~pyfsr.models.WidgetRecord` (``draft=True, installed=False``).
+
+      :raises FileNotFoundError: if ``path`` doesn't exist.
+      :raises WidgetUploadConflict: that name+version is already staged and
+          ``replace=False``.
+
+      .. rubric:: Example
+
+      >>> import io, tarfile, tempfile
+      >>> from pathlib import Path
+      >>> client = demo_client()
+      >>> with tempfile.TemporaryDirectory() as tmp:
+      ...     tgz = Path(tmp) / "jinjaEditorWidget-1.1.3.tgz"
+      ...     with tarfile.open(tgz, "w:gz") as tar:
+      ...         info = tarfile.TarInfo("jinjaEditorWidget-1.1.3/info.json")
+      ...         data = b'{"name": "jinjaEditorWidget", "version": "1.1.3"}'
+      ...         info.size = len(data)
+      ...         tar.addfile(info, io.BytesIO(data))
+      ...     record = client.widgets.upload(str(tgz))
+      >>> (record.name, record.version, record.draft, record.installed)
+      ('jinjaEditorWidget', '1.1.3', True, False)
+
+
+
+   .. py:method:: publish(uuid: str, *, replace: bool = True, go_live: bool = True) -> pyfsr.models._widgets.WidgetRecord
+
+      Publish an uploaded widget — step 2 of deploy.
+
+      Loads the development-workspace manifest (``GET
+      /api/3/widgets/development/<uuid>``) and ``PUT``\ s it back to
+      ``/api/3/widgets/<uuid>`` minus ``tree``, plus the publish flags. This
+      is exactly what the Content-Hub UI's *Publish* button sends — using
+      local ``info.json`` instead of the box's own development record was
+      observed to make the publish not stick.
+
+      :param uuid: the widget's uuid (from :meth:`upload` / :meth:`list`).
+      :param replace: supersede whatever version of this widget is currently
+                      installed (``replace`` body field, paired with
+                      ``replaceVersions``). Independent of upload's ``$replace`` —
+                      see the plan doc's "two replace flags" table.
+
+                      **Live-verified:** ``True`` and ``False`` produced an
+                      *identical* observable outcome in every case tested — a single
+                      fresh ``draft=False, installed=True`` record, no stacked
+                      versions. That's expected: by the time ``publish`` runs, the
+                      prior installed record for this name+version has typically
+                      already been collapsed by :meth:`upload`'s own ``replace``
+                      (see its docstring), so there was nothing left for this flag to
+                      visibly supersede in testing. It's kept ``True`` by default to
+                      match "replace existing version" (the UI's implied intent) and
+                      because the wire shape is what the real Publish button sends —
+                      but its effect when two *different* versions of a name
+                      genuinely coexist is unconfirmed (that scenario is currently
+                      blocked by a live-verified appliance bug on version bumps; see
+                      the module docstring's warning).
+      :param go_live: ``True`` (default) publishes for real (``draft=False``).
+                      ``False`` publishes-as-draft (rarely wanted).
+
+      :returns: The published :class:`~pyfsr.models.WidgetRecord`.
+
+
+
+   .. py:method:: deploy(path: str, *, replace: bool = True, wait: bool = True, interval: float = 3.0, timeout: float = 60.0) -> pyfsr.models._widgets.WidgetRecord
+
+      Upload then publish a widget ``.tgz`` in one call — the common path.
+
+      Unlike a connector install, a widget upload creates no import job to
+      poll — ``wait`` instead re-reads :meth:`list` until the published
+      version settles ``draft=False, installed=True`` (a cheap insurance
+      pass against a delayed reconciler revert).
+
+      :param path: filesystem path to the widget ``.tgz``.
+      :param replace: passed to both :meth:`upload` (``$replace``) and
+                      :meth:`publish` (``replace``) — see the plan doc for why
+                      these are independent flags that usually agree.
+      :param wait: settle-poll after publish until the new version is live.
+      :param interval: seconds between settle polls.
+      :param timeout: give up waiting after this many seconds.
+
+      :returns: The settled :class:`~pyfsr.models.WidgetRecord`.
+
+      :raises WidgetUploadConflict: upload collided with an existing staged version.
+      :raises WidgetPublishError: ``wait=True`` and the widget never settled live.
+
+
+
+   .. py:method:: ensure_deployed(path: str, *, replace: bool = True, wait: bool = True, interval: float = 3.0, timeout: float = 60.0) -> pyfsr.models._widgets.WidgetRecord
+
+      Deploy a widget ``.tgz`` only if it isn't already live at the same version.
+
+      Idempotent wrapper around :meth:`deploy`: reads the widget name and
+      version from the ``.tgz`` (via a lightweight upload probe), and if a
+      widget with the same name+version is already ``installed`` and
+      ``published``, skips the upload/publish cycle and returns the existing
+      record. Otherwise falls through to :meth:`deploy`.
+
+      Re-running a deploy script that ships the same widget version is a
+      no-op; a version bump deploys the new one.
+
+      :param path: filesystem path to the widget ``.tgz``.
+      :param replace: passed to :meth:`deploy` (and through to upload/publish).
+      :param wait: settle-poll after publish.
+      :param interval: seconds between settle polls.
+      :param timeout: give up waiting after this many seconds.
+
+      :returns: The settled :class:`~pyfsr.models.WidgetRecord` (existing or newly
+                deployed).
+
+
+
+   .. py:method:: export(uuid: str, dest: str, *, development: bool = False) -> str
+
+      Export a widget ``.tgz`` (mirrors the connector export).
+
+      ``POST /api/3/widgets/export/<uuid>`` with body ``{"development": bool}``,
+      response is the raw archive bytes.
+
+      :param uuid: the widget's uuid.
+      :param dest: filesystem path to write the ``.tgz`` to.
+      :param development: export the *development*-workspace copy instead of
+                          the installed/published one.
+
+      :returns: ``dest``.
+
+
+
+   .. py:method:: remove(uuid: str) -> None
+
+      Delete a widget record — ``DELETE /api/3/delete/widgets`` with ``{"ids": [uuid]}``.
+
+
+

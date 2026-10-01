@@ -1,0 +1,247 @@
+pyfsr.cli.appliance.mq
+======================
+
+.. py:module:: pyfsr.cli.appliance.mq
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance mq`` — RabbitMQ verbs (thin ``rabbitmqctl`` wrappers).
+
+   Surfaces the auth/vhost/queue-depth/consumer checks from the diagnoser, and flags
+   the two stuck-worker tells: deep queues (backlog) and queues with **zero
+   consumers**. ``rabbitmqctl`` needs root on the appliance, so every call runs sudo.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.mq.QueueInfo
+   pyfsr.cli.appliance.mq.Consumer
+   pyfsr.cli.appliance.mq.Permission
+   pyfsr.cli.appliance.mq.PurgeResult
+   pyfsr.cli.appliance.mq.WorkflowPurgeReport
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.mq.status
+   pyfsr.cli.appliance.mq.queues
+   pyfsr.cli.appliance.mq.consumers
+   pyfsr.cli.appliance.mq.vhosts
+   pyfsr.cli.appliance.mq.permissions
+   pyfsr.cli.appliance.mq.queue_depth
+   pyfsr.cli.appliance.mq.nonempty_queues
+   pyfsr.cli.appliance.mq.purge_queue
+   pyfsr.cli.appliance.mq.purge_workflows
+
+
+Module Contents
+---------------
+
+.. py:function:: status(transport: pyfsr.cli.appliance.transport.Transport) -> str
+
+   Raw ``rabbitmqctl status``.
+
+
+.. py:class:: QueueInfo(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One queue's depth and consumer count, with a stuck-worker ``flag``.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: messages
+      :type:  int
+
+
+   .. py:attribute:: consumers
+      :type:  int
+
+
+   .. py:attribute:: flag
+      :type:  str
+
+
+.. py:class:: Consumer(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A consumer binding (``queue_name`` ↔ ``channel_pid``).
+
+
+   .. py:attribute:: queue
+      :type:  str
+
+
+   .. py:attribute:: channel
+      :type:  str
+
+
+.. py:class:: Permission(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A user's ``configure``/``write``/``read`` regexes on a vhost.
+
+
+   .. py:attribute:: vhost
+      :type:  str
+
+
+   .. py:attribute:: user
+      :type:  str
+
+
+   .. py:attribute:: configure
+      :type:  str
+
+
+   .. py:attribute:: write
+      :type:  str
+
+
+   .. py:attribute:: read
+      :type:  str
+
+
+.. py:function:: queues(transport: pyfsr.cli.appliance.transport.Transport) -> list[QueueInfo]
+
+   List queues with depth + consumer count; flag backlogs and zero-consumer queues.
+
+
+.. py:function:: consumers(transport: pyfsr.cli.appliance.transport.Transport) -> list[Consumer]
+
+   List consumers (``queue_name`` ↔ ``channel_pid``).
+
+
+.. py:function:: vhosts(transport: pyfsr.cli.appliance.transport.Transport) -> list[str]
+
+   List virtual host names.
+
+
+.. py:function:: permissions(transport: pyfsr.cli.appliance.transport.Transport, *, all_vhosts: bool = False) -> list[Permission]
+
+   Permissions for the default vhost, or every vhost with ``all_vhosts``.
+
+   ``rabbitmqctl list_permissions`` is scoped to a single vhost (the default
+   ``/``). With ``all_vhosts=True`` this enumerates the vhosts and runs the
+   per-vhost query for each — the multi-vhost permission matrix the single-vhost
+   call can't give you.
+
+
+.. py:function:: queue_depth(transport: pyfsr.cli.appliance.transport.Transport, queue: str, *, vhost: str | None = None) -> int
+
+   Depth (pending message count) of a single ``queue``, or ``-1`` if absent.
+
+   Scoped to ``vhost`` when given. Cleanly typed: parses ``rabbitmqctl
+   list_queues`` and matches the named queue rather than awk-ing a tab field.
+
+
+.. py:function:: nonempty_queues(transport: pyfsr.cli.appliance.transport.Transport, *, vhost: str) -> list[tuple[str, int]]
+
+   ``(name, depth)`` for every queue in ``vhost`` with a non-zero depth.
+
+
+.. py:class:: PurgeResult(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Outcome of purging one queue: ``purged`` is the depth measured just before.
+
+
+   .. py:attribute:: queue
+      :type:  str
+
+
+   .. py:attribute:: vhost
+      :type:  str
+
+
+   .. py:attribute:: purged
+      :type:  int
+
+
+   .. py:attribute:: output
+      :type:  str
+
+
+.. py:function:: purge_queue(transport: pyfsr.cli.appliance.transport.Transport, queue: str, *, vhost: str | None = None, yes: bool = False) -> PurgeResult
+
+   Purge all pending messages from ``queue`` (irreversible). Gated by ``yes``.
+
+   Measures depth first so the result reports how many messages were dropped, then
+   runs ``rabbitmqctl purge_queue``.
+
+
+.. py:class:: WorkflowPurgeReport(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Result of :func:`purge_workflows`: the service actions taken plus the purges done.
+
+
+   .. py:attribute:: steps
+      :type:  list[pyfsr.cli.appliance.service.ServiceActionResult]
+      :value: None
+
+
+
+   .. py:attribute:: purges
+      :type:  list[PurgeResult]
+      :value: None
+
+
+
+   .. py:property:: total_purged
+      :type: int
+
+
+      Total messages purged across every queue in this report.
+
+
+   .. py:property:: ok
+      :type: bool
+
+
+      True if every service action succeeded.
+
+
+.. py:function:: purge_workflows(transport: pyfsr.cli.appliance.transport.Transport, *, yes: bool = False, graceful: bool = False, sweep_data_queues: bool = True) -> WorkflowPurgeReport
+
+   Release a stuck-worker backlog: purge queued workflows and recycle ``celeryd``.
+
+   A ``celeryd`` restart alone does NOT clear the backlog — queued tasks sit in the
+   ``celery`` queue (vhost ``fsr-cluster``) and re-dispatch the moment workers
+   return. So the workflow queue must be **purged**, not just the pool bounced.
+
+   Two strategies for recycling the pool:
+
+   * **hard (default)** — purge first, then ``systemctl kill -s SIGKILL celeryd``.
+     ``celeryd`` has ``Restart=always``, so systemd respawns a clean pool in ~1s
+     against the now-empty queue. This is the fast, live-proven path; a graceful
+     ``csadm`` stop blocks for *minutes* on in-flight workers.
+   * **graceful** (``graceful=True``) — ``csadm services --stop-service celeryd``
+     → purge → ``--start-service``. Slower but lets in-flight tasks finish.
+
+   Either way ``cyops-integrations-agent`` is restarted last (clears ballooned uwsgi
+   RSS). With ``sweep_data_queues`` (default) any non-empty queues in
+   ``intra-cyops`` are purged too.
+
+   Irreversible (drops queued tasks) — gated by ``yes``.
+
+
