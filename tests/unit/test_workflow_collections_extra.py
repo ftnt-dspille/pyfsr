@@ -498,3 +498,31 @@ def test_deploy_blocks_only_when_box_has_steps_the_yaml_lacks():
     rep3 = a3.deploy(envelope, overwrite_changed=True)
     assert "Drift WF" in rep3["diverged"]
     assert a3.client.playbooks.upserted[0]["uuid"] == wf_uuid
+
+
+# -- _wf_fingerprint: a round-tripped workflow must not read as changed ------
+def test_fingerprint_ignores_how_the_box_returns_the_same_definition():
+    """A $relationships read inlines stepType as an object and stores an empty
+    JSON object as [] -- neither is a change to the playbook."""
+    from pyfsr.api.workflow_collections import _wf_fingerprint
+
+    st = "04d0cf46-b6a8-42c4-8683-60a7eaa69e8f"
+    local = {
+        "name": "PB",
+        "isActive": True,
+        "steps": [{"name": "A", "stepType": f"/api/3/workflow_step_types/{st}", "arguments": {"params": {}}}],
+    }
+    live = {
+        "name": "PB",
+        "isActive": True,
+        "steps": [
+            {
+                "name": "A",
+                "stepType": {"@id": f"/api/3/workflow_step_types/{st}", "uuid": st},
+                "arguments": {"params": []},
+            }
+        ],
+    }
+    assert _wf_fingerprint(local) == _wf_fingerprint(live)
+    live["steps"][0]["arguments"] = {"params": {"x": 1}}
+    assert _wf_fingerprint(local) != _wf_fingerprint(live)

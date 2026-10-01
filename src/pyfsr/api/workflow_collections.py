@@ -70,10 +70,21 @@ def _wf_fingerprint(wf: dict[str, Any]) -> str:
 
     def _type(s: dict[str, Any]) -> str:
         t = s.get("stepType") or s.get("type") or ""
+        if isinstance(t, dict):  # a $relationships read inlines the step-type object
+            t = t.get("uuid") or t.get("@id") or ""
         return t.rsplit("/", 1)[-1] if isinstance(t, str) else str(t)
 
+    def _norm(v: Any) -> Any:
+        # The appliance stores an empty JSON object as ``[]``; treat every empty
+        # container as absent so a round-tripped step does not read as changed.
+        if isinstance(v, dict):
+            return {k: _norm(x) for k, x in v.items()} or None
+        if isinstance(v, list):
+            return [_norm(x) for x in v] or None
+        return v
+
     steps = [
-        {"name": s.get("name"), "type": _type(s), "args": s.get("arguments")}
+        {"name": s.get("name"), "type": _type(s), "args": _norm(s.get("arguments"))}
         for s in sorted(wf.get("steps") or [], key=lambda x: str(x.get("name", "")))
     ]
     shape = {"name": wf.get("name"), "isActive": wf.get("isActive"), "steps": steps}
@@ -866,8 +877,16 @@ class WorkflowCollectionsAPI(BaseAPI):
                 f"or pass overwrite_changed=True to delete them deliberately.{where}"
             )
 
-        # 4) ensure the collection exists, then upsert workflows in place
+        # 4) ensure the collection exists, then upsert workflows in place. A
+        # collection in the recycle bin still owns its uuid and name, so creating
+        # it again 409s -- restore it instead.
+        restored = None
         if target_live is None:
+            restored = self._restore_deleted_collection(target_uuid, col_name)
+            if restored:
+                target_uuid = restored
+                report["collection_uuid"] = restored
+        if target_live is None and not restored:
             self.create_collection(
                 col_name,
                 description=col.get("description", ""),
@@ -889,6 +908,29 @@ class WorkflowCollectionsAPI(BaseAPI):
                 except Exception:
                     pass
         return report
+
+    def _restore_deleted_collection(self, uuid: str | None, name: str) -> str | None:
+        """Restore a soft-deleted collection matching ``uuid`` (else ``name``); return its uuid."""
+        candidates: list[dict[str, Any]] = []
+        if uuid:
+            try:
+                row = self.client.get(f"{_BASE}/{uuid}", params={"$showDeleted": "true"})
+                if isinstance(row, dict):
+                    candidates.append(row)
+            except Exception:  # noqa: BLE001 - not present under this uuid
+                pass
+        if not candidates and name:
+            try:
+                resp = self.client.get(_BASE, params={"name": name, "$showDeleted": "true"})
+                candidates = [m for m in extract_members(resp) if m.get("name") == name]
+            except Exception:  # noqa: BLE001
+                candidates = []
+        deleted = [c for c in candidates if c.get("deletedAt")]
+        if not deleted:
+            return None
+        found = str(deleted[0]["uuid"])
+        self.client.put(f"{_BASE}/{found}", data={"deletedAt": None}, params={"$showDeleted": "true"})
+        return found
 
     def restore(self, uuid: str) -> WorkflowCollection:
         """Restore a soft-deleted collection from the recycle bin.

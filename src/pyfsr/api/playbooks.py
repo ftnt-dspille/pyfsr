@@ -28,6 +28,7 @@ import urllib.parse
 import warnings
 from collections.abc import Callable
 from typing import Any
+from uuid import uuid4 as _uuid4
 
 from pydantic import ValidationError
 
@@ -1481,45 +1482,55 @@ class PlaybooksAPI(BaseAPI):
     def upsert_playbooks(self, rows: builtins.list[dict[str, Any]]) -> dict[str, Any]:
         """Create-or-update playbook definitions, keyed by workflow ``uuid``.
 
-        For each row: if no workflow with that ``uuid`` exists, it is created via
-        :meth:`create_playbooks`. If it exists, the definition is updated
-        **in place** -- which the server offers no single endpoint for
-        (``bulkupsert/workflows`` is create-only, and a whole-row ``PUT`` with
-        nested ``steps`` dicts fails because the step children are treated as
-        inserts of already-existing uuids; both live-verified on 8.0.0). The
-        update is therefore performed piecewise:
+        For each row: if no workflow with that ``uuid`` exists, an empty playbook
+        is created (``POST /api/3/workflows`` with no steps) and then filled the
+        same way an existing one is updated, so creates and updates share one
+        path. A playbook in the recycle bin is restored and updated in place.
+        Updates happen **in place**. ``bulkupsert/workflows`` is create-only, and a whole-row
+        ``PUT`` with *every* step as a nested dict fails because existing children
+        are treated as inserts of already-existing uuids (live-verified on 8.0.0).
+        What does work is a ``PUT`` whose ``steps``/``routes`` reference the rows
+        being kept by IRI and carry only the new rows as dicts. So:
 
-        1. ``PUT /api/3/workflows/<uuid>`` with the scalar fields only
-           (``steps``/``triggerStep`` excluded),
-        2. each step: ``PUT /api/3/workflow_steps/<uuid>`` if it exists, else
-           ``POST /api/3/workflow_steps`` with the workflow IRI attached,
-        3. live steps absent from the new definition are deleted,
-        4. ``triggerStep`` is set last (it references a step that must exist).
+        1. ``PUT /api/3/workflows/<uuid>`` with the scalar fields only,
+        2. ``PUT /api/3/workflow_steps/<uuid>`` (and ``workflow_routes``) for each
+           row being kept, so edits to existing steps land,
+        3. one ``PUT /api/3/workflows/<uuid>`` with ``steps`` and ``routes`` --
+           kept rows as IRIs, new rows as dicts. The server creates the new rows
+           attached to the playbook and drops (deletes) rows absent from the
+           lists, so removed steps and rewired routes need no separate calls,
+        4. ``triggerStep`` is set last (it references a step that must exist),
+        5. the playbook is read back, and a mismatch between the intended and
+           live step/route uuids raises rather than reporting success.
+
+        A standalone ``POST /api/3/workflow_steps`` is deliberately avoided: the
+        server ignores its ``workflow`` field and leaves the step unattached, so
+        the playbook keeps running the old flow while the call reports success,
+        and the next update 409s on that leftover uuid (live-verified on 8.0.0).
+        Leftovers from that older behaviour are adopted -- updated and referenced
+        by IRI -- instead of being re-created.
 
         The playbook keeps its uuid, routes, and collection membership, so
         record-action routes and triggers stay registered.
 
-        NEW rows go through ``create_playbooks()`` -> ``bulkupsert/workflows``,
-        which rejects API-key auth on 8.0.0 (misleading ``Invalid credentials.``);
-        an API-key client raises ``UnsupportedAuthOperationError`` up front. Use a
-        username/password (JWT) client whenever a deploy may create playbooks.
+        Creating through ``bulkupsert/workflows`` (:meth:`create_playbooks`) is
+        avoided here for two reasons, both live-verified on 8.0.0: it fails with a
+        uniqueness error when the playbook's step rows outlived it (for example
+        after its collection was hard-deleted while the playbook sat in the
+        recycle bin -- the steps survive, attached to nothing, and no API call can
+        see the playbook), and it rejects API-key auth. The empty-shell create
+        adopts those stranded rows like any other leftover, and plain POST/PUT
+        works with API keys.
 
         Returns ``{"created": [uuids], "updated": [uuids]}``.
         """
         created: builtins.list[str] = []
         updated: builtins.list[str] = []
-        to_create: builtins.list[dict[str, Any]] = []
         for row in rows:
-            wf_uuid = row.get("uuid")
-            existing = None
-            if wf_uuid:
-                try:
-                    existing = self.client.get(f"/api/3/workflows/{wf_uuid}")
-                except Exception:
-                    existing = None
+            wf_uuid = row.get("uuid") or str(_uuid4())
+            existing = self._live_or_restored(str(wf_uuid))
             if not existing:
-                to_create.append(row)
-                continue
+                self._create_shell(row, str(wf_uuid))
 
             new_steps = row.get("steps") or []
             scalar = {
@@ -1551,49 +1562,136 @@ class PlaybooksAPI(BaseAPI):
             if scalar:
                 self.client.put(f"/api/3/workflows/{wf_uuid}", data=scalar)
 
+            wf_uuid = str(wf_uuid)
             wf_iri = f"/api/3/workflows/{wf_uuid}"
-            live = self.client.get(f"{wf_iri}?$relationships=true")
-            live_step_uuids = set()
-            for s in live.get("steps") or []:
-                sid = s.get("uuid") if isinstance(s, dict) else uuid_from_iri(str(s))
-                if not sid and isinstance(s, dict):
-                    sid = uuid_from_iri(s.get("@id", ""))
-                if sid:
-                    live_step_uuids.add(sid)
+            live = self._get_dict(f"{wf_iri}?$relationships=true")
+            live_steps = self._member_uuids(live.get("steps"))
+            live_routes = self._member_uuids(live.get("routes"))
 
-            new_step_uuids = set()
-            for step in new_steps:
-                body = {
-                    k: v
-                    for k, v in step.items()
-                    if k not in ("@context", "@id", "@type", "id", "uuid", "createDate", "modifyDate")
-                }
-                body["workflow"] = wf_iri
-                sid = step.get("uuid") or uuid_from_iri(step.get("@id", ""))
-                if sid and sid in live_step_uuids:
-                    self.client.put(f"/api/3/workflow_steps/{sid}", data=body)
-                    new_step_uuids.add(sid)
-                else:
-                    if sid:
-                        body["uuid"] = sid
-                    resp = self.client.post("/api/3/workflow_steps", data=body)
-                    new_step_uuids.add(sid or uuid_from_iri(resp.get("@id", "")))
-
-            for orphan in live_step_uuids - new_step_uuids:
-                try:
-                    self.client.delete(f"/api/3/workflow_steps/{orphan}")
-                except Exception:
-                    pass
+            relations: dict[str, Any] = {}
+            relations["steps"] = self._relation_refs(new_steps, "workflow_steps", live_steps, wf_iri)
+            if "routes" in row:
+                relations["routes"] = self._relation_refs(
+                    row.get("routes") or [], "workflow_routes", live_routes, wf_iri
+                )
+            self.client.put(wf_iri, data=relations)
 
             trigger = row.get("triggerStep")
             if trigger:
-                self.client.put(f"/api/3/workflows/{wf_uuid}", data={"triggerStep": trigger})
-            updated.append(wf_uuid)
+                self.client.put(wf_iri, data={"triggerStep": trigger})
+            self._verify_relations(wf_uuid, relations)
+            (updated if existing else created).append(wf_uuid)
 
-        if to_create:
-            self.create_playbooks(to_create)
-            created.extend(str(r.get("uuid") or "") for r in to_create)
         return {"created": created, "updated": updated}
+
+    _SHELL_EXCLUDE = frozenset(
+        {"steps", "routes", "groups", "versions", "triggerStep", "@context", "@id", "id", "createDate", "modifyDate"}
+    )
+
+    def _create_shell(self, row: dict[str, Any], wf_uuid: str) -> None:
+        """Create the playbook with no steps; the caller fills it in place."""
+        self._ensure_collections([row])
+        shell = {k: v for k, v in row.items() if k not in self._SHELL_EXCLUDE}
+        shell["uuid"] = wf_uuid
+        self.client.post(_WORKFLOWS, data=shell)
+
+    def _live_or_restored(self, wf_uuid: str) -> dict[str, Any] | None:
+        """The live workflow row, restoring it first if it is in the recycle bin.
+
+        A soft-deleted playbook 404s on a plain GET but still owns its uuid, so
+        creating it again fails (``bulkupsert`` 400, then a uniqueness 500). A
+        deploy that ships that playbook again means "bring it back": clear its
+        ``deletedAt`` (the steps come back with it) and update it in place.
+        """
+        try:
+            row = self.client.get(f"/api/3/workflows/{wf_uuid}")
+            if isinstance(row, dict) and row:
+                return row
+        except Exception:  # noqa: BLE001 - 404 when absent or soft-deleted
+            pass
+        try:
+            row = self.client.get(f"/api/3/workflows/{wf_uuid}", params={"$showDeleted": "true"})
+        except Exception:  # noqa: BLE001 - genuinely absent
+            return None
+        if not isinstance(row, dict) or not row.get("deletedAt"):
+            return None
+        self.client.put(f"/api/3/workflows/{wf_uuid}", data={"deletedAt": None}, params={"$showDeleted": "true"})
+        return self._get_dict(f"/api/3/workflows/{wf_uuid}")
+
+    @staticmethod
+    def _member_uuids(members: Any) -> set[str]:
+        """Uuids of a ``$relationships=true`` child list (dicts or bare IRIs)."""
+        out: set[str] = set()
+        for m in members or []:
+            sid = m.get("uuid") if isinstance(m, dict) else uuid_from_iri(str(m))
+            if not sid and isinstance(m, dict):
+                sid = uuid_from_iri(m.get("@id", ""))
+            if sid:
+                out.add(sid)
+        return out
+
+    def _get_dict(self, endpoint: str) -> dict[str, Any]:
+        resp = self.client.get(endpoint)
+        return resp if isinstance(resp, dict) else {}
+
+    def _row_exists(self, entity: str, uuid: str) -> bool:
+        try:
+            return bool(self.client.get(f"/api/3/{entity}/{uuid}"))
+        except Exception:  # noqa: BLE001 - 404 means it does not exist
+            return False
+
+    def _relation_refs(
+        self,
+        rows: builtins.list[dict[str, Any]],
+        entity: str,
+        live_uuids: set[str],
+        wf_iri: str,
+    ) -> builtins.list[Any]:
+        """Build a ``steps``/``routes`` list for the workflow PUT.
+
+        Rows already on the box are updated in place and referenced by IRI; new
+        rows are passed as dicts so the server creates them attached. A row whose
+        uuid exists but is not attached to this playbook (a leftover from an
+        interrupted update) is adopted the same way as a live one.
+        """
+        refs: builtins.list[Any] = []
+        for row in rows:
+            body = {
+                k: v
+                for k, v in row.items()
+                if k not in ("@context", "@id", "@type", "id", "uuid", "createDate", "modifyDate")
+            }
+            rid = row.get("uuid") or uuid_from_iri(row.get("@id", ""))
+            if rid and (rid in live_uuids or self._row_exists(entity, rid)):
+                self.client.put(f"/api/3/{entity}/{rid}", data={**body, "workflow": wf_iri})
+                refs.append(f"/api/3/{entity}/{rid}")
+            else:
+                if rid:
+                    body["uuid"] = rid
+                refs.append(body)
+        return refs
+
+    def _verify_relations(self, wf_uuid: str, relations: dict[str, Any]) -> None:
+        """Read the playbook back; raise if its steps/routes are not what was sent."""
+        after = self._get_dict(f"/api/3/workflows/{wf_uuid}?$relationships=true")
+        problems = []
+        for key, refs in relations.items():
+            want: set[str] = set()
+            for r in refs:
+                rid = r.get("uuid") if isinstance(r, dict) else uuid_from_iri(r)
+                if rid:
+                    want.add(str(rid))
+            got = self._member_uuids(after.get(key))
+            if want - got or (len(want) == len(refs) and got - want):
+                problems.append(f"{key}: missing {sorted(want - got)}, unexpected {sorted(got - want)}")
+        if problems:
+            from ..exceptions import APIError
+
+            raise APIError(
+                f"playbook {wf_uuid} update did not take effect -- " + "; ".join(problems),
+                None,
+                error_type="PlaybookUpdateMismatch",
+            )
 
     def query(
         self,
@@ -1768,10 +1866,14 @@ class PlaybooksAPI(BaseAPI):
             tail = s.rstrip("/").rsplit("/", 1)[-1]
             return tail if tail.isdigit() else None
         if _looks_like_uuid(s):  # a task_id -- map to its pk via the live log
-            resp = self.log_list(task_id=s, limit=1)
+            # A referenced child playbook runs under its parent's task_id, and the
+            # log lists newest first -- so the first row is the child, not the run
+            # that was triggered. Take the top-level run (no parent_wf).
+            resp = self.log_list(task_id=s, limit=50)
             members = extract_members(resp)
-            if members:
-                iri = members[0].get("@id") or ""
+            root = next((m for m in members if not m.get("parent_wf")), members[0] if members else None)
+            if root:
+                iri = root.get("@id") or ""
                 tail = iri.rstrip("/").rsplit("/", 1)[-1]
                 return tail if tail.isdigit() else None
         return None
