@@ -56,7 +56,7 @@ True
 The `set_variable` step type maps to a fixed `stepType` IRI (a UUID the
 compiler resolves from its catalog); the friendly `vars:` mapping lands verbatim
 in `arguments`, and `next:` becomes a `WorkflowRoute` whose `name` is
-`"<source> -> <target>"`. The volatile fields ��� `uuid`, `top`/`left` (canvas
+`"<source> -> <target>"`. The volatile fields -- `uuid`, `top`/`left` (canvas
 position), and the `/api/3/workflow_steps/<uuid>` IRIs in each route -- are
 compiler-generated and stable across runs, so you only need to author the
 friendly shape on the left.
@@ -73,7 +73,7 @@ visible: true                       # optional -- show in the UI (default true)
 
 playbooks:                          # required -- one or more workflows
   - name: My Playbook               # required -- workflow name
-    is_active: false                # optional -- live trigger? (default false)
+    is_active: false                # optional -- ship disabled (default true)
     trigger: start                  # optional -- trigger step type (default "start")
     parameters: []                  # optional -- referenced-playbook input params
     steps:                          # required -- the step list
@@ -87,18 +87,30 @@ playbooks:                          # required -- one or more workflows
 
 | Top-level key | Meaning |
 |---|---|
-| `collection` | Collection display name. |
+| `collection` | Collection display name (wrap mode -- replaces the whole collection). |
+| `into_collection` | Collection name (per-playbook mode -- only touches listed playbooks within a shared target). Mutually exclusive with `collection`; if neither is set, defaults to `00 - FSR Studio`. |
 | `description` | Free-text description. |
 | `visible` | Whether the collection shows in the UI (default `true`). |
+| `tags` | List of tag names for the collection. |
+| `exported_tags` | List of tag names used by the Data Ingestion Wizard. |
+| `uuid` | Collection UUID (round-trip preservation; omitted for new collections). |
 | `playbooks` | List of workflows; each is one playbook. |
 
 | Playbook key | Meaning |
 |---|---|
 | `name` | Workflow name (required). |
-| `is_active` | If `true`, the playbook is **live** and its trigger fires. Leave `false` for manual/referenced playbooks. |
+| `description` | Free-text description. |
+| `tag` / `tags` | Tag string or list of tag names. |
+| `is_active` | If `true` (the default), the playbook is **live** and its trigger fires. Set `false` to ship a disabled draft. |
+| `debug` | Verbose runtime tracing (default `false`). |
+| `is_private` | Private to owner teams; derived from `owners` when omitted. |
+| `owners` | List of team names or IRIs for private visibility. |
+| `priority` | Workflow priority: `High` (default), `Medium`, or `Low`. |
 | `trigger` | Short-name of the trigger step type; defaults to `start`. Usually inferred from the first `start*` step instead. |
-| `parameters` | Input parameters for a referenced playbook (`vars.input.params.<name>`). |
+| `parameters` | Input parameters for a referenced playbook -- a list of names or a mapping `{name: type}`. |
 | `steps` | The step list (see below). |
+| `annotations` | Canvas notes/blocks (round-trip preservation). |
+| `uuid` | Playbook UUID (round-trip preservation; omitted for new playbooks). |
 
 ## Steps: common shape
 
@@ -128,21 +140,28 @@ table). Use the friendly name on the left:
 
 | `type:` | FortiSOAR step | Purpose |
 |---|---|---|
-| `start` | `cybersponse.abstract_trigger` | Manual / referenced trigger (the default Start). |
+| `start` | `cybersponse.abstract_trigger` | Manual / referenced trigger (the default Start). With `module:`, becomes a manual Execute-menu trigger (`cybersponse.action`). |
 | `start_on_create` | `cybersponse.post_create` | **Auto-fire when a record is created** in a module. |
 | `start_on_update` | `cybersponse.post_update` | Auto-fire when a record is updated. |
+| `start_on_delete` | `cybersponse.post_delete` | Auto-fire when a record is deleted. |
+| `api_endpoint` | `cybersponse.api_call` | Expose the playbook at `POST /api/triggers/1/<route>`. |
 | `set_variable` | `SetVariable` | Define `vars.*` values. |
 | `decision` | `Decision` | Branch on conditions. |
 | `connector` | `Connectors` | Run a connector operation. |
 | `find_record` | `FindRecords` | Query records of a module. |
 | `create_record` | `InsertData` | Create a record. |
 | `update_record` | `UpdateRecord` | Update a record. |
+| `delete_record` | `Connectors` (`cyops_utilities.make_cyops_request`) | Delete a record (via a utility DELETE call). |
 | `ingest_bulk_feed` | `IngestBulkFeed` | Bulk feed insert (bypasses on-create triggers). |
 | `delay` | `Delay` | Wait. |
 | `manual_input` | `ManualInput` | Pause for human input. |
 | `approval` | `Approval` | Approval gate. |
 | `code_snippet` | `CodeSnippet` | Run a Python snippet. |
-| `workflow_reference` | `WorkflowReference` | Call another playbook. |
+| `send_email` | `SendMail` | Send an email (via the SMTP connector). |
+| `create_task` | `ManualTask` | Create a task record. |
+| `workflow_reference` | `WorkflowReference` | Call another playbook (same collection). |
+| `trigger_tenant_playbook` | `RemotePlaybookReference` | Call a playbook in another tenant. |
+| `utilities` | `Connectors` (`cyops_utilities`) | Run a utility operation (convert_json_to_csv, compute_hash, ...). |
 | `stop` / `end` | `Connectors` (`cyops_utilities.no_op`) | First-class no-op terminal. |
 
 ### `start` -- manual trigger
@@ -163,10 +182,10 @@ records:
   next: First Step
 ```
 
-### `start_on_create` / `start_on_update` -- record triggers
+### `start_on_create` / `start_on_update` / `start_on_delete` -- record triggers
 
-Auto-fire when a record is created (or updated) in `module:`. Set the
-playbook's `is_active: true` for it to actually fire.
+Auto-fire when a record is created (or updated, or deleted) in `module:`. Set
+the playbook's `is_active: true` (the default) for it to actually fire.
 
 ```yaml
 - name: Start
@@ -190,9 +209,10 @@ Add a `when:` field-based filter to fire only on records matching a query
 ```
 
 For `start_on_update`, `op: changed` (no `value`) fires when the listed field
-changes. The compiler expands `when:` into the canonical `fieldbasedtrigger`
-envelope (`resource`/`resources`, `step_variables`, `triggerOnSource`, …) for
-you.
+changes. For `start_on_delete`, the deleted record(s) arrive at
+`vars.input.records`. The compiler expands `when:` into the canonical
+`fieldbasedtrigger` envelope (`resource`/`resources`, `step_variables`,
+`triggerOnSource`, ...) for you.
 
 ```{important}
 A `start_on_create` / `start_on_update` playbook only fires when the workflow is
@@ -253,6 +273,19 @@ guess them:
   module: heists
   query: {logic: AND, filters: [{field: status, operator: eq, value: Open}]}
 
+# Or use the friendly query fields:
+- name: Find Recent
+  type: find_record
+  module: heists
+  filters:
+    - {field: status, op: eq, value: Open}
+  logic: AND
+  limit: 50
+  sort:
+    - {field: createDate, direction: DESC}
+  select: [name, status, takeUsd]
+  next: Decide
+
 - name: Log It
   type: create_record
   module: heist_logs
@@ -260,7 +293,7 @@ guess them:
 
 - name: Stamp Status
   type: update_record
-  module: heists                                     # → collectionType
+  module: heists                                     # -> collectionType
   record: "{{ vars.steps.Find_Open_Heists[0]['@id'] }}"  # first record IRI from the find step
   resource: {status: Briefed}
 ```
@@ -274,10 +307,129 @@ directly (not `.data`). Index the first hit with `[0]`, then read any field
 `record:` stays the *record* IRI you're updating). Bare picklist labels
 (e.g. `status: Briefed`) are auto-resolved to picklist IRIs.
 
-### `delay`, `approval`
+### `delay`
 
-These use canonical step-level keys (see `pyfsr playbook validate` /
-`pyfsr playbook step-help <type>`).
+Friendly duration fields -- the compiler expands to FSR's canonical time-based
+rule:
+
+```yaml
+- name: Wait a Bit
+   type: delay
+   seconds: 30
+   next: Next Step
+```
+
+Accepts `seconds`, `minutes`, `hours`, `days` (any combination; defaults to
+1 second if all are zero/absent).
+
+### `approval`
+
+An approval gate is a specialized `manual_input` with button-only options
+(approve/reject). The compiler handles the wire shape; see `pyfsr playbook
+step-help approval` for the full schema.
+
+### `send_email`
+
+Friendly email fields at the step top level (the compiler routes through the
+SMTP connector's `send_email` operation):
+
+```yaml
+- name: Notify Team
+  type: send_email
+  to: "{{ vars.input.records[0].ownerEmail }}"
+  subject: "Critical alert: {{ vars.input.records[0].name }}"
+  body: "Investigation triggered for alert {{ vars.input.records[0].name }}"
+  from: "soc@example.com"
+  cc: ["backup@example.com"]
+  next: Next Step
+```
+
+Accepts `to`, `cc`, `bcc` (string or list), `subject`, `body`, `from`, and
+`attachments`.
+
+### `create_task`
+
+Creates a record in the `tasks` module (the compiler defaults the collection
+to `tasks`):
+
+```yaml
+- name: Create Followup Task
+  type: create_task
+  resource:
+    name: "Investigate {{ vars.input.records[0].name }}"
+    description: "Auto-created by playbook"
+    status: Open
+  next: Next Step
+```
+
+### `delete_record`
+
+Deletes a single record by IRI, or bulk-deletes via a query (compiles to a
+`cyops_utilities.make_cyops_request` DELETE call):
+
+```yaml
+- name: Delete Old Record
+  type: delete_record
+  module: heists
+  record: "{{ vars.steps.Find_Old.data[0]['@id'] }}"
+  next: Done
+
+- name: Bulk Delete
+  type: delete_record
+  module: heists
+  query:
+    logic: AND
+    filters:
+      - {field: status, op: eq, value: Closed}
+  next: Done
+```
+
+Accepts `record` (single IRI), `record_id` (uuid + `module`), or `query`
+(bulk delete via `delete-with-query`). Set `show_deleted: true` to include
+already-deleted records in query results.
+
+### `api_endpoint`
+
+Exposes the playbook at `POST /api/triggers/1/<route>`:
+
+```yaml
+- name: Start
+  type: api_endpoint
+  route: my-webhook
+  next: Handle Request
+```
+
+Authentication defaults to Token Based (`[""]`); set `authentication_methods:
+["anonymous"]` for no-auth, or `["Basic"]` for HTTP Basic.
+
+### `utilities`
+
+Runs a `cyops_utilities` operation (convert_json_to_csv, compute_hash,
+make_cyops_request, no_op, ...). Put the operation name and params at the step
+top level:
+
+```yaml
+- name: Hash Value
+  type: utilities
+  operation: compute_hash
+  params:
+    algorithm: sha256
+    value: "{{ vars.input.records[0].sourceIp }}"
+  next: Next Step
+```
+
+### `trigger_tenant_playbook`
+
+Calls a playbook in another FortiSOAR tenant (requires a `workflowReference:`
+IRI -- the local-name `target:` form can't cross tenants):
+
+```yaml
+- name: Call Remote Tenant
+  type: trigger_tenant_playbook
+  workflowReference: "/api/3/workflows/<uuid>"
+  pickFromTenant: true
+  next: Done
+```
 
 ### `code_snippet` -- run a Python snippet
 
@@ -297,10 +449,10 @@ required (set `allow_imports` on it to `import` anything):
 
 ```{important}
 The `code-snippet` sandbox execs the snippet at **module level** (a top-level
-`return` is a `SyntaxError`), restricts `open`, **and blocks builtins like
-`max()`, `min()`, `sum()`**. Surface a result with
-`print(json.dumps(...))` -- the connector auto-deserializes it into a
-`code_output` dict read downstream at `vars.steps.<name>.data.code_output.*`.
+`return` is a `SyntaxError`) and restricts `open` (no file access). Surface a
+result with `print(json.dumps(...))` -- the connector auto-deserializes it
+into a `code_output` dict read downstream at
+`vars.steps.<name>.data.code_output.*`.
 See {doc}`playbook-authoring` for the full sandbox-compatible pattern, the
 upstream-output jinja paths, and the unrestricted-python escape hatch.
 ```
@@ -360,11 +512,74 @@ child's output:
 reads `vars.steps.CallChild.is_valid_number`. (In Jinja, spaces in a step name
 become underscores.)
 
-### `do_until` / `retry:` -- loop a step until a condition holds
+### `stop` / `end`
 
-Attach a `retry:` block (`until` / `times` / `delay`) to re-run a step until the
-Jinja `until` evaluates true. On a `workflow_reference` this re-launches the
-child each turn -- e.g. re-popping a `manual_input` until the answer validates:
+First-class no-op terminals -- use them on a branch that should do nothing
+rather than leaving it dangling:
+
+```yaml
+- name: Done
+  type: end
+```
+
+## Cross-cutting step features
+
+These keys work on most step types -- they're not step-specific arguments but
+compiler-level sugar that applies across the DSL.
+
+### `for_each:` -- loop a step over a list
+
+Attach a `for_each:` block to iterate a step over a Jinja list expression.
+Each iteration gets `{{ vars.for_each.item }}` (the current element):
+
+```yaml
+- name: Check Each IP
+  type: connector
+  connector: virustotal
+  operation: query_ip
+  params:
+    ip: "{{ vars.for_each.item }}"
+  next: Done
+  for_each:
+    item: "{{ vars.steps.Extract_IPs.data.ips }}"
+    parallel: true
+    max_parallel: 4
+    condition: "{{ vars.for_each.item | length > 0 }}"
+```
+
+Keys: `item` (required, Jinja list expression), `parallel` (default `false`),
+`condition` (optional Jinja filter per iteration), `batch_size` (bulk mode),
+`break_loop` (Jinja condition to stop early), `max_parallel` / `concurrency_count`
+(parallel loop cap, min 2). Not allowed on control-flow steps (`start*`,
+`decision`, `end`, `manual_input`).
+
+### `with:` -- compile-time Jinja alias
+
+Bind short names to long Jinja expressions at compile time; the compiler
+rewrites every `vars.<name>` reference in the step's arguments to the bound
+expression. This keeps complex `vars.steps.X.data.Y.Z` paths readable:
+
+```yaml
+- name: Build Verdict
+  type: set_variable
+  with:
+    yeti: "{{ vars.steps.Yeti_Search.data }}"
+    netbox: "{{ vars.steps.NetBox_Lookup.data }}"
+  vars:
+    yeti_hits: "{{ vars.yeti.total | default(0) }}"
+    asset_tenant: "{{ vars.netbox.results[0].tenant.name if (vars.netbox.count | default(0)) > 0 else 'Unknown' }}"
+  next: Branch on Threat
+```
+
+Here `vars.yeti.total` is rewritten at compile time to
+`vars.steps.Yeti_Search.data.total`. The `{{ }}` wrapper is optional in the
+binding value.
+
+### `retry:` / `do_until:` -- loop until a condition holds
+
+Attach a `retry:` block (`until` / `times` / `delay`) to re-run a step until
+the Jinja `until` evaluates true. On a `workflow_reference` this re-launches
+the child each turn -- e.g. re-popping a `manual_input` until the answer validates:
 
 ```yaml
 - name: CallChild
@@ -388,14 +603,67 @@ counting runs by name. The full worked example is
 `examples/playbook_do_until_loop.py`).
 ```
 
-### `stop` / `end`
+`retry:` and `do_until:` compile to the same wire block; use one or the other.
+`retry:` without `until:` is silently dropped by FSR at import time.
 
-First-class no-op terminals -- use them on a branch that should do nothing
-rather than leaving it dangling:
+### `post_comment:` -- comment on the triggering record
+
+Sugar for posting a collaboration comment on the triggering record:
 
 ```yaml
-- name: Done
-  type: end
+- name: Annotate
+  type: set_variable
+  vars: {note: "investigation complete"}
+  post_comment: "Auto-triaged: {{ vars.input.records[0].name }}"
+  next: Done
+```
+
+### `on_remote:` -- route to a remote agent
+
+Route step execution to a named FortiSOAR Agent, or use `pick_from_record` for
+record-ownership-based selection:
+
+```yaml
+- name: Block on Edge
+  type: connector
+  connector: fortigate
+  operation: block_ip
+  on_remote: edge-1
+  next: Done
+```
+
+### `set:` -- step variables (alias for step_variables)
+
+`set:` is a friendly alias for `step_variables` -- variables scoped to the
+current step's execution context:
+
+```yaml
+- name: Capture
+  type: connector
+  connector: virustotal
+  operation: query_ip
+  set:
+    verdict: "{{ vars.steps.Capture.data.last_analysis_stats }}"
+  next: Decide
+```
+
+### Decision: `display:` / `when:` / `default:`
+
+Decision conditions accept friendly key aliases: `display:` (the branch label,
+rewritten to wire `option:`) and `when:` (the condition, rewritten to wire
+`condition:`). A step-level `default:` is sugar for an Else branch:
+
+```yaml
+- name: Big Score?
+  type: decision
+  conditions:
+    - display: High Value
+      when: "{{ vars.input.records[0].takeUsd > 1000000 }}"
+      next: Alert The Boss
+    - display: Medium Value
+      when: "{{ vars.input.records[0].takeUsd > 100000 }}"
+      next: Log It
+  default: Log It
 ```
 
 ## Jinja value transforms (filters)
