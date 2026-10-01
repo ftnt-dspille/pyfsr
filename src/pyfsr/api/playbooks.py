@@ -2862,7 +2862,7 @@ class PlaybooksAPI(BaseAPI):
             resolves the playbook's trigger route automatically.
           - Otherwise, uses :meth:`trigger` (manual-execute / ``notrigger``).
 
-        When ``answers`` is provided, any :class:`manual_input` or approval gate
+        When ``answers`` is provided, any ``manual_input`` or approval gate
         that pauses the run is **auto-answered** during polling -- no need for a
         separate :meth:`~pyfsr.api.manual_input.ManualInputAPI.answer` call. The
         dict keys match by the prompt's **title** (the step's ``title:`` field)
