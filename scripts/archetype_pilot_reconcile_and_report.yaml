@@ -162,7 +162,7 @@ playbooks:
                   w.writerow([f["join_key"], f["severity"], f["kind"],
                               f["source_system"], f["target_system"], f["details"]])
 
-              # Big summary view — native Slack Block Kit (header + context +
+              # Big summary view -- native Slack Block Kit (header + context +
               # two-column field grids). Returned as a JSON string for the slack
               # connector's `blocks` param.
               today = datetime.date.today().strftime("%b %d")
@@ -212,7 +212,7 @@ playbooks:
                       "count": len(findings)}
 
       # One reconciliation_results record per finding (for_each over the findings
-      # array) — so dashboards can group/filter by mismatch_type, status, etc.
+      # array) -- so dashboards can group/filter by mismatch_type, status, etc.
       # NOTE: without a module uniqueness constraint on (join_key, mismatch_type)
       # this re-creates records every run; add that constraint for true upsert.
       - name: Write finding
@@ -243,12 +243,12 @@ playbooks:
         config: slack
         params:
           channel: "#it-asset-mgmt"
-          message: "{{ vars.item.emoji }} *{{ vars.item.severity }}* — {{ vars.item.details }} (asset {{ vars.item.join_key }}, {{ vars.item.source_system }} vs {{ vars.item.target_system }})"
+          message: "{{ vars.item.emoji }} *{{ vars.item.severity }}* -- {{ vars.item.details }} (asset {{ vars.item.join_key }}, {{ vars.item.source_system }} vs {{ vars.item.target_system }})"
             # The connector defaults thread_ts to 0 (Slack rejects it) unless sent
-            # explicitly empty — post as a top-level message, not a thread reply.
+            # explicitly empty -- post as a top-level message, not a thread reply.
           thread_ts: ""
 
-      # Big summary view — native Block Kit (header + field grids).
+      # Big summary view -- native Block Kit (header + field grids).
       - name: Slack summary
         type: connector
         connector: slack
