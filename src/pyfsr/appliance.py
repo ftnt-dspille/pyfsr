@@ -210,7 +210,7 @@ class MqNamespace:
 
 
 class HostNamespace:
-    """OS resource metrics (``appliance.host``). All read-only, no sudo."""
+    """OS resource metrics and OS accounts (``appliance.host``)."""
 
     def __init__(self, t: Transport) -> None:
         self._t = t
@@ -234,6 +234,23 @@ class HostNamespace:
     def snapshot(self, *, disk_path: str = "/opt/cyops") -> HostSnapshot:
         """One coherent sample: mem, swap, load, worker RSS, disk."""
         return host.snapshot(self._t, disk_path=disk_path)
+
+    def set_os_password(self, user: str, password: str, *, yes: bool = False) -> None:
+        """Set an OS account's password (``chpasswd``). Separate from the application login.
+
+        When ``user`` is the account this transport logs in as, its stored SSH and
+        sudo passwords are updated too so later calls keep working. Refuses
+        unless ``yes=True``.
+        """
+        host.set_os_password(self._t, user, password, yes=yes)
+        if getattr(self._t, "user", None) == user:
+            for attr in ("password", "sudo_password"):
+                if getattr(self._t, attr, None) is not None:
+                    setattr(self._t, attr, password)
+
+    def os_password_status(self, user: str) -> dict[str, str]:
+        """Password aging for an OS account (``chage -l``)."""
+        return host.os_password_status(self._t, user)
 
 
 class LicenseNamespace:
@@ -276,6 +293,10 @@ class LogsNamespace:
     def bundle(self, *, timeout: float = 300.0) -> str:
         """``csadm log --collect`` → tarball path (slow)."""
         return logs.bundle(self._t, timeout=timeout)
+
+    def forward_configs(self) -> str:
+        """``csadm log forward show-config`` -- configured syslog forwarding destinations."""
+        return logs.forward_configs(self._t)
 
 
 class EsNamespace:

@@ -1,11 +1,11 @@
-"""``pyfsr appliance host`` — OS-level resource metrics (mem / swap / load / RSS / disk).
+"""``pyfsr appliance host`` -- OS-level resource metrics (mem / swap / load / RSS / disk).
 
 Typed wrappers over ``free`` / ``ps`` / ``/proc/loadavg`` / ``df`` so callers get
 structured values instead of awk-ing command output. None of these need sudo.
 
 The headline call is :func:`snapshot`, which gathers mem, swap, load, per-pattern
 process RSS, and (optionally) disk in **one** SSH round-trip and returns a typed
-:class:`HostSnapshot` — the parsing every troubleshooting script otherwise
+:class:`HostSnapshot` -- the parsing every troubleshooting script otherwise
 re-implements lives here, tested once.
 """
 
@@ -135,7 +135,7 @@ def snapshot(
     """
     procs = DEFAULT_PROC_PATTERNS if procs is None else procs
     # Emit clearly delimited sections in one command, then parse each below. Keeping
-    # the (small) shell here — rather than 4 separate round-trips — is what makes the
+    # the (small) shell here -- rather than 4 separate round-trips -- is what makes the
     # sample coherent; the parsing is the part that matters and it's all typed.
     script = "echo '@@FREE'; free -m; echo '@@LOAD'; cat /proc/loadavg; echo '@@PS'; ps -e -o rss=,args="
     if disk_path:
@@ -143,7 +143,7 @@ def snapshot(
     out = transport.run(["sh", "-c", script]).stdout
     sections = _split_sections(out)
 
-    # A capture can come back empty or truncated — most commonly when the box is
+    # A capture can come back empty or truncated -- most commonly when the box is
     # under heavy load/swap and the SSH command returns no (or partial) output
     # *without* raising. Parsed naively that yields an all-zeros snapshot that is
     # indistinguishable from a real reading and silently corrupts callers (e.g. a
@@ -175,12 +175,12 @@ def _require_captured_mem(mem: MemInfo, *, source: str) -> MemInfo:
     if mem.total_mb <= 0:
         raise TransportError(
             f"{source}: captured no host metrics (memory total parsed as "
-            f"{mem.total_mb} MB — empty or truncated command output)"
+            f"{mem.total_mb} MB -- empty or truncated command output)"
         )
     return mem
 
 
-# --- parsers (pure functions — unit-tested without a live box) -----------------
+# --- parsers (pure functions -- unit-tested without a live box) -----------------
 
 
 def _split_sections(out: str) -> dict[str, str]:
@@ -248,3 +248,46 @@ def _parse_disk(out: str, path: str | None) -> DiskUsage:
                 use_pct=int(parts[4].rstrip("%")),
             )
     return DiskUsage(path=path or "?", size_mb=0, used_mb=0, avail_mb=0, use_pct=0)
+
+
+# ---------------------------------------------------------------------------
+# OS accounts. The appliance's Linux users (``csadmin`` over SSH, ``admin`` on
+# Fabric Studio images) are separate from FortiSOAR application logins of the
+# same name: changing one never changes the other.
+# ---------------------------------------------------------------------------
+
+_OS_USER_RE = re.compile(r"^[a-z_][a-z0-9_.-]*\$?$")
+
+
+def set_os_password(transport: Transport, user: str, password: str, *, yes: bool = False) -> None:
+    """Set a Linux account's password on the appliance (``chpasswd``, via sudo).
+
+    The password travels on stdin, never on the command line. PAM password
+    quality rules (``/etc/security/pwquality.conf``) apply; a rejected password
+    raises :class:`TransportError` with chpasswd's reason.
+
+    Args:
+        user: The OS account, e.g. ``csadmin``.
+        password: The new password.
+        yes: confirmation gate; without it the call raises rather than run.
+    """
+    if not _OS_USER_RE.match(user or ""):
+        raise ValueError(f"invalid OS user name {user!r}")
+    if not password or "\n" in password or ":" in password:
+        raise ValueError("password must be non-empty and contain no newline or ':'")
+    if not yes:
+        raise PermissionError(f"refusing to change the OS password of {user!r} without confirmation (pass yes=True)")
+    transport.run(["chpasswd"], input_text=f"{user}:{password}\n", sudo=True).check()
+
+
+def os_password_status(transport: Transport, user: str) -> dict[str, str]:
+    """Password aging for an OS account (``chage -l``), e.g. ``{"Password expires": "never", ...}``."""
+    if not _OS_USER_RE.match(user or ""):
+        raise ValueError(f"invalid OS user name {user!r}")
+    out = transport.run(["chage", "-l", user], sudo=True).check().stdout
+    status: dict[str, str] = {}
+    for line in out.splitlines():
+        key, sep, value = line.partition(":")
+        if sep:
+            status[key.strip()] = value.strip()
+    return status

@@ -32,6 +32,7 @@ self-describing: `<domain>_<action>_<detail>.py`. Most scripts talk to a
 | ...run appliance CLI commands (service/mq/db) | [`appliance_cli_tour.py`](appliance_cli_tour.py) |
 | ...serve a TAXII threat feed to FortiGate | [`taxii_threat_feed_to_fortigate.py`](taxii_threat_feed_to_fortigate.py) |
 | ...mint an API key + provision agents | [`agent_provisioning_matrix.py`](agent_provisioning_matrix.py) |
+| ...create a user, set and change passwords | [`user_password_lifecycle.py`](user_password_lifecycle.py) |
 
 ## Setup
 
@@ -107,6 +108,7 @@ docstring states which it expects.
 | [`appliance_cli_tour.py`](appliance_cli_tour.py) | Every `pyfsr appliance` command against a live box (service/mq/logs/db) | live |
 | [`tune_new_instance.py`](tune_new_instance.py) | Apply the standard tuning every new FortiSOAR instance needs | live |
 | [`agent_provisioning_matrix.py`](agent_provisioning_matrix.py) | Mint an API key, verify agent registration over the message bus, and prove the round trip (install connector on remote agent, execute an op on its host) | live |
+| [`user_password_lifecycle.py`](user_password_lifecycle.py) | Admin creates a user and sets its password, the user logs in and changes its own password (`users.reset_password` / `whoami` / `change_password`) | live |
 
 ## FortiAI, MCP & threat feeds
 

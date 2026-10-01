@@ -32,6 +32,7 @@ from .api.export_templates import ExportTemplatesAPI
 from .api.feeds import IngestFeedsAPI
 from .api.import_config import ImportConfigAPI
 from .api.incidents import IncidentsAPI
+from .api.log_forwarding import LogForwardingAPI
 from .api.manual_input import ManualInputAPI
 from .api.modules import ModulesAPI
 from .api.modules_admin import ModulesAdminAPI
@@ -378,6 +379,7 @@ class FortiSOAR:
         # Appliance tuning: system settings, DAS auth config, periodic schedules
         self.system_queries: SystemQueriesAPI = SystemQueriesAPI(self)
         self.system_settings: SystemSettingsAPI = SystemSettingsAPI(self)
+        self.log_forwarding: LogForwardingAPI = LogForwardingAPI(self)
         self.user_settings: UserSettingsAPI = UserSettingsAPI(self)
         self.auth_config: AuthConfigAPI = AuthConfigAPI(self)
         self.schedules: SchedulesAPI = SchedulesAPI(self)

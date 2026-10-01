@@ -1,4 +1,4 @@
-"""``pyfsr appliance logs`` — log tail / error scan for cyops services.
+"""``pyfsr appliance logs`` -- log tail / error scan for cyops services.
 
 Encodes the log paths so the caller doesn't re-derive them, and rolls up recent
 application errors + the journal for a quick "what just broke" view.
@@ -33,7 +33,7 @@ def tail(transport: Transport, service: str, *, lines: int = 100) -> str:
     """Tail the log for ``service`` (alias from :data:`LOG_PATHS`) or a raw path.
 
     Raises ``FileNotFoundError`` if the target log does not exist on the box,
-    rather than returning an empty string — a missing path is almost always a
+    rather than returning an empty string -- a missing path is almost always a
     stale alias or a version mismatch, not a genuinely empty log.
     """
     path = LOG_PATHS.get(service, service)
@@ -83,3 +83,12 @@ def scan(transport: Transport, *, minutes: int = 30) -> str:
         if body and "No entries" not in body:
             out.append(f"=== {unit} (last {minutes}min, errors) ===\n{body}")
     return "\n\n".join(out) if out else f"(no journal errors in the last {minutes} min)"
+
+
+def forward_configs(transport: Transport) -> str:
+    """Raw ``csadm log forward show-config`` -- the rsyslog forwarding destinations.
+
+    Lists configs created from the CLI and from *Settings → Log Forwarding* alike
+    (the UI side is :class:`pyfsr.api.log_forwarding.LogForwardingAPI`).
+    """
+    return transport.run(["csadm", "log", "forward", "show-config"], sudo=True).check().stdout.strip()
