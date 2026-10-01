@@ -80,18 +80,18 @@ Discover, configure, execute, and install connectors; manage remote agents.
 Bundle schema, records, connectors, and more into a `.zip` and re-apply it safely.
 :::
 
-:::{grid-item-card} Playbook Authoring
-:link: guides/playbook-authoring
-:link-type: doc
-
-Author playbooks in YAML, compile them, and deploy through the API or CLI.
-:::
-
 :::{grid-item-card} Finding Playbooks
 :link: guides/playbook-discovery
 :link-type: doc
 
 Search by trigger, module, step type, or connector -- server-side where possible.
+:::
+
+:::{grid-item-card} Playbook Authoring
+:link: guides/playbook-authoring
+:link-type: doc
+
+Author playbooks in YAML, compile them, and deploy through the API or CLI.
 :::
 
 :::{grid-item-card} AI & Agents
@@ -137,8 +137,8 @@ guides/module-admin
 guides/module-field-schema
 guides/connectors
 guides/export-import
-guides/playbook-authoring
 guides/playbook-discovery
+guides/playbook-authoring
 guides/playbook-yaml-reference
 guides/ai-agents
 guides/appliance-cli
