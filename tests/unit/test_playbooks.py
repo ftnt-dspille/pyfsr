@@ -1760,6 +1760,24 @@ def test_child_runs_resolves_path_and_taskid():
     assert api._resolve_run_pk("not-a-pk") is None
 
 
+def test_task_id_resolves_to_the_triggered_run_not_its_child():
+    """A referenced child runs under the parent's task_id, and the log lists the
+    newest (the child) first -- the pk must still be the parent's."""
+
+    class _Log:
+        def post(self, endpoint, data=None, params=None, **kw):
+            assert endpoint.endswith("/log_list/")
+            return {
+                "hydra:member": [
+                    {"@id": "/wf/api/workflows/4167/", "name": "Child", "parent_wf": "/wf/api/workflows/4166/"},
+                    {"@id": "/wf/api/workflows/4166/", "name": "Parent", "parent_wf": None},
+                ]
+            }
+
+    api = PlaybooksAPI(_Log())
+    assert api._resolve_run_pk("6868d523-925c-4d0b-ba11-be83452eae3c") == "4166"
+
+
 def test_has_async_children_reads_tag():
     parent = _run(
         "/api/wf/api/workflows/210/", "Parent", "finished", "2026-06-26T00:00:05", tags="#has_async_childwf_cyops"

@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Updating an existing playbook with `playbooks.upsert_playbooks()` (and
+  `workflow_collections.deploy()`) now changes its flow.** Before, new steps
+  were created but never attached to the playbook, and routes were never
+  written. The playbook kept running the old flow, the call still reported
+  `updated`, and the next update failed with a 409 on the leftover step. The
+  update now goes through the playbook itself, so new steps attach, routes
+  are rewired, and removed steps and routes are deleted. Steps left over by
+  the old behaviour are reused instead of re-created. The playbook is read
+  back after the update, and an update that did not take effect raises
+  `APIError` (`PlaybookUpdateMismatch`) instead of reporting success.
+- **`deploy()` brings back a playbook or collection that is in the recycle
+  bin.** It used to try to create it again and fail with a 400, 500 or 409.
+- **`deploy()` creates a playbook even when an earlier copy left step rows
+  behind.** Hard-deleting a collection while one of its playbooks is in the
+  recycle bin removes the playbook but leaves its steps, and those steps
+  blocked every new create with a uniqueness error. New playbooks are now
+  created empty and then filled the same way an update is, so leftover steps
+  are reused. This also means `deploy()` no longer uses `bulkupsert`, so it
+  works with API-key auth.
+- `deploy()` no longer reports an unchanged playbook as `changed`.
+- `run_and_wait()`, `run_tree()` and `run_env()` given a task id now return the
+  run that was triggered. When that playbook called a child playbook, they
+  returned the child's run instead.
+
+### Added
+- `tests/integration/test_deploy_edge_cases_integration.py`: a live matrix of
+  27 deploy cases (structure edits, decision and trigger changes, collection
+  and recycle-bin states, leftovers, the safety guards). Each case deploys,
+  checks the playbook's steps and routes, and runs it to check which steps
+  execute.
+
 ## [0.22.0] - 2026-10-01
 
 ### Added
