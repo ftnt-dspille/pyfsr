@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-01
+
+### Added
+- **`client.playbooks.run_and_wait(..., answers={...})`** answers
+  manual_input and approval prompts while it polls. A key can be the prompt's
+  title (the step's `title:`) or an input variable name. Child runs are
+  checked as well. The `pyfsr playbook` CLI also gains this support.
+- **`connectors.uninstall(..., version=)`** removes one install when several
+  versions of a connector are installed side by side. pyfsr refuses a name
+  that matches more than one install.
+- `examples/playbooks/all_step_types.yaml`: one playbook that uses every
+  friendly step type.
+
+### Changed
+- When several versions of a connector are installed side by side, pyfsr uses
+  the newest active one.
+- Example files now have descriptive names, and the examples README is
+  organized by task.
+- The playbook authoring, discovery, YAML reference, connectors,
+  module-admin and ai-agents guides are expanded. The ai-agents guide has a
+  live-verified FortiSIEM MCP server example.
+
+### Fixed
+- A response from a third-party MCP server that wasn't wrapped in the
+  standard envelope is no longer silently dropped.
+- Pre-push hooks now run on every push (`always_run: true`). CI uses the
+  locked ruff version.
+
 ## [0.21.0] - 2026-09-27
 
 ### Added
