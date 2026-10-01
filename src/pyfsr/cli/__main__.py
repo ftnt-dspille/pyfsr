@@ -26,6 +26,7 @@ from .appliance import es as es_cmds
 from .appliance import ha as ha_cmds
 from .appliance import host as host_cmds
 from .appliance import info as info_cmds
+from .appliance import integrations as integrations_cmds
 from .appliance import license as license_cmds
 from .appliance import logs as logs_cmds
 from .appliance import mq as mq_cmds
@@ -249,6 +250,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_ch_sync.add_argument("--yes", action="store_true", help="skip confirmation")
     p_ch_sync.set_defaults(func=cmd_content_hub_sync, force=True)
+
+    p_int = asub.add_parser("integrations", help="connector runtime settings (the integrations pip index)")
+    intsub = p_int.add_subparsers(dest="int_command", required=True)
+
+    p_int_pip = intsub.add_parser("pip-index", help="show the integrations pip index-url / extra-index-url (read-only)")
+    _add_connection_args(p_int_pip)
+    p_int_pip.set_defaults(func=cmd_integrations_pip_index)
+
+    p_int_add = intsub.add_parser(
+        "add-extra-index",
+        help="add an extra pip index for connector dependencies (default PyPI); clears and restores the "
+        "file's immutable flag; no-op if already listed; gated by --yes",
+    )
+    _add_connection_args(p_int_add)
+    p_int_add.add_argument("url", nargs="?", default=integrations_cmds.PYPI_SIMPLE, help="index URL (default: PyPI)")
+    p_int_add.add_argument("--yes", action="store_true", help="skip confirmation")
+    p_int_add.set_defaults(func=cmd_integrations_add_extra_index)
 
     # --- mq group ---
     p_mq = asub.add_parser("mq", help="RabbitMQ verbs (rabbitmqctl)")
@@ -765,6 +783,17 @@ def cmd_content_hub_sync(args: argparse.Namespace) -> int:
     r = content_hub_cmds.sync(_make_transport(args), force=args.force, yes=args.yes)
     print(str(r))
     return 0 if r.ok else 1
+
+
+def cmd_integrations_pip_index(args: argparse.Namespace) -> int:
+    print(str(integrations_cmds.pip_index(_make_transport(args))))
+    return 0
+
+
+def cmd_integrations_add_extra_index(args: argparse.Namespace) -> int:
+    r = integrations_cmds.ensure_extra_index(_make_transport(args), args.url, yes=args.yes)
+    print(str(r))
+    return 0 if (r.ok or not r.changed) else 1
 
 
 def cmd_service_systemctl(args: argparse.Namespace) -> int:

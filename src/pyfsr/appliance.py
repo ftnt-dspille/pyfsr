@@ -2,7 +2,7 @@
 
 The appliance verbs (DB queries, service control, queue management, log tails,
 Elasticsearch/HA health, …) are implemented as plain functions under
-:mod:`pyfsr.cli.appliance`, grouped per module — fine for the CLI, awkward to
+:mod:`pyfsr.cli.appliance`, grouped per module -- fine for the CLI, awkward to
 call by hand.
 
 :class:`Appliance` wraps a single connection and exposes those verbs as grouped
@@ -32,7 +32,7 @@ escape hatch.
 
 from __future__ import annotations
 
-from .cli.appliance import certs, db, host, info, logs, mq, service
+from .cli.appliance import certs, db, host, info, integrations, logs, mq, service
 from .cli.appliance import es as es_mod
 from .cli.appliance import ha as ha_mod
 from .cli.appliance import license as license_mod
@@ -41,6 +41,7 @@ from .cli.appliance.es import ESHealth
 from .cli.appliance.facts import Facts
 from .cli.appliance.ha import HaHealth, HaNode
 from .cli.appliance.host import DiskUsage, HostSnapshot, LoadAvg, MemInfo, ProcRss
+from .cli.appliance.integrations import IndexChange, PipIndex
 from .cli.appliance.license import DriftReport, LicenseDetails
 from .cli.appliance.mq import Consumer, Permission, PurgeResult, QueueInfo, WorkflowPurgeReport
 from .cli.appliance.service import Listener, ProbeResult, ServiceActionResult
@@ -57,6 +58,7 @@ __all__ = [
     "EsNamespace",
     "HaNamespace",
     "CertsNamespace",
+    "IntegrationsNamespace",
 ]
 
 
@@ -91,7 +93,7 @@ class DbNamespace:
         return db.indexes(self._facts, pattern, role=role, db=db_name)
 
     def sizes(self, *, timeout: float = 60.0) -> list[DataClassSize]:
-        """``csadm db --getsize`` — footprint by data class."""
+        """``csadm db --getsize`` -- footprint by data class."""
         return db.getsize(self._facts, timeout=timeout)
 
     def databases(self) -> list[DatabaseInfo]:
@@ -321,21 +323,37 @@ class CertsNamespace:
         return certs.regenerate(self._t, hostname, yes=yes, timeout=timeout)
 
 
+class IntegrationsNamespace:
+    """Connector runtime settings (``appliance.integrations``)."""
+
+    def __init__(self, t: Transport) -> None:
+        self._t = t
+
+    def pip_index(self) -> PipIndex:
+        """The integrations pip ``index-url`` / ``extra-index-url`` and the file's immutable flag."""
+        return integrations.pip_index(self._t)
+
+    def ensure_extra_index(self, url: str = integrations.PYPI_SIMPLE, *, yes: bool = False) -> IndexChange:
+        """Add ``url`` (default PyPI) as an extra pip index; no-op if listed. Refuses unless ``yes=True``."""
+        return integrations.ensure_extra_index(self._t, url, yes=yes)
+
+
 class Appliance:
     """A connection to a FortiSOAR appliance, exposing the ``pyfsr appliance`` verbs.
 
     Construct it with SSH connection details (or run it on-box with no ``host`` to
     use a local transport), then reach the grouped verbs:
 
-    - :attr:`db` — Postgres queries, table cleanup
-    - :attr:`service` — start/stop/restart, liveness
-    - :attr:`mq` — RabbitMQ queues, purges
-    - :attr:`host` — memory/load/disk/RSS
-    - :attr:`license` — device UUID, drift
-    - :attr:`logs` — tail, scan, bundle
-    - :attr:`es` — Elasticsearch health/shards
-    - :attr:`ha` — cluster nodes/health/replication
-    - :attr:`certs` — TLS cert regeneration
+    - :attr:`db` -- Postgres queries, table cleanup
+    - :attr:`service` -- start/stop/restart, liveness
+    - :attr:`mq` -- RabbitMQ queues, purges
+    - :attr:`host` -- memory/load/disk/RSS
+    - :attr:`license` -- device UUID, drift
+    - :attr:`logs` -- tail, scan, bundle
+    - :attr:`es` -- Elasticsearch health/shards
+    - :attr:`ha` -- cluster nodes/health/replication
+    - :attr:`certs` -- TLS cert regeneration
+    - :attr:`integrations` -- connector runtime pip index
 
     plus :meth:`info`, :meth:`diagnose`, and :meth:`run` (the escape hatch for
     arbitrary shell commands).
@@ -343,7 +361,7 @@ class Appliance:
     Connection args fall back to ``PYFSR_APPLIANCE_HOST`` / ``_USER`` / ``_PASSWORD``
     when omitted. Pass ``instance="<alias>"`` to resolve a named SSH profile from
     ``~/.pyfsr/instances.toml`` (the same file
-    :class:`~pyfsr.instances.InstanceRegistry` uses for the REST client) — this
+    :class:`~pyfsr.instances.InstanceRegistry` uses for the REST client) -- this
     takes precedence over the explicit host/user/password kwargs and is the SDK
     counterpart of ``pyfsr appliance --instance <alias>``.
 
@@ -353,50 +371,53 @@ class Appliance:
        ``pyfsr.cli.appliance`` submodule rather than here, so those dataclasses
        are documented on their own pages, not under this module's contents:
 
-       - :mod:`pyfsr.cli.appliance.db` — :class:`~pyfsr.cli.appliance.db.DatabaseInfo`,
+       - :mod:`pyfsr.cli.appliance.db` -- :class:`~pyfsr.cli.appliance.db.DatabaseInfo`,
          :class:`~pyfsr.cli.appliance.db.DataClassSize`, :class:`~pyfsr.cli.appliance.db.OrphanTable`
-       - :mod:`pyfsr.cli.appliance.service` — :class:`~pyfsr.cli.appliance.service.ServiceState`,
+       - :mod:`pyfsr.cli.appliance.service` -- :class:`~pyfsr.cli.appliance.service.ServiceState`,
          :class:`~pyfsr.cli.appliance.service.Listener`, :class:`~pyfsr.cli.appliance.service.ProbeResult`,
          :class:`~pyfsr.cli.appliance.service.ServiceActionResult`
-       - :mod:`pyfsr.cli.appliance.mq` — :class:`~pyfsr.cli.appliance.mq.QueueInfo`,
+       - :mod:`pyfsr.cli.appliance.mq` -- :class:`~pyfsr.cli.appliance.mq.QueueInfo`,
          :class:`~pyfsr.cli.appliance.mq.Consumer`, :class:`~pyfsr.cli.appliance.mq.Permission`,
          :class:`~pyfsr.cli.appliance.mq.PurgeResult`, :class:`~pyfsr.cli.appliance.mq.WorkflowPurgeReport`
-       - :mod:`pyfsr.cli.appliance.host` — :class:`~pyfsr.cli.appliance.host.MemInfo`,
+       - :mod:`pyfsr.cli.appliance.host` -- :class:`~pyfsr.cli.appliance.host.MemInfo`,
          :class:`~pyfsr.cli.appliance.host.LoadAvg`, :class:`~pyfsr.cli.appliance.host.ProcRss`,
          :class:`~pyfsr.cli.appliance.host.DiskUsage`, :class:`~pyfsr.cli.appliance.host.HostSnapshot`
-       - :mod:`pyfsr.cli.appliance.license` — :class:`~pyfsr.cli.appliance.license.LicenseDetails`,
+       - :mod:`pyfsr.cli.appliance.license` -- :class:`~pyfsr.cli.appliance.license.LicenseDetails`,
          :class:`~pyfsr.cli.appliance.license.DriftReport`
-       - :mod:`pyfsr.cli.appliance.es` — :class:`~pyfsr.cli.appliance.es.ESHealth`
-       - :mod:`pyfsr.cli.appliance.ha` — :class:`~pyfsr.cli.appliance.ha.HaNode`,
+       - :mod:`pyfsr.cli.appliance.es` -- :class:`~pyfsr.cli.appliance.es.ESHealth`
+       - :mod:`pyfsr.cli.appliance.ha` -- :class:`~pyfsr.cli.appliance.ha.HaNode`,
          :class:`~pyfsr.cli.appliance.ha.HaHealth`
     """
 
     db: DbNamespace
-    """Postgres verbs — queries, table listings, orphan-table cleanup. See :class:`DbNamespace`."""
+    """Postgres verbs -- queries, table listings, orphan-table cleanup. See :class:`DbNamespace`."""
 
     service: ServiceNamespace
-    """systemd / cyops service verbs — status, liveness, start/stop/restart. See :class:`ServiceNamespace`."""
+    """systemd / cyops service verbs -- status, liveness, start/stop/restart. See :class:`ServiceNamespace`."""
 
     mq: MqNamespace
-    """RabbitMQ verbs — queues, consumers, permissions, purges. See :class:`MqNamespace`."""
+    """RabbitMQ verbs -- queues, consumers, permissions, purges. See :class:`MqNamespace`."""
 
     host: HostNamespace
-    """OS resource metrics — memory, load, disk, process RSS. See :class:`HostNamespace`."""
+    """OS resource metrics -- memory, load, disk, process RSS. See :class:`HostNamespace`."""
 
     license: LicenseNamespace
-    """Licensing / identity — device UUID, license details, entitlement drift. See :class:`LicenseNamespace`."""
+    """Licensing / identity -- device UUID, license details, entitlement drift. See :class:`LicenseNamespace`."""
 
     logs: LogsNamespace
-    """Log verbs — tail a service log, scan recent errors, collect a bundle. See :class:`LogsNamespace`."""
+    """Log verbs -- tail a service log, scan recent errors, collect a bundle. See :class:`LogsNamespace`."""
 
     es: EsNamespace
-    """Elasticsearch verbs — cluster health, unassigned-shard explain. See :class:`EsNamespace`."""
+    """Elasticsearch verbs -- cluster health, unassigned-shard explain. See :class:`EsNamespace`."""
 
     ha: HaNamespace
-    """HA cluster verbs — nodes, health, replication status. See :class:`HaNamespace`."""
+    """HA cluster verbs -- nodes, health, replication status. See :class:`HaNamespace`."""
 
     certs: CertsNamespace
-    """Appliance TLS certificate verbs — regenerate the self-signed cert. See :class:`CertsNamespace`."""
+    """Appliance TLS certificate verbs -- regenerate the self-signed cert. See :class:`CertsNamespace`."""
+
+    integrations: IntegrationsNamespace
+    """Connector runtime settings -- the integrations pip index. See :class:`IntegrationsNamespace`."""
 
     def __init__(
         self,
@@ -414,7 +435,7 @@ class Appliance:
         if _facts is not None:
             self._facts = _facts
         elif instance is not None:
-            # Named SSH profile from ~/.pyfsr/instances.toml — the SDK counterpart
+            # Named SSH profile from ~/.pyfsr/instances.toml -- the SDK counterpart
             # of `pyfsr appliance --instance <alias>`. Takes precedence over the
             # explicit host/user/password kwargs. Requires an
             # [instances.<alias>.appliance] subtable.
@@ -444,13 +465,14 @@ class Appliance:
         self.es = EsNamespace(self._facts)
         self.ha = HaNamespace(t)
         self.certs = CertsNamespace(t)
+        self.integrations = IntegrationsNamespace(t)
 
     @property
     def facts(self) -> Facts:
         """The appliance's :class:`~pyfsr.cli.appliance.facts.Facts` (SSH transport +
-        cached lookups). Public handle for APIs that need appliance access — e.g.
+        cached lookups). Public handle for APIs that need appliance access -- e.g.
         :meth:`~pyfsr.api.modules_admin.ModulesAdminAPI.delete_module`'s
-        ``drop_orphan_tables`` — so callers pass ``appliance`` rather than a
+        ``drop_orphan_tables`` -- so callers pass ``appliance`` rather than a
         private attribute."""
         return self._facts
 
