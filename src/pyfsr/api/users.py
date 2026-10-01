@@ -329,6 +329,125 @@ class UsersAPI(BaseAPI):
         """
         return self.update(person_uuid, csActive=False, typed=typed)
 
+    def lookup(self, loginid: str) -> dict[str, Any]:
+        """Resolve a login ID to its das user UUID and People UUID.
+
+        ``GET /api/auth/users?loginid=`` gives the das user; ``GET
+        /api/3/people?userId=`` gives the People record linked to it.
+
+        Returns:
+            ``{"loginid", "user_id", "person_uuid"}``.
+
+        Raises:
+            LookupError: no such login, or no People record linked to it.
+        """
+        users = self.client.get("/api/auth/users", params={"loginid": loginid}).get("usersresp") or []
+        if not users:
+            raise LookupError(f"no user with login ID {loginid!r}")
+        user_id = users[0]["uuid"]
+        people = extract_members(self.client.get("/api/3/people", params={"userId": user_id}))
+        if not people:
+            raise LookupError(f"no People record for login ID {loginid!r} (das user {user_id})")
+        return {"loginid": loginid, "user_id": user_id, "person_uuid": people[0]["uuid"]}
+
+    def reset_password(self, loginid: str, new_password: str, *, send_email: bool = False) -> Any:
+        """Admin reset of another user's application password (``POST /api/3/resetpassword``).
+
+        Sends the same body as the UI's *Reset Password* dialog::
+
+            {"uuid": <People UUID>, "currentUUID": <das user UUID>,
+             "loginId": ..., "password": ..., "sendEmail": false}
+
+        Both UUIDs are looked up from ``loginid`` (see :meth:`lookup`). The
+        server returns the string ``"Password Changed sucessfully"`` (sic).
+
+        das refuses resetting your own login this way -- use
+        :meth:`change_password`. This changes the **application** login only;
+        the appliance's OS account of the same name (e.g. ``csadmin`` over SSH)
+        is a separate credential -- see
+        :meth:`pyfsr.appliance.HostNamespace.set_os_password`.
+
+        Args:
+            loginid: Login ID of the user whose password is reset.
+            new_password: The new password; must pass the password policy and history check.
+            send_email: Ask FortiSOAR to email a notice of the reset.
+
+        Returns:
+            The response body.
+        """
+        ids = self.lookup(loginid)
+        return self.client.post(
+            "/api/3/resetpassword",
+            data={
+                "uuid": ids["person_uuid"],
+                "currentUUID": ids["user_id"],
+                "loginId": loginid,
+                "password": new_password,
+                "sendEmail": send_email,
+            },
+        )
+
+    def whoami(self) -> dict[str, Any]:
+        """Identify the calling user, whatever the client authenticated with.
+
+        Combines ``GET /api/3/actors/current`` (the People profile) with
+        ``GET /api/auth/users?uuid=<userId>`` (the das login record). The login
+        ID is the username typed on the login page.
+
+        Returns:
+            ``{"loginid", "person_uuid", "user_id", "email", "name"}`` --
+            ``person_uuid`` is the People UUID, ``user_id`` the das user UUID.
+        """
+        actor = self.client.get("/api/3/actors/current")
+        users = self.client.get("/api/auth/users", params={"uuid": actor["userId"]}).get("usersresp") or []
+        if not users:
+            raise LookupError(f"no das user for userId {actor['userId']!r}")
+        return {
+            "loginid": users[0]["loginid"],
+            "person_uuid": actor["uuid"],
+            "user_id": actor["userId"],
+            "email": actor.get("email"),
+            "name": " ".join(filter(None, (actor.get("firstname"), actor.get("lastname")))),
+        }
+
+    def change_password(self, old_password: str, new_password: str) -> dict[str, Any]:
+        """Change the calling user's own application password (``PUT /api/3/changepassword``).
+
+        Only the two passwords are needed: the People UUID and login ID the
+        endpoint also requires are looked up with :meth:`whoami`. When the client
+        authenticated with a username/password, its stored password is updated
+        so token refreshes keep working (the UI logs out instead).
+
+        Server-side rules (cyops-api + das, 8.0.1): the body needs ``uuid``,
+        ``loginId``, ``oldPassword`` and ``newPassword``; ``uuid`` and
+        ``loginId`` must be the caller's own; the new password must differ from
+        the old one and pass the password policy. LDAP/SAML users cannot change
+        their password here ("Password change is not allowed for this user").
+
+        Args:
+            old_password: The current password.
+            new_password: The new password.
+
+        Returns:
+            The raw response body.
+        """
+        if new_password == old_password:
+            raise ValueError("new password can not be same as old password")
+        me = self.whoami()
+        resp = self.client.put(
+            "/api/3/changepassword",
+            data={
+                "uuid": me["person_uuid"],
+                "loginId": me["loginid"],
+                "oldPassword": old_password,
+                "newPassword": new_password,
+            },
+        )
+        auth = getattr(self.client, "auth", None)
+        if getattr(auth, "username", None) == me["loginid"] and hasattr(auth, "password"):
+            auth.password = new_password
+        return resp
+
     def list_roles(self, params: dict | None = None) -> list[Role]:
         """List all roles available for assignment (delegates to :class:`~pyfsr.api.roles.RolesAPI`).
 
