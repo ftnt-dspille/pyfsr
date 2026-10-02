@@ -36,6 +36,7 @@ from .cli.appliance import certs, db, host, info, integrations, logs, mq, servic
 from .cli.appliance import es as es_mod
 from .cli.appliance import ha as ha_mod
 from .cli.appliance import license as license_mod
+from .cli.appliance import users as users_mod
 from .cli.appliance.db import DatabaseInfo, DataClassSize, OrphanTable
 from .cli.appliance.es import ESHealth
 from .cli.appliance.facts import Facts
@@ -59,6 +60,7 @@ __all__ = [
     "HaNamespace",
     "CertsNamespace",
     "IntegrationsNamespace",
+    "UsersNamespace",
 ]
 
 
@@ -253,6 +255,30 @@ class HostNamespace:
         return host.os_password_status(self._t, user)
 
 
+class UsersNamespace:
+    """Login accounts the API can't remove, and live sessions (``appliance.users``)."""
+
+    def __init__(self, facts: Facts) -> None:
+        self._facts = facts
+
+    def delete_logins(self, user_ids: list[str], *, yes: bool = False) -> str:
+        """Remove login accounts with Fortinet's ``userDelete`` script. Refuses unless ``yes=True``.
+
+        ``user_ids`` are login UUIDs (the People record's ``userId``). Deleting
+        the People record through the API does not remove the login; run this
+        after it. Raises if any login remains afterwards.
+        """
+        return users_mod.delete_logins(self._facts, user_ids, yes=yes)
+
+    def logged_in(self, *, access_type: str = "Concurrent", limit: int = 10) -> list[str]:
+        """Login IDs with a live session (``csadm user show-logged-in-users``)."""
+        return users_mod.logged_in(self._facts.transport, access_type=access_type, limit=limit)
+
+    def logout(self, username: str, *, yes: bool = False) -> str:
+        """End every session of ``username`` (``csadm user logout-user``). Refuses unless ``yes=True``."""
+        return users_mod.logout(self._facts.transport, username, yes=yes)
+
+
 class LicenseNamespace:
     """Licensing / identity (``appliance.license``)."""
 
@@ -440,6 +466,9 @@ class Appliance:
     integrations: IntegrationsNamespace
     """Connector runtime settings -- the integrations pip index. See :class:`IntegrationsNamespace`."""
 
+    users: UsersNamespace
+    """Login accounts and live sessions -- remove logins, list/end sessions. See :class:`UsersNamespace`."""
+
     def __init__(
         self,
         host: str | None = None,
@@ -487,6 +516,7 @@ class Appliance:
         self.ha = HaNamespace(t)
         self.certs = CertsNamespace(t)
         self.integrations = IntegrationsNamespace(t)
+        self.users = UsersNamespace(self._facts)
 
     @property
     def facts(self) -> Facts:
