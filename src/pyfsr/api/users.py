@@ -18,8 +18,10 @@ names; names are resolved via a per-instance cache populated on first use.
 
 from __future__ import annotations
 
+import builtins
 from typing import Any, cast
 
+from ..exceptions import handle_api_error
 from ..models import Role, Team, User
 from ..pagination import extract_members
 from ..utils.validation import is_uuid as _is_uuid
@@ -316,6 +318,22 @@ class UsersAPI(BaseAPI):
         resp = self.client.put(f"/api/3/people/{person_uuid}", data=data)
         return User.model_validate(resp) if typed else resp
 
+    def _das_users(self, **params: str) -> builtins.list[dict[str, Any]]:
+        """``GET /api/auth/users`` filtered by ``loginid`` or ``uuid``.
+
+        das answers an unknown login with HTTP 400 ``{"reason": "Invalid
+        credentials or account locked"}`` rather than an empty list; that is
+        returned here as ``[]`` so callers can raise a clear ``LookupError``.
+        """
+        resp = self.client.get("/api/auth/users", params=params, raise_on_status=False)
+        if isinstance(resp, dict):  # already-parsed body (test doubles)
+            return resp.get("usersresp") or []
+        if resp.status_code == 400:
+            return []
+        if not resp.ok:
+            handle_api_error(resp)
+        return resp.json().get("usersresp") or []
+
     def _set_active(self, user: str, active: bool, typed: bool) -> User | dict[str, Any]:
         """Activate/deactivate ``user`` (login ID or People UUID) the way the UI does.
 
@@ -335,8 +353,7 @@ class UsersAPI(BaseAPI):
         else:
             ids = self.lookup(user)
             person_uuid, user_id = ids["person_uuid"], ids["user_id"]
-        das = cast(dict[str, Any], self.client.get("/api/auth/users", params={"uuid": user_id}))
-        users = das.get("usersresp") or []
+        users = self._das_users(uuid=user_id)
         if not users:
             raise LookupError(f"no das user for userId {user_id!r}")
         self.client.put(
@@ -372,8 +389,7 @@ class UsersAPI(BaseAPI):
         Raises:
             LookupError: no such login, or no login linked to the People record.
 
-        Example:
-            >>> client.users.deactivate("jsmith")
+        Usage: ``client.users.deactivate("jsmith")``.
         """
         return self._set_active(user, False, typed)
 
@@ -406,7 +422,7 @@ class UsersAPI(BaseAPI):
         Raises:
             LookupError: no such login, or no People record linked to it.
         """
-        users = self.client.get("/api/auth/users", params={"loginid": loginid}).get("usersresp") or []
+        users = self._das_users(loginid=loginid)
         if not users:
             raise LookupError(f"no user with login ID {loginid!r}")
         user_id = users[0]["uuid"]
@@ -464,7 +480,7 @@ class UsersAPI(BaseAPI):
             ``person_uuid`` is the People UUID, ``user_id`` the das user UUID.
         """
         actor = self.client.get("/api/3/actors/current")
-        users = self.client.get("/api/auth/users", params={"uuid": actor["userId"]}).get("usersresp") or []
+        users = self._das_users(uuid=actor["userId"])
         if not users:
             raise LookupError(f"no das user for userId {actor['userId']!r}")
         return {

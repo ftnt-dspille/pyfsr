@@ -238,3 +238,28 @@ def test_deactivate_unknown_login_id_raises_before_any_write():
     else:
         raise AssertionError("expected LookupError")
     assert rec.puts == []
+
+
+class _Resp:
+    def __init__(self, status_code, body):
+        self.status_code, self._body = status_code, body
+        self.ok = status_code < 400
+
+    def json(self):
+        return self._body
+
+
+class _DasStatus:
+    """das answers an unknown login with 400, not an empty list."""
+
+    def get(self, endpoint, params=None, **kw):
+        return _Resp(400, {"reason": "Invalid credentials or account locked"})
+
+
+def test_lookup_unknown_login_400_raises_lookup_error():
+    try:
+        UsersAPI(_DasStatus()).lookup("nobody")
+    except LookupError as e:
+        assert "nobody" in str(e)
+    else:
+        raise AssertionError("expected LookupError")
