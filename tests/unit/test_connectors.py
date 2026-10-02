@@ -33,6 +33,30 @@ _CONFIGURED = {
 }
 
 
+# The per-agent install rows (POST .../connectors/agents/<name>/<version>/) --
+# a read the fakes answer like the installed-connectors GET, without recording
+# it as a write. Every agent the tests bind to has the connector at id 190.
+_TEST_AGENTS = ("agent-9", "agent-x", "ag-1")
+
+
+def _agent_records(endpoint):
+    """GET /api/3/agents: each test agent, named ``<agentId>-name``."""
+    if endpoint == "/api/3/agents":
+        return {
+            "hydra:member": [
+                {"agentId": a, "uuid": f"u-{a}", "name": f"{a}-name"}
+                for a in (*_TEST_AGENTS, "agent-other", "agent-missing")
+            ]
+        }
+    return None
+
+
+def _agent_install_rows(endpoint):
+    if endpoint.startswith("/api/integration/connectors/agents/"):
+        return [{"agent": a, "conn_id": 190} for a in _TEST_AGENTS]
+    return None
+
+
 class FakeClient:
     def __init__(self, *, get_map=None, post_resp=None, raiser=None):
         self.get_calls = []
@@ -44,6 +68,8 @@ class FakeClient:
         self._raiser = raiser
 
     def get(self, endpoint, params=None, **kwargs):
+        if (agents := _agent_records(endpoint)) is not None:
+            return agents
         self.get_calls.append((endpoint, params))
         if self._raiser:
             self._raiser(endpoint)
@@ -54,6 +80,8 @@ class FakeClient:
         return self._get_map.get(endpoint, {})
 
     def post(self, endpoint, data=None, params=None, **kwargs):
+        if (rows := _agent_install_rows(endpoint)) is not None:
+            return rows
         self.post_calls.append((endpoint, data))
         self.last_post_params = params
         self.last_post_files = kwargs.get("files")
@@ -1060,6 +1088,8 @@ class ScriptedClient:
         self.put_envelope = None
 
     def get(self, endpoint, params=None, **kwargs):
+        if (agents := _agent_records(endpoint)) is not None:
+            return agents
         if endpoint.startswith("/api/integration/connectors/"):
             return self._listing
         if endpoint == "/api/integration/connector/development/entity/":
@@ -1067,6 +1097,8 @@ class ScriptedClient:
         return {}
 
     def post(self, endpoint, data=None, params=None, **kwargs):
+        if (rows := _agent_install_rows(endpoint)) is not None:
+            return rows
         self.post_calls.append((endpoint, data))
         if endpoint.endswith("/publish/"):
             if self.publish_raises:
@@ -2095,3 +2127,84 @@ def test_healthcheck_of_a_local_config_still_goes_by_name():
     api.healthcheck("virustotal", config="Lab")
     hc = [c for c in client.get_calls if "healthcheck" in c[0]]
     assert hc[-1][1] == {"config": "Lab"}
+
+
+# -- agent-bound configurations attach to the AGENT's install ----------------
+_AGENT_ROWS = [
+    {"agent": "agent-other", "conn_id": 188, "conn_name": "virustotal"},
+    {"agent": "agent-9", "conn_id": 190, "conn_name": "virustotal"},
+]
+
+
+class _AgentInstallClient(FakeClient):
+    """Answers the per-agent install-status POST with ``_AGENT_ROWS``."""
+
+    def post(self, endpoint, data=None, params=None, **kwargs):
+        if endpoint.startswith("/api/integration/connectors/agents/"):
+            self.post_calls.append((endpoint, data))
+            return list(_AGENT_ROWS)
+        return super().post(endpoint, data=data, params=params, **kwargs)
+
+
+def test_create_configuration_on_an_agent_uses_the_agents_install_id():
+    client = _AgentInstallClient(post_resp=_CREATED_CONFIG)
+    ConnectorsAPI(client).create_configuration(
+        "virustotal", {"k": "v"}, name="c", version="3.1.0", agent="agent-9", validate=False, autofill=False
+    )
+    endpoint, body = client.post_calls[-1]
+    assert endpoint == "/api/integration/configuration/"
+    assert body["connector"] == 190  # the agent's install, not the appliance's 16
+    assert body["agent"] == "agent-9"
+
+
+def test_create_configuration_without_an_agent_keeps_the_appliance_install_id():
+    client = _AgentInstallClient(post_resp=_CREATED_CONFIG)
+    ConnectorsAPI(client).create_configuration(
+        "virustotal", {"k": "v"}, name="c", version="3.1.0", validate=False, autofill=False
+    )
+    assert client.post_calls[-1][1]["connector"] == 16
+
+
+def test_update_configuration_on_an_agent_uses_the_agents_install_id():
+    client = _AgentInstallClient()
+    ConnectorsAPI(client).update_configuration(
+        "virustotal", "cfg-1", {"k": "v"}, name="c", version="3.1.0", agent="agent-9", validate=False, autofill=False
+    )
+    assert client.put_calls[-1][1]["connector"] == 190
+
+
+def test_configuring_on_an_agent_without_the_connector_names_the_agent():
+    client = _AgentInstallClient(post_resp=_CREATED_CONFIG)
+    with pytest.raises(ValueError, match="not installed on agent 'agent-missing'"):
+        ConnectorsAPI(client).create_configuration(
+            "virustotal", {"k": "v"}, name="c", version="3.1.0", agent="agent-missing", validate=False, autofill=False
+        )
+
+
+def test_create_configuration_takes_the_agents_name():
+    client = _AgentInstallClient(post_resp=_CREATED_CONFIG)
+    ConnectorsAPI(client).create_configuration(
+        "virustotal", {"k": "v"}, name="c", version="3.1.0", agent="agent-9-name", validate=False, autofill=False
+    )
+    body = client.post_calls[-1][1]
+    assert body["agent"] == "agent-9" and body["connector"] == 190
+
+
+def test_an_unknown_agent_name_lists_the_known_ones():
+    client = _AgentInstallClient(post_resp=_CREATED_CONFIG)
+    with pytest.raises(ValueError, match="no agent named 'nope'.*agent-9-name"):
+        ConnectorsAPI(client).create_configuration(
+            "virustotal", {"k": "v"}, name="c", version="3.1.0", agent="nope", validate=False, autofill=False
+        )
+
+
+def test_a_name_shared_by_two_agents_is_refused():
+    from pyfsr.api.agents import resolve_agent_id
+
+    class Two:
+        def get(self, endpoint, params=None, **kw):
+            return {"hydra:member": [{"agentId": "a1", "name": "lab"}, {"agentId": "a2", "name": "lab"}]}
+
+    with pytest.raises(ValueError, match="2 agents are named 'lab'"):
+        resolve_agent_id(Two(), "lab")
+    assert resolve_agent_id(Two(), "a2") == "a2"
