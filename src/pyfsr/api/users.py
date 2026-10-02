@@ -18,10 +18,11 @@ names; names are resolved via a per-instance cache populated on first use.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from ..models import Role, Team, User
 from ..pagination import extract_members
+from ..utils.validation import is_uuid as _is_uuid
 from .base import BaseAPI
 
 
@@ -315,19 +316,83 @@ class UsersAPI(BaseAPI):
         resp = self.client.put(f"/api/3/people/{person_uuid}", data=data)
         return User.model_validate(resp) if typed else resp
 
-    def deactivate(self, person_uuid: str, *, typed: bool = True) -> User | dict[str, Any]:
+    def _set_active(self, user: str, active: bool, typed: bool) -> User | dict[str, Any]:
+        """Activate/deactivate ``user`` (login ID or People UUID) the way the UI does.
+
+        1. ``PUT /api/auth/users`` with ``{"update": {uuid, status, user_type,
+           access_type}}`` sets the das login ``status`` (1=active, 2=inactive).
+           This is what allows or blocks login. The body must carry the current
+           ``user_type``/``access_type`` inside the ``update`` wrapper; a bare
+           ``{uuid, status}`` returns 200 but changes nothing.
+        2. ``csActive`` on the People record, which is what the UI displays.
         """
-        Deactivate a user account (sets ``csActive=False``).
+        if _is_uuid(user):
+            person_uuid = user
+            person = cast(dict[str, Any], self.client.get(f"/api/3/people/{person_uuid}"))
+            user_id = person.get("userId")
+            if not user_id:
+                raise LookupError(f"People record {person_uuid} has no linked login (userId)")
+        else:
+            ids = self.lookup(user)
+            person_uuid, user_id = ids["person_uuid"], ids["user_id"]
+        das = cast(dict[str, Any], self.client.get("/api/auth/users", params={"uuid": user_id}))
+        users = das.get("usersresp") or []
+        if not users:
+            raise LookupError(f"no das user for userId {user_id!r}")
+        self.client.put(
+            "/api/auth/users",
+            data={
+                "update": {
+                    "uuid": user_id,
+                    "status": 1 if active else 2,
+                    "user_type": users[0]["user_type"],
+                    "access_type": users[0]["access_type"],
+                }
+            },
+        )
+        return self.update(person_uuid, csActive=active, typed=typed)
+
+    def deactivate(self, user: str, *, typed: bool = True) -> User | dict[str, Any]:
+        """
+        Deactivate a user account, as the UI does.
+
+        New logins are refused (``Invalid credentials or account locked``) and
+        the user's existing tokens stop working within seconds. Setting
+        ``csActive=False`` alone (e.g. via :meth:`update`) does **not** do this;
+        it only changes how the UI shows the user.
 
         Args:
-            person_uuid: UUID of the person to deactivate.
+            user: the login ID (username) or the People UUID.
             typed: parse the result into a :class:`~pyfsr.models.User` (default);
                 pass ``False`` for the raw dict.
 
         Returns:
             The updated People record.
+
+        Raises:
+            LookupError: no such login, or no login linked to the People record.
+
+        Example:
+            >>> client.users.deactivate("jsmith")
         """
-        return self.update(person_uuid, csActive=False, typed=typed)
+        return self._set_active(user, False, typed)
+
+    def activate(self, user: str, *, typed: bool = True) -> User | dict[str, Any]:
+        """
+        Reactivate a user account; the reverse of :meth:`deactivate`.
+
+        Args:
+            user: the login ID (username) or the People UUID.
+            typed: parse the result into a :class:`~pyfsr.models.User` (default);
+                pass ``False`` for the raw dict.
+
+        Returns:
+            The updated People record.
+
+        Raises:
+            LookupError: no such login, or no login linked to the People record.
+        """
+        return self._set_active(user, True, typed)
 
     def lookup(self, loginid: str) -> dict[str, Any]:
         """Resolve a login ID to its das user UUID and People UUID.
