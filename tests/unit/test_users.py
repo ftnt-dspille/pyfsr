@@ -75,12 +75,61 @@ def test_update_returns_typed_user():
     assert out.csActive is False
 
 
-def test_deactivate_returns_typed_user():
-    updated = dict(_PERSON, csActive=False)
-    api = UsersAPI(_Rec(put_response=updated))
-    out = api.deactivate("3451141c-bac6-467c-8d72-85e0fab569ce")
+_USER_ID = "edf7fe38-0759-451b-9d79-793671632ede"
+_DAS_USER = {"uuid": _USER_ID, "loginid": "admin", "status": 1, "user_type": 2, "access_type": "Named"}
+
+
+class _Router:
+    """Answers by endpoint and records every PUT."""
+
+    def __init__(self, person):
+        self.person = person
+        self.puts = []
+
+    def get(self, endpoint, params=None, **kw):
+        if endpoint == "/api/auth/users":
+            hit = params in ({"uuid": _USER_ID}, {"loginid": _DAS_USER["loginid"]})
+            return {"usersresp": [_DAS_USER] if hit else []}
+        if endpoint == "/api/3/people":  # lookup(): People by userId
+            return {"hydra:member": [self.person]}
+        return self.person
+
+    def put(self, endpoint, data=None, params=None, **kw):
+        self.puts.append((endpoint, data))
+        if endpoint == "/api/auth/users":
+            return {"response": "Success"}
+        return dict(self.person, **data)
+
+
+def test_deactivate_blocks_login_then_marks_inactive():
+    rec = _Router(dict(_PERSON, userId=_USER_ID))
+    out = UsersAPI(rec).deactivate(_PERSON["uuid"])
+    assert rec.puts == [
+        ("/api/auth/users",
+         {"update": {"uuid": _USER_ID, "status": 2, "user_type": 2, "access_type": "Named"}}),
+        (f"/api/3/people/{_PERSON['uuid']}", {"csActive": False}),
+    ]  # fmt: skip
     assert isinstance(out, User)
     assert out.csActive is False
+
+
+def test_activate_restores_login_then_marks_active():
+    rec = _Router(dict(_PERSON, userId=_USER_ID, csActive=False))
+    out = UsersAPI(rec).activate(_PERSON["uuid"])
+    assert rec.puts[0][1]["update"]["status"] == 1
+    assert rec.puts[1] == (f"/api/3/people/{_PERSON['uuid']}", {"csActive": True})
+    assert out.csActive is True
+
+
+def test_deactivate_without_linked_login_raises_before_any_write():
+    rec = _Router(dict(_PERSON))  # no userId
+    try:
+        UsersAPI(rec).deactivate(_PERSON["uuid"])
+    except LookupError as e:
+        assert "no linked login" in str(e)
+    else:
+        raise AssertionError("expected LookupError")
+    assert rec.puts == []
 
 
 def test_create_returns_typed_user(mocker):
@@ -170,3 +219,22 @@ def test_create_inactive_sets_status_2(mocker):
     people = next(d for e, d in rec.posts if e == "/api/3/people")
     assert people["user"]["status"] == 2
     assert people["csActive"] is False
+
+
+def test_deactivate_by_login_id():
+    rec = _Router(dict(_PERSON, userId=_USER_ID))
+    out = UsersAPI(rec).deactivate("admin")
+    assert rec.puts[0][1]["update"] == {"uuid": _USER_ID, "status": 2, "user_type": 2, "access_type": "Named"}
+    assert rec.puts[1] == (f"/api/3/people/{_PERSON['uuid']}", {"csActive": False})
+    assert out.csActive is False
+
+
+def test_deactivate_unknown_login_id_raises_before_any_write():
+    rec = _Router(dict(_PERSON, userId=_USER_ID))
+    try:
+        UsersAPI(rec).deactivate("nobody")
+    except LookupError as e:
+        assert "nobody" in str(e)
+    else:
+        raise AssertionError("expected LookupError")
+    assert rec.puts == []
