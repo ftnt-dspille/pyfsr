@@ -1113,6 +1113,38 @@ class ConnectorsAPI(BaseAPI):
         hit = self._find_configured(connector)
         return hit.id if hit else None
 
+    def _agent_id(self, agent: str | None) -> str | None:
+        """``agent`` as an ``agentId`` -- callers may pass the agent's unique
+        name instead (see :func:`~pyfsr.api.agents.resolve_agent_id`)."""
+        if not agent:
+            return None
+        from .agents import resolve_agent_id
+
+        return resolve_agent_id(self.client, agent)
+
+    def _install_id(self, connector: str, version: str, agent: str | None) -> int | None:
+        """The install id a configuration's ``connector`` field must carry.
+
+        For the appliance itself that is :meth:`resolve_connector_id`. For a
+        remote **agent** it is the agent's OWN install of the connector -- a
+        different row with a different id. Sending the appliance's id with an
+        ``agent`` set stores a configuration that executes on the agent (the
+        ``agent`` field routes it) but is attached to the appliance's install:
+        the agent's connector page and the playbook designer's per-agent
+        Configuration list never show it, so it reads as "not linked to the
+        agent". Resolved from the per-agent install rows (``conn_id``).
+        """
+        if not agent:
+            return self.resolve_connector_id(connector)
+        path = f"/api/integration/connectors/agents/{connector}/{version}/?format=json&active=true"
+        rows = self.client.post(path, data={})
+        if isinstance(rows, dict):
+            rows = rows.get("data") or rows.get("hydra:member") or []
+        for row in rows or []:
+            if isinstance(row, dict) and row.get("agent") == agent and row.get("conn_id"):
+                return int(row["conn_id"])
+        return None
+
     def resolve_config(self, connector: str, config_name: str | None = None) -> str | None:
         """Return a config UUID for ``connector``.
 
@@ -1615,7 +1647,9 @@ class ConnectorsAPI(BaseAPI):
             config_id: reuse a specific UUID -- passing an existing config's id
                 **updates** that configuration instead of creating a new one
                 (the endpoint upserts on ``config_id``); omit to mint a new one.
-            agent: run the connector on a remote *agent* (its uuid); omit to use
+            agent: run the connector on a remote *agent* -- its name (unique),
+                ``agentId`` or uuid; the configuration is attached to that
+                agent's own install of the connector. Omit to use
                 the appliance's self-agent.
             validate: structurally check ``config`` against the connector's
                 schema first (via :meth:`validate_config`) and raise on a missing
@@ -1654,10 +1688,14 @@ class ConnectorsAPI(BaseAPI):
         version = version or self.resolve_version(connector)
         if not version:
             raise ValueError(f"{connector!r} version unknown (not yet configured); pass version=")
-        connector_id = self.resolve_connector_id(connector)
+        agent = self._agent_id(agent)
+        connector_id = self._install_id(connector, version, agent)
         if connector_id is None:
             raise ValueError(
-                f"{connector!r} is not installed; install it before configuring "
+                f"{connector!r} {version} is not installed on agent {agent!r}; install it there "
+                "first (client.agents.install_connector)"
+                if agent
+                else f"{connector!r} is not installed; install it before configuring "
                 "(client.connectors.install(name, version))"
             )
         if autofill:
@@ -1738,7 +1776,8 @@ class ConnectorsAPI(BaseAPI):
             name: the configuration's label.
             version: connector version (resolved if omitted).
             default: mark this the connector's default configuration.
-            agent: run the connector on a remote agent (omit to keep existing).
+            agent: run the connector on a remote agent -- name, ``agentId`` or
+                uuid (omit to keep existing).
             validate: structurally check ``config`` against the schema first
                 (default ``True``).
             autofill: fill any schema-defaulted fields ``config`` omits (default ``True``).
@@ -1756,9 +1795,14 @@ class ConnectorsAPI(BaseAPI):
         version = version or self.resolve_version(connector)
         if not version:
             raise ValueError(f"{connector!r} version unknown; pass version=")
-        connector_id = self.resolve_connector_id(connector)
+        agent = self._agent_id(agent)
+        connector_id = self._install_id(connector, version, agent)
         if connector_id is None:
-            raise ValueError(f"{connector!r} is not installed")
+            raise ValueError(
+                f"{connector!r} {version} is not installed on agent {agent!r}"
+                if agent
+                else f"{connector!r} is not installed"
+            )
         if autofill:
             config = self._materialize_config(self.config_schema(connector, version=version), config)
         if validate:
@@ -2143,7 +2187,8 @@ class ConnectorsAPI(BaseAPI):
             name: a label for this configuration (required).
             version: connector version (resolved if omitted).
             default: mark this the connector's default configuration.
-            agent: run the connector on a remote agent (omit for self-agent).
+            agent: run the connector on a remote agent -- name, ``agentId`` or
+                uuid (omit for self-agent).
             validate: structurally check ``config`` against the schema first
                 (default ``True``).
             autofill: fill any schema-defaulted fields ``config`` omits,
@@ -2158,6 +2203,7 @@ class ConnectorsAPI(BaseAPI):
                 fails structural validation.
         """
         version = version or self.resolve_version(connector)
+        agent = self._agent_id(agent)
         existing = self._find_configuration_by_name(connector, name, agent=agent)
 
         def _write() -> ConnectorConfig:

@@ -70,6 +70,16 @@ class AgentsAPI(BaseAPI):
             agents = [a for a in agents if a.active]
         return agents
 
+    def resolve(self, ref: str) -> str:
+        """The ``agentId`` for an agent's name, ``agentId`` or ``uuid``.
+
+        See :func:`resolve_agent_id`. Example:
+            >>> client = demo_client()
+            >>> client.agents.resolve("edge-1")
+            'edge-1'
+        """
+        return resolve_agent_id(self.client, ref)
+
     def get(self, uuid: str) -> Agent:
         """Fetch a single agent record by ``uuid`` (``GET /api/3/agents/{uuid}``).
 
@@ -92,7 +102,7 @@ class AgentsAPI(BaseAPI):
     ) -> Agent:
         """Register a new agent (``POST /api/3/agents``); returns the created record.
 
-        ``router`` is the secure-message-exchange router the agent connects through — pass a
+        ``router`` is the secure-message-exchange router the agent connects through - pass a
         router record (from :meth:`~pyfsr.api.routers.RoutersAPI.first`/``list``), its ``@id``
         IRI, or its bare uuid. ``installer_type`` is ``"docker"`` (default) or ``"bash"``, or a
         full picklist IRI. Creating the record does **not** install anything; follow with
@@ -126,7 +136,7 @@ class AgentsAPI(BaseAPI):
         """Idempotently ensure agent ``name`` exists; return ``(agent, created)``.
 
         If an agent with that ``name`` already exists, it is returned unchanged
-        (its router/installer_type/description are **not** modified — only
+        (its router/installer_type/description are **not** modified - only
         presence is ensured). Returns ``created=True`` only when the agent was
         newly created. ``router`` is required for the create path but ignored
         when the agent already exists.
@@ -165,7 +175,7 @@ class AgentsAPI(BaseAPI):
         ``POST /api/integration/agent-installer/?format=json``. ``agent_id`` is the agent's
         ``agentId`` (not its record uuid). ``connectors`` is an optional list of connectors to
         bake into the bundle; ``include_last_known_configurations`` ships the agent's last
-        known connector configs. Returns the raw bytes — write them to a ``.bin`` and run it
+        known connector configs. Returns the raw bytes - write them to a ``.bin`` and run it
         on the agent host.
 
         Example:
@@ -198,7 +208,7 @@ class AgentsAPI(BaseAPI):
     ) -> dict[str, Any]:
         """Register/activate a connector on a specific agent.
 
-        ``POST /api/integration/install-connector/?format=json`` — the call the FSoC *Agents →
+        ``POST /api/integration/install-connector/?format=json`` - the call the FSoC *Agents →
         Connectors* view makes so the connector shows as installed on ``agent_id``. ``name``
         and ``version`` **must match the appliance's connector catalog** (look it up via
         ``GET /api/integration/connectors/?name=<name>&format=json``); a version the catalog
@@ -226,7 +236,7 @@ class AgentsAPI(BaseAPI):
     def upgrade_connector(self, agent_id: str, *, name: str, version: str) -> dict[str, Any]:
         """Upgrade an installed connector on a remote agent to ``version``.
 
-        ``PUT /api/integration/install-connector/`` — same body shape the install
+        ``PUT /api/integration/install-connector/`` - same body shape the install
         proxy uses (``{name, version, agent_id}``). The appliance proxies the
         upgrade to ``agent_id`` over SME; poll :meth:`connector_install_status`
         for progress. To go the other way (downgrade/reinstall) pass the target
@@ -267,7 +277,7 @@ class AgentsAPI(BaseAPI):
     def heartbeat(self, agent_id: str) -> dict[str, Any]:
         """Probe a remote agent's liveness over the secure-message bus.
 
-        ``GET /api/integration/agent-heartbeat/{agent}/`` — round-trips a
+        ``GET /api/integration/agent-heartbeat/{agent}/`` - round-trips a
         heartbeat to the named agent and returns its response. This reflects the
         *current* SME-bus state, independent of the agent record's asynchronously
         updated ``configurationHealth.itemValue`` field.
@@ -292,7 +302,7 @@ class AgentsAPI(BaseAPI):
     ) -> list[AgentConnectorStatus]:
         """Per-agent connector install status rows (awaiting → in-progress → Completed).
 
-        ``POST /api/integration/connectors/agents/<connector>/<version>/?format=json`` — this
+        ``POST /api/integration/connectors/agents/<connector>/<version>/?format=json`` - this
         endpoint is **POST-only** (a GET is forbidden) and an empty body is enough. Returns
         the list of agent×version rows; pass ``agent_id`` to keep only that agent's row.
 
@@ -312,6 +322,32 @@ class AgentsAPI(BaseAPI):
         if agent_id is not None:
             rows = [r for r in rows if r.get("agent") == agent_id]
         return [AgentConnectorStatus.model_validate(r) for r in rows]
+
+
+def resolve_agent_id(client: Any, ref: str) -> str:
+    """The ``agentId`` for ``ref`` -- an agent's **name**, ``agentId`` or ``uuid``.
+
+    People name agents (``fsoc-automation-agent-07``); connector configurations
+    and actions bind by ``agentId``. A name shared by two agents is an error, not
+    a first-match pick: that is exactly the stale-agent case (a box re-imaged and
+    re-registered under the same name), where binding to the wrong record sends
+    every action to an agent that will never answer.
+
+    Raises:
+        ValueError: no agent matches, or the name is ambiguous.
+    """
+    members = extract_members(client.get(_BASE, params={"$limit": _ALL_LIMIT}))
+    agents = [a for a in members if isinstance(a, dict)]
+    for a in agents:
+        if ref in (a.get("agentId"), a.get("uuid")):
+            return a.get("agentId") or a["uuid"]
+    named = [a for a in agents if a.get("name") == ref]
+    if len(named) == 1:
+        return named[0].get("agentId") or named[0]["uuid"]
+    if not named:
+        known = ", ".join(sorted(a.get("name") or "?" for a in agents)) or "none"
+        raise ValueError(f"no agent named {ref!r} (known: {known})")
+    raise ValueError(f"{len(named)} agents are named {ref!r}; pass its agentId instead")
 
 
 def _require_uuid(uuid: str, op: str) -> str:
