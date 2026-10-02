@@ -51,7 +51,7 @@ def delete_logins(facts: Facts, user_ids: list[str], *, yes: bool = False, timeo
         user_ids: Login UUIDs (the People record's ``userId``), not People UUIDs.
         yes: confirmation gate; without it the call raises rather than run.
 
-    Returns the script's output. Raises :class:`TransportError` if the script
+    Returns the script's output. Raises :class:`~pyfsr.cli.appliance.transport.TransportError` if the script
     fails or any login is still present afterwards (the script prints
     ``DELETE 0`` for rows it had nothing to do with, so its output is not proof).
     """

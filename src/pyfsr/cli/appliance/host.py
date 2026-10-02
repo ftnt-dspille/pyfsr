@@ -264,7 +264,7 @@ def set_os_password(transport: Transport, user: str, password: str, *, yes: bool
 
     The password travels on stdin, never on the command line. PAM password
     quality rules (``/etc/security/pwquality.conf``) apply; a rejected password
-    raises :class:`TransportError` with chpasswd's reason.
+    raises :class:`~pyfsr.cli.appliance.transport.TransportError` with chpasswd's reason.
 
     Args:
         user: The OS account, e.g. ``csadmin``.
