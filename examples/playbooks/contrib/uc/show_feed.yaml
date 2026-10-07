@@ -1,0 +1,152 @@
+# "Show me the feed" -- a live Inoreader readout, on screen, inside FortiSOAR.
+#
+# WHY THIS EXISTS. There is no way to run a connector action ad hoc from the UI.
+# Content Hub -> Manage -> Inoreader -> Actions & Playbooks LISTS the operations
+# and describes them, but the only control on each row is a padlock, and it opens
+# "Assign Role(s) to Action" -- RBAC, not execution. The Configurations tab can
+# prove the connector is REACHABLE (HEALTH CHECK: AVAILABLE) and nothing more.
+#
+# So the only way to put live feed data on a screen is a playbook, and this is the
+# smallest one that does it: two reads, one comment, no side effects. It answers
+# "is this really talking to a real account?" before anyone asks, which is worth
+# more at the start of a demo than any amount of describing it.
+#
+# COST: 2 Zone 1 requests per run, against a quota of 100/day/zone. It writes
+# nothing to Inoreader, so Zone 2 is untouched, and it does NOT mark anything
+# read -- running it before the patch demo cannot spoil the patch demo.
+
+collection: Demo Library - Inoreader Feed
+description: >
+  Read the live Inoreader account and post what it holds as a comment: the
+  folder, its feeds, and how many unread articles each one carries.
+visible: true
+
+playbooks:
+  - name: Show Inoreader Feed
+    description: >
+      Live readout of the Inoreader account behind the patch demo -- feeds,
+      folders, and unread counts, on screen, in FortiSOAR.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: Show Inoreader Feed
+        comment: >
+          Reads nothing from the record it is launched from. A manual playbook
+          needs a module to hang a button on, and `alerts` is the module always
+          populated enough to have something to click.
+        next: Feed Config
+
+      - name: Feed Config
+        type: set_variable
+        vars:
+          inoreader_config: "inoreader-lab"
+          advisory_folder: "Patch Intel"
+        next: Read Subscriptions
+
+      - name: Read Subscriptions
+        type: connector
+        connector: inoreader
+        operation: get_subscriptions
+        config: "{{ vars.inoreader_config }}"
+        comment: >
+          Every feed the account holds, with the folder each is filed under.
+          This is the half that proves it is a real account rather than a
+          fixture: the list includes feeds nothing in this demo reads.
+        params: {}
+        next: Read Unread Counts
+
+      - name: Read Unread Counts
+        type: connector
+        connector: inoreader
+        operation: get_unread_counts
+        config: "{{ vars.inoreader_config }}"
+        comment: >
+          Per-feed unread counts, including one for the folder as a whole. This
+          is the half that makes the next act inevitable: the advisory the patch
+          playbook is about to consume is sitting here, unread, with a number
+          next to it.
+        params: {}
+        next: Summarise Feed
+
+      - name: Summarise Feed
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Join the two reads into something readable. `get_unread_counts` returns
+          stream IDS, not titles, so on its own it is a list of opaque
+          `feed/https://...` strings -- the subscription list is what turns those
+          into feed names anybody can read off a screen.
+
+          Stream ids come back containing the account's numeric user id
+          (`user/1003632566/label/Patch Intel`). That is rewritten to the
+          documented `user/-/` alias here so a screenshot of this comment does
+          not carry an account identifier around with it.
+        params:
+          code: |
+            import re
+
+            subs = {{ vars.steps.Read_Subscriptions.data | default({}) }} or {}
+            counts = {{ vars.steps.Read_Unread_Counts.data | default({}) }} or {}
+            folder = "{{ vars.advisory_folder }}"
+
+            titles, folders = {}, {}
+            for sub in subs.get("subscriptions") or []:
+                titles[sub.get("id")] = sub.get("title") or sub.get("id")
+                cats = []
+                for cat in sub.get("categories") or []:
+                    label = cat.get("label") if isinstance(cat, dict) else str(cat)
+                    if label:
+                        cats.append(label)
+                folders[sub.get("id")] = cats
+
+            rows, folder_total = [], None
+            for row in counts.get("unreadcounts") or []:
+                sid = str(row.get("id") or "")
+                count = row.get("count")
+                if "/label/" in sid:
+                    if sid.rsplit("/", 1)[-1] == folder:
+                        folder_total = count
+                    continue
+                if sid.startswith("user/"):
+                    continue
+                if folder in (folders.get(sid) or []):
+                    rows.append((titles.get(sid, sid), count))
+
+            rows.sort()
+            lines = ["<li><b>{0}</b> -- {1} unread</li>".format(t, c) for t, c in rows]
+
+            return {
+                "folder": folder,
+                "folder_unread": folder_total if folder_total is not None else "unknown",
+                "feed_rows": "".join(lines) or "<li>no feeds filed under this folder</li>",
+                "feeds_in_folder": len(rows),
+                "feeds_total": len(titles),
+            }
+        next: Feed Comment
+
+      - name: Feed Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Live from Inoreader.</b> This account holds
+            {{ vars.steps.Summarise_Feed.data.code_output.feeds_total }}
+            subscriptions;
+            {{ vars.steps.Summarise_Feed.data.code_output.feeds_in_folder }}
+            of them are filed under
+            <code>{{ vars.steps.Summarise_Feed.data.code_output.folder }}</code>,
+            which is the folder the patch playbook reads.</p>
+            <p>Unread in the folder:
+            <b>{{ vars.steps.Summarise_Feed.data.code_output.folder_unread }}</b></p>
+            <ul>{{ vars.steps.Summarise_Feed.data.code_output.feed_rows }}</ul>
+            <p><i>Fetched live over OAuth 2.0. Nothing was marked read -- this
+            playbook is safe to run immediately before the patch demo.</i></p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done
+
+      - name: Done
+        type: end

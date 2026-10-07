@@ -1,0 +1,99 @@
+collection: ZTPF FMG Microservices
+description: Proxy API trigger key for ZTPf2 -- triggers on device step Running with triggerKey=FortiManager Proxy API
+visible: true
+playbooks:
+- name: '> device step (Running) - FortiManager Proxy API'
+  is_active: true
+  parameters: []
+  steps:
+  - type: set_variable
+    name: return
+  - type: set_variable
+    name: run automation
+    description: Steps to run automation start here and connect to the next step.
+    vars:
+      script_type: '{{vars.input.records[0].triggerKey.split('' '')[1:]|join(" ")}}'
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: run_device_script
+  - type: workflow_reference
+    name: run device script
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/ddbf04fc-df33-54ba-8c85-6d2134c40e2c
+    script_type: '{{vars.script_type}}'
+    device_step_id: '{{vars.device_step_id}}'
+    next: step_post_run
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: FortiManager Proxy API
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+  annotations:
+  - id: details
+    title: Details
+    body: >-
+      Triggered when a device automation step transitions to Running with
+      triggerKey = "FortiManager Proxy API". Calls the proxy API sub-playbook
+      which uses FMG /sys/proxy/json for fast REST API calls through the
+      management tunnel.
+    position:
+      top: 260
+      left: 20
+      height: 205
+      width: 496

@@ -1,0 +1,26 @@
+# Delay step demo. Single-step body that pauses for 2 seconds, then a
+# set_variable stamps a marker so we can verify the step actually ran.
+# Compiler expands `arguments: {seconds: 2}` to the canonical FSR
+# TimeBased rule shape (resume_playbook channel + crudhub event source).
+
+collection: FSRPB Demo Delay
+description: Verify the delay step runs to completion.
+visible: true
+
+playbooks:
+  - name: FSRPB Demo - Delay
+    is_active: true
+    steps:
+      - name: trigger
+        type: start
+        next: Wait 2s
+
+      - name: Wait 2s
+        type: delay
+        next: Stamp done
+        seconds: 2
+
+      - name: Stamp done
+        type: set_variable
+        vars:
+          marker: "delay_passed"

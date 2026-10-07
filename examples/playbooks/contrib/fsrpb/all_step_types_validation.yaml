@@ -1,0 +1,465 @@
+# All-Step-Types Validation Playbook (the capstone).
+#
+# A single friendly-YAML *collection* that exercises every one of the 26
+# friendly step types at least once (24 typed + the `stop`/`end` one-way
+# sugars), so the author loop is proven end-to-end in one artifact, the
+# read loop is proven by a live push->pull->decompile round-trip, AND the
+# playbook actually RUNS on a live box (the orchestrator reaches a
+# terminal state with its happy-path steps executed).
+#
+# Why a collection and not one playbook: a FortiSOAR playbook has exactly ONE
+# start step, but there are 6 trigger variants (`start` Manual+Referenced,
+# `start_on_create`/`_update`/`_delete`, `api_endpoint`). So the trigger
+# variants each get their own playbook, and the main orchestrator carries
+# the body step types. The orchestrator calls the "Normalize Indicator"
+# child via `workflow_reference`.
+#
+# Compiles OFFLINE against the packaged slim reference DB (cyops_utilities
+# ops + mock_result stand in for a live feed connector; picklist-typed fields
+# are avoided so no live picklist UUIDs are needed). The push->pull->decompile
+# half that proves the READ loop + the live RUN are exercised by
+# `tooling/tests/test_all_step_types_roundtrip.py` (live tests).
+#
+# RUNNABILITY: the orchestrator's happy path runs on a live box. Steps whose
+# success depends on box-specific external config carry `ignore_errors: true`
+# so the run reaches `finished` regardless -- the step TYPE still executes
+# (attempts its op), and the run tree reports honestly which steps succeeded
+# vs. which errored-but-were-ignored:
+#   * ingest_bulk_feed  -- feed picklist IRIs are box-specific (no hardcoded UUIDs)
+#   * send_email        -- SMTP delivery depends on the smtp connector config
+#   * trigger_tenant_playbook -- needs a peer FortiSOAR tenant (none on a lab box)
+#   * record-crud family -- module required-fields are box-specific; ignored so a
+#                           missing picklist doesn't stop the run before the
+#                           later step types execute
+# The data the flow operates on is synthesized in the `Configure` step (a
+# literal indicator list) so the run does NOT depend on a live feed fetch.
+#
+# Step-type coverage (see tooling/step_type_coverage.py::COVERAGE):
+#   PB1 Orchestrator ......... start(manual), set_variable, connector,
+#                              code_snippet, find_record, decision,
+#                              manual_input, approval, delay, ingest_bulk_feed,
+#                              create_record, update_record,
+#                              delete_record, send_email, set_api_keys,
+#                              workflow_reference, trigger_tenant_playbook,
+#                              utilities, stop, end
+#   PB2 On Create ............ start_on_create
+#   PB3 On Update ............ start_on_update
+#   PB4 On Delete ............ start_on_delete
+#   PB5 API Endpoint ......... api_endpoint, create_task
+#   PB6 Normalize Indicator .. start(referenced) -- the workflow_reference target
+
+collection: FSRPB All Step Types Validation
+description: |
+  Capstone validation collection: every friendly step type in one artifact.
+  Extends the threat-feed recipe (Start -> Config -> Fetch -> Set Vars ->
+  Decision -> IngestBulkFeed | Raise) and chains in manual_input, approval,
+  create_task, send_email, set_api_keys, workflow_reference, connector,
+  code_snippet, the record-crud family, find_record, delay, the post-write
+  triggers, api_endpoint, and trigger_tenant_playbook.
+visible: true
+
+playbooks:
+
+  # -------------------------------------------------------------------------
+  # PB1 -- the orchestrator. Carries the body step types + is RUNNABLE.
+  # -------------------------------------------------------------------------
+  - name: Orchestrator - Threat Feed Ingest
+    description: Main playbook -- chains every body step type off the threat-feed recipe and runs to completion on a live box.
+    is_active: true
+    parameters: [feed_url, lastPullTime]
+    steps:
+      - name: Start
+        type: start
+        next: Configure
+        module: indicators
+        button_label: Ingest a threat feed
+
+      - name: Configure
+        type: set_variable
+        next: Fetch indicators
+        comment: |
+          Synthesize the indicator list inline so the run does NOT depend on a
+          live feed fetch (the connector step below exercises the type but its
+          result is unused). `marker` tags any records this run creates so they
+          can be found + cleaned up. Picklist maps would resolve live; left out
+          so the playbook compiles offline with no box-specific UUIDs.
+        vars:
+          feed_source_name: "demo-threat-feed"
+          marker: "fsrpb_all_step_types_{{ vars.task_id }}"
+          indicators:
+            - id: "demo-1"
+              value: "198.51.100.10"
+              type: "ipv4-addr"
+              tlp: "amber"
+              confidence: 70
+              description: "demo indicator (synthesized)"
+
+      - name: Fetch indicators
+        type: connector
+        next: Transform fetch
+        comment: |
+          Uses cyops_utilities.get_macro_list as a structurally-valid op so the
+          recipe compiles + round-trips offline; it does NOT fetch a feed and
+          its result is unused (the data comes from `Configure`). mock_result
+          keeps the offline compile + mock runs honest.
+        connector: cyops_utilities
+        operation: get_macro_list
+        config: ""
+        params: {}
+        mock_result: |
+          {
+            "indicators": [
+              {"id": "demo-1", "value": "198.51.100.10", "type": "ipv4-addr", "tlp": "amber", "confidence": 70, "description": "demo indicator (mock)"}
+            ]
+          }
+
+      - name: Transform fetch
+        type: code_snippet
+        next: Map ingested data
+        comment: Exercises the code_snippet type (sandbox-safe; no imports). Output unused.
+        code: |
+          src = "{{ vars.feed_source_name }}"
+          print(src.strip().lower().replace(" ", "-"))
+
+      - name: Map ingested data
+        type: set_variable
+        next: Any new data
+        vars:
+          ingestedData: "{{ vars.indicators }}"
+
+      - name: Any new data
+        type: decision
+        comment: Error gateway -- empty data raises so the run is visibly red, not silently no-op.
+        conditions:
+          - display: "yes"
+            when: "{{ (vars.ingestedData | length) > 0 }}"
+            next: Pause for approval
+          - display: Else
+            default: true
+            next: Raise no data
+
+      - name: Raise no data
+        type: connector
+        next: Stop here
+        connector: cyops_utilities
+        operation: raise_exception
+        config: ""
+        params:
+          msg: "Feed fetch returned no indicators (lastPullTime={{ vars.input.params.lastPullTime }})"
+
+      - name: Stop here
+        type: stop
+
+      - name: Pause for approval
+        type: manual_input
+        next: Wait briefly
+        title: Approve ingestion of the fetched indicators?
+        description: Click **approve** to ingest, **reject** to abort.
+        inputs:
+          - {name: analyst_comment, kind: text, label: Analyst Comment, required: false}
+        options:
+          - {display: approve, primary: true, next: Wait briefly}
+          - {display: reject, next: Stop here}
+
+      # The legacy `type: approval` step (ApprovalManualInput) is kept as an
+      # ORPHAN for step-type coverage (compile + round-trip + push) -- it is
+      # NOT on the run path because it is not programmatically resumable: it
+      # creates an approval-module record but no manual-wf-input, so
+      # wfinput_resume has no manual_input_id to target. The modern, resumable
+      # approval gate is a `manual_input` step (optionally with is_approval:
+      # true) -- the "Pause for approval" step above serves that role. See
+      # pyfsr memory `manual-input-run-scoped-helper` + MANUAL_INPUT.md.
+      - name: Legacy Approval Coverage
+        type: approval
+        resource:
+          approvaldescription: "Orphan -- exercises the approval step TYPE (compile/round-trip); never reached at run time."
+
+      # Like the approval orphan above, `create_task` (ManualTask) is a human-
+      # in-the-loop step that PAUSES the run (status `awaiting`) but creates NO
+      # manual-wf-input record (so it is not resumable via `wfinput_resume`/mi.answer),
+      # and a real task needs box-specific picklist IRIs (type/status/fsrQueue/
+      # priority). Kept as an orphan for step-type coverage (compile/round-trip/
+      # push); the run path never reaches it. See pb.approval docstring +
+      # pyfsr memory `manual-input-run-scoped-helper`.
+      - name: Create Task Coverage
+        type: create_task
+        resource:
+          description: "coverage-only"
+
+      - name: Wait briefly
+        type: delay
+        next: Ingest indicators
+        seconds: 1
+
+      - name: Ingest indicators
+        type: ingest_bulk_feed
+        next: Create audit alert
+        ignore_errors: true
+        comment: |
+          IngestBulkFeed -- POSTs to /api/ingest-feeds/threat_intel_feeds.
+          __bulk true intentionally bypasses per-indicator on-create playbooks.
+          ignore_errors because feed picklist IRIs (tLP/typeOfFeed) are box-
+          specific and not hardcoded in this portable example; the step TYPE
+          still executes (attempts the POST). for_each is a step-level IR
+          field (sibling of arguments), moved into the wire args at emit time.
+        for_each:
+          item: "{{ vars.ingestedData }}"
+          parallel: false
+          condition: ""
+          __bulk: true
+          batch_size: 1000
+        collection: /api/ingest-feeds/threat_intel_feeds
+        resource:
+          __replace: ""
+          value: "{{ vars.item.value }}"
+          source: "{{ vars.feed_source_name }}"
+          sourceId: "{{ vars.item.id }}"
+          sourceData: "{{ vars.item | toJSON }}"
+          description: "{{ vars.item.description | default('') }}"
+          patternType: "STIX"
+          patternVersion: "2.1"
+          recordTags: []
+          threatTypes: []
+          killChainPhases: []
+        mock_result: |
+          {"status": "ok", "ingested": 0, "mock": true}
+
+      - name: Create audit alert
+        type: create_record
+        next: Find audit alert
+        ignore_errors: true
+        comment: |
+          Creates an alert tagged with `marker` so the later find/delete steps
+          can locate it.
+
+          `name:` is REQUIRED on alerts -- omitting it fails the create with
+          "name: This value should not be blank", and because this step is
+          `ignore_errors: true` the run still reached `finished` while every
+          later step in the create -> find -> update -> delete chain quietly
+          operated on nothing. `ignore_errors` covers box-SPECIFIC required
+          fields; `name` is not one of those.
+
+          The find/update/delete steps and the on-create trigger all match on
+          `description`, so `name` is free to carry the marker too.
+        module: alerts
+        operation: Replace
+        fields:
+          name: "{{ vars.marker }}"
+          description: "{{ vars.marker }}"
+          source: "{{ vars.feed_source_name }}"
+      - name: Find audit alert
+        type: find_record
+        next: Update audit status
+        ignore_errors: true
+        comment: Find the alert we just created (by the marker) so update/delete target a real record.
+        module: alerts
+        filters:
+          - type: primitive
+            field: description
+            value: "{{ vars.marker }}"
+            operator: like
+            _operator: like
+      - name: Update audit status
+        type: update_record
+        next: Comment on audit alert
+        ignore_errors: true
+        module: alerts
+        record: "{{ vars.steps.Find_audit_alert[0]['@id'] | default('') }}"
+        fields:
+          description: "{{ vars.marker }} - ingested"
+        operation: Replace
+      - name: Comment on audit alert
+        type: create_record
+        next: Delete audit alert
+        ignore_errors: true
+        comment: create_record (InsertData) exercised here against the comments module.
+        module: comments
+        operation: Overwrite
+        fields:
+          content: "Ingested {{ vars.ingestedData | length }} indicator(s) from {{ vars.feed_source_name }}."
+      - name: Delete audit alert
+        type: delete_record
+        next: Notify team
+        ignore_errors: true
+        comment: |
+          Closes the create->find->update->delete lifecycle on the audit alert.
+          `record:` takes the find-result IRI (@id) directly (the `record_id:`
+          form builds `/api/3/<module>/<record_id>` and so wants a bare uuid;
+          feeding it the @id IRI doubles the path -> 404).
+        module: alerts
+        record: "{{ vars.steps.Find_audit_alert[0]['@id'] | default('') }}"
+
+      - name: Notify team
+        type: send_email
+        next: Store playbook keys
+        ignore_errors: true
+        comment: send_email now targets the SendMail connector path (smtp/send_email), which SUCCEEDS on 8.0. ignore_errors kept as a safety net in case a lab box has no smtp config (localhost-postfix absent).
+        to: [soc@example.com]
+        subject: "Threat feed ingest complete - {{ vars.feed_source_name }}"
+        body: "Ingested {{ vars.ingestedData | length }} indicator(s)."
+
+      - name: Store playbook keys
+        type: set_api_keys
+        next: Call normalize child
+        public_key: "{{ vars.feed_source_name }}-public"
+        private_key: "{{ vars.feed_source_name }}-private"
+
+      - name: Call normalize child
+        type: workflow_reference
+        next: Notify peer tenant
+        target: Normalize Indicator
+        indicator_value: "{{ vars.indicators[0].value }}"
+        apply_async: false
+        pass_parent_env: false
+        pass_input_record: false
+      - name: Notify peer tenant
+        type: trigger_tenant_playbook
+        next: Utils finish
+        ignore_errors: true
+        comment: ignore_errors because no peer FortiSOAR tenant is configured on a lab box; the step TYPE still executes.
+        playbook_alias_id: remote-ir-playbook
+        tenant_id: tenant-acme
+
+      - name: Utils finish
+        type: utilities
+        next: Done
+        operation: no_op
+
+      - name: Done
+        type: end
+
+  # -------------------------------------------------------------------------
+  # PB2 -- post_create trigger variant. ACTIVE + scoped to the orchestrator's
+  # audit alert so the orchestrator's own Create step FIRES it -- proving the
+  # start_on_create TYPE actually runs, not just compiles. (Playbooks do NOT
+  # need a separate publish to run their triggers -- live-verified on 8.0.0:
+  # the stock FortiSOAR post-create triggers fire on a direct API alert create
+  # with no publish, and so do these.) The `when` filter matches the run marker
+  # (description contains `fsrpb_all_step_types_`) so it only fires on our
+  # audit alert -- never on unrelated alert creates on the box.
+  # -------------------------------------------------------------------------
+  - name: On Create - Audit Alert
+    description: Auto-fires when the orchestrator creates its marker-tagged audit alert.
+    is_active: true
+    steps:
+      - name: On Create
+        type: start_on_create
+        next: Stamp created
+        module: alerts
+        when:
+          logic: AND
+          filters:
+            - {field: description, op: contains, value: "fsrpb_all_step_types_"}
+
+      - name: Stamp created
+        type: set_variable
+        next: End
+        vars:
+          created_marker: "fsrpb_all_step_types_on_create"
+
+      - name: End
+        type: end
+
+  # -------------------------------------------------------------------------
+  # PB3 -- post_update trigger variant. `contains` (not `changed`) so it fires
+  # on ANY update to a marker-tagged alert, not only on a specific field
+  # change (the orchestrator's Update step sets description to `marker - ingested`).
+  # -------------------------------------------------------------------------
+  - name: On Update - Audit Alert
+    description: Auto-fires when the orchestrator updates its marker-tagged audit alert.
+    is_active: true
+    steps:
+      - name: On Update
+        type: start_on_update
+        next: Note change
+        module: alerts
+        when:
+          logic: AND
+          filters:
+            - {field: description, op: contains, value: "fsrpb_all_step_types_"}
+
+      - name: Note change
+        type: set_variable
+        next: End
+        vars:
+          updated_marker: "fsrpb_all_step_types_on_update"
+
+      - name: End
+        type: end
+
+  # -------------------------------------------------------------------------
+  # PB4 -- post_delete trigger variant. FortiSOAR passes the pre-delete record
+  # state, so the marker filter still matches.
+  # -------------------------------------------------------------------------
+  - name: On Delete - Audit Alert
+    description: Auto-fires when the orchestrator deletes its marker-tagged audit alert.
+    is_active: true
+    steps:
+      - name: On Delete
+        type: start_on_delete
+        next: Log removal
+        module: alerts
+        when:
+          logic: AND
+          filters:
+            - {field: description, op: contains, value: "fsrpb_all_step_types_"}
+
+      - name: Log removal
+        type: set_variable
+        next: End
+        vars:
+          deleted_marker: "fsrpb_all_step_types_on_delete"
+
+      - name: End
+        type: end
+
+  # -------------------------------------------------------------------------
+  # PB5 -- custom API endpoint trigger variant + create_task.
+  # -------------------------------------------------------------------------
+  - name: API Endpoint - External Submit
+    description: Custom API trigger that creates a follow-up task from the request body.
+    is_active: true
+    parameters: [api_body]
+    steps:
+      - name: Start
+        type: api_endpoint
+        next: Build task from body
+        route: allstep/submit
+        authentication_methods: [anonymous]
+
+      - name: Build task from body
+        type: set_variable
+        next: Create Followup Task
+        vars:
+          task_name: "External submit - {{ vars.input.params.api_body | default('unspecified') }}"
+
+      - name: Create Followup Task
+        type: create_task
+        next: End
+        resource:
+          description: "Task created via the all-step-types API endpoint trigger."
+
+      - name: End
+        type: end
+
+  # -------------------------------------------------------------------------
+  # PB6 -- the referenced child the orchestrator calls via workflow_reference.
+  # A plain `start` (no module) is the Referenced trigger variant.
+  # -------------------------------------------------------------------------
+  - name: Normalize Indicator
+    description: Child playbook -- normalizes an indicator value. Called by the orchestrator.
+    is_active: true
+    parameters: [indicator_value]
+    steps:
+      - name: Start
+        type: start
+        next: Normalize
+
+      - name: Normalize
+        type: set_variable
+        next: End
+        vars:
+          normalized_value: "{{ vars.input.params.indicator_value | lower | trim }}"
+
+      - name: End
+        type: end

@@ -1,0 +1,175 @@
+collection: ZZ Worker Starvation Lab
+description: >-
+  Isolated experiment (module: alerts -- deliberately NOT ztpf_*) measuring whether
+  a playbook that waits holds a celery worker. The workflow worker runs
+  --autoscale=12,8, so 12 concurrent tasks is the hard ceiling; a 100-device
+  upgrade fleet cannot afford to park a worker per device.
+
+  Three playbooks, selected by the alert's `source` field:
+    ZZHOG-BLOCK  -> waits by calling code-runner time.sleep()  (expected: HOLDS a worker)
+    ZZHOG-DELAY  -> waits with the native Delay/Wait step type (expected: DESCHEDULES)
+    ZZCANARY     -> trivial, finishes immediately; its end-to-end latency while the
+                    hogs are waiting is the measurement that matters
+visible: true
+playbooks:
+
+- name: ZZ Hog - blocking sleep
+  uuid: 3a1c9e70-51d4-4f88-9b21-7c0e5a12d001
+  is_active: true
+  parameters: []
+  steps:
+  - type: start_on_create
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: alerts
+    resources:
+    - alerts
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: primitive
+        field: source
+        value: ZZHOG-BLOCK
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: sleep_in_connector
+    top: '40'
+    left: '40'
+  # Blocks a celery worker for the whole interval -- the anti-pattern under test.
+  - type: connector
+    name: sleep in connector
+    pickFromTenant: false
+    config: Default
+    params:
+      code: |-
+        import time
+        n = int(params.get("seconds") or 90)
+        t0 = time.time()
+        time.sleep(n)
+        result = {"slept": round(time.time() - t0, 2)}
+      input: '{{ {"seconds": 90} }}'
+    connector: code-runner
+    operation: run_python
+    next: done
+    top: '40'
+    left: '300'
+  - type: update_record
+    name: done
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: alerts
+    record: "{{vars.input.records[0]['@id']}}"
+    fields:
+      description: 'BLOCK done'
+    top: '40'
+    left: '560'
+
+- name: ZZ Hog - native delay
+  uuid: 3a1c9e70-51d4-4f88-9b21-7c0e5a12d002
+  is_active: true
+  parameters: []
+  steps:
+  - type: start_on_create
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: alerts
+    resources:
+    - alerts
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: primitive
+        field: source
+        value: ZZHOG-DELAY
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: wait_natively
+    top: '40'
+    left: '40'
+  # The native Wait step. Should park the run and release the worker.
+  - type: delay
+    name: wait natively
+    delay:
+      days: 0
+      weeks: 0
+      hours: 0
+      minutes: 0
+      seconds: 90
+    next: done
+    top: '40'
+    left: '300'
+  - type: update_record
+    name: done
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: alerts
+    record: "{{vars.input.records[0]['@id']}}"
+    fields:
+      description: 'DELAY done'
+    top: '40'
+    left: '560'
+
+- name: ZZ Canary
+  uuid: 3a1c9e70-51d4-4f88-9b21-7c0e5a12d003
+  is_active: true
+  parameters: []
+  steps:
+  - type: start_on_create
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: alerts
+    resources:
+    - alerts
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: primitive
+        field: source
+        value: ZZCANARY
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: stamp
+    top: '40'
+    left: '40'
+  # Writes as soon as it gets a worker. The gap between the alert's createDate and
+  # this write is the starvation measurement.
+  - type: update_record
+    name: stamp
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: alerts
+    record: "{{vars.input.records[0]['@id']}}"
+    fields:
+      description: 'CANARY ran'
+    top: '40'
+    left: '300'

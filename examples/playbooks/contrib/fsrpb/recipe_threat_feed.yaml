@@ -1,0 +1,166 @@
+# RECIPE TEMPLATE -- Threat Intel Feed Ingestion
+#
+# Pattern: Start → Configuration → Connector fetch → Set Variables (jinja
+# map) → Decision (any data?) → IngestBulkFeed | Raise Exception.
+#
+# Target module: threat_intel_feeds (the threat-feed module).
+# Bulk + trigger bypass is INTENTIONAL for feeds -- per-indicator on-create
+# playbooks would melt the system at feed volumes.
+#
+# Replace every TODO comment with the real value for your feed source.
+# Remove any TODO once it's resolved so this file lints clean.
+#
+# Tags applied (recipe lints these): dataingestion, fetch, create,
+# <connector_api_name>. Adjust <connector_api_name> below.
+
+collection: "Recipe -- TODO Connector > Fetch and Create"
+description: Threat intel feed ingestion recipe (IngestBulkFeed pattern).
+visible: true
+
+playbooks:
+  - name: "TODO Connector > Fetch and Create"
+    description: Fetch threat indicators from the source feed and bulk-ingest them.
+    is_active: true
+    tag: "dataingestion, fetch, create, todo_connector_api_name"
+    parameters: [lastPullTime]
+    steps:
+      - name: Start
+        type: start
+        next: Configuration
+
+      - name: Configuration
+        type: set_variable
+        next: Fetch indicators
+        comment: |
+          TODO replace picklist maps and feed-name. Picklist UUIDs MUST be
+          resolved live against the configured FSR -- do not hand-paste
+          UUIDs from another instance, they will not match.
+        vars:
+          feed_source_name: "TODO replace with your feed display name"
+          tlp_map:
+            # Map source-feed TLP → FSR picklist UUID. Resolve via
+            # `fsrpb pick TLP <label>` against the live FSR.
+            white: "TODO /api/3/picklists/<uuid-for-White>"
+            green: "TODO /api/3/picklists/<uuid-for-Green>"
+            amber: "TODO /api/3/picklists/<uuid-for-Amber>"
+            red: "TODO /api/3/picklists/<uuid-for-Red>"
+          typeOfFeed_map:
+            # Source-feed indicator type → FSR Type Of Feed picklist
+            ipv4-addr: "TODO /api/3/picklists/<uuid-for-IP>"
+            domain-name: "TODO /api/3/picklists/<uuid-for-Domain>"
+            url: "TODO /api/3/picklists/<uuid-for-URL>"
+          confidence_default: 50
+
+      - name: Fetch indicators
+        type: connector
+        next: Map to ingestedData
+        comment: |
+          TODO replace BOTH the connector and operation. This template
+          uses `cyops_utilities.get_picklist` as a structurally-valid
+          placeholder so the recipe compiles and round-trips out of the
+          box; it does NOT fetch a feed. Recipe rule: target connector
+          must already be installed on the configured FSR -- verify with
+          `fsrpb health <connector>` before running.
+        connector: cyops_utilities
+        operation: get_macro_list
+        config: ""
+        params: {}
+        # TODO once you swap in the real connector + op, supply the
+        # fetch parameters here. Use
+        # `{{ vars.input.params.lastPullTime }}` for incremental pulls.
+        #
+        # MOCK MODE: when the target connector isn't installed yet, you
+        # can still validate the rest of this recipe's plumbing by
+        # filling in `mock_result` (a JSON STRING -- yes, stringified)
+        # with a representative feed-fetch payload, then triggering
+        # with `fsrpb run-playbook --mock`. The runtime returns this
+        # string in place of executing the connector op, while every
+        # downstream step (mapping → Decision → IngestBulkFeed) runs
+        # live against it. Default trigger is non-mock; this only
+        # activates when --mock is passed.
+        mock_result: |
+          {
+            "indicators": [
+              {
+                "id": "TODO-mock-1",
+                "value": "1.2.3.4",
+                "type": "ipv4-addr",
+                "tlp": "white",
+                "confidence": 60,
+                "description": "TODO sample indicator (mock)"
+              }
+            ]
+          }
+
+      - name: Map to ingestedData
+        type: set_variable
+        next: Any data
+        comment: |
+          TODO adjust the per-indicator field mapping below. Each item
+          in the source list becomes one entry; `vars.item` is bound to
+          the current source-feed record at IngestBulkFeed time, NOT
+          here. This step just unboxes the array into `ingestedData`.
+        vars:
+          ingestedData: "{{ vars.steps.Fetch_indicators.indicators }}"
+
+      - name: Any data
+        type: decision
+        comment: |
+          Error gateway -- if the fetch produced nothing, raise so the
+          run is visibly red instead of silently no-op'ing.
+        conditions:
+          - display: "yes"
+            when: "{{ (vars.ingestedData | length) > 0 }}"
+            next: Ingest indicators
+          - display: Else
+            default: true
+            next: Raise no data
+
+      - name: Raise no data
+        type: connector
+        connector: cyops_utilities
+        operation: raise_exception
+        config: ""
+        params:
+          msg: "Feed fetch returned no indicators (lastPullTime={{ vars.input.params.lastPullTime }})"
+
+      - name: Ingest indicators
+        type: ingest_bulk_feed
+        comment: |
+          IngestBulkFeed -- POSTs to /api/ingest-feeds/threat_intel_feeds.
+          `__bulk: true` is intentional: per-indicator on-create playbooks
+          must NOT fire for feed volumes. Adjust batch_size to match your
+          feed's typical pull size (1000 is a safe default; up to ~8000
+          observed in the corpus).
+          TODO replace each `vars.item.<field>` reference with the actual
+          field name on your source-feed record shape.
+        for_each:
+          item: "{{ vars.ingestedData }}"
+          parallel: false
+          condition: ""
+          __bulk: true
+          batch_size: 1000
+        collection: /api/ingest-feeds/threat_intel_feeds
+        resource:
+          __replace: ""
+          value: "{{ vars.item.value }}"            # TODO field name
+          source: "{{ vars.feed_source_name }}"
+          sourceId: "{{ vars.item.id }}"            # TODO field name (must be unique per indicator for dedupe)
+          sourceData: "{{ vars.item | toJSON }}"
+          typeOfFeed: "{{ vars.item.type | resolveRange(vars.typeOfFeed_map) }}"  # TODO field name
+          tLP: "{{ vars.item.tlp | default('white') | resolveRange(vars.tlp_map) }}"  # TODO field name
+          confidence: "{{ vars.item.confidence | default(vars.confidence_default) }}"
+          description: "{{ vars.item.description | default('') }}"
+          patternType: "STIX"
+          patternVersion: "2.1"
+          recordTags: []
+          threatTypes: []
+          killChainPhases: []
+        # MOCK MODE: even with `useMockOutput=true / globalMock=false`,
+        # IngestBulkFeed still executes live unless it has its own
+        # `mock_result`. Fill in a stub success payload here while
+        # validating recipe plumbing without real picklist UUIDs;
+        # remove once the Configuration step's picklist maps point at
+        # real UUIDs from the live FSR.
+        mock_result: |
+          {"status": "ok", "ingested": 0, "mock": true}

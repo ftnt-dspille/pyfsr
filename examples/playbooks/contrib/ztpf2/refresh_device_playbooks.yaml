@@ -1,0 +1,210 @@
+collection: 10 - SP - ZTPF - Triggers
+description: >-
+  Device-step type "FortiManager Refresh Device": re-reads the device from the
+  FortiManager dvmdb and writes fresh firmware/platform/status back onto the
+  ztpf_devices record. Added as the final step of the upgrade/rollback profiles.
+visible: true
+playbooks:
+- name: '> run action from step_id - FortiManager Refresh Device'
+  uuid: 1f4d5b6a-0c21-4e77-9a3b-2d6f0e11aa01
+  is_active: true
+  parameters:
+  - device_step_id
+  steps:
+  - type: start
+    name: Start
+    next: find_step
+    top: '40'
+    left: '40'
+  - type: find_record
+    name: find step
+    step_variables: []
+    module: ztpf_device_automation_steps?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: "{{vars.input.params['device_step_id']}}"
+      operator: eq
+    next: find_device
+    top: '40'
+    left: '240'
+  - type: find_record
+    name: find device
+    step_variables: []
+    module: ztpf_devices?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: '{{vars.steps.find_step[0].ztpfDevices.id}}'
+      operator: eq
+    next: setup_vars
+    top: '40'
+    left: '440'
+  - type: set_variable
+    name: setup vars
+    vars:
+      device: '{{vars.steps.find_device[0].name}}'
+      device_id: '{{vars.steps.find_device[0].id}}'
+      device_step_fqid: "{{vars.steps.find_step[0]['@id']}}"
+      firmware_before: '{{vars.steps.find_device[0].firmware}}'
+    next: synch_dvmdb
+    top: '40'
+    left: '640'
+  # The actual work: the same sub-workflow the button calls. It queries the FMG
+  # dvmdb for these device ids and re-parses firmware/platform/status onto each
+  # ztpf_devices record. Invoked as a reference (not an API trigger), so its
+  # abstract-trigger input.params is populated from these arguments.
+  - type: workflow_reference
+    name: synch dvmdb
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/379c3a43-af7e-4a27-bdbf-1207d2697378
+    record_ids: '{{[vars.device_id]}}'
+    next: reread_device
+    top: '40'
+    left: '840'
+  - type: find_record
+    name: reread device
+    step_variables: []
+    module: ztpf_devices?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: '{{vars.device_id}}'
+      operator: eq
+    next: script_results
+    top: '40'
+    left: '1040'
+  - type: set_variable
+    name: script results
+    vars:
+      step_status: Complete
+      script_results: |-
+        {%- set fw = vars.steps.reread_device[0].firmware | default('', true) -%}
+        {%- set ret = {"output": {
+          "error": false,
+          "device": vars.device,
+          "firmware_before": vars.firmware_before,
+          "firmware_after": fw,
+          "changed": (fw != vars.firmware_before)
+        }} -%}
+        {{ret}}
+    next: update_step
+    top: '40'
+    left: '1240'
+  - type: update_record
+    name: update step
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_device_automation_steps
+    record: '{{vars.device_step_fqid}}'
+    fields:
+      queueStatus: '{{"ztpfDeviceStepStatus" | picklist(vars.step_status, "@id")}}'
+      outputSourceData: '{{vars.script_results}}'
+    next: return
+    top: '40'
+    left: '1440'
+  - type: set_variable
+    name: return
+    vars:
+      output: '{{vars.script_results}}'
+      params: '{{vars.input.params}}'
+      status: ''
+    top: '40'
+    left: '1640'
+
+- name: '> device step (Running) - FortiManager Refresh Device'
+  uuid: 2a7e6c1b-3d84-4f95-8b16-9c0e1f22bb02
+  is_active: true
+  parameters: []
+  steps:
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: FortiManager Refresh Device
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    top: '40'
+    left: '40'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+    top: '40'
+    left: '340'
+  - type: set_variable
+    name: run automation
+    vars:
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: run_device_script
+    top: '40'
+    left: '640'
+  - type: workflow_reference
+    name: run device script
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    target: '> run action from step_id - FortiManager Refresh Device'
+    device_step_id: '{{vars.device_step_id}}'
+    next: step_post_run
+    top: '40'
+    left: '940'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+    top: '40'
+    left: '1240'
+  - type: set_variable
+    name: return
+    top: '40'
+    left: '1540'

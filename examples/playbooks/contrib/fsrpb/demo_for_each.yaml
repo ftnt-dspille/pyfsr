@@ -1,0 +1,47 @@
+# for_each demo. A Set Variables step builds a static list of three
+# alert payloads; the next step loops over them with `for_each`,
+# creating one alert per element. Each iteration's element is bound
+# as `{{ vars.item }}` (object fields under `vars.item.<field>`).
+#
+# Note: this uses non-bulk Create Record so on-create alert playbook
+# triggers fire normally -- the ingestion-recipe pattern. Threat-feed
+# recipes use IngestBulkFeed with for_each.__bulk=true instead.
+
+collection: FSRPB Demo For Each
+description: Loops a create_record over a list with for_each / vars.item.
+visible: true
+
+playbooks:
+  - name: FSRPB For Each Create
+    is_active: true
+    steps:
+      - name: trigger
+        type: start
+        next: Build alerts
+
+      - name: Build alerts
+        type: set_variable
+        next: Create alert per item
+        vars:
+          alerts_to_create:
+            - name: "fsrpb_for_each marker A"
+              severity: High
+              description: "first looped alert"
+            - name: "fsrpb_for_each marker B"
+              severity: Medium
+              description: "second looped alert"
+            - name: "fsrpb_for_each marker C"
+              severity: Low
+              description: "third looped alert"
+
+      - name: Create alert per item
+        type: create_record
+        for_each:
+          item: "{{ vars.steps.Build_alerts.alerts_to_create }}"
+          parallel: false
+          condition: ""
+        module: alerts
+        operation: Replace
+        fields:
+          severity: "{{ vars.item.severity }}"
+          description: "{{ vars.item.description }}"

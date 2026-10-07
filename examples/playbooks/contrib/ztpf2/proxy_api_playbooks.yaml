@@ -1,0 +1,244 @@
+collection: 10 - SP - ZTPF - FMG Microservices
+description: Proxy API trigger key + sub-playbook for ZTPf2 -- uses FMG /sys/proxy/json for fast REST API calls
+visible: true
+playbooks:
+- name: '> run action from step_id - FortiManager Proxy API'
+  uuid: 41623f62-3a00-5681-8638-8bade02a76e4
+  is_active: true
+  parameters:
+  - device_step_id
+  steps:
+  - type: start
+    name: Start
+    next: find_step
+  - type: find_record
+    name: find step
+    step_variables: []
+    module: ztpf_device_automation_steps?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: "{{vars.input.params['device_step_id']}}"
+      operator: eq
+    select:
+    - ztpfDevices
+    - name
+    - script
+    - id
+    - ztpfAutomationActions
+    - triggerKey
+    next: find_device
+  - type: find_record
+    name: find device
+    step_variables: []
+    module: ztpf_devices?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: '{{vars.steps.find_step[0].ztpfDevices.id}}'
+      operator: eq
+    select:
+    - ztpfManagers
+    - name
+    - id
+    - adom
+    next: setup_vars
+  - type: set_variable
+    name: setup vars
+    vars:
+      device: '{{vars.steps.find_device[0].name}}'
+      adom: '{{vars.steps.find_device[0].adom}}'
+      connector_config: '{{vars.steps.find_device[0].ztpfManagers.connectorConfig}}'
+      device_step_fqid: '{{vars.steps.find_step[0][''@id'']}}'
+      script_cfg: |-
+        {%- set s = (vars.steps.find_step[0].script | default('', true)) | trim -%}
+        {%- if s.startswith('CFG ') -%}
+        {{ s[4:] }}
+        {%- elif s.startswith('{') -%}
+        {{s}}
+        {%- else -%}
+        {{ {"action": "get", "resource": s, "payload": {}} | tojson }}
+        {%- endif -%}
+    next: call_proxy_api
+  - type: connector
+    name: call proxy api
+    pickFromTenant: false
+    config: '{{vars.connector_config}}'
+    params:
+      url: /sys/proxy/json
+      # data is passed as ONE JSON string -- the FMG connector JSON-parses it, so
+      # `payload` reaches the FortiGate as a real object. Rendering payload as its
+      # own tojson'd leaf sent a JSON *string* body and the FGT answered with an
+      # HTML error page (live-hit on the rating-lookup POST).
+      data: '{{ {"action": vars.script_cfg.action or "get", "resource": vars.script_cfg.resource,
+        "target": ["device/" ~ vars.device], "payload": vars.script_cfg.payload or {}} | tojson }}'
+      track_task: false
+    connector: fortinet-fortimanager-json-rpc
+    operation: json_rpc_execute
+    next: script_results
+  - type: set_variable
+    name: script results
+    vars:
+      step_status: |-
+        {%- set base = vars.steps.call_proxy_api.data -%}
+        {%- set ret = "Complete" -%}
+        {%- if base.status is defined and base.status != 0 -%}
+          {%- set ret = "Failed" -%}
+        {%- elif base.execute_response is defined -%}
+          {%- if base.execute_response is mapping -%}
+            {%- if base.execute_response.status is defined and base.execute_response.status.code is defined and base.execute_response.status.code != 0 -%}
+              {%- set ret = "Failed" -%}
+            {%- endif -%}
+          {%- else -%}
+            {%- for r in base.execute_response -%}
+              {%- if r.status is defined and r.status.code is defined and r.status.code != 0 -%}
+                {%- set ret = "Failed" -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+        {%- endif -%}
+        {{ret}}
+      script_results: |-
+        {%- set base = vars.steps.call_proxy_api.data -%}
+        {%- set ret = {
+            "output": base,
+            "log": base
+        } -%}
+        {{ret}}
+    next: update_step
+  - type: update_record
+    name: update step
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_device_automation_steps
+    record: '{{vars.device_step_fqid}}'
+    fields:
+      queueStatus: '{{"ztpfDeviceStepStatus" | picklist(vars.step_status, "@id")}}'
+      outputSourceData: '{{vars.script_results}}'
+    next: return
+  - type: set_variable
+    name: return
+    vars:
+      output: '{{vars.script_results}}'
+      params: '{{vars.input.params}}'
+      status: ''
+  annotations:
+  - id: details
+    title: Details
+    body: >-
+      Calls FMG /sys/proxy/json to execute a FortiGate REST API endpoint through
+      the management tunnel. The action's script field holds the REST API path
+      (e.g. /api/v2/monitor/system/status). ~30x faster than Remote CLI scripts.
+    position:
+      top: 120
+      left: 140
+      width: 300
+
+- name: '> device step (Running) - FortiManager Proxy API'
+  uuid: 186d37e9-2f4a-5b5f-b303-7b5a43abe219
+  is_active: true
+  parameters: []
+  steps:
+  - type: set_variable
+    name: return
+    top: '40'
+    left: '1540'
+  - type: set_variable
+    name: run automation
+    description: Steps to run automation start here and connect to the next step.
+    vars:
+      script_type: '{{vars.input.records[0].triggerKey.split('' '')[1:]|join(" ")}}'
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: run_device_script
+    top: '40'
+    left: '640'
+  - type: workflow_reference
+    name: run device script
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    target: '> run action from step_id - FortiManager Proxy API'
+    device_step_id: '{{vars.device_step_id}}'
+    next: step_post_run
+    top: '40'
+    left: '940'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: FortiManager Proxy API
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    top: '40'
+    left: '40'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+    top: '40'
+    left: '1240'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+    top: '40'
+    left: '340'
+  annotations:
+  - id: details
+    title: Details
+    body: >-
+      Triggered when a device automation step transitions to Running with
+      triggerKey = "FortiManager Proxy API". Calls the proxy API sub-playbook
+      which uses FMG /sys/proxy/json for fast REST API calls through the
+      management tunnel.
+    position:
+      top: 260
+      left: 20
+      height: 205
+      width: 496

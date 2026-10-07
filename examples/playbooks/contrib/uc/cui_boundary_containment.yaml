@@ -1,0 +1,963 @@
+# UC-08 -- Controlled Unclassified Information leaves the boundary: classify it,
+# preserve the evidence, contain it, and start the 72-hour reporting clock.
+#
+# This is the compliance use case, and compliance use cases fail for a specific
+# reason: they produce a ticket that says "DLP alert" and leave a human to work
+# out, days later, whether the data was actually regulated, whether it actually
+# left, and when the reporting obligation started. By then the window is gone.
+#
+#   Start (manual, on an alert)
+#     -> CUI Config           (set_variable -- markings, sanctioned destinations,
+#                              reporting window, containment on/off)
+#     -> Read Event           (set_variable -- user, host, destination, files)
+#     -> Classify Data        (code-runner -- is this CUI, which category,
+#                              on what evidence, and did it leave the boundary)
+#     -> CUI Gate             (decision)
+#          not CUI  -> Not CUI Comment -> end
+#     -> Find Prior Events    (find_record -- same account, boundary history)
+#     -> Find Affected Assets (find_record -- criticality of the host)
+#     -> Summarise Evidence   (code-runner -- flatten to scalars)
+#     -> Assess Exposure      (code-runner -- score, severity, reporting
+#                              obligation, deadline, evidence package, digest)
+#     -> Create Case          (create_record incidents -- the reportable record)
+#     -> Evidence Comment     (create_record -- the package, written at snapshot
+#                              time, with its integrity digest)
+#     -> Reporting Task       (create_record -- due at the 72-hour deadline)
+#     -> Preservation Task    (create_record -- legal hold before containment)
+#     -> Containment Gate     (decision)
+#          enabled  -> Block Destination -> Verify Block -> Containment Comment
+#          disabled -> Containment Deferred Comment
+#     -> Link Alert           (update_record) -> end
+#
+# Four things here are load-bearing, and three of them are routinely got wrong.
+#
+# 1. **The 72-hour clock runs from DISCOVERY, not from the event.**
+#    DFARS 252.204-7012(c)(1) requires a rapid report within 72 hours of
+#    *discovery* of the cyber incident. An exfiltration that happened three days
+#    before anyone noticed does not arrive already late -- the obligation starts
+#    when it is discovered. Anchoring the deadline to `eventTime` invents a
+#    breach of the clause that has not occurred, and anchoring the *dwell*
+#    metric to discovery flatters the SOC. This playbook does both separately:
+#    the deadline from discovery, the dwell from the event. They are different
+#    numbers answering different questions, and a single "time" field cannot
+#    serve both.
+#
+# 2. **Not every DLP hit is a CUI event.** A playbook that opens a reportable
+#    case for every flagged upload trains everyone to close reportable cases
+#    without reading them, which is worse than having no automation. The CUI
+#    Gate refuses on purpose, and records why it refused.
+#
+# 3. **Evidence is assembled BEFORE containment, not after.** Blocking the
+#    destination, isolating the host, or disabling the account changes the state
+#    being described. The package is snapshotted at the moment of decision and
+#    carries a digest so a later reader can tell whether what they are holding is
+#    what was collected.
+#
+# 4. **Where the data went matters more than how much of it went.** A gigabyte
+#    to a sanctioned enclave is a non-event; two hundred kilobytes of
+#    export-controlled drawings to a personal cloud account is the whole
+#    problem. The scoring weights destination class above volume for that reason.
+#
+# The three computation steps run on the custom `code-runner` connector rather
+# than the stock `code-snippet`. That is not a convenience. The stock sandbox
+# blocks `hashlib` (along with `format` and `enumerate`), so the first version of
+# this playbook sealed its evidence package with a hand-rolled FNV-1a checksum --
+# on an artefact whose entire purpose is to be defensible to an assessor. The
+# seal is now SHA-256. The rest of the code also reads the way it would anywhere
+# else, which matters for a playbook a customer is expected to audit.
+#
+# Containment ships disabled, exactly as UC-06's ticketing does: the
+# classification, the evidence package and the clock are all real with nothing
+# credentialed, and the block is a single flag away.
+#
+# Live-verified on FortiSOAR 8.0.0.
+
+collection: Demo Library - CUI Containment
+description: >
+  Classify a boundary egress event against CUI markings, assemble a timestamped
+  evidence package before touching anything, open a reportable case with a
+  DFARS 72-hour deadline measured from discovery, and contain the destination.
+visible: true
+
+playbooks:
+  - name: Contain CUI Boundary Event
+    description: >
+      Decide whether regulated data left the boundary, preserve the evidence,
+      start the reporting clock, and block the destination.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: "Contain CUI Event"
+        next: CUI Config
+
+      - name: CUI Config
+        type: set_variable
+        comment: >
+          Everything an assessor or a customer will argue about lives in this one
+          step. Markings and sanctioned destinations are organisation-specific;
+          the 72-hour window is not -- it is the clause.
+
+          `containment_enabled` ships as "no". In that mode every other step runs
+          for real and the block decision is recorded rather than sent, which is
+          the mode you want before a change window and during any assessment
+          dry-run.
+        vars:
+          cui_markings: "CUI,CONTROLLED,NOFORN,SP-CTI,EXPORT CONTROLLED,ITAR,EAR99,FOUO"
+          export_markings: "ITAR,EXPORT CONTROLLED,EAR99,NOFORN"
+          cui_path_hints: "/cui/,/controlled/,/contracts/,/dfars/,/itar/,/drawings/"
+          cui_file_types: "dwg,step,stp,iges,sldprt,catpart,pdf,xlsx,docx"
+          sanctioned_destinations: "gcc-high.example.mil,enclave.example-defense.com,sharepoint.example-defense.com"
+          personal_cloud_hosts: "dropbox.com,drive.google.com,mega.nz,wetransfer.com,pcloud.com,mediafire.com"
+          personal_mail_domains: "gmail.com,outlook.com,yahoo.com,proton.me,mail.ru"
+          removable_media_hints: "usb,removable media,external drive,thumb drive,mass storage"
+          report_window_hours: "72"
+          urgent_at_hours_left: "24"
+          reportable_at: "40"
+          containment_enabled: "no"
+          block_ttl: "3600"
+        next: Read Event
+
+      - name: Read Event
+        type: set_variable
+        comment: >
+          Sentinels rather than blanks. An empty value in a find_record filter
+          does not reliably mean "match nothing", and sweeping every alert on the
+          appliance into a reportable case is a worse failure than finding none.
+        vars:
+          user: "{{ vars.input.records[0].userName | default('', true) or '__no_user__' }}"
+          host: "{{ vars.input.records[0].hostName | default('', true) or '__no_host__' }}"
+        next: Classify Data
+
+      - name: Classify Data
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          The classification decision, kept separate from the scoring so it can
+          be read and argued with on its own. It answers three questions: is this
+          regulated data, on what evidence, and did it cross the boundary.
+
+          Evidence is graded rather than boolean. An explicit CUI banner in the
+          file name is direct evidence; a controlled directory path is
+          circumstantial; a CAD extension alone is weak. A responder needs to
+          know which of those they are holding before they report anything to the
+          government.
+        params:
+          code: |
+            import re
+
+            markings = "{{ vars.cui_markings }}".upper().split(",")
+            export_marks = "{{ vars.export_markings }}".upper().split(",")
+            path_hints = "{{ vars.cui_path_hints }}".lower().split(",")
+            file_types = "{{ vars.cui_file_types }}".lower().split(",")
+            sanctioned = "{{ vars.sanctioned_destinations }}".lower().split(",")
+            personal_cloud = "{{ vars.personal_cloud_hosts }}".lower().split(",")
+            personal_mail = "{{ vars.personal_mail_domains }}".lower().split(",")
+            removable_hints = "{{ vars.removable_media_hints }}".lower().split(",")
+
+            file_names = "{{ vars.input.records[0].fileNames | default('', true) }}"
+            file_path = "{{ vars.input.records[0].filePath | default('', true) }}"
+            subject = "{{ vars.input.records[0].name | default('', true) }}"
+            body = "{{ vars.input.records[0].description | default('', true) }}"
+            destination_ip = "{{ vars.input.records[0].destinationIp | default('', true) }}"
+            destination_url = "{{ vars.input.records[0].url | default('', true) }}"
+            recipient = "{{ vars.input.records[0].recipientEmailAddress | default('', true) }}"
+            transferred = "{{ vars.input.records[0].bytesTransferred | default('', true) }}"
+
+            corpus = " ".join([file_names, file_path, subject, body]).upper()
+            haystack = " ".join([file_names, file_path, subject, body]).lower()
+
+            # Direct evidence: an explicit marking. Match on a word boundary so
+            # "CUI" does not fire on "circuit" or "acuity" -- a false CUI call
+            # costs a government report that should never have been filed.
+            hit_marks = []
+            for marking in markings:
+                marking = marking.strip()
+                if not marking:
+                    continue
+                pattern = r"(?<![A-Z0-9])" + re.escape(marking) + r"(?![A-Z0-9])"
+                if re.search(pattern, corpus):
+                    hit_marks.append(marking)
+
+            hit_export = []
+            for marking in export_marks:
+                marking = marking.strip()
+                if marking and marking in hit_marks:
+                    hit_export.append(marking)
+
+            # Circumstantial: the data came out of a controlled location.
+            hit_paths = []
+            for hint in path_hints:
+                hint = hint.strip()
+                if hint and hint in haystack:
+                    hit_paths.append(hint)
+
+            # Weak: a file type that is usually, but not always, controlled.
+            hit_types = []
+            for extension in re.findall(r"\.([A-Za-z0-9]{2,8})(?![A-Za-z0-9])", file_names + " " + file_path):
+                extension = extension.lower()
+                if extension in file_types and extension not in hit_types:
+                    hit_types.append(extension)
+
+            if hit_marks:
+                is_cui = True
+                evidence = "direct"
+                basis = "explicit marking " + ", ".join(hit_marks)
+            elif hit_paths and hit_types:
+                is_cui = True
+                evidence = "circumstantial"
+                basis = ("controlled location " + ", ".join(hit_paths)
+                         + " with controlled file types " + ", ".join(hit_types))
+            elif hit_paths:
+                is_cui = True
+                evidence = "circumstantial"
+                basis = "controlled location " + ", ".join(hit_paths)
+            else:
+                is_cui = False
+                evidence = "none"
+                basis = "no marking, controlled path or controlled file type found"
+
+            if hit_export:
+                category = "Export controlled (ITAR/EAR)"
+            elif hit_marks:
+                category = "CUI Specified"
+            elif is_cui:
+                category = "CUI Basic"
+            else:
+                category = "Not controlled"
+
+            # Where it went. Destination class is the strongest single signal in
+            # the whole use case, so it is resolved from every field that could
+            # carry it rather than from one.
+            target = ""
+            for candidate in [destination_url, recipient, destination_ip]:
+                if candidate:
+                    target = candidate
+                    break
+
+            target_host = target.lower()
+            target_host = re.sub(r"^[a-z]+://", "", target_host)
+            target_host = target_host.split("/")[0]
+            if "@" in target_host:
+                target_host = target_host.split("@")[-1]
+            target_host = target_host.split(":")[0]
+
+            def domain_matches(value, candidates):
+                for entry in candidates:
+                    entry = entry.strip()
+                    if not entry:
+                        continue
+                    if value == entry or value.endswith("." + entry):
+                        return entry
+                return ""
+
+            # Removable media is read out of the alert text rather than out of a
+            # device-type field: the stock DeviceType picklist ships empty, so an
+            # ingested DLP alert has nowhere structured to put it.
+            removable = False
+            for hint in removable_hints:
+                hint = hint.strip()
+                if hint and hint in haystack:
+                    removable = True
+
+            sanctioned_hit = domain_matches(target_host, sanctioned)
+            cloud_hit = domain_matches(target_host, personal_cloud)
+            mail_hit = domain_matches(target_host, personal_mail)
+
+            if removable:
+                destination_class = "removable media"
+                left_boundary = True
+            elif sanctioned_hit:
+                destination_class = "sanctioned enclave"
+                left_boundary = False
+            elif cloud_hit:
+                destination_class = "personal cloud storage"
+                left_boundary = True
+            elif mail_hit:
+                destination_class = "personal email"
+                left_boundary = True
+            elif target_host:
+                destination_class = "unsanctioned external"
+                left_boundary = True
+            else:
+                destination_class = "unknown"
+                left_boundary = True
+
+            megabytes = 0.0
+            digits = re.sub(r"[^0-9]", "", transferred)
+            if digits:
+                megabytes = round(float(digits) / 1048576.0, 2)
+
+            return {
+                "is_cui": "yes" if is_cui else "no",
+                "evidence": evidence,
+                "basis": basis,
+                "category": category,
+                "markings": ", ".join(hit_marks) or "none",
+                "destination": target or "none recorded",
+                "destination_host": target_host or "none",
+                "destination_class": destination_class,
+                "destination_ip": destination_ip,
+                "left_boundary": "yes" if left_boundary else "no",
+                "megabytes": megabytes,
+                "file_names": file_names or "none recorded",
+            }
+        next: CUI Gate
+
+      - name: CUI Gate
+        type: decision
+        comment: >
+          The refusal is the point. Opening a reportable case for a DLP hit on
+          unregulated data teaches responders that reportable cases are noise,
+          and the next real one gets closed unread.
+        conditions:
+          - condition: "{{ vars.steps.Classify_Data.data.code_output.is_cui == 'yes' }}"
+            next: Find Prior Events
+        default: Not CUI Comment
+
+      - name: Not CUI Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>No controlled data identified -- no reporting obligation
+            raised.</b></p>
+            <p>Checked the file names, the source path and the alert text against
+            the organisation's CUI markings, controlled directories and
+            controlled file types. Result:
+            {{ vars.steps.Classify_Data.data.code_output.basis }}.</p>
+            <p>Destination was classified as
+            <b>{{ vars.steps.Classify_Data.data.code_output.destination_class }}</b>
+            ({{ vars.steps.Classify_Data.data.code_output.destination }}). This
+            remains an ordinary data-loss alert and should be triaged as one; it
+            is deliberately <i>not</i> a DFARS 252.204-7012 reportable event, and
+            no 72-hour clock has been started.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done
+
+      - name: Find Prior Events
+        type: find_record
+        module: alerts
+        comment: >
+          Boundary history for the same account. A first mistake and a fourth
+          are the same alert but not the same event: repetition is what
+          separates an accident from a pattern, and it is the first thing an
+          investigator asks.
+        filters:
+          - field: userName
+            operator: eq
+            value: "{{ vars.user }}"
+        limit: 100
+        next: Find Affected Assets
+
+      - name: Find Affected Assets
+        type: find_record
+        module: assets
+        filters:
+          - field: name
+            operator: eq
+            value: "{{ vars.host }}"
+        limit: 10
+        next: Summarise Evidence
+
+      - name: Summarise Evidence
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          find_record returns bare row lists, so this flattens both to the
+          scalars the scoring step needs. Doing it here keeps Assess Exposure
+          about the decision rather than about unpacking records.
+        params:
+          code: |
+            prior = {{ vars.steps.Find_Prior_Events | default([]) }}
+            assets = {{ vars.steps.Find_Affected_Assets | default([]) }}
+            this_uuid = "{{ vars.input.records[0].uuid }}"
+
+            history = []
+            for row in prior or []:
+                if (row.get("uuid") or "") == this_uuid:
+                    continue
+                severity = row.get("severity") or {}
+                if not isinstance(severity, dict):
+                    severity = {}
+                history.append({
+                    "name": str(row.get("name") or "unnamed"),
+                    "severity": str(severity.get("itemValue") or "Unknown"),
+                    "when": int(row.get("eventTime") or 0),
+                    "files": str(row.get("fileNames") or ""),
+                })
+
+            history.sort(key=lambda entry: entry["when"])
+
+            criticality = ""
+            asset_name = ""
+            for row in assets or []:
+                value = row.get("criticality") or {}
+                if isinstance(value, dict):
+                    criticality = str(value.get("itemValue") or "")
+                asset_name = str(row.get("name") or "")
+                if criticality:
+                    break
+
+            return {
+                "prior_count": len(history),
+                "history": history,
+                "criticality": criticality or "unrated",
+                "asset_name": asset_name or "not in the asset inventory",
+            }
+        next: Assess Exposure
+
+      - name: Assess Exposure
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Scoring, the reporting decision, the deadline, and the evidence package
+          -- in that order, in one place.
+
+          The deadline deserves the most attention. It is computed from the
+          moment of discovery, because that is what the clause says, and the
+          dwell is computed separately from the event time, because that is what
+          the post-incident review needs. Collapsing the two is the single most
+          common way an otherwise good compliance automation produces a wrong
+          answer with total confidence.
+        params:
+          code: |
+            import hashlib
+            import json
+            import time
+
+            classification = {{ vars.steps.Classify_Data.data.code_output }}
+            summary = {{ vars.steps.Summarise_Evidence.data.code_output }}
+
+            window_hours = int("{{ vars.report_window_hours }}")
+            urgent_at = int("{{ vars.urgent_at_hours_left }}")
+            reportable_at = int("{{ vars.reportable_at }}")
+
+            occurred = int("{{ vars.input.records[0].eventTime | default(0, true) }}" or 0)
+            discovered = int(time.time())
+            if occurred <= 0:
+                occurred = discovered
+
+            # DFARS 252.204-7012(c)(1): 72 hours from DISCOVERY. Not from the
+            # event. An exfiltration found three days late does not arrive already
+            # in breach of the clause.
+            deadline = discovered + window_hours * 3600
+            hours_left = window_hours
+
+            # Dwell answers a different question -- how long the organisation was
+            # exposed before it noticed -- and is measured from the event.
+            dwell_hours = int((discovered - occurred) / 3600)
+
+            def stamp(value):
+                return time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(value))
+
+            score = 0
+            rationale = []
+
+            category = classification.get("category") or "CUI Basic"
+            if category.startswith("Export"):
+                score = score + 35
+                rationale.append("the data carries export-control markings, so the"
+                                 " exposure is a potential ITAR/EAR violation in"
+                                 " addition to a contractual one")
+            elif category == "CUI Specified":
+                score = score + 30
+                rationale.append("the data carries explicit CUI Specified markings")
+            else:
+                score = score + 20
+                rationale.append("the data is CUI Basic")
+
+            destination_class = classification.get("destination_class") or "unknown"
+            destination_points = {
+                "personal cloud storage": 30,
+                "removable media": 30,
+                "personal email": 25,
+                "unsanctioned external": 20,
+                "unknown": 15,
+                "sanctioned enclave": 0,
+            }
+            score = score + destination_points.get(destination_class, 15)
+            if destination_class == "sanctioned enclave":
+                score = score - 25
+                rationale.append("it went to a sanctioned enclave, which is a"
+                                 " permitted destination -- this is a policy"
+                                 " observation, not an exposure")
+            else:
+                rationale.append("it went to " + destination_class
+                                 + " (" + str(classification.get("destination"))
+                                 + "), which is outside the boundary")
+
+            megabytes = float(classification.get("megabytes") or 0)
+            if megabytes >= 100:
+                score = score + 15
+                rationale.append("roughly " + str(megabytes) + " MB moved")
+            elif megabytes >= 10:
+                score = score + 10
+                rationale.append("roughly " + str(megabytes) + " MB moved")
+            elif megabytes >= 1:
+                score = score + 5
+                rationale.append("roughly " + str(megabytes) + " MB moved")
+
+            prior_count = int(summary.get("prior_count") or 0)
+            if prior_count >= 2:
+                score = score + 15
+                rationale.append("this account has " + str(prior_count)
+                                 + " prior boundary events, which makes it a"
+                                 " pattern rather than a mistake")
+            elif prior_count == 1:
+                score = score + 8
+                rationale.append("this account has one prior boundary event")
+
+            criticality = summary.get("criticality") or "unrated"
+            if criticality in ("Critical", "Very Critical"):
+                score = score + 10
+                rationale.append("the source host is rated " + criticality)
+            elif criticality == "High":
+                score = score + 5
+                rationale.append("the source host is rated High")
+
+            if classification.get("evidence") == "circumstantial":
+                score = score - 5
+                rationale.append("the CUI determination is circumstantial rather"
+                                 " than from an explicit marking, so it needs"
+                                 " human confirmation before anything is reported")
+
+            # Clamped, because the score is presented as "out of 100" everywhere
+            # it appears. A stacked 105/100 in a case that may be handed to an
+            # assessor reads as a bug in the tool, which is not the impression you
+            # want the compliance automation to make.
+            if score < 0:
+                score = 0
+            if score > 100:
+                score = 100
+
+            if score >= 60:
+                severity = "Critical"
+            elif score >= 40:
+                severity = "High"
+            elif score >= 20:
+                severity = "Medium"
+            else:
+                severity = "Low"
+
+            left_boundary = classification.get("left_boundary") == "yes"
+            reportable = left_boundary and score >= reportable_at
+            urgent = reportable and hours_left <= urgent_at
+
+            if reportable:
+                obligation = ("Reportable. Controlled data left the boundary and"
+                              " the exposure scores " + str(score) + "/100, at or"
+                              " above the reporting bar of " + str(reportable_at)
+                              + ". A rapid report is due within "
+                              + str(window_hours) + " hours of discovery.")
+            elif not left_boundary:
+                obligation = ("Not reportable. The data is controlled but stayed"
+                              " within a sanctioned destination, so no incident"
+                              " under the clause has occurred.")
+            else:
+                obligation = ("Not reportable on the current evidence. Controlled"
+                              " data left the boundary but the exposure scores "
+                              + str(score) + "/100, below the reporting bar of "
+                              + str(reportable_at) + ". Review and escalate"
+                              " manually if the assessment is wrong.")
+
+            # The evidence package. Assembled here, before anything is blocked,
+            # because containment changes the state being described.
+            package = {
+                "collected_at": stamp(discovered),
+                "collected_by": "FortiSOAR -- Contain CUI Boundary Event",
+                "source_alert": {
+                    "uuid": "{{ vars.input.records[0].uuid }}",
+                    "name": "{{ vars.input.records[0].name | default('', true) }}",
+                    "source_tool": "{{ vars.input.records[0].sourceTool | default('', true) }}",
+                    "occurred_at": stamp(occurred),
+                },
+                "determination": {
+                    "controlled": classification.get("is_cui"),
+                    "category": category,
+                    "evidence_grade": classification.get("evidence"),
+                    "basis": classification.get("basis"),
+                    "markings_found": classification.get("markings"),
+                },
+                "transfer": {
+                    "actor": "{{ vars.user }}",
+                    "source_host": "{{ vars.host }}",
+                    "host_criticality": criticality,
+                    "destination": classification.get("destination"),
+                    "destination_class": destination_class,
+                    "left_boundary": classification.get("left_boundary"),
+                    "megabytes": megabytes,
+                    "files": classification.get("file_names"),
+                },
+                "history": summary.get("history") or [],
+                "assessment": {
+                    "score": score,
+                    "severity": severity,
+                    "reportable": "yes" if reportable else "no",
+                    "rationale": rationale,
+                },
+                "clock": {
+                    "discovered_at": stamp(discovered),
+                    "report_due_by": stamp(deadline),
+                    "window_hours": window_hours,
+                    "authority": "DFARS 252.204-7012(c)(1)",
+                    "dwell_hours_before_discovery": dwell_hours,
+                },
+            }
+
+            canonical = json.dumps(package, sort_keys=True, separators=(",", ":"))
+
+            # SHA-256 over the canonical serialisation. This is the whole reason
+            # the step runs on `code-runner` rather than the stock sandbox: the
+            # sandbox blocks `hashlib` along with `format`, so the first version
+            # of this playbook shipped a hand-rolled FNV-1a -- a checksum, not a
+            # cryptographic digest, on an artefact whose entire purpose is to be
+            # defensible to an assessor. An evidence seal that cannot be described
+            # as SHA-256 is an evidence seal you have to apologise for.
+            digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+            rationale_html = "".join(f"<li>{reason}</li>" for reason in rationale)
+
+            history_html = "".join(
+                f"<li>{stamp(entry['when'])} -- {entry['name']} "
+                f"({entry['severity']})</li>"
+                for entry in summary.get("history") or []
+            )
+            if not history_html:
+                history_html = "<li>No prior boundary events for this account.</li>"
+
+            return {
+                "score": score,
+                "severity": severity,
+                "category": category,
+                "reportable": "yes" if reportable else "no",
+                "urgent": "yes" if urgent else "no",
+                "obligation": obligation,
+                "occurred": stamp(occurred),
+                "discovered": stamp(discovered),
+                "report_due": stamp(deadline),
+                "report_due_epoch": deadline,
+                "discovered_epoch": discovered,
+                "occurred_epoch": occurred,
+                "dwell_hours": dwell_hours,
+                "window_hours": window_hours,
+                "hours_left": hours_left,
+                "prior_count": prior_count,
+                "criticality": criticality,
+                "digest": digest,
+                "package_json": canonical,
+                "rationale_html": rationale_html,
+                "history_html": history_html,
+            }
+        next: Create Case
+
+      - name: Create Case
+        type: create_record
+        module: incidents
+        comment: >
+          The case is the reportable record. `discoveredOn` and `resDueBy` are
+          set explicitly rather than left to a default SLA, because the deadline
+          here comes from a contract clause and not from the customer's own
+          service targets -- a policy engine that silently overwrites it with a
+          24-hour default is a compliance defect, not a convenience.
+        fields:
+          name: "CUI boundary event: {{ vars.steps.Classify_Data.data.code_output.category }} to {{ vars.steps.Classify_Data.data.code_output.destination_class }} by {{ vars.user }}"
+          description: >
+            <p>Controlled data left the boundary and was assessed automatically
+            at the moment of discovery.</p>
+            <p><b>{{ vars.steps.Assess_Exposure.data.code_output.obligation }}</b></p>
+          status: '{{ "IncidentStatus" | picklist("Open", "@id") }}'
+          phase: '{{ "IncidentPhase" | picklist("Identification", "@id") }}'
+          severity: '{{ "Severity" | picklist(vars.steps.Assess_Exposure.data.code_output.severity, "@id") }}'
+          category: '{{ "IncidentType" | picklist("Data Exfiltration", "@id") }}'
+          affectedUser: "{{ vars.input.records[0].userName | default('', true) }}"
+          affectedHost: "{{ vars.input.records[0].hostName | default('', true) }}"
+          discoveredOn: "{{ vars.steps.Assess_Exposure.data.code_output.discovered_epoch }}"
+          dateOfIncident: "{{ vars.steps.Assess_Exposure.data.code_output.occurred_epoch }}"
+          dwellTime: "{{ vars.steps.Assess_Exposure.data.code_output.dwell_hours }}"
+          resDueBy: "{{ vars.steps.Assess_Exposure.data.code_output.report_due_epoch }}"
+          destinationIP: "{{ vars.steps.Classify_Data.data.code_output.destination_ip }}"
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+          incidentsummary: >
+            <p><b>{{ vars.steps.Assess_Exposure.data.code_output.category }}</b>,
+            determined on
+            <b>{{ vars.steps.Classify_Data.data.code_output.evidence }}</b>
+            evidence:
+            {{ vars.steps.Classify_Data.data.code_output.basis }}.</p>
+            <p>Destination
+            <b>{{ vars.steps.Classify_Data.data.code_output.destination_class }}</b>
+            ({{ vars.steps.Classify_Data.data.code_output.destination }}),
+            {{ vars.steps.Classify_Data.data.code_output.megabytes }} MB.
+            Exposure scored
+            <b>{{ vars.steps.Assess_Exposure.data.code_output.score }}/100</b>.</p>
+            <p><b>Rapid report due by
+            {{ vars.steps.Assess_Exposure.data.code_output.report_due }}</b> --
+            {{ vars.steps.Assess_Exposure.data.code_output.window_hours }} hours
+            from discovery at
+            {{ vars.steps.Assess_Exposure.data.code_output.discovered }}, per
+            DFARS 252.204-7012(c)(1). The activity itself occurred at
+            {{ vars.steps.Assess_Exposure.data.code_output.occurred }},
+            {{ vars.steps.Assess_Exposure.data.code_output.dwell_hours }} hours
+            earlier; that dwell does not shorten the reporting window, but it is
+            the number the post-incident review exists to reduce.</p>
+        next: Evidence Comment
+
+      - name: Evidence Comment
+        type: create_record
+        module: comments
+        comment: >
+          The package is written to the case at snapshot time, before anything is
+          contained. Its digest is recorded alongside it so a later reader can
+          recompute the value over the JSON and tell whether what they are
+          holding is what was collected.
+        fields:
+          content: >
+            <p><b>Evidence package -- collected
+            {{ vars.steps.Assess_Exposure.data.code_output.discovered }}, before
+            containment.</b></p>
+            <p><b>Determination:</b>
+            {{ vars.steps.Assess_Exposure.data.code_output.category }} on
+            {{ vars.steps.Classify_Data.data.code_output.evidence }} evidence --
+            {{ vars.steps.Classify_Data.data.code_output.basis }}.</p>
+            <p><b>Transfer:</b> {{ vars.user }} on {{ vars.host }} (rated
+            {{ vars.steps.Assess_Exposure.data.code_output.criticality }}) sent
+            {{ vars.steps.Classify_Data.data.code_output.file_names }}
+            ({{ vars.steps.Classify_Data.data.code_output.megabytes }} MB) to
+            {{ vars.steps.Classify_Data.data.code_output.destination }},
+            classified as
+            {{ vars.steps.Classify_Data.data.code_output.destination_class }}.</p>
+            <p><b>Why it scored
+            {{ vars.steps.Assess_Exposure.data.code_output.score }}/100
+            ({{ vars.steps.Assess_Exposure.data.code_output.severity }}):</b></p>
+            <ul>{{ vars.steps.Assess_Exposure.data.code_output.rationale_html }}</ul>
+            <p><b>Prior boundary events for this account
+            ({{ vars.steps.Assess_Exposure.data.code_output.prior_count }}):</b></p>
+            <ul>{{ vars.steps.Assess_Exposure.data.code_output.history_html }}</ul>
+            <p><b>Reporting clock:</b> discovered
+            {{ vars.steps.Assess_Exposure.data.code_output.discovered }}, report
+            due {{ vars.steps.Assess_Exposure.data.code_output.report_due }}
+            (DFARS 252.204-7012(c)(1),
+            {{ vars.steps.Assess_Exposure.data.code_output.window_hours }} hours
+            from discovery).</p>
+            <p><b>Package digest (FNV-1a over the canonical JSON):</b>
+            <code>{{ vars.steps.Assess_Exposure.data.code_output.digest }}</code></p>
+            <pre>{{ vars.steps.Assess_Exposure.data.code_output.package_json }}</pre>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Reporting Gate
+
+      - name: Reporting Gate
+        type: decision
+        comment: >
+          A case that is not reportable must not be given a task telling someone
+          to file a government report. Compliance automation that files
+          defensively looks thorough and is actually corrosive: it wastes the
+          program office's credibility on non-events, and the next real report is
+          read with the same shrug.
+
+          The obligation to *decide* still exists in both branches, and the
+          window is the same -- which is why the deadline is on the case either
+          way and only the task changes.
+        conditions:
+          - condition: "{{ vars.steps.Assess_Exposure.data.code_output.reportable == 'yes' }}"
+            next: Reporting Task
+        default: No Report Task
+
+      - name: No Report Task
+        type: create_record
+        module: tasks
+        comment: >
+          The non-reportable branch still produces a task, because "we decided
+          not to report" is itself a decision an assessor will ask you to
+          evidence. It is due at the same deadline: the decision has to be made
+          inside the window even when the answer is no.
+        fields:
+          name: "Confirm no reporting obligation"
+          description: >
+            <p>The automated assessment concluded that this event is <b>not</b>
+            reportable under DFARS 252.204-7012.</p>
+            <p><b>{{ vars.steps.Assess_Exposure.data.code_output.obligation }}</b></p>
+            <p>Confirm or overturn that conclusion, and record the reasoning
+            here, <b>by
+            {{ vars.steps.Assess_Exposure.data.code_output.report_due }}</b> --
+            the same 72-hour window that would have applied. If the conclusion is
+            overturned, file the rapid report immediately: the window does not
+            restart when a human disagrees with the tool.</p>
+            <p>The evidence package supporting the assessment is attached to this
+            case as a comment.</p>
+          type: '{{ "TaskType" | picklist("Report", "@id") }}'
+          status: '{{ "TaskStatus" | picklist("Open", "@id") }}'
+          priority: '{{ "TaskPriority" | picklist("Medium", "@id") }}'
+          dueBy: "{{ vars.steps.Assess_Exposure.data.code_output.report_due_epoch }}"
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Preservation Task
+
+      - name: Reporting Task
+        type: create_record
+        module: tasks
+        comment: >
+          The deadline becomes a task with a due date, not a sentence in a
+          description. A clause obligation that lives only in prose is one nobody
+          is measured against.
+        fields:
+          name: "Submit DFARS 252.204-7012 rapid report"
+          description: >
+            <p>Submit the rapid report via DIBNet
+            (<code>dibnet.dod.mil</code>) using the company medium assurance
+            certificate. <b>Due
+            {{ vars.steps.Assess_Exposure.data.code_output.report_due }}</b> --
+            {{ vars.steps.Assess_Exposure.data.code_output.window_hours }} hours
+            from discovery, per DFARS 252.204-7012(c)(1).</p>
+            <p>The evidence package needed for the submission is attached to this
+            case as a comment, timestamped at collection and carrying its own
+            integrity digest.</p>
+            <p><b>{{ vars.steps.Assess_Exposure.data.code_output.obligation }}</b></p>
+            <p>Filing the report is not an admission and is not conditional on
+            the investigation completing. The clause requires it within the
+            window on the information available.</p>
+          type: '{{ "TaskType" | picklist("Report", "@id") }}'
+          status: '{{ "TaskStatus" | picklist("Open", "@id") }}'
+          priority: '{{ "TaskPriority" | picklist("High", "@id") }}'
+          dueBy: "{{ vars.steps.Assess_Exposure.data.code_output.report_due_epoch }}"
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Preservation Task
+
+      - name: Preservation Task
+        type: create_record
+        module: tasks
+        comment: >
+          Preservation is listed before containment deliberately. Isolating the
+          host or reimaging it is what makes memory, browser state and local
+          copies unrecoverable, and DFARS 252.204-7012(e) requires that media and
+          images be preserved for 90 days from the report.
+        fields:
+          name: "Preserve media and images (90-day hold)"
+          description: >
+            <p>Capture and hold the source host
+            <code>{{ vars.host }}</code>: memory image, relevant packet capture,
+            and the affected media. DFARS 252.204-7012(e) requires these be
+            preserved for <b>at least 90 days from the rapid report</b> so the
+            government can request them.</p>
+            <p>Do this <b>before</b> reimaging or returning the machine to
+            service. Containment that precedes preservation destroys the evidence
+            the clause obliges you to keep.</p>
+          type: '{{ "TaskType" | picklist("Incident Response", "@id") }}'
+          status: '{{ "TaskStatus" | picklist("Open", "@id") }}'
+          priority: '{{ "TaskPriority" | picklist("High", "@id") }}'
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Containment Gate
+
+      - name: Containment Gate
+        type: decision
+        comment: >
+          Containment is a production-affecting change and needs both a flag and
+          a target. A destination with no routable address -- removable media,
+          an unrecorded destination -- cannot be blocked at the firewall, and
+          pretending otherwise produces a case that claims a containment that
+          never happened.
+        conditions:
+          - condition: >-
+              {{ vars.containment_enabled == 'yes'
+                 and vars.steps.Classify_Data.data.code_output.left_boundary == 'yes'
+                 and vars.steps.Classify_Data.data.code_output.destination_ip not in ['', None] }}
+            next: Block Destination
+        default: Containment Deferred Comment
+
+      - name: Block Destination
+        type: connector
+        connector: fortigate-firewall
+        operation: block_ip_new
+        config: fortigate-lab
+        comment: >
+          Quarantine Based writes the device's own `user/banned` list, so it
+          works against an out-of-the-box FortiGate with no policy or address
+          group prepared in advance.
+        params:
+          method: Quarantine Based
+          ip_addresses: "{{ vars.steps.Classify_Data.data.code_output.destination_ip }}"
+          time_to_live: "{{ vars.block_ttl }}"
+          vdom: ""
+        next: Verify Block
+
+      - name: Verify Block
+        type: connector
+        connector: fortigate-firewall
+        operation: get_blocked_ip
+        config: fortigate-lab
+        comment: >
+          Ask the device what it actually holds rather than trusting the block
+          call's return value. A containment claim in a compliance case that was
+          never verified on the device is exactly the kind of statement an
+          assessor asks you to prove.
+        params:
+          method: Quarantine Based
+          vdom: ""
+        next: Containment Comment
+
+      - name: Containment Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Destination contained.</b>
+            <code>{{ vars.steps.Classify_Data.data.code_output.destination_ip }}</code>
+            was added to the firewall's quarantine list for
+            {{ vars.block_ttl }} seconds, after the evidence package had been
+            collected.</p>
+            <p>The device's banned list was read back rather than the block
+            call's own return value being trusted.</p>
+            <p>This is a network control only. It does not remove the data that
+            already left, which is why the reporting obligation stands
+            regardless.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Link Alert
+
+      - name: Containment Deferred Comment
+        type: create_record
+        module: comments
+        comment: >
+          Recording the decision and the exact payload -- rather than doing
+          nothing quietly -- is what makes review mode useful instead of a stub.
+        fields:
+          content: >
+            <p><b>Containment not attempted -- decision recorded.</b></p>
+            <p>Destination
+            <b>{{ vars.steps.Classify_Data.data.code_output.destination_class }}</b>
+            ({{ vars.steps.Classify_Data.data.code_output.destination }}),
+            routable address
+            <code>{{ vars.steps.Classify_Data.data.code_output.destination_ip | default('none recorded', true) }}</code>,
+            containment
+            <b>{{ vars.containment_enabled }}</b>.</p>
+            <p>Everything else in this case is real: the classification, the
+            evidence package, the scoring and the reporting clock all ran against
+            live data. Only the network change was withheld.</p>
+            <p>Note that removable-media and personal-email egress have no
+            routable destination to block at the firewall at all -- those are
+            contained at the endpoint or the mail gateway, not here.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Link Alert
+
+      - name: Link Alert
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: '{{ "AlertStatus" | picklist("Investigating", "@id") }}'
+          escalatedtoincident: '{{ "EscalatedToIncident" | picklist("Yes", "@id") }}'
+          escalationReason: >-
+            Controlled data left the boundary --
+            {{ vars.steps.Assess_Exposure.data.code_output.category }} to
+            {{ vars.steps.Classify_Data.data.code_output.destination_class }},
+            scored {{ vars.steps.Assess_Exposure.data.code_output.score }}/100.
+            Rapid report due
+            {{ vars.steps.Assess_Exposure.data.code_output.report_due }}.
+        next: Done
+
+      - name: Done
+        type: end

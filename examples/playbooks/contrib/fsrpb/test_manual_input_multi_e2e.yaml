@@ -1,0 +1,41 @@
+collection: FSRPB Manual-Input Multi Test
+description: |
+  Stage 5 -- a manual_input prompt authored in the FRIENDLY form (step-level
+  title/description/options/inputs), so it exercises the parser hoist + the
+  resolver's friendly→canonical transform (the F3 path). It collects MULTIPLE
+  typed fields, one of them REQUIRED, then a downstream set_variable step reads
+  those values back out of the resumed input so the test can assert the data
+  the responder supplied actually flowed into the run.
+visible: true
+
+playbooks:
+  - name: E2E - Manual Input Multi
+    description: start → manual_input(multi, friendly) → set_variable(capture) → terminal.
+    is_active: true
+    steps:
+      - name: Run
+        type: start
+        next: Collect
+
+      - name: Collect
+        # Friendly authoring -- the compiler hoists these step-level keys into
+        # arguments and expands `inputs:` into canonical inputVariables. A
+        # non-empty, correctly-typed form on the appliance is the F3 proof.
+        type: manual_input
+        next: Capture
+        title: "E2E multi gate"
+        description: "Provide details to resume the test playbook."
+        options: [Continue]
+        inputs:
+          - {name: comment, kind: textarea, label: "Comment", required: true}
+          - {name: severity, kind: select, label: "Severity", required: true, options: [Low, Medium, High]}
+          - {name: ticket_id, kind: text, label: "Ticket ID"}
+
+      - name: Capture
+        # Read the resumed values back out -- proves the responder's data
+        # reached the run. Referenced as vars.steps.<step_name>.input.<name>.
+        type: set_variable
+        vars:
+          got_severity: "{{ vars.steps.Collect.input.severity }}"
+          got_comment: "{{ vars.steps.Collect.input.comment }}"
+          got_ticket: "{{ vars.steps.Collect.input.ticket_id }}"

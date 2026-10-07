@@ -1,0 +1,144 @@
+collection: 10 - SP - ZTPF - Custom
+uuid: c7d3121b-5311-4dc8-8fcd-7b3fa9502721
+description: Custom playbooks for this solution pack if you wish.
+visible: true
+tags:
+- ZTPF
+playbooks:
+- name: ZTPF On Fail - FMG Device Group
+  uuid: 419ac2e4-8a64-495a-b5ba-3b39c9191080
+  description: 'Default on-fail handler: add the failed step''s device to an FMG device group. Group name comes from the action''s
+    configParameters.on_fail.fmg_group (default: ztpf-failed). Referenced via the onFailPlaybook field on the action; dispatched
+    by "> device step (Fail)".'
+  is_active: true
+  trigger_step_id: start
+  steps:
+  - type: start
+    name: Start
+    module: ztpf_device_automation_steps
+    button_label: 'FMG: Tag Failed Device'
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    next: find_device
+    uuid: 36e37692-4b19-4c28-9b56-46af74cf16ee
+    top: '40'
+    left: '40'
+  - type: find_record
+    name: find device
+    module: ztpf_devices
+    filters:
+    - field: id
+      value: '{{vars.input.records[0].ztpfDevices.id}}'
+      operator: eq
+    select:
+    - ztpfManagers
+    - name
+    - id
+    - adom
+    next: setup_vars
+    uuid: df0de2a1-bb2a-4863-8834-66008727828c
+    top: '140'
+    left: '40'
+  - type: set_variable
+    name: setup vars
+    vars:
+      device: '{{vars.steps.find_device[0].name}}'
+      adom: '{{vars.steps.find_device[0].adom}}'
+      connector_config: '{{vars.steps.find_device[0].ztpfManagers.connectorConfig}}'
+      fmg_group: '{%- set ret = "ztpf-failed" -%}
+
+        {%- set action = vars.input.records[0].ztpfAutomationActions -%}
+
+        {%- if action is defined and action and action.configParameters is defined and action.configParameters -%}
+
+        {%- set cp = action.configParameters | from_json -%}
+
+        {%- if cp.on_fail is defined and cp.on_fail.fmg_group is defined and cp.on_fail.fmg_group -%}
+
+        {%- set ret = cp.on_fail.fmg_group -%}
+
+        {%- endif -%}
+
+        {%- endif -%}
+
+        {%- set jv = vars.input.records[0].jinjaVars -%}
+
+        {%- if jv is defined and jv and jv.input is defined and jv.input and jv.input.fmg_group is defined and jv.input.fmg_group
+        -%}
+
+        {%- set ret = jv.input.fmg_group -%}
+
+        {%- endif -%}
+
+        {{ret}}'
+    next: ensure_group
+    uuid: 45c854bf-031e-4c5b-9ab1-d265fbc78c0c
+    top: '240'
+    left: '40'
+  - type: connector
+    name: ensure group
+    description: Create the device group if missing (errors when it already exists are expected and ignored).
+    ignore_errors: true
+    pickFromTenant: false
+    config: '{{vars.connector_config}}'
+    params:
+      url: /dvmdb/adom/{{vars.adom}}/group
+      data:
+        name: '{{vars.fmg_group}}'
+        desc: ZTPF failed steps
+    connector: fortinet-fortimanager-json-rpc
+    operation: json_rpc_add
+    next: add_member
+    uuid: be6b71ba-40c7-4ab3-86e6-65485b500bf8
+    top: '340'
+    left: '40'
+  - type: connector
+    name: add member
+    pickFromTenant: false
+    config: '{{vars.connector_config}}'
+    params:
+      url: /dvmdb/adom/{{vars.adom}}/group/{{vars.fmg_group}}/object member
+      data:
+        name: '{{vars.device}}'
+        vdom: root
+    connector: fortinet-fortimanager-json-rpc
+    operation: json_rpc_add
+    next: tag_step
+    uuid: 15c38466-e487-4ce9-9c32-9cc2b4a2e1c8
+    top: '440'
+    left: '40'
+  - type: update_record
+    name: tag step
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_device_automation_steps
+    record: '{{vars.input.records[0][''@id'']}}'
+    fields:
+      recordTags:
+      - fmg-tagged
+    next: return
+    uuid: 6cab9a06-eb78-4205-92cb-54706957561d
+    top: '540'
+    left: '40'
+  - type: set_variable
+    name: return
+    vars:
+      output: '{{vars.steps.add_member.data}}'
+      status: '{"error":false,"msg":"device {{vars.device}} added to FMG group {{vars.fmg_group}} (adom {{vars.adom}})"}'
+    uuid: 51352aec-5805-461c-874b-756a29120b45
+    top: '640'
+    left: '40'
+  annotations:
+  - id: changelog
+    uuid: c1a90020-0004-4a10-9e01-aa0000000004
+    title: Changelog
+    body: 'NEW default on-fail handler (adds failed device to an FMG group). fmg_group precedence: step input
+      (record.jinjaVars.input.fmg_group) -> action configParameters.on_fail.fmg_group -> default ztpf-failed.'
+    position:
+      top: 740
+      left: 40
+      width: 460

@@ -1,0 +1,2558 @@
+# UC-12 -- A vendor advisory arrives: establish exposure, gate the change, run
+# the patch, and prove the version actually moved by re-reading the inventory.
+#
+# Three questions follow a vendor fix, in order, and a patch demo is worth
+# having only if it answers all three: is this in my estate, am I allowed to
+# change it, and did the patch land. The middle one is routine. The first and
+# last are where this use case earns its place.
+#
+#   Start (manual, on an advisory-delivery alert)
+#     -> Pipeline Config     (set_variable -- config names, product map,
+#                             thresholds, remediation on/off)
+#     -> Fetch Advisories    (inoreader -- get_stream_contents, LIVE)
+#     -> Parse Advisories    (code-runner -- product + fixed version)
+#     -> Advisory Gate       (decision)
+#          nothing parseable -> Unparsed Comment -> end
+#     -> Presence Check      (generic-http -- Fleet software inventory, LIVE)
+#     -> Read Inventory      (code-runner -- who is below the fixed version,
+#                             and the CPE for the installed version)
+#     -> Presence Gate       (decision)
+#          unreachable     -> Inventory Unreadable Comment -> Link Alert -> end
+#          nobody affected -> No Exposure Comment -> Link Alert -> end
+#     -> CVE Query           (generic-http -- NVD by installed version, LIVE)
+#     -> CVE Lookup          (code-runner -- worst CVE affecting what is run)
+#     -> Find Prior Work     (find_record vulnerabilities -- seen this CVE?)
+#     -> Dedupe Gate         (decision)
+#          seen -> Duplicate Comment -> end
+#     -> EPSS Lookup         (epss -- LIVE)
+#     -> Score               (code-runner -- severity x exploitability)
+#     -> Create Case
+#     -> Record Ledger       (create_record vulnerabilities -- what Find Prior
+#                             Work reads on the next delivery)
+#     -> Evidence Comment    (pre-patch version, per host, before anything moves)
+#     -> Approval Gate       (decision -- score x host count)
+#          remediation off -> Remediation Disabled Comment -> Link Alert -> end
+#          score >= auto   -> Auto Approved Comment -> Remediate (no human gate)
+#          gated           -> Patch Approval (manual_input)
+#                               Decline -> Declined Comment -> Link Alert -> end
+#     -> Remediate           (Fleet batch script run)
+#     -> Verify              (Fleet software inventory, RE-READ)
+#     -> Compare Versions    (code-runner -- did the version actually move?)
+#     -> Verify Gate         (decision)
+#          moved     -> Patched Comment
+#          not moved -> Patch Did Not Land Comment
+#     -> Ticket Gate -> Create Ticket (jira) -> Ticket Comment
+#          -> Close Gate    (decision -- verified move only)
+#               -> Close Ticket (jira update_ticket, status Done)
+#     -> Digest Gate -> Send Digest (smtp)
+#     -> Slack Gate  -> Post To Slack (slack send_message)
+#     -> Update Case -> Link Alert -> end
+#
+# Six things here are load-bearing.
+#
+# 1. **An advisory with no matching install is a result, not a dead end.** The
+#    Presence Gate's "no exposure" branch writes down which hosts were queried
+#    and what they actually run. Most patch demos assume exposure rather than
+#    establishing it, and so can never produce the commonest real outcome:
+#    nothing to do, here is the proof.
+#
+# 2. **The patch is verified against the inventory, not against the script's
+#    exit code.** Remediate returns "the script ran". Verify re-reads Fleet and
+#    Compare Versions asks whether the installed version moved past the fixed
+#    version. Same argument as UC-11's read-back off AWS, and the half most
+#    demos skip. The `patch_did_not_land` scenario exists precisely because a
+#    successful script and an unmoved version co-occur often enough to be worth
+#    a branch.
+#
+# 3. **Scoring happens in FortiSOAR, not in the inventory tool.** Fleet's free
+#    tier gives software inventory and script execution; continuous CVE scanning
+#    is a paid tier and is deliberately not wanted here. Live CVSS from NVD plus
+#    live EPSS from FIRST.org, combined with the host count this playbook
+#    established itself, is both cheaper and the better argument -- and both
+#    those APIs are public, so the enrichment and scoring legs work on any box
+#    with outbound access, with no dependency on the lab at all.
+#
+# 4. **"Affected" is decided by a version comparison, not by a name match.** An
+#    advisory names a product and a fixed version; a host is affected if what it
+#    runs sorts below that fixed version. Read Inventory does that comparison
+#    once, and Compare Versions re-uses the identical rule after the patch, so
+#    "affected" and "remediated" cannot disagree about what the words mean. A
+#    version string the comparison cannot parse is reported as `unknown` and
+#    counted as affected -- unknown is not the same as safe.
+#
+# 5. **The case is per CVE, not per host.** One advisory across forty hosts is
+#    one piece of work; the hosts are evidence rows inside it. This is UC-06's
+#    position and the same reasoning: a per-host case multiplies the queue by
+#    the size of the estate and buries the single decision that matters.
+#
+# 6. **Remediation is one batch call, not a loop hidden in a step.** Fleet's
+#    batch script endpoint takes a host list, so the fan-out lives in the API
+#    where it is visible, rather than inside a single step that reports one
+#    status for N machines. UC-11's precedent is not to hide a loop; here the
+#    vendor API happens to make that free.
+#
+# **On enrichment order.** Exposure is established BEFORE the CVE is looked up,
+# which is the reverse of the obvious design and the reason this works at all.
+# The original flow read a CVE out of the advisory and enriched it; against the
+# real feeds that scored nothing, because vendor release notes for this class of
+# software carry no CVE identifiers -- 7-Zip's note for the release that fixed a
+# 7.8 says only "Some bugs and vulnerabilities were fixed." So the question is
+# inverted: the advisory establishes that a fix exists, the inventory
+# establishes what is actually installed, and NVD is then asked what affects
+# THAT version. It is more reliable, it spends NVD and EPSS calls only on
+# products the estate genuinely runs, and it usually returns more than the one
+# bug the release note had in mind.
+#
+# **On the fixtures -- there are none left.** Fetch Advisories, Presence Check,
+# Remediate and Verify are all live connector calls now, verified end to end
+# against the patch_pipeline lab: a real advisory, real exposure, a real
+# installer, and the version move confirmed by re-reading Fleet.
+#
+# The three notification legs are the exception, and they are off rather than
+# faked: `ticketing_enabled` and `digest_enabled` ship `no`, and `slack_enabled`
+# ships `no`. They write to systems outside FortiSOAR that a demo box has no
+# business filling with test data. Turning any of them on is a config name and
+# a flag, not a change to the flow. Ticketing, closure and Slack have NOT been
+# run against real endpoints -- say that out loud rather than be caught hiding
+# it, the same rule the fixtures used to carry.
+#
+# **On the connector.** This runs on `generic-http` v3.0.2
+# (github.com/ftnt-dspille/connector-generic-http), NOT the stock `http` v1.0.0.
+# That is a deliberate choice and it changes four things that would otherwise
+# have shaped the playbook badly:
+#
+#   - **Absolute URLs are honoured per call** (`_resolve_url`), so `rest_api` may
+#     be a full URL and the configured `server_url` is optional. Stock `http`
+#     concatenates `server_url + rest_api` with no escape, which makes a shared
+#     configuration impossible; here it would be workable. Two configurations
+#     are still used, for a better reason -- see the next point.
+#   - **Auth is a configuration field**, not a header the playbook carries.
+#     `patch-fleet` is
+#     `Bearer Token`. Two auth schemes means two configurations, and the tokens
+#     live encrypted in FortiSOAR instead of being substituted into this file by
+#     the harness -- which is why no feed-reader token placeholder appears
+#     below.
+#   - **Responses are JSON-decoded from the response's own Content-Type**, so no
+#     step has to send `Accept: application/json` defensively, and the return
+#     shape is `{status_code, headers, body}` rather than the bare body. Every
+#     read below goes through `.body`.
+#   - **`return_on_error` defaults to true**: a non-2xx comes back as data with
+#     its `status_code` rather than reddening the step. That is more useful and
+#     more dangerous. A 401 from Fleet returns a body with no hosts in it, and a
+#     playbook that does not check the status reads that as "nothing is
+#     installed" and closes the advisory clean. Read Inventory checks
+#     reachability FIRST for exactly this reason, and the Presence Gate has a
+#     third branch for it. An unreachable inventory must never be reported as no
+#     exposure.
+#
+# `http_paginate` is used for the inventory rather than a `per_page=200` guess.
+# A truncated first page is the same silent-wrong-answer bug as the 401: an
+# estate larger than one page would report exposure only for the hosts that
+# happened to come back. The operation returns `{items, pages_fetched,
+# truncated}`, and `truncated` is carried into the case rather than discarded.
+#
+# `__APPROVAL_TEAM_IRI__` is substituted by deploy_and_test.py. A manual_input
+# assigned by team *name* is created unowned and invisible to the run -- the
+# same trap as UC-11 and the teamviewer access request demo.
+#
+# The Miniflux original was live-verified end to end against the lab (Fleet +
+# two Windows
+# nodes), the `patch_pipeline` Fabric Studio topology, built separately. The
+# scenario table in PLAN.md passes 9/9. The auto-approval branch, the ticket
+# closure and the Slack post are newer than that run and are compile-verified
+# only.
+
+collection: Demo Library - Patch Lifecycle Inoreader
+description: >
+  Take a vendor advisory, score it with live CVSS and EPSS, ask the endpoint
+  inventory whether the affected product is installed anywhere at all, gate
+  remediation behind an approval sized by risk and blast radius, run the
+  upgrade, and confirm it landed by re-reading the inventory.
+visible: true
+
+playbooks:
+  - name: Patch Lifecycle Inoreader
+    description: >
+      Advisory to verified patch: establish exposure from inventory, gate the
+      change, remediate, and prove the version moved.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: "Run Patch Lifecycle"
+        next: Pipeline Config
+
+      - name: Pipeline Config
+        type: set_variable
+        comment: >
+          Everything environment-specific lives here, including the two
+          `generic-http` configuration names. They were two because Miniflux and
+          Fleet authenticate differently (`X-Auth-Token` header vs bearer) and
+          auth is a property of the configuration -- not because of any URL
+          limitation. A customer pointing this at their own feed reader and
+          their own Fleet changes two strings and two stored tokens.
+
+          `product_map` is keyed on the FEED TITLE, not on prose. Scanning
+          advisory text for a product name was the first design and it was
+          wrong: against the live feeds it matched "Firefox" in a blog post
+          about a root-store policy and pulled "52" out of it as a fixed
+          version. A feed is a per-product subscription, so the feed already
+          knows the product -- and Inoreader puts `origin.title` on every item,
+          exactly as Miniflux put `feed.title`.
+          The right-hand side is the name the inventory reports, matched as a
+          substring because inventories append versions and architectures to
+          display names ("7-Zip 23.01 (x64)") and an equality match on a
+          display name is a bug waiting for the next release.
+
+          `cpe_map` translates the same product into an NVD CPE prefix. The
+          installed version is appended at lookup time, so NVD is asked which
+          CVEs affect the version this estate is ACTUALLY running -- not which
+          CVE the advisory happened to name. Live-verified: the vendor release
+          feeds for 7-Zip and Notepad++ carry no CVE identifiers at all, so a
+          pipeline that depends on scraping one out of the advisory never
+          scores anything.
+
+          `script_map` names, per product, the Fleet script that upgrades it.
+          It is a map rather than the single `upgrade_script_id` this file
+          shipped with, and the reason is a property of Fleet rather than a
+          preference: the free tier runs a stored script with NO arguments, so
+          a script cannot be told which product to upgrade. One id per product
+          is the only shape the API supports. The value that shipped -- `"1"` --
+          was a guess, and live-verified it pointed at nothing: the lab's Fleet
+          had no scripts at all, and `scripts/run/batch` answers a missing
+          script with a 404 that `return_on_error` delivers as data. The run
+          would have reached Verify and reported "patch did not land" for a
+          patch that was never dispatched.
+
+          The scripts themselves live in `scripts/` next to this playbook and
+          upgrade to CURRENT rather than to a version passed in, for the same
+          no-arguments reason. That split is load-bearing: the script decides
+          how to upgrade, this playbook decides whether the result is
+          acceptable by re-reading the inventory. A script that judged its own
+          success would be the assumption this use case exists to refuse.
+
+          Firefox is installed on the estate and is deliberately absent from
+          both maps. Mozilla publishes no per-release feed that names a
+          version cleanly -- the security blog is prose, and the GitHub tag
+          feed is a firehose of betas, Android builds and dev editions. Rather
+          than parse that badly, Firefox serves as the negative control: it
+          stays on an old version throughout, and the verification proves the
+          pipeline moved what it was asked to move and left everything else
+          alone.
+
+          `remediation_enabled` ships `yes`. Unlike UC-06's ticketing and
+          UC-08's blocking, the remediation IS the use case -- with it off there
+          is nothing to verify, and the verification is the point. The safety is
+          the approval gate, not a disabled action.
+
+          `approval_auto_above` is the standing-authorisation bar: at or above
+          it the patch proceeds without waiting for a human. It ships at 90,
+          deliberately far above `approval_score_above` (60), so the ordinary
+          case is still a person approving a change. The argument for having it
+          at all is that a CVE which is both severe and demonstrably exploited
+          in the wild is one an organisation has usually pre-authorised in its
+          change policy, and routing it to an approver adds hours of exposure
+          to a decision whose answer was written down in advance. The argument
+          for keeping the bar high is that this branch is the one place the
+          playbook changes production software with nobody watching -- so it is
+          written to the case as its own comment, naming the score that carried
+          it, rather than being silently indistinguishable from an approved run.
+
+          Set it above 100 to disable auto-approval entirely and force every
+          patch through the gate.
+
+          `slack_enabled` ships `no` for the same reason as the digest: a demo
+          box should not post into a real workspace unasked. `slack_channel`
+          takes a channel name or ID; the connector also accepts `email_id` to
+          DM a user instead, which is the shape to use for per-owner routing.
+
+          `ticket_close_enabled` closes the ticket this playbook raised once the
+          version move is confirmed by the inventory re-read. It is gated
+          separately from `ticketing_enabled` because "file a ticket" and "let
+          automation close a ticket" are usually different conversations with a
+          change manager, and the second one is the one that gets refused.
+        vars:
+          inoreader_config: "inoreader-lab"
+          # The Inoreader stream the advisories come from. A folder, not a
+          # single feed: one subscription per product, all filed together, so
+          # adding a vendor is a subscription rather than a playbook edit.
+          advisory_stream: "user/-/label/Patch Intel"
+          fleet_config: "patch-fleet"
+          code_config: "Default"
+          nvd_http_config: "nvd-public-http"
+          epss_config: "epss-public"
+          # Ships EMPTY, and that is the safe default rather than a missing
+          # value. Fleet script ids are per-Fleet-instance and are reassigned
+          # when the lab is rebuilt, so any id hardcoded here is stale the
+          # moment someone re-provisions -- and the harness's own rollback
+          # scripts occupy the same id space. The pair this shipped with
+          # (`7-Zip=3`) survived exactly one rebuild before id 3 became
+          # `reset-7zip-vulnerable.ps1`: a plain `--deploy` followed by a click
+          # in the UI would have run the ROLLBACK, downgrading 7-Zip to the
+          # vulnerable build while reporting a patch run.
+          #
+          # Empty means the Approval Gate's unmapped-product branch fires and
+          # the run stops with "exposure confirmed, no upgrade path" -- true,
+          # safe, and the same answer a real deployment gets before it maps its
+          # own scripts. deploy_and_test.py rewrites this line from the live
+          # `--sync-scripts` upload for every scenario run, so the test path is
+          # unaffected.
+          script_map: ""
+          # `jira-demo` rather than a lab-specific name: it is the configuration
+          # UC-06 already writes real tickets through, so the ticketing and
+          # closure legs inherit a credential set that is known to work rather
+          # than a second one that has to be kept alive separately. The name
+          # this shipped with -- `jira-lab` -- resolved to nothing on the
+          # appliance, which `ticketing_enabled: no` hid completely: the steps
+          # that would have failed on it never ran.
+          jira_config: "jira-demo"
+          smtp_config: "smtp-lab"
+          slack_config: "slack-lab"
+          product_map: "Release notes from 7zip=7-Zip|7-Zip,Release notes from notepad-plus-plus=Notepad++|Notepad++"
+          cpe_map: "7-Zip=cpe:2.3:a:7-zip:7-zip,Notepad++=cpe:2.3:a:notepad-plus-plus:notepad\\+\\+"
+          approval_hosts_above: "0"
+          approval_score_above: "60"
+          approval_auto_above: "90"
+          epss_alarming: "0.5"
+          # The install wait is POLLED, not slept. attempts x seconds is a
+          # CEILING reached only when the patch never lands; a host that
+          # finishes in 40s is verified at 40s instead of at 225.
+          # WHICH affected host the wait watches. Empty means "whichever
+          # one can actually answer", which is what you want in an estate.
+          # Pinning it is for the case where a specific machine is the one
+          # under discussion -- including proving that an endpoint which
+          # cannot report produces the pending verdict rather than a false
+          # "patch did not land".
+          patch_watch_host_id: ""
+          patch_poll_attempts: "12"
+          patch_poll_seconds: "15"
+          # The inner wait, for a single refetch to land. Also a ceiling: a
+          # healthy host clears `refetch_requested` in a few seconds.
+          refresh_poll_attempts: "8"
+          refresh_poll_seconds: "8"
+          remediation_enabled: "yes"
+          ticketing_enabled: "no"
+          ticket_close_enabled: "yes"
+          digest_enabled: "no"
+          digest_to: "soc@example.com"
+          slack_enabled: "no"
+          slack_channel: "#soc-patching"
+        next: Fetch Advisories
+
+      - name: Fetch Advisories
+        type: connector
+        connector: inoreader
+        operation: get_stream_contents
+        config: "{{ vars.inoreader_config }}"
+        comment: >
+          LIVE. Inoreader's Reader API, through the `inoreader` connector.
+
+          No auth appears here. The connector holds the App ID/Key and the
+          OAuth refresh token on its configuration, mints an access token on
+          demand and persists the rotated refresh token back -- Inoreader
+          rotates it on EVERY refresh. Nothing about that is this playbook's
+          business, which is the point of it being a connector rather than
+          `generic-http` with a bearer header.
+
+          `get_stream_contents` and NOT `fetch_articles`, which is the more
+          obvious choice and is wrong here. `fetch_articles` returns the tidy
+          normalized shape, but it hard-codes oldest-first so that a truncated
+          ingestion run resumes from a sane cursor. That is right for scheduled
+          ingestion and wrong for this: the parser takes the first entry it can
+          read, so newest-first means the newest advisory wins, and ascending
+          would make every run re-offer the oldest release note in the feed.
+          The cost of choosing correctly is that Parse Advisories reads the RAW
+          Inoreader item shape -- `origin.title`, `summary.content`,
+          `canonical[0].href` -- rather than pre-flattened fields.
+
+          `unread_only` replaces Miniflux's `status=unread`. As before this
+          playbook does NOT mark anything read: that is a second call, a WRITE
+          to the feed reader on a path that may still fail, and it spends the
+          scarcer of the two rate-limit zones. De-duplication stays in
+          FortiSOAR against the vulnerabilities module. See Find Prior Work.
+
+          Rate limit, which Miniflux did not have: Inoreader allows 100
+          requests per day per zone. This step is one of them. A demo re-run
+          costs one more; a scheduled ingestion against the same account costs
+          more again. It is a DAILY ceiling with no burst limit, so the thing
+          to avoid is not a fast loop, it is a long day of iterating.
+        params:
+          stream_id: "{{ vars.advisory_stream }}"
+          unread_only: true
+          max_records: 100
+        next: Parse Advisories
+
+      - name: Parse Advisories
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Pulls the product and the fixed version out of one advisory. Regex
+          over advisory prose is not elegant, and it is what the input is:
+          vendor feeds are HTML written for humans, and the alternative -- a
+          per-vendor structured feed -- exists for roughly none of the
+          third-party software an estate actually runs.
+
+          The fixed version is the load-bearing field. Without it "affected"
+          degenerates to "has this product installed", which is every host and
+          therefore no information.
+
+          The CVE is deliberately NOT parsed here. Live-verified against the
+          real feeds: of the entries naming a product this estate runs, ZERO
+          carried a CVE identifier -- 7-Zip's release note for the version that
+          fixed a scored 7.8 says only "Some bugs and vulnerabilities were
+          fixed." A pipeline that requires a CVE from the advisory scores
+          nothing, forever. CVEs are instead looked up from NVD against the
+          version the estate is actually running, after exposure is confirmed.
+
+          Product comes from `feed.title`, not from scanning the text. The
+          text-scanning version matched "Firefox" inside a blog post about
+          root-store policy and extracted "52" as the fixed version, which
+          would have driven a remediation against a version that does not
+          exist.
+        params:
+          code: |
+            import re
+
+            # An auth failure must not be allowed to read as a quiet estate.
+            # That was the whole point of the status-code check this replaces,
+            # and the check itself is GONE rather than ported: `generic-http`
+            # runs with return_on_error, so a 401 came back as data carrying a
+            # status code to inspect. A connector operation has no status code
+            # -- on an auth or transport failure the `inoreader` connector
+            # RAISES, the step goes red, and this code never runs at all.
+            #
+            # That is louder and better, and it moves the burden: the run's
+            # failure is visible on the step rather than in a sentence in a
+            # comment. What remains here is the case the connector cannot
+            # distinguish for us -- it answered, and the answer was empty.
+            #
+            # `count` is checked, not just `items`, because the connector always
+            # returns both and a missing `count` means the shape changed under
+            # us, which should not be silently read as "no advisories".
+            response = {{ vars.steps.Fetch_Advisories.data | default({}) }} or {}
+            if "count" not in response:
+                return {
+                    "parsed": "no",
+                    "entry_id": "",
+                    "title": "",
+                    "url": "",
+                    "published": "",
+                    "advisory_cves": "",
+                    "product": "",
+                    "inventory_name": "",
+                    "fixed_version": "",
+                    "reason": (
+                        "the advisory feed answered in a shape this playbook "
+                        "does not recognise -- expected the inoreader "
+                        "connector's stream_id/count/items and got keys "
+                        "{0}. This run saw no advisories rather than no unread "
+                        "advisories; nothing was missed by the estate, only by "
+                        "this run".format(sorted(response.keys()) or "nothing")
+                    ),
+                }
+
+            entries = response.get("items") or []
+
+            # Feed title -> "advisory product name|inventory display name".
+            product_map = {}
+            for pair in "{{ vars.product_map }}".split(","):
+                if "=" not in pair:
+                    continue
+                feed_title, mapped = pair.split("=", 1)
+                names = mapped.split("|", 1)
+                product_map[feed_title.strip().lower()] = (
+                    names[0].strip(), names[-1].strip())
+
+            # Inoreader's RAW item shape, read in one place rather than
+            # inline at four call sites. get_stream_contents returns the API's
+            # own items (see Fetch Advisories for why not fetch_articles), so
+            # these four accessors are the entire difference between this
+            # playbook and the Miniflux original downstream of the fetch.
+            def feed_title_of(entry):
+                # Miniflux: entry["feed"]["title"]
+                return str(((entry.get("origin") or {}).get("title") or "")).strip()
+
+            def url_of(entry):
+                # Miniflux: entry["url"]. Inoreader carries a list of canonical
+                # links; alternate is the fallback some feeds use instead.
+                for key in ("canonical", "alternate"):
+                    links = entry.get(key) or []
+                    if links and isinstance(links, list):
+                        href = (links[0] or {}).get("href")
+                        if href:
+                            return str(href)
+                return ""
+
+            def content_of(entry):
+                # Miniflux: entry["content"]. Inoreader puts the body under
+                # `summary.content`, and `content.content` on some feeds.
+                for key in ("summary", "content"):
+                    block = entry.get(key) or {}
+                    if isinstance(block, dict) and block.get("content"):
+                        return str(block["content"])
+                return ""
+
+            def published_of(entry):
+                # Miniflux: entry["published_at"], already ISO 8601.
+                # Inoreader: epoch seconds. Converted here so everything
+                # downstream keeps receiving a string it can print.
+                import datetime
+                raw = entry.get("published") or entry.get("updated")
+                try:
+                    return datetime.datetime.utcfromtimestamp(int(raw)).isoformat() + "Z"
+                except (TypeError, ValueError):
+                    return str(raw or "")
+
+            def extract_version(entry, product):
+                """The fixed version, or "" if this entry does not clearly state one."""
+                title = str(entry.get("title") or "")
+                url = url_of(entry)
+                content = content_of(entry)
+
+                # A release-tag URL is the strongest signal available: it is
+                # machine-generated, so it does not drift with prose style.
+                tag = re.search(r"/(?:releases/tag|tag)/v?([0-9]+(?:\.[0-9]+)+)", url)
+                if tag:
+                    return tag.group(1)
+
+                patterns = (
+                    r"upgrade to ([0-9]+(?:\.[0-9]+)+)",
+                    r"fixed in ([0-9]+(?:\.[0-9]+)+)",
+                    r"before ([0-9]+(?:\.[0-9]+)+) are affected",
+                    # "Notepad++ release 8.9.7" -- the word between the product
+                    # and the number is why the naive adjacency pattern found
+                    # nothing on nine consecutive real entries.
+                    re.escape(product) + r"\s+(?:release\s+)?v?([0-9]+(?:\.[0-9]+)+)",
+                    # "7-Zip 26.02" as a bare entry title.
+                    r"^v?([0-9]+(?:\.[0-9]+)+)\s*$",
+                )
+                for text in (title, content):
+                    for pattern in patterns:
+                        found = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+                        if found:
+                            return found.group(1).rstrip(".")
+                return ""
+
+            for entry in entries:
+                feed_title = feed_title_of(entry).lower()
+                if feed_title not in product_map:
+                    continue
+                product, inventory_name = product_map[feed_title]
+
+                fixed = extract_version(entry, product)
+                if not fixed:
+                    continue
+
+                text = "{0} {1}".format(entry.get("title") or "", content_of(entry))
+                cves = sorted(set(re.findall(r"CVE-\d{4}-\d{4,7}", text)))
+
+                return {
+                    "parsed": "yes",
+                    "entry_id": str(entry.get("id") or ""),
+                    "title": str(entry.get("title") or ""),
+                    "url": url_of(entry),
+                    "published": published_of(entry),
+                    "advisory_cves": ", ".join(cves),
+                    "product": product,
+                    "inventory_name": inventory_name,
+                    "fixed_version": fixed,
+                    "reason": "",
+                }
+
+            return {
+                "parsed": "no",
+                "entry_id": "",
+                "title": "",
+                "url": "",
+                "published": "",
+                "advisory_cves": "",
+                "product": "",
+                "inventory_name": "",
+                "fixed_version": "",
+                # The feed titles actually seen are named, because the single
+                # most likely way this swap fails is a title mismatch:
+                # `product_map` is keyed on the feed title, and Inoreader is
+                # free to title a subscription differently from Miniflux. A
+                # bare "nothing matched" would send someone to the regexes.
+                "reason": (
+                    "no unread entry came from a mapped feed with a parseable "
+                    "fixed version. Feeds seen: {0}. Feeds mapped: {1}".format(
+                        sorted({feed_title_of(e) for e in entries if feed_title_of(e)})
+                        or "none",
+                        sorted(product_map) or "none")
+                    if entries else "the feed returned no unread entries"
+                ),
+            }
+        next: Advisory Gate
+
+      - name: Advisory Gate
+        type: decision
+        comment: >
+          An advisory nobody can parse is an ordinary outcome -- a vendor
+          rewrites its feed, or ships a note about a product this estate has
+          never mapped. It gets written down rather than turned into a red run,
+          because a red run here is indistinguishable from the feed being down.
+        conditions:
+          - condition: "{{ vars.steps.Parse_Advisories.data.code_output.parsed == 'yes' }}"
+            next: Inventory Probe
+        default: Unparsed Comment
+
+      - name: Unparsed Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>No advisory acted on -- nothing in the feed could be turned
+            into a patch decision.</b></p>
+            <p>{{ vars.steps.Parse_Advisories.data.code_output.reason }}.</p>
+            <p>Three fields have to be present together for an advisory to be
+            actionable: a CVE identifier, a product name that appears in
+            <code>product_map</code>, and a fixed version. An advisory missing
+            the fixed version is the common case and is not a parser failure --
+            without it, "affected" would mean "has this product", which is every
+            host that runs it and therefore no information at all.</p>
+            <p>Current map:
+            <code>{{ vars.product_map }}</code>.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done
+
+      - name: Find Prior Work
+        type: find_record
+        module: vulnerabilities
+        comment: >
+          De-duplication is done here rather than by marking the Inoreader item
+          read, and the difference matters. Marking read is a write to the feed
+          reader that happens before the run can fail; if it does fail, the
+          advisory is both unhandled and invisible. A ledger in the
+          vulnerabilities module is idempotent and survives a failed run: a
+          re-delivery finds the record and stops, a genuinely new advisory does
+          not.
+        filters:
+          - field: cveId
+            operator: eq
+            value: "{{ vars.steps.CVE_Lookup.data.code_output.cve }}"
+        limit: 5
+        next: Dedupe Gate
+
+      - name: Dedupe Gate
+        type: decision
+        conditions:
+          - condition: "{{ vars.steps.Find_Prior_Work | length > 0 }}"
+            next: Duplicate Comment
+        default: EPSS Lookup
+
+      - name: Duplicate Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Advisory already handled -- no second case and no second
+            ticket.</b></p>
+            <p><code>{{ vars.steps.CVE_Lookup.data.code_output.cve }}</code>
+            ({{ vars.steps.Parse_Advisories.data.code_output.product }}) is
+            already tracked by
+            {{ vars.steps.Find_Prior_Work | length }} existing record(s):
+            <b>{{ vars.steps.Find_Prior_Work | map(attribute='name') | join(', ') }}</b>.</p>
+            <p>Feeds re-deliver. This run stopped before enrichment, before
+            touching the inventory and before any change, which is the point of
+            checking prior work first rather than after scoring.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done
+
+      - name: CVE Query
+        type: connector
+        connector: generic-http
+        operation: http_get
+        config: "{{ vars.nvd_http_config }}"
+        comment: >
+          LIVE. Asks NVD which CVEs affect the version this estate is ACTUALLY
+          RUNNING, via `virtualMatchString` on a CPE built from `cpe_map` plus
+          the installed version Read Inventory found.
+
+          This is the inversion that makes the pipeline work at all. The
+          original design read a CVE out of the advisory and looked it up; the
+          live feeds carry no CVEs, so it looked up nothing. Asking NVD about
+          the installed version is both more reliable and a better question:
+          the advisory tells you a fix exists, NVD tells you what you are
+          exposed to right now -- which is usually more than the one bug the
+          release note mentions. Live-verified: 7-Zip 23.01 returns 14 CVEs,
+          all scored, the worst an 8.8.
+
+          It runs AFTER exposure is established, so NVD is queried only for
+          products this estate actually has. NVD throttles unauthenticated
+          callers hard; a 403 here is rate limiting, not a bad CPE.
+        params:
+          rest_api: "https://services.nvd.nist.gov/rest/json/cves/2.0"
+          parameter:
+            virtualMatchString: "{{ vars.steps.Read_Inventory.data.code_output.cpe_match }}"
+            resultsPerPage: 50
+        next: CVE Lookup
+
+      - name: CVE Lookup
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Picks the CVE the case is opened on: the highest CVSS base score
+          among those affecting the installed version. Everything else is
+          recorded as context rather than discarded, because "and 13 others"
+          is the part that makes an upgrade argument.
+
+          NVD nests the base score three ways depending on which CVSS version
+          the record carries, and a CVE with no v3.1 metric is normal rather
+          than exceptional. All are tried; unscored CVEs are counted but cannot
+          win the ranking.
+
+          A CPE that matches nothing is an ordinary outcome, not an error --
+          NVD simply has no entry for that product-version pair. It is reported
+          as `found: no` and the score falls back to the vendor signal.
+        params:
+          code: |
+            response = {{ vars.steps.CVE_Query.data | default({}) }} or {}
+            status = response.get("status_code")
+            body = response.get("body") or {}
+            cpe = "{{ vars.steps.Read_Inventory.data.code_output.cpe_match }}"
+
+            # An empty CPE must NEVER be interpreted, because NVD treats an
+            # empty `virtualMatchString` as "no filter" and cheerfully returns
+            # the whole database. Live-verified: that path produced a 1999 CVE
+            # scored 10.0 and a 100/100 Critical case for a product that was
+            # not installed anywhere. It is reachable whenever a host reports a
+            # version string the comparison cannot parse -- that host counts as
+            # affected, but yields no version to build a CPE from.
+            if not cpe:
+                return {
+                    "found": "no",
+                    "reachable": "yes",
+                    "cve": "",
+                    "cve_count": 0,
+                    "all_cves": "",
+                    "cvss": "unknown",
+                    "cvss_vector": "unpublished",
+                    "reason": (
+                        "no CPE could be built -- either the product is absent "
+                        "from cpe_map or no host reported a parseable version, "
+                        "so NVD was not asked a question it would have answered "
+                        "with the entire database"
+                    ),
+                }
+
+            if status is not None and int(status) >= 300:
+                return {
+                    "found": "no",
+                    "reachable": "no",
+                    "cve": "",
+                    "cve_count": 0,
+                    "all_cves": "",
+                    "cvss": "unknown",
+                    "cvss_vector": "unpublished",
+                    "reason": (
+                        "NVD returned HTTP {0} -- most often rate limiting, "
+                        "which this connector reports as data rather than as a "
+                        "failed step".format(status)
+                    ),
+                }
+
+            ranked = []
+            unscored = []
+            for item in (body.get("vulnerabilities") or []):
+                cve = item.get("cve") or {}
+                cve_id = str(cve.get("id") or "")
+                if not cve_id:
+                    continue
+                metrics = cve.get("metrics") or {}
+                best = None
+                vector = ""
+                for key in ("cvssMetricV40", "cvssMetricV31",
+                            "cvssMetricV30", "cvssMetricV2"):
+                    rows = metrics.get(key) or []
+                    if rows:
+                        data = rows[0].get("cvssData") or {}
+                        if data.get("baseScore") is not None:
+                            best = float(data.get("baseScore"))
+                            vector = str(data.get("vectorString") or "")
+                            break
+                if best is None:
+                    unscored.append(cve_id)
+                else:
+                    ranked.append((best, cve_id, vector))
+
+            if not ranked and not unscored:
+                return {
+                    "found": "no",
+                    "reachable": "yes",
+                    "cve": "",
+                    "cve_count": 0,
+                    "all_cves": "",
+                    "cvss": "unknown",
+                    "cvss_vector": "unpublished",
+                    "reason": (
+                        "NVD has no CVE recorded against the installed version; "
+                        "the upgrade rests on the vendor's own advisory"
+                    ),
+                }
+
+            ranked.sort(reverse=True)
+            if ranked:
+                top_score, top_cve, top_vector = ranked[0]
+            else:
+                top_score, top_cve, top_vector = None, unscored[0], ""
+
+            ordered = [entry[1] for entry in ranked] + unscored
+            return {
+                "found": "yes",
+                "reachable": "yes",
+                "cve": top_cve,
+                "cve_count": len(ordered),
+                "all_cves": ", ".join(ordered[:15]),
+                "unscored_count": len(unscored),
+                "cvss": top_score if top_score is not None else "unknown",
+                "cvss_vector": top_vector or "unpublished",
+                "reason": "",
+            }
+        next: Find Prior Work
+
+      - name: EPSS Lookup
+        type: connector
+        connector: exploit-prediction-scoring-system
+        operation: get_epss_score_by_cve_id
+        config: "{{ vars.epss_config }}"
+        comment: >
+          The signal CVSS cannot give: the probability this CVE is exploited in
+          the wild in the next 30 days. Free, unauthenticated and public, so
+          this leg works on any box with outbound access.
+
+          Every parameter has to be passed even when empty -- the connector
+          reads them positionally and raises a bare KeyError otherwise. Same
+          trap as UC-06.
+        params:
+          cve: "{{ vars.steps.CVE_Lookup.data.code_output.cve }}"
+          scope: "Public"
+          byDate: ""
+          fields: ""
+          sort: ""
+          envelope: false
+          pretty: false
+          orderResult: false
+        next: Score
+
+      - name: Score
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Severity crossed with exploitability, before the estate is consulted.
+          The host count is folded in later, at the Approval Gate, and keeping
+          the two apart is deliberate: this number describes the vulnerability,
+          the gate describes the blast radius, and a customer who disagrees with
+          one should not have to unpick the other.
+
+          The CVSS figure is already picked and normalised by CVE Lookup, which
+          ranks every CVE affecting the installed version and takes the worst.
+          A CVE with no published metric is normal rather than exceptional and
+          is scored as unknown and treated as high, because an unscored CVE is
+          not a low one.
+        params:
+          code: |
+            picked = {{ vars.steps.CVE_Lookup.data.code_output | default({}) }} or {}
+            epss_response = {{ vars.steps.EPSS_Lookup.data | default({}) }}
+            alarming = float("{{ vars.epss_alarming }}" or 0.5)
+
+            raw_cvss = picked.get("cvss")
+            cvss = None if raw_cvss in (None, "", "unknown") else float(raw_cvss)
+            vector = str(picked.get("cvss_vector") or "")
+            cve_count = int(picked.get("cve_count") or 0)
+
+            epss = 0.0
+            percentile = 0.0
+            rows = epss_response.get("data") or []
+            if rows:
+                epss = float(rows[0].get("epss") or 0)
+                percentile = float(rows[0].get("percentile") or 0)
+
+            # Base = CVSS on its own 0-100 scale, so the number and the
+            # priority band below agree with CVSS's published thresholds
+            # (9.0 critical / 7.0 high / 4.0 medium). A customer who knows
+            # CVSS can predict this score, which is the whole point of not
+            # inventing a weighting.
+            base = (cvss if cvss is not None else 8.5) * 10.0
+
+            # EPSS is banded, not multiplied. Raw EPSS is heavily skewed --
+            # the median CVE sits near 0.0004 -- so a linear term contributes
+            # essentially nothing for the 90% of CVEs that are never exploited
+            # and cannot separate them either. Bands are what EPSS is actually
+            # useful for: they answer "is this being exploited" rather than
+            # pretending four decimal places of probability are meaningful.
+            if epss >= 0.5:
+                uplift, epss_note = 20.0, "exploitation active"
+            elif epss >= 0.1:
+                uplift, epss_note = 12.0, "exploitation likely"
+            elif epss >= 0.01:
+                uplift, epss_note = 6.0, "some exploitation signal"
+            elif epss >= 0.001:
+                uplift, epss_note = 2.0, "little exploitation signal"
+            else:
+                uplift, epss_note = 0.0, "no exploitation signal"
+
+            score = int(min(100, round(base + uplift)))
+
+            if score >= 90:
+                priority = "Critical"
+            elif score >= 70:
+                priority = "High"
+            elif score >= 40:
+                priority = "Medium"
+            else:
+                priority = "Low"
+
+            # A CVE with real-world exploitation cannot be filed below Critical
+            # regardless of its base score. This is the CISA KEV argument: a
+            # moderate bug that is being used is a bigger problem than a severe
+            # one that is not, and a purely additive model cannot express that.
+            floored = False
+            if epss >= alarming and priority != "Critical":
+                priority = "Critical"
+                floored = True
+
+            reasons = []
+            reasons.append(
+                "CVSS {0}".format(cvss) if cvss is not None
+                else "no CVSS metric published yet, scored as 8.5 pending one")
+            if cve_count > 1:
+                reasons.append(
+                    "{0} CVEs affect the installed version".format(cve_count))
+            reasons.append(
+                "EPSS {0:.4f} ({1:.1f}th percentile) -- {2}".format(
+                    epss, percentile * 100, epss_note))
+            if floored:
+                reasons.append(
+                    "raised to Critical: a CVE under active exploitation "
+                    "outranks its own base score")
+
+            return {
+                "cvss": cvss if cvss is not None else "unknown",
+                "cvss_vector": vector or "unpublished",
+                "epss": round(epss, 4),
+                "epss_percentile": round(percentile, 4),
+                "score": score,
+                "priority": priority,
+                "epss_band": epss_note,
+                "rationale": "; ".join(reasons),
+            }
+        next: Create Case
+
+      - name: Inventory Probe
+        type: connector
+        connector: generic-http
+        operation: http_get
+        config: "{{ vars.fleet_config }}"
+        comment: >
+          A one-host GET whose ONLY purpose is to expose a status code.
+
+          This step exists because of a defect found by testing the real thing:
+          `http_paginate` does not surface `status_code`. It returns
+          `{items, pages_fetched, truncated}` and nothing else, so a 401 comes
+          back as `items: [], pages_fetched: 1` -- byte-identical to an estate
+          with no hosts in it. The reachability guard in Read Inventory checked
+          `pages_fetched < 1` and therefore did NOT fire, which means the
+          playbook would have reported a confident "no exposure" on an expired
+          token. That is the precise failure this use case is built to prevent,
+          and it survived until the connector was driven against a deliberately
+          broken configuration.
+
+          `per_page=1` because nothing here reads the body. The paginated call
+          that follows does the real work; this one only establishes that the
+          inventory can be reached and is willing to answer.
+        params:
+          rest_api: "/api/v1/fleet/hosts"
+          parameter:
+            per_page: 1
+        next: Presence Check
+
+      - name: Presence Check
+        type: connector
+        connector: generic-http
+        operation: http_paginate
+        config: "{{ vars.fleet_config }}"
+        comment: >
+          LIVE. Fleet's software inventory -- the step that answers the first
+          of the three questions, and the one most patch demos skip by assuming
+          exposure.
+
+          `http_paginate` rather than a single call with `per_page=200`. An
+          estate bigger than one page would otherwise report exposure only for
+          the hosts that happened to come back -- a wrong answer that looks
+          exactly like a right one. It returns
+          `{items, pages_fetched, truncated}`; `truncated` means max_pages was
+          hit with more still to come, and Read Inventory carries it into the
+          case rather than dropping it.
+
+          `populate_software=true` on the LIST endpoint is now live-verified:
+          each host carries a `software` array inline, no per-host GET
+          required. This was the plan's highest-risk assumed contract, because
+          a wrong guess here does not crash -- Read Inventory would have read
+          "no software key" as "not installed" and closed a real exposure as an
+          all-clear. Confirmed against a running Fleet: 56 entries on the test
+          host, with display names of the form "7-Zip 23.01 (x64)" and a clean
+          `version` field alongside.
+        params:
+          rest_api: "/api/v1/fleet/hosts"
+          method: GET
+          parameter:
+            populate_software: "true"
+            per_page: 100
+          pagination_mode: page_param
+          page_param_name: "page"
+          start_page: 0
+          items_path: "hosts"
+          max_pages: 20
+        next: Read Inventory
+
+      - name: Read Inventory
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Decides what "affected" means, once, for the whole run. A host is
+          affected if it carries the mapped product AND the installed version
+          sorts below the advisory's fixed version.
+
+          The comparison is a numeric tuple compare, zero-padded to equal
+          length, so 23.9 sorts below 23.10 -- which a string compare gets
+          backwards, and which is a real 7-Zip-shaped version scheme rather than
+          a contrived one. A version that will not parse is reported `unknown`
+          and counted as AFFECTED: unknown is not the same as safe, and a patch
+          pipeline that quietly excuses the hosts it cannot read is worse than
+          one that over-reports.
+
+          Compare Versions re-uses this identical function after the patch, so
+          "affected" and "remediated" cannot disagree about what the words mean.
+
+          It also decides whether the inventory answered at all. `generic-http`
+          returns non-2xx as DATA rather than reddening the step, so a 401 from
+          Fleet arrives as a body with no hosts in it -- which, unchecked, reads
+          as "nothing is installed" and closes a live advisory clean. That is
+          the worst bug this playbook could have, so the reachability check is
+          the first thing here and the Presence Gate has a branch for it.
+
+          It also builds the CPE that the NVD query downstream uses. That has
+          to happen here rather than at Pipeline Config because the CPE needs
+          the INSTALLED version, which is only known once the inventory has
+          been read -- and the installed version is the one worth asking NVD
+          about.
+        params:
+          code: |
+            inventory = {{ vars.steps.Presence_Check.data | default({}) }} or {}
+
+            wanted = "{{ vars.steps.Parse_Advisories.data.code_output.inventory_name }}"
+            fixed = "{{ vars.steps.Parse_Advisories.data.code_output.fixed_version }}"
+            product = "{{ vars.steps.Parse_Advisories.data.code_output.product }}"
+
+            cpe_prefix = ""
+            for pair in "{{ vars.cpe_map }}".split(","):
+                if "=" in pair:
+                    left, right = pair.split("=", 1)
+                    if left.strip() == product:
+                        cpe_prefix = right.strip()
+                        break
+
+            # Which Fleet script upgrades this product. Resolved here rather
+            # than inline in Remediate's body because this step already owns
+            # the canonical product name, and because an unmapped product must
+            # be an explicit 0 that Remediate can refuse -- not an empty string
+            # Jinja would render into a malformed body.
+            script_id = 0
+            for pair in "{{ vars.script_map }}".split(","):
+                if "=" not in pair:
+                    continue
+                left, right = pair.split("=", 1)
+                if left.strip() == product and right.strip().isdigit():
+                    script_id = int(right.strip())
+                    break
+
+            # Reachability is decided by the probe, NOT by the paginated
+            # response, because http_paginate discards the status code and an
+            # auth failure is otherwise indistinguishable from an empty estate.
+            probe = {{ vars.steps.Inventory_Probe.data | default({}) }} or {}
+            probe_status = probe.get("status_code")
+
+            hosts = inventory.get("items")
+            probe_bad = probe_status is None or int(probe_status) >= 300
+            if probe_bad or not isinstance(hosts, list):
+                return {
+                    "reachable": "no",
+                    "installed": "unknown",
+                    "exposed": "unknown",
+                    "affected_hosts": "none",
+                    "affected_count": 0,
+                    "affected_ids": "",
+                    "affected_id_list": [],
+                    # Named on EVERY return path. This branch does not reach
+                    # the wait, but a key that exists on one path and not the
+                    # other is how a downstream reference renders empty and
+                    # fails somewhere that does not mention this step.
+                    "watch_id": "",
+                    "watch_answerable": "no",
+                    "current_hosts": "none",
+                    "current_count": 0,
+                    "unreadable_hosts": "none",
+                    "hosts_scanned": 0,
+                    "truncated": "unknown",
+                    "fixed_version": fixed,
+                    "product": wanted,
+                    "installed_version": "",
+                    "cpe_match": "",
+                    "script_id": script_id,
+                    "inventory_stamps": "",
+                    "reason": (
+                        "the endpoint inventory answered HTTP {0} -- most often an "
+                        "expired or wrong Fleet credential, which this connector "
+                        "reports as data rather than as a failed step".format(probe_status)
+                        if probe_bad else
+                        "the endpoint inventory returned no host list at all"
+                    ),
+                }
+
+            def as_tuple(text):
+                parts = []
+                for chunk in str(text).split("."):
+                    digits = "".join(c for c in chunk if c.isdigit())
+                    if digits == "":
+                        return None
+                    parts.append(int(digits))
+                return tuple(parts) if parts else None
+
+            def below(installed, target):
+                left = as_tuple(installed)
+                right = as_tuple(target)
+                if left is None or right is None:
+                    return None
+                width = max(len(left), len(right))
+                left = left + (0,) * (width - len(left))
+                right = right + (0,) * (width - len(right))
+                return left < right
+
+            # Per-host software-collection stamps, captured BEFORE the patch.
+            # Compare Versions uses them to tell "the inventory has not been
+            # re-collected yet" apart from "the patch did not land" -- see the
+            # long note there. It has to be recorded here because after the
+            # patch there is nothing left to compare against.
+            stamps = []
+
+            affected = []
+            current = []
+            unreadable = []
+            host_ids = []
+            # (id, answerable) per affected host. A host that is offline, or
+            # already stuck mid-refetch, cannot produce fresh evidence inside
+            # any wait -- so watching it means burning the whole budget and
+            # reporting pending while an online host next to it has the
+            # answer. Fleet returns hosts in page order, so without this the
+            # verdict depends on list position.
+            watchable = []
+            lowest_installed = ""
+            lowest_key = None
+            for host in hosts:
+                name = str(host.get("hostname") or host.get("id") or "")
+                for package in (host.get("software") or []):
+                    if wanted.lower() not in str(package.get("name") or "").lower():
+                        continue
+                    version = str(package.get("version") or "")
+                    verdict = below(version, fixed)
+                    row = "{0}={1}".format(name, version or "unreported")
+                    key = as_tuple(version)
+                    if key is not None and (lowest_key is None or key < lowest_key):
+                        lowest_key = key
+                        lowest_installed = version
+                    answerable = (str(host.get("status") or "").lower() == "online"
+                                  and not host.get("refetch_requested"))
+                    if verdict is None:
+                        unreadable.append(row)
+                        affected.append(row)
+                        host_ids.append(host.get("id"))
+                        watchable.append((host.get("id"), answerable))
+                        stamps.append("{0}={1}".format(name, host.get("software_updated_at") or ""))
+                    elif verdict:
+                        affected.append(row)
+                        host_ids.append(host.get("id"))
+                        watchable.append((host.get("id"), answerable))
+                        stamps.append("{0}={1}".format(name, host.get("software_updated_at") or ""))
+                    else:
+                        current.append(row)
+                    break
+
+            # Answerable hosts first, original order preserved within each
+            # group so the choice is stable run to run.
+            ordered = ([i for i, ok in watchable if ok]
+                       + [i for i, ok in watchable if not ok])
+
+            # An explicit pin wins, but ONLY if that host is actually affected.
+            # Watching a host with nothing to patch would sit there until the
+            # budget ran out and then report pending, which is a lie dressed as
+            # caution.
+            pinned = "{{ vars.patch_watch_host_id }}".strip()
+            watch_id = ordered[0] if ordered else ""
+            if pinned:
+                try:
+                    if int(pinned) in host_ids:
+                        watch_id = int(pinned)
+                except (TypeError, ValueError):
+                    pass
+
+            hosts_scanned = len(hosts)
+            return {
+                "watch_id": watch_id,
+                "watch_answerable": "yes" if any(
+                    i == watch_id and ok for i, ok in watchable) else "no",
+                "reachable": "yes",
+                "installed": "yes" if (affected or current) else "no",
+                "exposed": "yes" if affected else "no",
+                "affected_hosts": ", ".join(affected) or "none",
+                "affected_count": len(affected),
+                "affected_ids": ", ".join(str(i) for i in host_ids) or "",
+                "affected_id_list": host_ids,
+                "current_hosts": ", ".join(current) or "none",
+                "current_count": len(current),
+                "unreadable_hosts": ", ".join(unreadable) or "none",
+                "hosts_scanned": hosts_scanned,
+                "truncated": "yes" if inventory.get("truncated") else "no",
+                "pages_fetched": int(inventory.get("pages_fetched") or 0),
+                "fixed_version": fixed,
+                "product": wanted,
+                "installed_version": lowest_installed,
+                "script_id": script_id,
+                "inventory_stamps": ", ".join(stamps) or "",
+                # The OLDEST installed version, deliberately -- it is the one
+                # exposed to the most CVEs, so scoring it is the conservative
+                # choice across a mixed estate. An empty prefix or version
+                # yields an empty match string, which CVE Lookup reports as
+                # "no CVE recorded" rather than guessing.
+                "cpe_match": (
+                    "{0}:{1}:*:*:*:*:*:*:*".format(cpe_prefix, lowest_installed)
+                    if cpe_prefix and lowest_installed else ""
+                ),
+                "reason": "",
+            }
+        next: Presence Gate
+
+      - name: Presence Gate
+        type: decision
+        comment: >
+          The branch that makes this use case worth building. "Nobody runs it"
+          is the commonest honest answer to a vendor advisory and it is a
+          *result* -- it closes the advisory with evidence, no case, no ticket
+          and no change window. A pipeline that cannot produce this outcome is
+          not establishing exposure, it is assuming it.
+
+          The `reachable` branch is checked first and is not a nicety. "No
+          exposure" and "I could not ask" produce identical-looking evidence --
+          an empty host list -- and only one of them means the advisory is
+          closed. Collapsing the two is how a patch pipeline reports an all-clear
+          on an expired API token.
+        conditions:
+          - condition: "{{ vars.steps.Read_Inventory.data.code_output.reachable != 'yes' }}"
+            next: Inventory Unreadable Comment
+          - condition: "{{ vars.steps.Read_Inventory.data.code_output.exposed == 'yes' }}"
+            next: CVE Query
+        default: No Exposure Comment
+
+      - name: Inventory Unreadable Comment
+        type: create_record
+        module: comments
+        comment: >
+          Deliberately NOT worded as an outcome for the advisory. Nothing is
+          known about exposure, and saying so is the whole content of this
+          branch.
+        fields:
+          content: >
+            <p><b>Advisory not assessed -- the endpoint inventory could not be
+            read.</b></p>
+            <p>{{ vars.steps.Read_Inventory.data.code_output.reason }}.</p>
+            <p><b>This is not an all-clear.</b>
+            <b>{{ vars.steps.Parse_Advisories.data.code_output.product }}</b>
+            below
+            <b>{{ vars.steps.Parse_Advisories.data.code_output.fixed_version }}</b>
+            is unassessed: no host was confirmed exposed and no host was
+            confirmed safe. The advisory was never scored either -- CVE lookup
+            runs only once exposure is established, so there is no risk number
+            to report here. Fix the inventory connection and re-run.</p>
+            <p>The reason this is a branch rather than a red step is that the
+            connector returns HTTP errors as data. That is usually what you
+            want, and here it means an authentication failure would otherwise
+            have arrived as an empty host list and been reported as no
+            exposure.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Link Alert
+
+      - name: No Exposure Comment
+        type: create_record
+        module: comments
+        comment: >
+          States what was queried and what was found, not merely that nothing
+          happened. "No exposure" with no evidence behind it is indistinguishable
+          from an inventory that returned nothing because the query was wrong.
+        fields:
+          content: >
+            <p><b>No exposure -- no case opened and nothing changed.</b></p>
+            <p>The advisory covers
+            <b>{{ vars.steps.Parse_Advisories.data.code_output.product }}</b>
+            below version
+            <b>{{ vars.steps.Parse_Advisories.data.code_output.fixed_version }}</b>.
+            No CVE lookup and no scoring were performed: both are spent only on
+            products this estate is confirmed to be running, and nothing here
+            is.</p>
+            <p><b>{{ vars.steps.Read_Inventory.data.code_output.hosts_scanned }}</b>
+            host(s) were queried in the endpoint inventory.
+            {% if vars.steps.Read_Inventory.data.code_output.installed == 'yes' %}
+            The product is installed, and every install is already at or above
+            the fixed version:
+            <code>{{ vars.steps.Read_Inventory.data.code_output.current_hosts }}</code>.
+            {% else %}
+            The product is not installed on any of them.
+            {% endif %}</p>
+            <p>This is the evidence, not an assumption: the inventory was read
+            for this advisory, at this moment, and it is what closes it.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Link Alert
+
+      - name: Create Case
+        type: create_record
+        module: incidents
+        comment: >
+          One case per CVE, with the hosts as evidence inside it. A case per host
+          multiplies the queue by the size of the estate and buries the single
+          decision -- patch or do not -- that anyone is actually making.
+
+          The two picklist values here were both wrong in the version that
+          compiled clean, and the way they failed is worth recording. This step
+          asked for `IncidentType "Vulnerability"` and `IncidentPhase
+          "Remediation"`, and NEITHER exists on stock FortiSOAR. The `picklist`
+          filter does not raise on a miss -- it renders empty -- so the playbook
+          compiled, deployed and ran, and died at the API with
+          `phase: This value should not be blank`. Nothing upstream of the
+          create told anyone the names were fiction.
+
+          `Eradication` is the stock phase that means "remove the vulnerability"
+          and is where patching belongs. `Vendor / 3rd Party Error` is the
+          closest stock type for a defect in software somebody else wrote --
+          "Vulnerability" reads better and does not exist, which is exactly the
+          trade that produced the bug. Any site that has added its own values
+          should change these two lines; they are the only place the playbook
+          depends on the type and phase vocabularies.
+        fields:
+          name: >-
+            Patch {{ vars.steps.Parse_Advisories.data.code_output.product }} --
+            {{ vars.steps.CVE_Lookup.data.code_output.cve }}
+          description: >
+            <p><b>{{ vars.steps.Parse_Advisories.data.code_output.title }}</b>
+            (<a href="{{ vars.steps.Parse_Advisories.data.code_output.url }}">advisory</a>,
+            published {{ vars.steps.Parse_Advisories.data.code_output.published }}).</p>
+            <p><code>{{ vars.steps.CVE_Lookup.data.code_output.cve }}</code>
+            affects
+            <b>{{ vars.steps.Parse_Advisories.data.code_output.product }}</b>
+            below
+            <b>{{ vars.steps.Parse_Advisories.data.code_output.fixed_version }}</b>.
+            Risk <b>{{ vars.steps.Score.data.code_output.score }}/100
+            ({{ vars.steps.Score.data.code_output.priority }})</b> --
+            {{ vars.steps.Score.data.code_output.rationale }}.</p>
+            <p><b>{{ vars.steps.Read_Inventory.data.code_output.affected_count }}</b>
+            of
+            {{ vars.steps.Read_Inventory.data.code_output.hosts_scanned }}
+            host(s) are below the fixed version.</p>
+          type: '{{ "IncidentType" | picklist("Vendor / 3rd Party Error", "@id") }}'
+          severity: '{{ "Severity" | picklist("High", "@id") }}'
+          status: '{{ "IncidentStatus" | picklist("Open", "@id") }}'
+          phase: '{{ "IncidentPhase" | picklist("Eradication", "@id") }}'
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Record Ledger
+
+      - name: Record Ledger
+        type: create_record
+        module: vulnerabilities
+        comment: >
+          The ledger row Find Prior Work reads. Without it the dedupe branch is
+          unreachable: Find Prior Work filters `vulnerabilities` on `cveId`,
+          nothing else in this playbook writes that module, so every filter
+          returns empty and every re-delivery of the same advisory opens a
+          second case. The gate looked like de-duplication and was decoration --
+          the same failure mode as a threshold that can never fire.
+
+          It is written AFTER Create Case rather than before, so the ledger
+          never claims a CVE that has no case behind it. The cost of that
+          ordering is a run which dies between the two steps re-processes the
+          advisory on the next delivery. That is the correct way round: a
+          duplicate case is visible and cheap, a CVE silently marked handled
+          with nothing tracking it is neither.
+
+          `vulnerabilityId` is required by the module and is NOT a free-text
+          copy of the CVE -- it carries the estate-facing identity (product,
+          fixed version), so two advisories that name the same CVE for
+          different products stay distinguishable in the list view.
+
+          `cvss3BaseScore` and `severity` are the NVD values, not this
+          playbook's blended score. The blended score is a local prioritisation
+          decision and belongs on the case; the vulnerability record should
+          report what the vendor and NVD say, so it still reads correctly to
+          someone who arrives without this playbook's context.
+        fields:
+          name: >-
+            {{ vars.steps.CVE_Lookup.data.code_output.cve }} --
+            {{ vars.steps.Parse_Advisories.data.code_output.product }}
+          vulnerabilityId: >-
+            {{ vars.steps.Parse_Advisories.data.code_output.product }}/{{ vars.steps.Parse_Advisories.data.code_output.fixed_version }}
+          cveId: "{{ vars.steps.CVE_Lookup.data.code_output.cve }}"
+          description: >
+            <p>Tracked from the vendor advisory
+            <a href="{{ vars.steps.Parse_Advisories.data.code_output.url }}">{{ vars.steps.Parse_Advisories.data.code_output.title }}</a>,
+            fixed in
+            <b>{{ vars.steps.Parse_Advisories.data.code_output.fixed_version }}</b>.</p>
+            <p>NVD reports
+            <b>{{ vars.steps.CVE_Lookup.data.code_output.cve_count }}</b>
+            CVE(s) affecting the installed version
+            <b>{{ vars.steps.Read_Inventory.data.code_output.installed }}</b>:
+            <code>{{ vars.steps.CVE_Lookup.data.code_output.all_cves }}</code>.</p>
+            <p>This record exists so a re-delivered advisory is recognised
+            rather than re-processed. See Find Prior Work.</p>
+          cvss3BaseScore: "{{ vars.steps.CVE_Lookup.data.code_output.cvss }}"
+          cvss3Vector: "{{ vars.steps.CVE_Lookup.data.code_output.cvss_vector }}"
+          impactedAssets: "{{ vars.steps.Read_Inventory.data.code_output.affected_count | int }}"
+          severity: '{{ "Severity" | picklist("High", "@id") }}'
+          status: '{{ "VulnerabilityStatus" | picklist("Open", "@id") }}'
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Evidence Comment
+
+      - name: Evidence Comment
+        type: create_record
+        module: comments
+        comment: >
+          The pre-patch versions, per host, written while they are still the
+          current versions. After the next few steps this record is the only
+          place the original state exists -- an upgrade is destructive of the
+          thing it replaces, and no inventory keeps a history of what was there
+          before. It is also what the verification is compared against, so it
+          has to be recorded before the change rather than reconstructed after.
+        fields:
+          content: >
+            <p><b>Pre-patch state recorded before any change.</b></p>
+            <p>Product <b>{{ vars.steps.Read_Inventory.data.code_output.product }}</b>,
+            fixed in
+            <b>{{ vars.steps.Read_Inventory.data.code_output.fixed_version }}</b>.</p>
+            <p><b>Below the fix
+            ({{ vars.steps.Read_Inventory.data.code_output.affected_count }}):</b>
+            <code>{{ vars.steps.Read_Inventory.data.code_output.affected_hosts }}</code></p>
+            <p><b>Already current
+            ({{ vars.steps.Read_Inventory.data.code_output.current_count }}):</b>
+            <code>{{ vars.steps.Read_Inventory.data.code_output.current_hosts }}</code></p>
+            <p><b>Version unreadable:</b>
+            <code>{{ vars.steps.Read_Inventory.data.code_output.unreadable_hosts }}</code>
+            -- these are counted as affected. An install whose version cannot be
+            parsed is not evidence of safety.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Approval Gate
+
+      - name: Approval Gate
+        type: decision
+        comment: >
+          Risk crossed with blast radius, and the two are separate conditions
+          on purpose. A critical CVE on one machine is a change a technician
+          makes; a moderate one across the estate is a change window. Either
+          alone can be sized wrong, so either alone raises the gate.
+
+          `approval_hosts_above` ships 0, so ANY confirmed affected host raises
+          the gate. That is the conservative default for changing software on
+          machines someone is using, and it is also the honest one for a live
+          estate: the thresholds shipped originally (more than 2 hosts, score
+          above 70) could not fire against a real inventory of this size, so
+          the pipeline auto-patched and the gate was decoration. A safety
+          control that never fires is worse than no safety control, because it
+          reads as one.
+
+          The unmapped-product branch is checked before everything, including
+          `remediation_enabled`. Asking someone to authorise a patch this
+          playbook has no script to perform is worse than useless: it spends
+          the approver's attention and then fails, and it teaches them the gate
+          is noise. It is also the branch that catches the defect this file
+          shipped with -- a hardcoded `upgrade_script_id` pointing at a script
+          that did not exist -- as an honest "no upgrade path" rather than as a
+          404 laundered by `return_on_error` into "the patch did not land".
+
+          `remediation_enabled` is checked next and does not raise an approval.
+          Asking a human to authorise an action the playbook has already been
+          told not to take is how approval fatigue starts -- the same argument
+          as UC-11's containment switch.
+
+          The auto-approve branch is checked BEFORE the two conditions that
+          raise the gate, and the order is the whole design. Written the other
+          way round -- gate first, auto-approve as a fallthrough -- a critical
+          CVE would satisfy the score condition, stop at the approval, and the
+          standing authorisation would never fire. Auto-approval has to
+          out-rank the gate or it is not an authorisation, it is a preference.
+
+          Note that this branch skips the approval, not the evidence. Create
+          Case, Record Ledger and Evidence Comment have all already run by the
+          time this decision is reached, so a pre-authorised patch leaves the
+          same pre-patch record of what every host was running as an approved
+          one does.
+        conditions:
+          - condition: "{{ vars.steps.Read_Inventory.data.code_output.script_id | int < 1 }}"
+            next: No Upgrade Script Comment
+          - condition: "{{ vars.remediation_enabled != 'yes' }}"
+            next: Remediation Disabled Comment
+          - condition: "{{ vars.steps.Score.data.code_output.score | int >= vars.approval_auto_above | int }}"
+            next: Auto Approved Comment
+          - condition: "{{ vars.steps.Read_Inventory.data.code_output.affected_count | int > vars.approval_hosts_above | int }}"
+            next: Patch Approval
+          - condition: "{{ vars.steps.Score.data.code_output.score | int > vars.approval_score_above | int }}"
+            next: Patch Approval
+        default: Remediate
+
+      - name: Auto Approved Comment
+        type: create_record
+        module: comments
+        comment: >
+          The audit record for the one branch that changes production software
+          with nobody watching. It names the score, the bar it cleared and the
+          hosts it is about to touch, written BEFORE the dispatch rather than
+          after it -- so if the patch goes badly the case already says what was
+          decided and on what basis, instead of that having to be reconstructed
+          from the run log.
+
+          It exists because "auto-approved" and "approved by someone" must never
+          look the same in the case history. An organisation that cannot tell
+          the two apart afterwards has no way to audit its own standing
+          authorisation, and the first time a pre-authorised patch breaks
+          something the policy gets withdrawn wholesale rather than tuned.
+        fields:
+          content: >
+            <p><b>Auto-approved -- no human gate was raised.</b></p>
+            <p><code>{{ vars.steps.CVE_Lookup.data.code_output.cve }}</code>
+            scores
+            <b>{{ vars.steps.Score.data.code_output.score }}/100
+            ({{ vars.steps.Score.data.code_output.priority }})</b>, at or above
+            the standing-authorisation bar of
+            <b>{{ vars.approval_auto_above }}</b> --
+            {{ vars.steps.Score.data.code_output.rationale }}.</p>
+            <p><b>{{ vars.steps.Parse_Advisories.data.code_output.product }}</b>
+            is being upgraded to
+            <b>{{ vars.steps.Parse_Advisories.data.code_output.fixed_version }}</b>
+            on
+            {{ vars.steps.Read_Inventory.data.code_output.affected_count }}
+            host(s):
+            <code>{{ vars.steps.Read_Inventory.data.code_output.affected_hosts }}</code>.</p>
+            <p>Below that bar this patch would have waited for an approver. The
+            verification that follows is unchanged: the version move is still
+            confirmed by re-reading the inventory, and a patch that does not
+            land is still reported as a failure.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Remediate
+
+      - name: No Upgrade Script Comment
+        type: create_record
+        module: comments
+        comment: >
+          The exposure is real and the case stands -- only the automated fix is
+          missing. That distinction is the whole point of stopping here rather
+          than dispatching something: the advisory has been established as
+          affecting this estate, and a human now has a scoped, evidenced piece
+          of work instead of a green run that patched nothing.
+        fields:
+          content: >
+            <p><b>Exposure confirmed, but no upgrade script is mapped for this
+            product.</b></p>
+            <p><b>{{ vars.steps.Read_Inventory.data.code_output.product }}</b>
+            has no entry in <code>script_map</code>, so there is nothing to
+            dispatch.
+            <code>{{ vars.steps.Read_Inventory.data.code_output.affected_hosts }}</code>
+            remain below
+            <b>{{ vars.steps.Read_Inventory.data.code_output.fixed_version }}</b>
+            and this case stays open.</p>
+            <p>Nothing was sent to the endpoints. A patch pipeline that fires a
+            script id it cannot resolve gets a 404 back, and because the HTTP
+            connector returns errors as data that 404 would have been reported
+            downstream as "the patch did not land" -- true, but the wrong
+            diagnosis, and one that sends someone to look at the endpoint
+            instead of at this map.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Link Alert
+
+      - name: Remediation Disabled Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Patch not attempted -- decision recorded.</b></p>
+            <p><code>{{ vars.steps.Read_Inventory.data.code_output.affected_hosts }}</code>
+            would have been upgraded to
+            <b>{{ vars.steps.Read_Inventory.data.code_output.fixed_version }}</b>.
+            <code>remediation_enabled</code> is
+            <b>{{ vars.remediation_enabled }}</b>.</p>
+            <p>Everything before this point was real: the advisory was scored
+            against live CVSS and EPSS, and the exposure was established by
+            reading the endpoint inventory. Only the change was withheld.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Link Alert
+
+      - name: Patch Approval
+        type: manual_input
+        comment: >
+          WARN: assign_to.team must be a team IRI, not a name. A bare name is
+          emitted as a string FortiSOAR cannot resolve, and the gate is created
+          unowned and invisible to the run. __APPROVAL_TEAM_IRI__ is substituted
+          by deploy_and_test.py.
+
+          The prompt names the hosts and both versions, because an approver who
+          has to open the case to find out what is about to change will approve
+          without opening it.
+        title: "Approve a third-party patch across production endpoints"
+        description: >
+            **{{ vars.steps.Parse_Advisories.data.code_output.product }}** will
+            be upgraded to
+            **{{ vars.steps.Parse_Advisories.data.code_output.fixed_version }}**
+            on
+            **{{ vars.steps.Read_Inventory.data.code_output.affected_count }}**
+            host(s):
+            `{{ vars.steps.Read_Inventory.data.code_output.affected_hosts }}`.
+
+            This runs an installer on each machine. Expect the application to
+            close; anything unsaved in it is lost.
+
+            `{{ vars.steps.CVE_Lookup.data.code_output.cve }}` scores
+            **{{ vars.steps.Score.data.code_output.score }}/100
+            ({{ vars.steps.Score.data.code_output.priority }})** --
+            {{ vars.steps.Score.data.code_output.rationale }}.
+
+            Already current and **not** being touched:
+            `{{ vars.steps.Read_Inventory.data.code_output.current_hosts }}`.
+
+            Declining changes nothing. The case, the score and the pre-patch
+            inventory stay on the record either way.
+        is_approval: true
+        assign_to:
+          team: "__APPROVAL_TEAM_IRI__"
+        options:
+          - {option: "Patch", primary: true, next: Remediate}
+          - {option: "Decline", next: Declined Comment}
+
+      - name: Declined Comment
+        type: create_record
+        module: comments
+        comment: >
+          A declined approval is an outcome, not an error, and it gets the same
+          treatment as a successful patch: written down, with the state of the
+          estate stated plainly so nobody later assumes it moved. The approver's
+          identity is not interpolated -- a manual_input step's runtime output
+          has no documented `username` key, and a comment reading "declined by "
+          with nothing after it is worse than one that does not claim to know.
+        fields:
+          content: >
+            <p><b>Patch declined at the approval gate -- every host is still on
+            its original version.</b></p>
+            <p><code>{{ vars.steps.Read_Inventory.data.code_output.affected_hosts }}</code>
+            remain below
+            <b>{{ vars.steps.Read_Inventory.data.code_output.fixed_version }}</b>
+            and remain exposed to
+            <code>{{ vars.steps.CVE_Lookup.data.code_output.cve }}</code>
+            (risk {{ vars.steps.Score.data.code_output.score }}/100).</p>
+            <p>No installer ran and no script was dispatched. The case stays
+            open at the Remediation phase; re-running the playbook after the
+            change window re-raises this gate with the inventory re-read at that
+            time, so nothing here goes stale.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Link Alert
+
+      - name: Remediate
+        type: connector
+        connector: generic-http
+        operation: http_post
+        config: "{{ vars.fleet_config }}"
+        comment: >
+          LIVE. Fleet's batch script run, verified end to end against a running
+          Fleet 4.71.0 on the free tier: a real script dispatched to a real
+          Windows endpoint, executed as SYSTEM, exit code read back.
+
+          Two things the plan listed as unknown are now settled. Batch script
+          execution is NOT gated behind Premium -- the free tier accepts this
+          call and answers 200 with a `batch_execution_id`. And a bad
+          `script_id` answers 404 `"Script N was not found in the datastore"`
+          rather than failing the step, which is precisely why Approval Gate
+          refuses to reach this step with an unmapped product.
+
+          One batch call rather than a per-host loop: the fan-out lives in the
+          vendor API where it is visible, instead of inside a step that would
+          report a single status for N machines.
+
+          `body_type: json` sets Content-Type and encodes the body; no header is
+          written by hand and no bearer token appears in this file -- auth lives
+          in the `patch-fleet` configuration.
+
+          What comes back is a batch execution id, and it means the batch was
+          ACCEPTED. It does not mean any installer ran, let alone succeeded --
+          the call returns immediately while the endpoints are still working.
+          That is the whole reason Verify exists, and it is why nothing
+          downstream treats this step's return value as evidence that anything
+          changed. Dispatch Gate below reads the STATUS CODE only, which is a
+          different and much weaker claim: that the request was accepted at all.
+        params:
+          rest_api: "/api/v1/fleet/scripts/run/batch"
+          body_type: json
+          data: >-
+            {"script_id": {{ vars.steps.Read_Inventory.data.code_output.script_id }},
+             "host_ids": {{ vars.steps.Read_Inventory.data.code_output.affected_id_list }}}
+        next: Dispatch Gate
+
+      - name: Dispatch Gate
+        type: decision
+        comment: >
+          Separates "never dispatched" from "dispatched and did not take". This
+          was carried as TODO(phase-3) because it could not be written against a
+          fixture, and it is now written against the real failure mode.
+
+          `generic-http` is configured with `return_on_error`, so a 403 or a 404
+          from Fleet arrives as data with a non-2xx `status_code` and the step
+          SUCCEEDS. Without this gate the run would continue to Verify, find the
+          version unmoved, and close the case as "patch did not land" -- which
+          is true and useless. It sends someone to inspect an endpoint that was
+          never asked to do anything, while the actual fault is a credential, a
+          role, or a script id.
+
+          It reads the status code and nothing else. Whether the patch worked is
+          a question about the endpoints, and only the inventory can answer it.
+        conditions:
+          - condition: "{{ vars.steps.Remediate.data.status_code | int >= 300 }}"
+            next: Dispatch Failed Comment
+        default: Await Patch
+
+      - name: Await Patch
+        type: workflow_reference
+        target: Refresh And Read Host
+        apply_async: false
+        comment: >
+          Waits for the installers to finish -- by WATCHING for them to finish,
+          rather than by sleeping 180 seconds and hoping.
+
+          The wait needs a refetch-then-read PAIR per attempt, and that is the
+          whole reason this is a child playbook. Fleet's `osquery_detail` is
+          3600s, so an endpoint does not re-collect its software on its own
+          inside any window worth waiting: polling a single GET would re-read
+          the same hour-old inventory until the budget ran out. Only a refetch
+          produces fresh evidence, and `do_until` loops ONE step. So the pair
+          becomes a child and the parent loops the child.
+
+          Live-verified on 8.0.0 that this works at all, because none of it is
+          documented: `retry:` DOES loop a workflow_reference, and the parent
+          reads the child at `vars.steps.<step>.<var the child SET>`. A value
+          the child merely returned as `code_output` is invisible from here --
+          which is why the child ends in a `set_variable` rather than in the
+          step that computes the answer.
+
+          The budget is a CEILING, not a duration. The old 180s sleep was paid
+          in full on every run including the ones where the patch landed in
+          forty seconds, and was still too short for an estate slower than this
+          lab. A poll is faster when the host is quick and still correct when it
+          is slow, which no constant can be at the same time.
+
+          SINGLE HOST, deliberately: Fleet's refetch is per-host and this
+          playbook has no loops. Remaining hosts fall through to the pending
+          verdict, which is honest -- they genuinely have not been re-read.
+        host_id: "{{ vars.steps.Read_Inventory.data.code_output.watch_id }}"
+        product: "{{ vars.steps.Read_Inventory.data.code_output.product }}"
+        fixed_version: "{{ vars.steps.Read_Inventory.data.code_output.fixed_version }}"
+        fleet_config: "{{ vars.fleet_config }}"
+        refresh_poll_attempts: "{{ vars.refresh_poll_attempts }}"
+        refresh_poll_seconds: "{{ vars.refresh_poll_seconds }}"
+        retry:
+          times: "{{ vars.patch_poll_attempts }}"
+          delay: "{{ vars.patch_poll_seconds }}"
+          until: "{{ vars.steps.Await_Patch.patched == 'yes' }}"
+        next: Verify
+
+      - name: Dispatch Failed Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>The patch was never dispatched -- this is not a failed
+            patch.</b></p>
+            <p>Fleet answered
+            <code>HTTP {{ vars.steps.Remediate.data.status_code }}</code> to the
+            batch script run:
+            <code>{{ vars.steps.Remediate.data.body }}</code></p>
+            <p>Nothing ran on
+            <code>{{ vars.steps.Read_Inventory.data.code_output.affected_hosts }}</code>,
+            which are still below
+            <b>{{ vars.steps.Read_Inventory.data.code_output.fixed_version }}</b>.
+            The fault is on the FortiSOAR-to-Fleet path -- an expired token, a
+            role without script permissions, or a script id that no longer
+            exists -- not on the endpoints.</p>
+            <p>This distinction is recorded deliberately. The HTTP connector
+            returns errors as data rather than failing the step, so without an
+            explicit check on the status code this run would have reached the
+            verification, found the version unmoved, and closed the case with
+            the wrong diagnosis.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Link Alert
+
+      - name: Verify
+        type: connector
+        connector: generic-http
+        operation: http_paginate
+        config: "{{ vars.fleet_config }}"
+        comment: >
+          LIVE. The inventory, RE-READ after the patch. This is the step the use
+          case is built around, and it is deliberately the SAME call as Presence
+          Check with the same parameters -- the before and after readings have
+          to come from one source asked one way, or the comparison is between
+          two different questions.
+
+          The re-read carries `software_updated_at` and `refetch_requested` per
+          host, and those two fields are what make the verdict trustworthy.
+          Live-verified against Fleet 4.71.0, with one correction to the
+          assumption this file was written on:
+
+            - `osquery_detail` is 3600s, so software is re-collected roughly
+              hourly on its own and an immediate re-read can still show the
+              PRE-PATCH version.
+            - `POST /hosts/{id}/refetch` DOES force a software re-collection.
+              Measured: a real 7-Zip downgrade on the endpoint appeared in the
+              inventory about 60s after the refetch. `update_interval` is
+              rejected by `PATCH /fleet/config` (`unsupported key`), so refetch
+              is the only lever an integration has -- and it is enough.
+            - The trap is `software_updated_at`. It is a CHANGE timestamp, not
+              a collection timestamp: Fleet leaves it alone when a
+              re-collection finds the same software set. An earlier reading of
+              this lab concluded refetch does not refresh software, purely
+              because nothing had changed at the time. So the field cannot be
+              used to answer "has the inventory been re-read", only "has
+              anything changed" -- and reading it as the former is how you
+              conclude a working refresh is broken.
+
+          None of that is a reason to fall back on the script's exit code. It is
+          a reason for the verification to have THREE outcomes rather than two,
+          which is what Compare Versions produces: moved, did not move, and not
+          yet collected. The third is an honest "ask again later" and is the
+          difference between a verification and a guess.
+
+          The refetch itself is issued by the harness rather than here, because
+          it is a per-host call and this playbook deliberately has no loops --
+          the fan-out would have to become a sub-playbook to cover an estate
+          larger than the lab. That is a real limitation and it is why the
+          pending branch exists rather than being designed away: whoever runs
+          this against a bigger estate needs the honest verdict, not one that
+          silently depends on a refresh nobody issued.
+        params:
+          rest_api: "/api/v1/fleet/hosts"
+          method: GET
+          parameter:
+            populate_software: "true"
+            per_page: 100
+          pagination_mode: page_param
+          page_param_name: "page"
+          start_page: 0
+          items_path: "hosts"
+          max_pages: 20
+        # Every Fleet call is a fresh Token Login, and Fleet rate-limits
+        # logins. This read lands immediately after the wait above has spent
+        # several, so a 429 here is routine rather than exceptional -- and it
+        # was failing the whole run at the last step, with the patch already
+        # verified and on disk, which reads as "the patch did not land".
+        #
+        # `ignore_errors` lets the 429 arrive as data so `do_until` can simply
+        # ask again; an exhausted budget still falls through to Compare
+        # Versions, whose pending verdict is the honest answer to an inventory
+        # it could not read.
+        ignore_errors: true
+        retry:
+          times: "6"
+          delay: "10"
+          # SUBSCRIPT, not dotted. `data.items` resolves to the dict's own
+          # `.items` METHOD -- Jinja tries attribute lookup first -- and the
+          # condition dies with "object of type 'builtin_function_or_method'
+          # has no len()", which fails the step it was added to protect.
+          until: "{{ vars.steps.Verify.data['items'] | default([], true) | length > 0 }}"
+        next: Compare Versions
+
+      - name: Compare Versions
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          The only assertion in this run worth anything. It re-applies the
+          version rule from Read Inventory -- deliberately the same code, so a
+          host cannot be "affected" before and "patched" after under two
+          different definitions -- and reports, per host, whether it moved.
+
+          Note what is NOT consulted: the Remediate step's return value. A batch
+          execution id says the batch was accepted. Whether an installer
+          actually replaced the binary on a machine is a fact about the machine,
+          and the only thing that knows it is the inventory.
+
+          THREE outcomes, not two. Fleet re-collects software on its own
+          schedule -- hourly in this lab -- so a re-read taken moments after the
+          patch can legitimately still show the old version, and calling that
+          "the patch did not land" is a false negative that would fire on
+          successful runs.
+
+          Freshness is decided by `refetch_requested`, and ONLY by it. That
+          field is true while a forced re-collection is in flight, so a reading
+          taken then is known-stale and the verdict is `pending`.
+
+          `software_updated_at` is deliberately NOT used for this, and the
+          reason is the trap that produced the wrong design first time round. It
+          is a CHANGE timestamp, not a collection timestamp: Fleet leaves it
+          alone when a re-collection finds the same software set. An earlier
+          version of this step treated an unmoved stamp as "not collected yet"
+          and reported `pending`. That is wrong in exactly the case this use
+          case exists to catch -- a patch that ran, reported success and changed
+          nothing produces an unmoved stamp BY DEFINITION, so `patch_did_not
+          _land` could never fire and the failure branch was dead code. The
+          conservative-looking rule was the one that hid the failure.
+
+          Force Refresh upstream means a completed re-collection is the normal
+          case, so a host that is still below the fixed version after one is a
+          genuine failure and is called one. The stamp survives only as evidence
+          in the message.
+
+          The alternative -- trusting the script's exit code while the inventory
+          is stale -- is precisely the assumption this use case exists to
+          refuse, and it is worth noticing that the pressure to take it comes
+          from an operational inconvenience rather than from any doubt about
+          which source is authoritative.
+        params:
+          code: |
+            after = {{ vars.steps.Verify.data | default({}) }} or {}
+
+            wanted = "{{ vars.steps.Read_Inventory.data.code_output.product }}"
+            fixed = "{{ vars.steps.Read_Inventory.data.code_output.fixed_version }}"
+            before_rows = "{{ vars.steps.Read_Inventory.data.code_output.affected_hosts }}"
+            stamp_rows = "{{ vars.steps.Read_Inventory.data.code_output.inventory_stamps }}"
+
+            before = {}
+            for row in before_rows.split(","):
+                if "=" in row:
+                    host, version = row.split("=", 1)
+                    before[host.strip()] = version.strip()
+
+            stamps = {}
+            for row in stamp_rows.split(","):
+                if "=" in row:
+                    host, stamp = row.split("=", 1)
+                    stamps[host.strip()] = stamp.strip()
+
+            def as_tuple(text):
+                parts = []
+                for chunk in str(text).split("."):
+                    digits = "".join(c for c in chunk if c.isdigit())
+                    if digits == "":
+                        return None
+                    parts.append(int(digits))
+                return tuple(parts) if parts else None
+
+            def below(installed, target):
+                left = as_tuple(installed)
+                right = as_tuple(target)
+                if left is None or right is None:
+                    return None
+                width = max(len(left), len(right))
+                left = left + (0,) * (width - len(left))
+                right = right + (0,) * (width - len(right))
+                return left < right
+
+            moved = []
+            stuck = []
+            missing = []
+            pending = []
+            for host, old_version in before.items():
+                observed = None
+                fresh_stamp = ""
+                refetching = False
+                for entry in (after.get("items") or []):
+                    if str(entry.get("hostname") or entry.get("id") or "") != host:
+                        continue
+                    fresh_stamp = str(entry.get("software_updated_at") or "")
+                    refetching = bool(entry.get("refetch_requested"))
+                    for package in (entry.get("software") or []):
+                        if wanted.lower() in str(package.get("name") or "").lower():
+                            observed = str(package.get("version") or "")
+                            break
+                    break
+
+                if observed is None:
+                    missing.append("{0}: {1} -> product no longer reported".format(host, old_version))
+                    continue
+
+                verdict = below(observed, fixed)
+                if verdict is False:
+                    # A host that reads as current is current regardless of the
+                    # collection stamp -- a stale reading cannot invent a NEWER
+                    # version than the one it was holding. Staleness can only
+                    # ever hide a success, never manufacture one, so it is
+                    # checked on the failure path only.
+                    moved.append("{0}: {1} -> {2}".format(host, old_version, observed))
+                    continue
+
+                old_stamp = stamps.get(host, "")
+                if refetching or not fresh_stamp:
+                    pending.append("{0}: still reads {1}, the re-collection has not finished".format(
+                        host, observed))
+                else:
+                    stuck.append("{0}: still {1}; inventory re-collected, last change {2}".format(
+                        host, observed, fresh_stamp or old_stamp or "unknown"))
+
+            expected = len(before)
+            if moved and not stuck and not missing and not pending:
+                state = "patched"
+            elif stuck or missing:
+                state = "failed"
+            elif pending:
+                state = "pending"
+            else:
+                state = "failed"
+
+            return {
+                "state": state,
+                "patched": "yes" if state == "patched" else "no",
+                "moved_hosts": "; ".join(moved) or "none",
+                "moved_count": len(moved),
+                "stuck_hosts": "; ".join(stuck) or "none",
+                "stuck_count": len(stuck),
+                "missing_hosts": "; ".join(missing) or "none",
+                "pending_hosts": "; ".join(pending) or "none",
+                "pending_count": len(pending),
+                "expected_count": expected,
+                "fixed_version": fixed,
+                "summary": "{0} of {1} host(s) reached {2}{3}".format(
+                    len(moved), expected, fixed,
+                    "; {0} not yet re-collected".format(len(pending)) if pending else ""),
+            }
+        next: Verify Gate
+
+      - name: Verify Gate
+        type: decision
+        comment: >
+          A partial patch takes the failure branch. Three of four hosts moved is
+          not a success with a footnote -- the CVE is still exploitable on the
+          estate, and a case closed as Patched with a machine still on the old
+          version is exactly the false assurance this whole playbook is arranged
+          to prevent.
+          The pending branch is not a third kind of success. It is the run
+          admitting it cannot tell yet, because Fleet had not re-collected the
+          software inventory between the patch and the read-back. The case stays
+          open and nothing is closed on an unverified claim -- which is the same
+          principle as the failure branch, applied to a different unknown.
+        conditions:
+          - condition: "{{ vars.steps.Compare_Versions.data.code_output.state == 'patched' }}"
+            next: Patched Comment
+          - condition: "{{ vars.steps.Compare_Versions.data.code_output.state == 'pending' }}"
+            next: Verification Pending Comment
+        default: Patch Did Not Land Comment
+
+      - name: Verification Pending Comment
+        type: create_record
+        module: comments
+        comment: >
+          The outcome that keeps the verification honest. Without it every
+          successful patch reads as a failure for the first hour, and the
+          obvious way to make that stop -- believing the script's exit code --
+          is the one thing this use case refuses to do.
+        fields:
+          content: >
+            <p><b>Patch dispatched. Not yet confirmed -- the inventory has not
+            been re-collected.</b></p>
+            <p>{{ vars.steps.Compare_Versions.data.code_output.pending_hosts }}</p>
+            <p>Fleet re-collects software inventory on its own schedule --
+            hourly in this environment -- so a re-read taken moments after the
+            patch legitimately still shows the old version. A host refetch
+            forces a re-collection and lands in about a minute, but the
+            collection timestamp only advances when the software set actually
+            changes, so an unmoved timestamp cannot distinguish "not collected
+            yet" from "collected, nothing changed". This run reports the
+            ambiguity instead of resolving it in its own favour.</p>
+            <p>This case stays <b>open</b>. The batch was accepted as
+            <code>{{ vars.steps.Remediate.data.body.batch_execution_id }}</code>,
+            which means the work was dispatched and nothing more. Re-running the
+            verification once the inventory has refreshed will settle it one way
+            or the other -- and until it does, the correct answer is that we do
+            not know, not that the script said it worked.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Ticket Gate
+
+      - name: Patched Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Patched, and confirmed by re-reading the endpoint inventory.</b></p>
+            <p>{{ vars.steps.Compare_Versions.data.code_output.summary }}:
+            <code>{{ vars.steps.Compare_Versions.data.code_output.moved_hosts }}</code></p>
+            <p>The evidence is the inventory, read back after the run --
+            <b>not</b> the script's exit status. The batch was accepted as
+            <code>{{ vars.steps.Remediate.data.body.batch_execution_id }}</code>, which says the work was
+            dispatched and nothing more.</p>
+            <p><code>{{ vars.steps.CVE_Lookup.data.code_output.cve }}</code>
+            is no longer exploitable on these hosts through
+            {{ vars.steps.Read_Inventory.data.code_output.product }}.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Ticket Gate
+
+      - name: Patch Did Not Land Comment
+        type: create_record
+        module: comments
+        comment: >
+          The branch that justifies the verify leg existing at all. A script
+          that reports success against a version that did not move is the normal
+          failure mode of third-party patching -- a pending reboot, a per-user
+          install the system-context installer cannot see, an MSI that exits 0
+          having declined to downgrade.
+        fields:
+          content: >
+            <p><b>Patch did not land -- the script ran and the version did not
+            move.</b></p>
+            <p>{{ vars.steps.Compare_Versions.data.code_output.summary }}.</p>
+            <p><b>Still exposed:</b>
+            <code>{{ vars.steps.Compare_Versions.data.code_output.stuck_hosts }}</code></p>
+            <p><b>Moved:</b>
+            <code>{{ vars.steps.Compare_Versions.data.code_output.moved_hosts }}</code></p>
+            <p><b>Product no longer reported:</b>
+            <code>{{ vars.steps.Compare_Versions.data.code_output.missing_hosts }}</code>
+            -- usually an inventory that has not refreshed since the change
+            rather than an uninstall, and it is reported separately from "still
+            exposed" for that reason.</p>
+            <p>The batch was dispatched and accepted. That is why this is
+            reported as a failure rather than a success: the only evidence that
+            counts is the version the inventory reports, and it has not
+            changed.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Ticket Gate
+
+      - name: Ticket Gate
+        type: decision
+        comment: >
+          Ticketing and the digest ship OFF, unlike remediation. They write to
+          systems outside FortiSOAR that a demo box has no business filling with
+          test data, and neither is part of what this use case is arguing.
+        conditions:
+          - condition: "{{ vars.ticketing_enabled == 'yes' }}"
+            next: Create Ticket
+          - condition: "{{ vars.digest_enabled == 'yes' }}"
+            next: Send Digest
+          - condition: "{{ vars.slack_enabled == 'yes' }}"
+            next: Post To Slack
+        default: Update Case
+
+      - name: Create Ticket
+        type: connector
+        connector: jira
+        operation: create_ticket
+        config: "{{ vars.jira_config }}"
+        comment: >
+          The ticket is raised AFTER verification, carrying the verdict. A
+          ticket opened before the patch runs is a ticket somebody has to close
+          by hand once it succeeds, which is most of them.
+        params:
+          project_key: "INC"
+          issue_type: "Task"
+          ticket_summary: >-
+            {{ vars.steps.CVE_Lookup.data.code_output.cve }} --
+            {{ vars.steps.Parse_Advisories.data.code_output.product }}
+            patch {{ vars.steps.Compare_Versions.data.code_output.patched == 'yes' and 'verified' or 'FAILED VERIFICATION' }}
+          ticket_description: >-
+            {{ vars.steps.Compare_Versions.data.code_output.summary }}.
+            Moved: {{ vars.steps.Compare_Versions.data.code_output.moved_hosts }}.
+            Still exposed: {{ vars.steps.Compare_Versions.data.code_output.stuck_hosts }}.
+            Risk {{ vars.steps.Score.data.code_output.score }}/100 --
+            {{ vars.steps.Score.data.code_output.rationale }}.
+        next: Ticket Comment
+
+      - name: Ticket Comment
+        type: create_record
+        module: comments
+        comment: >
+          The ticket key, written back onto the case. Without it the two
+          systems hold half the story each: Jira knows a CVE was patched and
+          FortiSOAR knows a ticket exists somewhere, and reconciling them means
+          searching Jira by summary text -- which is not unique across runs.
+
+          It is also the only durable record that ticketing was on for this
+          run. `ticketing_enabled` is a config default that scenarios and
+          customers both override, so "was a ticket raised?" cannot be answered
+          from the playbook source afterwards.
+        fields:
+          content: >
+            <p><b>Ticket raised:
+            <code>{{ vars.steps.Create_Ticket.data.key }}</code></b>
+            in project INC.</p>
+            <p>Raised after verification and carrying the verdict --
+            {{ vars.steps.Compare_Versions.data.code_output.summary }}.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Close Gate
+
+      - name: Close Gate
+        type: decision
+        comment: >
+          The ticket closes only on a confirmed version move, and `patched` is
+          the same field the case status is set from -- so a ticket cannot be
+          closed by a run that left the case open. The pending and did-not-land
+          states both fall through to the default and leave the ticket open,
+          which is the correct answer for pending too: "we cannot tell yet" is
+          not grounds for closing anything.
+        conditions:
+          - condition: "{{ vars.ticket_close_enabled == 'yes' and vars.steps.Compare_Versions.data.code_output.patched == 'yes' }}"
+            next: Close Ticket
+        default: Digest Gate
+
+      - name: Close Ticket
+        type: connector
+        connector: jira
+        operation: update_ticket
+        config: "{{ vars.jira_config }}"
+        comment: >
+          Closed by the same evidence that set the case to Resolved: the
+          inventory re-read, not the script's exit code. The comment carries
+          that evidence into the ticketing system, because a ticket that closes
+          itself with no stated reason is the kind of automation an auditor
+          asks to have turned off.
+
+          `status` is a transition NAME and it is workflow-specific -- "Done" is
+          the default Jira software workflow's closing transition, and a project
+          using a customised workflow needs whatever its own is ("Closed",
+          "Resolved"). The connector requires summary, comment and priority on
+          every update call even when only the status is changing, so they are
+          re-sent unchanged rather than blanked.
+
+          `description` is re-sent for the same reason, and that one is NOT
+          documented: the connector marks it optional, and against Jira Cloud
+          every `update_ticket` call that omits it comes back
+          `400 INVALID_INPUT` with an empty `errors` object -- the field edit
+          fails outright. Measured against a live Cloud site: with description
+          absent the call fails whether or not `status` is set, and when it is
+          set the transition has ALREADY been applied by the time the field
+          edit 400s. So the untested version of this step closed the ticket and
+          reddened the run at the same time, which is the worst of both -- the
+          failure says the close did not happen when it did.
+
+          `set_status`, which looks like the obvious operation for this, is not
+          usable here at all: it rejects every transition name the workflow
+          actually offers, including the "Done" that `update_ticket` applies
+          successfully.
+        params:
+          issue_key: "{{ vars.steps.Create_Ticket.data.key }}"
+          project_key: "INC"
+          status: "Done"
+          description: >-
+            Closed automatically by FortiSOAR after verification.
+            {{ vars.steps.Compare_Versions.data.code_output.summary }}.
+          priority: >-
+            {% if vars.steps.Score.data.code_output.priority == 'Critical' %}Highest{% else %}{{ vars.steps.Score.data.code_output.priority | default('Medium', true) }}{% endif %}
+          summary: >-
+            {{ vars.steps.CVE_Lookup.data.code_output.cve }} --
+            {{ vars.steps.Parse_Advisories.data.code_output.product }}
+            patch verified
+          comment: >-
+            Closed automatically: the endpoint inventory was re-read after the
+            patch and every affected host now reports
+            {{ vars.steps.Parse_Advisories.data.code_output.fixed_version }} or
+            later. {{ vars.steps.Compare_Versions.data.code_output.summary }}.
+            Moved: {{ vars.steps.Compare_Versions.data.code_output.moved_hosts }}.
+        next: Digest Gate
+
+      - name: Digest Gate
+        type: decision
+        conditions:
+          - condition: "{{ vars.digest_enabled == 'yes' }}"
+            next: Send Digest
+          - condition: "{{ vars.slack_enabled == 'yes' }}"
+            next: Post To Slack
+        default: Update Case
+
+      - name: Send Digest
+        type: connector
+        connector: smtp
+        operation: send_email
+        config: "{{ vars.smtp_config }}"
+        params:
+          to_recipients: "{{ vars.digest_to }}"
+          subject: >-
+            [{{ vars.steps.Score.data.code_output.priority }}]
+            {{ vars.steps.CVE_Lookup.data.code_output.cve }} --
+            {{ vars.steps.Compare_Versions.data.code_output.summary }}
+          body: >
+            <p>{{ vars.steps.Parse_Advisories.data.code_output.title }}</p>
+            <p>Risk {{ vars.steps.Score.data.code_output.score }}/100 --
+            {{ vars.steps.Score.data.code_output.rationale }}.</p>
+            <p>Moved:
+            {{ vars.steps.Compare_Versions.data.code_output.moved_hosts }}</p>
+            <p>Still exposed:
+            {{ vars.steps.Compare_Versions.data.code_output.stuck_hosts }}</p>
+        next: Slack Gate
+
+      - name: Slack Gate
+        type: decision
+        conditions:
+          - condition: "{{ vars.slack_enabled == 'yes' }}"
+            next: Post To Slack
+        default: Update Case
+
+      - name: Post To Slack
+        type: connector
+        connector: slack
+        operation: send_message
+        config: "{{ vars.slack_config }}"
+        comment: >
+          The heads-up leg. It posts AFTER verification and leads with the
+          outcome, because a channel notification that fires on dispatch tells
+          the room a patch was attempted, which is the half of the story nobody
+          needs -- and it trains people to ignore the next one.
+
+          `message` is the only required parameter and it is what renders in
+          notifications and previews, so the verdict has to be in it rather than
+          only in a block. Slack's mrkdwn is not Markdown: single asterisks bold
+          and backticks are literal, which is why this is not reusing the HTML
+          bodies the comments and the email digest carry.
+
+          `channel` accepts a name or an ID. The connector also takes `email_id`
+          instead, which resolves a user and DMs them -- the shape to use for
+          routing to an asset owner rather than to a room, once the inventory
+          carries one.
+
+          A failure here must not fail the run: the patch has already landed and
+          been verified, and losing the case update because a chat API returned
+          a 500 would be the tail wagging the dog. The Slack connector raises on
+          a non-2xx rather than returning it as data the way generic-http does,
+          so this step's `Continue on failure` is the thing that enforces that
+          -- set it in the UI, or accept that an unreachable workspace ends the
+          run one step short of Update Case.
+        params:
+          channel: "{{ vars.slack_channel }}"
+          message: >-
+            {% if vars.steps.Compare_Versions.data.code_output.patched == 'yes' %}:white_check_mark: *Patched and verified*{% elif vars.steps.Compare_Versions.data.code_output.state == 'pending' %}:hourglass: *Patch dispatched -- not yet confirmed*{% else %}:rotating_light: *Patch did not land*{% endif %}
+            -- {{ vars.steps.Parse_Advisories.data.code_output.product }}
+            {{ vars.steps.Parse_Advisories.data.code_output.fixed_version }}
+            ({{ vars.steps.CVE_Lookup.data.code_output.cve }}, risk
+            {{ vars.steps.Score.data.code_output.score }}/100
+            {{ vars.steps.Score.data.code_output.priority }})
+
+            {{ vars.steps.Compare_Versions.data.code_output.summary }}
+            {% if vars.steps.Compare_Versions.data.code_output.stuck_hosts %}
+            Still exposed: `{{ vars.steps.Compare_Versions.data.code_output.stuck_hosts }}`
+            {% endif %}
+        next: Update Case
+
+      - name: Update Case
+        type: update_record
+        module: incidents
+        comment: >
+          The phase moves to Recovery only when the verification passed. A case
+          that advances on the strength of a dispatched script is the specific
+          false assurance this playbook is arranged to prevent, and it would be
+          undone here in one field.
+        record: "{{ vars.steps.Create_Case['@id'] }}"
+        fields:
+          phase: >-
+            {% if vars.steps.Compare_Versions.data.code_output.patched == 'yes' %}{{ "IncidentPhase" | picklist("Recovery", "@id") }}{% else %}{{ "IncidentPhase" | picklist("Eradication", "@id") }}{% endif %}
+          status: >-
+            {% if vars.steps.Compare_Versions.data.code_output.patched == 'yes' %}{{ "IncidentStatus" | picklist("Resolved", "@id") }}{% else %}{{ "IncidentStatus" | picklist("Open", "@id") }}{% endif %}
+        next: Link Alert
+
+      - name: Link Alert
+        type: update_record
+        module: alerts
+        comment: >
+          The final step, and the reason the harness can tell a completed run
+          from one that died after creating the case.
+
+          Every terminal branch except the unparsed-advisory one converges here
+          -- patched, verification pending, not landed, never dispatched,
+          declined, no upgrade script, remediation disabled, inventory
+          unreadable and no exposure -- so this step may reference ONLY what
+          every one of them has produced.
+
+          That rule is narrower than it first looks, and the compiler caught
+          this step breaking it. The version of this field that shipped named
+          the CVE and the blended score, both of which come from steps that run
+          only AFTER exposure is confirmed. On the no-exposure and
+          inventory-unreadable branches they had never run, so the escalation
+          reason would have rendered with holes in it -- a record implying a
+          scored CVE that this run never established. Parse Advisories is the
+          last step common to all of these branches, so it is the last thing
+          safe to name here.
+
+          Nothing about the outcome appears either. The verdict lives in the
+          branch comments, each of which states it unambiguously, and a summary
+          field that has to stay true on nine branches can only say what they
+          share.
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: '{{ "AlertStatus" | picklist("Investigating", "@id") }}'
+          escalationReason: >-
+            {{ vars.steps.Parse_Advisories.data.code_output.product }}
+            advisory, fixed in
+            {{ vars.steps.Parse_Advisories.data.code_output.fixed_version }}.
+            See the linked case and its comments for what was established and
+            what was done.
+        next: Done
+
+      - name: Done
+        type: end
+
+  - name: Refresh And Read Host
+    description: >
+      One refetch-then-read attempt against a single Fleet host, answering the
+      only question the parent's wait cares about: has this host's installed
+      version reached the fixed version yet.
+
+      It exists as a child playbook rather than as steps in the parent because
+      `do_until` loops ONE step and this wait needs a PAIR. Fleet re-collects
+      software on its own only every `osquery_detail` (3600s here), so polling
+      a read alone would re-read the same stale inventory until the budget ran
+      out and then report the pending verdict forever -- a loop that looks like
+      diligence and observes nothing. Only the refetch produces new evidence,
+      so the refetch has to be inside the loop, so the loop body has to be a
+      playbook.
+    tag: uc12
+    parameters: [host_id, product, fixed_version, fleet_config,
+                 refresh_poll_attempts, refresh_poll_seconds]
+    steps:
+
+      - name: Start
+        type: start
+        next: Refetch
+
+      - name: Refetch
+        type: connector
+        connector: generic-http
+        operation: http_post
+        config: "{{ vars.input.params.fleet_config }}"
+        ignore_errors: true
+        comment: >
+          Asks Fleet to re-collect this host's software NOW rather than at its
+          next hourly interval. `update_interval` is rejected by
+          `PATCH /fleet/config` (`unsupported key`), so refetch is the only
+          lever an integration has -- and it is enough.
+
+          The response is not consulted and a failure is not fatal. A refetch
+          that did not take means this attempt observes nothing new, which the
+          version check below reports as `no` and the parent simply retries. A
+          failed refetch is not a failed patch.
+        params:
+          rest_api: "/api/v1/fleet/hosts/{{ vars.input.params.host_id }}/refetch"
+          body_type: json
+          data: "{}"
+        next: Await Collection
+
+      - name: Await Collection
+        type: connector
+        connector: generic-http
+        operation: http_get
+        config: "{{ vars.input.params.fleet_config }}"
+        ignore_errors: true
+        comment: >
+          Waits for THIS refetch to land. `POST /refetch` sets
+          `refetch_requested: true`; Fleet clears it once the endpoint has
+          reported back, so the wait has an observable end.
+
+          This is the LEAN per-host read, not the estate dump: `/hosts/{id}`
+          carries the host's software inline with no `populate_software`, so a
+          poll costs one host rather than every host in the estate.
+
+          An exhausted budget falls through to the version check on purpose. A
+          poll that gave up has not proven anything about the patch -- it has
+          only failed to observe it -- and the honest answer to that is the
+          same `no` that sends the parent round again.
+        params:
+          rest_api: "/api/v1/fleet/hosts/{{ vars.input.params.host_id }}"
+        retry:
+          times: "{{ vars.input.params.refresh_poll_attempts }}"
+          delay: "{{ vars.input.params.refresh_poll_seconds }}"
+          until: "{{ vars.steps.Await_Collection.data.body.host.refetch_requested == false }}"
+        next: Check Version
+
+      - name: Check Version
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          The same version rule Read Inventory and Compare Versions apply, for
+          the same reason they share it: a host cannot be "affected" under one
+          definition and "patched" under another.
+
+          Deliberately conservative. Anything it cannot read -- no software
+          list, an unparseable version, a product that has vanished from the
+          inventory -- answers `no`, which costs another attempt and at worst
+          hands the parent's Verify step the pending verdict it already knows
+          how to report. Answering `yes` on missing evidence would end the wait
+          early and let Compare Versions grade a stale reading.
+        params:
+          code: |
+            import json
+
+            def loads(raw):
+                v = json.loads(raw)
+                return json.loads(v) if isinstance(v, str) else v
+
+            body = loads(r'''{{ vars.steps.Await_Collection.data.body | default({}, true) | tojson }}''') or {}
+            host = body.get("host") or {}
+
+            wanted = '''{{ vars.input.params.product }}'''.strip().lower()
+            fixed = '''{{ vars.input.params.fixed_version }}'''.strip()
+
+            def as_tuple(text):
+                parts = []
+                for chunk in str(text).split("."):
+                    digits = "".join(c for c in chunk if c.isdigit())
+                    if digits == "":
+                        return None
+                    parts.append(int(digits))
+                return tuple(parts) if parts else None
+
+            def below(installed, target):
+                left = as_tuple(installed)
+                right = as_tuple(target)
+                if left is None or right is None:
+                    return None
+                width = max(len(left), len(right))
+                left = left + (0,) * (width - len(left))
+                right = right + (0,) * (width - len(right))
+                return left < right
+
+            installed = ""
+            for entry in (host.get("software") or []):
+                name = str(entry.get("name") or "")
+                if wanted and wanted in name.lower():
+                    installed = str(entry.get("version") or "")
+                    break
+
+            still_below = below(installed, fixed) if installed else None
+            patched = "yes" if still_below is False else "no"
+
+            return {
+                "patched": patched,
+                "installed": installed,
+                "fixed": fixed,
+                "hostname": str(host.get("hostname") or ""),
+                # Evidence, not a verdict. The parent's Verify step re-reads the
+                # whole estate and grades it; this only decides whether to stop
+                # waiting.
+                "software_updated_at": str(host.get("software_updated_at") or ""),
+            }
+        next: Answer
+
+      - name: Answer
+        type: set_variable
+        comment: >
+          The child's answer has to be a VARIABLE, not a return value. The
+          parent reads `vars.steps.<step>.<var the child set>`, so a
+          `code_output` the child never promoted is invisible from the caller
+          and the parent's `until:` would silently never resolve -- looping the
+          full budget on every run, including the successful ones.
+        vars:
+          patched: "{{ vars.steps.Check_Version.data.code_output.patched }}"
+          installed_version: "{{ vars.steps.Check_Version.data.code_output.installed }}"

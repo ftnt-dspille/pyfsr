@@ -1,0 +1,47 @@
+# Probe playbook for mock-output validation. Pushed + run by
+# tooling/probes/probe_mock_output.py.
+#
+# Shape: start → connector (unconfigured target with mock_result) →
+# set_variable (captures the connector output into `mocked_value`).
+#
+# Without `--mock`, the connector step would fail (no config). With
+# `--mock`, the runtime returns `arguments.mock_result` and the
+# downstream set_variable stamps it into the env.
+
+collection: FSRPB Probe Mock Output
+description: Validates that useMockOutput=true substitutes mock_result and downstream steps see it.
+visible: true
+
+playbooks:
+  - name: FSRPB Probe Mock
+    description: connector → set_variable; mock_result must show up in capture step.
+    is_active: true
+    steps:
+      - name: trigger
+        type: start
+        next: Fetch mocked
+
+      - name: Fetch mocked
+        # recorded-future-feed.get_riskrules -- chosen because it's
+        # unlikely to be configured on the dev FSR. Without --mock,
+        # this step fails with "no configuration"; with --mock the
+        # runtime returns the mock_result string verbatim.
+        type: connector
+        next: Capture mock
+        connector: recorded-future
+        operation: get_riskrules
+        config: ""
+        params: {}
+        mock_result: |
+          {"mock_marker": "fsrpb-mock-probe-OK", "items": [{"id": 1, "name": "alpha"}, {"id": 2, "name": "beta"}]}
+
+      - name: Capture mock
+        # set_variable shape: each variable is a flat top-level key
+        # directly under `arguments`. No wrapper. (Authoring as
+        # `step_variables: [{name,value},...]` would emit a single var
+        # literally named `step_variables`.)
+        type: set_variable
+        vars:
+          mocked_marker: "{{ vars.steps.Fetch_mocked.mock_marker }}"
+          mocked_count: "{{ vars.steps.Fetch_mocked['items'] | length }}"
+          mocked_first_name: "{{ vars.steps.Fetch_mocked['items'][0]['name'] }}"

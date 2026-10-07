@@ -1,0 +1,556 @@
+collection: ZZ Fire and Poll Lab
+description: >-
+  Isolated experiment (module: alerts -- deliberately NOT ztpf_*) for WORK_STATUS
+  next-session items 3 and 4:
+
+    3. fire-and-poll -- today's `> exec task ...` calls the FortiManager connector
+       with `track_task: true` and `task_timeout: 21600`, so ONE worker is held for
+       the WHOLE upgrade (~40 min/cluster). Against a `--autoscale=12,8` worker
+       caps the fleet at 12 concurrent upgrades. The fix is to fire the job, capture
+       its id, and poll it in short runs with native Delay steps between checks.
+    4. batch/aggregation -- `/um/image/upgrade/ext` takes MANY devices per call and
+       returns ONE task. One fired job + one poller can cover a whole group, then
+       fan the result back out to every member record.
+
+  A POLL LOOP CANNOT BE A CYCLE IN ONE PLAYBOOK. FSR refuses to run a non-DAG:
+  `CS-WF-13: Invalid Playbook. Playbook should always be Directed Acyclic Graph`
+  -- reproduced in this lab, and the compiler's "cycle in playbook" error is right.
+  The loop is therefore built as RECURSION: `ZZ FP - Poll Cycle` is a referenced
+  playbook whose last step references ITSELF with `attempt + 1`. Each playbook is
+  internally acyclic; the cycle lives across runs, where FSR permits it.
+  `apply_async: true` makes the parent run END at the hand-off instead of waiting,
+  so no worker is held between polls.
+
+  THE JOB IS SIMULATED. A "job" here is an alerts record whose description carries
+  `due:<epoch>`; it is "done" once that epoch passes. What is unproven is the
+  FRAMEWORK pattern (recursion, attempt budget, worker release, fan-out), not the
+  FortiManager contract -- firing with `track_task: false` and polling
+  `/task/task/<id>` is already live-proven in this repo. Simulating keeps the lab
+  off the FortiGates entirely.
+
+  TWO SWAP SEAMS, marked `SEAM:` below, are all that change for the real thing:
+    fire  -> connector fortinet-fortimanager-json-rpc / json_rpc_execute,
+             `track_task: false`, capture `execute_response.taskid`
+    poll  -> the same connector on `/task/task/<id>`, read `percent` / `state`
+
+  Playbooks, selected by the alert's `source` field. Each trigger alert carries its
+  job length in `description` as `dur:<seconds>`:
+    ZZFP-BLOCK   -> holds a worker for the whole job (the track_task:true analogue)
+    ZZFP-POLL    -> fire, then hand off to the recursive poller
+    ZZFP-BATCH   -> ONE job for N ZZFP-MEMBER alerts, one poller, fan-out on done
+    ZZFP-CANARY  -> trivial; its end-to-end latency is the worker-starvation probe
+  ZZFP-JOB and ZZFP-MEMBER records are data, not triggers -- no playbook fires on them.
+visible: true
+playbooks:
+
+# ---------------------------------------------------------------------------
+# A. The anti-pattern under test: one connector call that blocks for the whole
+#    job, exactly as `> exec task ...` does today with track_task: true.
+# ---------------------------------------------------------------------------
+- name: ZZ FP - Blocking
+  uuid: 5c8d1f20-6a3e-4d91-8b47-2e0f7a31c001
+  is_active: true
+  parameters: []
+  steps:
+  - type: start_on_create
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: alerts
+    resources:
+    - alerts
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: primitive
+        field: source
+        value: ZZFP-BLOCK
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: block_setup
+    top: '40'
+    left: '40'
+  # The job length is parsed here rather than inline in the connector's `input`:
+  # a Jinja chain ending in `| int` inside the param makes the compiler's
+  # param-type check read the whole expression as an int, and `input` wants a
+  # json_object (BAD_VALUE param_type).
+  - type: set_variable
+    name: block setup
+    vars:
+      dur: '{{ vars.input.records[0].description.split(":")[1] | int }}'
+    next: block_until_done
+    top: '40'
+    left: '170'
+  # SEAM (real): the FMG connector with track_task: true -- it polls the task
+  # internally and does not return until the task ends, so the worker is held
+  # for the entire upgrade. Here the same occupancy is produced by sleeping.
+  - type: connector
+    name: block until done
+    description: Holds a celery worker for the whole job (track_task:true analogue)
+    pickFromTenant: false
+    config: Default
+    params:
+      code: |-
+        import time
+        n = int(params.get("seconds") or 90)
+        t0 = time.time()
+        time.sleep(n)
+        result = {"held_seconds": round(time.time() - t0, 2)}
+      input: '{{ {"seconds": vars.dur} }}'
+    connector: code-runner
+    operation: run_python
+    next: block_done
+    top: '40'
+    left: '300'
+  - type: update_record
+    name: block done
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: alerts
+    record: "{{vars.input.records[0]['@id']}}"
+    fields:
+      description: 'BLOCK done held={{vars.steps.block_until_done.data.held_seconds}}'
+    top: '40'
+    left: '560'
+
+# ---------------------------------------------------------------------------
+# B. Item 3: fire, then hand off. This playbook does NOT wait for the job -- it
+#    ends as soon as the poller is dispatched, releasing its worker.
+# ---------------------------------------------------------------------------
+- name: ZZ FP - Fire and Poll
+  uuid: 5c8d1f20-6a3e-4d91-8b47-2e0f7a31c002
+  is_active: true
+  parameters: []
+  steps:
+  - type: start_on_create
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: alerts
+    resources:
+    - alerts
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: primitive
+        field: source
+        value: ZZFP-POLL
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: setup
+    top: '40'
+    left: '40'
+  - type: set_variable
+    name: setup
+    vars:
+      dur: '{{ vars.input.records[0].description.split(":")[1] | int }}'
+      alert_id: "{{vars.input.records[0]['@id']}}"
+    next: fire_job
+    top: '40'
+    left: '240'
+  # SEAM (real): connector json_rpc_execute on /um/image/upgrade/ext with
+  # `track_task: false` -- returns immediately with a taskid instead of blocking.
+  - type: create_record
+    name: fire job
+    description: Start the async job and return at once (track_task:false analogue)
+    module: alerts
+    fields:
+      name: 'ZZFP job for {{vars.input.records[0].name}}'
+      source: ZZFP-JOB
+      description: 'due:{{ arrow.utcnow().int_timestamp + vars.dur }}'
+    next: hand_off_to_poller
+    top: '40'
+    left: '440'
+  # apply_async: true -- the poller runs as its own job, so THIS run ends here
+  # instead of holding a worker for the length of the upgrade. That is the whole
+  # point of item 3.
+  # SEAM (real): job_id becomes `vars.steps.fire_job.data.execute_response.taskid`.
+  # NOTE the shape difference: a create_record step's output IS the record, so it
+  # is `vars.steps.fire_job.uuid` -- no `.data`. Only CONNECTOR steps nest their
+  # output under `.data`. Getting this wrong renders the param EMPTY, and an empty
+  # filter value makes /api/query/<module> answer a bare 400 with no clue which
+  # value was blank.
+  - type: workflow_reference
+    name: hand off to poller
+    apply_async: true
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/5c8d1f20-6a3e-4d91-8b47-2e0f7a31c005
+    job_id: '{{vars.steps.fire_job.uuid}}'
+    alert_id: '{{vars.alert_id}}'
+    attempt: '0'
+    max_attempts: '30'
+    poll_interval: '10'
+    mode: single
+    started: '{{ arrow.utcnow().int_timestamp }}'
+    top: '40'
+    left: '640'
+
+# ---------------------------------------------------------------------------
+# C. Item 4: batch/aggregation. N member records -> ONE fired job -> ONE poller
+#    -> fan-out. This is the shape ZTPF lacks: it is per-device end to end, so
+#    100 devices means 100 runs and 100 pollers.
+# ---------------------------------------------------------------------------
+- name: ZZ FP - Batch
+  uuid: 5c8d1f20-6a3e-4d91-8b47-2e0f7a31c003
+  is_active: true
+  parameters: []
+  steps:
+  - type: start_on_create
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: alerts
+    resources:
+    - alerts
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: primitive
+        field: source
+        value: ZZFP-BATCH
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: batch_setup
+    top: '40'
+    left: '40'
+  - type: set_variable
+    name: batch setup
+    vars:
+      dur: '{{ vars.input.records[0].description.split(":")[1] | int }}'
+      alert_id: "{{vars.input.records[0]['@id']}}"
+    next: find_members
+    top: '40'
+    left: '240'
+  # The aggregation step: collect every device that belongs in this batch. In
+  # ZTPF this is the run group's device set.
+  - type: find_record
+    name: find members
+    module: alerts?$limit=100
+    filters:
+    - field: source
+      value: ZZFP-MEMBER
+      operator: eq
+    - field: description
+      value: queued
+      operator: eq
+    next: fire_batch_job
+    top: '40'
+    left: '440'
+  # SEAM (real): ONE /um/image/upgrade/ext call whose `devices: []` carries every
+  # member -- proven live to create a SINGLE FortiManager task for the group.
+  - type: create_record
+    name: fire batch job
+    description: One job covering every member (one FMG task for the whole group)
+    module: alerts
+    fields:
+      name: 'ZZFP batch job x{{ vars.steps.find_members | length }}'
+      source: ZZFP-JOB
+      description: 'due:{{ arrow.utcnow().int_timestamp + vars.dur }}'
+    next: hand_off_batch
+    top: '40'
+    left: '640'
+  - type: workflow_reference
+    name: hand off batch
+    apply_async: true
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/5c8d1f20-6a3e-4d91-8b47-2e0f7a31c005
+    job_id: '{{vars.steps.fire_batch_job.uuid}}'
+    alert_id: '{{vars.alert_id}}'
+    attempt: '0'
+    max_attempts: '30'
+    poll_interval: '10'
+    mode: batch
+    started: '{{ arrow.utcnow().int_timestamp }}'
+    top: '40'
+    left: '840'
+
+# ---------------------------------------------------------------------------
+# D. The poller. ONE attempt per run: check, and if the job is still going,
+#    Delay and re-enter THIS playbook with attempt+1. Recursion, not a cycle --
+#    FSR rejects a non-DAG playbook outright (CS-WF-13).
+# ---------------------------------------------------------------------------
+- name: ZZ FP - Poll Cycle
+  uuid: 5c8d1f20-6a3e-4d91-8b47-2e0f7a31c005
+  is_active: true
+  parameters:
+  - job_id
+  - alert_id
+  - attempt
+  - max_attempts
+  - poll_interval
+  - mode
+  - started
+  steps:
+  - type: start
+    name: Start
+    next: poll_job
+    top: '40'
+    left: '40'
+  # SEAM (real): the connector on /task/task/{{job_id}}, reading percent/state.
+  # This is the only work a poll attempt does -- short, so the worker is occupied
+  # for a poll, not for the job.
+  - type: find_record
+    name: poll job
+    module: alerts?$limit=1
+    filters:
+    - field: uuid
+      value: "{{vars.input.params['job_id']}}"
+      operator: eq
+    next: job_done
+    top: '40'
+    left: '240'
+  - type: decision
+    name: job done
+    step_variables: []
+    conditions:
+    # SEAM (real): `... percent == 100`, or state in the terminal set.
+    - display: done
+      when: '{{ arrow.utcnow().int_timestamp >= (vars.steps.poll_job[0].description.split(":")[1] | int) }}'
+      next: stamp_done
+    - display: not yet
+      default: true
+      next: check_budget
+    top: '40'
+    left: '440'
+  # The budget is re-read on EVERY attempt because every attempt is a fresh run
+  # that receives it as a parameter. The shipped ZTPF Wait for Condition routed
+  # retry straight back to the poll, bypassing its own budget check -- the counter
+  # was decremented forever and never re-read, making the loop unbounded.
+  - type: decision
+    name: check budget
+    step_variables: []
+    conditions:
+    - display: budget left
+      when: "{{ (vars.input.params['attempt'] | int) < (vars.input.params['max_attempts'] | int) }}"
+      next: wait_between_polls
+    - display: exhausted
+      default: true
+      next: stamp_timeout
+    top: '200'
+    left: '440'
+  # Native Delay DESCHEDULES the run and releases the worker -- measured in the
+  # worker-starvation lab (canary 1.8s with Delay vs 80.0s with a connector
+  # sleep). A connector that sleeps would reintroduce the whole problem.
+  - type: delay
+    name: wait between polls
+    description: Native Wait step -- releases the worker between polls
+    delay:
+      days: 0
+      weeks: 0
+      hours: 0
+      minutes: 0
+      seconds: "{{vars.input.params['poll_interval']}}"
+    next: recurse
+    top: '200'
+    left: '240'
+  # The loop, with attempt+1. NOT a self-reference: FSR aborts a chain that
+  # references the SAME playbook more than 10 deep --
+  #   CS-WF-52: Possible infinite recursion detected. Aborting after a depth of
+  #   10 runs referencing the same playbook.
+  # and it aborts SILENTLY as far as the record is concerned: the run dies at the
+  # `recurse` step, so neither `stamp done` nor `stamp timeout` ever fires. A
+  # 30-minute HA-rejoin wait therefore cannot be a self-recursive poller.
+  # `ZZ FP - Poll Trampoline` bounces straight back here, so no single playbook
+  # repeats consecutively -- whether that actually lifts the cap is what the
+  # `budget` phase measures.
+  - type: workflow_reference
+    name: recurse
+    apply_async: true
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/5c8d1f20-6a3e-4d91-8b47-2e0f7a31c006
+    job_id: "{{vars.input.params['job_id']}}"
+    alert_id: "{{vars.input.params['alert_id']}}"
+    attempt: "{{ (vars.input.params['attempt'] | int) + 1 }}"
+    max_attempts: "{{vars.input.params['max_attempts']}}"
+    poll_interval: "{{vars.input.params['poll_interval']}}"
+    mode: "{{vars.input.params['mode']}}"
+    started: "{{vars.input.params['started']}}"
+    top: '360'
+    left: '240'
+  - type: update_record
+    name: stamp done
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: alerts
+    record: "{{vars.input.params['alert_id']}}"
+    fields:
+      description: "{{ 'BATCH' if vars.input.params['mode'] == 'batch' else 'POLL' }} done attempts={{vars.input.params['attempt']}} elapsed={{ arrow.utcnow().int_timestamp - (vars.input.params['started'] | int) }}"
+    next: fanout_gate
+    top: '40'
+    left: '640'
+  - type: decision
+    name: fanout gate
+    step_variables: []
+    conditions:
+    - display: batch
+      when: "{{ vars.input.params['mode'] == 'batch' }}"
+      next: find_members
+    - display: single
+      default: true
+      next: finish
+    top: '40'
+    left: '840'
+  - type: find_record
+    name: find members
+    module: alerts?$limit=100
+    filters:
+    - field: source
+      value: ZZFP-MEMBER
+      operator: eq
+    - field: description
+      value: queued
+      operator: eq
+    next: fan_out
+    top: '40'
+    left: '1040'
+  # Fan-out: ONE poller writes the outcome back to every member. `for_each` is a
+  # step modifier, not a step type; inside the loop the element is `vars.item`.
+  - type: update_record
+    name: fan out
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: alerts
+    record: "{{vars.item['@id']}}"
+    for_each:
+      item: '{{ vars.steps.find_members }}'
+    fields:
+      description: "MEMBER done job={{vars.input.params['job_id']}}"
+    next: finish
+    top: '40'
+    left: '1240'
+  - type: set_variable
+    name: finish
+    vars:
+      done: 'true'
+    top: '40'
+    left: '1440'
+  - type: update_record
+    name: stamp timeout
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: alerts
+    record: "{{vars.input.params['alert_id']}}"
+    fields:
+      description: "{{ 'BATCH' if vars.input.params['mode'] == 'batch' else 'POLL' }} timeout attempts={{vars.input.params['attempt']}}"
+    top: '360'
+    left: '640'
+
+# ---------------------------------------------------------------------------
+# F. The trampoline. Does nothing but bounce back into the poller, so the
+#    recursion chain never references one playbook twice in a row. Exists only
+#    to probe FSR's CS-WF-52 depth guard.
+# ---------------------------------------------------------------------------
+- name: ZZ FP - Poll Trampoline
+  uuid: 5c8d1f20-6a3e-4d91-8b47-2e0f7a31c006
+  is_active: true
+  parameters:
+  - job_id
+  - alert_id
+  - attempt
+  - max_attempts
+  - poll_interval
+  - mode
+  - started
+  steps:
+  - type: start
+    name: Start
+    next: bounce
+    top: '40'
+    left: '40'
+  - type: workflow_reference
+    name: bounce
+    apply_async: true
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/5c8d1f20-6a3e-4d91-8b47-2e0f7a31c005
+    job_id: "{{vars.input.params['job_id']}}"
+    alert_id: "{{vars.input.params['alert_id']}}"
+    attempt: "{{vars.input.params['attempt']}}"
+    max_attempts: "{{vars.input.params['max_attempts']}}"
+    poll_interval: "{{vars.input.params['poll_interval']}}"
+    mode: "{{vars.input.params['mode']}}"
+    started: "{{vars.input.params['started']}}"
+    top: '40'
+    left: '240'
+
+# ---------------------------------------------------------------------------
+# E. The measurement. Latency from create to this write = how long a trivial
+#    playbook waited for a worker while the variants above were running.
+# ---------------------------------------------------------------------------
+- name: ZZ FP - Canary
+  uuid: 5c8d1f20-6a3e-4d91-8b47-2e0f7a31c004
+  is_active: true
+  parameters: []
+  steps:
+  - type: start_on_create
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: alerts
+    resources:
+    - alerts
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: primitive
+        field: source
+        value: ZZFP-CANARY
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: stamp
+    top: '40'
+    left: '40'
+  - type: update_record
+    name: stamp
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: alerts
+    record: "{{vars.input.records[0]['@id']}}"
+    fields:
+      description: 'CANARY ran'
+    top: '40'
+    left: '300'

@@ -1,0 +1,28 @@
+# create_record demo. The playbook itself creates an alert (rather than
+# the test sidecar's setup) -- exercises the InsertData step type.
+#
+# Cleanup: the playbook tags the new alert's `description` with a known
+# fsrpb_e2e_create marker; the .test.yaml's cleanup_query then deletes
+# any alert with that marker so repeat runs don't accumulate.
+
+collection: FSRPB Demo Record Create
+description: Single-step playbook that creates an alert.
+visible: true
+
+playbooks:
+  - name: FSRPB Create Alert
+    is_active: true
+    parameters: [alert_name]
+    steps:
+      - name: trigger
+        type: start
+        next: Create alert
+
+      - name: Create alert
+        type: create_record
+        module: alerts                # → collection: /api/3/alerts
+        operation: Replace
+        fields:
+          severity: /api/3/picklists/40187287-89fc-4e9c-b717-e9443d57eedb   # High
+          description: "fsrpb_e2e_create marker"
+        step_variables: []

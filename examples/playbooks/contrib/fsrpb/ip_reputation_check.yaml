@@ -1,0 +1,92 @@
+collection: IP Reputation Enrichment
+description: Check IP reputation and set alert severity based on organizational data.
+visible: true
+
+playbooks:
+  - name: IP Reputation Check
+    description: |
+      Enriches alerts by looking up organization information based on source IP domain.
+      If organization is found, sets severity to Critical; otherwise Low.
+      Demonstrates the complete workflow: extract data → connector call → decision → update.
+    steps:
+      - name: Start
+        type: start
+        next: Extract source IP and domain
+        comment: |
+          Trigger on Alert records. Extract the source IP and domain information
+          for organizational lookup.
+
+      - name: Extract source IP and domain
+        type: set_variable
+        next: Get Organization Details
+        comment: |
+          Read the sourceIp and senderDomain fields from the alert record.
+          Store them as variables for use in the connector call.
+        vars:
+          source_ip: "{{ vars.input.records[0].sourceIp }}"
+          source_domain: "{{ vars.input.records[0].senderDomain | default('Fortinet') }}"
+
+      - name: Get Organization Details
+        type: connector
+        next: Extract organization result
+        comment: |
+          Call the FortiSIEM connector to look up organization information.
+          Step output is keyed by the step name: vars.steps.Get_Organization_Details.
+        connector: fortinet-fortisiem
+        operation: get_org_name_by_org_id
+        config: ""
+        params:
+          domain_id: "{{ vars.source_domain }}"
+
+      - name: Extract organization result
+        type: set_variable
+        next: Decide severity based on organization
+        comment: |
+          Pull the org identifier from the connector response. The recorded
+          output schema for get_org_name_by_org_id exposes @id / @xmlId
+          (not an `org_name` field), so use @id for the existence check
+          and @xmlId as the human-readable label.
+        vars:
+          org_found: "{{ vars.steps.Get_Organization_Details['@id'] is not none }}"
+          org_name: "{{ vars.steps.Get_Organization_Details['@xmlId'] | default('Unknown') }}"
+
+      - name: Decide severity based on organization
+        type: decision
+        comment: |
+          Branch on whether organization was found.
+          If org is known, route to Critical; otherwise fall through (next:) to Low.
+        conditions:
+          - display: Critical
+            when: "{{ vars.org_found }}"
+            next: Set Critical severity
+          - display: Else
+            default: true
+            next: Set Low severity
+
+      - name: Set Critical severity
+        type: set_variable
+        next: Update alert severity
+        comment: |
+          Prepare to update the alert with Critical severity
+          because the organization was identified.
+        vars:
+          new_severity: "Critical"
+
+      - name: Set Low severity
+        type: set_variable
+        next: Update alert severity
+        comment: |
+          Prepare to update the alert with Low severity
+          because the organization could not be identified.
+        vars:
+          new_severity: "Low"
+
+      - name: Update alert severity
+        type: update_record
+        comment: |
+          Update the alert record with the new severity level.
+          The picklist filter converts the string to the proper picklist reference.
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          severity: "{{ vars.new_severity | picklist('severity') }}"

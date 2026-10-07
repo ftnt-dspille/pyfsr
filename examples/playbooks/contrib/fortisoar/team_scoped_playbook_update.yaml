@@ -1,0 +1,52 @@
+# Probe: does the 8.0 "only show users from selected teams" restriction get enforced when a
+# PLAYBOOK (server-side automation) writes a team-scoped People field?
+#
+# Surfaces tested across the repro set: UI picker (filters dropdown) | direct API (proven:
+# accepts) | THIS: playbook update_record step. If the cross-team value lands, the playbook
+# engine does not enforce the scope either.
+#
+# Manual-trigger playbook: the runner creates a reproteamlookup record (teamAUsers=userA,
+# in-scope), then triggers this on that record so `vars.input.records[0]` is it. Two
+# update_record steps follow -- same step type + IRI reference, differing only in team scope:
+#   In Scope Update  -> teamAUsers = userB (TeamA member; teamAUsers is scoped to TeamA)  [control]
+#   Cross Team Update -> teamBUsers = userA (TeamA member; teamBUsers is scoped to TeamB)  [probe]
+# If the control lands but the probe does not, the difference is the team scope (enforced).
+# If neither lands, it is a plumbing error, not enforcement. teamA/teamBUsers are LOOKUP
+# (single-ref) People fields. __UPPER__ placeholders are substituted at run time.
+collection: __COLLECTION__
+description: >
+  Update a reproteamlookup record (passed in as the trigger record) twice: an in-scope control
+  update to teamAUsers, then an out-of-scope probe update to teamBUsers. Readback of the two
+  fields isolates team-scope enforcement from update-step plumbing.
+visible: true
+
+playbooks:
+  - name: __PB_NAME__
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        next: In Scope Update
+
+      # CONTROL: set teamAUsers (scoped to TeamA) to userB, who IS on TeamA -> in-scope. Same
+      # update_record mechanics + trigger-record IRI as the probe, so a divergence is the scope.
+      - name: In Scope Update
+        type: update_record
+        next: Cross Team Update
+        module: reproteamlookup
+        record: "__RECORD_IRI__"
+        operation: Overwrite
+        fields:
+          teamAUsers: "__USERB_IRI__"
+        step_variables: []
+
+      # PROBE: put userA (TeamA) into teamBUsers (scoped to TeamB) -> out-of-scope. If this
+      # lands, the playbook engine does NOT enforce the team scope.
+      - name: Cross Team Update
+        type: update_record
+        module: reproteamlookup
+        record: "__RECORD_IRI__"
+        operation: Overwrite
+        fields:
+          teamBUsers: "__USERA_IRI__"
+        step_variables: []

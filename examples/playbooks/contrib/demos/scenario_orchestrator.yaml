@@ -1,0 +1,123 @@
+# FortiEDR C2 Scenario -- Orchestrator playbooks for running + resetting the demo.
+#
+# Two playbooks in one collection, both manual-triggered on the `scenario` module:
+#
+#   1. "Run FortiEDR C2 Scenario" -- fires the "Scenario - Generate FortiEDR Alerts"
+#      playbook (uuid 3cab56f1) which creates 2 FortiEDR alerts, then stores the
+#      created alert IRIs on the scenario record's `createdAlertsID` field.
+#
+#   2. "Reset FortiEDR C2 Scenario" -- reads `createdAlertsID` from the scenario
+#      record, deletes each created alert via a code_snippet (DELETE API calls),
+#      then clears `createdAlertsID` so the scenario is ready to re-run.
+#
+# Deploy with:
+#   set -a; . ./.env.upgrade; set +a
+#   pyfsr playbook deploy scratch/fortiedr_c2/scenario_orchestrator.yaml --replace --refresh-catalog
+
+collection: 01 - FortiEDR C2 Scenario Orchestrator
+description: >
+  Run / Reset playbooks for the FortiEDR C2 demo scenario. "Run" fires the
+  alert-generation playbook; "Reset" deletes the alerts it created.
+visible: true
+
+playbooks:
+  # ------------------------------------------------------------------- RUN
+  - name: Run FortiEDR C2 Scenario
+    description: >
+      Fires "Scenario - Generate FortiEDR Alerts" to create 2 demo FortiEDR C2
+      alerts, then stores their IRIs on the scenario record's createdAlertsID.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: scenario
+        button_label: "Run Selected Scenario"
+        next: Call Alert Generator
+
+      # Call the existing "Scenario - Generate FortiEDR Alerts" playbook by its
+      # workflow IRI (cross-collection -- target-by-name only works within the
+      # same collection, so we use the canonical workflowReference key directly).
+      - name: Call Alert Generator
+        type: workflow_reference
+        apply_async: false
+        workflowReference: /api/3/workflows/3cab56f1-c28a-4952-bc70-2fdd7bfcbeb1
+        next: Store Created Alert IDs
+
+      # Extract the created alert IRIs from the child playbook's result.
+      - name: Store Created Alert IDs
+        type: set_variable
+        vars:
+          created_alerts_id: "{{ vars.steps.Call_Alert_Generator.recordIRIs | join(',') }}"
+        next: Update Scenario Record
+
+      # Update the scenario record with the created alert IRIs so "Reset"
+      # can find and delete them later.
+      - name: Update Scenario Record
+        type: update_record
+        module: scenario
+        record: "{{ vars.input.records[0]['@id'] }}"
+        resource:
+          createdAlertsID: "{{ vars.created_alerts_id }}"
+        next: Done
+
+      - name: Done
+        type: set_variable
+        vars:
+          run_result: "Scenario started"
+
+  # ----------------------------------------------------------------- RESET
+  - name: Reset FortiEDR C2 Scenario
+    description: >
+      Reads createdAlertsID from the scenario record, deletes each created
+      alert, then clears createdAlertsID so the scenario is ready to re-run.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: scenario
+        button_label: "Reset Scenario"
+        next: Set Alert IRIs
+
+      # Parse the createdAlertsID (comma-separated IRIs) from the scenario record.
+      - name: Set Alert IRIs
+        type: set_variable
+        vars:
+          alert_iris: "{{ vars.input.records[0].createdAlertsID | default('', true) | split(',') }}"
+        next: Delete First Alert
+
+      # Delete alerts one by one via cyops_utilities make_cyops_request (DELETE).
+      # FortiSOAR has no native delete-record step. We use a for_each loop on
+      # the alert_iris list, deleting each via a DELETE request to its IRI.
+      - name: Delete First Alert
+        type: connector
+        connector: cyops_utilities
+        operation: make_cyops_request
+        config: ""
+        params:
+          method: DELETE
+          iri: "{{ vars.alert_iris[0] }}"
+        next: Delete Second Alert
+
+      - name: Delete Second Alert
+        type: connector
+        connector: cyops_utilities
+        operation: make_cyops_request
+        config: ""
+        params:
+          method: DELETE
+          iri: "{{ vars.alert_iris[1] }}"
+        next: Clear Created Alert IDs
+
+      # Clear createdAlertsID on the scenario record so it's ready to re-run.
+      - name: Clear Created Alert IDs
+        type: update_record
+        module: scenario
+        record: "{{ vars.input.records[0]['@id'] }}"
+        resource:
+          createdAlertsID: ""
+        next: Reset Done
+
+      - name: Reset Done
+        type: set_variable
+        vars:
+          reset_result: "Scenario reset"

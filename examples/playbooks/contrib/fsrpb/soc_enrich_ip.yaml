@@ -1,0 +1,175 @@
+# SOC -- Enrich IP via Yeti (threat intel) + NetBox (asset ownership routing).
+#
+# Connectors: http "SOC Yeti" + http "SOC NetBox" (registered by
+# tools/fsr_register_http_configs.py --no-verify-ssl).
+# The "SOC Yeti" config carries Authorization: Bearer -- no in-playbook auth exchange.
+#
+# Stanford ISO demo: shows federated IT routing -- the playbook automatically
+# determines which IT org owns the victim asset and routes accordingly.
+#
+# Alert fields (c2_beacon_outbound scenario):
+#   sourceIp      = victim (internal, NetBox-owned: School of Medicine or Engineering)
+#   destinationIp = C2 attacker (203.0.113.66, Yeti-seeded as known-bad)
+
+collection: SOC Enrichment
+description: IP enrichment with federated IT ownership routing -- Yeti threat intel + NetBox asset lookup.
+visible: true
+
+playbooks:
+  - name: Enrich IP
+    description: >
+      Check destinationIp (attacker) in Yeti and sourceIp (victim) in NetBox,
+      branch on threat verdict, then route to the owning IT org's response lane.
+    is_active: true
+    steps:
+      - name: start
+        type: start
+        module: alerts
+        requires_record: true
+        next: Yeti Auth
+
+      - name: Yeti Auth
+        type: connector
+        next: Yeti Search
+        connector: http
+        operation: http_post
+        config: "SOC Yeti"
+        params:
+          rest_api: "/auth/api-token"
+
+      - name: Yeti Search
+        type: connector
+        next: NetBox Lookup
+        connector: http
+        operation: http_post
+        config: "SOC Yeti"
+        params:
+          rest_api: "/observables/search"
+          header:
+            Authorization: "Bearer {{ vars.steps.Yeti_Auth.data.body.access_token }}"
+          data:
+            query:
+              value: "{{ vars.input.records[0].destinationIp }}"
+
+      - name: NetBox Lookup
+        type: connector
+        next: Build Verdict
+        connector: http
+        operation: http_get
+        config: "SOC NetBox"
+        params:
+          rest_api: "/ipam/ip-addresses/"
+          parameter:
+            address: "{{ vars.input.records[0].sourceIp }}"
+
+      - name: Build Verdict
+        type: set_variable
+        next: Branch on Threat
+        with:
+          yeti: "{{ vars.steps.Yeti_Search.data }}"
+          netbox: "{{ vars.steps.NetBox_Lookup.data }}"
+        vars:
+          yeti_hits: "{{ vars.yeti.total | default(0) }}"
+          yeti_tags: "{{ vars.yeti.observables[0].tags | map(attribute='name') | join(', ') if (vars.yeti.total | default(0)) > 0 else 'none' }}"
+          asset_tenant: "{{ vars.netbox.results[0].tenant.name if (vars.netbox.count | default(0)) > 0 else 'Unknown' }}"
+          asset_owner: "{{ vars.netbox.results[0].description if (vars.netbox.count | default(0)) > 0 else 'Unknown' }}"
+
+      - name: Branch on Threat
+        type: decision
+        conditions:
+          - display: malicious
+            when: "{{ (vars.yeti_hits | int) > 0 }}"
+            next: Comment Threat Confirmed
+          - display: clean
+            when: "{{ (vars.yeti_hits | int) == 0 }}"
+            next: Comment No Threat Intel
+
+      # ── MALICIOUS PATH ──────────────────────────────────────────────────────
+
+      - name: Comment Threat Confirmed
+        type: set_variable
+        next: Branch on Asset Owner
+        message:
+          type: comment
+          content: >
+            <p><strong>⚠ Threat Confirmed</strong> -- destination IP
+            <strong>{{ vars.input.records[0].destinationIp }}</strong> is flagged
+            malicious in Yeti (tags: <strong>{{ vars.yeti_tags }}</strong>).<br>
+            Victim asset <strong>{{ vars.input.records[0].sourceIp }}</strong>
+            owned by: <strong>{{ vars.asset_tenant }}</strong>
+            ({{ vars.asset_owner }}).</p>
+
+      - name: Branch on Asset Owner
+        type: decision
+        conditions:
+          - display: School of Medicine
+            when: "{{ vars.asset_tenant == 'School of Medicine' }}"
+            next: Route to MedIT
+          - display: College of Engineering
+            when: "{{ vars.asset_tenant == 'College of Engineering' }}"
+            next: Route to EngIT
+          - display: unknown owner
+            when: "{{ vars.asset_tenant == 'Unknown' }}"
+            next: Escalate to Central SOC
+
+      - name: Route to MedIT
+        type: set_variable
+        next: Comment Routed MedIT
+        vars:
+          routed_team: "MedIT"
+          routed_contact: "medhelp@stanford.edu"
+
+      - name: Comment Routed MedIT
+        type: set_variable
+        message:
+          type: comment
+          content: >
+            <p>Asset owned by <strong>School of Medicine (MedIT)</strong>.
+            Ticket routed to <strong>medhelp@stanford.edu</strong> for
+            containment and owner notification.</p>
+
+      - name: Route to EngIT
+        type: set_variable
+        next: Comment Routed EngIT
+        vars:
+          routed_team: "EngIT"
+          routed_contact: "enghelp@stanford.edu"
+
+      - name: Comment Routed EngIT
+        type: set_variable
+        message:
+          type: comment
+          content: >
+            <p>Asset owned by <strong>College of Engineering (EngIT)</strong>.
+            Ticket routed to <strong>enghelp@stanford.edu</strong> for
+            containment and owner notification.</p>
+
+      - name: Escalate to Central SOC
+        type: set_variable
+        next: Comment Escalated
+        vars:
+          routed_team: "Central SOC"
+          routed_contact: "iso-soc@stanford.edu"
+
+      - name: Comment Escalated
+        type: set_variable
+        message:
+          type: comment
+          content: >
+            <p>Asset owner <strong>unknown</strong> -- not found in NetBox.
+            Escalated to <strong>Central SOC (iso-soc@stanford.edu)</strong>
+            for manual ownership determination and containment.</p>
+
+      # ── CLEAN PATH ──────────────────────────────────────────────────────────
+
+      - name: Comment No Threat Intel
+        type: set_variable
+        message:
+          type: comment
+          content: >
+            <p><strong>✓ No Threat Intel Match</strong> -- destination IP
+            <strong>{{ vars.input.records[0].destinationIp }}</strong> has no
+            hits in Yeti. Victim asset
+            <strong>{{ vars.input.records[0].sourceIp }}</strong>
+            owned by: <strong>{{ vars.asset_tenant }}</strong>
+            ({{ vars.asset_owner }}). No routing action required.</p>

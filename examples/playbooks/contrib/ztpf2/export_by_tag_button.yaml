@@ -1,0 +1,293 @@
+collection: 10 - SP - ZTPF - Triggers
+description: >-
+  Manual button (shown on the ZTPF Automation Profiles page). It reads the tags
+  actually used on ZTPF automation profiles, lets the operator pick one, previews
+  how many records in each module carry that tag, and on confirm BUILDS an Export
+  Wizard template from scratch (no dependency on an example template existing on
+  the box), runs the export, and returns the file link. The Start step is turned
+  into a Manual trigger and the two manual-input fields are injected by
+  deploy_export_button.py after compile.
+visible: true
+playbooks:
+- name: 'Export Records by Tag'
+  uuid: 3c1e77aa-1b42-4d9e-8f60-77a10e2bb001
+  is_active: true
+  tags: [ZTPF]
+  steps:
+  - type: start
+    name: Start
+    # MUST name the module(s) the button appears on. An empty list compiles to a
+    # trigger that shows up nowhere, and the pyfsr compiler now rejects it outright
+    # (missing_field), which silently blocked this whole playbook from deploying.
+    # Keep in sync with the `resources` in deploy_export_button.py's Manual-button
+    # PUT -- that script rewrites this Start step into a cybersponse.action button.
+    resources: [ztpf_automation_profiles]
+    inputVariables: []
+    next: get_profile_tags
+    top: '40'
+    left: '40'
+  # Only offer tags that are actually used on an automation profile.
+  - type: connector
+    name: get_profile_tags
+    connector: cyops_utilities
+    operation: make_cyops_request
+    params:
+      method: GET
+      iri: '/api/3/ztpf_automation_profiles?$limit=1000'
+      body: ''
+    step_variables:
+      profiles: '{{ vars.result.data["hydra:member"] }}'
+    next: build_tag_options
+    top: '40'
+    left: '360'
+  - type: set_variable
+    name: build_tag_options
+    vars:
+      # Flat list of the tag names used on automation profiles.
+      tag_options: >-
+        {%- set tags = [] -%}
+        {%- for p in vars.profiles -%}
+          {%- for t in (p.recordTags | default([], true)) -%}
+            {%- set nm = (t | string) | replace('/api/3/tags/', '') -%}
+            {%- if nm and nm not in tags -%}{%- do tags.append(nm) -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {{ (tags | sort) | tojson }}
+    next: pick_tag
+    top: '40'
+    left: '680'
+  # Operator picks a tag from the dynamic list (field injected at deploy).
+  - type: manual_input
+    name: pick_tag
+    title: Export records by profile tag
+    description: >-
+      Pick a tag used on a ZTPF automation profile. Every record carrying that
+      tag will be exported.
+    inputs:
+    - name: tag
+      kind: select
+      label: Tag
+      required: true
+      # tag_options is already JSON (built with | tojson), so the dynamicList
+      # widget can parse it. The compiler emits the full dynamicList field.
+      options: '{{ vars.tag_options }}'
+    options:
+    - option: Next
+      primary: true
+      next: setup
+    top: '40'
+    left: '1000'
+  - type: set_variable
+    name: setup
+    vars:
+      # dynamicList selection is an array (the picked path) -- take the last element.
+      tag: "{{ (vars.steps.pick_tag.input.tag if vars.steps.pick_tag.input.tag is string else (vars.steps.pick_tag.input.tag | last)) | string | replace('/api/3/tags/', '') }}"
+      new_name: "ZTPF-TagExport--{{ (vars.steps.pick_tag.input.tag if vars.steps.pick_tag.input.tag is string else (vars.steps.pick_tag.input.tag | last)) | string | replace('/api/3/tags/', '') }}"
+      new_tag_iri: "/api/3/tags/{{ (vars.steps.pick_tag.input.tag if vars.steps.pick_tag.input.tag is string else (vars.steps.pick_tag.input.tag | last)) | string | replace('/api/3/tags/', '') }}"
+      file_name_enc: "{{ ('ztpf-' ~ ((vars.steps.pick_tag.input.tag if vars.steps.pick_tag.input.tag is string else (vars.steps.pick_tag.input.tag | last)) | string | replace('/api/3/tags/', '')) ~ '-export') | urlencode }}"
+      tag_clean: "{{ (vars.steps.pick_tag.input.tag if vars.steps.pick_tag.input.tag is string else (vars.steps.pick_tag.input.tag | last)) | string | replace('/api/3/tags/', '') | regex_replace('[^A-Za-z0-9_.:-]', '') }}"
+    next: validate
+    top: '40'
+    left: '1320'
+  - type: decision
+    name: validate
+    # Reject a tag that could break out of the JSON body / URL.
+    conditions:
+    - display: valid
+      when: "{{ vars.tag == vars.tag_clean and (vars.tag | length) > 0 and (vars.tag | length) <= 64 }}"
+      next: build_export
+    - display: rejected
+      default: true
+      next: rejected
+    top: '40'
+    left: '1640'
+  - type: set_variable
+    name: rejected
+    vars:
+      error: true
+      message: "Rejected: tag must be 1-64 chars of [A-Za-z0-9_.:-]. Got '{{vars.tag}}'."
+    top: '240'
+    left: '1640'
+  # BUILD the Export Wizard template options from scratch -- one recordSet per ZTPF
+  # module, each filtered on the chosen tag. No example template needs to exist.
+  - type: set_variable
+    name: build_export
+    vars:
+      module_list: >-
+        {{ ["ztpf_automation_actions","ztpf_automation_profiles","ztpf_automation_profile_steps","ztpf_metadata_sources","ztpf_templates"] }}
+      swapped_options_json: >-
+        {%- set mods = ["ztpf_automation_actions","ztpf_automation_profiles","ztpf_automation_profile_steps","ztpf_metadata_sources","ztpf_templates"] -%}
+        {%- set rs = [] -%}
+        {%- for m in mods -%}
+          {%- do rs.append({
+            "type": m, "label": m,
+            "query": {"sort": [], "limit": 5000, "logic": "AND",
+              "filters": [{"type": "array", "field": "recordTags", "module": "recordTags",
+                           "display": "", "operator": "in", "value": [vars.new_tag_iri],
+                           "template": "tags", "OPERATOR_KEY": "$", "useInOperator": true,
+                           "previousOperator": "in", "previousTemplate": "tags"}],
+              "__selectFields": ["uuid"]},
+            "include": true, "includeCorrelations": true}) -%}
+        {%- endfor -%}
+        {{ {"roles": [], "rules": [], "teams": [], "views": [], "actors": [], "modules": [],
+            "reports": [], "widgets": [], "connectors": [], "dashboards": [], "recordSets": rs} | tojson }}
+      metadata_json: '{{ {"autoSelectDeps": {}, "autoSelectPicklists": false} | tojson }}'
+    next: count_records
+    top: '40'
+    left: '1960'
+  # Count records carrying the tag in each module, for the preview.
+  - type: connector
+    name: count_records
+    connector: cyops_utilities
+    operation: make_cyops_request
+    for_each:
+      item: '{{vars.module_list}}'
+      parallel: false
+    params:
+      method: POST
+      iri: '/api/query/{{vars.item}}'
+      body: '{"logic":"AND","filters":[{"type":"array","field":"recordTags","operator":"in","value":["{{vars.new_tag_iri}}"]}],"limit":1}'
+    next: build_preview
+    top: '40'
+    left: '2280'
+  - type: set_variable
+    name: build_preview
+    vars:
+      preview: >-
+        {%- set ns = namespace(total=0) -%}
+        {%- set lines = [] -%}
+        {%- for i in range(vars.module_list | length) -%}
+          {%- set mod = vars.module_list[i] -%}
+          {%- set res = vars.steps.count_records[i] | default({}, true) -%}
+          {%- set cnt = (res.data['hydra:totalItems'] if res.data is defined else res['hydra:totalItems']) | default(0, true) -%}
+          {%- set ns.total = ns.total + (cnt | int) -%}
+          {%- do lines.append('- ' ~ mod ~ ': ' ~ cnt) -%}
+        {%- endfor -%}
+        Records tagged '{{vars.tag}}' that would be exported ({{ns.total}} total):{{ '\n' }}{{ lines | join('\n') }}
+      total_count: >-
+        {%- set ns = namespace(total=0) -%}
+        {%- for i in range(vars.module_list | length) -%}
+          {%- set res = vars.steps.count_records[i] | default({}, true) -%}
+          {%- set cnt = (res.data['hydra:totalItems'] if res.data is defined else res['hydra:totalItems']) | default(0, true) -%}
+          {%- set ns.total = ns.total + (cnt | int) -%}
+        {%- endfor -%}
+        {{ ns.total }}
+    next: confirm
+    top: '40'
+    left: '2600'
+  # Show the per-module counts; confirm or cancel (description injected at deploy).
+  - type: manual_input
+    name: confirm
+    title: Confirm export
+    description: '{{ vars.preview }}'
+    options:
+    - option: Export
+      primary: true
+      next: find_existing
+    - option: Cancel
+      next: cancelled
+    top: '40'
+    left: '2920'
+  - type: set_variable
+    name: cancelled
+    vars:
+      error: false
+      message: 'Export cancelled by the operator.'
+    top: '240'
+    left: '2920'
+  - type: connector
+    name: find_existing
+    connector: cyops_utilities
+    operation: query_cyops_resource
+    params:
+      resource: export_templates
+      query: '{"logic":"AND","filters":[{"field":"name","operator":"eq","value":"{{vars.new_name}}"}]}'
+    step_variables:
+      existing_uuid: "{{ vars.result.data[0].uuid if vars.result.data else '' }}"
+    next: exists_gate
+    top: '40'
+    left: '3240'
+  - type: decision
+    name: exists_gate
+    conditions:
+    - display: update
+      when: "{{ vars.existing_uuid not in ['', None] }}"
+      next: update_template
+    - display: create
+      default: true
+      next: create_template
+    top: '40'
+    left: '3560'
+  - type: connector
+    name: create_template
+    connector: cyops_utilities
+    operation: make_cyops_request
+    params:
+      method: POST
+      iri: /api/3/export_templates
+      body: '{"name": {{vars.new_name | tojson}}, "type": "Export Wizard", "options": {{vars.swapped_options_json}}, "metadata": {{vars.metadata_json}}}'
+    step_variables:
+      template_uuid: '{{vars.result.data.uuid}}'
+    next: run_export
+    top: '40'
+    left: '3880'
+  - type: connector
+    name: update_template
+    connector: cyops_utilities
+    operation: make_cyops_request
+    params:
+      method: PUT
+      iri: '/api/3/export_templates/{{vars.existing_uuid}}'
+      body: '{"options": {{vars.swapped_options_json}}}'
+    step_variables:
+      template_uuid: '{{vars.existing_uuid}}'
+    next: run_export
+    top: '240'
+    left: '3880'
+  - type: connector
+    name: run_export
+    connector: cyops_utilities
+    operation: make_cyops_request
+    params:
+      method: PUT
+      iri: '/api/export?fileName={{vars.file_name_enc}}&template={{vars.template_uuid}}'
+      body: ''
+    step_variables:
+      jobUuid: '{{vars.result.data.jobUuid}}'
+    next: wait_export
+    top: '40'
+    left: '4200'
+  - type: connector
+    name: wait_export
+    connector: cyops_utilities
+    operation: make_cyops_request
+    do_until:
+      delay: '10'
+      retries: '18'
+      condition: "{{ vars.result.data['status'] == 'Export Complete' }}"
+    params:
+      method: GET
+      iri: '/api/3/export_jobs/{{vars.jobUuid}}'
+      body: ''
+    step_variables:
+      file_iri: "{{ vars.result.data['file']['@id'] }}"
+    next: done
+    top: '40'
+    left: '4520'
+  # Terminal prompt: show the finished export with a clickable download link.
+  # file_iri is /api/3/files/<uuid>, which serves the zip with a
+  # Content-Disposition filename -- a same-origin link downloads it directly.
+  - type: manual_input
+    name: done
+    title: Export ready
+    description: >-
+      Exported **{{ vars.total_count }}** record(s) tagged
+      `{{ vars.tag }}` to template **{{ vars.new_name }}**.
+
+
+      **[Download ztpf-{{ vars.tag }}-export.zip]({{ vars.file_iri }})**
+    options:
+    - option: Close
+      primary: true
+    top: '40'
+    left: '4840'

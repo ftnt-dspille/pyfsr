@@ -1,0 +1,42 @@
+# manual_input -- pause execution and ask a human a question.
+# Common in approval flows: bot proposes an action, user confirms.
+#
+# Prompt body under `arguments:` -- `title:` is the heading,
+# `description:` is the markdown body, `inputs:` is an optional
+# inputVariables list. Step-level `options:` is the button list; each
+# entry has `display:` (label) and `next:` (target step). The choice
+# IS the branch taken -- there is no `vars.steps.<name>.input.choice`
+# at runtime.
+
+collection: Compiler Examples
+description: Approval loop -- ask a human, then act based on their response.
+visible: true
+
+playbooks:
+  - name: Confirm Before Block
+    description: Ask SOC analyst to approve a block, then act.
+    steps:
+      - name: start
+        type: start
+        next: Approve block
+
+      - name: Approve block
+        type: manual_input
+        options:
+          - display: block
+            primary: true
+            next: Pretend we blocked
+          - display: skip
+            next: Skip
+        title: Block this IP?
+        description: Click **block** to proceed, **skip** to abort.
+
+      - name: Pretend we blocked
+        type: set_variable
+        vars:
+          outcome: blocked
+
+      - name: Skip
+        type: set_variable
+        vars:
+          outcome: skipped

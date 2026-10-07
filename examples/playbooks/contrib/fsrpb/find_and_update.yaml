@@ -1,0 +1,47 @@
+# find_record + update_record -- the canonical "look something up, mutate it"
+# pattern. Most ingestion playbooks look like this.
+#
+# `find_record` (handler `find_data`):
+#   module: target module name (alerts, incidents, indicators, etc.)
+#   query: filter spec; supports `eq`, `contains`, `in`, etc.
+#   partial: when true, returns first page only
+#
+# `update_record` (handler `update_data`):
+#   module:   target module name (alerts, incidents, indicators, ...)
+#   record:   IRI of the record to update. Required: without it the step has
+#             nothing to write to and fails at run time
+#   fields:   dict of {field: new_value} to set on the record
+#   link:     dict of {field: [values]} appended to multi-value fields
+#             (tags are `recordTags`; there is no `tags` field)
+
+collection: Compiler Examples
+description: find + update pattern.
+visible: true
+
+playbooks:
+  - name: Tag Existing Indicator
+    description: Look up an indicator by value and tag it.
+    parameters:
+      - indicator_value
+      - tag
+    steps:
+      - name: start
+        type: start
+        next: find
+
+      - name: find
+        type: find_record
+        next: Apply tag
+        module: indicators
+        filters:
+          - field: value
+            operator: eq
+            value: "{{ vars.input.params.indicator_value }}"
+        partial: true
+
+      - name: Apply tag
+        type: update_record
+        module: indicators
+        record: "{{ vars.steps.find[0]['@id'] }}"
+        link:                       # appends; a `fields:` write would replace the tags
+          recordTags: ["{{ vars.input.params.tag }}"]

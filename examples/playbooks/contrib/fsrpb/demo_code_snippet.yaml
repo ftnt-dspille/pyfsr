@@ -1,0 +1,32 @@
+# CodeSnippet (Python inline) demo. Runs a small Python block through
+# FSR's `code-snippet` connector. Compiler resolves the connector config
+# UUID via connector_configs.resolve_config_id (live + cached).
+#
+# Authoring shape: just `code:` (multiline string). Optional `config:`
+# selects a non-default connector configuration by friendly name.
+
+collection: FSRPB Demo Code Snippet
+description: Run a Python snippet, capture output, branch on result.
+visible: true
+
+playbooks:
+  - name: FSRPB Demo - Code Snippet
+    is_active: true
+    parameters: [first_name]
+    steps:
+      - name: trigger
+        type: start
+        next: Build greeting
+
+      - name: Build greeting
+        type: code_snippet
+        next: Stamp greeting
+        code: |
+          name = "{{ vars.input.params.first_name }}"
+          greeting = f"hello {name}"
+          print(greeting)
+
+      - name: Stamp greeting
+        type: set_variable
+        vars:
+          greeting_text: "{{ vars.steps.Build_greeting.output }}"

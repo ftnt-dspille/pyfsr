@@ -1,0 +1,442 @@
+collection: 10 - SP - ZTPF - FMG Microservices
+description: >-
+  FortiManager firmware upgrade with a mandatory upgrade-path preflight.
+  New action type "Upgrade Preflight" -- the shipped "Upgrade Device Firmware"
+  type goes straight to flags 900 (execute); this one asks FortiManager for the
+  upgrade PATH first (flags 16), refuses to start when the path is missing, and
+  upgrades to the concrete image the path names.
+visible: true
+playbooks:
+- name: '> run action from step_id - FortiManager Upgrade Preflight'
+  uuid: 7c41a9d2-3f18-4b6e-9a55-2d80c6e14b31
+  is_active: true
+  parameters:
+  - device_step_id
+  steps:
+  - type: start
+    name: Start
+    next: find_step
+    top: '40'
+    left: '40'
+  - type: find_record
+    name: find step
+    step_variables: []
+    module: ztpf_device_automation_steps?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: "{{vars.input.params['device_step_id']}}"
+      operator: eq
+    next: find_device
+    top: '40'
+    left: '240'
+  - type: find_record
+    name: find device
+    step_variables: []
+    module: ztpf_devices?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: '{{vars.steps.find_step[0].ztpfDevices.id}}'
+      operator: eq
+    next: render_yaml_payload
+    top: '40'
+    left: '440'
+  # The action script is YAML (`firmware: {{record.metadata.target_firmware}}`),
+  # already Jinja-rendered at Preparing; this turns it into a dict.
+  - type: workflow_reference
+    name: render yaml payload
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/e8a9ca65-8ba2-4da5-993a-e98d1e22283c
+    yaml: '{{vars.steps.find_step[0].script}}'
+    manual_test: ''
+    next: setup_vars
+    top: '40'
+    left: '640'
+  - type: set_variable
+    name: setup vars
+    vars:
+      device: '{{vars.steps.find_device[0].name}}'
+      # The ADOM comes from the device record. The shipped upgrade playbook
+      # hardcoded "demo" (the ADOM from the FortiManager doc example it was
+      # copied from), which aims the upgrade at an ADOM that does not exist.
+      adom: '{{vars.steps.find_device[0].adom}}'
+      connector_config: '{{vars.steps.find_device[0].ztpfManagers.connectorConfig}}'
+      device_step_fqid: "{{vars.steps.find_step[0]['@id']}}"
+      firmware: '{{vars.steps.render_yaml_payload.output.firmware}}'
+      api_url: /um/image/upgrade/ext
+      task_stale_timeout: '900'
+      # flags 16 = return the upgrade path ONLY. The FortiManager doc warns that
+      # the symbolic form "f_preview" triggers a REAL upgrade instead -- the
+      # integer is not interchangeable with it.
+      # The whole object is tojson'd ONCE into a single JSON-string `data`: the
+      # connector JSON-parses a string `data`, and its parameter scan otherwise
+      # crashes on the `devices` list ("expected string or bytes-like object,
+      # got 'list'").
+      preflight_payload: |-
+        {{ {"data": {"adom": vars.steps.find_device[0].adom,
+                     "devices": [{"image": vars.steps.render_yaml_payload.output.firmware,
+                                  "name": vars.steps.find_device[0].name}],
+                     "flags": 16}} | tojson }}
+      # upgrade | downgrade, from the step's stepARGS. FortiManager computes
+      # upgrade paths UPWARD ONLY, so a downward target always answers `no_path`
+      # and the preflight can never approve one. A downgrade therefore skips path
+      # resolution entirely and names the image itself.
+      # The direction is DERIVED from the device's current firmware vs the target,
+      # not typed by anyone. FortiManager computes upgrade paths UPWARD ONLY, so a
+      # downward move must skip path resolution and name the image itself -- that
+      # is the only thing this flag decides.
+      direction: |-
+        {%- set cur = (vars.steps.find_device[0].firmware | default('', true)) | string -%}
+        {%- set cb = cur.split('-')[0].lstrip('v') -%}
+        {%- set tb = (vars.steps.render_yaml_payload.output.firmware | default('', true)) | string | trim | replace('"', '') -%}
+        {%- set tb2 = tb.split('-')[0].lstrip('v') -%}
+        {%- set cp = cb.split('.') -%}
+        {%- set tp = tb2.split('.') -%}
+        {%- set cn = (cp[0] | int) * 1000000 + ((cp[1] | int) if cp | length > 1 else 0) * 1000 + ((cp[2] | int) if cp | length > 2 else 0) -%}
+        {%- set tn = (tp[0] | int) * 1000000 + ((tp[1] | int) if tp | length > 1 else 0) * 1000 + ((tp[2] | int) if tp | length > 2 else 0) -%}
+        {{ 'downgrade' if tn < cn else 'upgrade' }}
+      image_list_payload: '{{ {"product": "FGT"} | tojson }}'
+    next: direction_gate
+    top: '40'
+    left: '840'
+  - type: decision
+    name: direction gate
+    step_variables: []
+    conditions:
+    - display: downgrade
+      when: "{{ vars.direction == 'downgrade' }}"
+      next: list_local_images
+    - display: upgrade
+      default: true
+      next: preflight
+    top: '40'
+    left: '940'
+  # A downgrade must use an image FortiManager already holds. There is no path to
+  # trigger FortiManager's background fetch from FortiGuard (that machinery is
+  # driven by upgrade-path resolution), so an unstaged downgrade target simply
+  # fails -- which is why this reads the local store and refuses when it is absent.
+  - type: connector
+    name: list local images
+    description: FortiManager's LOCAL image store -- the only valid downgrade source
+    pickFromTenant: false
+    config: '{{vars.connector_config}}'
+    params:
+      url: /um/image/list
+      data: '{{vars.image_list_payload}}'
+    connector: fortinet-fortimanager-json-rpc
+    operation: json_rpc_get
+    next: resolve_local_image
+    top: '200'
+    left: '940'
+  # Produces the SAME `upgrade_path` shape the path resolver emits, so everything
+  # downstream (the gate, the exec payload, the status template) is untouched.
+  # NOTE the version-string form: the local store reports `7.4.11-b2878-GA`, while
+  # the upgrade call expects the `-M` form.
+  - type: set_variable
+    name: resolve local image
+    vars:
+      upgrade_path: |-
+        {%- set resp = vars.steps.list_local_images.data.get_response | default({}, true) -%}
+        {%- set rows = resp.image_list | default([], true) -%}
+        {%- set want = vars.firmware | string | trim -%}
+        {%- set plat = vars.steps.find_device[0].platform | default('', true) -%}
+        {%- set res = {"image": "", "blocked": true, "hops": [], "rows": []} -%}
+        {%- for r in rows -%}
+          {%- set v = r.version | default('', true) -%}
+          {%- if r.platform == plat and (v.split('-')[0] == want) and res.image == '' -%}
+            {%- set img = v.replace('-GA', '-M') -%}
+            {%- do res.update({"image": img, "blocked": false, "hops": [img]}) -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{res}}
+    next: path_gate
+    top: '360'
+    left: '940'
+  # Called on the connector directly, NOT through '> exec task ...': a flags-16
+  # call creates no FortiManager task, so the task-tracking wrapper would poll
+  # for a task that never exists and report "Task data is empty."
+  - type: connector
+    name: preflight
+    description: Ask FortiManager for the upgrade path (creates no task)
+    pickFromTenant: false
+    config: '{{vars.connector_config}}'
+    params:
+      url: '{{vars.api_url}}'
+      data: '{{vars.preflight_payload}}'
+      track_task: false
+    connector: fortinet-fortimanager-json-rpc
+    operation: json_rpc_execute
+    next: resolve_path
+    top: '40'
+    left: '1040'
+  # The preview answers
+  #   {"execute_response": {"upgrade_path": [{"name", "path": [...], "no_path": 1?}]}}
+  # LIVE-VERIFIED: FortiManager returns **`no_path` with an UNDERSCORE**, not the
+  # `no-path` the JSON-RPC doc prints. Both spellings are checked. This matters
+  # because a no_path row STILL carries a non-empty `path` (asking for the version
+  # the device already runs answers `{"no_path": 1, "path": ["7.4.11-b2878-M"]}`),
+  # so a length check alone silently accepts it and the upgrade then dies as the
+  # opaque "No devices".
+  # `path` is the full hop list -- live-probed, fgt1a on 7.0.15 targeting 7.0.19
+  # comes back as ["7.0.17-b682-M", "7.0.19-b696-M"], i.e. FortiManager requires
+  # an intermediate build. The LAST hop is the concrete image handed to the
+  # execute call (FortiManager's auto-created firmware template walks the
+  # intermediate hops itself); the full list is kept in the step output so the
+  # operator can see a multi-hop upgrade for what it is.
+  - type: set_variable
+    name: resolve path
+    vars:
+      upgrade_path: |-
+        {%- set out = vars.steps.preflight.data | default({}, true) -%}
+        {%- set rows = out.execute_response.upgrade_path | default([], true) -%}
+        {%- set res = {"image": "", "blocked": true, "hops": [], "rows": rows} -%}
+        {%- for r in rows -%}
+          {%- if r.name == vars.device -%}
+            {%- set p = r.path | default([], true) -%}
+            {%- if r['no_path'] is not defined and r['no-path'] is not defined and p | length > 0 -%}
+              {%- do res.update({"image": p[-1], "blocked": false, "hops": p}) -%}
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{res}}
+    next: path_gate
+    top: '40'
+    left: '1240'
+  - type: decision
+    name: path gate
+    step_variables: []
+    conditions:
+    - display: 'No path'
+      default: true
+      next: no_path
+    - display: 'Path found'
+      when: '{{ vars.upgrade_path.blocked == false }}'
+      next: setup_exec_payload
+    top: '40'
+    left: '1440'
+  - type: set_variable
+    name: no path
+    description: FortiManager has no upgrade path -- refuse to start the task
+    vars:
+      step_status: Failed
+      script_results: |-
+        {%- set ret = {"output": {
+          "error": true,
+          "device": vars.device,
+          "requested": vars.firmware,
+          "upgrade_path": vars.upgrade_path.rows,
+          "message": "No FortiManager {{vars.direction}} image/path to " ~ vars.firmware ~ " for " ~ vars.device
+                     ~ " -- the target build may have been withdrawn, or the device is already at or above it."
+        }} -%}
+        {{ret}}
+    next: update_step
+    top: '200'
+    left: '1640'
+  # flags 900 + create_task: the real upgrade, tracked as an FMG task.
+  - type: set_variable
+    name: setup exec payload
+    vars:
+      exec_payload: |-
+        {{ {"data": {"adom": vars.adom, "create_task": "enable",
+                     "devices": [{"image": vars.upgrade_path.image, "name": vars.device}],
+                     "flags": 900}} | tojson }}
+    next: run_upgrade
+    top: '40'
+    left: '1640'
+  - type: workflow_reference
+    name: run upgrade
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/ec1c9a17-98b1-40c3-bda5-7e3a9b315e70
+    exec_url: '{{vars.api_url}}'
+    exec_payload: '{{vars.exec_payload}}'
+    task_timeout: ''
+    task_stale_timeout: '{{vars.task_stale_timeout}}'
+    zero_percent_timeout: ''
+    connector_config: '{{vars.connector_config}}'
+    next: script_results
+    top: '40'
+    left: '1840'
+  - type: set_variable
+    name: script results
+    vars:
+      step_status: |-
+        {%- set base = vars.steps.run_upgrade.output | default({}, true) -%}
+        {%- if base.error -%}Failed{%- else -%}Complete{%- endif -%}
+      script_results: |-
+        {%- set base = vars.steps.run_upgrade.output | default({}, true) -%}
+        {%- set ret = {"output": {
+          "error": base.error | default(true),
+          "device": vars.device,
+          "adom": vars.adom,
+          "requested": vars.firmware,
+          "image": vars.upgrade_path.image,
+          "path": vars.upgrade_path.hops,
+          "task": base
+        }} -%}
+        {{ret}}
+    next: update_step
+    top: '40'
+    left: '2040'
+  - type: update_record
+    name: update step
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_device_automation_steps
+    record: '{{vars.device_step_fqid}}'
+    fields:
+      queueStatus: '{{"ztpfDeviceStepStatus" | picklist(vars.step_status, "@id")}}'
+      outputSourceData: '{{vars.script_results}}'
+    next: return
+    top: '40'
+    left: '2240'
+  - type: set_variable
+    name: return
+    vars:
+      output: '{{vars.script_results}}'
+      params: '{{vars.input.params}}'
+      status: ''
+    top: '40'
+    left: '2440'
+  annotations:
+  - id: details
+    title: Details
+    body: >-
+      Upgrades one device via FortiManager /um/image/upgrade/ext, but only after
+      a flags-16 preflight returns a usable upgrade path. The ADOM is taken from
+      the device record, and the image sent to the execute call is the last hop
+      of the path FortiManager returned (e.g. "7.0.19-b0696-FGT"), not the bare
+      version string. The action script is YAML: `firmware: {{...}}` -- point it
+      at record.metadata.target_firmware for per-device targets.
+    position:
+      top: 320
+      left: 140
+      width: 340
+  - id: changelog
+    title: Changelog
+    body: >-
+      created. Splits the upgrade into preflight + execute because
+      the shipped "> upgrade firmware image ext" went straight to flags 900 with
+      a hardcoded "demo" ADOM and no no-path check, which the FortiManager doc
+      explicitly warns against (a withdrawn intermediate build silently breaks
+      the path). Written as a NEW playbook rather than extending the shipped one:
+      the API accepts POST /api/3/workflow_steps and /api/3/workflow_routes but
+      drops the `workflow` relationship, so steps and routes cannot be added to
+      an existing playbook at all.
+    position:
+      top: 320
+      left: 500
+      width: 340
+
+- name: '> device step (Running) - FortiManager Upgrade Preflight'
+  uuid: 5b6d38ff-91a4-4c07-8e2b-71f4a0c2d5e6
+  is_active: true
+  parameters: []
+  steps:
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: FortiManager Upgrade Preflight
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    top: '40'
+    left: '40'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+    top: '40'
+    left: '340'
+  - type: set_variable
+    name: run automation
+    vars:
+      script_type: '{{vars.input.records[0].triggerKey.split('' '')[1:]|join(" ")}}'
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: run_device_script
+    top: '40'
+    left: '640'
+  - type: workflow_reference
+    name: run device script
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    target: '> run action from step_id - FortiManager Upgrade Preflight'
+    device_step_id: '{{vars.device_step_id}}'
+    next: step_post_run
+    top: '40'
+    left: '940'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+    top: '40'
+    left: '1240'
+  - type: set_variable
+    name: return
+    top: '40'
+    left: '1540'
+  annotations:
+  - id: details
+    title: Details
+    body: >-
+      Fires when a device automation step goes Running with triggerKey
+      "FortiManager Upgrade Preflight". Same pre_run / run / post_run sandwich as
+      the other ZTPF action types, so save-metadata, status templates, abort mode
+      and stepWhen all behave identically.
+    position:
+      top: 200
+      left: 140
+      width: 340

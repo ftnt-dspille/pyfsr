@@ -1,0 +1,33 @@
+# post_update trigger demo (cybersponse.post_update). Fires automatically
+# whenever an alert is updated AND the `status` field changed. Single-step
+# playbook stamps the alert with a marker so the e2e runner can verify
+# the trigger fired.
+#
+# `type: start_on_update` + `when:` shorthand expands to FSR's canonical
+# `fieldbasedtrigger` block with `operator: changed`.
+
+collection: FSRPB Demo Alert On Status Change
+description: Auto-trigger when an alert's status field changes.
+visible: true
+
+playbooks:
+  - name: FSRPB Demo - On Alert Status Change
+    is_active: true
+    steps:
+      - name: On Alert Status Change
+        type: start_on_update
+        next: Stamp marker
+        module: alerts
+        when:
+          logic: OR
+          filters:
+            - {field: status, op: changed}
+
+      - name: Stamp marker
+        type: update_record
+        record: "{{ vars.input.records[0]['@id'] }}"
+        module: alerts                # → collectionType: /api/3/alerts
+        fields:
+          description: "fsrpb_e2e_on_update_marker"
+        operation: Replace
+        step_variables: []

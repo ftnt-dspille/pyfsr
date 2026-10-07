@@ -1,0 +1,25 @@
+collection: FSRPB Mock Conn Probe
+description: Minimal -- does mock return mock_result for microsoft-management-activity-api with empty config?
+visible: true
+
+playbooks:
+  - name: Mock Conn Probe
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        next: Start Sub
+      - name: Start Sub
+        type: connector
+        next: Capture
+        connector: microsoft-management-activity-api
+        operation: start_subscription
+        config: ""
+        params:
+          content_type: Audit.Exchange
+        mock_result:
+          status: success
+      - name: Capture
+        type: set_variable
+        vars:
+          got: "{{ vars.steps.Start_Sub.status }}"

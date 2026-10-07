@@ -1,0 +1,248 @@
+# Billionaire Club -- Contain & Block response playbook.
+#
+# Ties together the two connectors students bring online in chapter 06
+# (Microsoft WinRM against the Windows Server, Fortinet FortiGate against
+# Enterprise_Core) into one manual response action that reverses every step
+# of the attack chain covered in chapters 01-04:
+#
+#   SuperZipSetup.exe -> HelpDeskClient.exe persistence (scheduled task
+#   "Microsoft Update Health" + an all-users Startup shortcut that relaunches it
+#   at every logon) -> rogue local admin m1crosoftSupport -> exfil
+#   to uploadmystuff.com, C2 at d1rv.cn.
+#
+#   Start (manual, on an alert)
+#     -> Kill Persistence Process   (winrm execute_ps_command -- stop HelpDeskClient.exe)
+#     -> Remove Scheduled Task      (winrm execute_ps_command -- unregister "Microsoft Update Health")
+#     -> Remove Startup Shortcut    (winrm execute_ps_command -- delete HelpDeskClient.lnk from Startup)
+#     -> Disable Rogue Admin        (winrm execute_ps_command -- disable m1crosoftSupport)
+#     -> Block C2 Domain            (fortigate block_url d1rv.cn)
+#     -> Block Exfil Domain         (fortigate block_url uploadmystuff.com)
+#     -> Verify Blocks              (fortigate get_blocked_urls -- read-back, not trust)
+#     -> Evaluate Verification      (code_snippet -- did both domains actually land?)
+#     -> Response Comment           (create_record -- one summary comment on the alert)
+#     -> end
+#
+# Every PowerShell command below is written to no-op cleanly if the artifact
+# is already gone (-ErrorAction SilentlyContinue / ignoring "not found"), so
+# the playbook is safe to re-run against a pod that's only partway through
+# the attack chain, or has already been cleaned up once.
+#
+# The FortiGate steps depend on device-side config that the connector does NOT
+# create for itself. See ../fortigate/lab-enterprise-core.conf.
+# In short, all three must be true or block_url fails:
+#
+#   1. The connector config `Enterprise_Core` has Web Filter Profile Name set
+#      (= "default"). Without it: "Web filter profile name not defined in
+#      configuration parameter".
+#   2. That webfilter profile has a `urlfilter-table` bound on the FortiGate.
+#      Without it the connector requests table id 0 and the device 404s
+#      ("path":"webfilter","name":"urlfilter","mkey":"0"). This is the state
+#      the lab was found in -- the 7.4.7 config backup contains no
+#      `config webfilter urlfilter` block at all.
+#   3. An egress policy applies that profile with utm-status enable, AND the
+#      lab hosts actually route through the FortiGate. On a single-subnet pod
+#      hosts only traverse the FortiGate for
+#      traffic leaving the subnet, and only if it is their default gateway.
+#
+# Note on (1): setting that field via connectors.upsert_configuration silently
+# no-ops -- the PUT returns 200 but the stored config still shows
+# url_block_policy: "". Passing the full config dict to
+# connectors.update_configuration(..., autofill=False) DOES persist it.
+#
+# Live-verified connectors on the workshop pod: microsoft-winrm 2.1.0
+# (config Windows_Server, http/5985/ntlm), fortigate-firewall 5.4.0
+# (config Enterprise_Core).
+
+collection: SIEM Experts 2026 - Billionaire Club Response
+description: >
+  Contain the Billionaire Club incident: kill the attacker's persistence and
+  rogue admin account on the Windows Server via WinRM, then block the C2 and
+  exfil domains on the FortiGate -- with a device read-back to confirm the
+  blocks actually landed before declaring the alert contained.
+visible: true
+
+playbooks:
+  - name: Contain and Block - Billionaire Club
+    description: >
+      Manual response action for the Billionaire Club attack chain: WinRM
+      containment on the endpoint, then verified FortiGate domain blocks.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: "Contain & Block (Billionaire Club)"
+        next: Kill Persistence Process
+
+      # SINGLE QUOTES ONLY in every PowerShell command below. The WinRM
+      # connector strips double quotes before handing the command to the
+      # remote shell, so a double-quoted value containing spaces arrives as
+      # several positional arguments and the cmdlet fails. Proven on this pod:
+      #   Write-Output "hello world"  -> hello | world   (two args)
+      #   Write-Output 'hello world'  -> hello world     (one string)
+      # The failure mode is nasty because single-token values like
+      # "HelpDeskClient" survive unharmed -- only values WITH SPACES break, so
+      # the bug hides until it hits `-TaskName 'Microsoft Update Health'`.
+
+      - name: Kill Persistence Process
+        type: connector
+        connector: microsoft-winrm
+        operation: execute_ps_command
+        config: Windows_Server
+        comment: >
+          -ErrorAction SilentlyContinue makes this safe to re-run even if the
+          process already exited or was never started. The output distinguishes
+          the two cases rather than always claiming success.
+        params:
+          command: >
+            $p = Get-Process -Name 'HelpDeskClient' -ErrorAction SilentlyContinue;
+            if ($p) { Stop-Process -InputObject $p -Force; Write-Output 'killed' }
+            else { Write-Output 'not running' }
+          convert_to_json: false
+        next: Remove Scheduled Task
+
+      - name: Remove Scheduled Task
+        type: connector
+        connector: microsoft-winrm
+        operation: execute_ps_command
+        config: Windows_Server
+        comment: >
+          The attacker's persistence masquerades as a legitimate update task.
+          Get-ScheduledTask returning nothing is not an error -- it means this
+          step already ran, or the task was never created on this pod.
+        params:
+          command: >
+            $t = Get-ScheduledTask -TaskName 'Microsoft Update Health' -ErrorAction SilentlyContinue;
+            if ($t) { Unregister-ScheduledTask -TaskName 'Microsoft Update Health' -Confirm:$false; Write-Output 'removed' }
+            else { Write-Output 'absent' }
+          convert_to_json: false
+        next: Remove Startup Shortcut
+
+      - name: Remove Startup Shortcut
+        type: connector
+        connector: microsoft-winrm
+        operation: execute_ps_command
+        config: Windows_Server
+        comment: >
+          The installer also drops HelpDeskClient.lnk into the all-users Startup
+          folder, so Explorer relaunches the client at every interactive logon.
+          Killing the process without this only holds until the next person
+          logs in. Per-user Startup folders are swept too, in case a variant
+          drops it there instead.
+        params:
+          command: >
+            $s = Get-ChildItem -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp','C:\Users\*\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup' -Filter 'HelpDeskClient*' -ErrorAction SilentlyContinue;
+            if ($s) { $s | Remove-Item -Force; Write-Output ('removed ' + ($s.Name -join ', ')) }
+            else { Write-Output 'absent' }
+          convert_to_json: false
+        next: Disable Rogue Admin
+
+      - name: Disable Rogue Admin
+        type: connector
+        connector: microsoft-winrm
+        operation: execute_ps_command
+        config: Windows_Server
+        comment: >
+          Disable rather than delete -- keeps the account and its SAM entry
+          available for forensics instead of destroying evidence.
+        params:
+          command: >
+            $u = Get-LocalUser -Name 'm1crosoftSupport' -ErrorAction SilentlyContinue;
+            if ($u) { Disable-LocalUser -Name 'm1crosoftSupport'; Write-Output 'disabled' }
+            else { Write-Output 'absent' }
+          convert_to_json: false
+        next: Block C2 Domain
+
+      - name: Block C2 Domain
+        type: connector
+        connector: fortigate-firewall
+        operation: block_url
+        config: Enterprise_Core
+        params:
+          url: "d1rv.cn"
+        next: Block Exfil Domain
+
+      - name: Block Exfil Domain
+        type: connector
+        connector: fortigate-firewall
+        operation: block_url
+        config: Enterprise_Core
+        params:
+          url: "uploadmystuff.com"
+        next: Verify Blocks
+
+      # Read the device's own blocked-URL list back rather than trusting the
+      # block calls' return values -- same pattern as UC-04's verified block.
+      - name: Verify Blocks
+        type: connector
+        connector: fortigate-firewall
+        operation: get_blocked_urls
+        config: Enterprise_Core
+        next: Evaluate Verification
+
+      - name: Evaluate Verification
+        type: code_snippet
+        config: default
+        comment: >
+          Lists only -- no set() and no sorted(). The code-snippet sandbox
+          blocklists a number of builtin names, and `set` is one of them:
+          "Uses of ['set'] is restricted in the code snippet". It compiles
+          fine and only fails at runtime, so the substitution is deliberate,
+          not style. Same reason there is no isinstance() below -- the sandbox
+          shadows the builtin type names.
+        code: |
+          rows = {{ vars.steps.Verify_Blocks.data | default([]) }}
+          wanted = ["d1rv.cn", "uploadmystuff.com"]
+
+          found = []
+          for row in rows or []:
+              url = str((row or {}).get("url") or "").strip()
+              if url in wanted and url not in found:
+                  found.append(url)
+
+          missing = []
+          for want in wanted:
+              if want not in found:
+                  missing.append(want)
+
+          print({
+              "c2_blocked": "yes" if "d1rv.cn" in found else "",
+              "exfil_blocked": "yes" if "uploadmystuff.com" in found else "",
+              "missing": ", ".join(missing) if missing else "none",
+              "all_confirmed": "yes" if not missing else "",
+          })
+        next: Response Comment
+
+      - name: Response Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Billionaire Club containment actions taken:</b></p>
+            <ul>
+              <li><code>HelpDeskClient.exe</code> on Win2019DC.example.com --
+                {{ vars.steps.Kill_Persistence_Process.data.op_result | default('no result') }}</li>
+              <li>Scheduled task <code>Microsoft Update Health</code> --
+                {{ vars.steps.Remove_Scheduled_Task.data.op_result | default('no result') }}</li>
+              <li>Startup shortcut <code>HelpDeskClient.lnk</code> --
+                {{ vars.steps.Remove_Startup_Shortcut.data.op_result | default('no result') }}</li>
+              <li>Local admin <code>m1crosoftSupport</code> --
+                {{ vars.steps.Disable_Rogue_Admin.data.op_result | default('no result') }}</li>
+              <li>Blocked <code>d1rv.cn</code> on the FortiGate --
+                confirmed: {{ vars.steps.Evaluate_Verification.data.code_output.c2_blocked | default('NOT confirmed') }}</li>
+              <li>Blocked <code>uploadmystuff.com</code> on the FortiGate --
+                confirmed: {{ vars.steps.Evaluate_Verification.data.code_output.exfil_blocked | default('NOT confirmed') }}</li>
+            </ul>
+            <p>{% if vars.steps.Evaluate_Verification.data.code_output.all_confirmed %}
+            All blocks confirmed on the device.
+            {% else %}
+            <b>Not fully confirmed on the device</b> -- missing:
+            {{ vars.steps.Evaluate_Verification.data.code_output.missing }}.
+            Check the FortiGate's Web Filter Profile Name in the
+            fortigate-firewall connector configuration.
+            {% endif %}</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done
+
+      - name: Done
+        type: end

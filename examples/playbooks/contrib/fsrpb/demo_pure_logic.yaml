@@ -1,0 +1,45 @@
+# Runner smoke test. Pure logic, no external API. Severity flows through
+# real trigger input → set_variable → decision → branch → terminal.
+#
+# Demonstrates the `stop` short type -- when a decision branch should do
+# nothing, write `type: stop` (compiles to `cyops_utilities.no_op`, the
+# canonical FSR "Utils: No Operation" idiom) instead of dangling or
+# filler set_variable steps.
+
+collection: FSRPB Demo Pure Logic
+description: Runner smoke test -- branches on severity from trigger input.
+visible: true
+
+playbooks:
+  - name: Route Severity Pure
+    description: Reads severity from trigger input, branches on it, stamps a tier.
+    is_active: true
+    parameters: [severity]
+    steps:
+      - name: start
+        type: start
+        next: Read severity
+
+      - name: Read severity
+        type: set_variable
+        next: Branch on severity
+        vars:
+          severity: "{{ vars.input.params.severity }}"
+
+      - name: Branch on severity
+        type: decision
+        conditions:
+          - display: high
+            when: "{{ vars.severity in ['critical', 'high'] }}"
+            next: Escalate to Tier 2
+          - display: low
+            when: "{{ vars.severity not in ['critical', 'high'] }}"
+            next: No action low severity
+
+      - name: Escalate to Tier 2
+        type: set_variable
+        vars:
+          tier: "tier2"
+
+      - name: No action low severity
+        type: end

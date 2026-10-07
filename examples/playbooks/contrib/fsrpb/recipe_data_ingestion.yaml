@@ -1,0 +1,201 @@
+# RECIPE TEMPLATE -- Data Ingestion Wizard
+#
+# Pattern: three-playbook composition (Fetch / Create / Ingest) modeled
+# on the canonical FSR Data Ingestion Wizard. Targets the Alerts module.
+#
+# IMPORTANT: This recipe uses NON-bulk Create Record on the Alerts module
+# so on-create alert playbooks (enrichment, escalation, dedupe) fire
+# normally. Do NOT switch this to IngestBulkFeed / `__bulk: true` --
+# those bypass triggers and that's wrong for Alerts. (For threat-feed
+# ingestion, see recipe_threat_feed.yaml instead.)
+#
+# Error handling: every fallible step routes through a Decision gateway
+# that ends in `cyops_utilities.raise_exception` on the failure branch
+# with a descriptive message -- never a silent fall-through.
+#
+# Tags applied (recipe lints these): dataingestion + one of fetch|create|
+# ingest + <connector_api_name>. Replace todo_connector_api_name
+# everywhere.
+#
+# Replace every TODO comment with the real value for your source.
+# Remove any TODO once it's resolved so this file lints clean.
+
+collection: "Recipe -- TODO Connector Data Ingestion"
+description: Data Ingestion Wizard recipe (Fetch / Create / Ingest, Alerts module).
+visible: true
+
+playbooks:
+  # ---------------------------------------------------------------- Fetch
+  - name: "TODO Connector > Fetch"
+    description: Fetch raw records from the source system.
+    is_active: true
+    tag: "dataingestion, fetch, todo_connector_api_name"
+    parameters: [lastPullTime]
+    steps:
+      - name: Start
+        type: start
+        next: Fetch records
+
+      - name: Fetch records
+        type: connector
+        next: Capture data
+        comment: |
+          TODO replace BOTH connector and operation. Placeholder
+          (cyops_utilities.get_macro_list) keeps this recipe compilable
+          out of the box; it does NOT fetch anything useful. The target
+          connector must already be installed on the configured FSR.
+        connector: cyops_utilities
+        operation: get_macro_list
+        config: ""
+        params: {}
+        # MOCK MODE: when the target connector isn't installed yet,
+        # validate the rest of this recipe's plumbing by filling in
+        # `mock_result` (a JSON STRING) with a representative fetch
+        # payload, then triggering with `fsrpb run-playbook --mock`.
+        # The runtime returns this string in place of executing the
+        # op, and downstream Create / Ingest steps run live against
+        # it. Default is non-mock; only activates when --mock is set.
+        mock_result: |
+          {
+            "data": {
+              "records": [
+                {
+                  "id": "TODO-mock-1",
+                  "name": "TODO sample alert (mock)",
+                  "severity": "Medium",
+                  "description": "TODO sample description"
+                }
+              ]
+            }
+          }
+
+      - name: Capture data
+        type: set_variable
+        comment: |
+          TODO point `data` at the array path inside the fetch result
+          (e.g. `vars.steps.Fetch_records.data.records`).
+        vars:
+          data: "{{ vars.steps.Fetch_records }}"
+  - name: "TODO Connector > Create"
+    description: Create one Alert record per ingested item.
+    is_active: true
+    tag: "dataingestion, create, todo_connector_api_name"
+    parameters: [ingestedData]
+    steps:
+      - name: Start
+        type: start
+        next: Any records
+
+      - name: Any records
+        type: decision
+        comment: |
+          Error gateway -- if the parent passed an empty array, fail loud
+          rather than silently looping zero times.
+        conditions:
+          - display: "yes"
+            when: "{{ (vars.input.params.ingestedData | length) > 0 }}"
+            next: Create alert per item
+          - display: Else
+            default: true
+            next: Raise empty input
+
+      - name: Raise empty input
+        type: connector
+        connector: cyops_utilities
+        operation: raise_exception
+        config: ""
+        params:
+          msg: "Create called with empty ingestedData -- Fetch returned no records."
+
+      - name: Create alert per item
+        type: create_record
+        comment: |
+          NON-bulk on purpose -- on-create alert playbooks must fire.
+          TODO adjust the resource field mapping below to match your
+          source-record shape. Picklist values (severity, status,
+          source) are friendly strings; the compiler resolves them
+          against the live FSR's picklist tables.
+        for_each:
+          item: "{{ vars.input.params.ingestedData }}"
+          parallel: false
+          condition: ""
+        module: alerts
+        operation: Replace
+        fields:
+          severity: "{{ vars.item.severity | default('Medium') }}"
+          status: "Open"
+          type: "TODO source-event type label"
+          description: "{{ vars.item.description | default('') }}"
+          sourceId: "{{ vars.item.id }}"                # required for dedupe
+          sourceData: "{{ vars.item | toJSON }}"
+  # ---------------------------------------------------------------- Ingest
+  - name: "TODO Connector > Ingest"
+    description: Orchestrator -- pulls Fetch, hands records to Create.
+    is_active: true
+    tag: "dataingestion, ingest, todo_connector_api_name"
+    parameters: [env_setup, lastPullTime]
+    steps:
+      - name: Start
+        type: start
+        next: Mapping preview
+
+      - name: Mapping preview
+        type: decision
+        comment: |
+          The Wizard sets `env_setup=true` while users design the field
+          mapping in the UI; in that mode we return a sample record
+          shape instead of writing to Alerts. `false` (or missing) is
+          the real ingestion path.
+        conditions:
+          - display: preview
+            when: "{{ vars.input.params.env_setup | default(false) | bool }}"
+            next: Return sample shape
+          - display: Else
+            default: true
+            next: Call Fetch
+
+      - name: Return sample shape
+        type: set_variable
+        comment: |
+          TODO replace this stub with a representative single-record
+          sample so the Wizard's mapping preview shows real fields.
+        vars:
+          sample:
+            id: "TODO-1"
+            severity: "Medium"
+            description: "TODO sample description"
+
+      - name: Call Fetch
+        type: workflow_reference
+        next: Fetch returned data
+        target: "TODO Connector > Fetch"
+        lastPullTime: "{{ vars.input.params.lastPullTime }}"
+        apply_async: false
+        pass_parent_env: false
+        pass_input_record: false
+      - name: Fetch returned data
+        type: decision
+        conditions:
+          - display: "yes"
+            when: "{{ (vars.steps.Call_Fetch.data | default([]) | length) > 0 }}"
+            next: Call Create
+          - display: Else
+            default: true
+            next: Raise no data
+
+      - name: Raise no data
+        type: connector
+        connector: cyops_utilities
+        operation: raise_exception
+        config: ""
+        params:
+          msg: "Ingest: Fetch returned no records (lastPullTime={{ vars.input.params.lastPullTime }})"
+
+      - name: Call Create
+        type: workflow_reference
+        target: "TODO Connector > Create"
+        ingestedData: "{{ vars.steps.Call_Fetch.data }}"
+        apply_async: false
+        pass_parent_env: false
+        pass_input_record: false
+        step_variables: []

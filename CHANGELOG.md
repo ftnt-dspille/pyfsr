@@ -4,9 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Removed
-- `examples/playbooks/contrib/`: links to playbooks in other local projects
-  that did not resolve outside one machine.
+### Changed
+- `examples/playbooks/contrib/` holds real copies of the contributed playbooks
+  instead of links to other local projects, which did not resolve outside one
+  machine.
 
 ## [0.23.1] - 2026-10-06
 

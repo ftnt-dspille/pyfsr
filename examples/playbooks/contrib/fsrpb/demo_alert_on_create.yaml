@@ -1,0 +1,34 @@
+# post_create trigger demo. Fires automatically when an alert is
+# created where `type` matches a known suspicious-email value (uses
+# the `when:` shorthand → fieldbasedtrigger). Single-step playbook
+# stamps the new alert with a marker so the e2e runner can verify the
+# trigger fired.
+
+collection: FSRPB Demo Alert On Create
+description: Auto-trigger when a Phishing alert is created.
+visible: true
+
+playbooks:
+  - name: FSRPB Demo - On Alert Create
+    is_active: true
+    steps:
+      - name: On Alert Create
+        type: start_on_create
+        next: Stamp marker
+        module: alerts
+        when:
+          logic: AND
+          filters:
+            # `name` is a plain string field; picklist-typed fields
+            # like `type`/`severity` store IRIs, not display values,
+            # so a literal-string `like` filter on them never matches.
+            - {field: name, op: like, value: "%fsrpb_e2e_on_create%"}
+
+      - name: Stamp marker
+        type: update_record
+        record: "{{ vars.input.records[0]['@id'] }}"
+        module: alerts
+        fields:
+          description: "fsrpb_e2e_on_create_marker"
+        operation: Replace
+        step_variables: []

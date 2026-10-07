@@ -1,0 +1,361 @@
+collection: 10 - SP - ZTPF - Triggers
+description: >-
+  Working replacement for "ZTPF Wait for Condition". Both earlier versions -- the
+  shipped runner (00000000-…-000000000002) and the "(paced)" fix
+  (2f9d7c14) -- are CYCLIC, and FSR refuses to run a cyclic playbook:
+
+    CS-WF-13: Invalid Playbook. Playbook should always be Directed Acyclic Graph
+
+  Neither has ever executed a single time. The compiler said so ("cycle in
+  playbook … FSR will not loop") and the deploy scripts suppressed it via
+  skip=["bad_value", …], so both deployed clean and stayed broken.
+
+  A poll loop must be RECURSION across runs, not a back-edge inside one playbook:
+
+    (poller trigger)  pre_run -> parse budget -> hand off ------------.
+                                                                      v
+    (poll cycle)  find step -> poll -> met?  -- yes -->  post_run -> return
+                                        |
+                                        no -> budget left? -- no --> post_run
+                                                   |                (post_run sees
+                                                   yes               the exception and
+                                                   |                 applies the action's
+                                                   v                 on_exception mode)
+                                        Delay(poll_interval) -> trampoline -> poll cycle(attempt+1)
+
+  Two properties this buys, both measured in the alerts lab
+  (lab_fire_and_poll.yaml -- 12 concurrent 90s jobs):
+    * the native Delay DESCHEDULES the run, so no worker is held between polls
+      (canary 6.5s vs 79.6s for a connector that blocks) -- at 100 devices against
+      a --autoscale=12,8 worker pool this is the difference between a fleet and a queue;
+    * the budget is re-read on EVERY attempt, because each attempt is a fresh run
+      that receives it as a parameter.
+
+  THE TRAMPOLINE IS NOT OPTIONAL. FSR aborts a chain that references the SAME
+  playbook more than 10 deep:
+    CS-WF-52: Possible infinite recursion detected. Aborting after a depth of 10
+    runs referencing the same playbook.
+  and it aborts at the recursing step, so NEITHER terminal branch runs -- the step
+  is left hanging with no completion and no failure. A self-recursive poller at a
+  30s interval therefore dies silently after 5 minutes, which is useless for a
+  30-minute HA rejoin. Bouncing through a second playbook means no playbook
+  repeats consecutively; live-proven to run a full 30-attempt budget.
+visible: true
+playbooks:
+
+# ---------------------------------------------------------------------------
+# 1. The trigger (collection: Triggers). Fires on the device step going Running
+#    with triggerKey "ZTPF Wait for Condition", then HANDS OFF and ends -- it
+#    never waits, so it never holds a worker.
+# ---------------------------------------------------------------------------
+- name: '> device step (Running) - ZTPF Wait for Condition (poller)'
+  uuid: a1f0c3d2-7b45-4e18-9c62-5d8e0a2f4001
+  is_active: true
+  parameters: []
+  steps:
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: ZTPF Wait for Condition
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    top: '40'
+    left: '40'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: parse_budget
+    top: '40'
+    left: '260'
+  - type: set_variable
+    name: parse budget
+    vars:
+      max_attempts: |-
+        {%- set args = vars.input.records[0].stepARGS | default('input:\n  max_attempts: 10\n  poll_interval: 30\n') -%}
+        {%- set parsed = args | from_yaml -%}
+        {{ parsed.get('input', {}).get('max_attempts', 10) | default(10) }}
+      poll_interval: |-
+        {%- set args = vars.input.records[0].stepARGS | default('input:\n  max_attempts: 10\n  poll_interval: 30\n') -%}
+        {%- set parsed = args | from_yaml -%}
+        {{ parsed.get('input', {}).get('poll_interval', 30) | default(30) }}
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: hand_off_to_poll_cycle
+    top: '40'
+    left: '480'
+  # apply_async: true -- this run ENDS here. Everything after is the cycle's.
+  - type: workflow_reference
+    name: hand off to poll cycle
+    apply_async: true
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/a1f0c3d2-7b45-4e18-9c62-5d8e0a2f4002
+    device_step_id: '{{vars.device_step_id}}'
+    attempt: '0'
+    max_attempts: '{{vars.max_attempts}}'
+    poll_interval: '{{vars.poll_interval}}'
+    top: '40'
+    left: '700'
+  annotations:
+  - id: details
+    title: Details
+    body: >-
+      Polls a Proxy API action until its outputStatusTemplate stops reporting
+      "Exceptions Found", waiting `input.poll_interval` seconds between attempts
+      and giving up after `input.max_attempts`. Set both in the step's stepARGS.
+      Any action whose status template flags an exception becomes a retry, which
+      is how the post-upgrade HA rejoin gate rides out the reboot window
+      (0 or 1 members answering reads as "not yet", not as a failure). This
+      playbook only starts the poll; `> ZTPF wait poll cycle` does the work.
+    position:
+      top: 240
+      left: 140
+      width: 340
+  - id: changelog
+    title: Changelog
+    body: >-
+      replaces "(paced)" (2f9d7c14), which replaced the shipped
+      runner. BOTH were cyclic and therefore unrunnable -- FSR rejects a non-DAG
+      with CS-WF-13, and neither had ever executed. The loop is now recursion
+      across runs via `> ZTPF wait poll cycle` + `> ZTPF wait poll trampoline`;
+      the trampoline exists because FSR aborts a chain 10 deep into the same
+      playbook (CS-WF-52) without running either terminal branch. Deactivate the
+      other two so only one fires on this trigger key.
+    position:
+      top: 240
+      left: 500
+      width: 340
+
+# ---------------------------------------------------------------------------
+# 2. The poll cycle (collection: Functions). ONE attempt per run.
+# ---------------------------------------------------------------------------
+- name: '> ZTPF wait poll cycle'
+  uuid: a1f0c3d2-7b45-4e18-9c62-5d8e0a2f4002
+  is_active: true
+  parameters:
+  - device_step_id
+  - attempt
+  - max_attempts
+  - poll_interval
+  steps:
+  - type: start
+    name: Start
+    next: find_step
+    top: '40'
+    left: '40'
+  # post_run wants the whole step record (the trigger passes
+  # `vars.input.records[0]`); an async descendant has no input record, so it is
+  # re-read here from the id.
+  - type: find_record
+    name: find step
+    module: ztpf_device_automation_steps?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: "{{vars.input.params['device_step_id']}}"
+      operator: eq
+    next: run_proxy_api
+    top: '40'
+    left: '240'
+  - type: workflow_reference
+    name: run proxy api
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/41623f62-3a00-5681-8638-8bade02a76e4
+    device_step_id: "{{vars.input.params['device_step_id']}}"
+    next: render_output
+    top: '40'
+    left: '440'
+  # The proxy playbook only writes `outputSourceData` on the step -- it does NOT
+  # render the action's outputStatusTemplate, so right after it there is nothing
+  # that says whether the condition holds. This renders it, exactly as post_run
+  # later will, and returns {status: "OK" | "Exceptions Found", message: …}.
+  #
+  # The playbook this replaces tested
+  #   vars.steps.run_proxy_api.output.output_status.status != "Exceptions Found"
+  # and that key DOES NOT EXIST in the proxy playbook's return (it is
+  # {output: {log, output}, params, status}). An undefined compared to a string
+  # is always "not equal", so the condition read MET on the very first poll,
+  # every time -- the runner would never have waited even with the DAG problem
+  # fixed. Live-caught here on a degraded cluster that should have retried.
+  - type: workflow_reference
+    name: render output
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/28a1b591-dd4f-43f7-8f45-cbe21781f883
+    device_step_id: "{{vars.input.params['device_step_id']}}"
+    next: read_status
+    top: '40'
+    left: '640'
+  # Read the status off the STEP RECORD, not off the reference's return value.
+  # That playbook's `return` renders `output: "{{vars.output_status}}"`, so the
+  # dict arrives here as a STRING and `.status` on it is undefined -- which, with
+  # a fail-closed condition, silently turned every poll into "not yet" and burned
+  # the whole budget on a HEALTHY cluster. Its `update step` writes the rendered
+  # `outputStatus` picklist onto the step, which is typed and unambiguous.
+  - type: find_record
+    name: read status
+    module: ztpf_device_automation_steps?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: "{{vars.input.params['device_step_id']}}"
+      operator: eq
+    next: check_condition
+    top: '40'
+    left: '740'
+  # FAIL CLOSED: only an explicit "OK" counts as met. Anything missing, blank or
+  # unexpected is treated as "not yet" and retries, which is the safe direction
+  # for a wait gate -- the previous version failed OPEN and that is precisely how
+  # it went unnoticed.
+  - type: decision
+    name: check condition
+    step_variables: []
+    conditions:
+    - display: met
+      when: "{{ (vars.steps.read_status[0].outputStatus.itemValue | default('', true)) == 'OK' }}"
+      next: step_post_run
+    - display: not yet
+      default: true
+      next: check_attempts
+    top: '40'
+    left: '840'
+  # Exhausted routes to post_run as well, deliberately: the last poll left an
+  # "Exceptions Found" output, so post_run applies the action's own
+  # on_exception mode (pause | flag | abort) instead of inventing a second
+  # failure path here.
+  - type: decision
+    name: check attempts
+    step_variables: []
+    conditions:
+    - display: budget left
+      when: "{{ (vars.input.params['attempt'] | int) < (vars.input.params['max_attempts'] | int) }}"
+      next: pause_between_polls
+    - display: exhausted
+      default: true
+      next: step_post_run
+    top: '200'
+    left: '840'
+  # Native Delay -- deschedules the run and releases the worker. A connector that
+  # sleeps holds one for the whole interval (measured: 80s canary vs 1.8s).
+  - type: delay
+    name: pause between polls
+    description: Native Wait step -- releases the worker between polls
+    delay:
+      days: 0
+      weeks: 0
+      hours: 0
+      minutes: 0
+      seconds: "{{vars.input.params['poll_interval']}}"
+    next: bounce
+    top: '200'
+    left: '640'
+  # Via the trampoline, never straight back here -- see CS-WF-52 above.
+  - type: workflow_reference
+    name: bounce
+    apply_async: true
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/a1f0c3d2-7b45-4e18-9c62-5d8e0a2f4003
+    device_step_id: "{{vars.input.params['device_step_id']}}"
+    attempt: "{{ (vars.input.params['attempt'] | int) + 1 }}"
+    max_attempts: "{{vars.input.params['max_attempts']}}"
+    poll_interval: "{{vars.input.params['poll_interval']}}"
+    top: '360'
+    left: '440'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.steps.find_step[0]}}'
+    next: return
+    top: '40'
+    left: '1080'
+  - type: set_variable
+    name: return
+    vars:
+      output: ''
+      params: '{{vars.input.params}}'
+      status: '{"error":false,"msg":"ok"}'
+    top: '40'
+    left: '1280'
+
+# ---------------------------------------------------------------------------
+# 3. The trampoline (collection: Functions). Bounces straight back into the
+#    cycle so no playbook repeats consecutively in the recursion chain.
+# ---------------------------------------------------------------------------
+- name: '> ZTPF wait poll trampoline'
+  uuid: a1f0c3d2-7b45-4e18-9c62-5d8e0a2f4003
+  is_active: true
+  parameters:
+  - device_step_id
+  - attempt
+  - max_attempts
+  - poll_interval
+  steps:
+  - type: start
+    name: Start
+    next: bounce_back
+    top: '40'
+    left: '40'
+  - type: workflow_reference
+    name: bounce back
+    apply_async: true
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/a1f0c3d2-7b45-4e18-9c62-5d8e0a2f4002
+    device_step_id: "{{vars.input.params['device_step_id']}}"
+    attempt: "{{vars.input.params['attempt']}}"
+    max_attempts: "{{vars.input.params['max_attempts']}}"
+    poll_interval: "{{vars.input.params['poll_interval']}}"
+    top: '40'
+    left: '240'

@@ -1,0 +1,179 @@
+collection: 10 - SP - ZTPF - Custom
+description: >-
+  MVP fail action -- on a bad upgrade SOAR fails the device (the existing abort chain)
+  and emails an HTML summary showing WHERE IN THE CYCLE it failed.
+
+  The `Start` step is a record-action trigger: `type: start` WITH a `module:` makes
+  the compiler resolve it to `cybersponse.action` and fill the canonical args (route
+  uuid5, displayConditions, the noRecordExecution/singleRecordExecution flag pair).
+  That is what the on-fail dispatcher (`> device step (Fail)`, 957d7308) resolves and
+  POSTs the failing step to.
+visible: true
+playbooks:
+- name: ZTPF On Fail - Notify
+  uuid: c4e91a6f-2d70-4b83-95ac-1e6f0d38b527
+  is_active: true
+  parameters: []
+  steps:
+  - type: start
+    name: Start
+    module: ztpf_device_automation_steps
+    button_label: 'ZTPF: Notify on Fail'
+    requires_record: true
+    run_mode: per_record
+    next: find_device
+    top: '40'
+    left: '40'
+  - type: find_record
+    name: find device
+    step_variables: []
+    module: ztpf_devices?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: '{{vars.input.records[0].ztpfDevices.id}}'
+      operator: eq
+    next: find_action
+    top: '40'
+    left: '240'
+  # The action carries the notification config in configParameters, e.g.
+  #   {"on_exception":"abort","on_fail":{"notify_email":"noc@example.com"}}
+  - type: find_record
+    name: find action
+    step_variables: []
+    module: ztpf_automation_actions?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: '{{vars.input.records[0].ztpfAutomationActions.id}}'
+      operator: eq
+    next: find_run_steps
+    top: '40'
+    left: '440'
+  # EVERY step of the failing step's run group, in execution order -- this is what
+  # makes the mail show the whole cycle rather than just the failure.
+  - type: find_record
+    name: find run steps
+    step_variables: []
+    module: ztpf_device_automation_steps?$limit=200
+    checkboxFields: true
+    sort:
+    - field: stepNumber
+      direction: ASC
+    filters:
+    - field: ztpfRunGroups
+      value: "{{vars.input.records[0].ztpfRunGroups['@id']}}"
+      operator: eq
+    next: build_html
+    top: '40'
+    left: '640'
+  - type: set_variable
+    name: build html
+    description: Compose once -- a Slack/Teams step can reuse these vars later
+    vars:
+      notify_to: |-
+        {%- set raw = vars.steps.find_action[0].configParameters | default('', true) -%}
+        {%- set cfg = {} -%}
+        {%- if raw is string and raw | trim -%}{%- set cfg = raw | toDict -%}{%- endif -%}
+        {{ cfg.get('on_fail', {}).get('notify_email', 'soc@localhost') }}
+      subject: '[ZTPF] {{vars.steps.find_device[0].name}} FAILED at step {{vars.input.records[0].stepNumber}} - {{vars.input.records[0].name}}'
+      html: |-
+        {%- set s = vars.input.records[0] -%}
+        {%- set d = vars.steps.find_device[0] -%}
+        {%- set rows = vars.steps.find_run_steps | default([], true) -%}
+        {%- set failed_no = s.stepNumber -%}
+        <html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;color:#1f2328">
+        <h2 style="margin:0 0 4px 0;color:#b3261e">ZTPF upgrade FAILED &mdash; {{d.name}}</h2>
+        <p style="margin:0 0 16px 0;color:#57606a">The device has been marked <b>Failed</b> and the remaining steps were cancelled.</p>
+        <table cellpadding="6" cellspacing="0" style="border-collapse:collapse;margin-bottom:18px">
+        <tr><td style="color:#57606a">Device</td><td><b>{{d.name}}</b> ({{d.managementIP | default('no mgmt ip', true)}})</td></tr>
+        <tr><td style="color:#57606a">ADOM</td><td>{{d.adom | default('-', true)}}</td></tr>
+        <tr><td style="color:#57606a">Firmware</td><td>{{d.firmware | default('-', true)}}</td></tr>
+        <tr><td style="color:#57606a">Device status</td><td><b>{{d.status.itemValue | default('-', true)}}</b></td></tr>
+        <tr><td style="color:#57606a">Failed at</td><td><b>step {{failed_no}} &mdash; {{s.name}}</b></td></tr>
+        </table>
+        <h3 style="margin:0 0 6px 0">Where in the cycle it failed</h3>
+        <table cellpadding="6" cellspacing="0" style="border-collapse:collapse;border:1px solid #d0d7de;min-width:560px">
+        <tr style="background:#f6f8fa;text-align:left">
+        <th style="border-bottom:1px solid #d0d7de">#</th><th style="border-bottom:1px solid #d0d7de">Step</th>
+        <th style="border-bottom:1px solid #d0d7de">Status</th><th style="border-bottom:1px solid #d0d7de">Result</th></tr>
+        {%- for r in rows %}
+        {%- set st = r.status.itemValue | default('-', true) -%}
+        {%- set bg = '#fff5f5' if r.stepNumber == failed_no else ('#fafafa' if st == 'Cancelled' else '#ffffff') -%}
+        {%- set fg = '#b3261e' if r.stepNumber == failed_no else ('#8c959f' if st == 'Cancelled' else '#1f2328') -%}
+        <tr style="background:{{bg}};color:{{fg}}">
+        <td style="border-bottom:1px solid #eaeef2">{{r.stepNumber}}</td>
+        <td style="border-bottom:1px solid #eaeef2">{{'&#9654; ' if r.stepNumber == failed_no else ''}}{{r.name}}</td>
+        <td style="border-bottom:1px solid #eaeef2">{{st}}</td>
+        <td style="border-bottom:1px solid #eaeef2">{{r.outputStatus.itemValue | default('-', true)}}</td></tr>
+        {%- endfor %}
+        </table>
+        <h3 style="margin:18px 0 6px 0">Failure detail</h3>
+        {%- set detail = s.outputMarkdown or s.outputText or '(no output captured)' -%}
+        <pre style="background:#f6f8fa;border:1px solid #d0d7de;padding:10px;white-space:pre-wrap">
+        {%- if detail is string %}{{ detail | truncate(1500) }}
+        {%- else %}{{ detail | to_nice_yaml | truncate(1500) }}{%- endif %}</pre>
+        <p style="color:#57606a;font-size:12px">Re-firing the run button on a Failed device is gated &mdash; reset the device before re-running.</p>
+        </body></html>
+    next: notify_email
+    top: '40'
+    left: '840'
+  # Only the smtp connector is installed on this appliance (localhost-postfix).
+  # Slack/Teams are not; append a step here when they are.
+  - type: connector
+    name: notify email
+    pickFromTenant: false
+    config: localhost-postfix
+    params:
+      from: fortisoar@localhost
+      to: '{{vars.notify_to}}'
+      subject: '{{vars.subject}}'
+      content: '{{vars.html}}'
+      content_type: text/html
+    connector: smtp
+    operation: send_email
+    next: tag_step
+    top: '40'
+    left: '1040'
+  - type: update_record
+    name: tag step
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_device_automation_steps
+    record: "{{vars.input.records[0]['@id']}}"
+    fields:
+      recordTags:
+      - notified
+    next: return
+    top: '40'
+    left: '1240'
+  - type: set_variable
+    name: return
+    vars:
+      output: '{{vars.subject}}'
+      status: ''
+    top: '40'
+    left: '1440'
+  annotations:
+  - id: details
+    title: Details
+    body: >-
+      MVP fail action. Set an action's onFailPlaybook to this playbook's uuid and put
+      recipients in that action's configParameters
+      ({"on_fail":{"notify_email":"noc@example.com"}}). The mail lists every step of
+      the failing run group in order, so the passed pre-checks, the failing step and
+      the cancelled tail are visible at a glance.
+    position:
+      top: 220
+      left: 140
+      width: 340
+  - id: changelog
+    title: Changelog
+    body: >-
+      created. MVP -- on a bad upgrade SOAR fails the device and notifies;
+      no automated remediation or rollback.
+    position:
+      top: 220
+      left: 500
+      width: 340

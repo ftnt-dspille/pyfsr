@@ -1,0 +1,120 @@
+collection: ZZ Probe - child args
+description: >-
+  Establishes the runtime contract for workflow_reference child parameters,
+  which is what the compiler has to emit. A child playbook echoes its own
+  vars.input.params; three parents call it with the SAME logical params
+  expressed three different ways on the wire.
+visible: true
+playbooks:
+
+- name: 'ZZ CA - child echo'
+  uuid: b1c2d3e4-0011-4000-8000-000000000011
+  description: Echoes back whatever arrived in vars.input.params.
+  is_active: true
+  trigger_step_id: start
+  parameters:
+  - type
+  - datakey
+  - description
+  - title
+  steps:
+  - type: start
+    name: Start
+    step_variables:
+      input:
+        params: []
+    next: return
+    top: '40'
+    left: '40'
+  - type: set_variable
+    name: return
+    vars:
+      output: '{{ vars.input.params | tojson }}'
+      params: '{{ vars.input.params }}'
+      status: ''
+    top: '40'
+    left: '340'
+
+- name: 'ZZ CA - parent A nested only'
+  uuid: b1c2d3e4-0012-4000-8000-000000000012
+  is_active: true
+  steps:
+  - type: start
+    name: Start
+    resources: [ztpf_devices]
+    inputVariables: []
+    next: call_child
+    top: '40'
+    left: '40'
+  - type: workflow_reference
+    name: call child
+    apply_async: false
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/b1c2d3e4-0011-4000-8000-000000000011
+    datakey: placeholder
+    next: return
+    top: '40'
+    left: '340'
+  - type: set_variable
+    name: return
+    vars:
+      echo: '{{ vars.steps.call_child.output }}'
+    top: '40'
+    left: '640'
+
+- name: 'ZZ CA - parent B hoisted only'
+  uuid: b1c2d3e4-0013-4000-8000-000000000013
+  is_active: true
+  steps:
+  - type: start
+    name: Start
+    resources: [ztpf_devices]
+    inputVariables: []
+    next: call_child
+    top: '40'
+    left: '40'
+  - type: workflow_reference
+    name: call child
+    apply_async: false
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/b1c2d3e4-0011-4000-8000-000000000011
+    datakey: placeholder
+    next: return
+    top: '40'
+    left: '340'
+  - type: set_variable
+    name: return
+    vars:
+      echo: '{{ vars.steps.call_child.output }}'
+    top: '40'
+    left: '640'
+
+- name: 'ZZ CA - parent C both'
+  uuid: b1c2d3e4-0014-4000-8000-000000000014
+  is_active: true
+  steps:
+  - type: start
+    name: Start
+    resources: [ztpf_devices]
+    inputVariables: []
+    next: call_child
+    top: '40'
+    left: '40'
+  - type: workflow_reference
+    name: call child
+    apply_async: false
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/b1c2d3e4-0011-4000-8000-000000000011
+    datakey: placeholder
+    next: return
+    top: '40'
+    left: '340'
+  - type: set_variable
+    name: return
+    vars:
+      echo: '{{ vars.steps.call_child.output }}'
+    top: '40'
+    left: '640'

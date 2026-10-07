@@ -1,0 +1,49 @@
+# Record-context trigger demo (cybersponse.action). Half of all
+# real-world FSR playbooks fire this way -- right-click an alert,
+# pick "Execute". The playbook receives the record at vars.input.records[0]
+# and stamps a verdict.
+#
+# `type: record_action` compiles to cybersponse.action with the canonical
+# dozen-key argument dict (route uuid, resources, displayConditions,
+# triggerOnSource, etc.) auto-filled.
+
+collection: FSRPB Demo Alert Action
+description: Right-click action on alerts -- read severity, decide, stamp.
+visible: true
+
+playbooks:
+  - name: FSRPB Demo - Triage Alert
+    description: Reads alert severity and tags the alert with a verdict.
+    is_active: true
+    steps:
+      - name: Triage Alert            # canvas/step name (what shows on the node)
+        type: start
+        next: Read severity
+        module: alerts
+        button_label: "Triage Alert" # what shows on the Execute menu button
+        requires_record: true
+        run_mode: per_record
+
+      - name: Read severity
+        type: set_variable
+        next: Branch on severity
+        vars:
+          severity: "{{ vars.input.records[0].severity.itemValue }}"
+
+      - name: Branch on severity
+        type: decision
+        conditions:
+          - display: high
+            when: "{{ vars.severity in ['Critical', 'High'] }}"
+            next: Stamp high verdict
+          - display: low
+            when: "{{ vars.severity not in ['Critical', 'High'] }}"
+            next: No action low severity
+
+      - name: Stamp high verdict
+        type: set_variable
+        vars:
+          verdict: "escalate"
+
+      - name: No action low severity
+        type: end

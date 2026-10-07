@@ -1,0 +1,26 @@
+collection: PYFSR CRUD Probe
+description: Throwaway manual playbook that creates, updates, then deletes one alert. For publish blast-radius testing. Safe to delete.
+visible: true
+
+playbooks:
+  - name: PYFSR CRUD Probe PB
+    is_active: true
+    steps:
+      - name: trigger
+        type: start
+        next: Create
+      - name: Create
+        type: create_record
+        module: alerts
+        operation: Replace
+        fields:
+        next: Update
+      - name: Update
+        type: update_record
+        record: "{{ vars.steps.Create['@id'] }}"
+        module: alerts
+        fields:
+        next: Delete
+      - name: Delete
+        type: delete_record
+        record: "{{ vars.steps.Create['@id'] }}"

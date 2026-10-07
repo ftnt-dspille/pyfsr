@@ -1,0 +1,347 @@
+# M365 Forwarding-Rule Triage -- parent/child split.
+#
+# Parent: pulls the forwarding-rule alert set (Microsoft Graph /security/alerts_v2,
+#         filtered to Defender for Office 365), loops each alert, and hands it to a
+#         per-alert reference playbook.
+# Child:  for ONE alert -- creates a tracking alert, reads the mailbox messageRules,
+#         pulls the Audit.Exchange history (Management Activity API), normalizes the
+#         forwarding destinations, AD-classifies each, and comments the verdict on
+#         the tracking alert.
+#
+# Mock policy: only Microsoft connector steps carry mock_result (Graph, MAA, Graph
+# Mail, AD).  Code snippets, create_record, and the comment step run LIVE so the
+# tracking alert and comment are real end-to-end.
+#
+# Connectors (configs must exist on the appliance):
+#   microsoft-graph                "M365 Defender"  get_all_security_alerts
+#   microsoft-management-activity-api "M365 Audit"  start_subscription / list_content
+#   microsoft-graph-mail           "M365 Graph"     execute_api_request -> messageRules
+#   activedirectory                "Corp AD"        advanced_search
+
+collection: M365 Forwarding Rule Triage
+description: Loop forwarding-rule alerts; per-alert audit + messageRules + AD enrichment via a reference playbook.
+visible: true
+
+playbooks:
+  # ─────────────────────────── PARENT ───────────────────────────
+  - name: Forwarding Rule Triage
+    description: >
+      Detect forwarding/redirect-rule alerts in Defender for Office 365 and
+      dispatch each one to the Per Alert Triage reference playbook.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        requires_record: true
+        button_label: "Run Forwarding Triage"
+        next: Get Forwarding Alerts
+
+      - name: Get Forwarding Alerts
+        type: connector
+        next: Dispatch Each Alert
+        connector: microsoft-graph
+        operation: get_all_security_alerts
+        config: ""
+        params:
+          api_version: V2
+          serviceSource: "microsoftDefenderForOffice365"
+          top: 100
+        mock_result:
+          data:
+            - id: alert-1
+              title: Creation of forwarding/redirect rule
+              createdDateTime: "2026-09-30T13:22:18Z"
+              serviceSource: microsoftDefenderForOffice365
+              evidence:
+                - "@odata.type": "#microsoft.graph.security.userEvidence"
+                  userAccount:
+                    userPrincipalName: alice@company.com
+            - id: alert-2
+              title: Email forwarding rule created
+              createdDateTime: "2026-09-30T13:40:00Z"
+              serviceSource: microsoftDefenderForOffice365
+              evidence:
+                - "@odata.type": "#microsoft.graph.security.userEvidence"
+                  userAccount:
+                    userPrincipalName: bob@company.com
+
+      - name: Dispatch Each Alert
+        type: workflow_reference
+        next: Done
+        target: Per Alert Triage
+        for_each:
+          item: "{{ vars.steps.Get_Forwarding_Alerts.data }}"
+          parallel: false
+        alert: "{{ vars.item }}"
+
+      - name: Done
+        type: end
+
+  # ─────────────────────────── CHILD (per alert) ───────────────────────────
+  - name: Per Alert Triage
+    description: >
+      For one forwarding-rule alert: create a tracking alert, extract the affected
+      user, pull current inbox messageRules, pull Audit.Exchange history, normalize
+      destinations, AD-classify each, and comment the verdict on the tracking alert.
+    is_active: true
+    parameters: [alert]
+    steps:
+      - name: Start
+        type: start
+        next: Extract Affected User
+
+      - name: Extract Affected User
+        type: code_snippet
+        next: Create Tracking Alert
+        code: |
+          alert = {{ vars.input.params.alert | tojson }}
+          upn = ''
+          for ev in (alert.get('evidence') or []):
+              ua = ev.get('userAccount') or {}
+              if ua.get('userPrincipalName'):
+                  upn = ua['userPrincipalName']
+                  break
+          print({'upn': upn, 'alert_id': alert.get('id'), 'title': alert.get('title'), 'alert_created': alert.get('createdDateTime')})
+
+      - name: Create Tracking Alert
+        type: create_record
+        next: Ensure Audit Subscription
+        module: alerts
+        operation: Replace
+        fields:
+          name: "Forwarding rule triage: {{ vars.steps.Extract_Affected_User.data.code_output.upn }}"
+          severity: Medium
+          description: >
+            Tracking alert for M365 forwarding-rule triage.
+            Source alert: {{ vars.steps.Extract_Affected_User.data.code_output.alert_id }}
+            User: {{ vars.steps.Extract_Affected_User.data.code_output.upn }}
+
+      - name: Ensure Audit Subscription
+        type: connector
+        next: Pull Audit History
+        connector: microsoft-management-activity-api
+        operation: start_subscription
+        config: ""
+        params:
+          content_type: Audit.Exchange
+        mock_result:
+          data:
+            status: success
+
+      - name: Pull Audit History
+        type: connector
+        next: Fetch Current Message Rules
+        connector: microsoft-management-activity-api
+        operation: list_content
+        config: ""
+        params:
+          content_type: Audit.Exchange
+          start_time: "{{ vars.steps.Extract_Affected_User.data.code_output.alert_created | default('', true) }}"
+          end_time: "{{ get_current_datetime() }}"
+        mock_result:
+          data:
+            - Operation: New-InboxRule
+              UserId: alice@company.com
+              CreationTime: "2026-09-30T13:21:55Z"
+              Parameters:
+                - Name: Name
+                  Value: Forward invoices
+                - Name: ForwardTo
+                  Value: personal@gmail.com
+            - Operation: Set-InboxRule
+              UserId: alice@company.com
+              CreationTime: "2026-09-30T13:25:00Z"
+              Parameters:
+                - Name: RedirectTo
+                  Value: susan@company.com
+
+      - name: Fetch Current Message Rules
+        type: connector
+        next: Normalize Audit Records
+        connector: microsoft-graph-mail
+        operation: execute_api_request
+        config: ""
+        params:
+          method: GET
+          endpoint: "/v1.0/users/{{ vars.steps.Extract_Affected_User.data.code_output.upn }}/mailFolders/inbox/messageRules"
+        ignore_errors: true
+        mock_result:
+          data:
+            value:
+              - id: rule1
+                displayName: Forward invoices
+                actions:
+                  forwardTo:
+                    - emailAddress:
+                        address: personal@gmail.com
+                  redirectTo: []
+                  forwardAsAttachmentTo: []
+
+      - name: Normalize Audit Records
+        type: code_snippet
+        next: Extract Destinations
+        code: |
+          audit = {{ vars.steps.Pull_Audit_History.data | tojson }}
+          upn = {{ vars.steps.Extract_Affected_User.data.code_output.upn | tojson }}
+          rows = []
+          for rec in audit:
+              op = rec.get('Operation') or ''
+              if op not in ('New-InboxRule', 'Set-InboxRule'):
+                  continue
+              if rec.get('UserId') and upn and upn.lower() not in str(rec.get('UserId')).lower():
+                  continue
+              params = {}
+              for p in (rec.get('Parameters') or []):
+                  params[p.get('Name')] = p.get('Value')
+              rows.append({
+                  'operation': op,
+                  'user': rec.get('UserId'),
+                  'created': rec.get('CreationTime'),
+                  'rule_name': params.get('Name'),
+                  'params': params,
+              })
+          print({'rows': rows, 'count': len(rows)})
+
+      - name: Extract Destinations
+        type: code_snippet
+        next: Classify Destinations
+        code: |
+          dests = []
+          # From audit Parameters (historical)
+          rows = {{ vars.steps.Normalize_Audit_Records.data.code_output.rows | tojson }}
+          for row in rows:
+              p = row['params']
+              for key in ('ForwardTo', 'RedirectTo', 'ForwardAsAttachmentTo'):
+                  v = p.get(key)
+                  if v:
+                      dests.append({'type': key.lower(), 'address': v, 'source': 'audit', 'rule': row['rule_name']})
+          # From current messageRules (present state) -- merge, dedupe
+          rules = {{ vars.steps.Fetch_Current_Message_Rules.data.value | default([]) | tojson }}
+          for rule in rules:
+              acts = rule.get('actions') or {}
+              for key in ('forwardTo', 'redirectTo', 'forwardAsAttachmentTo'):
+                  for r in (acts.get(key) or []):
+                      addr = (r.get('emailAddress') or {}).get('address') if r else None
+                      if addr:
+                          dests.append({'type': key, 'address': addr, 'source': 'messageRules', 'rule': rule.get('displayName')})
+          seen = {}
+          uniq = []
+          for d in dests:
+              k = (d['type'], d['address'])
+              if k not in seen:
+                  seen[k] = True
+                  uniq.append(d)
+          print({'destinations': uniq, 'count': len(uniq)})
+
+      - name: Classify Destinations
+        type: workflow_reference
+        next: Apply Priority
+        target: Classify Destination
+        for_each:
+          item: "{{ vars.steps.Extract_Destinations.data.code_output.destinations }}"
+          parallel: false
+        address: "{{ vars.item.address }}"
+        source_user_upn: "{{ vars.steps.Extract_Affected_User.data.code_output.upn }}"
+
+      - name: Apply Priority
+        type: code_snippet
+        next: Comment Verdict
+        code: |
+          addrs = {{ vars.steps.Classify_Destinations | map(attribute='address') | list | tojson }}
+          prios = {{ vars.steps.Classify_Destinations | map(attribute='priority') | list | tojson }}
+          classes = {{ vars.steps.Classify_Destinations | map(attribute='classification') | list | tojson }}
+          cls = []
+          i = 0
+          while i < len(addrs):
+              cls.append({'address': addrs[i], 'priority': prios[i], 'classification': classes[i]})
+              i += 1
+          order = {'Low': 0, 'Medium': 1, 'Critical': 2}
+          top = 'Low'
+          for c in cls:
+              if order.get(c.get('priority'), 0) > order.get(top, 0):
+                  top = c['priority']
+          print({'final_priority': top, 'destinations': cls, 'count': len(cls)})
+
+      - name: Comment Verdict
+        type: set_variable
+        next: Done
+        message:
+          type: comment
+          content: >
+            <p>Forwarding-rule alert
+            <strong>{{ vars.steps.Extract_Affected_User.data.code_output.alert_id }}</strong>
+            for <strong>{{ vars.steps.Extract_Affected_User.data.code_output.upn }}</strong>:
+            {{ vars.steps.Apply_Priority.data.code_output.count }} destination(s),
+            final priority <strong>{{ vars.steps.Apply_Priority.data.code_output.final_priority }}</strong>.</p>
+          record: "{{ vars.steps.Create_Tracking_Alert['@id'] }}"
+
+      - name: Done
+        type: end
+
+  # ─────────────────────────── GRANDCHILD (single destination) ───────────────────────────
+  - name: Classify Destination
+    description: >
+      Resolve one forwarding destination in Active Directory and return its
+      classification + priority: external/unresolved -> Critical, other internal
+      employee -> Medium, the source user's own manager -> Low.
+    is_active: true
+    parameters: [address, source_user_upn]
+    steps:
+      - name: Start
+        type: start
+        next: Resolve Source
+
+      - name: Resolve Source
+        type: connector
+        next: Resolve Destination
+        connector: activedirectory
+        operation: advanced_search
+        config: ""
+        params:
+          query: "(objectCategory=person)(|(mail={{ vars.input.params.source_user_upn }})(userPrincipalName={{ vars.input.params.source_user_upn }}))"
+        set:
+          source_manager_dn: "{{ vars.steps.Resolve_Source.data.entries[0].attributes.manager | default('', true) }}"
+        ignore_errors: true
+        mock_result:
+          data:
+            entries:
+              - attributes:
+                  manager: CN=Susan Smith,OU=Users,DC=company,DC=com
+
+      - name: Resolve Destination
+        type: connector
+        next: Classify
+        connector: activedirectory
+        operation: advanced_search
+        config: ""
+        params:
+          query: "(|(mail={{ vars.input.params.address }})(userPrincipalName={{ vars.input.params.address }})(proxyAddresses=SMTP:{{ vars.input.params.address }}))"
+        mock_result:
+          data:
+            entries:
+              - attributes:
+                  distinguishedName: CN=Susan Smith,OU=Users,DC=company,DC=com
+                  userAccountControl: "512"
+
+      - name: Classify
+        type: code_snippet
+        next: Export Result
+        code: |
+          entries = {{ vars.steps.Resolve_Destination.data.entries | default([]) | tojson }}
+          if not entries:
+              print({'priority': 'Critical', 'classification': 'external'})
+          else:
+              dn = entries[0].get('attributes', {}).get('distinguishedName', '')
+              manager = {{ vars.source_manager_dn | default('') | tojson }}
+              if manager and dn and dn.lower() == manager.lower():
+                  print({'priority': 'Low', 'classification': 'manager'})
+              else:
+                  print({'priority': 'Medium', 'classification': 'employee'})
+
+      - name: Export Result
+        type: set_variable
+        vars:
+          address: "{{ vars.input.params.address }}"
+          priority: "{{ vars.steps.Classify.data.code_output.priority }}"
+          classification: "{{ vars.steps.Classify.data.code_output.classification }}"

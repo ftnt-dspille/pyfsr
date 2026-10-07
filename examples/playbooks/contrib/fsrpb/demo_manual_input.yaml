@@ -1,0 +1,37 @@
+# Manual-input (human-in-the-loop) demo. Pauses with two options;
+# whichever the user clicks routes to a different next step. The e2e
+# runner picks the option programmatically via `resume_input:` in the
+# .test.yaml so the demo can run unattended.
+
+collection: FSRPB Demo Manual Input
+description: Pause for an approve/reject decision, then branch.
+visible: true
+
+playbooks:
+  - name: FSRPB Demo - Manual Input
+    is_active: true
+    steps:
+      - name: trigger
+        type: start
+        next: Approve action
+
+      - name: Approve action
+        type: manual_input
+        options:
+          - display: approve
+            primary: true
+            next: Stamp approved
+          - display: reject
+            next: Stamp rejected
+        title: "Approve the e2e action?"
+        description: "Click **approve** to continue, **reject** to abort."
+
+      - name: Stamp approved
+        type: set_variable
+        vars:
+          verdict: approved
+
+      - name: Stamp rejected
+        type: set_variable
+        vars:
+          verdict: rejected

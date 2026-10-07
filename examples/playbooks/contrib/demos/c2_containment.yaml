@@ -1,0 +1,1026 @@
+# FortiSOC C2 containment: a user's device beacons to a command-and-control
+# address, and FortiSOC contains the user, the device and the address in one run.
+#
+#   Start (manual, on an alert -- the FortiAnalyzer C2 alert)
+#     -> Response Config      (set_variable -- names, allow-list, feed confidence)
+#     -> Read Alert           (set_variable -- user, host, C2 address)
+#     -> Input Gate           (decision -- no user or no C2 address, stop)
+#   1. AD Lookup User         (activedirectory/global_search, via the agent)
+#      AD Lookup Manager      (global_search on the manager's DN)
+#   2. Find Caller            (servicenow/search_record -- the API user's sys_id)
+#      Create Incident        (servicenow/create_incident) -> progress comment
+#   3. SASE Gate              (decision -- only allow-listed demo users)
+#      Deauth VPN / SWG       (fortinet-fortisase/generic_api_call, via the agent)
+#   4. List Collectors        (fortinet-fortiedr/get_collector_list)
+#      Isolate Endpoint       (isolate_collector) -> Verify -> Evaluate
+#   5. Publish C2 Indicator   (threat_intel_feeds record -- the TAXII block feed
+#                              the FortiGate pulls)
+#      Incident Work Notes    (servicenow/update_servicenow_incident)
+#      Mark Investigating     (alert status + ticketID)
+#      Containment Comment
+#   6. Email Gate             (decision -- only when notify_to is set)
+#      Send Summary Email     (smtp/send_email_new, errors don't stop the run)
+#   7. Approve Close          (manual_input -- analyst confirms containment)
+#      Close Incident         (servicenow/update_servicenow_incident -> Closed)
+#      Verify Incident Closed (servicenow/search_record) -> Evaluate
+#      Close Alert            (alert Closed, reason Tasks Completed) -> end
+#
+# Two rules this playbook keeps:
+#
+# 1. The FortiSASE tenant is a real organisation. A deauth of the wrong user
+#    disconnects a real person, so the playbook only disconnects usernames on the
+#    Response Config allow-list. Anyone else is reported, not disconnected.
+#
+# 2. Every containment claim is read back. FortiEDR's isolate call reports
+#    success even for a collector that does not exist, so the collector list is
+#    read again and the host's state checked.
+#
+# Connector configs are referenced by name. AD and FortiSASE are bound to the
+# on-prem automation agent -- FortiSASE because FortiCloud's token endpoint only
+# answers from the lab -- which the config itself records, so the steps need
+# nothing extra.
+
+collection: FortiSOC - C2 Containment
+description: >
+  Contain a device beaconing to a C2 address: identify the user and their manager
+  in AD, open a ServiceNow incident, disconnect the user's FortiSASE sessions,
+  isolate the endpoint in FortiEDR, and publish the address to the FortiGate's
+  TAXII block feed. Then email the summary and, once an analyst approves, close
+  the ServiceNow incident and the alert.
+visible: true
+
+playbooks:
+  - name: Contain C2 Beacon
+    description: >
+      AD enrichment, ServiceNow incident, FortiSASE deauth, FortiEDR isolation
+      and TAXII block, each read back before it is reported.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: "Contain C2 Beacon"
+        next: Response Config
+
+      - name: Response Config
+        type: set_variable
+        comment: >
+          sase_allowlist is the ONLY set of FortiSASE usernames this playbook
+          will disconnect (comma-separated). Leave it empty and the SASE leg
+          reports what it would have done instead.
+
+          snow_caller is the ServiceNow user_name the incident is raised as.
+          feed_confidence must be at least 70 for the shipped "Block List (IP
+          Address)" dataset -- the FortiGate's feed -- to publish the address.
+
+          notify_to is who gets the containment summary email (comma-separated).
+          Empty skips the email.
+
+          edr_host_map maps an alert host name to its FortiEDR collector name
+          when the two differ (host=collector, comma-separated). The lab's
+          ws-badguy registered with FortiEDR as "ubuntu".
+        vars:
+          sase_allowlist: "jdoe@demo.lab"
+          snow_caller: "fortisoc.api"
+          feed_confidence: "90"
+          notify_to: ""
+          edr_host_map: "ws-badguy=ubuntu"
+        next: Read Alert
+
+      - name: Read Alert
+        type: set_variable
+        comment: >
+          The username may arrive as DOMAIN\user or user@domain; AD is searched
+          by sAMAccountName, so both are stripped.
+        vars:
+          # Single-quoted YAML, so Jinja receives '\\' -- one literal backslash.
+          user: '{{ (vars.input.records[0].userName | default("", true)).split("\\")[-1].split("@")[0] | trim }}'
+          host: "{{ vars.input.records[0].computerName | default('', true) | trim }}"
+          c2_ip: "{{ vars.input.records[0].destinationIp | default('', true) | trim }}"
+          src_ip: "{{ vars.input.records[0].sourceIp | default('', true) | trim }}"
+        next: Input Gate
+
+      - name: Input Gate
+        type: decision
+        conditions:
+          - display: has-user-and-c2
+            when: "{{ vars.user | length > 0 and vars.c2_ip | length > 0 }}"
+            next: AD Lookup User
+          - display: Else
+            default: true
+            next: Missing Input Comment
+
+      - name: Missing Input Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Nothing contained -- the alert does not name both a user and
+            a C2 address.</b></p>
+            <p>User: <code>{{ vars.user or 'missing' }}</code>, C2 address:
+            <code>{{ vars.c2_ip or 'missing' }}</code>. Fix the FortiAnalyzer
+            alert mapping (<code>userName</code>, <code>destinationIp</code>)
+            rather than working around it here.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Missing Input
+
+      - name: Done Missing Input
+        type: end
+
+      # ---- 1. Active Directory -------------------------------------------------
+      - name: AD Lookup User
+        type: connector
+        connector: activedirectory
+        operation: global_search
+        config: Lab Active Directory
+        params:
+          search_object: User
+          search_attr_name: SamAccount Name
+          search_attr_value: "{{ vars.user }}"
+        next: Summarise User
+
+      - name: Summarise User
+        type: set_variable
+        vars:
+          ad_found: "{{ 'yes' if (vars.steps.AD_Lookup_User.data.entries | default([], true)) | length > 0 else '' }}"
+          ad_name: "{{ vars.steps.AD_Lookup_User.data.entries[0].attributes.displayName | default(vars.user, true) }}"
+          ad_title: "{{ vars.steps.AD_Lookup_User.data.entries[0].attributes.title | default('', true) }}"
+          ad_department: "{{ vars.steps.AD_Lookup_User.data.entries[0].attributes.department | default('', true) }}"
+          ad_manager_dn: "{{ vars.steps.AD_Lookup_User.data.entries[0].attributes.manager | default('', true) }}"
+          # Set here too, so the no-manager branch reads empty rather than unset.
+          manager_name: ""
+          manager_title: ""
+          # The FortiSASE login is the user's mail, else their UPN.
+          sase_user: "{{ vars.steps.AD_Lookup_User.data.entries[0].attributes.mail | default(vars.steps.AD_Lookup_User.data.entries[0].attributes.userPrincipalName, true) | default(vars.user, true) }}"
+        next: Manager Gate
+
+      - name: Manager Gate
+        type: decision
+        conditions:
+          - display: has-manager
+            when: "{{ vars.ad_manager_dn | length > 0 }}"
+            next: AD Lookup Manager
+          - display: Else
+            default: true
+            next: Find Caller
+
+      - name: AD Lookup Manager
+        type: connector
+        connector: activedirectory
+        operation: global_search
+        config: Lab Active Directory
+        params:
+          search_object: User
+          search_attr_name: Distinguished Name
+          search_attr_value: "{{ vars.ad_manager_dn }}"
+        next: Summarise Manager
+
+      - name: Summarise Manager
+        type: set_variable
+        vars:
+          manager_name: "{{ vars.steps.AD_Lookup_Manager.data.entries[0].attributes.displayName | default('', true) }}"
+          manager_title: "{{ vars.steps.AD_Lookup_Manager.data.entries[0].attributes.title | default('', true) }}"
+        next: Find Caller
+
+      # ---- 2. ServiceNow -------------------------------------------------------
+      # caller_id is a reference field: it takes a sys_id, which differs per
+      # instance, so it is looked up by user_name rather than hard-coded.
+      - name: Find Caller
+        type: connector
+        connector: servicenow
+        operation: search_record
+        config: Lab ServiceNow
+        params:
+          table_name: sys_user
+          column_name: user_name
+          value: "{{ vars.snow_caller }}"
+        next: Create Incident
+
+      - name: Create Incident
+        type: connector
+        connector: servicenow
+        operation: create_incident
+        config: Lab ServiceNow
+        params:
+          caller_id: "{{ vars.steps.Find_Caller.data.result[0].sys_id }}"
+          short_description: "C2 beacon: {{ vars.host or vars.src_ip }} ({{ vars.user }}) -> {{ vars.c2_ip }}"
+          description: |
+            FortiSOC detected {{ vars.host or 'a device' }} ({{ vars.src_ip or 'unknown address' }}) beaconing to the command-and-control address {{ vars.c2_ip }}.
+
+            User: {{ vars.ad_name }} ({{ vars.user }}){% if vars.ad_title %}, {{ vars.ad_title }}{% endif %}{% if vars.ad_department %}, {{ vars.ad_department }}{% endif %}
+            Manager: {{ vars.manager_name | default('not recorded in AD', true) }}{% if vars.manager_title %}, {{ vars.manager_title }}{% endif %}
+
+            FortiSOC is disconnecting the user's FortiSASE sessions, isolating the endpoint in FortiEDR and publishing {{ vars.c2_ip }} to the FortiGate block feed. Results follow in the work notes.
+          urgency: "1"
+          impact: "2"
+          category: "security"
+        next: Incident Opened Comment
+
+      # A progress mark on the alert: the containment legs and the approval can
+      # take minutes, and the analyst watching the alert should see who and
+      # which ticket before the summary lands.
+      - name: Incident Opened Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Containment started.</b> ServiceNow incident
+            <b>{{ vars.steps.Create_Incident.data.result.number }}</b> opened for
+            {{ vars.ad_name }} ({{ vars.user }}){% if vars.manager_name | default('', true) %},
+            manager {{ vars.manager_name }}{% endif %}. Next: FortiSASE, FortiEDR
+            and the FortiGate block feed.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: SASE Gate
+
+      # ---- 3. FortiSASE --------------------------------------------------------
+      - name: SASE Gate
+        type: decision
+        conditions:
+          - display: allow-listed
+            when: "{{ (vars.sase_user | lower) in ((vars.sase_allowlist | lower).split(',') | map('trim') | list) }}"
+            next: Deauth VPN
+          - display: Else
+            default: true
+            next: SASE Skipped
+
+      - name: Deauth VPN
+        type: connector
+        connector: fortinet-fortisase
+        operation: generic_api_call
+        config: Lab FortiSASE
+        params:
+          method: POST
+          endpoint: /monitor-api/v1/user/vpn/sessions/deauth
+          data: '{"usernames": ["{{ vars.sase_user }}"]}'
+        next: Deauth SWG
+
+      - name: Deauth SWG
+        type: connector
+        connector: fortinet-fortisase
+        operation: generic_api_call
+        config: Lab FortiSASE
+        params:
+          method: POST
+          endpoint: /monitor-api/v1/user/swg/sessions/deauth
+          data: '{"usernames": ["{{ vars.sase_user }}"]}'
+        next: SASE Done
+
+      - name: SASE Done
+        type: set_variable
+        vars:
+          sase_result: "disconnected {{ vars.sase_user }}'s VPN and SWG sessions"
+        next: List Collectors
+
+      - name: SASE Skipped
+        type: set_variable
+        comment: >
+          Not an error: the FortiSASE tenant is a real organisation, and only
+          allow-listed demo users are ever disconnected.
+        vars:
+          sase_result: "not disconnected -- {{ vars.sase_user }} is not on the demo allow-list"
+        next: List Collectors
+
+      # ---- 4. FortiEDR ---------------------------------------------------------
+      # The config's organization scopes the login itself, so no organization
+      # parameter is passed.
+      - name: List Collectors
+        type: connector
+        connector: fortinet-fortiedr
+        operation: get_collector_list
+        config: Lab FortiEDR
+        params: {}
+        next: Match Collector
+
+      - name: Match Collector
+        type: code_snippet
+        config: default
+        comment: >
+          Alerts often carry an FQDN where the EDR carries a short name, so both
+          are compared.
+        code: |
+          collectors = {{ vars.steps.List_Collectors.data | default([]) }}
+          wanted = """{{ vars.host }}""".strip().lower()
+
+          aliases = {}
+          for pair in """{{ vars.edr_host_map | default('', true) }}""".split(","):
+              if "=" in pair:
+                  alias_host, alias_edr = pair.split("=", 1)
+                  aliases[alias_host.strip().lower()] = alias_edr.strip().lower()
+          wanted = aliases.get(wanted, aliases.get(wanted.split(".")[0], wanted))
+
+          match = {}
+          for row in collectors or []:
+              name = str((row or {}).get("name") or "").strip().lower()
+              if wanted and name and (name == wanted or wanted.split(".")[0] == name):
+                  match = row
+
+          print({
+              "found": "yes" if match else "",
+              "name": str(match.get("name") or ""),
+              "state": str(match.get("state") or ""),
+              "fleet_size": len(collectors or []),
+          })
+        next: Collector Gate
+
+      - name: Collector Gate
+        type: decision
+        conditions:
+          - display: found
+            when: "{{ vars.steps.Match_Collector.data.code_output.found | length > 0 }}"
+            next: Isolate Endpoint
+          - display: Else
+            default: true
+            next: EDR Not Found
+
+      - name: EDR Not Found
+        type: set_variable
+        vars:
+          edr_result: "not isolated -- no FortiEDR collector named {{ vars.host or '(no host on the alert)' }} among {{ vars.steps.Match_Collector.data.code_output.fleet_size }}"
+          edr_isolated: ""
+        next: Publish C2 Indicator
+
+      - name: Isolate Endpoint
+        type: connector
+        connector: fortinet-fortiedr
+        operation: isolate_collector
+        config: Lab FortiEDR
+        params:
+          type: Name
+          devices: "{{ vars.steps.Match_Collector.data.code_output.name }}"
+        next: Verify Isolation
+
+      # The isolate call returns "Successfully executed" whether or not the
+      # collector exists -- the list is the evidence.
+      - name: Verify Isolation
+        type: connector
+        connector: fortinet-fortiedr
+        operation: get_collector_list
+        config: Lab FortiEDR
+        params:
+          type: Name
+          devices: "{{ vars.steps.Match_Collector.data.code_output.name }}"
+        next: Evaluate Isolation
+
+      - name: Evaluate Isolation
+        type: code_snippet
+        config: default
+        comment: >
+          An ONLINE collector reports isolation in `state`; an OFFLINE one keeps
+          `state` Disconnected and records it in `stateAdditionalInfo`, enforced
+          when it reconnects.
+        code: |
+          collectors = {{ vars.steps.Verify_Isolation.data | default([]) }}
+          wanted = """{{ vars.steps.Match_Collector.data.code_output.name }}""".strip().lower()
+
+          state = ""
+          extra = ""
+          for row in collectors or []:
+              if str((row or {}).get("name") or "").strip().lower() == wanted:
+                  state = str(row.get("state") or "")
+                  extra = str(row.get("stateAdditionalInfo") or "")
+
+          isolated = state.lower() == "isolated" or extra.lower() == "isolated"
+          if not isolated:
+              result = "isolation NOT confirmed -- the collector reports %s" % (state or "nothing")
+          elif state.lower() == "isolated":
+              result = "isolated -- confirmed on the collector"
+          else:
+              result = "isolation queued -- the collector is offline and is isolated when it reconnects"
+
+          print({"isolated": "yes" if isolated else "", "result": result})
+        next: EDR Done
+
+      - name: EDR Done
+        type: set_variable
+        vars:
+          edr_result: "{{ vars.steps.Evaluate_Isolation.data.code_output.result }}"
+          edr_isolated: "{{ vars.steps.Evaluate_Isolation.data.code_output.isolated }}"
+        next: Publish C2 Indicator
+
+      # ---- 5. TAXII block feed -------------------------------------------------
+      # The shipped "Block List (IP Address)" dataset publishes IP Address,
+      # Malicious, confidence >= 70 feeds created in the last 24h -- the rolling
+      # window is also the block's expiry. The FortiGate pulls that dataset.
+      - name: Publish C2 Indicator
+        type: create_record
+        module: threat_intel_feeds
+        fields:
+          name: "{{ vars.c2_ip }}"
+          value: "{{ vars.c2_ip }}"
+          typeOfFeed: '{{ "ThreatIntelFeedType" | picklist("IP Address", "@id") }}'
+          reputation: '{{ "IndicatorReputation" | picklist("Malicious", "@id") }}'
+          confidence: "{{ vars.feed_confidence | int }}"
+          source: "FortiSOC C2 containment"
+          description: "C2 address beaconed to by {{ vars.host or vars.src_ip }} ({{ vars.user }})."
+          # FortiOS 7.6 pulls the feed over stix:// and builds an address ONLY
+          # from each object's STIX pattern; the TAXII serializer emits these
+          # stored fields verbatim, it does not derive a pattern from `value`.
+          pattern: "[ipv4-addr:value = '{{ vars.c2_ip }}']"
+          patternType: "stix"
+          patternVersion: "2.1"
+        next: Incident Work Notes
+
+      - name: Incident Work Notes
+        type: connector
+        connector: servicenow
+        operation: update_servicenow_incident
+        config: Lab ServiceNow
+        params:
+          sys_id: "{{ vars.steps.Create_Incident.data.result.sys_id }}"
+          work_notes: |
+            FortiSOC containment:
+            - FortiSASE: {{ vars.sase_result }}
+            - FortiEDR: {{ vars.edr_result }}
+            - FortiGate: {{ vars.c2_ip }} published to the TAXII block feed
+        next: Mark Investigating
+
+      - name: Mark Investigating
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: '{{ "AlertStatus" | picklist("Investigating", "@id") }}'
+          ticketID: "{{ vars.steps.Create_Incident.data.result.number }}"
+        next: Containment Comment
+
+      - name: Containment Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>C2 beacon contained -- {{ vars.host or vars.src_ip }} to
+            {{ vars.c2_ip }}.</b></p>
+            <p><b>1. User:</b> {{ vars.ad_name }} ({{ vars.user }}){% if vars.ad_title %},
+            {{ vars.ad_title }}{% endif %}{% if vars.ad_department %},
+            {{ vars.ad_department }}{% endif %}.
+            {% if vars.manager_name | default('', true) %}Manager:
+            <b>{{ vars.manager_name }}</b>{% if vars.manager_title %},
+            {{ vars.manager_title }}{% endif %}.{% elif not vars.ad_found %}Not
+            found in Active Directory.{% else %}No manager recorded in AD.{% endif %}</p>
+            <p><b>2. ServiceNow:</b> incident
+            <b>{{ vars.steps.Create_Incident.data.result.number }}</b> opened.</p>
+            <p><b>3. FortiSASE:</b> {{ vars.sase_result }}.</p>
+            <p><b>4. FortiEDR:</b> {{ vars.edr_result }}.</p>
+            <p><b>5. FortiGate:</b> {{ vars.c2_ip }} published to the TAXII
+            block feed; the FortiGate denies it on its next feed refresh.</p>
+            <p>Waiting for an analyst to approve closing the incident and this
+            alert.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Email Gate
+
+      # ---- 6. Summary email ----------------------------------------------------
+      - name: Email Gate
+        type: decision
+        conditions:
+          - display: has-recipients
+            when: "{{ vars.notify_to | trim | length > 0 }}"
+            next: Send Summary Email
+          - display: Else
+            default: true
+            next: Approve Close
+
+      # A mail failure must not strand a contained incident: the run carries on
+      # to the approval either way, and the step's own result shows the error.
+      - name: Send Summary Email
+        type: connector
+        connector: smtp
+        operation: send_email_new
+        config: Lab SMTP
+        ignore_errors: true
+        params:
+          type: Manual Input
+          to: "{{ vars.notify_to }}"
+          body_type: Rich Text
+          subject: "[FortiSOC] C2 beacon contained: {{ vars.host or vars.src_ip }} -> {{ vars.c2_ip }} ({{ vars.steps.Create_Incident.data.result.number }})"
+          content: >
+            <p><b>FortiSOC contained a C2 beacon.</b>
+            {{ vars.host or 'A device' }} ({{ vars.src_ip or 'unknown address' }})
+            was calling {{ vars.c2_ip }}.</p>
+            <table border="1" cellpadding="6" style="border-collapse: collapse;">
+            <tr><td><b>User</b></td><td>{{ vars.ad_name }} ({{ vars.user }}){% if vars.ad_title %}, {{ vars.ad_title }}{% endif %}{% if vars.ad_department %}, {{ vars.ad_department }}{% endif %}</td></tr>
+            <tr><td><b>Manager</b></td><td>{{ vars.manager_name | default('not recorded in AD', true) }}{% if vars.manager_title %}, {{ vars.manager_title }}{% endif %}</td></tr>
+            <tr><td><b>ServiceNow</b></td><td>{{ vars.steps.Create_Incident.data.result.number }}</td></tr>
+            <tr><td><b>FortiSASE</b></td><td>{{ vars.sase_result }}</td></tr>
+            <tr><td><b>FortiEDR</b></td><td>{{ vars.edr_result }}</td></tr>
+            <tr><td><b>FortiGate</b></td><td>{{ vars.c2_ip }} published to the TAXII block feed</td></tr>
+            </table>
+            <p>An analyst is asked to confirm before the incident and the alert
+            are closed.</p>
+        next: Approve Close
+
+      # ---- 7. Analyst approval, then close -------------------------------------
+      - name: Approve Close
+        type: manual_input
+        title: "Close incident {{ vars.steps.Create_Incident.data.result.number }}?"
+        description: >
+          **{{ vars.host or vars.src_ip }}** was beaconing to **{{ vars.c2_ip }}**.
+          Containment so far:
+
+          - **FortiSASE:** {{ vars.sase_result }}
+
+          - **FortiEDR:** {{ vars.edr_result }}
+
+          - **FortiGate:** {{ vars.c2_ip }} is on the TAXII block feed
+
+          **Close** resolves ServiceNow incident
+          {{ vars.steps.Create_Incident.data.result.number }} and closes this alert.
+          **Keep Open** leaves both open for follow-up.
+        options:
+          - display: Close
+            primary: true
+            next: Close Incident
+          - display: Keep Open
+            next: Kept Open Comment
+
+      - name: Kept Open Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Left open by the analyst.</b> ServiceNow incident
+            {{ vars.steps.Create_Incident.data.result.number }} and this alert
+            stay open for follow-up.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Kept Open
+
+      - name: Done Kept Open
+        type: end
+
+      # ServiceNow closes (7) only with a close code and notes; the choice list
+      # is the instance's own incident.close_code.
+      - name: Close Incident
+        type: connector
+        connector: servicenow
+        operation: update_servicenow_incident
+        config: Lab ServiceNow
+        params:
+          sys_id: "{{ vars.steps.Create_Incident.data.result.sys_id }}"
+          state: "7"
+          work_notes: "Containment approved in FortiSOC; closing."
+          other_fields:
+            close_code: Solution provided
+            close_notes: >-
+              FortiSOC contained the C2 beacon from {{ vars.host or vars.src_ip }}
+              to {{ vars.c2_ip }}. FortiSASE: {{ vars.sase_result }}. FortiEDR:
+              {{ vars.edr_result }}. FortiGate: {{ vars.c2_ip }} on the block feed.
+        next: Verify Incident Closed
+
+      - name: Verify Incident Closed
+        type: connector
+        connector: servicenow
+        operation: search_record
+        config: Lab ServiceNow
+        params:
+          table_name: incident
+          column_name: sys_id
+          value: "{{ vars.steps.Create_Incident.data.result.sys_id }}"
+        next: Close Alert
+
+      - name: Close Alert
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: '{{ "AlertStatus" | picklist("Closed", "@id") }}'
+          closureReason: '{{ "Closure Reason" | picklist("Tasks Completed", "@id") }}'
+          closureNotes: >-
+            Contained by FortiSOC and approved by an analyst. ServiceNow
+            {{ vars.steps.Create_Incident.data.result.number }}:
+            {{ 'closed' if (vars.steps.Verify_Incident_Closed.data.result[0].state | default('')) == '7' else 'close NOT confirmed (state ' ~ (vars.steps.Verify_Incident_Closed.data.result[0].state | default('unknown')) ~ ')' }}.
+        next: Closed Comment
+
+      - name: Closed Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Closed after analyst approval.</b> ServiceNow incident
+            {{ vars.steps.Create_Incident.data.result.number }}:
+            {% if (vars.steps.Verify_Incident_Closed.data.result[0].state | default('')) == '7' %}closed
+            (read back from ServiceNow){% else %}<b>close NOT confirmed</b> -- ServiceNow
+            reports state {{ vars.steps.Verify_Incident_Closed.data.result[0].state | default('unknown') }}{% endif %}.
+            Alert closed as Tasks Completed.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done
+
+      - name: Done
+        type: end
+
+  # ===========================================================================
+  # Reset: back to square zero after a demo run, on the same alert.
+  #   Read Alert -> Input Gate
+  #   1. TAXII feed    find the C2 address's feed records -> delete -> re-find
+  #                    (the FortiGate drops the address on its next feed pull)
+  #   2. FortiEDR      find the host's collector -> unisolate -> read back
+  #   3. ServiceNow    the alert's ticketID -> close it if still open -> read back
+  #   4. Alert         Closed (Resolved) + one comment listing every result
+  # FortiSASE has nothing to undo: a disconnected user signs in again.
+  # ===========================================================================
+  - name: Reset C2 Demo
+    description: >
+      Undo a Contain C2 Beacon run: take the C2 address off the TAXII block feed,
+      release the endpoint from FortiEDR isolation, close the ServiceNow incident
+      if it is still open, and close the alert -- each read back before it is
+      reported.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: "Reset C2 Demo"
+        next: Read Alert
+
+      - name: Read Alert
+        type: set_variable
+        vars:
+          host: "{{ vars.input.records[0].computerName | default('', true) | trim }}"
+          c2_ip: "{{ vars.input.records[0].destinationIp | default('', true) | trim }}"
+          ticket: "{{ vars.input.records[0].ticketID | default('', true) | trim }}"
+          # Keep in step with Contain C2 Beacon's Response Config.
+          edr_host_map: "ws-badguy=ubuntu"
+        next: Input Gate
+
+      - name: Input Gate
+        type: decision
+        conditions:
+          - display: has-c2
+            when: "{{ vars.c2_ip | length > 0 }}"
+            next: Find Feed Entries
+          - display: Else
+            default: true
+            next: Missing Input Comment
+
+      - name: Missing Input Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Nothing reset -- the alert has no C2 address</b>
+            (<code>destinationIp</code>), so there is no feed entry to find.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Missing Input
+
+      - name: Done Missing Input
+        type: end
+
+      # ---- 1. TAXII block feed -------------------------------------------------
+      - name: Find Feed Entries
+        type: find_record
+        module: threat_intel_feeds
+        filters:
+          - field: value
+            operator: eq
+            value: "{{ vars.c2_ip }}"
+        limit: 100
+        next: Feed Gate
+
+      - name: Feed Gate
+        type: decision
+        conditions:
+          - display: on-feed
+            when: "{{ (vars.steps.Find_Feed_Entries | default([], true)) | length > 0 }}"
+            next: Remove Feed Entries
+          - display: Else
+            default: true
+            next: Feed Not Listed
+
+      - name: Remove Feed Entries
+        type: delete_record
+        module: threat_intel_feeds
+        query:
+          logic: AND
+          filters:
+            - type: primitive
+              field: value
+              operator: eq
+              _operator: eq
+              value: "{{ vars.c2_ip }}"
+        # Recycle bin only: never touch records that are already deleted.
+        show_deleted: false
+        next: Verify Feed Clear
+
+      - name: Verify Feed Clear
+        type: find_record
+        module: threat_intel_feeds
+        filters:
+          - field: value
+            operator: eq
+            value: "{{ vars.c2_ip }}"
+        limit: 100
+        next: Feed Done
+
+      - name: Feed Done
+        type: set_variable
+        vars:
+          feed_result: >-
+            {% set left = (vars.steps.Verify_Feed_Clear | default([], true)) | length %}{% if left == 0 %}removed
+            {{ vars.steps.Find_Feed_Entries | length }} feed record(s) for {{ vars.c2_ip }}; the
+            FortiGate drops the address on its next feed pull{% else %}removal NOT confirmed --
+            {{ left }} feed record(s) for {{ vars.c2_ip }} remain{% endif %}
+        next: Host Gate
+
+      - name: Feed Not Listed
+        type: set_variable
+        vars:
+          feed_result: "{{ vars.c2_ip }} was not on the feed -- nothing to remove"
+        next: Host Gate
+
+      # ---- 2. FortiEDR ---------------------------------------------------------
+      - name: Host Gate
+        type: decision
+        conditions:
+          - display: has-host
+            when: "{{ vars.host | length > 0 }}"
+            next: List Collectors
+          - display: Else
+            default: true
+            next: EDR Not Found
+
+      - name: List Collectors
+        type: connector
+        connector: fortinet-fortiedr
+        operation: get_collector_list
+        config: Lab FortiEDR
+        params: {}
+        next: Match Collector
+
+      - name: Match Collector
+        type: code_snippet
+        config: default
+        code: |
+          collectors = {{ vars.steps.List_Collectors.data | default([]) }}
+          wanted = """{{ vars.host }}""".strip().lower()
+
+          aliases = {}
+          for pair in """{{ vars.edr_host_map | default('', true) }}""".split(","):
+              if "=" in pair:
+                  alias_host, alias_edr = pair.split("=", 1)
+                  aliases[alias_host.strip().lower()] = alias_edr.strip().lower()
+          wanted = aliases.get(wanted, aliases.get(wanted.split(".")[0], wanted))
+
+          match = {}
+          for row in collectors or []:
+              name = str((row or {}).get("name") or "").strip().lower()
+              if wanted and name and (name == wanted or wanted.split(".")[0] == name):
+                  match = row
+
+          print({
+              "found": "yes" if match else "",
+              "name": str(match.get("name") or ""),
+              "state": str(match.get("state") or ""),
+          })
+        next: Collector Gate
+
+      - name: Collector Gate
+        type: decision
+        conditions:
+          - display: found
+            when: "{{ vars.steps.Match_Collector.data.code_output.found | length > 0 }}"
+            next: Unisolate Endpoint
+          - display: Else
+            default: true
+            next: EDR Not Found
+
+      - name: EDR Not Found
+        type: set_variable
+        vars:
+          edr_result: "nothing to release -- no FortiEDR collector named {{ vars.host or '(no host on the alert)' }}"
+        next: Ticket Gate
+
+      - name: Unisolate Endpoint
+        type: connector
+        connector: fortinet-fortiedr
+        operation: unisolate_collector
+        config: Lab FortiEDR
+        params:
+          type: Name
+          devices: "{{ vars.steps.Match_Collector.data.code_output.name }}"
+        next: Verify Release
+
+      # Like isolate, unisolate reports success regardless -- the list is the
+      # evidence.
+      - name: Verify Release
+        type: connector
+        connector: fortinet-fortiedr
+        operation: get_collector_list
+        config: Lab FortiEDR
+        params:
+          type: Name
+          devices: "{{ vars.steps.Match_Collector.data.code_output.name }}"
+        next: Evaluate Release
+
+      - name: Evaluate Release
+        type: code_snippet
+        config: default
+        code: |
+          collectors = {{ vars.steps.Verify_Release.data | default([]) }}
+          wanted = """{{ vars.steps.Match_Collector.data.code_output.name }}""".strip().lower()
+
+          state = ""
+          extra = ""
+          for row in collectors or []:
+              if str((row or {}).get("name") or "").strip().lower() == wanted:
+                  state = str(row.get("state") or "")
+                  extra = str(row.get("stateAdditionalInfo") or "")
+
+          if state.lower() == "isolated" or extra.lower() == "isolated":
+              result = "release NOT confirmed -- %s still reports isolated" % wanted
+          else:
+              result = "released %s from isolation -- the collector reports %s" % (wanted, state or "nothing")
+          print({"result": result})
+        next: EDR Done
+
+      - name: EDR Done
+        type: set_variable
+        vars:
+          edr_result: "{{ vars.steps.Evaluate_Release.data.code_output.result }}"
+        next: Ticket Gate
+
+      # ---- 3. ServiceNow -------------------------------------------------------
+      - name: Ticket Gate
+        type: decision
+        conditions:
+          - display: has-ticket
+            when: "{{ vars.ticket | length > 0 }}"
+            next: Find Incident
+          - display: Else
+            default: true
+            next: No Ticket
+
+      - name: No Ticket
+        type: set_variable
+        vars:
+          snow_result: "no incident on the alert -- nothing to close"
+        next: Close Alert
+
+      - name: Find Incident
+        type: connector
+        connector: servicenow
+        operation: search_record
+        config: Lab ServiceNow
+        params:
+          table_name: incident
+          column_name: number
+          value: "{{ vars.ticket }}"
+        next: Incident Gate
+
+      # 6 Resolved, 7 Closed, 8 Canceled are all done; anything else is open.
+      - name: Incident Gate
+        type: decision
+        conditions:
+          - display: still-open
+            when: "{{ (vars.steps.Find_Incident.data.result | default([], true)) | length > 0 and (vars.steps.Find_Incident.data.result[0].state | string) not in ['6', '7', '8'] }}"
+            next: Close Incident
+          - display: Else
+            default: true
+            next: Incident Already Closed
+
+      - name: Incident Already Closed
+        type: set_variable
+        vars:
+          snow_result: >-
+            {% if (vars.steps.Find_Incident.data.result | default([], true)) | length > 0 %}{{ vars.ticket }}
+            was already closed (state {{ vars.steps.Find_Incident.data.result[0].state }}){% else %}{{ vars.ticket }}
+            not found in ServiceNow{% endif %}
+        next: Close Alert
+
+      - name: Close Incident
+        type: connector
+        connector: servicenow
+        operation: update_servicenow_incident
+        config: Lab ServiceNow
+        params:
+          sys_id: "{{ vars.steps.Find_Incident.data.result[0].sys_id }}"
+          state: "7"
+          work_notes: "FortiSOC demo reset; closing."
+          other_fields:
+            close_code: Solution provided
+            close_notes: "Closed by the FortiSOC demo reset."
+        next: Verify Incident Closed
+
+      - name: Verify Incident Closed
+        type: connector
+        connector: servicenow
+        operation: search_record
+        config: Lab ServiceNow
+        params:
+          table_name: incident
+          column_name: sys_id
+          value: "{{ vars.steps.Find_Incident.data.result[0].sys_id }}"
+        next: Incident Done
+
+      - name: Incident Done
+        type: set_variable
+        vars:
+          snow_result: >-
+            {{ vars.ticket }} {{ 'closed' if (vars.steps.Verify_Incident_Closed.data.result[0].state | default('') | string) == '7'
+            else 'close NOT confirmed (state ' ~ (vars.steps.Verify_Incident_Closed.data.result[0].state | default('unknown')) ~ ')' }}
+        next: Close Alert
+
+      # ---- 4. Alert ------------------------------------------------------------
+      - name: Close Alert
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: '{{ "AlertStatus" | picklist("Closed", "@id") }}'
+          closureReason: '{{ "Closure Reason" | picklist("Resolved", "@id") }}'
+          closureNotes: >-
+            FortiSOC demo reset. Feed: {{ vars.feed_result }}. FortiEDR:
+            {{ vars.edr_result }}. ServiceNow: {{ vars.snow_result }}.
+        next: Reset Comment
+
+      - name: Reset Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Demo reset -- back to square zero.</b></p>
+            <p><b>FortiGate / TAXII feed:</b> {{ vars.feed_result }}.</p>
+            <p><b>FortiEDR:</b> {{ vars.edr_result }}.</p>
+            <p><b>ServiceNow:</b> {{ vars.snow_result }}.</p>
+            <p><b>FortiSASE:</b> nothing to undo -- a disconnected user signs
+            in again.</p>
+            <p><b>Alert:</b> closed as Resolved.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done
+
+      - name: Done
+        type: end
+
+  # ===========================================================================
+  # Create Test C2 Alert: one click on the Alerts list (no record selected)
+  # makes an alert shaped like FortiSOC's own FortiAnalyzer C2 alert, for
+  # ws-badguy / jdoe, with a fresh C2 address from TEST-NET-3 (203.0.113.0/24)
+  # each time, so a new run never starts out already blocked by an earlier
+  # run's feed entry. Then click "Contain C2 Beacon" on it.
+  # ===========================================================================
+  - name: Create Test C2 Alert
+    description: >
+      Create a demo C2 beacon alert for ws-badguy (jdoe) with a fresh
+      TEST-NET-3 C2 address, ready for Contain C2 Beacon.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        requires_record: false
+        button_label: "Create Test C2 Alert"
+        next: Alert Values
+
+      - name: Alert Values
+        type: set_variable
+        comment: >
+          host must stay ws-badguy: it is the one FortiEDR collector the
+          containment playbook may isolate (see edr_host_map), and jdoe is the
+          seeded AD user.
+        vars:
+          host: "ws-badguy"
+          user: 'DEMO\jdoe'
+          src_ip: "10.10.10.50"
+          c2_ip: "203.0.113.{{ range(10, 250) | random }}"
+          hits: "{{ range(40, 180) | random }}"
+          # The Jinja sandbox refuses range() spans over 100000.
+          nonce: "{{ range(10000, 99999) | random }}"
+        next: Create Alert
+
+      - name: Create Alert
+        type: create_record
+        module: alerts
+        fields:
+          name: "C2 beacon: {{ vars.host }} -> {{ vars.c2_ip }} (demo)"
+          severity: '{{ "Severity" | picklist("Critical", "@id") }}'
+          status: '{{ "AlertStatus" | picklist("Open", "@id") }}'
+          source: "FortiSOC demo"
+          # alerts.sourceId is unique across the module.
+          sourceId: "c2-demo-{{ vars.c2_ip }}-{{ vars.nonce }}"
+          sourceIp: "{{ vars.src_ip }}"
+          destinationIp: "{{ vars.c2_ip }}"
+          destinationPort: "443"
+          computerName: "{{ vars.host }}"
+          hostName: "{{ vars.host }}"
+          userName: "{{ vars.user }}"
+          description: >
+            <p><strong>{{ vars.host }}</strong> ({{ vars.src_ip }}), logged in as
+            <strong>{{ vars.user }}</strong>, made <strong>{{ vars.hits }}</strong>
+            outbound HTTPS connections to <strong>{{ vars.c2_ip }}</strong> at a
+            steady ~60-second interval. FortiGuard lists the destination as
+            botnet command and control. The FortiGate allowed the traffic: the
+            address is not on any block list yet.</p>
+            <p>Demo alert made by <em>Create Test C2 Alert</em>. Run
+            <strong>Contain C2 Beacon</strong> on it, and <strong>Reset C2
+            Demo</strong> afterwards.</p>
+        next: Created Comment
+
+      - name: Created Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p>Test alert created. C2 address <b>{{ vars.c2_ip }}</b> is not on
+            the block feed yet. Next: <b>Contain C2 Beacon</b>.</p>
+          alerts: ["{{ vars.steps.Create_Alert['@id'] }}"]
+        next: Done
+
+      - name: Done
+        type: end

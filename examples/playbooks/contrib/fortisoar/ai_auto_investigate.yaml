@@ -1,0 +1,103 @@
+# Auto-trigger an AI investigation on alert create, and escalate on the verdict.
+#
+# Test harness for "can FortiSOAR 8.0.1 run AI investigations hands-off and act
+# on the result?". Scoped to alerts whose source is `ai-autotrigger-test`, so it
+# never fires for real or eval alerts on a shared box.
+#
+#   PB1 (on create): POST the alert to /api/ai/triage/alert with the Utilities
+#       "Make FortiSOAR API Call" step (what the UI button does), then write the
+#       returned task_id to the alert's triagetaskid, as the UI does.
+#   PB2 (on update): the investigation writes aIVerdict / aISeverity / aISummary
+#       back to the alert (mcp-server update_alert_ai_analysis). When the verdict
+#       is Malicious and the alert isn't escalated yet, raise severity to
+#       Critical and add a comment for the analyst.
+
+collection: AI Auto-Investigation Test
+description: On-create AI investigation trigger and verdict-based escalation (8.0.1 test harness).
+visible: true
+
+playbooks:
+  - name: AI Auto-Investigate New Alert
+    description: Starts a FortiAI investigation for each new ai-autotrigger-test alert.
+    is_active: true
+    steps:
+      - name: On Alert Create
+        type: start_on_create
+        next: Start Investigation
+        module: alerts
+        when:
+          logic: AND
+          filters:
+            - {field: source, op: eq, value: "ai-autotrigger-test"}
+
+      - name: Start Investigation
+        type: connector
+        next: Link Task To Alert
+        connector: cyops_utilities
+        operation: make_cyops_request
+        config: ""
+        params:
+          iri: /api/ai/triage/alert
+          method: POST
+          body: "{{ vars.input.records[0] }}"
+
+      - name: Link Task To Alert
+        type: update_record
+        record: "{{ vars.input.records[0]['@id'] }}"
+        module: alerts
+        fields:
+          triagetaskid: "{{ (vars.steps.Start_Investigation.data | default(vars.steps.Start_Investigation, true)).task_id }}"
+        operation: Overwrite
+        step_variables: []
+
+  - name: AI Verdict Escalation
+    description: Escalates an ai-autotrigger-test alert once the AI verdict comes back Malicious.
+    is_active: true
+    steps:
+      - name: On Alert Update
+        type: start_on_update
+        next: Verdict Malicious
+        module: alerts
+        when:
+          logic: AND
+          filters:
+            - {field: source, op: eq, value: "ai-autotrigger-test"}
+
+      - name: Verdict Malicious
+        type: decision
+        conditions:
+          - display: Escalate
+            when: >-
+              {{ (vars.input.records[0].aIVerdict.itemValue | default(vars.input.records[0].aIVerdict, true)) == 'Malicious'
+                 and (vars.input.records[0].severity.itemValue | default(vars.input.records[0].severity, true)) != 'Critical' }}
+            next: Raise Severity
+          - display: No action
+            default: true
+            next: Done
+
+      - name: Raise Severity
+        type: update_record
+        next: Notify Analyst
+        record: "{{ vars.input.records[0]['@id'] }}"
+        module: alerts
+        fields:
+          severity: "{{ 'Critical' | picklist('Severity') }}"
+        operation: Overwrite
+        step_variables: []
+
+      - name: Notify Analyst
+        type: connector
+        next: Done
+        connector: cyops_utilities
+        operation: insert_cyops_resource
+        config: ""
+        params:
+          iri: /api/3/comments
+          body:
+            content: >-
+              AI investigation verdict: Malicious. Severity raised to Critical
+              for analyst review. Summary: {{ vars.input.records[0].aISummary }}
+            alerts: ["{{ vars.input.records[0]['@id'] }}"]
+
+      - name: Done
+        type: end

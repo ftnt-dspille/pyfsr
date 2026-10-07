@@ -1,0 +1,28 @@
+collection: FSRPB E2E Test
+description: |
+  E2E smoke test -- Stage 3: declared `parameters: [score]` and
+  reading `vars.input.params.score` from a runtime input.
+visible: true
+
+playbooks:
+  - name: E2E - Compute Severity
+    description: Stage 3 -- adds an input parameter; references it in a Jinja template.
+    is_active: true
+    parameters: [score]
+    steps:
+      - name: Run
+        type: start
+        next: Pull from input
+
+      - name: Pull from input
+        type: set_variable
+        next: Final
+        vars:
+          score_int: "{{ vars.input.params.score }}"
+          label_seed: "score-{{ vars.input.params.score }}"
+
+      - name: Final
+        type: set_variable
+        vars:
+          final_label: "{{ vars.label_seed }}-final"
+          final_status: complete

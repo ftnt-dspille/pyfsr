@@ -1,0 +1,319 @@
+# UC-04 -- Block a malicious IP on the firewall, then PROVE it landed.
+#
+# FortiSOAR's `04 - Actions` pack ships `Action - IP Address - Block (Indicator)`
+# and its siblings, but their "block" step is a manual_input that tells a human
+# *"Configure your firewall to block: X and click Block Completed"*. Nothing is
+# blocked, and the indicator gets marked Blocked on the analyst's word alone.
+#
+# This playbook does the opposite of that in two ways:
+#
+#   1. It actually calls the firewall (fortigate-firewall/block_ip_new).
+#   2. It then reads the device's ban list back and only marks the indicator
+#      Blocked if the address is genuinely there. A block that silently failed
+#      gets a loud "NOT blocked" comment instead of a false audit trail.
+#
+#   Start (manual, on an indicator)
+#     -> Block Config          (set_variable -- TTL, reputation gate)
+#     -> Read Indicator        (set_variable -- pull value + type off the record)
+#     -> Type Gate             (decision -- IP Address only; block_url needs a
+#                               webfilter profile that a stock device lacks)
+#     -> Reputation Check      (connector virustotal/query_ip)
+#     -> Justify Block         (code_snippet -- is there evidence to justify it?)
+#     -> Justification Gate    (decision)
+#          no evidence -> Skip Comment -> end
+#     -> Block On FortiGate    (connector block_ip_new, Quarantine Based)
+#     -> Verify On Device      (connector get_blocked_ip -- reads user/banned)
+#     -> Evaluate Verification (code_snippet -- is our address actually there?)
+#     -> Verify Gate           (decision)
+#          landed     -> Mark Blocked -> Blocked Comment -> end
+#          not landed -> Block Failed Comment -> end
+#
+# Quarantine Based is the method that works on a stock FortiGate: it writes the
+# `user/banned` list and needs only an address and a TTL. Policy Based would
+# require a pre-created policy and address group on the device first.
+#
+# Live-verified on FortiSOAR 8.0.0 against a real FortiGate.
+
+collection: Demo Library - Fleet Blocking
+description: >
+  Block a malicious IP indicator on the firewall and verify the block against
+  the device's own ban list before recording it as blocked.
+visible: true
+
+playbooks:
+  - name: Block Indicator With Verification
+    description: >
+      Evidence-gated firewall block with device read-back confirmation.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: indicators
+        button_label: "Block With Verification"
+        next: Block Config
+
+      - name: Block Config
+        type: set_variable
+        comment: >
+          min_malicious is the evidence bar for blocking. Set it to 0 to block
+          on the analyst's say-so regardless of reputation -- useful when the
+          indicator came from a trusted internal source rather than from OSINT.
+        vars:
+          block_ttl: "12 Hour"
+          min_malicious: 1
+          fortigate_config: fortigate-lab
+        next: Read Indicator
+
+      - name: Read Indicator
+        type: set_variable
+        vars:
+          indicator_value: "{{ vars.input.records[0].value }}"
+          indicator_type: "{{ vars.input.records[0].typeofindicator.itemValue | default('') }}"
+        next: Type Gate
+
+      - name: Type Gate
+        type: decision
+        comment: >
+          Only IP addresses are blockable on a stock device. Domain/URL blocking
+          goes through block_url, which requires a webfilter profile to be named
+          in the connector configuration -- so it fails confusingly rather than
+          usefully if the box has not been set up for it.
+        conditions:
+          - display: ip-address
+            when: "{{ vars.indicator_type == 'IP Address' }}"
+            next: Reputation Check
+          - display: Else
+            default: true
+            next: Unsupported Type Comment
+
+      - name: Unsupported Type Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Not blocked.</b> This playbook blocks IP addresses only; this
+            indicator is of type
+            <b>{{ vars.indicator_type | default('unknown') }}</b>.</p>
+            <p>Domain and URL blocking use the FortiGate webfilter, which needs a
+            webfilter profile named in the connector configuration before it can
+            be driven from here.</p>
+          indicators: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Unsupported
+
+      - name: Done Unsupported
+        type: end
+
+      - name: Reputation Check
+        type: connector
+        connector: virustotal
+        operation: query_ip
+        config: test
+        params:
+          ip: "{{ vars.indicator_value }}"
+        next: Justify Block
+
+      - name: Justify Block
+        type: code_snippet
+        config: default
+        comment: >
+          Blocking is a production-affecting change, so it needs a reason that
+          survives review. This records the evidence in the same shape the
+          comment and the audit trail will use.
+        code: |
+          vt = {{ vars.steps.Reputation_Check.data | default({}) }}
+          attrs = (vt or {}).get("attributes") or {}
+          stats = attrs.get("last_analysis_stats") or {}
+
+          malicious = int(stats.get("malicious") or 0)
+          suspicious = int(stats.get("suspicious") or 0)
+
+          justified = malicious >= {{ vars.min_malicious }}
+
+          print({
+              "malicious": malicious,
+              "suspicious": suspicious,
+              "harmless": int(stats.get("harmless") or 0),
+              "asn": str(attrs.get("asn") or "n/a"),
+              "as_owner": attrs.get("as_owner") or "n/a",
+              "country": attrs.get("country") or attrs.get("continent") or "n/a",
+              "justified": "yes" if justified else "",
+              "reason": (
+                  "%d VirusTotal engines report this address as malicious"
+                  % malicious
+                  if justified
+                  else "no VirusTotal engine reports this address as malicious"
+              ),
+          })
+        next: Justification Gate
+
+      - name: Justification Gate
+        type: decision
+        conditions:
+          - display: justified
+            when: "{{ vars.steps.Justify_Block.data.code_output.justified | default('') | length > 0 }}"
+            next: Block On FortiGate
+          - display: Else
+            default: true
+            next: Skip Comment
+
+      - name: Skip Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Not blocked -- no supporting evidence.</b>
+            {{ vars.steps.Justify_Block.data.code_output.reason }}
+            ({{ vars.steps.Justify_Block.data.code_output.harmless }} engines
+            report it harmless).</p>
+            <p>No firewall change was made. Lower <code>min_malicious</code> in
+            the playbook config to block on analyst judgement instead.</p>
+          indicators: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Skipped
+
+      - name: Done Skipped
+        type: end
+
+      - name: Block On FortiGate
+        type: connector
+        connector: fortigate-firewall
+        operation: block_ip_new
+        config: fortigate-lab
+        comment: >
+          Quarantine Based writes the device's `user/banned` list and needs only
+          an address and a TTL, so it works against an out-of-the-box FortiGate.
+          Policy Based would need a named policy and address group to exist first.
+        params:
+          method: Quarantine Based
+          ip_addresses: "{{ vars.indicator_value }}"
+          time_to_live: "{{ vars.block_ttl }}"
+          vdom: ""
+        next: Verify On Device
+
+      # The step that makes this use case worth showing: ask the device what it
+      # actually has, rather than trusting the block call's return value.
+      - name: Verify On Device
+        type: connector
+        connector: fortigate-firewall
+        operation: get_blocked_ip
+        config: fortigate-lab
+        params:
+          method: Quarantine Based
+          vdom: ""
+        next: Evaluate Verification
+
+      - name: Evaluate Verification
+        type: code_snippet
+        config: default
+        comment: >
+          `get_blocked_ip` reads `user/banned`, which is where Quarantine Based
+          writes. Note that `get_quarantine_hosts` reads a DIFFERENT list
+          (`user/quarantine`, the FortiClient one) and will show nothing here --
+          checking that one is how you convince yourself a working block failed.
+        code: |
+          result = {{ vars.steps.Verify_On_Device.data | default({}) }}
+          wanted = """{{ vars.indicator_value }}""".strip()
+
+          # The ban list is nested two levels deep: the connector returns the
+          # raw FortiGate envelope, so rows live at
+          #   data.result[<per-vdom entry>].results[]
+          # not at data.results. Flatten across every vdom entry.
+          # No isinstance() below: the sandbox shadows the builtin type names,
+          # so `isinstance(x, list)` dies with "arg 2 must be a type". Rely on
+          # `or []` / `or {}` to absorb missing or unexpected shapes instead.
+          rows = []
+          for entry in (result or {}).get("result") or []:
+              for row in (entry or {}).get("results") or []:
+                  rows.append(row)
+
+          import time
+
+          found = False
+          expires = ""
+          source = ""
+          for row in rows:
+              if str((row or {}).get("ip_address") or "").strip() == wanted:
+                  found = True
+                  source = str(row.get("source") or "")
+                  # The device reports expiry as a raw epoch; render it so the
+                  # audit comment reads as a time rather than a number.
+                  raw_expiry = row.get("expires")
+                  if raw_expiry:
+                      expires = time.strftime(
+                          "%Y-%m-%d %H:%M:%S UTC", time.gmtime(int(raw_expiry))
+                      )
+
+          print({
+              "found": "yes" if found else "",
+              "expires": expires,
+              "source": source,
+              "ban_count": len(rows),
+          })
+        next: Verify Gate
+
+      - name: Verify Gate
+        type: decision
+        conditions:
+          - display: confirmed-on-device
+            when: "{{ vars.steps.Evaluate_Verification.data.code_output.found | default('') | length > 0 }}"
+            next: Mark Blocked
+          - display: Else
+            default: true
+            next: Block Failed Comment
+
+      - name: Mark Blocked
+        type: update_record
+        module: indicators
+        record: "{{ vars.input.records[0]['@id'] }}"
+        comment: >
+          Picklist writes on update_record must go through the runtime filter;
+          a compile-time IRI is rejected with FSR_CH_0000001.
+        fields:
+          indicatorStatus: '{{ "IndicatorStatus" | picklist("Blocked", "@id") }}'
+          reputation: '{{ "IndicatorReputation" | picklist("Malicious", "@id") }}'
+        next: Blocked Comment
+
+      - name: Blocked Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Blocked on the firewall and confirmed on the device.</b>
+            {{ vars.indicator_value }} is present in the FortiGate ban list
+            (source
+            {{ vars.steps.Evaluate_Verification.data.code_output.source | default('n/a') }},
+            expires
+            {{ vars.steps.Evaluate_Verification.data.code_output.expires | default('n/a') }};
+            {{ vars.steps.Evaluate_Verification.data.code_output.ban_count }}
+            entries on the device in total).</p>
+            <p><b>Justification:</b>
+            {{ vars.steps.Justify_Block.data.code_output.reason }}. ASN
+            {{ vars.steps.Justify_Block.data.code_output.asn }}
+            ({{ vars.steps.Justify_Block.data.code_output.as_owner }}),
+            {{ vars.steps.Justify_Block.data.code_output.country }}.</p>
+            <p>Block TTL {{ vars.block_ttl }}. Indicator marked Blocked.</p>
+          indicators: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Blocked
+
+      - name: Done Blocked
+        type: end
+
+      # Honest failure. The indicator is deliberately NOT marked Blocked here --
+      # a false audit trail is worse than a visible failure.
+      - name: Block Failed Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Block NOT confirmed.</b> The block call was made, but
+            {{ vars.indicator_value }} is not present in the FortiGate ban list
+            on read-back
+            ({{ vars.steps.Evaluate_Verification.data.code_output.ban_count }}
+            entries seen).</p>
+            <p>The indicator has deliberately <b>not</b> been marked Blocked.
+            Check the connector configuration's VDOM and that the credentials
+            have write access to <code>user/banned</code>.</p>
+          indicators: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Failed
+
+      - name: Done Failed
+        type: end

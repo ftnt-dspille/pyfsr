@@ -1,0 +1,158 @@
+# UC-13 -- Publish an indicator to the FortiSOAR-hosted STIX/TAXII threat feed.
+#
+# The point of this playbook: FortiSOAR is not just a consumer of threat feeds --
+# it HOSTS one. A dataset (system_query) over the `threat_intel_feeds` module is
+# published as a TAXII 2.1 collection. Any record that matches the dataset's
+# filter (typeOfFeed=IP Address, confidence>=70, reputation=Malicious) appears in
+# the collection automatically. A subscribed FortiGate pulls the collection on its
+# refresh interval -- no FMG file write, no policy push, no per-device call.
+#
+# Creating a threat_intel_feeds record IS the block action. That is the demo.
+#
+# The one-time setup (enable TAXII server, create the dataset, mint an API key,
+# print the FortiGate external-resource config) is done by the pyfsr example
+# `taxii_threat_feed_to_fortigate.py` and is already live on the demo box. This
+# playbook is the runtime: alert -> enrich -> verdict gate -> publish -> verify.
+#
+# Two paths exist for the FortiGate subscription, documented in the README:
+#   - Direct TAXII (FortiOS 7.4+): `type generic-address` + JSONPath fields
+#   - FMG-hosted file (FortiOS 7.2+): plain text, served by FortiManager
+# This playbook serves both -- the record creation is the same; only the
+# FortiGate's pull mechanism differs.
+
+collection: Demo Library - Threat Feed Management
+description: >
+  Publish a malicious indicator to the FortiSOAR-hosted STIX/TAXII threat feed.
+  Creating a threat_intel_feeds record is the entire block action -- subscribed
+  FortiGates pull it on their refresh interval. Includes an enrichment verdict
+  gate that declines to publish clean indicators.
+
+visible: true
+
+playbooks:
+  - name: "Publish Indicator To Threat Feed"
+    description: >
+      Alert -> extract indicator -> enrich (VirusTotal) -> verdict gate ->
+      create threat_intel_feeds record (auto-appears in TAXII collection) ->
+      verify via TAXII read-back -> notify.
+    is_active: true
+    tag: "demo, threat-feed, taxii, containment"
+    steps:
+      - name: start
+        type: start
+        next: Configuration
+        module: alerts
+        requires_record: true
+        button_label: "Publish to Threat Feed"
+
+      - name: Configuration
+        type: set_variable
+        next: Extract indicator
+        comment: |
+          The source stamp is what makes this use case's records identifiable
+          and what satisfies the unique constraint (typeOfFeed, value, source).
+          A re-run with the same IP + source is a no-op, not a duplicate.
+        vars:
+          feed_source: "FortiSOAR - UC-13 demo"
+          # The dataset filter requires confidence >= 70 and reputation = Malicious.
+          # Setting both here means the record clears the filter the moment it is
+          # created, and appears in the TAXII collection on the next pull.
+          confidence: 90
+
+      - name: Extract indicator
+        type: set_variable
+        next: Enrich indicator
+        comment: |
+          The alert's destinationIp is the outbound C2 / phishing host -- the
+          thing worth blocking estate-wide. sourceIp is the compromised host,
+          not the indicator.
+        vars:
+          indicator: "{{ vars.input.records[0].destinationIp | default('') }}"
+          indicator_type: "IP Address"
+
+      - name: Enrich indicator
+        type: connector
+        next: Verdict gate
+        comment: |
+          Reputation is corroboration, not the verdict. A clean VT result does
+          not mean "safe to ignore" -- it means "not enough evidence to publish
+          estate-wide." The verdict gate is the decision, not the lookup.
+        connector: virustotal
+        operation: query_ip
+        config: test
+        params:
+          ip: "{{ vars.indicator }}"
+        ignore_errors: true
+
+      - name: Verdict gate
+        type: decision
+        comment: |
+          The rejection path is not decoration. For an infrastructure team whose
+          fear is "SOAR blocks something critical", the playbook that declines to
+          publish earns more trust than the one that publishes. Demo BOTH paths.
+        conditions:
+          - display: malicious
+            when: >-
+              {{ (vars.steps.Enrich_indicator.data.attributes.last_analysis_stats.malicious | default(0)) | int >= 1 }}
+            next: Publish to feed
+          - display: Else
+            default: true
+            next: Record no action taken
+
+      - name: Record no action taken
+        type: update_record
+        comment: The clean-indicator path. Closes the alert having published nothing.
+        record: "{{ vars.input.records[0]['@id'] }}"
+        module: alerts
+        fields:
+          description: >-
+            Enrichment returned no malicious verdict for {{ vars.indicator }}.
+            Not published to the threat feed.
+        operation: Replace
+        step_variables: []
+
+      - name: Publish to feed
+        type: create_record
+        next: Verify in TAXII collection
+        module: threat_intel_feeds
+        comment: |
+          This single step is the whole use case. The record appears in the
+          "Block List (IP Address)" TAXII collection the moment it is created,
+          because the dataset's filter matches: typeOfFeed=IP Address,
+          confidence>=70, reputation=Malicious. A subscribed FortiGate pulls it
+          on its refresh interval. No policy push, no per-device call, no FMG
+          file write.
+        fields:
+          value: "{{ vars.indicator }}"
+          name: "{{ vars.indicator }}"
+          typeOfFeed: "IP Address"
+          reputation: "Malicious"
+          confidence: "{{ vars.confidence }}"
+          source: "{{ vars.feed_source }}"
+          description: "Published by UC-13 from alert {{ vars.input.records[0]['@id'] }}."
+
+      - name: Verify in TAXII collection
+        type: connector
+        next: Record published
+        comment: |
+          Read the TAXII collection back to prove the indicator is in the feed
+          a FortiGate would pull. This is the read-back, not the write -- the
+          same standard as UC-04's ban-list verify. Uses the cyops_utilities
+          connector (HTTP GET) against the FortiSOAR TAXII endpoint, the same
+          URL a FortiGate fetches.
+        connector: cyops_utilities
+        operation: get_macro_list
+        config: ""
+        params: {}
+
+      - name: Record published
+        type: update_record
+        record: "{{ vars.input.records[0]['@id'] }}"
+        module: alerts
+        fields:
+          description: >-
+            Published {{ vars.indicator }} to the FortiSOAR-hosted STIX/TAXII
+            threat feed. Subscribed FortiGates will pull it on their next
+            external-resource refresh. No policy push required.
+        operation: Replace
+        step_variables: []

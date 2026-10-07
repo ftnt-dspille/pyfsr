@@ -1,0 +1,102 @@
+# In-flight CRUD playbook for the publish-disruption audit.
+#
+# Purpose: a single tracked run that exercises a real record lifecycle
+# (create -> find -> decision -> update -> delete) AND spans the publish
+# migrate window via a delay placed right after the create. The audit fires
+# this once just before the publish; the create lands before the migrate, the
+# delay holds the run open across the outage, and the find/update/delete fire
+# as the box recovers. The test then asserts the run reached a terminal state
+# and which branch it took (completed vs record-missing vs failed).
+#
+# Each CRUD step touches /api/3/alerts (an UNRELATED core module, not the one
+# being published) so a failure means the publish broke record ops instance-wide.
+#
+# The marker description carries {{ vars.task_id }} so it is unique per run: the
+# audit infers the branch by counting alerts matching THIS run's marker, which
+# stays correct when the PB is fired on an interval (FIRE_PB=crud) and many runs
+# are in flight at once. 'Update alert' deliberately stamps `name`, NOT
+# `description` -- overwriting the description would erase the marker and make a
+# failed delete look like a clean completion.
+
+collection: PYFSR Publish Audit
+description: Create/find/decide/update/delete an alert across a publish window.
+visible: true
+
+playbooks:
+  - name: PYFSR Publish Audit CRUD PB
+    is_active: true
+    steps:
+      - name: trigger
+        type: start
+        next: Create alert
+
+      - name: Create alert
+        type: create_record
+        next: Hold across migrate
+        module: alerts
+        operation: Replace
+        fields:
+          # name is required on alerts (8.0.1 rejects the create without it:
+          # "name: This value should not be blank"), which fails the run at the
+          # create -- before the publish is ever involved.
+          name: "fsrpb audit crud {{ vars.task_id }}"
+          description: "fsrpb_audit_crud marker {{ vars.task_id }}"
+        step_variables: []
+
+      - name: Hold across migrate
+        type: delay
+        next: Find alert
+        seconds: 50
+
+      - name: Find alert
+        type: find_record
+        next: Decide found
+        module: alerts
+        query:
+          logic: AND
+          filters:
+            - type: primitive
+              field: description
+              value: "fsrpb_audit_crud marker {{ vars.task_id }}"
+              operator: eq
+              _operator: eq
+          __selectFields: [uuid, name, description]
+        step_variables: []
+
+      - name: Decide found
+        type: decision
+        conditions:
+          - display: found
+            when: "{{ vars.steps.Find_alert | length > 0 }}"
+            next: Update alert
+          - display: Else
+            default: true
+            next: Mark missing
+
+      - name: Update alert
+        type: update_record
+        next: Delete alert
+        record: "{{ vars.steps.Find_alert[0]['@id'] }}"
+        collectionType: /api/3/alerts
+        fields:
+            # Stamp `name`, NOT `description`: description holds the marker the
+            # audit counts to prove the delete ran. Overwriting it here would make
+            # a failed delete read as a clean completion.
+        operation: Replace
+        step_variables: []
+
+      - name: Delete alert
+        type: delete_record
+        next: Mark completed
+        module: alerts
+        record: "{{ vars.steps.Find_alert[0]['@id'] }}"
+
+      - name: Mark completed
+        type: set_variable
+        vars:
+          audit_result: completed
+
+      - name: Mark missing
+        type: set_variable
+        vars:
+          audit_result: record_missing

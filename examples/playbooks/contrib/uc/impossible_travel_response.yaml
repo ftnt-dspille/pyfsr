@@ -1,0 +1,586 @@
+# UC-05 -- Impossible-travel sign-in: decide whether the credential is burned,
+# then contain what can actually be contained.
+#
+# The shipped *Impossible Traveler Threat Response* pack assumes an identity
+# provider connector is wired up, and every step of consequence is an Entra or
+# AD call. On a box with no IdP credentialed, the whole pack is inert.
+#
+# That assumption is worth challenging anyway. The hard part of this use case is
+# not calling `revoke_sessions` -- it is *deciding that the sign-in is actually
+# impossible*, because "impossible travel" alerts are notoriously noisy: a
+# corporate VPN egress, a roaming phone on a foreign carrier, or a user who
+# genuinely flew all produce the same alert. Firing a password reset on every one
+# trains the SOC to disable the automation.
+#
+# So this playbook does the decision natively and completely, and is honest
+# about the one leg that needs wiring:
+#
+#   Start (manual, on an alert)
+#     -> Response Config       (set_variable -- velocity threshold, trusted
+#                               countries, block TTL)
+#     -> Read Alert            (set_variable -- user, foreign IP, sign-in pair)
+#     -> User Gate             (decision -- no username, nothing to reason about)
+#     -> Find Correlated Alerts(find_record -- other open alerts for this user)
+#     -> Assess Compromise     (code_snippet -- great-circle distance, implied
+#                               velocity, corroboration, risk score, decision)
+#     -> Geo Gate              (decision -- could both ends be located?)
+#     -> Response Gate         (decision -- contain, or monitor)
+#          monitor  -> Monitor Comment -> end
+#     -> Block Source IP       (connector fortigate-firewall/block_ip_new)
+#     -> Verify Block          (connector get_blocked_ip -- read the device back)
+#     -> Evaluate Block        (code_snippet -- is OUR address on the ban list?)
+#     -> Identity Action Task  (create_record -- the IdP leg, as a work item)
+#     -> Mark Investigating    (update_record)
+#     -> Containment Comment   (create_record) -> end
+#
+# Two design notes worth reading before changing anything:
+#
+# 1. The implied-velocity calculation is the whole use case. Two sign-ins are
+#    only "impossible" relative to how fast a human can move between them, so
+#    the playbook computes the great-circle distance between the two sign-in
+#    cities and divides by the elapsed time. `impossible_kmh` defaults to 900 --
+#    just above a commercial airliner -- so a real flight does NOT trip it and a
+#    teleport does. This is the check that makes the alert actionable instead of
+#    a coin flip.
+#
+# 2. The perimeter block is real; the identity action is a task. FortiGate is
+#    credentialed, so the attacker's source address is genuinely banned on the
+#    device and the ban list is read back to prove it. No identity provider is
+#    credentialed, so revoking sessions and resetting the password is raised as
+#    a task naming the exact operations to run. Swapping that task for two
+#    `activedirectory` steps (`disable_user_account`, then
+#    `force_password_reset_next_logon`) is a ten-line change once a directory is
+#    configured -- see the README.
+#
+# Live-verified on FortiSOAR 8.0.0 against a real FortiGate.
+
+collection: Demo Library - Account Compromise
+description: >
+  Score an impossible-travel sign-in on implied travel velocity and corroborating
+  alerts, block the attacker's source address on the firewall with device
+  read-back confirmation, and raise the identity-provider actions as a task.
+visible: true
+
+playbooks:
+  - name: Respond To Impossible Travel Sign-In
+    description: >
+      Velocity-scored account-compromise response with verified perimeter
+      containment.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: "Respond To Account Compromise"
+        next: Response Config
+
+      - name: Response Config
+        type: set_variable
+        comment: >
+          impossible_kmh is the implied-velocity bar, in km/h. 900 sits just
+          above airliner cruise, so a user who genuinely flew does not trip it.
+          Drop it to ~250 to also catch improbable-but-possible travel, at the
+          cost of alerting on anyone on a train with a roaming SIM.
+
+          trusted_countries suppresses containment for sign-ins that land in
+          countries the business actually operates in -- the single most
+          effective noise reduction here, since most false positives are a VPN
+          egress in a country you already have staff in.
+        vars:
+          impossible_kmh: "900"
+          trusted_countries: "US,CA"
+          # A labelled enum on the device, not seconds: valid values are
+          # 1 Hour, 6 Hour, 12 Hour, 1 Day, 6 Months, 1 Year, Never, Custom Time.
+          # Anything else is silently mapped to null and the block call dies on
+          # int(None).
+          block_ttl: "1 Hour"
+          contain_score: "60"
+        next: Read Alert
+
+      - name: Read Alert
+        type: set_variable
+        comment: >
+          sourcedata carries the IdP's own sign-in pair (both locations and the
+          elapsed minutes). That is the analytic's evidence, and it is what the
+          velocity check runs on -- not a re-derivation from the alert text.
+        vars:
+          user: "{{ vars.input.records[0].userName | default('', true) }}"
+          foreign_ip: "{{ vars.input.records[0].sourceIp | default('', true) }}"
+        next: User Gate
+
+      - name: User Gate
+        type: decision
+        conditions:
+          - display: has-user
+            when: "{{ vars.user | default('', true) | length > 0 }}"
+            next: Find Correlated Alerts
+          - display: Else
+            default: true
+            next: No User Comment
+
+      # Corroboration is the second half of the confidence story. One impossible
+      # travel alert is a maybe; the same user also generating MFA-fatigue and
+      # token-issuance alerts is a compromise.
+      - name: Find Correlated Alerts
+        type: find_record
+        module: alerts
+        filters:
+          - field: userName
+            operator: eq
+            value: "{{ vars.user }}"
+        limit: 50
+        next: Summarise Correlation
+
+      - name: Summarise Correlation
+        type: set_variable
+        comment: >
+          Flattened to scalars in Jinja rather than inlined into the snippet as
+          a record list. The code-snippet sandbox screens source with a crude
+          token scan, so ANY alert field whose *value* happens to match a
+          restricted name -- `Array`, `min`, `map` -- gets the whole step
+          rejected before it runs. Inlining a full record is therefore fragile
+          by construction: it works until a user types the wrong word into a
+          description. Passing only the fields actually needed is both safer and
+          easier to read.
+
+          The result still includes the alert being processed, so the snippet
+          subtracts it by name.
+        vars:
+          correlated_names: "{{ vars.steps.Find_Correlated_Alerts | selectattr('status.itemValue', 'ne', 'Closed') | map(attribute='name') | join(' || ') }}"
+        next: Assess Compromise
+
+      - name: Assess Compromise
+        type: code_snippet
+        config: default
+        comment: >
+          The demo locates the two sign-ins from a small embedded city table so
+          it runs with no external dependency. A production build swaps CITIES
+          for `ipstack/ip_locate` or the IdP's own sign-in log, both of which
+          return lat/lon directly -- the arithmetic below is unchanged.
+        code: |
+          import json
+          import math
+
+          # sourcedata is stored as a JSON *string*, so it is parsed here rather
+          # than dot-walked in Jinja. Triple single quotes are deliberate: JSON
+          # quotes attributes with ", so ''' cannot be closed early by content.
+          raw_signin = '''{{ vars.input.records[0].sourcedata | default('{}', true) }}'''
+          try:
+              signin = json.loads(raw_signin)
+          except ValueError:
+              signin = {}
+
+          # Corroborating alerts arrive pre-flattened as a joined name list --
+          # see the Summarise Correlation step for why.
+          self_name = '''{{ vars.input.records[0].name }}'''
+          others = []
+          for candidate in '''{{ vars.correlated_names | default('', true) }}'''.split(" || "):
+              candidate = candidate.strip()
+              if candidate and candidate != self_name:
+                  others.append(candidate)
+          severity = """{{ vars.input.records[0].severity.itemValue | default('', true) }}"""
+
+          threshold = float("""{{ vars.impossible_kmh }}""")
+          contain_at = float("""{{ vars.contain_score }}""")
+          trusted = []
+          for token in """{{ vars.trusted_countries }}""".split(","):
+              if token.strip():
+                  trusted.append(token.strip().upper())
+
+          CITIES = {
+              "new york": (40.71, -74.01),
+              "bucharest": (44.43, 26.11),
+              "london": (51.51, -0.13),
+              "moscow": (55.76, 37.62),
+              "beijing": (39.90, 116.41),
+              "lagos": (6.52, 3.38),
+              "sao paulo": (-23.55, -46.63),
+              "sydney": (-33.87, 151.21),
+              "san francisco": (37.77, -122.42),
+              "chicago": (41.88, -87.63),
+              "toronto": (43.65, -79.38),
+              "frankfurt": (50.11, 8.68),
+              "singapore": (1.35, 103.82),
+              "mumbai": (19.08, 72.88),
+              "dubai": (25.20, 55.27),
+              "amsterdam": (52.37, 4.90),
+          }
+
+          first = signin.get("firstLocation") or {}
+          second = signin.get("secondLocation") or {}
+          first_city = str(first.get("city") or "").strip()
+          second_city = str(second.get("city") or "").strip()
+          second_country = str(second.get("country") or "").strip().upper()
+          minutes = float(signin.get("travelTimeMinutes") or 0)
+
+          here = CITIES.get(first_city.lower())
+          there = CITIES.get(second_city.lower())
+
+          distance = 0.0
+          velocity = 0.0
+          verdict = "unlocatable"
+          if here and there:
+              lat1 = math.radians(here[0])
+              lat2 = math.radians(there[0])
+              dlat = lat2 - lat1
+              dlon = math.radians(there[1] - here[1])
+              a = (math.sin(dlat / 2) ** 2
+                   + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2)
+              chord = a ** 0.5
+              if chord > 1.0:
+                  chord = 1.0
+              distance = 6371.0 * 2 * math.asin(chord)
+              if minutes > 0:
+                  velocity = distance / (minutes / 60.0)
+              else:
+                  # Simultaneous sign-ins from two places is the strongest
+                  # possible signal, not a divide-by-zero to swallow.
+                  velocity = threshold * 10
+              if velocity >= threshold:
+                  verdict = "impossible"
+              elif velocity >= threshold / 4:
+                  verdict = "improbable"
+              else:
+                  verdict = "plausible"
+
+          score = 0.0
+          drivers = []
+          if verdict == "impossible":
+              score = score + 50
+              drivers.append("implied travel velocity of %.0f km/h exceeds the %.0f km/h bar" % (velocity, threshold))
+          elif verdict == "improbable":
+              score = score + 25
+              drivers.append("implied travel velocity of %.0f km/h is improbable but not impossible" % velocity)
+
+          trusted_hit = second_country in trusted
+          if second_country and not trusted_hit:
+              score = score + 15
+              drivers.append("second sign-in landed in %s, which is not a country the business operates in" % second_country)
+          elif trusted_hit:
+              drivers.append("second sign-in landed in %s, a trusted country, so no location penalty was applied" % second_country)
+
+          capped = len(others)
+          if capped > 3:
+              capped = 3
+          corroboration = capped * 10
+          if corroboration:
+              score = score + corroboration
+              drivers.append("%d other open alert(s) name the same account" % len(others))
+
+          if severity.lower() in ("high", "critical"):
+              score = score + 10
+              drivers.append("the source analytic rated it %s" % severity)
+
+          # Joined with ". " below, so each driver needs to start as a sentence.
+          sentences = []
+          for driver in drivers:
+              if driver:
+                  sentences.append(driver[0].upper() + driver[1:])
+
+          decision = "contain" if score >= contain_at else "monitor"
+
+          print({
+              "verdict": verdict,
+              "geo_known": "" if verdict == "unlocatable" else "yes",
+              "distance_km": "%.0f" % distance,
+              "velocity_kmh": "%.0f" % velocity,
+              "minutes": "%.0f" % minutes,
+              "first_city": first_city or "unknown",
+              "second_city": second_city or "unknown",
+              "second_country": second_country or "unknown",
+              "trusted_country": "yes" if trusted_hit else "",
+              "corroborating_count": len(others),
+              "corroborating": "; ".join(others) or "none",
+              "score": "%.0f" % score,
+              "rationale": ". ".join(sentences) or "No risk drivers matched",
+              "decision": decision,
+          })
+        next: Geo Gate
+
+      - name: Geo Gate
+        type: decision
+        conditions:
+          - display: located
+            when: "{{ vars.steps.Assess_Compromise.data.code_output.geo_known | default('', true) | length > 0 }}"
+            next: Response Gate
+          - display: Else
+            default: true
+            next: Geo Unknown Comment
+
+      - name: Response Gate
+        type: decision
+        conditions:
+          - display: contain
+            when: "{{ vars.steps.Assess_Compromise.data.code_output.decision == 'contain' }}"
+            next: Block Source IP
+          - display: Else
+            default: true
+            next: Monitor Comment
+
+      - name: Monitor Comment
+        type: create_record
+        module: comments
+        comment: >
+          The alert is deliberately left Open. Scoring it below the bar is a
+          statement that a human should look, not that nothing happened -- and
+          silently closing plausible-travel alerts is how a real compromise gets
+          auto-dismissed.
+        fields:
+          content: >
+            <p><b>No automated containment -- risk score
+            {{ vars.steps.Assess_Compromise.data.code_output.score }},
+            below the bar of {{ vars.contain_score }}.</b></p>
+            <p><b>{{ vars.user }}</b> signed in from
+            {{ vars.steps.Assess_Compromise.data.code_output.first_city }}
+            and then
+            {{ vars.steps.Assess_Compromise.data.code_output.second_city }}
+            ({{ vars.steps.Assess_Compromise.data.code_output.second_country }})
+            --
+            {{ vars.steps.Assess_Compromise.data.code_output.distance_km }} km in
+            {{ vars.steps.Assess_Compromise.data.code_output.minutes }} minutes,
+            an implied
+            {{ vars.steps.Assess_Compromise.data.code_output.velocity_kmh }} km/h.
+            Assessed as
+            <b>{{ vars.steps.Assess_Compromise.data.code_output.verdict }}</b>
+            travel.</p>
+            <p>{{ vars.steps.Assess_Compromise.data.code_output.rationale }}.</p>
+            <p>The alert is left Open for analyst review rather than closed. To
+            tighten the gate, lower <code>impossible_kmh</code> or
+            <code>contain_score</code> in the Response Config step.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Monitor
+
+      - name: Done Monitor
+        type: end
+
+      # Real containment on the leg that is actually credentialed. Quarantine
+      # Based writes the device's `user/banned` list and needs only an address
+      # and a TTL, so it works against a stock FortiGate.
+      - name: Block Source IP
+        type: connector
+        connector: fortigate-firewall
+        operation: block_ip_new
+        config: fortigate-lab
+        params:
+          method: Quarantine Based
+          ip_addresses: "{{ vars.foreign_ip }}"
+          time_to_live: "{{ vars.block_ttl }}"
+          vdom: ""
+        next: Verify Block
+
+      - name: Verify Block
+        type: connector
+        connector: fortigate-firewall
+        operation: get_blocked_ip
+        config: fortigate-lab
+        params:
+          method: Quarantine Based
+          vdom: ""
+        next: Summarise Ban List
+
+      - name: Summarise Ban List
+        type: set_variable
+        comment: >
+          The ban list is buried at data.result[0].results -- a per-request
+          envelope wrapping the device's own reply, not a flat list. Flattened
+          to scalars here for the same reason the correlation step is: handing
+          the raw structure to a code snippet does not survive serialisation.
+        vars:
+          banned_ips: "{{ vars.steps.Verify_Block.data.result[0].results | default([], true) | map(attribute='ip_address') | join(',') }}"
+          # map('string') is load-bearing: `expires` is an integer, and joining
+          # ints renders the map object's repr instead of the values, which then
+          # parses as garbage downstream.
+          banned_expiries: "{{ vars.steps.Verify_Block.data.result[0].results | default([], true) | map(attribute='expires') | map('string') | join(',') }}"
+        next: Evaluate Block
+
+      - name: Evaluate Block
+        type: code_snippet
+        config: default
+        comment: >
+          The block call's own return value is not evidence. This checks the
+          address against the ban list the device just reported.
+        code: |
+          import time
+
+          wanted = '''{{ vars.foreign_ip }}'''.strip()
+          addresses = '''{{ vars.banned_ips | default('', true) }}'''.split(",")
+          expiries = '''{{ vars.banned_expiries | default('', true) }}'''.split(",")
+
+          found = ""
+          expires = ""
+          index = 0
+          for address in addresses:
+              if address.strip() == wanted and wanted:
+                  found = "yes"
+                  if index < len(expiries):
+                      expires = expiries[index].strip()
+              index = index + 1
+
+          total = 0
+          for address in addresses:
+              if address.strip():
+                  total = total + 1
+
+          # The device reports expiry as a unix timestamp; render it so the
+          # comment reads as a time rather than as an integer.
+          # Defensive digit extraction rather than a bare int(): `expires` is an
+          # integer on the device, and FSR's Jinja renders a list of integers as
+          # the map object's repr rather than joining the values, so this can
+          # arrive fringed with brackets or parentheses. Pulling the digits out
+          # is stable whichever way it renders.
+          digits = ""
+          for character in expires:
+              if character.isdigit():
+                  digits = digits + character
+
+          readable = "unknown"
+          if digits:
+              readable = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(int(digits)))
+
+          print({
+              "blocked": found,
+              "expires": readable,
+              "ban_list_size": total,
+          })
+        next: Identity Action Task
+
+      - name: Identity Action Task
+        type: create_record
+        module: tasks
+        comment: >
+          This is the identity-provider leg, expressed as a work item because no
+          IdP is credentialed on the demo box. It names the exact operations
+          rather than saying "review the account", so it is actionable by hand
+          and unambiguous to automate later. With `activedirectory` configured,
+          replace this step with `disable_user_account` followed by
+          `force_password_reset_next_logon`, then read the account back with
+          `get_specific_object_details` to confirm it -- the same
+          verify-before-you-claim-it shape the firewall leg already uses.
+        fields:
+          name: "Revoke sessions and reset credentials for {{ vars.user }}"
+          description: >
+            <p><b>Account compromise assessed -- risk score
+            {{ vars.steps.Assess_Compromise.data.code_output.score }}.</b>
+            The perimeter block is already in place; the identity actions below
+            are not automated on this deployment and need to be performed.</p>
+            <p><b>Account:</b> {{ vars.user }}<br/>
+            <b>Attacker source address:</b> {{ vars.foreign_ip }}
+            ({{ vars.steps.Assess_Compromise.data.code_output.second_city }},
+            {{ vars.steps.Assess_Compromise.data.code_output.second_country }})</p>
+            <p><b>Required actions, in order:</b></p>
+            <ol>
+            <li>Revoke all refresh tokens and active sessions for the account --
+            a password reset alone does not invalidate an already-issued OAuth
+            refresh token, so the attacker keeps access.</li>
+            <li>Force a password reset at next logon
+            (<code>activedirectory/force_password_reset_next_logon</code>).</li>
+            <li>Review mailbox rules created in the last 7 days -- forwarding
+            rules are the usual persistence after this attack.</li>
+            <li>Confirm the enrolled MFA methods are still the user's own.</li>
+            </ol>
+            <p><b>Why this account:</b>
+            {{ vars.steps.Assess_Compromise.data.code_output.rationale }}.</p>
+          type: '{{ "TaskType" | picklist("Incident Response", "@id") }}'
+          status: '{{ "TaskStatus" | picklist("Open", "@id") }}'
+          priority: '{{ "TaskPriority" | picklist("High", "@id") }}'
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Mark Investigating
+
+      - name: Mark Investigating
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: '{{ "AlertStatus" | picklist("Investigating", "@id") }}'
+        next: Containment Comment
+
+      - name: Containment Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Account compromise assessed -- risk score
+            {{ vars.steps.Assess_Compromise.data.code_output.score }}, containment
+            actioned.</b></p>
+            <p><b>{{ vars.user }}</b> signed in from
+            {{ vars.steps.Assess_Compromise.data.code_output.first_city }}
+            and then
+            {{ vars.steps.Assess_Compromise.data.code_output.second_city }}
+            ({{ vars.steps.Assess_Compromise.data.code_output.second_country }})
+            --
+            {{ vars.steps.Assess_Compromise.data.code_output.distance_km }} km in
+            {{ vars.steps.Assess_Compromise.data.code_output.minutes }} minutes,
+            an implied
+            <b>{{ vars.steps.Assess_Compromise.data.code_output.velocity_kmh }}
+            km/h</b>. Assessed as
+            <b>{{ vars.steps.Assess_Compromise.data.code_output.verdict }}</b>
+            travel.</p>
+            <p>{{ vars.steps.Assess_Compromise.data.code_output.rationale }}.</p>
+            {% if vars.steps.Evaluate_Block.data.code_output.blocked %}
+            <p><b>Perimeter: {{ vars.foreign_ip }} is confirmed on the
+            firewall's ban list</b> (expires
+            {{ vars.steps.Evaluate_Block.data.code_output.expires }};
+            {{ vars.steps.Evaluate_Block.data.code_output.ban_list_size }}
+            entries banned in total). The address was read back off the device,
+            not inferred from the block call's return value.</p>
+            {% else %}
+            <p><b>Perimeter: the block of {{ vars.foreign_ip }} could NOT be
+            confirmed.</b> The device's ban list
+            ({{ vars.steps.Evaluate_Block.data.code_output.ban_list_size }}
+            entries) does not contain the address. Treat the source as still
+            reachable and block it by hand.</p>
+            {% endif %}
+            <p><b>Identity: not automated on this deployment.</b> A high-priority
+            remediation task has been raised against this alert to revoke
+            sessions and reset credentials. Note that revoking tokens matters
+            more than the password reset -- an issued refresh token survives a
+            password change.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Contain
+
+      - name: Done Contain
+        type: end
+
+      - name: No User Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>No account name on this alert.</b> Nothing was assessed or
+            contained.</p>
+            <p>An impossible-travel alert with no <code>userName</code> cannot be
+            reasoned about -- the whole assessment is relative to one identity's
+            movement. Fix the ingestion mapping for this alert source rather than
+            working around it here.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done No User
+
+      - name: Done No User
+        type: end
+
+      - name: Geo Unknown Comment
+        type: create_record
+        module: comments
+        comment: >
+          Failing loudly here is deliberate. Silently scoring an unlocatable
+          sign-in as low risk would make the playbook quietly stop working the
+          moment it met a city outside the demo table.
+        fields:
+          content: >
+            <p><b>Could not locate both sign-ins -- no assessment made.</b></p>
+            <p>The alert reports a sign-in pair of
+            <b>{{ vars.steps.Assess_Compromise.data.code_output.first_city }}</b>
+            then
+            <b>{{ vars.steps.Assess_Compromise.data.code_output.second_city }}</b>,
+            and at least one of those is not resolvable to coordinates. Without
+            both locations there is no distance, so there is no implied velocity
+            and no basis for calling the travel impossible.</p>
+            <p>Nothing was blocked and the alert is left Open. To resolve this
+            class of alert automatically, point the Assess Compromise step at a
+            real geolocation source -- <code>ipstack/ip_locate</code> against
+            {{ vars.foreign_ip }}, or the identity provider's own sign-in log.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Geo
+
+      - name: Done Geo
+        type: end

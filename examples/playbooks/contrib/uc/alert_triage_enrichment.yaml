@@ -1,0 +1,383 @@
+# UC-02 -- Alert Enrichment, Deduplication and Triage.
+#
+# The everyday SOC problem: a queue full of alerts, most of them repeats of one
+# another, none of them carrying enough context to decide anything. An analyst
+# opens each one, copies the IP into VirusTotal, checks whether they have seen it
+# before, then guesses at a severity.
+#
+# This playbook does that pass automatically and shows its work:
+#
+#   Start (manual, on an alert)
+#     -> Triage Config          (set_variable -- thresholds, notification target)
+#     -> Extract Indicators     (code_snippet -- regex IPs/domains/URLs/hashes out of the alert)
+#     -> Find Similar Alerts    (find_record  -- same alert name, any state)
+#     -> Assess Duplicate       (code_snippet -- is this a repeat of an open alert?)
+#     -> Duplicate Gate         (decision)
+#          duplicate -> Close As Duplicate -> Duplicate Comment -> end
+#          new       -> Has IP Gate
+#     -> Has IP Gate            (decision -- did we actually extract an IP?)
+#     -> VirusTotal IP          (connector virustotal/query_ip)
+#     -> FortiGuard IOC         (connector fortinet-fortiguard-ioc/ioc_search)
+#     -> Score Alert            (code_snippet -- reputation + repeat count -> severity)
+#     -> Apply Triage           (update_record -- severity + status on the alert)
+#     -> Enrichment Comment     (create_record on comments -- the analyst-facing writeup)
+#     -> Escalation Gate        (decision -- score over threshold?)
+#          escalate -> Notify SOC (connector smtp/send_email) -> end
+#          benign   -> Close As Benign -> end
+#
+# Every connector this uses is configured and health-verified on the target box:
+# virustotal, fortinet-fortiguard-ioc, code-snippet and smtp. There is no device
+# dependency, so it runs on any appliance with those four wired up -- which is
+# why this is the first use case in the library to reach "fully complete".
+#
+# Live-verified on FortiSOAR 8.0.0.
+
+collection: Demo Library - Alert Triage
+description: >
+  Automated first-pass triage: extract indicators from an alert, suppress
+  duplicates, enrich against VirusTotal and FortiGuard, score it, and either
+  escalate to the SOC or close it as benign.
+visible: true
+
+playbooks:
+  - name: Enrich and Triage Alert
+    description: >
+      One-click enrichment, dedup and severity assignment for a raw alert.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: "Enrich & Triage"
+        next: Triage Config
+
+      - name: Triage Config
+        type: set_variable
+        comment: >
+          vt_escalate_at is the VirusTotal malicious-engine count at or above
+          which we escalate rather than auto-close. 3 is deliberately low for a
+          demo; production SOCs usually sit at 5-10 depending on how much they
+          trust the long tail of VT engines.
+        vars:
+          vt_escalate_at: 3
+          dedup_min_matches: 1
+          soc_email: "soc@example.com"
+        next: Extract Indicators
+
+      # Pull observables out of whatever free text the alert carries. Real
+      # ingestion usually populates structured fields, but demo and third-party
+      # alerts often only have a description, so parse both and merge.
+      - name: Extract Indicators
+        type: code_snippet
+        config: default
+        code: |
+          import re
+
+          blob = " ".join([
+              """{{ vars.input.records[0].name | default('') }}""",
+              """{{ vars.input.records[0].description | default('') }}""",
+              """{{ vars.input.records[0].sourceData | default('') }}""",
+          ])
+
+          # Strip HTML so tag attributes don't masquerade as observables.
+          blob = re.sub(r"<[^>]+>", " ", blob)
+
+          # NOTE: the code-snippet sandbox restricts a set of builtins -- `all`
+          # and `map` among them -- and fails the step rather than degrading.
+          # Everything below sticks to plain loops for that reason.
+          ip_re = r"\b(?:\d{1,3}\.){3}\d{1,3}\b"
+          ips = []
+          for candidate in re.findall(ip_re, blob):
+              octets = candidate.split(".")
+              valid = True
+              for octet in octets:
+                  if int(octet) > 255:
+                      valid = False
+              if valid:
+                  ips.append(candidate)
+
+          urls = re.findall(r"https?://[^\s\"'<>]+", blob)
+          hashes = re.findall(r"\b[a-fA-F0-9]{64}\b|\b[a-fA-F0-9]{32}\b", blob)
+
+          # Domains: skip anything that is really an IP, and skip the hostname
+          # part of a URL we already captured.
+          domains = [d for d in re.findall(
+              r"\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b", blob)
+              if not re.fullmatch(ip_re, d)]
+
+          # The sandbox blocklist matches on identifier names, not just builtins
+          # -- it rejected a local called `seq`, and `set` outright -- so this
+          # dedupes with a plain list and deliberately bland variable names.
+          def uniq(raw_list):
+              deduped = []
+              for entry in raw_list:
+                  if entry not in deduped:
+                      deduped.append(entry)
+              return deduped
+
+          ips = uniq(ips)
+          urls = uniq(urls)
+          hashes = uniq(hashes)
+          domains = uniq(domains)
+
+          # code-snippet returns whatever the body prints, keeping the type --
+          # `print(dict)` lands as an object at data.code_output, not a string.
+          print({
+              "ips": ips,
+              "urls": urls,
+              "hashes": hashes,
+              "domains": domains,
+              # first_ip drives the enrichment branch; empty string means "skip".
+              "first_ip": ips[0] if ips else "",
+              "first_domain": domains[0] if domains else "",
+              "total": len(ips) + len(urls) + len(hashes) + len(domains),
+          })
+        next: Find Similar Alerts
+
+      # Dedup signal: other alerts carrying the same name. Cheap and reliable --
+      # detection sources reuse rule names, so a repeat rule firing is the
+      # dominant duplicate pattern in a real queue.
+      - name: Find Similar Alerts
+        type: find_record
+        module: alerts
+        filters:
+          - field: name
+            operator: eq
+            value: "{{ vars.input.records[0].name }}"
+        limit: 50
+        next: Assess Duplicate
+
+      - name: Assess Duplicate
+        type: code_snippet
+        config: default
+        comment: >
+          The find_record result includes the alert we are running on, so a
+          single match means "no duplicate". Only alerts that are still open
+          count -- a closed one is history, not a suppression reason.
+
+          find_record's step result IS the list of rows at runtime -- there is no
+          `.data.records` key and no hydra envelope, despite the compiler
+          advertising `hydra:member` in its output keys. Reference the step
+          directly or you silently get an empty list and never detect anything.
+        code: |
+          records = {{ vars.steps.Find_Similar_Alerts | default([]) }}
+          self_id = """{{ vars.input.records[0].uuid }}"""
+
+          others = [r for r in records if r.get("uuid") != self_id]
+          open_others = [
+              r for r in others
+              if str((r.get("status") or {}).get("itemValue", "")) != "Closed"
+          ]
+
+          print({
+              "match_count": len(others),
+              "open_count": len(open_others),
+              "is_duplicate": "yes" if len(open_others) >= 1 else "",
+              "original_id": open_others[0].get("@id") if open_others else "",
+          })
+        next: Duplicate Gate
+
+      - name: Duplicate Gate
+        type: decision
+        conditions:
+          - display: duplicate
+            when: "{{ vars.steps.Assess_Duplicate.data.code_output.is_duplicate | default('') | length > 0 }}"
+            next: Close As Duplicate
+          - display: Else
+            default: true
+            next: Has IP Gate
+
+      - name: Close As Duplicate
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: '{{ "AlertStatus" | picklist("Closed", "@id") }}'
+        next: Duplicate Comment
+
+      - name: Duplicate Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Closed as duplicate.</b> This alert repeats an open alert of
+            the same name
+            ({{ vars.steps.Assess_Duplicate.data.code_output.open_count }} other
+            open occurrence(s), {{ vars.steps.Assess_Duplicate.data.code_output.match_count }}
+            total). No enrichment was spent on it.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Duplicate
+
+      - name: Done Duplicate
+        type: end
+
+      # Enrichment only makes sense if we found something to enrich.
+      - name: Has IP Gate
+        type: decision
+        conditions:
+          - display: has-ip
+            when: "{{ vars.steps.Extract_Indicators.data.code_output.first_ip | default('') | length > 0 }}"
+            next: VirusTotal IP
+          - display: Else
+            default: true
+            next: Score Alert
+
+      - name: VirusTotal IP
+        type: connector
+        connector: virustotal
+        operation: query_ip
+        config: test
+        params:
+          ip: "{{ vars.steps.Extract_Indicators.data.code_output.first_ip }}"
+        next: FortiGuard IOC
+
+      # Fortinet's own view of the same address, so the demo shows two
+      # independent reputation sources agreeing (or not).
+      - name: FortiGuard IOC
+        type: connector
+        connector: fortinet-fortiguard-ioc
+        operation: ioc_search
+        config: Default Configuration
+        params:
+          indicator: "{{ vars.steps.Extract_Indicators.data.code_output.first_ip }}"
+        next: Score Alert
+
+      - name: Score Alert
+        type: code_snippet
+        config: default
+        comment: >
+          Severity is driven by VirusTotal's malicious-engine count, then nudged
+          up one band if the same alert has fired repeatedly -- a noisy indicator
+          that keeps coming back is worth more than a single sighting.
+        code: |
+          vt = {{ vars.steps.VirusTotal_IP.data | default({}) }}
+          extract = {{ vars.steps.Extract_Indicators.data.code_output | default({}) }}
+          dedup = {{ vars.steps.Assess_Duplicate.data.code_output | default({}) }}
+
+          stats = (((vt or {}).get("attributes") or {}).get("last_analysis_stats") or {})
+          malicious = int(stats.get("malicious") or 0)
+          suspicious = int(stats.get("suspicious") or 0)
+          harmless = int(stats.get("harmless") or 0)
+
+          attrs = (vt or {}).get("attributes") or {}
+          asn = attrs.get("asn")
+          owner = attrs.get("as_owner") or ""
+          country = attrs.get("country") or attrs.get("continent") or ""
+
+          bands = ["Minimal", "Low", "Medium", "High", "Critical"]
+          if malicious >= 10:
+              idx = 4
+          elif malicious >= 3:
+              idx = 3
+          elif malicious >= 1 or suspicious >= 3:
+              idx = 2
+          elif extract.get("total"):
+              idx = 1
+          else:
+              idx = 0
+
+          # Repeat offender: bump one band, capped at Critical.
+          repeats = int(dedup.get("match_count") or 0)
+          if repeats >= 3 and idx < 4:
+              idx += 1
+
+          print({
+              "severity": bands[idx],
+              "malicious": malicious,
+              "suspicious": suspicious,
+              "harmless": harmless,
+              "asn": str(asn) if asn is not None else "n/a",
+              "as_owner": owner or "n/a",
+              "country": country or "n/a",
+              "repeats": repeats,
+              "escalate": "yes" if malicious >= {{ vars.vt_escalate_at }} else "",
+              "verdict": "malicious" if malicious >= {{ vars.vt_escalate_at }} else "no reputation hits",
+          })
+        next: Apply Triage
+
+      - name: Apply Triage
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        comment: >
+          A literal picklist value (`status: Investigating`) is resolved to an
+          IRI at compile time, but severity is only known at runtime, so it has
+          to go through the `picklist` Jinja filter instead. Writing the bare
+          name would fail with FSR_CH_0000001.
+        fields:
+          severity: '{{ "Severity" | picklist(vars.steps.Score_Alert.data.code_output.severity, "@id") }}'
+          status: '{{ "AlertStatus" | picklist("Investigating", "@id") }}'
+        next: Enrichment Comment
+
+      - name: Enrichment Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Automated triage complete.</b> Severity set to
+            <b>{{ vars.steps.Score_Alert.data.code_output.severity }}</b>
+            ({{ vars.steps.Score_Alert.data.code_output.verdict }}).</p>
+            <p><b>Indicators extracted:</b>
+            {{ vars.steps.Extract_Indicators.data.code_output.total }} total --
+            IPs {{ vars.steps.Extract_Indicators.data.code_output.ips }},
+            domains {{ vars.steps.Extract_Indicators.data.code_output.domains }},
+            URLs {{ vars.steps.Extract_Indicators.data.code_output.urls }},
+            hashes {{ vars.steps.Extract_Indicators.data.code_output.hashes }}.</p>
+            <p><b>VirusTotal</b> for
+            {{ vars.steps.Extract_Indicators.data.code_output.first_ip | default('n/a') }}:
+            {{ vars.steps.Score_Alert.data.code_output.malicious }} malicious,
+            {{ vars.steps.Score_Alert.data.code_output.suspicious }} suspicious,
+            {{ vars.steps.Score_Alert.data.code_output.harmless }} harmless.
+            ASN {{ vars.steps.Score_Alert.data.code_output.asn }}
+            ({{ vars.steps.Score_Alert.data.code_output.as_owner }}),
+            {{ vars.steps.Score_Alert.data.code_output.country }}.</p>
+            <p><b>Prior occurrences of this alert:</b>
+            {{ vars.steps.Score_Alert.data.code_output.repeats }}.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Escalation Gate
+
+      - name: Escalation Gate
+        type: decision
+        conditions:
+          - display: escalate
+            when: "{{ vars.steps.Score_Alert.data.code_output.escalate | default('') | length > 0 }}"
+            next: Notify SOC
+          - display: Else
+            default: true
+            next: Close As Benign
+
+      - name: Notify SOC
+        type: connector
+        connector: smtp
+        operation: send_email
+        config: localhost-postfix
+        params:
+          to: "{{ vars.soc_email }}"
+          subject: >
+            [{{ vars.steps.Score_Alert.data.code_output.severity }}] {{ vars.input.records[0].name }}
+          content: >
+            Automated triage escalated this alert.
+
+            Indicator: {{ vars.steps.Extract_Indicators.data.code_output.first_ip }}
+            VirusTotal: {{ vars.steps.Score_Alert.data.code_output.malicious }} engines malicious
+            ASN: {{ vars.steps.Score_Alert.data.code_output.asn }} ({{ vars.steps.Score_Alert.data.code_output.as_owner }})
+            Prior occurrences: {{ vars.steps.Score_Alert.data.code_output.repeats }}
+        next: Done Escalated
+
+      - name: Done Escalated
+        type: end
+
+      - name: Close As Benign
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        comment: >
+          No reputation hits and no duplicate history. Auto-closing is the whole
+          point of the use case -- this is the alert the analyst never has to
+          open. The enrichment comment above stays as the audit trail.
+        fields:
+          status: '{{ "AlertStatus" | picklist("Closed", "@id") }}'
+        next: Done Benign
+
+      - name: Done Benign
+        type: end

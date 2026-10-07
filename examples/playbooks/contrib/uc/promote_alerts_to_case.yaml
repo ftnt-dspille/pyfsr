@@ -1,0 +1,509 @@
+# UC-10 -- Promote correlated alerts into a case: assemble it, plan it, and
+# start the clock.
+#
+# This is the only use case in the library with no external dependency at all.
+# Everything here is FortiSOAR's own case machinery, which makes it the one that
+# survives contact with an air-gapped demo, a broken lab, or a customer who has
+# not credentialed anything yet.
+#
+# It is also the use case that gives the others somewhere to land. UC-02 triages
+# an alert, UC-03 isolates a host, UC-04 blocks an address, UC-05 scores a
+# sign-in -- and every one of them ends with an alert in a state. None of them
+# produces the artefact an incident responder is actually judged on: a case with
+# a defensible timeline, an owner, a plan, and a deadline.
+#
+#   Start (manual, on an alert)
+#     -> Case Config          (set_variable -- SLA hours per severity)
+#     -> Read Alert           (set_variable -- host, user, severity)
+#     -> Find By Host         (find_record -- alerts sharing the host)
+#     -> Find By User         (find_record -- alerts sharing the account)
+#     -> Expand Hosts         (set_variable -- machines that account touched)
+#     -> Find By Related Hosts(find_record -- second-degree expansion)
+#     -> Correlate            (set_variable -- flatten both pivots to scalars)
+#     -> Build Case           (code_snippet -- dedupe, rank severity, dwell
+#                              time, SLA deadlines, timeline, summary)
+#     -> Create Case          (create_record incidents -- links every alert)
+#     -> Detection Task       (create_record) \
+#     -> Containment Task     (create_record)  |  NIST 800-61 response plan,
+#     -> Eradication Task     (create_record)  |  one task per phase
+#     -> Recovery Task        (create_record)  |
+#     -> Post-Incident Task   (create_record) /
+#     -> Case Summary Comment (create_record -- the timeline, on the case)
+#     -> Alert Comment        (create_record -- back-reference, on the alert)
+#     -> Mark Alert Investigating (update_record) -> end
+#
+# Three things here are load-bearing and easy to get wrong:
+#
+# 1. **Correlation pivots on two keys, not one.** Real cases are found by asking
+#    "what else touched this host" AND "what else touched this account". A single
+#    pivot misses the half of the intrusion that moved laterally to a different
+#    machine under the same credential, or that hit the same machine under a
+#    different one. Both lists are merged and de-duplicated in Build Case.
+#
+# 2. **The case severity is the MAXIMUM of its constituents, not the severity of
+#    whichever alert the analyst happened to click.** Promoting from a Low alert
+#    that turns out to be part of a Critical cluster must produce a Critical
+#    case, or the SLA clock is wrong from the first second.
+#
+# 3. **Dwell time is measured from the EARLIEST constituent alert**, not from
+#    when the case was opened. Opening a case does not mean the intrusion started
+#    then, and a dwell-time metric that says otherwise flatters the SOC and is
+#    worthless in a post-incident review.
+#
+# The empty-pivot guard matters too: a find_record filter given an empty string
+# can match far more than intended, so a missing host or user is replaced with a
+# sentinel that matches nothing rather than being passed through blank.
+#
+# Live-verified on FortiSOAR 8.0.0.
+
+collection: Demo Library - Case Management
+description: >
+  Promote an alert and everything correlated with it into an incident, with a
+  NIST 800-61 response plan, severity-driven SLA deadlines, and a reconstructed
+  timeline. No external connectors required.
+visible: true
+
+playbooks:
+  - name: Promote Alerts To Case
+    description: >
+      Assemble a case from correlated alerts, generate the response plan, and
+      set the SLA clock from the earliest evidence.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: "Promote To Case"
+        next: Case Config
+
+      - name: Case Config
+        type: set_variable
+        comment: >
+          Acknowledgement and resolution windows in hours, per severity. These
+          are the numbers a customer will argue about, so they live in one step
+          rather than being scattered through the logic.
+
+          correlation_days bounds how far back the pivots reach. Unbounded
+          correlation eventually pulls a year of unrelated noise for a busy host
+          into one case.
+        vars:
+          ack_hours_critical: "1"
+          ack_hours_high: "4"
+          ack_hours_default: "24"
+          resolve_hours_critical: "8"
+          resolve_hours_high: "24"
+          resolve_hours_default: "72"
+          correlation_days: "7"
+        next: Read Alert
+
+      - name: Read Alert
+        type: set_variable
+        comment: >
+          The sentinels matter. An empty value in a find_record filter does not
+          reliably mean "match nothing" -- it can match far more than intended,
+          which would sweep unrelated alerts into the case. A string no record
+          will ever hold is a safer blank.
+        vars:
+          host: "{{ vars.input.records[0].hostName | default('', true) or '__no_host__' }}"
+          user: "{{ vars.input.records[0].userName | default('', true) or '__no_user__' }}"
+        next: Find By Host
+
+      - name: Find By Host
+        type: find_record
+        module: alerts
+        filters:
+          - field: hostName
+            operator: eq
+            value: "{{ vars.host }}"
+        limit: 100
+        next: Find By User
+
+      - name: Find By User
+        type: find_record
+        module: alerts
+        filters:
+          - field: userName
+            operator: eq
+            value: "{{ vars.user }}"
+        limit: 100
+        next: Expand Hosts
+
+      # Second-degree expansion. The account pivot reveals which machines the
+      # credential actually touched; those machines then have alerts of their own
+      # that neither first-degree pivot can see. Without this hop, promoting from
+      # an alert that carries an account but no host -- a mailbox rule, an
+      # impossible-travel sign-in -- produces a case that misses the endpoint
+      # activity entirely, which is exactly the half you need.
+      - name: Expand Hosts
+        type: set_variable
+        comment: >
+          Falls back to a sentinel when nothing was discovered: an `in` filter
+          given an empty list matches everything, which would sweep the entire
+          alert table into the case.
+        vars:
+          related_hosts: "{{ (vars.steps.Find_By_User | map(attribute='hostName') | select | list) or ['__no_host__'] }}"
+        next: Find By Related Hosts
+
+      - name: Find By Related Hosts
+        type: find_record
+        module: alerts
+        filters:
+          - field: hostName
+            operator: in
+            value: "{{ vars.related_hosts }}"
+        limit: 100
+        next: Correlate
+
+      - name: Correlate
+        type: set_variable
+        comment: >
+          Flattened to scalars before the snippet sees them. Inlining whole alert
+          records into a code snippet is fragile by construction: the sandbox
+          screens source with a token scan that matches inside string values, so
+          one unlucky word in an alert description rejects the whole step.
+
+          The two pivots overlap -- the triggering alert appears in both -- so
+          Build Case de-duplicates on the IRI.
+        vars:
+          host_names: "{{ vars.steps.Find_By_Host | map(attribute='name') | join(' || ') }}"
+          host_iris: "{{ vars.steps.Find_By_Host | map(attribute='@id') | join(' || ') }}"
+          host_dates: "{{ vars.steps.Find_By_Host | map(attribute='createDate') | map('string') | join(' || ') }}"
+          host_events: "{{ vars.steps.Find_By_Host | map(attribute='eventTime') | map('string') | join(' || ') }}"
+          host_sevs: "{{ vars.steps.Find_By_Host | map(attribute='severity.itemValue') | join(' || ') }}"
+          user_names: "{{ vars.steps.Find_By_User | map(attribute='name') | join(' || ') }}"
+          user_iris: "{{ vars.steps.Find_By_User | map(attribute='@id') | join(' || ') }}"
+          user_dates: "{{ vars.steps.Find_By_User | map(attribute='createDate') | map('string') | join(' || ') }}"
+          user_events: "{{ vars.steps.Find_By_User | map(attribute='eventTime') | map('string') | join(' || ') }}"
+          user_sevs: "{{ vars.steps.Find_By_User | map(attribute='severity.itemValue') | join(' || ') }}"
+          rel_names: "{{ vars.steps.Find_By_Related_Hosts | map(attribute='name') | join(' || ') }}"
+          rel_iris: "{{ vars.steps.Find_By_Related_Hosts | map(attribute='@id') | join(' || ') }}"
+          rel_dates: "{{ vars.steps.Find_By_Related_Hosts | map(attribute='createDate') | map('string') | join(' || ') }}"
+          rel_events: "{{ vars.steps.Find_By_Related_Hosts | map(attribute='eventTime') | map('string') | join(' || ') }}"
+          rel_sevs: "{{ vars.steps.Find_By_Related_Hosts | map(attribute='severity.itemValue') | join(' || ') }}"
+        next: Build Case
+
+      - name: Build Case
+        type: code_snippet
+        config: default
+        code: |
+          import time
+
+          SPLIT = " || "
+
+          def parts(blob):
+              out = []
+              for piece in blob.split(SPLIT):
+                  out.append(piece.strip())
+              return out
+
+          names = (parts('''{{ vars.host_names | default('', true) }}''')
+                   + parts('''{{ vars.user_names | default('', true) }}''')
+                   + parts('''{{ vars.rel_names | default('', true) }}'''))
+          iris = (parts('''{{ vars.host_iris | default('', true) }}''')
+                   + parts('''{{ vars.user_iris | default('', true) }}''')
+                   + parts('''{{ vars.rel_iris | default('', true) }}'''))
+          dates = (parts('''{{ vars.host_dates | default('', true) }}''')
+                   + parts('''{{ vars.user_dates | default('', true) }}''')
+                   + parts('''{{ vars.rel_dates | default('', true) }}'''))
+          # eventTime is when the activity actually happened; createDate is only
+          # when FortiSOAR heard about it. Dwell measured from ingestion flatters
+          # the SOC by exactly the length of its own detection lag, so prefer the
+          # event time wherever the source supplied one.
+          events = (parts('''{{ vars.host_events | default('', true) }}''')
+                    + parts('''{{ vars.user_events | default('', true) }}''')
+                    + parts('''{{ vars.rel_events | default('', true) }}'''))
+          sevs = (parts('''{{ vars.host_sevs | default('', true) }}''')
+                   + parts('''{{ vars.user_sevs | default('', true) }}''')
+                   + parts('''{{ vars.rel_sevs | default('', true) }}'''))
+
+          # De-duplicate on the IRI: the triggering alert is in both pivots, and
+          # so is anything matching on host AND account.
+          seen = []
+          rows = []
+          index = 0
+          for iri in iris:
+              if iri and iri not in seen:
+                  seen.append(iri)
+                  name = names[index] if index < len(names) else "unnamed alert"
+                  created = dates[index] if index < len(dates) else ""
+                  occurred = events[index] if index < len(events) else ""
+                  severity = sevs[index] if index < len(sevs) else ""
+                  rows.append({"iri": iri, "name": name, "created": created,
+                               "occurred": occurred, "severity": severity})
+              index = index + 1
+
+          # Case severity is the MAXIMUM of the constituents. Promoting from a
+          # Low alert that belongs to a Critical cluster must yield a Critical
+          # case, or every downstream deadline is wrong.
+          RANK = {"minimal": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+          top = "Low"
+          top_rank = -1
+          for row in rows:
+              rank = RANK.get(row["severity"].strip().lower(), -1)
+              if rank > top_rank:
+                  top_rank = rank
+                  top = row["severity"].strip() or "Low"
+
+          # createDate is a unix epoch FLOAT, not an ISO string -- printing it
+          # raw puts "1785381374.484333" in the timeline, and parsing it as a
+          # date silently yields a dwell of zero, which is the number a reader is
+          # least likely to question.
+          def epoch_of(raw):
+              try:
+                  return float(raw)
+              except ValueError:
+                  return 0.0
+
+          def observed_at(row):
+              # Prefer the reported event time; fall back to ingestion time.
+              seconds = epoch_of(row["occurred"])
+              if seconds:
+                  return seconds
+              return epoch_of(row["created"])
+
+          def when(raw):
+              seconds = epoch_of(raw)
+              if not seconds:
+                  return "unknown time"
+              return time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(seconds))
+
+          # Sort numerically by timestamp so the timeline reads in the order
+          # things happened.
+          ordered = sorted(rows, key=observed_at)
+
+          first_epoch = observed_at(ordered[0]) if ordered else 0.0
+          last_epoch = observed_at(ordered[-1]) if ordered else 0.0
+          first_seen = when(first_epoch) if ordered else "unknown"
+          last_seen = when(last_epoch) if ordered else "unknown"
+
+          # Dwell is measured from the EARLIEST evidence, not from now. A case
+          # opened today for an intrusion that started last week did not have a
+          # dwell time of zero.
+          dwell_hours = 0
+          if first_epoch:
+              dwell_hours = int((time.time() - first_epoch) / 3600.0)
+          if dwell_hours < 0:
+              dwell_hours = 0
+
+          key = top.lower()
+          if key == "critical":
+              ack_hours = float('''{{ vars.ack_hours_critical }}''')
+              res_hours = float('''{{ vars.resolve_hours_critical }}''')
+          elif key == "high":
+              ack_hours = float('''{{ vars.ack_hours_high }}''')
+              res_hours = float('''{{ vars.resolve_hours_high }}''')
+          else:
+              ack_hours = float('''{{ vars.ack_hours_default }}''')
+              res_hours = float('''{{ vars.resolve_hours_default }}''')
+
+          # The SLA fields are unix epoch SECONDS, despite the API's error
+          # message calling them datetimes -- an ISO string is rejected, and
+          # epoch milliseconds is accepted but silently stored as a nonsense
+          # date. Emit both: the epoch for the record, a readable form for the
+          # human-facing comment.
+          now = time.time()
+          ack_epoch = int(now + ack_hours * 3600)
+          res_epoch = int(now + res_hours * 3600)
+          readable = "%Y-%m-%d %H:%M UTC"
+          ack_due = time.strftime(readable, time.gmtime(ack_epoch))
+          res_due = time.strftime(readable, time.gmtime(res_epoch))
+
+          timeline = []
+          for row in ordered:
+              timeline.append("<li><b>%s</b> -- %s <i>(%s)</i></li>"
+                              % (when(observed_at(row)), row["name"],
+                                 row["severity"] or "unrated"))
+
+          print({
+              "alert_count": len(rows),
+              "severity": top,
+              "first_seen": first_seen,
+              "last_seen": last_seen,
+              "dwell_hours": dwell_hours,
+              "ack_due": ack_due,
+              "res_due": res_due,
+              "ack_epoch": ack_epoch,
+              "res_epoch": res_epoch,
+              "ack_hours": "%.0f" % ack_hours,
+              "res_hours": "%.0f" % res_hours,
+              "timeline_html": "".join(timeline),
+              "names": "; ".join(names[:10]),
+          })
+        next: Create Case
+
+      - name: Create Case
+        type: create_record
+        module: incidents
+        comment: >
+          Every correlated alert is attached, not just the one the analyst
+          clicked. The case is the unit of work from here on, and an incident
+          linked to one of its five alerts is a reporting lie.
+        fields:
+          name: "Case: {{ vars.steps.Build_Case.data.code_output.alert_count }} correlated alerts on {{ vars.input.records[0].hostName | default(vars.input.records[0].userName, true) | default('unknown asset', true) }}"
+          description: >
+            <p>Assembled automatically from
+            {{ vars.steps.Build_Case.data.code_output.alert_count }} correlated
+            alerts pivoting on host and account.</p>
+          status: '{{ "IncidentStatus" | picklist("Open", "@id") }}'
+          phase: '{{ "IncidentPhase" | picklist("Identification", "@id") }}'
+          severity: '{{ "Severity" | picklist(vars.steps.Build_Case.data.code_output.severity, "@id") }}'
+          affectedHost: "{{ vars.input.records[0].hostName | default('', true) }}"
+          affectedUser: "{{ vars.input.records[0].userName | default('', true) }}"
+          ackDueDate: "{{ vars.steps.Build_Case.data.code_output.ack_epoch }}"
+          resDueBy: "{{ vars.steps.Build_Case.data.code_output.res_epoch }}"
+          alerts: "{{ ((vars.steps.Find_By_Host | map(attribute='@id') | list) + (vars.steps.Find_By_User | map(attribute='@id') | list) + (vars.steps.Find_By_Related_Hosts | map(attribute='@id') | list)) | unique | list }}"
+          incidentsummary: >
+            <p>Severity <b>{{ vars.steps.Build_Case.data.code_output.severity }}</b>,
+            derived from the highest-rated constituent alert rather than from the
+            alert this case was promoted from.</p>
+            <p>Earliest evidence
+            <b>{{ vars.steps.Build_Case.data.code_output.first_seen }}</b>,
+            most recent
+            <b>{{ vars.steps.Build_Case.data.code_output.last_seen }}</b> --
+            an observed dwell of
+            <b>{{ vars.steps.Build_Case.data.code_output.dwell_hours }} hours</b>
+            before the case was opened.</p>
+          nextsteps: >
+            <p>Acknowledge within
+            {{ vars.steps.Build_Case.data.code_output.ack_hours }} hours and
+            resolve within
+            {{ vars.steps.Build_Case.data.code_output.res_hours }} hours. A
+            five-phase NIST 800-61 response plan has been attached as tasks.</p>
+        next: Detection Task
+
+      # The response plan. One task per NIST 800-61 phase, created up front so
+      # the case has a plan before anyone opens it -- rather than a plan being
+      # reconstructed afterwards for the report.
+      - name: Detection Task
+        type: create_record
+        module: tasks
+        fields:
+          name: "1. Detection and Analysis"
+          description: >
+            <p>Confirm the scope of what was detected. Review all
+            {{ vars.steps.Build_Case.data.code_output.alert_count }} correlated
+            alerts, establish whether the earliest
+            ({{ vars.steps.Build_Case.data.code_output.first_seen }}) is
+            genuinely the first activity or merely the first thing that was
+            logged, and record what evidence has been preserved.</p>
+          type: '{{ "TaskType" | picklist("Incident Response", "@id") }}'
+          status: '{{ "TaskStatus" | picklist("In progress", "@id") }}'
+          priority: '{{ "TaskPriority" | picklist("High", "@id") }}'
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Containment Task
+
+      - name: Containment Task
+        type: create_record
+        module: tasks
+        fields:
+          name: "2. Containment"
+          description: >
+            <p>Stop the spread without destroying evidence. Capture volatile
+            state before isolating anything -- isolation is what makes memory and
+            live network state unrecoverable.</p>
+          type: '{{ "TaskType" | picklist("Incident Response", "@id") }}'
+          status: '{{ "TaskStatus" | picklist("Open", "@id") }}'
+          priority: '{{ "TaskPriority" | picklist("High", "@id") }}'
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Eradication Task
+
+      - name: Eradication Task
+        type: create_record
+        module: tasks
+        fields:
+          name: "3. Eradication"
+          description: >
+            <p>Remove the foothold and close the way in. Eradication that does
+            not identify the initial access vector guarantees a repeat.</p>
+          type: '{{ "TaskType" | picklist("Incident Response", "@id") }}'
+          status: '{{ "TaskStatus" | picklist("Open", "@id") }}'
+          priority: '{{ "TaskPriority" | picklist("Medium", "@id") }}'
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Recovery Task
+
+      - name: Recovery Task
+        type: create_record
+        module: tasks
+        fields:
+          name: "4. Recovery"
+          description: >
+            <p>Return affected systems to service and monitor them specifically.
+            Recovery is not complete when the host boots; it is complete when it
+            has run clean under observation.</p>
+          type: '{{ "TaskType" | picklist("Incident Response", "@id") }}'
+          status: '{{ "TaskStatus" | picklist("Open", "@id") }}'
+          priority: '{{ "TaskPriority" | picklist("Medium", "@id") }}'
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Post Incident Task
+
+      - name: Post Incident Task
+        type: create_record
+        module: tasks
+        fields:
+          name: "5. Post-Incident Review"
+          description: >
+            <p>Record the timeline, the dwell time
+            ({{ vars.steps.Build_Case.data.code_output.dwell_hours }} hours
+            observed here), what detected it, and what should have detected it
+            sooner. This is the task that turns an incident into a control
+            improvement, and the one most often skipped.</p>
+          type: '{{ "TaskType" | picklist("Report", "@id") }}'
+          status: '{{ "TaskStatus" | picklist("Open", "@id") }}'
+          priority: '{{ "TaskPriority" | picklist("Low", "@id") }}'
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Case Summary Comment
+
+      - name: Case Summary Comment
+        type: create_record
+        module: comments
+        comment: >
+          The timeline is reconstructed from the constituent alerts and written
+          down at the moment the case opens. Assembling it afterwards, by hand,
+          from whatever is still in the console is how post-incident reports end
+          up wrong.
+        fields:
+          content: >
+            <p><b>Case assembled from
+            {{ vars.steps.Build_Case.data.code_output.alert_count }} correlated
+            alerts.</b> Severity
+            <b>{{ vars.steps.Build_Case.data.code_output.severity }}</b>, taken
+            from the highest-rated constituent.</p>
+            <p><b>Reconstructed timeline</b></p>
+            <ul>{{ vars.steps.Build_Case.data.code_output.timeline_html }}</ul>
+            <p><b>Dwell:</b> earliest evidence
+            {{ vars.steps.Build_Case.data.code_output.first_seen }}, roughly
+            {{ vars.steps.Build_Case.data.code_output.dwell_hours }} hours before
+            this case was opened. Measured from the first alert, not from case
+            creation.</p>
+            <p><b>SLA:</b> acknowledge by
+            {{ vars.steps.Build_Case.data.code_output.ack_due }}, resolve by
+            {{ vars.steps.Build_Case.data.code_output.res_due }}.</p>
+            <p>A five-phase NIST 800-61 response plan is attached as tasks.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Alert Comment
+
+      - name: Alert Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Promoted to a case.</b> This alert and
+            {{ vars.steps.Build_Case.data.code_output.alert_count }} correlated
+            alerts in total are now tracked as a single incident at severity
+            <b>{{ vars.steps.Build_Case.data.code_output.severity }}</b>.</p>
+            <p>Correlation pivoted on both the host and the account, so alerts
+            that moved laterally to another machine under the same credential are
+            included. Work the case, not this alert.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Mark Alert Investigating
+
+      - name: Mark Alert Investigating
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: '{{ "AlertStatus" | picklist("Investigating", "@id") }}'
+        next: Done
+
+      - name: Done
+        type: end

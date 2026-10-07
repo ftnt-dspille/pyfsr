@@ -1,0 +1,415 @@
+# UC-03 -- Isolate a compromised endpoint, but only the ones you are allowed to
+# isolate unilaterally, and only after proving the isolation landed.
+#
+# Endpoint isolation is the most destructive button in a SOC's automation. Fully
+# automating it gets a domain controller cut off at 3am; leaving it fully manual
+# means a workstation stays on the network for the forty minutes it takes to get
+# someone to click. Neither is the answer.
+#
+# So this playbook splits the fleet by what the asset actually is:
+#
+#   * Workstations         -> isolated automatically, then CONFIRMED against the
+#                             EDR's own collector inventory before the alert is
+#                             recorded as contained.
+#   * Servers / OT assets  -> deliberately NOT isolated. An Approval task is
+#                             raised against the alert and the alert moves to
+#                             Pending. A human decides.
+#   * Unknown hosts        -> nothing is touched, and the alert says why.
+#
+#   Start (manual, on an alert)
+#     -> Isolation Config    (set_variable -- org, EDR config, protected families)
+#     -> Read Alert          (set_variable -- hostName off the record)
+#     -> Hostname Gate       (decision -- no host, nothing to isolate)
+#     -> List Collectors     (connector fortinet-fortiedr/get_collector_list)
+#     -> Match Collector     (code_snippet -- find the host, classify the asset)
+#     -> Found Gate          (decision)
+#          no collector -> Not Found Comment -> end
+#     -> Criticality Gate    (decision)
+#          protected    -> Approval Task -> Approval Comment -> Mark Pending -> end
+#     -> Isolate Endpoint    (connector isolate_collector)
+#     -> Verify Isolation    (connector get_collector_list -- read the fleet back)
+#     -> Evaluate Isolation  (code_snippet -- is OUR host actually isolated?)
+#     -> Isolation Gate      (decision)
+#          confirmed    -> Mark Contained -> Isolated Comment -> end
+#          not confirmed-> Isolation Failed Comment -> end
+#
+# The verification signal is subtle and worth knowing: for a collector that is
+# currently online, isolating flips `state` to "Isolated". For one that is
+# offline, `state` stays "Disconnected" and the isolation is recorded in
+# `stateAdditionalInfo` instead -- it will be enforced when the endpoint comes
+# back. Checking only `state` makes a perfectly good isolation of an offline
+# host look like a failure, so both are checked.
+#
+# Live-verified on FortiSOAR 8.0.0 against a real FortiEDR manager.
+
+collection: Demo Library - Endpoint Isolation
+description: >
+  Isolate a compromised endpoint on FortiEDR with an asset-criticality approval
+  gate, and confirm the isolation against the EDR's collector inventory before
+  recording the alert as contained.
+visible: true
+
+playbooks:
+  - name: Isolate Endpoint With Approval Gate
+    description: >
+      Criticality-gated FortiEDR isolation with inventory read-back confirmation.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: "Isolate Endpoint"
+        next: Isolation Config
+
+      - name: Isolation Config
+        type: set_variable
+        comment: >
+          protected_os_families is the list of asset classes this playbook will
+          not isolate on its own authority. It is a comma-separated string
+          rather than a list because set_variable renders through Jinja, and a
+          string survives that unambiguously. Empty it to isolate everything
+          automatically; add collector group names to protected_groups to carve
+          out an OT cell or a production ring by group rather than by OS.
+
+          Leave edr_org empty for a single-tenant FortiEDR manager -- that
+          searches everything the credentials can see. On a multi-tenant
+          manager set it to the exact organization name, or the lookup silently
+          searches the wrong scope and every host looks like it has no agent.
+        vars:
+          edr_org: ""
+          protected_os_families: "Windows Server,Linux Server,OS X"
+          protected_groups: ""
+        next: Read Alert
+
+      - name: Read Alert
+        type: set_variable
+        vars:
+          target_host: "{{ vars.input.records[0].hostName | default('') }}"
+        next: Hostname Gate
+
+      - name: Hostname Gate
+        type: decision
+        conditions:
+          - display: has-hostname
+            when: "{{ vars.target_host | default('') | length > 0 }}"
+            next: List Collectors
+          - display: Else
+            default: true
+            next: No Hostname Comment
+
+      - name: No Hostname Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>No endpoint to isolate.</b> This alert carries no
+            <code>hostName</code>, so there is nothing to match against the EDR
+            collector inventory.</p>
+            <p>Populate <code>hostName</code> on ingestion -- isolation cannot be
+            automated against an alert that does not say which machine it is
+            about.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done No Host
+
+      - name: Done No Host
+        type: end
+
+      - name: List Collectors
+        type: connector
+        connector: fortinet-fortiedr
+        operation: get_collector_list
+        config: fortiedr-lab
+        comment: >
+          FortiEDR is multi-tenant. Omitting the organization silently searches
+          the wrong scope on a multi-org manager, so it is always passed.
+        params:
+          organization: "{{ vars.edr_org }}"
+        next: Match Collector
+
+      - name: Match Collector
+        type: code_snippet
+        config: default
+        comment: >
+          Resolve the alert's hostname to a real collector and decide whether
+          this playbook is allowed to isolate it unilaterally.
+        code: |
+          collectors = {{ vars.steps.List_Collectors.data | default([]) }}
+          wanted = """{{ vars.target_host }}""".strip().lower()
+
+          protected_families = []
+          for token in """{{ vars.protected_os_families }}""".split(","):
+              if token.strip():
+                  protected_families.append(token.strip().lower())
+
+          protected_groups = []
+          for token in """{{ vars.protected_groups }}""".split(","):
+              if token.strip():
+                  protected_groups.append(token.strip().lower())
+
+          # No isinstance() below: the code-snippet sandbox shadows the builtin
+          # type names, so `isinstance(x, list)` dies with "arg 2 must be a
+          # type". `or []` / `or {}` absorb unexpected shapes instead.
+          match = {}
+          for row in collectors or []:
+              name = str((row or {}).get("name") or "").strip().lower()
+              # Alerts often carry an FQDN where the EDR carries a short name.
+              if name and (name == wanted or wanted.split(".")[0] == name):
+                  match = row
+
+          family = str(match.get("osFamily") or "")
+          group = str(match.get("collectorGroupName") or "")
+
+          protected = ""
+          reason = ""
+          if family.lower() in protected_families:
+              protected = "yes"
+              reason = "%s is a %s asset" % (match.get("name"), family)
+          elif group.lower() in protected_groups:
+              protected = "yes"
+              reason = "%s is in the protected collector group %s" % (
+                  match.get("name"),
+                  group,
+              )
+
+          print({
+              "found": "yes" if match else "",
+              "name": str(match.get("name") or ""),
+              "os": str(match.get("operatingSystem") or ""),
+              "family": family,
+              "group": group or "none",
+              "ip": str(match.get("ipAddress") or ""),
+              "state": str(match.get("state") or ""),
+              "last_seen": str(match.get("lastSeenTime") or ""),
+              "protected": protected,
+              "reason": reason,
+              "fleet_size": len(collectors or []),
+          })
+        next: Found Gate
+
+      - name: Found Gate
+        type: decision
+        conditions:
+          - display: collector-found
+            when: "{{ vars.steps.Match_Collector.data.code_output.found | default('') | length > 0 }}"
+            next: Criticality Gate
+          - display: Else
+            default: true
+            next: Not Found Comment
+
+      - name: Not Found Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>No EDR collector for
+            {{ vars.target_host }}.</b> Nothing was isolated.</p>
+            <p>{{ vars.steps.Match_Collector.data.code_output.fleet_size }}
+            collectors were searched in organization
+            <b>{{ vars.edr_org }}</b>. Either this host has no EDR agent
+            installed -- itself worth an investigation -- or the alert's
+            hostname does not match the name the agent registered under.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Not Found
+
+      - name: Done Not Found
+        type: end
+
+      # The gate this use case exists for. Isolating a domain controller or an
+      # OT asset is a business decision, not an automation decision.
+      - name: Criticality Gate
+        type: decision
+        conditions:
+          - display: needs-approval
+            when: "{{ vars.steps.Match_Collector.data.code_output.protected | default('') | length > 0 }}"
+            next: Approval Task
+          - display: Else
+            default: true
+            next: Isolate Endpoint
+
+      - name: Approval Task
+        type: create_record
+        module: tasks
+        comment: >
+          A task, not a manual_input step, so the run finishes and the decision
+          becomes a tracked work item with an owner and an SLA. Swap this for an
+          `approval` step if you would rather the run park in `awaiting` and
+          resume in place -- that demos well live, but it leaves a suspended
+          execution behind on every unattended run.
+        fields:
+          name: "Approve isolation of {{ vars.steps.Match_Collector.data.code_output.name }}"
+          description: >
+            <p>Automated isolation was <b>withheld</b>.
+            {{ vars.steps.Match_Collector.data.code_output.reason }}, so it is
+            not isolated without a human decision.</p>
+            <p><b>Host:</b>
+            {{ vars.steps.Match_Collector.data.code_output.name }}
+            ({{ vars.steps.Match_Collector.data.code_output.os }}) at
+            {{ vars.steps.Match_Collector.data.code_output.ip }},
+            collector group
+            {{ vars.steps.Match_Collector.data.code_output.group }}, last seen
+            {{ vars.steps.Match_Collector.data.code_output.last_seen }}.</p>
+            <p>To approve, run <i>Isolate Endpoint</i> on the linked alert with
+            <code>protected_os_families</code> cleared, or isolate the collector
+            directly in FortiEDR.</p>
+          type: '{{ "TaskType" | picklist("Approval", "@id") }}'
+          status: '{{ "TaskStatus" | picklist("Open", "@id") }}'
+          priority: '{{ "TaskPriority" | picklist("High", "@id") }}'
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Approval Comment
+
+      - name: Approval Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Isolation withheld pending approval.</b>
+            {{ vars.steps.Match_Collector.data.code_output.reason }}.</p>
+            <p>The endpoint is <b>still on the network</b>. An Approval task has
+            been raised against this alert and the alert has moved to Pending.
+            Nothing on the EDR was changed.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Mark Pending
+
+      - name: Mark Pending
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        comment: >
+          Picklist writes on update_record must go through the runtime filter;
+          a compile-time IRI is rejected with FSR_CH_0000001.
+        fields:
+          status: '{{ "AlertStatus" | picklist("Pending", "@id") }}'
+        next: Done Awaiting Approval
+
+      - name: Done Awaiting Approval
+        type: end
+
+      - name: Isolate Endpoint
+        type: connector
+        connector: fortinet-fortiedr
+        operation: isolate_collector
+        config: fortiedr-lab
+        comment: >
+          Matched by Name rather than ID: the name is what the alert carries and
+          what the analyst recognises in the audit trail. `devices` takes a
+          comma-separated list, so this generalises to a fan-out later.
+        params:
+          type: Name
+          devices: "{{ vars.steps.Match_Collector.data.code_output.name }}"
+          organization: "{{ vars.edr_org }}"
+        next: Verify Isolation
+
+      # The step that makes this worth showing: ask the EDR what it actually
+      # has, rather than trusting the isolate call's return value. That call
+      # returns "Successfully executed isolate_collector" whether or not the
+      # collector it named exists.
+      - name: Verify Isolation
+        type: connector
+        connector: fortinet-fortiedr
+        operation: get_collector_list
+        config: fortiedr-lab
+        params:
+          organization: "{{ vars.edr_org }}"
+        next: Evaluate Isolation
+
+      - name: Evaluate Isolation
+        type: code_snippet
+        config: default
+        comment: >
+          An ONLINE collector reports isolation in `state`; an OFFLINE one keeps
+          `state` as "Disconnected" and records it in `stateAdditionalInfo`,
+          to be enforced when it reconnects. Checking only `state` would call a
+          perfectly good isolation of an offline host a failure.
+        code: |
+          collectors = {{ vars.steps.Verify_Isolation.data | default([]) }}
+          wanted = """{{ vars.steps.Match_Collector.data.code_output.name }}""".strip().lower()
+
+          state = ""
+          extra = ""
+          for row in collectors or []:
+              if str((row or {}).get("name") or "").strip().lower() == wanted:
+                  state = str(row.get("state") or "")
+                  extra = str(row.get("stateAdditionalInfo") or "")
+
+          isolated = state.lower() == "isolated" or extra.lower() == "isolated"
+          pending = isolated and state.lower() != "isolated"
+
+          print({
+              "isolated": "yes" if isolated else "",
+              "state": state or "unknown",
+              "detail": extra,
+              "enforcement": (
+                  "queued -- the collector is offline and will be isolated when "
+                  "it reconnects"
+                  if pending
+                  else "active on the endpoint now"
+              ),
+          })
+        next: Isolation Gate
+
+      - name: Isolation Gate
+        type: decision
+        conditions:
+          - display: confirmed-on-edr
+            when: "{{ vars.steps.Evaluate_Isolation.data.code_output.isolated | default('') | length > 0 }}"
+            next: Mark Contained
+          - display: Else
+            default: true
+            next: Isolation Failed Comment
+
+      - name: Mark Contained
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: '{{ "AlertStatus" | picklist("Investigating", "@id") }}'
+        next: Isolated Comment
+
+      - name: Isolated Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Endpoint isolated and confirmed on the EDR.</b>
+            {{ vars.steps.Match_Collector.data.code_output.name }}
+            ({{ vars.steps.Match_Collector.data.code_output.os }}) at
+            {{ vars.steps.Match_Collector.data.code_output.ip }} reports
+            collector state
+            <b>{{ vars.steps.Evaluate_Isolation.data.code_output.state }}</b>{%
+            if vars.steps.Evaluate_Isolation.data.code_output.detail %} /
+            {{ vars.steps.Evaluate_Isolation.data.code_output.detail }}{% endif
+            %}.</p>
+            <p>Containment is
+            {{ vars.steps.Evaluate_Isolation.data.code_output.enforcement }}.</p>
+            <p>Isolated automatically: this is a
+            {{ vars.steps.Match_Collector.data.code_output.family }} asset, which
+            is not on the protected list, so no approval was required. Alert
+            moved to Investigating.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Isolated
+
+      - name: Done Isolated
+        type: end
+
+      # Honest failure. The alert is deliberately NOT marked contained -- an
+      # audit trail that claims containment that never happened is worse than a
+      # visible failure.
+      - name: Isolation Failed Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Isolation NOT confirmed.</b> The isolate call was made for
+            {{ vars.steps.Match_Collector.data.code_output.name }}, but the EDR
+            still reports collector state
+            <b>{{ vars.steps.Evaluate_Isolation.data.code_output.state }}</b> on
+            read-back.</p>
+            <p>The alert has deliberately <b>not</b> been recorded as contained.
+            Check that the connector credentials carry isolation permission and
+            that the organization
+            <b>{{ vars.edr_org }}</b> is the one owning this collector.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Failed
+
+      - name: Done Failed
+        type: end

@@ -1,0 +1,71 @@
+# Repro fixture for "Configurable max parallel limit for loop steps" (8.0).
+#
+# Two playbooks:
+#   * Child "FSRPB Loop Child Sleep" -- a single code_snippet that sleeps SLEEP_SECONDS.
+#     Each invocation is one timestamped execution; their start/end overlap is the signal.
+#   * Parent "FSRPB Loop Parallel Cap" -- builds a list of ITEM_COUNT items and loops a
+#     workflow_reference (apply_async: true => each child runs as its own execution) over
+#     them with `parallel: true`. The repro script injects the candidate cap key into this
+#     step's `for_each` dict before deploy (the exact 8.0 key is what we are probing).
+#
+# Verification is BEHAVIOURAL: the cap field is not schema-validated by
+# /api/3, so we read it back by measuring peak child concurrency with
+# pyfsr.concurrency.compute_overlap:
+#   * 8.0 honouring the cap (=2)  -> max_concurrent <= 2
+#   * 7.6.5 (no cap, key ignored) -> all eligible children run together (THREAD_POOL_WORKER)
+#
+# The script overrides item count / sleep / the cap key+value via Jinja-free string edits
+# on the compiled rows, so this file holds the structural shape only.
+
+collection: FSRPB Loop Parallel Cap Repro
+description: Loops a workflow_reference with a parallel cap; child sleeps so overlap is measurable.
+visible: true
+
+playbooks:
+  - name: FSRPB Loop Child Sleep
+    description: Child -- sleeps SLEEP_SECONDS so concurrent invocations overlap in time.
+    is_active: true
+    parameters: [idx]
+    steps:
+      - name: start
+        type: start
+        next: Sleep
+
+      # A native Delay step makes each child take measurable wall-clock time
+      # WITHOUT custom code -- so it needs no code-snippet connector config, no
+      # "Custom Code Execution" gate, and no module allowlist.
+      - name: Sleep
+        type: delay
+        seconds: SLEEP_SECONDS_PLACEHOLDER
+
+  - name: FSRPB Loop Parallel Cap
+    description: Parent -- loops a reference to the sleep child with parallel + a cap candidate key.
+    is_active: true
+    steps:
+      - name: start
+        type: start
+        next: Build items
+
+      - name: Build items
+        type: set_variable
+        next: Loop children
+        vars:
+          loop_items: ITEMS_PLACEHOLDER
+
+      - name: Loop children
+        type: workflow_reference
+        for_each:
+          item: "{{ vars.loop_items }}"
+          parallel: true
+          condition: ""
+          max_parallel: CAP_PLACEHOLDER
+        target: FSRPB Loop Child Sleep
+        idx: "{{ vars.item }}"
+          # apply_async: FALSE is essential: each iteration must BLOCK on its
+          # child so the loop's concurrency cap actually limits in-flight work.
+          # With apply_async: true the iteration just fire-and-forget dispatches
+          # and returns instantly, so all children escape the cap and run at once.
+        apply_async: false
+        pass_parent_env: false
+        pass_input_record: false
+        step_variables: []

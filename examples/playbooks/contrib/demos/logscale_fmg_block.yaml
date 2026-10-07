@@ -1,0 +1,218 @@
+# DEMO -- Indicator to widespread block, via the FortiManager-hosted external resource.
+#
+# The point of this playbook: it does NOT push a policy. The one-time setup playbook
+# (see LOGSCALE_FMG_BLOCK_DEMO.md) already created the external resource, the policy
+# package and the policies that reference it. From then on, blocking an indicator
+# everywhere is appending one line to a file that FortiManager hosts and every FortiGate
+# pulls. That is the manual patch the customer's lead engineer writes today, deleted.
+#
+# Trigger: an alert raised from a FortiAnalyzer event (or a simulated LogScale detection
+# emitted by alertforge -- see the demo doc). Alert fields used:
+#   sourceIp / destinationIp -- the indicator under test
+#
+# STATUS: authored against the lab that does not exist yet. Every TODO below is a value
+# that MUST be resolved against the live FMG/FSR before this runs:
+#   - the FMG connector config name
+#   - the ADOM names standing in for business units
+#   - the external-resource filename (must match the setup playbook's)
+#   - picklist UUIDs (resolve live via `fsrpb pick <listname> <label>` -- never hand-paste
+#     UUIDs from another instance)
+
+collection: Demo -- LogScale to FortiManager Block
+description: >
+  Block an indicator across every managed FortiGate by appending it to the
+  FortiManager-hosted external block list. No policy push. Includes an enrichment
+  verdict gate that declines to block clean indicators, and an approval gate that
+  states blast radius before acting.
+visible: true
+
+playbooks:
+  - name: "Demo - Block Indicator Everywhere"
+    description: >
+      FAZ/LogScale detection -> indicator -> enrich -> verdict gate -> approval with
+      blast radius -> append to FMG external resource -> verify on a FortiGate -> notify.
+    is_active: true
+    tag: "demo, containment, fortimanager"
+    steps:
+      - name: start
+        type: start
+        next: Configuration
+        module: alerts
+        requires_record: true
+        button_label: "Block Indicator Everywhere"
+
+      - name: Configuration
+        type: set_variable
+        next: Extract indicator
+        comment: |
+          TODO resolve every value here against the live lab before the demo.
+          `resource_file` MUST match the filename the setup playbook created, or the
+          FortiGates will keep pulling the old list and the demo will silently no-op.
+        vars:
+          fmg_config: "TODO FMG connector config name"
+          resource_file: "FSR-banned_ip_list.txt"
+          # ADOMs stand in for the customer's business units. Order matters only for
+          # the blast-radius message.
+          adoms:
+            - "TODO adom-bu-east"
+            - "TODO adom-bu-west"
+
+      - name: Extract indicator
+        type: set_variable
+        next: Enrich indicator
+        comment: |
+          The customer's brief says "malicious FQDN, IP, App, etc." This demo path
+          handles the IP case; destinationIp is the outbound peer, i.e. the thing worth
+          blocking. An FQDN variant would target a different external-resource type.
+        vars:
+          indicator: "{{ vars.input.records[0].destinationIp }}"
+          indicator_type: "ip"
+
+      - name: Enrich indicator
+        type: connector
+        next: Verdict gate
+        comment: |
+          TODO swap in the customer-appropriate reputation source. Kept generic on
+          purpose: the multi-vendor story is that this step is replaceable, not that it
+          must be Fortinet. Demoing the rejection path (below) requires this to return a
+          clean verdict for at least one seeded indicator.
+        connector: cyops_utilities
+        operation: get_macro_list
+        config: ""
+        params: {}
+
+      - name: Verdict gate
+        type: decision
+        comment: |
+          The rejection path is not decoration. For an infrastructure team whose fear is
+          "SOAR blocks something critical", the playbook that declines to act earns more
+          trust than the one that acts. Demo BOTH branches.
+        conditions:
+          - display: malicious
+            when: "{{ vars.steps.Enrich_indicator.data.reputation | default('unknown') in ['malicious', 'suspicious'] }}"
+            next: Count blast radius
+          - display: Else
+            default: true
+            next: Record no action taken
+
+      - name: Record no action taken
+        type: update_record
+        comment: The clean-indicator path. Closes the alert having touched nothing.
+        record: "{{ vars.input.records[0]['@id'] }}"
+        module: alerts
+        fields:
+          description: >-
+            Enrichment returned no malicious verdict for {{ vars.indicator }}.
+            No block applied.
+        operation: Replace
+        step_variables: []
+
+      - name: Count blast radius
+        type: connector
+        next: Approve block
+        comment: |
+          Ask FMG which devices are actually in scope, so the approval states a real
+          number instead of a guess. TODO confirm the JSON-RPC url for the device list
+          against the live FMG (`/dvmdb/adom/<adom>/device` is the expected shape) --
+          the connector is a raw passthrough, so a wrong url fails at run time, not
+          at compile time.
+        connector: fortinet-fortimanager-json-rpc
+        operation: json_rpc_get
+        config: "{{ vars.fmg_config }}"
+        params:
+          url: "/dvmdb/device"
+
+      - name: Approve block
+        type: manual_input
+        comment: |
+          Blast radius in the prompt is the whole point. Not "approve?" but "this will
+          affect N devices across M business units - approve?". This is what turns the
+          lead engineer from the bottleneck into the decision-maker.
+        options:
+          - display: approve
+            primary: true
+            next: Read current block list
+          - display: reject
+            next: Record no action taken
+        title: "Block {{ vars.indicator }} across all managed FortiGates?"
+        description: >-
+          **Indicator:** {{ vars.indicator }} ({{ vars.indicator_type }})
+
+          **Blast radius:** {{ vars.steps.Count_blast_radius.data.result | default([]) | length }}
+          managed devices across {{ vars.adoms | length }} business units.
+
+          Approving appends this indicator to the FortiManager-hosted block list
+          (`{{ vars.resource_file }}`). **No policy push is required** -- every
+          FortiGate picks it up on its next external-resource refresh.
+
+      - name: Read current block list
+        type: connector
+        next: Append indicator
+        comment: |
+          Read-modify-write. The file is the source of truth and is shared across ADOMs,
+          so it must never be blindly overwritten - that would silently drop every
+          previously blocked indicator.
+        connector: fortinet-fortimanager-json-rpc
+        operation: json_rpc_get
+        config: "{{ vars.fmg_config }}"
+        params:
+          url: "/pm/config/global/_external/resource/{{ vars.resource_file }}"
+
+      - name: Append indicator
+        type: set_variable
+        next: Write block list
+        comment: |
+          Idempotent on purpose: re-running the demo (or a duplicate detection) must not
+          double-add. TODO verify the response field carrying the file body against the
+          live FMG; `.data.content` is the expected shape but is unconfirmed.
+        vars:
+          existing: "{{ vars.steps.Read_current_block_list.data.content | default('') }}"
+          already_present: "{{ vars.indicator in (vars.steps.Read_current_block_list.data.content | default('')) }}"
+          new_content: >-
+            {{ vars.steps.Read_current_block_list.data.content | default('') }}{{ vars.indicator }}
+
+      - name: Write block list
+        type: connector
+        next: Verify on FortiGate
+        comment: |
+          This single call is the whole demo. No policy package, no install, no push.
+        connector: fortinet-fortimanager-json-rpc
+        operation: json_rpc_set
+        config: "{{ vars.fmg_config }}"
+        params:
+          url: "/pm/config/global/_external/resource/{{ vars.resource_file }}"
+          data:
+            content: "{{ vars.new_content }}"
+
+      - name: Verify on FortiGate
+        type: connector
+        next: Record block applied
+        comment: |
+          Proof, not assertion. Proxies a FortiOS call through FMG down to a real
+          FortiGate to show the device itself sees the entry.
+          TODO confirm the sys/proxy/json payload shape and the target device against the
+          live lab. Note the honest caveat for the stage: the FortiGate reflects the new
+          entry on its external-resource REFRESH INTERVAL, not instantly. Tune the
+          interval for the demo and say so out loud - this team will spot it.
+        connector: fortinet-fortimanager-json-rpc
+        operation: json_rpc_execute
+        config: "{{ vars.fmg_config }}"
+        params:
+          url: "/sys/proxy/json"
+          data:
+            target:
+              - "adom/{{ vars.adoms[0] }}/device/TODO-device-name"
+            action: "get"
+            resource: "/api/v2/monitor/system/external-resource/entry-list"
+
+      - name: Record block applied
+        type: update_record
+        record: "{{ vars.input.records[0]['@id'] }}"
+        module: alerts
+        fields:
+          description: >-
+            Blocked {{ vars.indicator }} across all managed FortiGates by appending to
+            the FortiManager-hosted external resource {{ vars.resource_file }}.
+            No policy push required.
+        operation: Replace
+        step_variables: []

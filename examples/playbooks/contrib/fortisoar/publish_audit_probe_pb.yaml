@@ -1,0 +1,24 @@
+# Lightweight fire-loop playbook for the publish-disruption audit.
+#
+# Purpose: the smallest possible manual run (trigger -> set variable). The audit
+# fires this once per second throughout the publish window; each trigger that the
+# appliance refuses during the outage is counted as a "rejected at submit" signal,
+# and each accepted run is resolved to a terminal status. Kept trivial (no record
+# ops) so the trigger-accept path itself is what's under test, not any downstream work.
+
+collection: PYFSR Blast Probe
+description: Trivial trigger -> set-variable run, fired repeatedly across a publish window.
+visible: true
+
+playbooks:
+  - name: PYFSR Blast Probe PB
+    is_active: true
+    steps:
+      - name: trigger
+        type: start
+        next: Mark fired
+
+      - name: Mark fired
+        type: set_variable
+        vars:
+          probe_result: fired

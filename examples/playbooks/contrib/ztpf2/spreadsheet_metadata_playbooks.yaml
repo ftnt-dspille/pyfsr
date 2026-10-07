@@ -1,0 +1,403 @@
+collection: 10 - SP - ZTPF - FMG Microservices
+description: >-
+  New action type "Spreadsheet Metadata" -- read a CSV / XLS / XLSX held as a
+  FortiSOAR attachment, find the row for THIS device, and write every column of
+  that row into the device's metadata. The sheet is the source of truth for
+  pre-known, per-device values (upgrade target, rollback target, maintenance
+  window, owner...), authored outside FortiSOAR by whoever owns the change.
+visible: true
+playbooks:
+
+# ---------------------------------------------------------------------------
+# The runner. The action's script is YAML and names the sheet, the column to
+# match on, and the value to match it against:
+#
+#   file: fgt-upgrade-plan.csv          # attachment NAME (or file_iri: /api/3/files/<id>)
+#   file_type: CSV                      # CSV | XLS, XLSX | XML
+#   match_column: device
+#   match_value: '{{record.device.name}}'
+#
+# Note the SINGLE quotes: the action-script render pipeline strips a trailing
+# double quote (`script_rendered | regex_replace('"$','')`), so a script whose
+# last character is `"` arrives here unparseable. Live-hit.
+#
+# `match_value` is ordinary Jinja over the usual action context, so the sheet can
+# be keyed by whatever the operator's change record is keyed by. Note the context
+# is NOT the raw device record: `record.device` holds only id / name / adom /
+# vdom / mgmt_ip / firmware / platform / tags, so there is no `sn` -- a
+# serial-keyed sheet has to match on metadata (and see the render-timing note in
+# AUTHORING_GUIDE.md 2.1 before reading metadata an earlier step wrote).
+#
+# Reading the file is ONE connector call: cyops_utilities `convert_to_json`
+# accepts a record IRI directly (type "record IRI"), so nothing has to stage the
+# file on the appliance filesystem first, and XLS/XLSX work without a parser of
+# our own.
+# ---------------------------------------------------------------------------
+- name: '> run action from step_id - ZTPF Spreadsheet Metadata'
+  uuid: d5f61c08-9a37-4be2-8c71-3e04b9d5a712
+  description: >-
+    Look this device up in a spreadsheet attachment and return the matching row,
+    so the action's saveMetadata template can write it to device metadata.
+  is_active: true
+  trigger_step_id: start
+  parameters:
+  - device_step_id
+  steps:
+  - type: start
+    name: Start
+    step_variables:
+      input:
+        params: []
+    next: find_step
+    top: '40'
+    left: '40'
+  - type: find_record
+    name: find step
+    step_variables: []
+    module: ztpf_device_automation_steps?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: "{{vars.input.params['device_step_id']}}"
+      operator: eq
+    next: find_device
+    top: '40'
+    left: '340'
+  - type: find_record
+    name: find device
+    step_variables: []
+    module: ztpf_devices?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: '{{vars.steps.find_step[0].ztpfDevices.id}}'
+      operator: eq
+    next: render_yaml_config
+    top: '40'
+    left: '640'
+  # The script is already Jinja-rendered (Preparing); this turns the YAML into a
+  # dict the rest of the playbook can read.
+  - type: workflow_reference
+    name: render yaml config
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/e8a9ca65-8ba2-4da5-993a-e98d1e22283c
+    yaml: '{{vars.steps.find_step[0].script}}'
+    manual_test: ''
+    next: setup_vars
+    top: '40'
+    left: '940'
+  # Every read of the parsed config is guarded. If `render yaml config` could not
+  # parse the action script, its output is undefined -- and an unguarded read
+  # throws BEFORE `update step`, which leaves the step at Running forever and
+  # stalls the whole device queue with nothing on the record to explain it (the
+  # same failure class as the diff-step hang). Guarded, a bad script falls
+  # through to `file gate` and fails loudly instead.
+  - type: set_variable
+    name: setup vars
+    vars:
+      cfg: '{{ vars.steps.render_yaml_config.output | default({}, true) }}'
+      device_step_fqid: "{{vars.steps.find_step[0]['@id']}}"
+      file_name: '{{ (vars.steps.render_yaml_config.output | default({}, true)).file | default("", true) }}'
+      match_column: '{{ (vars.steps.render_yaml_config.output | default({}, true)).match_column | default("", true) }}'
+      # Matching is case- and whitespace-insensitive: a sheet maintained by hand
+      # WILL contain "FGT1A " and "fgt1a".
+      match_value: '{{ ((vars.steps.render_yaml_config.output | default({}, true)).match_value | default("", true)) | string | trim | lower }}'
+      file_type: '{{ (vars.steps.render_yaml_config.output | default({}, true)).file_type | default("CSV", true) }}'
+    next: find_attachment
+    top: '40'
+    left: '1240'
+  # Skipped when the action names the file IRI directly. `file` is the friendlier
+  # form: an operator re-uploading next month's plan under the same attachment
+  # name does not have to touch the action.
+  - type: find_record
+    name: find attachment
+    when: '{{vars.file_name}}'
+    step_variables: []
+    module: attachments?$limit=1
+    checkboxFields: true
+    filters:
+    - field: name
+      value: '{{vars.file_name}}'
+      operator: eq
+    next: resolve_file
+    top: '40'
+    left: '1540'
+  - type: set_variable
+    name: resolve file
+    vars:
+      file_iri: |-
+        {%- set direct = vars.cfg.file_iri | default('', true) -%}
+        {%- if direct not in ['', None] -%}
+        {{direct}}
+        {%- else -%}
+        {%- set rows = vars.steps.find_attachment | default([], true) -%}
+        {%- if rows | length > 0 and rows[0].file is defined and rows[0].file -%}
+        {{ rows[0].file['@id'] }}
+        {%- endif -%}
+        {%- endif -%}
+      file_error: |-
+        {%- set direct = vars.cfg.file_iri | default('', true) -%}
+        {%- set rows = vars.steps.find_attachment | default([], true) -%}
+        {%- if direct in ['', None] and vars.file_name in ['', None] -%}
+        The action script names neither `file` (an attachment name) nor `file_iri`.
+        {%- elif direct in ['', None] and rows | length == 0 -%}
+        No attachment named '{{vars.file_name}}' exists in FortiSOAR. Upload the sheet as an attachment with that exact name.
+        {%- elif direct in ['', None] and (rows[0].file is not defined or not rows[0].file) -%}
+        Attachment '{{vars.file_name}}' has no file on it.
+        {%- endif -%}
+    next: file_gate
+    top: '40'
+    left: '1840'
+  - type: decision
+    name: file gate
+    step_variables: []
+    conditions:
+    - display: 'No file'
+      default: true
+      next: no_file
+    - display: 'File found'
+      when: '{{ vars.file_error in ["", None] }}'
+      next: read_sheet
+    top: '40'
+    left: '2140'
+  - type: set_variable
+    name: no file
+    description: Fail loudly -- a missing plan must never read as "no changes needed"
+    vars:
+      step_status: Failed
+      script_results: '{{ {"output": {"error": true, "matched": false, "message": vars.file_error}} }}'
+    next: update_step
+    top: '240'
+    left: '2140'
+  - type: connector
+    name: read sheet
+    description: >-
+      cyops_utilities converts CSV / XLS / XLSX / XML into a dictionary. Passing
+      the record IRI reads the stored file directly -- no filesystem staging.
+    pickFromTenant: false
+    config: Default
+    params:
+      type: record IRI
+      iri: '{{vars.file_iri}}'
+      file_type: '{{vars.file_type}}'
+    connector: cyops_utilities
+    operation: convert_to_json
+    next: normalize_rows
+    top: '40'
+    left: '2440'
+  # The converter's envelope varies by file type -- a CSV comes back as a list of
+  # row dicts, a workbook comes back keyed by sheet name -- so normalise to "a
+  # list of row dicts" in its own step rather than assuming one shape.
+  # `namespace` is not decoration: a plain `set` inside a for-loop does not
+  # survive the loop in Jinja, so the sheet-keyed branch would silently yield an
+  # empty list and every device would read as "not in the plan".
+  - type: set_variable
+    name: normalize rows
+    vars:
+      rows: |-
+        {%- set d = vars.steps.read_sheet.data -%}
+        {%- set body = d.get('data', d) if d is mapping else d -%}
+        {%- set ns = namespace(rows=[]) -%}
+        {%- if body is mapping -%}
+          {%- for v in body.values() -%}
+            {%- if v is sequence and v is not string and v is not mapping and ns.rows | length == 0 -%}
+              {%- set ns.rows = v -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- elif body is sequence and body is not string -%}
+          {%- set ns.rows = body -%}
+        {%- endif -%}
+        {{ ns.rows | tojson }}
+    next: match_row
+    top: '40'
+    left: '2740'
+  - type: set_variable
+    name: match row
+    vars:
+      matched_row: |-
+        {%- set ns = namespace(hit={}, found=false) -%}
+        {%- for r in vars.rows | default([], true) -%}
+          {%- if r is mapping and not ns.found -%}
+            {%- set cell = ((r[vars.match_column] | default('', true)) | string | trim | lower) -%}
+            {%- if cell != '' and cell == vars.match_value -%}
+              {%- set ns.hit = r -%}
+              {%- set ns.found = true -%}
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.hit | tojson }}
+    next: script_results
+    top: '40'
+    left: '3040'
+  - type: set_variable
+    name: script results
+    vars:
+      step_status: '{%- if (vars.matched_row | default({}, true)) | length > 0 -%}Complete{%- else -%}Failed{%- endif -%}'
+      script_results: |-
+        {%- set row = vars.matched_row | default({}, true) -%}
+        {{ {"output": {
+             "matched": (row | length > 0),
+             "row": row,
+             "row_count": (vars.rows | default([], true)) | length,
+             "match_column": vars.match_column,
+             "match_value": vars.match_value,
+             "file": vars.file_name | default(vars.cfg.file_iri | default('', true), true)
+           }} }}
+    next: update_step
+    top: '40'
+    left: '3340'
+  - type: update_record
+    name: update step
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_device_automation_steps
+    record: '{{vars.device_step_fqid}}'
+    fields:
+      queueStatus: '{{"ztpfDeviceStepStatus" | picklist(vars.step_status, "@id")}}'
+      outputSourceData: '{{vars.script_results}}'
+    next: return
+    top: '40'
+    left: '3640'
+  - type: set_variable
+    name: return
+    vars:
+      output: '{{vars.script_results}}'
+      params: '{{vars.input.params}}'
+      status: ''
+    top: '40'
+    left: '3940'
+  annotations:
+  - id: details
+    title: Details
+    body: >-
+      Reads a CSV/XLS/XLSX attachment, finds the row whose `match_column` equals
+      the rendered `match_value`, and returns it as outputSourceData.output.row.
+      The ACTION's saveMetadata template is what turns that row into device
+      metadata -- typically `{{output.row | tojson}}`, which writes every column
+      as its own metadata entry. A device with no row in the sheet FAILS the
+      step: a missing plan must not read as "nothing to do".
+    position:
+      top: 120
+      left: 140
+      width: 320
+  - id: changelog
+    title: Changelog
+    body: >-
+      created. Replaces the run-time firmware-target resolvers --
+      the target is a decision made in advance by a human, recorded in the
+      change plan, not something derived from whatever FortiManager happens to
+      hold at the moment the profile runs.
+    position:
+      top: 120
+      left: 480
+      width: 320
+
+# ---------------------------------------------------------------------------
+- name: '> device step (Running) - ZTPF Spreadsheet Metadata'
+  uuid: e7b2419d-05c6-4a83-9f21-6cd83b70e5c4
+  is_active: true
+  parameters: []
+  steps:
+  - type: set_variable
+    name: return
+    top: '40'
+    left: '1540'
+  - type: set_variable
+    name: run automation
+    description: Steps to run automation start here and connect to the next step.
+    vars:
+      script_type: '{{vars.input.records[0].triggerKey.split('' '')[1:]|join(" ")}}'
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: run_device_script
+    top: '40'
+    left: '640'
+  - type: workflow_reference
+    name: run device script
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    target: '> run action from step_id - ZTPF Spreadsheet Metadata'
+    device_step_id: '{{vars.device_step_id}}'
+    next: step_post_run
+    top: '40'
+    left: '940'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: ZTPF Spreadsheet Metadata
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    top: '40'
+    left: '40'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+    top: '40'
+    left: '1240'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+    top: '40'
+    left: '340'
+  annotations:
+  - id: details
+    title: Details
+    body: >-
+      Triggered when a device automation step transitions to Running with
+      triggerKey = "ZTPF Spreadsheet Metadata".
+    position:
+      top: 120
+      left: 140
+      width: 300

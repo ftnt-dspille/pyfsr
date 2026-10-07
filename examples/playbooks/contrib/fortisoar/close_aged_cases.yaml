@@ -1,0 +1,102 @@
+# Close Cases older than 3 days.
+#
+# Runs on a daily schedule (the schedule itself is a PeriodicTask, created
+# separately -- see deploy_close_aged_cases.py).
+#
+# LIVE-VERIFIED QUERY SHAPES (live appliance, 8.0.0) -- each of these was
+# wrong in an earlier draft and failed SILENTLY rather than erroring:
+#
+#   createDate  must be an ISO-8601 STRING. An epoch int/float (which is what
+#               the API *returns* for this field) raises a 500. Verified honest
+#               by splitting the corpus: lt now-30d = 224, gt now-30d = 1668,
+#               total 1892.
+#
+#   status      must be the PICKLIST IRI. Filtering on the item value
+#               ("Resolved") returns 0 rows with no error -- the classic
+#               silently-dropped filter. The IncidentStatus uuids below are
+#               product-seeded and byte-identical on the lab box and the FortiCloud
+#               box, so hardcoding them is portable.
+#
+#   limit       set it as a QUERY-STRING SUFFIX ON THE MODULE --
+#               `module: incidents?$limit=1000`. The `limit` key inside the
+#               query body is ignored; so is a `limit` at argument level. All
+#               three were measured on a lab box: with the body limit at 5000 a
+#               run closed exactly 30, and 30 again with the other two
+#               placements. Moving it onto the module closed 120 of 120 in one
+#               run.
+#
+#               Getting this wrong is expensive and silent -- draining a
+#               backlog of 1,770 cases took 68 separate triggers at 30 a run,
+#               and a schedule capped at 30 would fall behind ~700 alerts/day
+#               and let the correlation pool re-saturate.
+#
+#               Paging inside a run is not an option: FSR playbooks are DAGs
+#               and the compiler rejects a route back into an earlier step
+#               ("FSR will not loop, the run will stall or error").
+#
+# Module note: the UI calls it "Cases"; the API type is `incidents`.
+# There is no "Closed" status on this product -- Resolved is the terminal state.
+
+collection: Case Hygiene
+description: Scheduled case maintenance playbooks.
+visible: true
+
+playbooks:
+  - name: Close Cases Older Than 3 Days
+    is_active: true
+    steps:
+      - name: trigger
+        type: start
+        next: Compute cutoff
+
+      # Rendered once per run so the window slides with the schedule.
+      #
+      # The age is an OPTIONAL input defaulting to 3, purely so this exact
+      # artifact can be tested. createDate is server-set (backdating it via the
+      # API is silently ignored), so on a lab box there is no way to make a
+      # genuinely 3-day-old case -- without this knob the only way to test
+      # would be to deploy a modified copy, which tests the wrong thing.
+      # A scheduled run passes no inputs and therefore gets 3.
+      - name: Compute cutoff
+        type: set_variable
+        next: Find aged cases
+        vars:
+          cutoff: >-
+            {% set _d = (vars.inputs.max_age_days | default(3)) | int -%}
+            {{ arrow.utcnow().shift(days=-_d).isoformat() }}
+
+      - name: Find aged cases
+        type: find_record
+        next: Close case
+        module: incidents?$limit=1000
+        logic: AND
+        filters:
+          - type: primitive
+            field: createDate
+            value: "{{ vars.steps.Compute_cutoff.cutoff }}"
+            operator: lt
+            _operator: lt
+          # Only cases still in a live state. Excluding the terminal statuses
+          # keeps the run idempotent -- a second run the same day matches
+          # nothing instead of re-writing every record.
+          - type: primitive
+            field: status
+            value:
+              - /api/3/picklists/bb73fe9e-f699-11e7-8c3f-9a214cf093ae  # Open
+              - /api/3/picklists/bb7402d6-f699-11e7-8c3f-9a214cf093ae  # In Progress
+              - /api/3/picklists/bb74042a-f699-11e7-8c3f-9a214cf093ae  # Awaiting
+            operator: in
+            _operator: in
+
+      - name: Close case
+        type: update_record
+        for_each:
+          item: "{{ vars.steps.Find_aged_cases }}"
+          parallel: false
+          condition: ""
+        module: incidents
+        record: "{{ vars.item['@id'] }}"
+        operation: Replace
+        fields:
+          status: /api/3/picklists/bb73fd5e-f699-11e7-8c3f-9a214cf093ae  # Resolved
+        step_variables: []

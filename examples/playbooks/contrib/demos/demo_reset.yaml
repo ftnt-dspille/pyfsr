@@ -1,0 +1,452 @@
+# Vulnerability-demo reset -- one click, from the FortiSOAR UI.
+#
+# The CLI equivalents exist and work (`deploy_and_test.py --cleanup`,
+# `uc12b_patch_inoreader/demo_reset.py`). These are here for the same reason the
+# other demo reset pair is: the reset you actually need is the one you can run
+# from the machine you are already presenting on, thirty seconds before you
+# start, without alt-tabbing to a terminal and finding the VPN has dropped.
+#
+# TWO playbooks, not one, because the two demos leave different messes and one
+# of them is slow:
+#
+#   Reset Intake Demo   -- doors 1-3 (CSV, PDF, TAXII). Deletes the CVE records
+#                          this demo wrote and rewinds the TAXII cursor.
+#                          Seconds. Safe to run while the room is watching.
+#
+#   Reset Patch Demo    -- door 4 (Inoreader RSS). Marks the advisory unread and
+#                          rolls the endpoint back to its vulnerable version.
+#                          MINUTES -- the rollback is a real installer run. Do
+#                          not start this one in front of anybody.
+#
+# Both are safe to run when nothing is wrong. That is the point: you should not
+# have to know whether the last run finished cleanly.
+#
+# ---------------------------------------------------------------------------
+# TWO THINGS THAT LOOK LIKE DETAILS AND ARE NOT
+#
+# 1. DELETION IS SOFT BY DEFAULT, AND THAT SILENTLY BREAKS THE NEXT DEMO.
+#    A recycled CVE record still matches the upsert on `cVEID`, so the next
+#    intake RESURRECTS it carrying the previous run's values -- and the demo
+#    then shows last week's numbers while every step is green. There is no
+#    `delete_record` step type, so the deletes here go through
+#    `cyops_utilities/make_cyops_request` with `$hardDelete=true`, which is the
+#    only form that actually removes the row.
+#
+# 2. THE DELETES ARE SCOPED BY `identifierSource`, DELIBERATELY.
+#    The CVE module is SHARED -- it holds ~1,670 pre-existing KEV rows, and a
+#    KEV ingestion has written CVE-2021-44228 into it mid-suite before now. A
+#    reset that deleted every row in the module would work fine on a lab box and
+#    destroy real data the first time this appliance stopped being one. If you
+#    add an intake door, add its `identifierSource` marker to `demo_sources`
+#    below -- do NOT widen the filter.
+#
+# Neither playbook reads anything from the record it is launched from. They hang
+# off `alerts` because a manual playbook needs a module to put a button on, and
+# alerts is the module always populated enough to have something to click.
+
+collection: Demo Library - Vuln Demo Reset
+description: >
+  One-click reset of the vulnerability-management demo back to its pre-run
+  state: the CVE records the demo wrote, the TAXII cursor, the Inoreader
+  read/unread state, and the endpoint's software versions.
+visible: true
+
+playbooks:
+  # ======================================================= intake (fast) =====
+  - name: Reset Intake Demo
+    description: >
+      Hard-delete the CVE records this demo wrote and rewind the TAXII cursor,
+      so the file and feed intake acts both open with something to ingest.
+      Seconds.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: Reset Intake Demo
+        comment: >
+          Manual and record-free. Nothing here reads the alert it was launched
+          from; a start step just needs a `module:` or it has no trigger route
+          at all and cannot be launched by anything, button or SDK.
+        next: Reset Config
+
+      - name: Reset Config
+        type: set_variable
+        comment: >
+          `demo_sources` is the allow-list the deletes are scoped to, matched as
+          a substring against `identifierSource`. See note 2 in the header
+          before widening it.
+
+          UC-14 writes the FILE NAME into identifierSource; UC-15 writes
+          "TAXII 2.1 subscription: <report name>". Those two shapes are the
+          entire surface this reset is allowed to touch.
+        vars:
+          demo_sources: "tenable_export.csv,dcise_tipper,advisory_no_cves,host_inventory.csv,TAXII 2.1 subscription"
+          taxii_macro: "Uc15TaxiiLastPullTime_6ccd1f4b_bb78_5305_9461_88e53e9b43ba"
+        next: Find Demo CVEs
+
+      - name: Find Demo CVEs
+        type: connector
+        connector: cyops_utilities
+        operation: make_cyops_request
+        config: ""
+        comment: >
+          Read the CVE module wide and filter in the next step, because the
+          markers are SUBSTRINGS and no server-side filter on this endpoint can
+          express that. Three were tried against a record known to exist:
+
+            identifierSource=<exact value>       matches (equality only)
+            identifierSource__contains=<value>   accepted, matches NOTHING ever
+            POST /api/query with a filters array  accepted, returns EVERY row
+
+          The last two are the dangerous pair, and in opposite directions: one
+          silently deletes nothing, the other would hand every row in a shared
+          module to a delete step. If you ever swap this for a server-side
+          filter, verify it returns EXACTLY the rows you expect against a record
+          you just created -- not that the call returns 200, and not that the
+          count merely differs from the total.
+
+          `$limit=5000` against ~1,700 rows. The cap is real, not theoretical:
+          the first version of this used the default 1000 and the receipt read
+          "997 kept + 3 deleted", which is exactly 1000 and was the only
+          evidence that a third of the module had never been looked at.
+        params:
+          method: GET
+          iri: "/api/3/c_v_es?$limit=5000"
+          body: ""
+        next: Select For Deletion
+
+      - name: Select For Deletion
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Scope the deletion, and REFUSE it if the read was truncated.
+
+          A truncated scan cannot be distinguished from a clean one by its
+          output -- both return a list of rows -- so the only safe response to
+          hitting the cap is to stop and say so. Under-deleting silently is what
+          makes the NEXT demo show stale numbers with every step green, which is
+          the failure this playbook exists to prevent.
+        params:
+          code: |
+            payload = {{ vars.steps.Find_Demo_CVEs.data | default({}) }} or {}
+            rows = []
+            if isinstance(payload, dict):
+                rows = payload.get("hydra:member") or payload.get("member") or []
+            elif isinstance(payload, list):
+                rows = payload
+            total = 0
+            if isinstance(payload, dict):
+                total = int(payload.get("hydra:totalItems") or 0)
+
+            LIMIT = 5000
+            truncated = len(rows) >= LIMIT or (total and len(rows) < total)
+
+            markers = [m.strip() for m in "{{ vars.demo_sources }}".split(",") if m.strip()]
+            doomed, sources, kept = [], set(), 0
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                source = str(row.get("identifierSource") or "")
+                if any(m.lower() in source.lower() for m in markers):
+                    iri = row.get("@id") or ""
+                    if iri:
+                        doomed.append(iri)
+                        sources.add(source[:60])
+                else:
+                    kept += 1
+
+            return {
+                "iris": [] if truncated else doomed,
+                "count": 0 if truncated else len(doomed),
+                "would_have": len(doomed),
+                "kept": kept,
+                "scanned": len(rows),
+                "total": total,
+                "truncated": "yes" if truncated else "no",
+                "sources": "; ".join(sorted(sources)) or "none",
+                "any": "no" if truncated else ("yes" if doomed else "no"),
+            }
+        next: Delete Gate
+
+      - name: Delete Gate
+        type: decision
+        conditions:
+          - condition: "{{ vars.steps.Select_For_Deletion.data.code_output.any == 'yes' }}"
+            next: Hard Delete CVEs
+        default: Rewind TAXII Cursor
+
+      - name: Hard Delete CVEs
+        type: connector
+        connector: cyops_utilities
+        operation: make_cyops_request
+        config: ""
+        comment: >
+          `$hardDelete=true` is the whole point of this step -- see note 1 in the
+          header. `$showDeleted=true` accompanies it so a row already sitting in
+          the recycle bin from an earlier soft delete is reachable and can
+          finally be removed, rather than being invisible and continuing to
+          block recreation of its own uuid.
+
+          `ignore_errors` because a row deleted by a concurrent cleanup should
+          not fail the reset. The receipt reports what was attempted.
+        params:
+          method: DELETE
+          iri: "{{ vars.item }}?$hardDelete=true&$showDeleted=true"
+          body: ""
+        for_each:
+          item: "{{ vars.steps.Select_For_Deletion.data.code_output.iris }}"
+        ignore_errors: true
+        next: Rewind TAXII Cursor
+
+      - name: Rewind TAXII Cursor
+        type: connector
+        connector: cyops_utilities
+        operation: make_cyops_request
+        config: ""
+        comment: >
+          The cursor is the platform's own ingestion high-water mark, a global
+          variable ("macro") at /api/wf/api/dynamic-variable/. If it holds a
+          recent timestamp the next TAXII pull legitimately finds NOTHING --
+          which is correct behaviour and a dead opening beat, and the single
+          most common way this demo fails in front of a room.
+
+          Rewound to 2000 rather than deleted: an absent macro sends the
+          playbook down its 30-day fallback, which works today and stops working
+          whenever the lab fixtures fall outside that window. A date nothing can
+          be older than has no such expiry.
+
+          `ignore_errors` because a first-ever run has no macro to rewind, and
+          that is not a failure.
+        params:
+          method: GET
+          iri: "/api/wf/api/dynamic-variable/?format=json&name={{ vars.taxii_macro }}"
+          body: ""
+        ignore_errors: true
+        next: Resolve Cursor Row
+
+      - name: Resolve Cursor Row
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        params:
+          code: |
+            found = {{ vars.steps.Rewind_TAXII_Cursor.data | default({}) }} or {}
+            rows = found.get("hydra:member") or found.get("member") or [] \
+                if isinstance(found, dict) else []
+            iri = (rows[0].get("@id") or "") if rows else ""
+            return {"iri": iri, "exists": "yes" if iri else "no"}
+        next: Cursor Gate
+
+      - name: Cursor Gate
+        type: decision
+        conditions:
+          - condition: "{{ vars.steps.Resolve_Cursor_Row.data.code_output.exists == 'yes' }}"
+            next: Write Ancient Cursor
+        default: Intake Receipt
+
+      - name: Write Ancient Cursor
+        type: connector
+        connector: cyops_utilities
+        operation: make_cyops_request
+        config: ""
+        params:
+          method: PUT
+          iri: "{{ vars.steps.Resolve_Cursor_Row.data.code_output.iri }}"
+          body: '{"value": "2000-01-01T00:00:00.000Z"}'
+        ignore_errors: true
+        next: Intake Receipt
+
+      - name: Intake Receipt
+        type: create_record
+        module: comments
+        comment: >
+          A receipt on the launching alert, because a reset that reports nothing
+          is indistinguishable from a reset that did nothing -- and the
+          difference matters most exactly when you are about to present.
+        fields:
+          content: >
+            <p><b>Intake demo reset.</b></p>
+            {% if vars.steps.Select_For_Deletion.data.code_output.truncated == 'yes' %}
+            <p><b>REFUSED -- the module read was truncated.</b> Scanned
+            {{ vars.steps.Select_For_Deletion.data.code_output.scanned }} of
+            {{ vars.steps.Select_For_Deletion.data.code_output.total }} rows, so
+            {{ vars.steps.Select_For_Deletion.data.code_output.would_have }}
+            match(es) were found but NOTHING was deleted -- a partial scan cannot
+            tell a clean module from a stale one. Raise `$limit` in Find Demo
+            CVEs and re-run.</p>
+            {% else %}
+            <p>CVE records hard-deleted:
+            <b>{{ vars.steps.Select_For_Deletion.data.code_output.count }}</b>
+            (scanned {{ vars.steps.Select_For_Deletion.data.code_output.scanned }}
+            rows, left untouched:
+            {{ vars.steps.Select_For_Deletion.data.code_output.kept }}).</p>
+            <p>Sources matched:
+            {{ vars.steps.Select_For_Deletion.data.code_output.sources }}.</p>
+            {% endif %}
+            <p>TAXII cursor:
+            {% if vars.steps.Resolve_Cursor_Row.data.code_output.exists == 'yes'
+            %}rewound to 2000-01-01, so the next pull reads the collection whole
+            {% else %}not present -- the next pull is a first run and falls back
+            30 days{% endif %}.</p>
+            <p>Doors 1-3 are ready. The patch demo is reset separately -- run
+            <b>Reset Patch Demo</b>, and not while anyone is watching.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Intake
+
+      - name: Done Intake
+        type: end
+
+  # ======================================================== patch (slow) =====
+  - name: Reset Patch Demo
+    description: >
+      Mark the Inoreader advisory unread and roll the endpoint back to its
+      vulnerable version, so the patch act has something to find and something
+      to fix. Takes minutes -- the rollback is a real installer run.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: Reset Patch Demo
+        next: Patch Reset Config
+
+      - name: Patch Reset Config
+        type: set_variable
+        comment: >
+          `reset_script_id` is the Fleet script that puts the product BACK on its
+          vulnerable version. Script ids are per-Fleet-instance and are
+          reassigned on a lab rebuild, so this is a variable and not a constant
+          -- the same trap the main playbook documents at length. Check it
+          against Fleet after any re-provision.
+        vars:
+          inoreader_config: "inoreader-lab"
+          fleet_config: "patch-fleet"
+          advisory_stream: "user/-/label/Patch Intel"
+          mapped_feed_marker: "Release notes from"
+          reset_script_id: "4"
+          fleet_host_id: "1"
+        next: Read Advisory Stream
+
+      - name: Read Advisory Stream
+        type: connector
+        connector: inoreader
+        operation: get_stream_contents
+        config: "{{ vars.inoreader_config }}"
+        comment: >
+          Read the folder WITHOUT `unread_only`, which is the opposite of what
+          the demo playbook does and is the entire point: this step is looking
+          for the advisories that have already been consumed, so it can put them
+          back.
+        params:
+          stream_id: "{{ vars.advisory_stream }}"
+          max_records: 100
+        next: Select Read Advisories
+
+      - name: Select Read Advisories
+
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Only items from a MAPPED feed are worth restoring. The folder is
+          mostly CISA bulletins that the demo playbook skips by design, and
+          marking those unread would spend a write on the scarcer rate-limit
+          zone to no effect.
+        params:
+          code: |
+            response = {{ vars.steps.Read_Advisory_Stream.data | default({}) }} or {}
+            marker = "{{ vars.mapped_feed_marker }}"
+
+            ids, titles = [], []
+            for item in response.get("items") or []:
+                feed = str(((item.get("origin") or {}).get("title") or ""))
+                if marker.lower() not in feed.lower():
+                    continue
+                read = any("state/com.google/read" in c
+                           for c in item.get("categories") or [])
+                if read and item.get("id"):
+                    ids.append(item["id"])
+                    titles.append("{0}: {1}".format(feed, item.get("title") or ""))
+
+            return {
+                "item_ids": ids,
+                "count": len(ids),
+                "titles": "; ".join(titles) or "none",
+                "any": "yes" if ids else "no",
+            }
+        next: Unread Gate
+
+      - name: Unread Gate
+        type: decision
+        conditions:
+          - condition: "{{ vars.steps.Select_Read_Advisories.data.code_output.any == 'yes' }}"
+            next: Mark Advisory Unread
+        default: Roll Back Endpoint
+
+      - name: Mark Advisory Unread
+        type: connector
+        connector: inoreader
+        operation: edit_tag
+        config: "{{ vars.inoreader_config }}"
+        comment: >
+          Removing the Read state is what makes the advisory "arrive" again. The
+          demo playbook fetches with `unread_only`, so read/unread IS the
+          arrival signal -- and an advisory that has been demoed once is read
+          afterwards. Its absence fails the worst way available: the run goes
+          GREEN and reports "the feed returned no unread entries", which reads
+          as a broken integration.
+
+          This is a replay of a real event, not a fabricated one. The advisory
+          is the vendor's own release note and nothing about it is edited.
+        params:
+          item_ids: "{{ vars.steps.Select_Read_Advisories.data.code_output.item_ids }}"
+          remove_tag: "Read"
+        next: Roll Back Endpoint
+
+      - name: Roll Back Endpoint
+        type: connector
+        connector: generic-http
+        operation: http_post
+        config: "{{ vars.fleet_config }}"
+        comment: >
+          Puts the product back on the version the advisory supersedes, so there
+          is real exposure to find. This is a REAL installer run on a REAL
+          endpoint and it takes minutes; the call returns as soon as Fleet
+          accepts the batch, which is not the same as the endpoint being done.
+
+          Nothing downstream waits for it, deliberately. A reset that blocks for
+          three minutes is a reset nobody runs, and the state it produces is
+          observable directly -- open the host in Fleet, or re-run the demo
+          playbook and watch the presence gate.
+        params:
+          rest_api: "/api/v1/fleet/scripts/run/batch"
+          body_type: json
+          data: >-
+            {"script_id": {{ vars.reset_script_id }},
+             "host_ids": [{{ vars.fleet_host_id }}]}
+        next: Patch Receipt
+
+      - name: Patch Receipt
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Patch demo reset.</b></p>
+            <p>Advisories marked unread:
+            <b>{{ vars.steps.Select_Read_Advisories.data.code_output.count }}</b>
+            ({{ vars.steps.Select_Read_Advisories.data.code_output.titles }}).</p>
+            <p>Endpoint rollback dispatched to Fleet
+            (status {{ vars.steps.Roll_Back_Endpoint.data.status_code | default('not sent', true) }}).
+            <b>This is a real installer run and takes minutes.</b> Confirm the
+            version has actually moved back before presenting -- the dispatch
+            returning 200 only means Fleet accepted the batch.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Patch
+
+      - name: Done Patch
+        type: end

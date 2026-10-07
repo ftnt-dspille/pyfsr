@@ -1,0 +1,2026 @@
+collection: 10 - SP - ZTPF - Triggers
+uuid: 9cca11ea-b95a-4504-8385-ad42db358c36
+description: Playbooks triggers by conditions.
+visible: true
+tags:
+- ZTPF
+playbooks:
+- name: '> device automation step (Running) - deprecated'
+  uuid: e2dc23b1-3f81-45a7-b95b-b89fe5e7f663
+  description: Step changed to running and will now execute the automation step on
+    this device and save the results.
+  is_active: false
+  trigger_step_id: start
+  steps:
+  - type: update_record
+    name: add vars and script to step
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_device_automation_steps
+    record: '{{vars.input.records[0][''@id'']}}'
+    fields:
+      script: '{{vars.steps.get_jinja_vars_and_script.output[''script_rendered'']}}'
+      jinjaVars: '{{vars.steps.get_jinja_vars_and_script.output[''jinja_vars'']}}'
+      outputType: '{{vars.steps.find_action[0].actionOutputType[''@id'']}}'
+    next: update_step_start
+    uuid: 97ac96e1-1adb-49ef-b074-9861f17dad9f
+    top: '300'
+    left: '640'
+  - type: update_record
+    name: complete step
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_device_automation_steps
+    record: '{{vars.input.records[0][''@id'']}}'
+    fields:
+      stepDone: true
+    next: run_next_automation_step
+    uuid: 97e7298c-d8d6-4931-93fb-f079550423bb
+    top: '260'
+    left: '40'
+  - type: find_record
+    name: find action
+    step_variables: []
+    module: ztpf_automation_actions?$limit=1
+    checkboxFields: true
+    filters:
+    - field: id
+      value: '{{vars.input.records[0].ztpfAutomationActions.id}}'
+      operator: eq
+    next: get_jinja_vars_and_script
+    uuid: f61bf281-4fba-4a98-8b77-ec4f7e03bb58
+    top: '40'
+    left: '640'
+  - type: workflow_reference
+    name: get jinja_vars and script
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/6ed8988b-5216-4fb3-94e5-0be09ec2ac0a
+    action_id: '{{vars.steps.find_action[0].id}}'
+    device_id: '{{vars.input.records[0].ztpfDevices.id}}'
+    input_yaml: ''
+    next: add_vars_and_script_to_step
+    uuid: bdccba97-4645-4467-85e9-833074439065
+    top: '160'
+    left: '700'
+  - type: workflow_reference
+    name: render action output
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/28a1b591-dd4f-43f7-8f45-cbe21781f883
+    device_step_id: '{{vars.input.records[0].id}}'
+    next: complete_step
+    uuid: acc6a83b-fd7f-43b0-88b0-5eddcce4002d
+    top: '340'
+    left: '40'
+  - type: workflow_reference
+    name: run automation
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/d089d16a-c383-43b0-a7d2-4a2ab1efb25a
+    device_step_id: '{{vars.input.records[0].id}}'
+    next: update_step_stop
+    uuid: 19d2e3cc-752d-437f-8d71-62a3345853a2
+    top: '320'
+    left: '340'
+  - type: workflow_reference
+    name: run next automation step
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/3bcc3bbf-7003-4676-9d49-abdcd4f5913b
+    device_id: '{{vars.input.records[0].ztpfDevices.id}}'
+    uuid: ff370cf5-c97d-4590-83aa-0c99bc7a4ff3
+    top: '180'
+    left: '40'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: queueStatus
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: queueStatus
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: OLD
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: find_action
+    uuid: 2c28d6ff-73c9-4dcc-a6a1-cd805b7db406
+    top: '40'
+    left: '40'
+  - type: update_record
+    name: update step start
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_device_automation_steps
+    record: '{{vars.input.records[0][''@id'']}}'
+    fields:
+      stepStartTimestamp: '{{arrow.utcnow().int_timestamp}}'
+    next: run_automation
+    uuid: 268cf2ca-cfa3-4bb7-9ed8-1bd72d8353e8
+    top: '400'
+    left: '640'
+  - type: update_record
+    name: update step stop
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_device_automation_steps
+    record: '{{vars.input.records[0][''@id'']}}'
+    fields:
+      stepStopTimestamp: '{{arrow.utcnow().int_timestamp}}'
+    next: render_action_output
+    uuid: 19d5189c-fa7b-4b86-8191-f8592ae980d5
+    top: '420'
+    left: '40'
+  annotations:
+  - id: details
+    uuid: 0be7e8bc-fd20-4cab-82ba-8985516c8b58
+    title: Details
+    body: "Updates the step script to prepare for the automation to execute and then\
+      \ update the start time. Once executed the step will be updated with the output\
+      \ and the stop time. \n\nFinally the step complete flag is set and we trigger\
+      \ the next pending step in the queue."
+    position:
+      top: 100
+      left: 300
+      height: 194
+      width: 331
+  tags:
+  - deprecated
+  - TODO
+  - ztpfDeviceAutomationStep
+- name: '> device step (Preparing)'
+  uuid: 9f5b1d3c-533f-40fc-939d-40f31be25568
+  description: Step changed to Pre-Running meaning it is ready for setup.
+  is_active: true
+  trigger_step_id: start
+  steps:
+  - type: set_variable
+    name: create input data
+    vars:
+      input_data: "{%- set ina = {} -%}\n{%- set invalid = [None,\"null\",''] -%}\n\
+        {%- set stepin = vars.steps.render_jinja_input.output.input -%}\n{%- set ret\
+        \ = {\"input_args\":ina,\"input_valid\":true} -%}\n\n{%- if stepin  -%}\n\
+        \  {%- for k in stepin -%}\n    {%- set v = stepin[k] -%}\n    {%- if v ==\
+        \ None -%}\n      {%- set v = \"<INPUT NEEDED>\" -%}\n    {%- endif -%}\n\
+        \    {%- do ina.update({k:v}) -%}\n  {%- endfor -%}\n{%- endif -%}\n\n{%-\
+        \ for i in ina -%}\n{%- set v = ina[i]|string|trim -%}\n  {% if v in invalid\
+        \ -%}\n    {%- do ret.update({\"input_valid\":false}) -%}\n  {%- elif v.startswith(\"\
+        <\") or v.endswith(\">\") -%}\n    {%- do ret.update({\"input_valid\":false})\
+        \ -%}\n  {%- elif v.startswith(\"[\") or v.endswith(\"]\") -%}\n    {%- do\
+        \ ret.update({\"input_valid\":false}) -%}\n  {%-endif -%}\n{% endfor %}\n\n\
+        {{ret}}"
+      config_data: "{%- set config_input = {} -%}\n{%- if vars.steps.render_jinja_input.output.config\
+        \ -%}\n  {%- set config_input = vars.steps.render_jinja_input.output.config\
+        \ -%}\n{%- endif -%}\n\n{%- set config = vars.config_default | combine (config_input\
+        \ ) -%}\n\n{{config}}"
+    next: input_data_valid
+    uuid: ddb92561-7409-4228-92ea-1fd684a3c462
+    top: '220'
+    left: '580'
+  - type: workflow_reference
+    name: get device jinja_vars
+    when: '{{''{{'' in (vars.input.records[0].stepARGS | default('''', true))}}'
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/7b1c12a7-a422-45f4-87e4-96f01a4c03f2
+    device_id: '{{vars.input.records[0].ztpfDevices.id}}'
+    next: setup_vars
+    uuid: 14e2bf2c-76bc-4e2e-9f78-1cd9d1978565
+    top: '40'
+    left: '300'
+  - type: workflow_reference
+    name: get jinja_vars and script
+    when: '{{vars.step_status == "Ready" and vars.config_data.render_script_on_preparing}}'
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/6ed8988b-5216-4fb3-94e5-0be09ec2ac0a
+    action_id: '{{vars.input.records[0].ztpfAutomationActions.id}}'
+    device_id: '{{vars.input.records[0].ztpfDevices.id}}'
+    input_yaml: '{{vars.steps.refactor_step_arg.output}}'
+    next: update_step_input
+    uuid: 10156cc7-5d39-4cf5-bd0f-e892561d94ee
+    top: '600'
+    left: '580'
+  - type: decision
+    name: input data valid
+    step_variables: []
+    conditions:
+    - default: true
+      next: input_not_valid
+    - when: '{{ vars.input_data.input_valid }}'
+      next: input_valid
+    unlabeled_next:
+    - input_valid
+    - input_not_valid
+    uuid: b0d34030-d3e3-42a3-99ce-c5982147f75f
+    top: '340'
+    left: '580'
+  - type: set_variable
+    name: input not valid
+    vars:
+      step_status: Input Needed
+    next: refactor_step_arg
+    uuid: 61656a85-91d4-4381-8463-694c512f7e13
+    top: '420'
+    left: '240'
+  - type: set_variable
+    name: input valid
+    vars:
+      jinja_vars: "{%- set ret = {} -%}\n{%- if vars.jinja_vars -%}\n  {%- set ret\
+        \ = vars.jinja_vars -%}\n{%- endif -%}\n{%- do ret.update({\"input\":vars.input_data.input_args})\
+        \ -%}\n{{ret}}"
+      step_status: Ready
+    next: render_step_name
+    uuid: c881779a-ee63-4b42-a05c-e6c3dbdf9c7a
+    top: '380'
+    left: '900'
+  - type: workflow_reference
+    name: refactor_step_arg
+    when: '{{vars.steps.render_jinja_input.output}}'
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/4af18fe1-5248-4f94-a595-131de9c6a913
+    step_args: '{{vars.steps.render_jinja_input.output}}'
+    next: get_jinja_vars_and_script
+    uuid: 041fe7be-edbe-4319-ab45-12e5657c5c52
+    top: '500'
+    left: '580'
+  - type: workflow_reference
+    name: render jinja input
+    when: '{{vars.step_args}}'
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/b9e9fe1a-4964-4631-ba81-97987676884d
+    script_vars: '{{vars.jinja_vars}}'
+    yaml2json_flag: 'true'
+    script_template: '{{vars.step_args}}'
+    next: create_input_data
+    uuid: 659f259b-9b51-43d6-b0c9-3d3549453ab0
+    top: '140'
+    left: '900'
+  - type: workflow_reference
+    name: render step name
+    when: '{{"{{" in vars.step_name}}'
+    apply_async: false
+    step_variables:
+      step_name: '{{vars.steps.render_step_name.output}}'
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/b9e9fe1a-4964-4631-ba81-97987676884d
+    script_vars: '{{vars.jinja_vars}}'
+    yaml2json_flag: ''
+    script_template: '{{vars.step_name}}'
+    next: refactor_step_arg
+    uuid: 904f368b-65c1-440b-9adf-eb586bf42377
+    top: '460'
+    left: '900'
+  - type: set_variable
+    name: setup vars
+    vars:
+      step_args: '{{vars.input.records[0].stepARGS}}'
+      step_name: '{{vars.input.records[0].name}}'
+      jinja_vars: "{%- set ret = vars.input.records[0].jinjaVars -%}\n{%- if vars.steps.get_device_jinja_vars.output\
+        \ -%}\n  {%- set ret = ret | combine(vars.steps.get_device_jinja_vars.output)\
+        \ -%}\n{%- endif -%}\n{{ret}}"
+      config_default: '{"render_script_on_preparing": true }'
+    next: render_jinja_input
+    uuid: 267f5de7-bfdc-4543-9d0a-83d176ecb46b
+    top: '40'
+    left: '580'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/feea7c72-3743-49ad-baf8-46bf1f1fca0e
+        _value:
+          '@id': /api/3/picklists/feea7c72-3743-49ad-baf8-46bf1f1fca0e
+          display: Preparing
+          itemValue: Preparing
+        operator: eq
+    triggerOnReplicate: false
+    next: get_device_jinja_vars
+    uuid: d83ff81b-7319-4ca3-8470-59621178280b
+    top: '40'
+    left: '20'
+  - type: update_record
+    name: update step input
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_device_automation_steps
+    record: '{{vars.input.records[0][''@id'']}}'
+    fields:
+      name: '{{vars.step_name}}'
+      script: '{%- set script = vars.steps.get_jinja_vars_and_script.output[''script_rendered'']
+        -%}
+
+        {%- if script not in ['''',None] -%}
+
+        {{script}}
+
+        {%- else -%}
+
+        # no action payload
+
+        {%- endif -%}'
+      status: '{{"ztpfDeviceStepStatus" | picklist(vars.step_status, "@id")}}'
+      stepARGS: '{{vars.steps.refactor_step_arg.output|default('''')}}'
+      jinjaVars: '{{vars.steps.get_jinja_vars_and_script.output[''jinja_vars'']}}'
+      queueStatus: '{{"ztpfDeviceStepStatus" | picklist(vars.step_status, "@id")}}'
+    uuid: a5f64fa9-d613-4a61-9615-2be672c0394c
+    top: '700'
+    left: '580'
+  annotations:
+  - id: details
+    uuid: 8f5ca918-65cd-47ae-9e04-80eeb5cdea71
+    title: Details
+    body: 'Step status changed to pre-run. Review input args and handle updating the
+      step where needed. If our inputs are valid then populate the action payload
+      script in the step and mark the record ready.
+
+
+      Look for render_script_on_preparing and if false skip render script.'
+    position:
+      top: 120
+      left: 40
+      height: 162
+      width: 498
+  tags:
+  - TODO
+  - TriggerStep
+  - ztpfDeviceAutomationStep
+- name: '> device step (Running) - FortiManager DeviceDB'
+  uuid: b4e4f6be-9c12-4646-ad86-fcd8783be9c3
+  description: Step changed to running for given Action Category and Type.
+  is_active: true
+  trigger_step_id: start
+  steps:
+  - type: set_variable
+    name: return
+    uuid: 48fdeaf7-2851-4e12-acb6-4a3fde229318
+    top: '140'
+    left: '20'
+  - type: set_variable
+    name: run automation
+    description: Steps to run automation start here and connect to the next step,
+      the post_run.
+    vars:
+      script_type: '{{vars.input.records[0].triggerKey.split('' '')[1]}}'
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: run_device_script
+    uuid: fa74d26d-75a5-47c4-95e1-bc0abd950aad
+    top: '100'
+    left: '1060'
+  - type: workflow_reference
+    name: run device script
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9339cf20-07e5-419c-b995-68d4d897d525
+    script_type: '{{vars.script_type}}'
+    device_step_id: '{{vars.device_step_id}}'
+    next: step_post_run
+    uuid: e64ce01c-f7d9-43a4-9fef-8cfca0622352
+    top: '340'
+    left: '720'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: FortiManager DeviceDB
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    uuid: 36949cb7-9d68-473e-b91e-b5ec70ebb6fe
+    top: '46'
+    left: '20'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+    uuid: 08aef2ee-3f6c-4f59-8880-406762b73531
+    top: '140'
+    left: '320'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+    uuid: 8ff05a87-6ade-4fa6-bd8d-7b9a4a0a83ad
+    top: '46'
+    left: '320'
+  annotations:
+  - id: details
+    uuid: dac3ff42-a842-4e40-884e-9391bf89d8a5
+    title: Details
+    body: 'Step status changed to running and matching trigger key playbook. Starts
+      with standard pre and post routines but each action is unique to the needs of
+      this step.
+
+
+      Type: FortiManager DeviceDB
+
+      Description: Create, execute, delete, and get the logs of a device manager script
+      via the FMG API.'
+    position:
+      top: 260
+      left: 20
+      height: 205
+      width: 496
+  - id: step_trigger_start_and_stop
+    uuid: ef0c2070-5028-43ab-b288-43b18a61281f
+    kind: block
+    title: Step Trigger Start and Stop
+    body: Block to start and stop steps that are triggered to running.
+    contains:
+    - return
+    - run_automation
+    - start
+    - step_post_run
+    - step_trigger_pre_run
+    position:
+      top: 20
+      left: 20
+      height: 232
+      width: 1360
+  tags:
+  - TODO
+  - TriggerStep
+  - ztpfDeviceAutomationStep
+- name: '> device step (Running) - FortiManager Install Device Config'
+  uuid: 1bac3fe8-022a-4bf6-9da4-54facbd7af06
+  description: Step changed to running for given Action Category and Type.
+  is_active: true
+  trigger_step_id: start
+  steps:
+  - type: set_variable
+    name: return
+    uuid: f042f65e-3180-406e-bc18-2192019ca5c0
+    top: '140'
+    left: '20'
+  - type: set_variable
+    name: run automation
+    description: Steps to run automation start here and connect to the next step,
+      the post_run.
+    vars:
+      script_type: '{{vars.input.records[0].triggerKey.split('' '')[1:]|join(" ")}}'
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: run_devicedb_install
+    uuid: 8ad5d18e-97da-4ecd-9af0-93042613fef3
+    top: '100'
+    left: '1060'
+  - type: workflow_reference
+    name: run devicedb install
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/cfd50d73-78a7-40cc-9f7a-2d2ea3458f04
+    device_step_id: '{{vars.device_step_id}}'
+    next: step_post_run
+    uuid: db1021cd-3d67-476c-aa9c-c110311025c4
+    top: '340'
+    left: '720'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: FortiManager Install Device Config
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    uuid: 9cc2c10a-41ba-4324-8113-17e97165a9e4
+    top: '60'
+    left: '20'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+    uuid: 084896bc-7ad5-4b8f-94fb-0feea299a4a1
+    top: '140'
+    left: '320'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    input_yaml: '{{vars.input.records[0].stepARGS}}'
+    refresh_step_script: '{{vars.input.records[0].script}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+    uuid: e17f6d26-6208-43d5-9fe4-01c1ccfe813c
+    top: '46'
+    left: '320'
+  annotations:
+  - id: details
+    uuid: d40b4dfd-a9d0-4adf-9cdf-83f859035dd2
+    title: Details
+    body: 'Step status changed to running and matching trigger key playbook. Starts
+      with standard pre and post routines but each action is unique to the needs of
+      this step.
+
+
+      Type: FortiManager Install Device Config
+
+      Description: Install DeviceDB from FMG to Device.'
+    position:
+      top: 260
+      left: 20
+      height: 205
+      width: 496
+  - id: step_trigger_start_and_stop
+    uuid: 27a1f427-4c5e-4729-8666-dab774a85db4
+    kind: block
+    title: Step Trigger Start and Stop
+    body: Block to start and stop steps that are triggered to running.
+    contains:
+    - return
+    - run_automation
+    - start
+    - step_post_run
+    - step_trigger_pre_run
+    position:
+      top: 20
+      left: 20
+      height: 232
+      width: 1360
+  tags:
+  - TODO
+  - TriggerStep
+  - ztpfDeviceAutomationStep
+- name: '> device step (Running) - FortiManager Remote CLI'
+  uuid: 065f534e-5ef0-4b32-9f08-5f587a172c73
+  description: Step changed to running for given Action Category and Type.
+  is_active: true
+  trigger_step_id: start
+  steps:
+  - type: set_variable
+    name: return
+    uuid: a02aa011-ac2f-4ef0-87de-b76c6080a780
+    top: '140'
+    left: '20'
+  - type: set_variable
+    name: run automation
+    description: Steps to run automation start here and connect to the next step,
+      the post_run.
+    vars:
+      script_type: '{{vars.input.records[0].triggerKey.split('' '')[1:]|join(" ")}}'
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: run_device_script
+    uuid: e399a4b7-0240-4186-8bc1-88cfd02a3f45
+    top: '100'
+    left: '1060'
+  - type: workflow_reference
+    name: run device script
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9339cf20-07e5-419c-b995-68d4d897d525
+    script_type: '{{vars.script_type}}'
+    device_step_id: '{{vars.device_step_id}}'
+    next: step_post_run
+    uuid: 0062f25f-9edc-4f71-8348-b511b86d126f
+    top: '340'
+    left: '720'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: FortiManager Remote CLI
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    uuid: ef0e1f5d-179a-4fd3-9e89-05ec2faeffe4
+    top: '46'
+    left: '20'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+    uuid: a60f64e9-1326-46da-b64e-4fc6030c1834
+    top: '140'
+    left: '320'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+    uuid: bdaa7508-b00e-43cf-9d03-c6251d321b3a
+    top: '46'
+    left: '320'
+  annotations:
+  - id: details
+    uuid: 6cf5250a-3974-46d3-b87d-4d80e22ff48c
+    title: Details
+    body: 'Step status changed to running and matching trigger key playbook. Starts
+      with standard pre and post routines but each action is unique to the needs of
+      this step.
+
+
+      Type: FortiManager DeviceDB
+
+      Description: Create, execute, delete, and get the logs of a device manager script
+      via the FMG API.'
+    position:
+      top: 260
+      left: 20
+      height: 205
+      width: 496
+  - id: step_trigger_start_and_stop
+    uuid: 4194fe26-a05c-4889-a378-8a82f572d0a7
+    kind: block
+    title: Step Trigger Start and Stop
+    body: Block to start and stop steps that are triggered to running.
+    contains:
+    - return
+    - run_automation
+    - start
+    - step_post_run
+    - step_trigger_pre_run
+    position:
+      top: 20
+      left: 20
+      height: 232
+      width: 1360
+  tags:
+  - TODO
+  - TriggerStep
+  - ztpfDeviceAutomationStep
+- name: '> device step (Running) - FortiManager Upgrade Device Firmware'
+  uuid: d223d29d-46f5-4f8b-8cba-dae5d07785fa
+  description: Step changed to running for given Action Category and Type.
+  is_active: true
+  trigger_step_id: start
+  steps:
+  - type: set_variable
+    name: return
+    uuid: 72d4568c-3e55-4eb1-8641-654a812f2d3a
+    top: '140'
+    left: '20'
+  - type: workflow_reference
+    name: run action
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/c6005971-b284-4b3e-8e47-006f14942899
+    device_step_id: '{{vars.device_step_id}}'
+    next: step_post_run
+    uuid: 37f1c533-369d-4935-b43a-6f6559482bc7
+    top: '340'
+    left: '720'
+  - type: set_variable
+    name: run automation
+    description: Steps to run automation start here and connect to the next step,
+      the post_run.
+    vars:
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: run_action
+    uuid: c5dfbc68-78d2-4e77-b961-adf3a3d636bd
+    top: '100'
+    left: '1060'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: FortiManager Upgrade Device Firmware
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    uuid: 374316aa-1c3c-4343-adfd-1f048cdd72bb
+    top: '46'
+    left: '20'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+    uuid: 26bfdc8a-3df1-4712-84db-5616ff68e067
+    top: '140'
+    left: '320'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+    uuid: e3a9d731-d0f0-4b46-a729-f4118b0f5024
+    top: '46'
+    left: '320'
+  annotations:
+  - id: details
+    uuid: 77a664b6-e7c3-4b64-ac58-09cbdfe4d0ef
+    title: Details
+    body: 'Step status changed to running and matching trigger key playbook. Starts
+      with standard pre and post routines but each action is unique to the needs of
+      this step.
+
+
+      Type: FortiManager Upgrade Device Firmware
+
+      Description: Upgrade device firmware from FMG.'
+    position:
+      top: 280
+      left: 20
+      height: 181
+      width: 498
+  - id: step_trigger_start_and_stop
+    uuid: 03c7ffac-623c-402f-a6c8-b5fe85f2a69e
+    kind: block
+    title: Step Trigger Start and Stop
+    body: Block to start and stop steps that are triggered to running.
+    contains:
+    - return
+    - run_automation
+    - start
+    - step_post_run
+    - step_trigger_pre_run
+    position:
+      top: 20
+      left: 20
+      height: 232
+      width: 1360
+  tags:
+  - TEMPLATE
+  - TriggerStep
+  - ztpfDeviceAutomationStep
+- name: '> device step (Running) - TEMPLATE to CLONE from'
+  uuid: 8d0cbbf3-8263-4183-8617-9e455794e883
+  description: Step changed to running for given Action Category and Type.
+  is_active: false
+  trigger_step_id: start
+  steps:
+  - type: set_variable
+    name: return
+    uuid: bde9478f-c97b-4047-9952-885581730e16
+    top: '140'
+    left: '20'
+  - type: set_variable
+    name: run action placeholder
+    description: Add referenced playbook here.
+    next: step_post_run
+    uuid: 48a7b168-9d02-42ce-95d5-e001c31eabdf
+    top: '340'
+    left: '720'
+  - type: set_variable
+    name: run automation
+    description: Steps to run automation start here and connect to the next step,
+      the post_run.
+    vars:
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: run_action_placeholder
+    uuid: aad2ead2-891a-4433-b371-c289d48eb6ff
+    top: '100'
+    left: '1060'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: '[Action Category and Type]'
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    uuid: 64613bb7-a386-4b96-bde6-ca30b67aae6c
+    top: '46'
+    left: '20'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+    uuid: 793f7b90-32e0-43d8-a500-24ba340150f8
+    top: '140'
+    left: '320'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+    uuid: e3aafcf2-5814-4dbc-baf8-70590da5bdf0
+    top: '46'
+    left: '320'
+  annotations:
+  - id: details
+    uuid: 3a5a22c2-5653-4c91-8cdc-ce76299c3e12
+    title: Details
+    body: 'Step status changed to running and matching trigger key playbook. Starts
+      with standard pre and post routines but each action is unique to the needs of
+      this step.
+
+
+      Type: [Action Category and Type]
+
+      Description: [What this action will do.]'
+    position:
+      top: 280
+      left: 20
+      height: 181
+      width: 498
+  - id: step_trigger_start_and_stop
+    uuid: 5271ae04-10bd-425e-91b4-2cecf37fcf07
+    kind: block
+    title: Step Trigger Start and Stop
+    body: Block to start and stop steps that are triggered to running.
+    contains:
+    - return
+    - run_automation
+    - start
+    - step_post_run
+    - step_trigger_pre_run
+    position:
+      top: 20
+      left: 20
+      height: 232
+      width: 1360
+  tags:
+  - TEMPLATE
+  - TriggerStep
+  - ztpfDeviceAutomationStep
+- name: '> device step (Running) - ZTPF Diff Step Output'
+  uuid: 84f66ae9-a77e-41fe-a27d-cad528b6c39a
+  description: Step changed to running for given Action Category and Type.
+  is_active: true
+  trigger_step_id: start
+  steps:
+  - type: set_variable
+    name: return
+    uuid: f4db85cb-a7a7-4b8e-bac2-fac9b4a8a869
+    top: '140'
+    left: '20'
+  - type: workflow_reference
+    name: run action
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/f23963fd-d890-44a1-8f93-d966d669e769
+    device_step_id: '{{vars.input.records[0].id}}'
+    next: step_post_run
+    uuid: 9dfff049-b3e3-4b75-ae37-427b974e3f2f
+    top: '340'
+    left: '720'
+  - type: set_variable
+    name: run automation
+    description: Steps to run automation start here and connect to the next step,
+      the post_run.
+    vars:
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: run_action
+    uuid: 69145c36-66ca-4301-94fc-0c9971f00235
+    top: '100'
+    left: '1060'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: ZTPF Diff Step Output
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    uuid: 7a3e65e8-c3d9-4c6b-95c2-304eed1aaa81
+    top: '46'
+    left: '20'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+    uuid: ba55710b-41f3-4dfe-91db-9f0dd4e70872
+    top: '140'
+    left: '320'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+    uuid: 96cfa3ff-0683-45aa-894b-7071fffa4845
+    top: '46'
+    left: '320'
+  annotations:
+  - id: details
+    uuid: 80cc6461-c406-4eae-89f7-468a07fb8c41
+    title: Details
+    body: 'Step status changed to running and matching trigger key playbook. Starts
+      with standard pre and post routines but each action is unique to the needs of
+      this step.
+
+
+      Type: ZTPF Diff Step Output
+
+      Description: Diff the output of two steps.'
+    position:
+      top: 280
+      left: 20
+      height: 181
+      width: 498
+  - id: step_trigger_start_and_stop
+    uuid: 44ad1c73-18ed-44ab-9779-e9deb0eef666
+    kind: block
+    title: Step Trigger Start and Stop
+    body: Block to start and stop steps that are triggered to running.
+    contains:
+    - return
+    - run_automation
+    - start
+    - step_post_run
+    - step_trigger_pre_run
+    position:
+      top: 20
+      left: 20
+      height: 232
+      width: 1360
+  tags:
+  - TEMPLATE
+  - TriggerStep
+  - ztpfDeviceAutomationStep
+- name: '> device step (Running) - ZTPF Report'
+  uuid: 30dc14b0-252d-4d53-ae9a-3e89c6d357a6
+  description: Step changed to running for given Action Category and Type.
+  is_active: true
+  trigger_step_id: start
+  steps:
+  - type: set_variable
+    name: return
+    uuid: 8008b917-c93f-4ae4-ae1d-7d8e30497284
+    top: '140'
+    left: '20'
+  - type: set_variable
+    name: run automation
+    description: Steps to run automation start here and connect to the next step,
+      the post_run.
+    vars:
+      script_type: '{{vars.input.records[0].triggerKey.split('' '')[1]}}'
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: run_report
+    uuid: 4f3abe5a-11f7-4b4d-b98f-e20c9e8b803a
+    top: '100'
+    left: '1060'
+  - type: workflow_reference
+    name: run report
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/13c165ac-38fc-41c4-b20f-cb90394c3d71
+    device_step_id: '{{vars.device_step_id}}'
+    next: step_post_run
+    uuid: 0a653a51-a0cb-42cf-a3b3-8efc3186325d
+    top: '340'
+    left: '720'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: ZTPF Report
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    uuid: ebdff6d1-c100-47be-bfd0-6e00e0e177e3
+    top: '46'
+    left: '20'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+    uuid: be7e9fa3-f4c2-4ed1-88ba-704f58cdc0a9
+    top: '140'
+    left: '320'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+    uuid: 19d6c1b8-b630-46d6-8532-b3493dbfe508
+    top: '46'
+    left: '320'
+  annotations:
+  - id: details
+    uuid: 2694dcab-e1aa-46e3-9f49-194ce7e12e8f
+    title: Details
+    body: 'Step status changed to running and matching trigger key playbook. Starts
+      with standard pre and post routines but each action is unique to the needs of
+      this step.
+
+
+      Type: ZTPF Report
+
+      Description: Run the Report'
+    position:
+      top: 260
+      left: 20
+      height: 205
+      width: 496
+  - id: step_trigger_start_and_stop
+    uuid: 4b390490-2035-4b2f-b3ef-8ebad30a7f7a
+    kind: block
+    title: Step Trigger Start and Stop
+    body: Block to start and stop steps that are triggered to running.
+    contains:
+    - return
+    - run_automation
+    - start
+    - step_post_run
+    - step_trigger_pre_run
+    position:
+      top: 20
+      left: 20
+      height: 232
+      width: 1360
+  tags:
+  - TODO
+  - TriggerStep
+  - ztpfDeviceAutomationStep
+- name: '> device step (Running) - ZTPF Wait for Condition'
+  uuid: 00000000-0000-0000-0000-000000000002
+  description: Triggered when a Wait for Condition step starts running. Polls the
+    action's Proxy API endpoint at a configurable interval until the outputStatusTemplate
+    no longer reports an exception, or a timeout is reached.
+  # SUPERSEDED -- MUST STAY is_active: false.
+  # Replaced by '> device step (Running) - ZTPF Wait for Condition (poller)'
+  # (a1f0c3d2-7b45-4e18-9c62-5d8e0a2f4001). Both filter the SAME trigger key
+  # 'ZTPF Wait for Condition', so activating this one gives step 14 of BOTH real
+  # profiles (HA Post: Wait for HA Rejoin) two runners -- and FortiSOAR refuses to
+  # dispatch this one at all (CS-WF-13: it is cyclic, not a DAG). It also neither
+  # waited (poll_interval parsed and never read) nor bounded itself (wait-and-retry
+  # routed past the attempt check). Guard: check_trigger_keys.py.
+  is_active: false
+  trigger_step_id: start
+  steps:
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: ZTPF Wait for Condition
+        operator: eq
+        _operator: eq
+    next: step_trigger_pre_run
+    uuid: 00000000-0000-0000-0000-000000000010
+    top: '40'
+    left: '40'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    next: run_automation
+    uuid: 00000000-0000-0000-0000-000000000011
+    top: '120'
+    left: '40'
+  - type: set_variable
+    name: run automation
+    vars:
+      device_step_id: '{{vars.input.records[0].id}}'
+      max_attempts: '{%- set args = vars.input.records[0].stepARGS | default(''input:\n  max_attempts: 10\n  poll_interval: 30\n'')
+        -%}{%- set parsed = args | from_yaml -%}{{ parsed.get(''input'', {}).get(''max_attempts'',
+        10) | default(10) }}'
+      poll_interval: '{%- set args = vars.input.records[0].stepARGS | default(''input:\n  max_attempts: 10\n  poll_interval: 30\n'')
+        -%}{%- set parsed = args | from_yaml -%}{{ parsed.get(''input'', {}).get(''poll_interval'',
+        30) | default(30) }}'
+    next: check_attempts
+    uuid: 00000000-0000-0000-0000-000000000012
+    top: '200'
+    left: '40'
+  - type: decision
+    name: check attempts
+    step_variables: []
+    conditions:
+    - display: exceeded
+      when: '{{ vars.steps.run_automation.max_attempts | int <= 0 }}'
+      next: step_post_run
+    - display: poll
+      default: true
+      next: run_proxy_api
+    uuid: 00000000-0000-0000-0000-000000000013
+    top: '280'
+    left: '40'
+  - type: workflow_reference
+    name: run proxy api
+    apply_async: false
+    step_variables: []
+    device_step_id: '{{vars.device_step_id}}'
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/41623f62-3a00-5681-8638-8bade02a76e4
+    next: check_condition
+    uuid: 00000000-0000-0000-0000-000000000014
+    top: '360'
+    left: '160'
+  - type: decision
+    name: check condition
+    step_variables: []
+    conditions:
+    - display: met
+      when: '{{ vars.steps.run_proxy_api.output.output_status.status != "Exceptions
+        Found" }}'
+      next: step_post_run
+    - display: not yet
+      default: true
+      next: wait_and_retry
+    uuid: 00000000-0000-0000-0000-000000000015
+    top: '440'
+    left: '160'
+  - type: set_variable
+    name: wait and retry
+    vars:
+      max_attempts: '{{ vars.steps.run_automation.max_attempts | int - 1 }}'
+    next: run_proxy_api
+    uuid: 00000000-0000-0000-0000-000000000016
+    top: '520'
+    left: '160'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    next: return
+    uuid: 00000000-0000-0000-0000-000000000017
+    top: '600'
+    left: '40'
+  - type: set_variable
+    name: return
+    vars:
+      output: ''
+      params: '{{vars.input.params}}'
+      status: '{"error":false,"msg":"ok"}'
+    uuid: 00000000-0000-0000-0000-000000000018
+    top: '680'
+    left: '40'
+  annotations:
+  - id: details
+    uuid: 00000000-0000-0000-0000-000000000019
+    title: Details
+    body: 'Wait for Condition trigger: polls the action''s Proxy API endpoint at
+      a configurable interval (default 30s, max 10 attempts) until the outputStatusTemplate
+      no longer reports an exception. If the condition is met, the step completes
+      normally and the next step runs. If max_attempts is exceeded, the step post-run
+      evaluates the last output and may fail+pause.'
+    position:
+      top: 20
+      left: 400
+      height: 150
+      width: 400
+- name: '> manager admin status (Changed)'
+  uuid: e853d695-c3d4-48e7-b74b-f1a495d89e54
+  description: On change of admin status perform steps on the record.
+  is_active: true
+  trigger_step_id: start
+  steps:
+  - type: set_variable
+    name: setup vars
+    vars:
+      record_id: '{{vars.input.records[0].id}}'
+      record_fqid: '{{vars.input.records[0][''@id'']}}'
+      admin_status: '{{vars.input.records[0].adminStatus.itemValue}}'
+    next: status
+    uuid: 9393d732-a26d-448b-afa8-c57f81284023
+    top: '40'
+    left: '660'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_managers
+    resources:
+    - ztpf_managers
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: adminStatus
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+    triggerOnReplicate: false
+    next: setup_vars
+    uuid: d647d4e3-3729-4ab6-856b-1e385d404c17
+    top: '40'
+    left: '40'
+  - type: decision
+    name: status
+    step_variables: []
+    conditions:
+    - default: true
+      next: unknown
+    - when: '{{ vars.admin_status == "Disabled" }}'
+      next: status_disabled
+    - when: '{{ vars.admin_status == "Enabled" }}'
+      next: status_enabled
+    unlabeled_next:
+    - status_disabled
+    - status_enabled
+    - unknown
+    uuid: ce76ef2e-137a-496f-b715-679c529d9565
+    top: '140'
+    left: '660'
+  - type: set_variable
+    name: status disabled
+    vars:
+      status: Disabled
+    next: update_manager_status
+    uuid: 31108e00-a526-4352-a18f-b950e6657149
+    top: '220'
+    left: '1000'
+  - type: set_variable
+    name: status enabled
+    vars:
+      status: Pending
+    next: update_manager_status
+    uuid: ba068de9-6dc2-4621-8b67-2199201cba2c
+    top: '220'
+    left: '320'
+  - type: workflow_reference
+    name: synch manager info
+    when: '{{vars.status == "Pending"}}'
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/d653b755-cf23-4935-93e4-474acc7534d8
+    record_id: '{{vars.record_id}}'
+    uuid: eab19220-33b0-4a9d-af1a-4252c0dc615b
+    top: '400'
+    left: '660'
+  - type: set_variable
+    name: unknown
+    uuid: 87e0bfa3-4615-45a7-aaee-124022e3b4f4
+    top: '80'
+    left: '1000'
+  - type: update_record
+    name: update manager status
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_managers
+    record: '{{vars.record_fqid}}'
+    fields:
+      status: '{{"ztpfStatus" | picklist(vars.status, "@id")}}'
+    next: synch_manager_info
+    uuid: a50d50bc-5fc5-470a-ac7f-cd67bdc37f0f
+    top: '300'
+    left: '660'
+  tags:
+  - ztpfManager
+- name: '> rungroup (Reviewing)'
+  uuid: 4afe669a-08c8-45f6-94e3-82910e7a1d5a
+  description: The RunGroup needs to be reviewed.
+  is_active: true
+  trigger_step_id: start
+  steps:
+  - type: find_record
+    name: find steps
+    step_variables: []
+    module: ztpf_device_automation_steps?$limit=5000
+    checkboxFields: true
+    filters:
+    - field: ztpfRunGroups
+      value: '{{vars.input.records[0][''@id'']}}'
+      operator: eq
+      type: object
+      _value:
+        '@id': '{{vars.input.records[0][''@id'']}}'
+        display: ''
+        itemValue: ''
+    next: step_results
+    uuid: 0864d8d0-b9e1-488f-8903-ffd61128f5e7
+    top: '40'
+    left: '620'
+  - type: set_variable
+    name: rungroup status complete
+    vars:
+      total_time: "{% macro human_time(total_seconds) -%}\n    {%- set total_seconds\
+        \ = total_seconds | int -%}\n    {%- set days = total_seconds // 86400 -%}\n\
+        \    {%- set hours = (total_seconds % 86400) // 3600 -%}\n    {%- set minutes\
+        \ = (total_seconds % 3600) // 60 -%}\n    {%- set seconds = total_seconds\
+        \ % 60 -%}\n\n    {%- set out = [] -%}\n\n    {%- if days > 0 -%}\n      \
+        \  {%- set _ = out.append(days ~ \"d\") -%}\n    {%- endif -%}\n\n    {%-\
+        \ if hours > 0 -%}\n        {%- set _ = out.append(hours ~ \"h\") -%}\n  \
+        \  {%- endif -%}\n\n    {%- if minutes > 0 -%}\n        {%- set _ = out.append(minutes\
+        \ ~ \"m\") -%}\n    {%- endif -%}\n\n    {%- if total_seconds < 600 and seconds\
+        \ > 0 -%}\n        {%- set _ = out.append(seconds ~ \"s\") -%}\n    {%- endif\
+        \ -%}\n\n    {%- if out | length == 0 -%}\n        0s\n    {%- else -%}\n\
+        \        {{ out | join(\" \") }}\n    {%- endif -%}\n{%- endmacro %}\n\n{%-\
+        \ set start_min =  vars.step_results.steps_stopped\n                     \
+        \     |json_query('[].stepStartTimestamp')\n                          |min\n\
+        -%}\n{%- set stop_max =  vars.step_results.steps_stopped\n               \
+        \           |json_query('[].stepStopTimestamp')\n                        \
+        \  |max\n-%}\n\n{%- set total_seconds = stop_max - start_min  -%}\n{{human_time(total_seconds\
+        \ )}}"
+      rungroup_status: Complete
+      total_time_seconds: "{%- set start_min =  vars.step_results.steps_stopped\n\
+        \                          |json_query('[].stepStartTimestamp')\n        \
+        \                  |min\n-%}\n{%- set stop_max =  vars.step_results.steps_stopped\n\
+        \                          |json_query('[].stepStopTimestamp')\n         \
+        \                 |max\n-%}\n{%- set total_seconds = stop_max - start_min\
+        \  -%}\n{{total_seconds}}"
+      ztpfRunning_checkbox: 'false'
+    next: update_steps
+    uuid: ca114fe7-64bd-425d-900f-2d529b6930a3
+    top: '320'
+    left: '800'
+  - type: set_variable
+    name: rungroup status running
+    vars:
+      rungroup_status: Running
+      ztpfRunning_checkbox: 'true'
+    next: update_rungroup
+    uuid: 3dc2817d-0260-46b3-828e-ba13a3476644
+    top: '320'
+    left: '420'
+  - type: set_variable
+    name: setup vars
+    vars:
+      checked: 'true'
+      unchecked: 'false'
+      total_time: '-1'
+      rungroup_status: Running
+      total_time_seconds: '-1'
+      ztpfRunning_checkbox: 'true'
+    next: find_steps
+    uuid: 0e814fc9-c4d8-4d62-a033-a51315b55c96
+    top: '40'
+    left: '320'
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_run_groups
+    resources:
+    - ztpf_run_groups
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/606a0e6c-9c08-4081-bb17-bc8c3872fb68
+        _value:
+          '@id': /api/3/picklists/606a0e6c-9c08-4081-bb17-bc8c3872fb68
+          display: Reviewing
+          itemValue: Reviewing
+        operator: eq
+    triggerOnReplicate: false
+    next: setup_vars
+    uuid: e30276a5-0d95-46be-b24d-94ab84554b76
+    top: '40'
+    left: '40'
+  - type: set_variable
+    name: step_results
+    vars:
+      step_results: "{%- set ret = {\n  \"total_steps\": 0,\n  \"device_ids\": [],\n\
+        \  \"device_records\": [],\n  \"steps_stopped\":[],\n  \"steps_pending\":[],\n\
+        \  \"steps_failed\":[]\n} -%}\n\n{%- for r in vars.steps.find_steps -%}\n  {%-\
+        \ do ret.update({\"total_steps\":ret.total_steps + 1}) -%}\n  {%- if r.ztpfDevices.id\
+        \ not in ret.device_ids -%}\n    {%- do ret.device_ids.append(r.ztpfDevices.id)\
+        \ -%}\n    {%- do ret.device_records.append(r.ztpfDevices) -%}\n  {%- endif -%}\n\
+        \  {%- if r.stepStopTimestamp -%}\n    {%- do ret.steps_stopped.append(r) -%}\n\
+        \    {%- if r.status.itemValue == \"Fail\" -%}\n      {%- do ret.steps_failed.append(r)\
+        \ -%}\n    {%- endif -%}\n  {%- else -%}\n    {%- do ret.steps_pending.append(r)\
+        \ -%}\n  {%- endif -%}\n{%- endfor -%}\n\n{{ret}}"
+    next: steps_done_or_running
+    uuid: 480cc345-a2cf-4cc1-9fe2-94d727037231
+    top: '120'
+    left: '620'
+  - type: decision
+    name: steps done or running
+    step_variables: []
+    conditions:
+    - display: failed
+      when: '{{ vars.step_results[''steps_failed'']|length > 0 }}'
+      next: rungroup_status_reviewing
+    - display: done
+      when: '{{ vars.step_results[''steps_pending'']|length == 0 and vars.step_results[''steps_failed'']|length
+        == 0 }}'
+      next: rungroup_status_complete
+    - display: running
+      default: true
+      next: rungroup_status_running
+    uuid: 83d60920-95bd-4431-8e17-d4cc8ec71a59
+    top: '220'
+    left: '620'
+  - type: set_variable
+    name: rungroup status reviewing
+    vars:
+      checked: 'true'
+      unchecked: 'false'
+      rungroup_status: Reviewing
+      ztpfRunning_checkbox: 'false'
+    next: update_steps
+    uuid: 00000000-0000-0000-0000-000000000001
+    top: '320'
+    left: '580'
+  - type: update_record
+    name: update devices
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_devices
+    record: '{{vars.item[''@id'']}}'
+    fields:
+      status: /api/3/picklists/2a2f34dc-4f3b-4434-aa58-ba995b2bf7c6
+      ztpfRunning: '{{vars.unchecked}}'
+    for_each:
+      item: '{{vars.step_results[''device_records'']}}'
+      __bulk: true
+      parallel: false
+      condition: ''
+      batch_size: 100
+    next: update_rungroup
+    uuid: 7438cb3f-bc0e-4190-8dd6-500f5d77fa5a
+    top: '480'
+    left: '800'
+  - type: update_record
+    name: update rungroup
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_run_groups
+    record: '{{vars.input.records[0][''@id'']}}'
+    fields:
+      status: '{{"ztpfRunGroupsStatus" | picklist(vars.rungroup_status, "@id")}}'
+      totalSteps: '{{vars.step_results[''total_steps'']}}'
+      ztpfRunning: '{{vars.ztpfRunning_checkbox}}'
+      totalDevices: '{{vars.step_results[''device_ids'']|length}}'
+      totalRunningTime: '{{vars.total_time}}'
+      totalStepsComplete: '{{vars.step_results[''steps_stopped'']|length}}'
+      totalRunningTimeSeconds: '{{vars.total_time_seconds}}'
+    uuid: 1b6866ca-c154-4e5a-917b-c87bc845e9c0
+    top: '420'
+    left: '260'
+  - type: update_record
+    name: update steps
+    operation: Append
+    fieldOperation:
+      recordTags: Append
+    module: ztpf_device_automation_steps
+    record: '{{vars.item[''@id'']}}'
+    fields:
+      stepDone: '{{vars.checked}}'
+    for_each:
+      item: '{{vars.steps.find_steps}}'
+      __bulk: true
+      parallel: false
+      condition: ''
+      batch_size: 100
+    next: update_devices
+    uuid: 9bb2b6e0-6c31-4f23-a64a-f08fc1664718
+    top: '400'
+    left: '800'
+  - type: set_variable
+    name: return
+    vars:
+      output: ''
+      params: '{{vars.input.params}}'
+      status: '{"error":false,"msg":"ok"}'
+  annotations:
+  - id: details
+    uuid: bdebeb1e-ce61-404a-bcba-ef4b11c8141b
+    title: Details
+    body: When the RunGroup is complete we need to evaluate the steps and update the
+      group record and all the steps.
+    position:
+      top: 120
+      left: 60
+      height: 109
+      width: 393
+  tags:
+  - TODO
+  - ztpfRunGroup
+- name: '> device step (Fail)'
+  uuid: 957d7308-03e4-4021-8be6-3654400256c0
+  description: 'When a step fails, dispatch the action''s onFailPlaybook (if set)
+    with the failing step as the record. The playbook must have a record-action
+    trigger on ZTPF Device Automation Steps.'
+  is_active: true
+  trigger_step_id: start
+  steps:
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/30515ef9-5192-4329-86db-9a47b6c8db65
+        _value:
+          '@id': /api/3/picklists/30515ef9-5192-4329-86db-9a47b6c8db65
+          display: Fail
+          itemValue: Fail
+        operator: eq
+    triggerOnReplicate: false
+    next: setup_vars
+    uuid: bf80a374-c876-46f5-a048-8e703c557adb
+    top: '40'
+    left: '40'
+  - type: set_variable
+    name: setup vars
+    vars:
+      on_fail_uuid: |-
+        {%- set ret = "" -%}
+        {%- set action = vars.input.records[0].ztpfAutomationActions -%}
+        {%- if action is defined and action and action.onFailPlaybook is defined and action.onFailPlaybook -%}
+        {%- set ret = action.onFailPlaybook.strip().split("/") | last -%}
+        {%- endif -%}
+        {{ret}}
+      step_fqid: '{{vars.input.records[0][''@id'']}}'
+    next: has_on_fail_playbook
+    uuid: ba2e7150-7ba8-47e5-8ee9-52be8092c68a
+    top: '140'
+    left: '40'
+  - type: decision
+    name: has on fail playbook
+    step_variables: []
+    conditions:
+    - display: dispatch
+      when: '{{ vars.on_fail_uuid | length > 0 }}'
+      next: get_playbook_definition
+    - display: no handler
+      default: true
+      next: return
+    uuid: 90dd6329-48b5-4bda-8dbf-a703b9222def
+    top: '240'
+    left: '40'
+  - type: connector
+    name: get playbook definition
+    pickFromTenant: false
+    params:
+      iri: '/api/3/workflows/{{vars.on_fail_uuid}}?$relationships=true&format=json'
+      method: GET
+    connector: cyops_utilities
+    operation: make_cyops_request
+    next: dispatch
+    uuid: 1478343a-b1cb-4857-a115-009d78a4477a
+    top: '340'
+    left: '40'
+  - type: connector
+    name: dispatch
+    description: Fire the on-fail playbook's record-action route with the failing
+      step as the record.
+    pickFromTenant: false
+    params:
+      iri: |-
+        {%- set steps = vars.steps.get_playbook_definition.data.steps -%}
+        {%- set route = steps | selectattr("arguments.route", "defined") | map(attribute="arguments.route") | list | first -%}
+        /api/triggers/1/action/{{route}}
+      body:
+        singleRecordExecution: true
+        __resource: ztpf_device_automation_steps
+        __uuid: '{{vars.on_fail_uuid}}'
+        records:
+        - '{{vars.step_fqid}}'
+      method: POST
+    connector: cyops_utilities
+    operation: make_cyops_request
+    next: return
+    uuid: 94b82808-640f-4031-90e2-bcab6012dac9
+    top: '440'
+    left: '40'
+  - type: set_variable
+    name: return
+    vars:
+      output: '{{vars.on_fail_uuid}}'
+      status: '{"error":false,"msg":"ok"}'
+    uuid: 8f3f0a44-6a1e-4f2f-9d6e-0f4b8c2a7d11
+    top: '540'
+    left: '260'

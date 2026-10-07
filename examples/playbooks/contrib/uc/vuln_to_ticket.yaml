@@ -1,0 +1,594 @@
+# UC-06 -- Vulnerability to ticket, with enrichment that changes the answer and
+# de-duplication that stops the ticket flood.
+#
+# The failure mode this exists to avoid: a scanner integration that opens one
+# ticket per finding. Ten thousand findings become ten thousand tickets, nobody
+# can tell which matter, the same CVE is filed forty times across forty hosts,
+# and within a month the queue is ignored. Automation made the problem worse.
+#
+# So two things have to be true before this is worth deploying:
+#
+#   1. **The enrichment has to change the outcome.** A CVSS score alone cannot
+#      prioritise anything -- it is a property of the vulnerability, identical
+#      for everyone on earth, and it says nothing about whether this CVE is
+#      being exploited or whether the affected box matters. This playbook adds
+#      EPSS (probability of exploitation in the wild, live from FIRST.org) and
+#      the criticality of the assets actually affected. A CVSS 9.8 on a
+#      decommissioned lab box with an EPSS of 0.0001 is not an emergency; a CVSS
+#      7.5 with an EPSS of 0.97 on a domain controller is.
+#
+#   2. **It must find the existing ticket before it opens a new one.** One CVE
+#      across forty hosts is one piece of work, not forty. Every run therefore
+#      looks for a ticket already tracking this CVE and updates it instead --
+#      and because prevalence is itself a risk signal, a CVE that turns up on
+#      more than `escalate_above` hosts escalates the existing ticket's priority
+#      rather than quietly adding another comment.
+#
+#   Start (manual, on a vulnerability)
+#     -> Ticket Config        (set_variable -- thresholds, project, on/off)
+#     -> Read Vulnerability   (set_variable -- CVE, CVSS)
+#     -> CVE Gate             (decision -- no CVE, nothing to correlate on)
+#     -> EPSS Lookup          (connector -- live exploitation probability)
+#     -> Find Same CVE        (find_record -- every finding for this CVE)
+#     -> Find Affected Assets (find_record -- dot-walks vulnerabilities.cveId)
+#     -> Summarise Evidence   (set_variable -- flatten to scalars)
+#     -> Assess Risk          (code_snippet -- score, priority, prevalence,
+#                              existing ticket, create-vs-update, escalation)
+#     -> Ticketing Gate       (decision -- is a ticketing system wired up?)
+#          disabled -> Dry Run Comment -> end
+#     -> Search Tickets       (connector jira/list_tickets -- authoritative)
+#     -> Reconcile            (code_snippet -- ticketing system wins over ledger)
+#     -> Action Gate          (decision -- create or update)
+#          create -> Create Ticket -> Link Ticket -> Result Comment -> end
+#          update -> Link Existing Ticket -> Comment On Ticket -> Escalation Gate
+#                      escalate -> Raise Priority -> Result Comment -> end
+#                      else     -> Result Comment -> end
+#
+# **On `ticketing_enabled`.** It ships `no`, and that is not a stub -- it is the
+# mode you want before credentials exist and during any change-controlled
+# rollout. Every decision is still computed and written to the record as a
+# comment showing the exact payload that would have been sent, so the scoring
+# and de-duplication can be reviewed against real scanner data before the
+# playbook is allowed to write to the ITSM. Flip it to `yes` once the Jira
+# configuration has real credentials; nothing else changes.
+#
+# **On the ticket ledger.** The stock `vulnerabilities` module has no ticket-ID
+# field, so the link is kept as a `jira:<KEY>` entry in `recordTags` -- visible
+# in the UI and readable without a schema change. A real deployment should add a
+# proper `ticketId` field to the module and read that instead; the only code
+# that changes is the tag scan in Assess Risk.
+#
+# Live-verified on FortiSOAR 8.0.0. EPSS enrichment is live against FIRST.org.
+#
+# **The Jira leg is live-verified too**, against a real Jira Cloud site, with
+# `ticketing_enabled` flipped to `yes`. Two consecutive runs on one CVE:
+#
+#   run 1, one finding   -> Search Tickets found nothing, Create Ticket raised
+#                           one issue, Link Ticket wrote the `jira:<KEY>` tag.
+#   run 2, five findings -> Search Tickets found that same issue by its CVE
+#                           label, Comment On Ticket appended the new evidence,
+#                           and Raise Priority moved it Medium -> High because
+#                           prevalence crossed `escalate_above`.
+#
+# One CVE produced exactly ONE issue across both runs. That is the whole claim
+# this playbook makes, and it now holds against a real ticketing system rather
+# than against the local ledger.
+#
+# Two things that verification settled, both worth keeping:
+#
+#   - `Raise Priority` sends `description: ""` and `status: ""`. An EMPTY
+#     description is accepted; it is an ABSENT one that Jira Cloud rejects with
+#     `400 INVALID_INPUT` and an empty `errors` object. Do not "tidy up" those
+#     empty strings out of the params.
+#   - `Link Ticket` used to be on the CREATE branch only, so a finding that
+#     merely updated an existing ticket carried no `jira:` tag and the ledger
+#     was left half-written. `Link Existing Ticket` now mirrors it on the update
+#     branch, so EVERY finding for a CVE points at the issue tracking it.
+
+collection: Demo Library - Vulnerability Response
+description: >
+  Enrich a vulnerability with live EPSS exploitation probability and affected
+  asset criticality, find the ticket already tracking the CVE before opening a
+  new one, and escalate priority when the same CVE spreads across hosts.
+visible: true
+
+playbooks:
+  - name: Vulnerability To Ticket
+    description: >
+      Risk-scored vulnerability ticketing with de-duplication and
+      prevalence-based escalation.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: vulnerabilities
+        button_label: "Create Or Update Ticket"
+        next: Ticket Config
+
+      - name: Ticket Config
+        type: set_variable
+        comment: >
+          ticketing_enabled ships as "no" so the playbook can be run against real
+          scanner data and reviewed before it is allowed to write to the ITSM.
+          Set it to "yes" once the Jira configuration has real credentials.
+
+          escalate_above is the prevalence bar. A CVE on four or more hosts is a
+          different problem from the same CVE on one, and the ticket's priority
+          should say so.
+        vars:
+          ticketing_enabled: "no"
+          jira_project: "INC"
+          escalate_above: "3"
+          epss_alarming: "0.5"
+        next: Read Vulnerability
+
+      - name: Read Vulnerability
+        type: set_variable
+        vars:
+          cve: "{{ vars.input.records[0].cveId | default('', true) }}"
+          cvss: "{{ vars.input.records[0].cvss3BaseScore | default(0, true) }}"
+        next: CVE Gate
+
+      - name: CVE Gate
+        type: decision
+        conditions:
+          - display: has-cve
+            when: "{{ vars.cve | default('', true) | length > 0 }}"
+            next: EPSS Lookup
+          - display: Else
+            default: true
+            next: No CVE Comment
+
+      - name: EPSS Lookup
+        type: connector
+        connector: exploit-prediction-scoring-system
+        operation: get_epss_score_by_cve_id
+        config: epss-public
+        comment: >
+          EPSS is the signal CVSS cannot give you: the probability this CVE is
+          exploited in the wild in the next 30 days, updated daily. It is a free,
+          unauthenticated public API, so this leg works on any box with outbound
+          access -- no licence and no key.
+
+          Every parameter has to be passed even when empty; the connector reads
+          them positionally and raises a bare KeyError otherwise.
+        params:
+          cve: "{{ vars.cve }}"
+          scope: "Public"
+          byDate: ""
+          fields: ""
+          sort: ""
+          envelope: false
+          pretty: false
+          orderResult: false
+        next: Find Same CVE
+
+      - name: Find Same CVE
+        type: find_record
+        module: vulnerabilities
+        comment: >
+          Every finding for this CVE, across every host. This is both the
+          de-duplication key and the prevalence measure.
+        filters:
+          - field: cveId
+            operator: eq
+            value: "{{ vars.cve }}"
+        limit: 200
+        next: Find Affected Assets
+
+      - name: Find Affected Assets
+        type: find_record
+        module: assets
+        comment: >
+          Dot-walks the relationship: assets whose linked vulnerabilities carry
+          this CVE. That is what makes criticality available for scoring without
+          iterating the findings one by one.
+        filters:
+          - field: vulnerabilities.cveId
+            operator: eq
+            value: "{{ vars.cve }}"
+        limit: 200
+        next: Summarise Evidence
+
+      - name: Summarise Evidence
+        type: set_variable
+        comment: >
+          Flattened to scalars before the snippet sees them -- inlining record
+          lists into a code snippet is fragile, because the sandbox screens
+          source with a token scan that matches inside string values.
+
+          recordTags is a list per record, so it needs the inner join first.
+          selectattr on criticality drops assets that have none rather than
+          letting a null blow up the attribute walk.
+        vars:
+          same_tags: "{{ vars.steps.Find_Same_CVE | map(attribute='recordTags') | map('join', ',') | join(' || ') }}"
+          same_names: "{{ vars.steps.Find_Same_CVE | map(attribute='name') | join(' || ') }}"
+          asset_crits: "{{ vars.steps.Find_Affected_Assets | selectattr('criticality') | map(attribute='criticality.itemValue') | join(',') }}"
+          asset_names: "{{ vars.steps.Find_Affected_Assets | map(attribute='name') | join(', ') }}"
+          asset_count: "{{ vars.steps.Find_Affected_Assets | length }}"
+          prevalence: "{{ vars.steps.Find_Same_CVE | length }}"
+          epss_score: "{{ vars.steps.EPSS_Lookup.data.data[0].epss | default('0', true) }}"
+          epss_pct: "{{ vars.steps.EPSS_Lookup.data.data[0].percentile | default('0', true) }}"
+        next: Assess Risk
+
+      - name: Assess Risk
+        type: code_snippet
+        config: default
+        comment: >
+          The scoring model, in one place so it can be argued with. CVSS is
+          capped at half the weight deliberately: on its own it is the least
+          decision-useful of the three inputs, because it is identical for every
+          organisation on earth.
+        code: |
+          cve = '''{{ vars.cve }}'''.strip()
+
+          def number(raw, fallback):
+              try:
+                  return float(raw)
+              except ValueError:
+                  return fallback
+
+          cvss = number('''{{ vars.cvss }}''', 0.0)
+          epss = number('''{{ vars.epss_score }}''', 0.0)
+          epss_pct = number('''{{ vars.epss_pct }}''', 0.0)
+          prevalence = int(number('''{{ vars.prevalence }}''', 0))
+          asset_count = int(number('''{{ vars.asset_count }}''', 0))
+          escalate_above = int(number('''{{ vars.escalate_above }}''', 3))
+          alarming = number('''{{ vars.epss_alarming }}''', 0.5)
+
+          # Highest criticality among the affected assets. One critical asset in
+          # the blast radius sets the tone regardless of how many others there
+          # are -- averaging would let a hundred lab boxes dilute a domain
+          # controller into obscurity.
+          RANK = {"none": 0, "low": 1, "medium": 2, "high": 3,
+                  "critical": 4, "very critical": 5}
+          crit_rank = 0
+          crit_label = "unclassified"
+          for token in '''{{ vars.asset_crits }}'''.split(","):
+              token = token.strip()
+              rank = RANK.get(token.lower(), -1)
+              if rank > crit_rank:
+                  crit_rank = rank
+                  crit_label = token
+
+          # Existing ticket, from the local ledger. Tags are joined per record
+          # with "," and between records with " || ".
+          ticket_key = ""
+          for group in '''{{ vars.same_tags }}'''.split(" || "):
+              for tag in group.split(","):
+                  tag = tag.strip()
+                  if tag.lower().startswith("jira:") and not ticket_key:
+                      ticket_key = tag.split(":", 1)[1].strip()
+
+          # 50 points of CVSS, 30 of EPSS, 20 of asset criticality.
+          score = (cvss / 10.0) * 50 + epss * 30 + (crit_rank / 5.0) * 20
+
+          drivers = []
+          drivers.append("CVSS %.1f" % cvss)
+          if epss >= alarming:
+              drivers.append("EPSS %.4f -- in the top %.1f%% of CVEs for likelihood of exploitation, which is the signal CVSS cannot give you" % (epss, (1.0 - epss_pct) * 100))
+          else:
+              drivers.append("EPSS %.4f (%.1fth percentile), so exploitation in the wild is not currently likely" % (epss, epss_pct * 100))
+          if crit_rank >= 4:
+              drivers.append("it affects at least one %s asset" % crit_label)
+          elif crit_rank > 0:
+              drivers.append("highest affected asset criticality is %s" % crit_label)
+          else:
+              drivers.append("no criticality is recorded for the affected assets, so no asset weighting was applied")
+
+          # Prevalence is a risk signal in itself: the same CVE spreading across
+          # hosts is a bigger problem than one instance of it, and it is the
+          # reason to raise an existing ticket rather than file another.
+          escalated = ""
+          if prevalence > escalate_above:
+              escalated = "yes"
+              score = score + 10
+              drivers.append("it is present on %d hosts, above the escalation bar of %d" % (prevalence, escalate_above))
+
+          if score >= 80:
+              priority = "Critical"
+              jira_priority = "Highest"
+              sla_days = 7
+          elif score >= 60:
+              priority = "High"
+              jira_priority = "High"
+              sla_days = 14
+          elif score >= 40:
+              priority = "Medium"
+              jira_priority = "Medium"
+              sla_days = 30
+          else:
+              priority = "Low"
+              jira_priority = "Low"
+              sla_days = 90
+
+          action = "update" if ticket_key else "create"
+
+          summary = "%s -- %s (%d host(s), EPSS %.4f)" % (
+              cve, priority, prevalence, epss)
+
+          print({
+              "cve": cve,
+              "cvss": "%.1f" % cvss,
+              "epss": "%.5f" % epss,
+              "epss_percentile": "%.1f" % (epss_pct * 100),
+              "prevalence": prevalence,
+              "asset_count": asset_count,
+              "criticality": crit_label,
+              "risk_score": "%.0f" % score,
+              "priority": priority,
+              "jira_priority": jira_priority,
+              "sla_days": sla_days,
+              "action": action,
+              "ticket_key": ticket_key or "none",
+              "escalated": escalated,
+              "rationale": "; ".join(drivers),
+              "summary": summary,
+          })
+        next: Ticketing Gate
+
+      - name: Ticketing Gate
+        type: decision
+        conditions:
+          - display: ticketing-live
+            when: "{{ vars.ticketing_enabled == 'yes' }}"
+            next: Search Tickets
+          - display: Else
+            default: true
+            next: Dry Run Comment
+
+      # ---------------------------------------------------------------- review
+      - name: Dry Run Comment
+        type: create_record
+        module: comments
+        comment: >
+          The review mode. Everything above ran for real -- live EPSS, real asset
+          criticality, real de-duplication against the finding set -- and this
+          records the decision and the exact payload rather than writing to a
+          ticketing system that is not wired up yet.
+        fields:
+          content: >
+            <p><b>Ticketing is disabled -- decision recorded, nothing sent.</b>
+            Set <code>ticketing_enabled</code> to <code>yes</code> in the Ticket
+            Config step once the Jira configuration has credentials.</p>
+            <p><b>Would {{ vars.steps.Assess_Risk.data.code_output.action }}</b>{%
+            if vars.steps.Assess_Risk.data.code_output.action == 'update' %}
+            ticket
+            <b>{{ vars.steps.Assess_Risk.data.code_output.ticket_key }}</b>{%
+            endif %} at priority
+            <b>{{ vars.steps.Assess_Risk.data.code_output.jira_priority }}</b>.</p>
+            <p><b>Risk {{ vars.steps.Assess_Risk.data.code_output.risk_score }}/100
+            ({{ vars.steps.Assess_Risk.data.code_output.priority }})</b> --
+            {{ vars.steps.Assess_Risk.data.code_output.rationale }}.</p>
+            <p><b>Prevalence:</b> this CVE appears on
+            {{ vars.steps.Assess_Risk.data.code_output.prevalence }} finding(s)
+            across
+            {{ vars.steps.Assess_Risk.data.code_output.asset_count }} asset(s){%
+            if vars.steps.Assess_Risk.data.code_output.escalated %} --
+            <b>above the escalation bar, so the existing ticket would be raised
+            rather than commented on</b>{% endif %}.</p>
+            <p><b>Payload:</b> project
+            <code>{{ vars.jira_project }}</code>, summary
+            <code>{{ vars.steps.Assess_Risk.data.code_output.summary }}</code>,
+            remediation SLA
+            {{ vars.steps.Assess_Risk.data.code_output.sla_days }} days.</p>
+          vulnerabilities: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Dry Run
+
+      - name: Done Dry Run
+        type: end
+
+      # ------------------------------------------------------------- live path
+      - name: Search Tickets
+        type: connector
+        connector: jira
+        operation: list_tickets
+        config: jira-demo
+        comment: >
+          The ticketing system is authoritative, not the local ledger. Someone
+          may have opened a ticket for this CVE by hand, or the tag may have been
+          lost -- and either way filing a duplicate is the thing this playbook
+          exists to prevent.
+        params:
+          jql_query: "project = {{ vars.jira_project }} AND labels = \"{{ vars.cve | lower }}\" AND statusCategory != Done ORDER BY created DESC"
+          maxResults: 5
+          start_time: ""
+          nextPageToken: ""
+          fields: "key,summary,priority,status"
+        next: Reconcile
+
+      - name: Reconcile
+        type: code_snippet
+        config: default
+        comment: >
+          A ticket found in Jira overrides the ledger -- including the case where
+          the ledger thought a ticket existed but it has since been deleted, in
+          which case this correctly falls back to creating one.
+        code: |
+          ledger_key = '''{{ vars.steps.Assess_Risk.data.code_output.ticket_key }}'''.strip()
+          if ledger_key.lower() == "none":
+              ledger_key = ""
+
+          # The search returns the ticketing system's own view; the first
+          # matching open issue for this CVE is the one to update.
+          hits = int('''{{ vars.steps.Search_Tickets.data.issues | default([], true) | length }}''' or 0)
+          found_key = '''{{ vars.steps.Search_Tickets.data.issues[0].key | default('', true) }}'''.strip()
+
+          key = found_key or ledger_key
+          print({
+              "ticket_key": key,
+              "action": "update" if key else "create",
+              "open_matches": hits,
+              "source": "ticketing system" if found_key else ("local ledger" if ledger_key else "none"),
+          })
+        next: Action Gate
+
+      - name: Action Gate
+        type: decision
+        conditions:
+          - display: update-existing
+            when: "{{ vars.steps.Reconcile.data.code_output.action == 'update' }}"
+            next: Link Existing Ticket
+          - display: Else
+            default: true
+            next: Create Ticket
+
+      - name: Create Ticket
+        type: connector
+        connector: jira
+        operation: create_ticket
+        config: jira-demo
+        params:
+          project_key: "{{ vars.jira_project }}"
+          ticket_summary: "{{ vars.steps.Assess_Risk.data.code_output.summary }}"
+          issue_type: "Task"
+          priority: "{{ vars.steps.Assess_Risk.data.code_output.jira_priority }}"
+          parent: ""
+          ticket_description: >
+            {{ vars.steps.Assess_Risk.data.code_output.cve }} --
+            risk {{ vars.steps.Assess_Risk.data.code_output.risk_score }}/100.
+
+            {{ vars.steps.Assess_Risk.data.code_output.rationale }}.
+
+            Affected assets ({{ vars.steps.Assess_Risk.data.code_output.asset_count }}):
+            {{ vars.asset_names | default('none recorded', true) }}.
+
+            Remediate within {{ vars.steps.Assess_Risk.data.code_output.sla_days }} days.
+          other_fields: '{"labels": ["{{ vars.cve | lower }}", "fortisoar"]}'
+        next: Link Ticket
+
+      - name: Link Ticket
+        type: update_record
+        module: vulnerabilities
+        record: "{{ vars.input.records[0]['@id'] }}"
+        comment: >
+          Writes the ledger entry so the next finding for this CVE de-duplicates
+          against it without needing a Jira round-trip.
+        fields:
+          recordTags: "{{ (vars.input.records[0].recordTags | default([], true)) + ['jira:' ~ (vars.steps.Create_Ticket.data.key | default('unknown', true))] }}"
+        next: Result Comment
+
+      - name: Link Existing Ticket
+        type: update_record
+        module: vulnerabilities
+        record: "{{ vars.input.records[0]['@id'] }}"
+        comment: >
+          The mirror of Link Ticket, on the update branch.
+
+          Without it only the finding that HAPPENED to open the ticket carries
+          the `jira:<KEY>` tag, and every later finding for the same CVE is
+          linked to nothing -- so "which ticket tracks this?" is answerable for
+          one record out of forty. De-duplication still worked, because
+          Reconcile asks the ticketing system first and only falls back to the
+          ledger, but the ledger it falls back to was being left half-written.
+
+          `reject` before appending: the trigger record may already carry this
+          exact tag from an earlier run over the same finding, and recordTags
+          are not de-duplicated by the platform.
+        fields:
+          recordTags: >-
+            {{ (vars.input.records[0].recordTags | default([], true))
+               | reject('equalto', 'jira:' ~ vars.steps.Reconcile.data.code_output.ticket_key)
+               | list
+               + ['jira:' ~ vars.steps.Reconcile.data.code_output.ticket_key] }}
+        next: Comment On Ticket
+
+      - name: Comment On Ticket
+        type: connector
+        connector: jira
+        operation: add_comment
+        config: jira-demo
+        comment: >
+          One CVE across many hosts is one piece of work. The new occurrence goes
+          on the existing ticket as evidence rather than becoming a ticket of its
+          own.
+        params:
+          issue_key: "{{ vars.steps.Reconcile.data.code_output.ticket_key }}"
+          comment: >
+            Another instance of {{ vars.cve }} was detected.
+            Now present on {{ vars.steps.Assess_Risk.data.code_output.prevalence }}
+            host(s), across
+            {{ vars.steps.Assess_Risk.data.code_output.asset_count }} asset(s):
+            {{ vars.asset_names | default('none recorded', true) }}.
+            Current risk score
+            {{ vars.steps.Assess_Risk.data.code_output.risk_score }}/100
+            ({{ vars.steps.Assess_Risk.data.code_output.rationale }}).
+        next: Escalation Gate
+
+      - name: Escalation Gate
+        type: decision
+        conditions:
+          - display: escalate
+            when: "{{ vars.steps.Assess_Risk.data.code_output.escalated | default('', true) | length > 0 }}"
+            next: Raise Priority
+          - display: Else
+            default: true
+            next: Result Comment
+
+      - name: Raise Priority
+        type: connector
+        connector: jira
+        operation: update_ticket
+        config: jira-demo
+        comment: >
+          Prevalence has crossed the bar, so the existing ticket is raised rather
+          than merely annotated. A ticket that silently accumulates forty
+          comments at its original priority is how spreading exposure gets
+          missed.
+        params:
+          issue_key: "{{ vars.steps.Reconcile.data.code_output.ticket_key }}"
+          project_key: "{{ vars.jira_project }}"
+          priority: "{{ vars.steps.Assess_Risk.data.code_output.jira_priority }}"
+          summary: "{{ vars.steps.Assess_Risk.data.code_output.summary }}"
+          description: ""
+          status: ""
+          comment: >
+            Priority raised to
+            {{ vars.steps.Assess_Risk.data.code_output.jira_priority }}:
+            {{ vars.cve }} is now present on
+            {{ vars.steps.Assess_Risk.data.code_output.prevalence }} hosts.
+          other_fields: ""
+        next: Result Comment
+
+      - name: Result Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Ticket
+            {{ vars.steps.Reconcile.data.code_output.action | default('created', true) }}d
+            for {{ vars.cve }}.</b></p>
+            <p>Risk <b>{{ vars.steps.Assess_Risk.data.code_output.risk_score }}/100</b>
+            ({{ vars.steps.Assess_Risk.data.code_output.priority }}) --
+            {{ vars.steps.Assess_Risk.data.code_output.rationale }}.</p>
+            <p>Present on
+            {{ vars.steps.Assess_Risk.data.code_output.prevalence }} finding(s)
+            across
+            {{ vars.steps.Assess_Risk.data.code_output.asset_count }} asset(s).
+            Remediation SLA
+            {{ vars.steps.Assess_Risk.data.code_output.sla_days }} days.</p>
+          vulnerabilities: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Live
+
+      - name: Done Live
+        type: end
+
+      - name: No CVE Comment
+        type: create_record
+        module: comments
+        comment: >
+          Deliberately not ticketed. A finding with no CVE cannot be
+          de-duplicated against anything, so auto-filing it is how the duplicate
+          flood starts again through the back door.
+        fields:
+          content: >
+            <p><b>No CVE on this finding -- no ticket raised.</b></p>
+            <p>Without a CVE there is no key to de-duplicate on, so filing
+            automatically would reintroduce exactly the duplicate flood this
+            playbook exists to prevent. Either enrich the finding with a CVE at
+            ingestion, or triage it by hand.</p>
+          vulnerabilities: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done No CVE
+
+      - name: Done No CVE
+        type: end

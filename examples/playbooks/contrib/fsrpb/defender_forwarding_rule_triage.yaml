@@ -1,0 +1,163 @@
+# Forwarding-Rule Alert Triage -- Defender for Office 365 -> Graph messageRules -> AD enrichment.
+#
+# Connectors (configs must exist on the appliance):
+#   microsoft-graph            "M365 Defender"   (get_all_security_alerts, V2 / security/alerts_v2)
+#   microsoft-graph-mail       "M365 Graph"      (execute_api_request -> /users/{user}/mailFolders/inbox/messageRules)
+#   activedirectory            "Corp AD"         (advanced_search, ALL_ATTRIBUTES -> manager/proxyAddresses/...)
+#
+# Trigger: on an Alerts record that represents a Microsoft forwarding-rule alert.
+# The alert record should carry the affected user's UPN in the field wired into
+# `user_upn` below (e.g. record.userPrincipalName or a custom field). Adjust the
+# Jinja path to match the module field.
+
+collection: M365 Forwarding Rule Triage
+description: Detect forwarding-rule alerts, pull the mailbox message rules, and classify by AD manager relationship.
+visible: true
+
+playbooks:
+  - name: Forwarding Rule Triage
+    description: >
+      Defends against mailbox auto-forwarding abuse. When a Defender for Office 365
+      alert fires, read the affected user's inbox message rules, extract forward/redirect
+      destinations, resolve them in Active Directory, and compare the destination against
+      the source user's manager to assign a priority.
+    is_active: true
+    parameters: [user_upn, destination_hint]
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        requires_record: true
+        next: Query Forwarding Alert
+
+      - name: Query Forwarding Alert
+        type: connector
+        next: Extract Affected User
+        connector: microsoft-graph
+        operation: get_all_security_alerts
+        config: "M365 Defender"
+        params:
+          api_version: V2
+          serviceSource: "microsoftDefenderForOffice365"
+          top: 25
+
+      - name: Extract Affected User
+        type: set_variable
+        next: Fetch Message Rules
+        vars:
+          user_upn: "{{ vars.input.params.user_upn | default(vars.input.records[0].userPrincipalName, true) }}"
+
+      - name: Fetch Message Rules
+        type: connector
+        next: Extract Forwarding Destinations
+        connector: microsoft-graph-mail
+        operation: execute_api_request
+        config: "M365 Graph"
+        params:
+          method: GET
+          endpoint: "/v1.0/users/{{ vars.user_upn }}/mailFolders/inbox/messageRules"
+        mock_result:
+          value:
+            - id: rule-1
+              displayName: Forward to manager
+              forwardTo:
+                - address: susan@company.com
+              forwardAsAttachmentTo: []
+              redirectTo: []
+
+      - name: Extract Forwarding Destinations
+        type: code_snippet
+        next: Resolve Source User
+        code: |
+          rules = vars.steps.Fetch_Message_Rules.data.get('value') or []
+          fwd = []
+          for r in rules:
+              fwd_to = (r.get('forwardTo') or [])
+              fwd_att = (r.get('forwardAsAttachmentTo') or [])
+              redirect = (r.get('redirectTo') or [])
+              if fwd_to or fwd_att or redirect:
+                  fwd.append({
+                      'id': r.get('id'),
+                      'displayName': r.get('displayName'),
+                      'fwd': [e.get('address') for e in fwd_to],
+                      'fwdAtt': [e.get('address') for e in fwd_att],
+                      'redirect': [e.get('address') for e in redirect],
+                  })
+          print({'rules': fwd, 'count': len(fwd)})
+
+      - name: Resolve Source User
+        type: connector
+        next: Build Destinations List
+        connector: activedirectory
+        operation: advanced_search
+        config: "Corp AD"
+        params:
+          query: "(|(mail={{ vars.user_upn }})(userPrincipalName={{ vars.user_upn }})(proxyAddresses=SMTP:{{ vars.user_upn }}))"
+
+      - name: Build Destinations List
+        type: set_variable
+        next: Enrich Each Destination
+        vars:
+          source_dn: "{{ vars.steps.Resolve_Source_User.data.entries[0].attributes.distinguishedName | default('') }}"
+          source_manager_dn: "{{ vars.steps.Resolve_Source_User.data.entries[0].attributes.manager | default('') }}"
+          destinations: "{{ (vars.steps.Extract_Forwarding_Destinations.data.rules | map(attribute='fwd') | sum(start=[]) + vars.steps.Extract_Forwarding_Destinations.data.rules | map(attribute='fwdAtt') | sum(start=[]) + vars.steps.Extract_Forwarding_Destinations.data.rules | map(attribute='redirect') | sum(start=[])) | unique | list }}"
+
+      - name: Enrich Each Destination
+        type: connector
+        next: Build Classification
+        connector: activedirectory
+        operation: advanced_search
+        config: "Corp AD"
+        for_each:
+          item: "{{ vars.destinations }}"
+        params:
+          query: "(|(mail={{ vars.item }})(userPrincipalName={{ vars.item }})(proxyAddresses=SMTP:{{ vars.item }}))"
+        set:
+          dest_resolutions: "{{ vars.dest_resolutions | default([]) + [{'address': vars.item, 'dn': vars.steps.Enrich_Each_Destination.data.entries[0].attributes.distinguishedName if (vars.steps.Enrich_Each_Destination.data.entries | default([]) | length) > 0 else ''}] }}"
+
+      - name: Build Classification
+        type: code_snippet
+        next: Assign Priority
+        code: |
+          resolutions = vars.dest_resolutions or []
+          source_dn = vars.source_dn or ''
+          manager_dn = vars.source_manager_dn or ''
+          internal = 0
+          is_manager = 0
+          for d in resolutions:
+              dn = d.get('dn') or ''
+              if dn:
+                  internal += 1
+                  if manager_dn and dn == manager_dn:
+                      is_manager += 1
+          all_internal = internal == len(resolutions) if resolutions else False
+          if not resolutions or internal < len(resolutions):
+              priority = 'Critical'      # external / unresolved destination
+          elif is_manager == len(resolutions):
+              priority = 'Low'           # forwarding to the user's own manager
+          else:
+              priority = 'Medium'        # forwarding to another internal employee
+          print({'priority': priority, 'internal_count': internal, 'total': len(resolutions), 'manager_match': is_manager})
+
+      - name: Assign Priority
+        type: update_record
+        next: Comment Verdict
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          priority: "{{ vars.steps.Build_Classification.data.code_output.priority | picklist('priority') }}"
+
+      - name: Comment Verdict
+        type: set_variable
+        next: Done
+        message:
+          type: comment
+          content: >
+            <p>Forwarding-rule triage for <strong>{{ vars.user_upn }}</strong>:
+            {{ vars.steps.Build_Classification.data.code_output.total }} destination(s),
+            {{ vars.steps.Build_Classification.data.code_output.internal_count }} internal,
+            manager match {{ vars.steps.Build_Classification.data.code_output.manager_match }}.
+            Priority: <strong>{{ vars.steps.Build_Classification.data.code_output.priority }}</strong>.</p>
+
+      - name: Done
+        type: end

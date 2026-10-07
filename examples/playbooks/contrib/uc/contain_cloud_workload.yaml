@@ -1,0 +1,773 @@
+# UC-11 -- A cloud workload is compromised: preserve it, gate it, contain it,
+# and prove the containment happened on the provider rather than in the case.
+#
+# Cloud containment is the use case customers ask for and demos get wrong, in a
+# specific way: the playbook calls an isolate action, the action returns
+# success, the case says "instance contained", and nobody ever asks the cloud
+# provider what the instance's network posture actually became. In this
+# scenario the API call genuinely does return success when it has done less than
+# you think -- see the note on the containment step -- so the read-back is not
+# belt-and-braces. It is the only assertion in the run that is worth anything.
+#
+#   Start (manual, on an alert)
+#     -> Cloud Config       (set_variable -- quarantine group, approval tag,
+#                            containment on/off)
+#     -> Read Alert         (set_variable -- instance id, sentinel if absent)
+#     -> Resolve Instance   (aws-extended generic_action -- describe by filter)
+#     -> Read Instance      (code-runner -- found?, volumes, current groups,
+#                            tags, and whether approval is required)
+#     -> Resolve Gate       (decision)
+#          not found -> Unresolved Comment -> end
+#     -> Preserve Evidence  (aws-extended snapshot_volume -- BEFORE anything)
+#     -> Verify Snapshot    (aws-extended generic_action -- describe_snapshots)
+#     -> Preservation Gate  (decision)
+#          no snapshot -> Preservation Failed Comment -> end   [containment
+#                                                              does NOT proceed]
+#     -> Create Case        (create_record incidents)
+#     -> Evidence Comment   (create_record -- the pre-containment state, on the
+#                            record, before it is changed)
+#     -> Approval Gate      (decision on the environment tag)
+#          production -> Production Approval (manual_input)
+#                          Decline -> Declined Comment -> Link Alert -> end
+#     -> Contain            (aws-extended add_security_group_to_instance)
+#     -> Tag Instance       (aws-extended add_tag_to_instance)
+#     -> Read Back          (aws-extended generic_action -- describe again)
+#     -> Verify Containment (code-runner -- compare before and after)
+#     -> Verify Gate        (decision)
+#          not contained -> Containment Failed Comment -> Link Alert -> end
+#     -> Containment Comment -> Link Alert -> end
+#
+# Five things here are load-bearing.
+#
+# 1. **Evidence is preserved before containment, and containment is refused if
+#    preservation failed.** This is the same lesson UC-08 encodes for DFARS
+#    media preservation, and in the cloud it bites harder: containment here is a
+#    live change to a running instance, and the malware's response to losing its
+#    network is frequently to wipe. A snapshot taken afterwards records the
+#    aftermath. The Preservation Gate is what makes the ordering real rather
+#    than merely stated -- without it, "preserve first" is a comment, not a
+#    control.
+#
+#    The playbook does *not* wait for the snapshot to reach `completed`. An EBS
+#    snapshot is point-in-time as of the moment `CreateSnapshot` returns; the
+#    block-copy that follows is durability, not capture. Blocking containment
+#    until `completed` would leave a compromised instance online for minutes for
+#    no forensic gain. What the gate requires is that the snapshot *exists on
+#    AWS* -- read back by ID, not taken on trust from the create call.
+#
+# 2. **`add_security_group_to_instance` REPLACES the instance's group list, it
+#    does not append to it.** The vendor operation resolves the names it was
+#    given to IDs and calls `ModifyInstanceAttribute(Groups=<those ids>)`.
+#    For containment that is exactly the behaviour you want -- the quarantine
+#    group must be the *only* group, not an addition to whatever was already
+#    permitting traffic. Anywhere else it is a footgun, and it has a sharper
+#    edge: a name it cannot resolve is dropped from the list rather
+#    than raising, so a typo alongside one valid group applies only the valid
+#    one and still returns success. Both facts point the same way -- read the
+#    group list back off AWS and compare it to what you asked for.
+#
+# 3. **The quarantine group is empty in both directions.** Zero ingress rules
+#    and zero egress rules. A security group with no egress rule permits no
+#    outbound traffic, so the instance cannot reach its C2. This is worth saying
+#    out loud because the *default* security group ships with an allow-all
+#    egress rule, and a "quarantine" group cloned from it contains nothing: the
+#    instance stops serving traffic and carries on beaconing. Revoking that
+#    default rule requires sending `IpProtocol: "-1"`, which the stock AWS
+#    connector cannot do -- the platform retypes the string to an int and boto3
+#    rejects it. That is why this use case runs on `aws-extended`.
+#
+# 4. **The approval gate keys off a tag, not an OS family or an instance type.**
+#    Tags are what a customer actually controls and already maintains, and
+#    `Environment=production` is the one nearly everybody has. Which tag and
+#    which values are configuration, in Cloud Config, so a customer whose scheme
+#    is `env=prod` or `tier=1` changes a string rather than the playbook.
+#
+# 5. **The tag the playbook writes is a label, not a state.** `SecurityStatus =
+#    Quarantined` is written for humans and for cost/CMDB tooling. It is written
+#    *before* the read-back on purpose, so that the verification step is
+#    verifying AWS's answer and not its own bookkeeping -- and so that a tag
+#    reading `Quarantined` on an instance whose group list says otherwise is
+#    visible as the contradiction it is. If you take one habit from this
+#    playbook, it is that the tag is never the evidence.
+#
+# Containment ships **enabled** here, unlike UC-06's ticketing and UC-08's
+# blocking. The use case is the containment; with the flag off there is nothing
+# left to demo. The safety is the approval gate and the reset script, not a
+# disabled action.
+#
+# `__APPROVAL_TEAM_IRI__` is substituted by deploy_and_test.py. A manual_input
+# assigned by team *name* is created unowned and invisible to the run -- see the
+# same trap in the teamviewer access request demo playbook.
+#
+# Live-verified on FortiSOAR 8.0.0 against a real AWS account.
+
+collection: Demo Library - Cloud Workload Containment
+description: >
+  Resolve a compromised EC2 instance from an alert, snapshot its volume before
+  touching it, gate production assets behind a human approval, replace its
+  security groups with an egress-locked quarantine group, and confirm the
+  containment by reading the group list back off AWS.
+visible: true
+
+playbooks:
+  - name: Contain Cloud Workload
+    description: >
+      Preserve, gate, contain and verify a compromised cloud workload -- in that
+      order, with the verification done against the cloud provider.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: "Contain Cloud Workload"
+        next: Cloud Config
+
+      - name: Cloud Config
+        type: set_variable
+        comment: >
+          Everything environment-specific lives here. `quarantine_group` must be
+          a group with no ingress rules AND no egress rules, in the same VPC as
+          the workload -- AWS rejects a group from another VPC, which is the
+          most common way this fails on a first run in a customer account.
+
+          `approval_tag` / `approval_values` decide which workloads a human has
+          to authorise. They are a tag rather than anything intrinsic to the
+          instance because a tag is what the customer already maintains.
+        vars:
+          aws_config: "aws-extended-lab"
+          quarantine_group: "uc11-quarantine"
+          approval_tag: "Environment"
+          approval_values: "production,prod"
+          status_tag_key: "SecurityStatus"
+          status_tag_value: "Quarantined"
+          containment_enabled: "yes"
+        next: Read Alert
+
+      - name: Read Alert
+        type: set_variable
+        comment: >
+          The instance ID is read from `deviceUID`, not from `sourceId`, and
+          that distinction is enforced by the platform rather than a matter of
+          taste: the alerts module carries a module-level uniqueness constraint
+          `alerts_unique` on `sourceId`. Two findings naming the same instance
+          would collide on the second insert -- and a deleted alert sitting in
+          the recycle bin keeps blocking it. The constraint does not appear in
+          the per-field metadata, only in the module's `uniqueConstraints`, so
+          the first sign of it is a 409 on ingestion.
+
+          It is also the more accurate model. `sourceId` is the *finding's* own
+          identifier in the source system, which is unique by construction and
+          is what deduplicates repeat deliveries of the same finding.
+          `deviceUID` is the resource the finding implicates, and many findings
+          legitimately name one instance.
+
+          A sentinel rather than a blank: an empty value in an AWS instance-id
+          filter does not mean "match nothing" everywhere in boto3, and a
+          playbook that resolves the wrong instance is worse than one that
+          resolves none.
+        vars:
+          instance_id: "{{ vars.input.records[0].deviceUID | default('', true) or '__no_instance__' }}"
+        next: Resolve Instance
+
+      - name: Resolve Instance
+        type: connector
+        connector: aws-extended
+        operation: generic_action
+        config: aws-extended-lab
+        comment: >
+          A *filter* on instance-id, not the `InstanceIds` argument, and not the
+          connector's own `describe_instance`. Both of those raise
+          `InvalidInstanceID.NotFound` on an unknown ID, which turns "the alert
+          named an instance that does not exist" -- an ordinary, expected
+          outcome -- into a failed playbook run with a red step and no case.
+          A filter returns an empty `Reservations` list and lets the playbook
+          decide what to do about it.
+
+          `read_only: true` refuses anything that is not a describe/get/list, so
+          this step cannot mutate the account even if it is edited later.
+        params:
+          service: ec2
+          api_action: describe_instances
+          payload: '{"Filters": [{"Name": "instance-id", "Values": ["{{ vars.instance_id }}"]}]}'
+          read_only: true
+        next: Read Instance
+
+      - name: Read Instance
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Flattens the AWS response to the scalars the rest of the run needs,
+          and makes the approval decision. Keeping the decision here rather than
+          in the gate means the reason is a value that can be written into the
+          case, instead of a condition nobody can read afterwards.
+
+          Only the root volume is snapshotted, and the others are recorded. A
+          multi-volume workload needs a snapshot per volume, which is a loop
+          this playbook deliberately does not hide inside a single step.
+        params:
+          code: |
+            response = {{ vars.steps.Resolve_Instance.data | default({}) }}
+            approval_tag = "{{ vars.approval_tag }}"
+            approval_values = [v.strip().lower() for v in "{{ vars.approval_values }}".split(",") if v.strip()]
+
+            instance = {}
+            for reservation in (response.get("Reservations") or []):
+                for candidate in (reservation.get("Instances") or []):
+                    instance = candidate
+                    break
+                if instance:
+                    break
+
+            if not instance:
+                return {
+                    "found": "no",
+                    "instance_id": "{{ vars.instance_id }}",
+                    "reason": "no EC2 instance matched that identifier in this account and region",
+                }
+
+            tags = {}
+            for tag in (instance.get("Tags") or []):
+                tags[str(tag.get("Key") or "")] = str(tag.get("Value") or "")
+
+            groups = []
+            group_ids = []
+            for group in (instance.get("SecurityGroups") or []):
+                groups.append(str(group.get("GroupName") or ""))
+                group_ids.append(str(group.get("GroupId") or ""))
+
+            volumes = []
+            for mapping in (instance.get("BlockDeviceMappings") or []):
+                ebs = mapping.get("Ebs") or {}
+                volume_id = str(ebs.get("VolumeId") or "")
+                if volume_id:
+                    volumes.append(volume_id)
+
+            environment = tags.get(approval_tag, "")
+            approval_required = environment.strip().lower() in approval_values
+
+            placement = instance.get("Placement") or {}
+            state = instance.get("State") or {}
+
+            return {
+                "found": "yes",
+                "instance_id": str(instance.get("InstanceId") or ""),
+                "instance_type": str(instance.get("InstanceType") or ""),
+                "state": str(state.get("Name") or "unknown"),
+                "private_ip": str(instance.get("PrivateIpAddress") or "none"),
+                "public_ip": str(instance.get("PublicIpAddress") or "none"),
+                "vpc_id": str(instance.get("VpcId") or ""),
+                "subnet_id": str(instance.get("SubnetId") or ""),
+                "availability_zone": str(placement.get("AvailabilityZone") or ""),
+                "groups_before": ", ".join(groups) or "none",
+                "group_ids_before": ", ".join(group_ids) or "none",
+                "group_count_before": len(groups),
+                "root_volume": volumes[0] if volumes else "",
+                "other_volumes": ", ".join(volumes[1:]) or "none",
+                "volume_count": len(volumes),
+                "environment": environment or "untagged",
+                "approval_required": "yes" if approval_required else "no",
+                "approval_reason": (
+                    "{0}={1} is in the approval list".format(approval_tag, environment)
+                    if approval_required
+                    else "{0}={1} is not in the approval list".format(
+                        approval_tag, environment or "(unset)")
+                ),
+                "owner": tags.get("Owner", "unrecorded"),
+                "purpose": tags.get("purpose", "unrecorded"),
+                "reason": "",
+            }
+        next: Resolve Gate
+
+      - name: Resolve Gate
+        type: decision
+        comment: >
+          An alert that names an instance nobody can find is common and is not a
+          failure -- the instance may already be terminated, or the finding may
+          be from another account. Recording that plainly beats a red run.
+        conditions:
+          - condition: "{{ vars.steps.Read_Instance.data.code_output.found == 'yes' }}"
+            next: Preserve Evidence
+        default: Unresolved Comment
+
+      - name: Unresolved Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>No cloud workload contained -- the instance could not be
+            resolved.</b></p>
+            <p>The alert named
+            <code>{{ vars.steps.Read_Instance.data.code_output.instance_id }}</code>,
+            and
+            {{ vars.steps.Read_Instance.data.code_output.reason }}.</p>
+            <p>Nothing was snapshotted and no security group was changed. The
+            usual causes are an instance that has already been terminated, a
+            finding raised against a different AWS account, or a region mismatch
+            between the finding and this connector's configuration -- an EC2
+            instance ID is only unique within its region.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done
+
+      - name: Preserve Evidence
+        type: connector
+        connector: aws-extended
+        operation: snapshot_volume
+        config: aws-extended-lab
+        comment: >
+          The first thing that touches the account, and it is a read of the disk
+          rather than a change to the workload. Containment cuts the instance's
+          network; whatever is resident in memory is lost either way, but the
+          disk is not -- unless the containment prompts the intruder to wipe it,
+          which is exactly why this runs first.
+
+          `ec2:CreateSnapshot` is a distinct IAM action from the describes and
+          the security-group edits, and an identity that can do everything else
+          in this playbook can still be denied it. See iam-policy-uc11.json.
+        params:
+          volume_id: "{{ vars.steps.Read_Instance.data.code_output.root_volume }}"
+          description: >-
+            Forensic snapshot before containment of
+            {{ vars.steps.Read_Instance.data.code_output.instance_id }}
+            (alert {{ vars.input.records[0].uuid }})
+        next: Verify Snapshot
+
+      - name: Verify Snapshot
+        type: connector
+        connector: aws-extended
+        operation: generic_action
+        config: aws-extended-lab
+        comment: >
+          Read the snapshot back by ID. The create call's own return value says
+          a snapshot was requested; this says AWS holds one.
+        params:
+          service: ec2
+          api_action: describe_snapshots
+          payload: '{"Filters": [{"Name": "snapshot-id", "Values": ["{{ vars.steps.Preserve_Evidence.data.SnapshotId | default(''none'', true) }}"]}]}'
+          read_only: true
+        next: Preservation Gate
+
+      - name: Preservation Gate
+        type: decision
+        comment: >
+          The gate that makes "preserve first" a control rather than a claim. If
+          the snapshot is not on AWS, the run stops before it changes anything.
+          Containing without evidence is a choice a human can still make by hand
+          -- it is not one this playbook makes silently.
+
+          `pending` is a pass. The snapshot is point-in-time from the moment it
+          exists; waiting for `completed` would keep a compromised instance
+          online for minutes and capture nothing extra.
+        conditions:
+          - condition: "{{ vars.steps.Verify_Snapshot.data.Snapshots | default([]) | length > 0 }}"
+            next: Create Case
+        default: Preservation Failed Comment
+
+      - name: Preservation Failed Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Containment refused -- evidence could not be preserved.</b></p>
+            <p>A snapshot of volume
+            <code>{{ vars.steps.Read_Instance.data.code_output.root_volume }}</code>
+            on instance
+            <code>{{ vars.steps.Read_Instance.data.code_output.instance_id }}</code>
+            was requested but could not be read back from AWS. <b>No security
+            group was changed and the workload is still online.</b></p>
+            <p>This is deliberate. Containment frequently provokes destruction of
+            the disk, so an instance contained without a snapshot can leave you
+            with an incident and no evidence. Resolve the preservation failure --
+            most often a missing <code>ec2:CreateSnapshot</code> permission --
+            and re-run, or contain by hand having accepted the loss.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done
+
+      - name: Create Case
+        type: create_record
+        module: incidents
+        comment: >
+          The case is created after preservation and before containment, so the
+          record exists to hold the "before" state at the moment that state is
+          still true.
+        fields:
+          name: >-
+            Cloud workload containment --
+            {{ vars.steps.Read_Instance.data.code_output.instance_id }}
+          description: >
+            <p>Alert <b>{{ vars.input.records[0].name }}</b> implicates EC2
+            instance
+            <code>{{ vars.steps.Read_Instance.data.code_output.instance_id }}</code>
+            ({{ vars.steps.Read_Instance.data.code_output.instance_type }},
+            {{ vars.steps.Read_Instance.data.code_output.availability_zone }}),
+            currently <b>{{ vars.steps.Read_Instance.data.code_output.state }}</b>
+            in VPC
+            <code>{{ vars.steps.Read_Instance.data.code_output.vpc_id }}</code>.</p>
+            <p>Environment tag
+            <b>{{ vars.steps.Read_Instance.data.code_output.environment }}</b> --
+            {{ vars.steps.Read_Instance.data.code_output.approval_reason }}.</p>
+          type: '{{ "IncidentType" | picklist("Compromised System", "@id") }}'
+          severity: '{{ "Severity" | picklist("High", "@id") }}'
+          status: '{{ "IncidentStatus" | picklist("Open", "@id") }}'
+          phase: '{{ "IncidentPhase" | picklist("Containment", "@id") }}'
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Evidence Comment
+
+      - name: Evidence Comment
+        type: create_record
+        module: comments
+        comment: >
+          The pre-containment state, written down while it is still the current
+          state. After the next few steps this record is the only place the
+          original security-group membership exists -- AWS keeps no history of
+          `ModifyInstanceAttribute`, so an instance restored from this comment is
+          restored from the only surviving copy.
+        fields:
+          content: >
+            <p><b>Evidence preserved before containment.</b></p>
+            <p>Snapshot
+            <code>{{ vars.steps.Preserve_Evidence.data.SnapshotId }}</code> of
+            root volume
+            <code>{{ vars.steps.Read_Instance.data.code_output.root_volume }}</code>,
+            state
+            <b>{{ vars.steps.Verify_Snapshot.data.Snapshots[0].State | default('unknown', true) }}</b>,
+            read back from AWS by ID rather than taken from the create call's
+            return value.</p>
+            <p>An EBS snapshot is point-in-time as of creation, so
+            <code>pending</code> here is a complete capture that is still
+            copying. Other volumes on this instance:
+            <code>{{ vars.steps.Read_Instance.data.code_output.other_volumes }}</code>
+            -- these are <b>not</b> snapshotted by this playbook and must be
+            captured separately if they are in scope.</p>
+            <p><b>Pre-containment network posture</b> (record this -- AWS keeps
+            no history of it):<br/>
+            security groups
+            <code>{{ vars.steps.Read_Instance.data.code_output.groups_before }}</code>
+            (<code>{{ vars.steps.Read_Instance.data.code_output.group_ids_before }}</code>)<br/>
+            private
+            <code>{{ vars.steps.Read_Instance.data.code_output.private_ip }}</code>,
+            public
+            <code>{{ vars.steps.Read_Instance.data.code_output.public_ip }}</code>,
+            subnet
+            <code>{{ vars.steps.Read_Instance.data.code_output.subnet_id }}</code></p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Approval Gate
+
+      - name: Approval Gate
+        type: decision
+        comment: >
+          Two independent conditions, and it is worth being explicit about why
+          both are here. `containment_enabled` is the change-window switch and
+          applies to every workload; the approval tag applies only to the ones a
+          customer has said are production. A run with containment disabled must
+          not raise an approval -- asking a human to authorise an action the
+          playbook has already been told not to take is how approval fatigue
+          starts.
+        conditions:
+          - condition: "{{ vars.containment_enabled != 'yes' }}"
+            next: Containment Disabled Comment
+          - condition: "{{ vars.steps.Read_Instance.data.code_output.approval_required == 'yes' }}"
+            next: Production Approval
+        default: Contain
+
+      - name: Containment Disabled Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Containment not attempted -- decision recorded.</b></p>
+            <p>Instance
+            <code>{{ vars.steps.Read_Instance.data.code_output.instance_id }}</code>
+            would have had its security groups replaced with
+            <code>{{ vars.quarantine_group }}</code>, leaving
+            <code>{{ vars.steps.Read_Instance.data.code_output.groups_before }}</code>.
+            <code>containment_enabled</code> is
+            <b>{{ vars.containment_enabled }}</b>.</p>
+            <p>Everything before this point was real: the instance was resolved
+            against AWS and the forensic snapshot
+            <code>{{ vars.steps.Preserve_Evidence.data.SnapshotId }}</code> was
+            taken and verified. Only the network change was withheld.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Link Alert
+
+      - name: Production Approval
+        type: manual_input
+        comment: >
+          WARN: assign_to.team must be a team IRI, not a name. A bare name is
+          emitted as a string FortiSOAR cannot resolve, and the gate is created
+          unowned and invisible to the run. __APPROVAL_TEAM_IRI__ is substituted
+          by deploy_and_test.py.
+        title: "Approve containment of a production cloud workload"
+        description: >
+            Containment will replace **all** security groups on
+            `{{ vars.steps.Read_Instance.data.code_output.instance_id }}`
+            ({{ vars.steps.Read_Instance.data.code_output.instance_type }},
+            {{ vars.steps.Read_Instance.data.code_output.private_ip }}) with
+            **{{ vars.quarantine_group }}**, which has no ingress and no egress
+            rules. The workload will stop serving traffic and stop reaching
+            anything, including its own dependencies and any agent that reports
+            its health.
+
+            Currently attached:
+            `{{ vars.steps.Read_Instance.data.code_output.groups_before }}`.
+            **Record this** -- AWS keeps no history of the change, and it is what
+            restore puts back.
+
+            Tagged
+            **{{ vars.approval_tag }}={{ vars.steps.Read_Instance.data.code_output.environment }}**,
+            which is why this is being asked. Forensic snapshot
+            `{{ vars.steps.Preserve_Evidence.data.SnapshotId }}` has already been
+            taken, so declining does not lose the evidence.
+        is_approval: true
+        assign_to:
+          team: "__APPROVAL_TEAM_IRI__"
+        options:
+          - {option: "Contain", primary: true, next: Contain}
+          - {option: "Decline", next: Declined Comment}
+
+      - name: Declined Comment
+        type: create_record
+        module: comments
+        comment: >
+          A declined approval is an outcome, not an error. It gets the same
+          treatment as a containment: written down, with the state of the
+          workload stated plainly so nobody assumes otherwise. The approver's
+          identity is not interpolated here -- a manual_input step's runtime
+          output has no documented `username` key, and a comment that renders
+          "declined by " with nothing after it is worse than one that does not
+          claim to know. The approval record itself carries who answered.
+        fields:
+          content: >
+            <p><b>Containment declined at the approval gate -- the workload is
+            still online and still on its original security groups.</b></p>
+            <p>Instance
+            <code>{{ vars.steps.Read_Instance.data.code_output.instance_id }}</code>
+            remains on
+            <code>{{ vars.steps.Read_Instance.data.code_output.groups_before }}</code>.
+            No security group was changed and no quarantine tag was written.</p>
+            <p>The forensic snapshot
+            <code>{{ vars.steps.Preserve_Evidence.data.SnapshotId }}</code> was
+            taken before the approval was raised and is unaffected -- declining
+            containment does not decline the evidence.</p>
+            <p>Containment can be re-run against this alert at any time, and the
+            case remains open in the Containment phase until it is.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Link Alert
+
+      - name: Contain
+        type: connector
+        connector: aws-extended
+        operation: add_security_group_to_instance
+        config: aws-extended-lab
+        comment: >
+          Despite the name, this operation REPLACES the instance's security-group
+          list -- it resolves the names given to IDs and calls
+          `ModifyInstanceAttribute(Groups=<those ids>)`. Here that is the
+          required behaviour: quarantine is only quarantine if the permissive
+          groups are gone.
+
+          Two ways this returns success having done less than asked: a group
+          name it cannot resolve is dropped from the list rather than raising,
+          and a group in a different VPC is rejected by AWS at a layer whose
+          error is easy to swallow. Neither is detectable from this step's
+          return value, which is why Read Back exists.
+        params:
+          instance_id: "{{ vars.steps.Read_Instance.data.code_output.instance_id }}"
+          group_list: "{{ vars.quarantine_group }}"
+        next: Tag Instance
+
+      - name: Tag Instance
+        type: connector
+        connector: aws-extended
+        operation: add_tag_to_instance
+        config: aws-extended-lab
+        comment: >
+          For humans, cost tooling and the CMDB -- not for the playbook. It runs
+          before the read-back deliberately, so the verification below is
+          checking AWS's account of the network posture rather than this
+          playbook's own bookkeeping. A tag saying `Quarantined` on an instance
+          whose group list says otherwise is a contradiction worth being able to
+          see.
+        params:
+          instance_id: "{{ vars.steps.Read_Instance.data.code_output.instance_id }}"
+          tag_key: "{{ vars.status_tag_key }}"
+          tag_value: "{{ vars.status_tag_value }}"
+        next: Read Back
+
+      - name: Read Back
+        type: connector
+        connector: aws-extended
+        operation: generic_action
+        config: aws-extended-lab
+        comment: >
+          Ask AWS what the instance's groups actually became. This is the step
+          the whole use case turns on, and the one most cloud-containment demos
+          leave out.
+        params:
+          service: ec2
+          api_action: describe_instances
+          payload: '{"Filters": [{"Name": "instance-id", "Values": ["{{ vars.steps.Read_Instance.data.code_output.instance_id }}"]}]}'
+          read_only: true
+        next: Verify Containment
+
+      - name: Verify Containment
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Contained means the group list is *exactly* the quarantine group.
+          "Contains the quarantine group" is not the same claim and is the one
+          that lets a still-permissive group survive alongside it.
+
+          The quarantine group's own rules are checked too. An empty group name
+          proves nothing about the traffic it permits, and a group cloned from
+          `default` carries an allow-all egress rule -- the instance would stop
+          serving and carry on beaconing, which looks exactly like success from
+          the outside.
+        params:
+          code: |
+            response = {{ vars.steps.Read_Back.data | default({}) }}
+            expected = "{{ vars.quarantine_group }}"
+            before = "{{ vars.steps.Read_Instance.data.code_output.groups_before }}"
+
+            instance = {}
+            for reservation in (response.get("Reservations") or []):
+                for candidate in (reservation.get("Instances") or []):
+                    instance = candidate
+                    break
+                if instance:
+                    break
+
+            groups = []
+            group_ids = []
+            for group in (instance.get("SecurityGroups") or []):
+                groups.append(str(group.get("GroupName") or ""))
+                group_ids.append(str(group.get("GroupId") or ""))
+
+            tags = {}
+            for tag in (instance.get("Tags") or []):
+                tags[str(tag.get("Key") or "")] = str(tag.get("Value") or "")
+
+            contained = groups == [expected]
+
+            if contained:
+                verdict = ("the instance is on {0} and nothing else"
+                           .format(expected))
+            elif expected in groups:
+                verdict = ("{0} was attached but {1} other group(s) survived "
+                           "alongside it, so permissive rules may still apply"
+                           .format(expected, len(groups) - 1))
+            elif not groups:
+                verdict = "the instance reports no security groups at all"
+            else:
+                verdict = ("the group list is {0}, which does not include {1} -- "
+                           "the change did not take effect"
+                           .format(", ".join(groups), expected))
+
+            return {
+                "contained": "yes" if contained else "no",
+                "groups_before": before,
+                "groups_after": ", ".join(groups) or "none",
+                "group_ids_after": ", ".join(group_ids) or "none",
+                "verdict": verdict,
+                "status_tag": tags.get("{{ vars.status_tag_key }}", "not written"),
+            }
+        next: Verify Gate
+
+      - name: Verify Gate
+        type: decision
+        conditions:
+          - condition: "{{ vars.steps.Verify_Containment.data.code_output.contained == 'yes' }}"
+            next: Containment Comment
+        default: Containment Failed Comment
+
+      - name: Containment Failed Comment
+        type: create_record
+        module: comments
+        comment: >
+          The failure path exists because the success path is not the interesting
+          one. A containment that half-worked -- quarantine attached alongside a
+          permissive group -- reads as success everywhere except in the group
+          list, and this is where that gets said.
+        fields:
+          content: >
+            <p><b>Containment did NOT take effect -- treat this workload as still
+            reachable.</b></p>
+            <p>{{ vars.steps.Verify_Containment.data.code_output.verdict }}.</p>
+            <p>Requested <code>{{ vars.quarantine_group }}</code>; AWS now
+            reports
+            <code>{{ vars.steps.Verify_Containment.data.code_output.groups_after }}</code>
+            (was
+            <code>{{ vars.steps.Verify_Containment.data.code_output.groups_before }}</code>).</p>
+            <p>The API call returned success, which is why this comment exists.
+            The usual causes are a quarantine group name that does not resolve --
+            dropped from the list and reported only inside the response body,
+            never as a step failure -- or a group in a different
+            VPC to the instance. Contain by hand now; do not re-run and hope.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Link Alert
+
+      - name: Containment Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Workload contained, verified against AWS.</b></p>
+            <p>Instance
+            <code>{{ vars.steps.Read_Instance.data.code_output.instance_id }}</code>
+            moved from
+            <code>{{ vars.steps.Verify_Containment.data.code_output.groups_before }}</code>
+            to
+            <code>{{ vars.steps.Verify_Containment.data.code_output.groups_after }}</code>
+            --
+            {{ vars.steps.Verify_Containment.data.code_output.verdict }}.</p>
+            <p>The group list was read back off AWS after the change rather than
+            inferred from the containment call's return value. The
+            <code>{{ vars.status_tag_key }}</code> tag now reads
+            <code>{{ vars.steps.Verify_Containment.data.code_output.status_tag }}</code>,
+            for humans and inventory tooling -- the group list above is the
+            evidence.</p>
+            <p><code>{{ vars.quarantine_group }}</code> has no ingress and no
+            egress rules, so the instance is unreachable and can reach nothing.
+            The instance is still <b>running</b>: memory, processes and disk are
+            intact for investigation, and snapshot
+            <code>{{ vars.steps.Preserve_Evidence.data.SnapshotId }}</code>
+            captured the disk before the change.</p>
+            <p>To restore, re-attach
+            <code>{{ vars.steps.Verify_Containment.data.code_output.groups_before }}</code>.
+            That list is recorded here and in the evidence comment because AWS
+            does not keep it.</p>
+          incidents: ["{{ vars.steps.Create_Case['@id'] }}"]
+        next: Link Alert
+
+      - name: Link Alert
+        type: update_record
+        module: alerts
+        comment: >
+          The final step, and the reason the test harness can tell a completed
+          run from one that died after creating the case.
+
+          Four branches converge here -- contained, not contained, declined, and
+          containment disabled -- so this step may reference only what every one
+          of them has produced. The containment verdict is deliberately NOT
+          interpolated: it exists on one branch, and a summary field that reads
+          as blank on three of four paths is how a case ends up implying an
+          outcome nobody asserted. The verdict lives in the branch comments,
+          each of which states it unambiguously.
+        record: "{{ vars.input.records[0]['@id'] }}"
+        fields:
+          status: '{{ "AlertStatus" | picklist("Investigating", "@id") }}'
+          escalatedtoincident: '{{ "EscalatedToIncident" | picklist("Yes", "@id") }}'
+          escalationReason: >-
+            Cloud workload
+            {{ vars.steps.Read_Instance.data.code_output.instance_id }}
+            ({{ vars.approval_tag }}={{ vars.steps.Read_Instance.data.code_output.environment }})
+            preserved to snapshot
+            {{ vars.steps.Preserve_Evidence.data.SnapshotId }} before any change.
+            See the case comments for the containment outcome.
+        next: Done
+
+      - name: Done
+        type: end

@@ -1,0 +1,127 @@
+# Intentionally-broken playbook used to demonstrate every static type
+# diagnostic the compiler emits (Tier 1 + Tier 2.3).
+#
+# Run:  python -m cli validate examples/type_validation_scenarios.yaml
+#
+# Each step deliberately misuses one connector param so the resolver
+# fires exactly one diagnostic. Anything that compiles clean here is
+# either (a) a check we don't have yet, or (b) a regression -- re-look.
+
+collection: TypeValidationScenarios
+playbooks:
+  - name: TypeProbes
+    steps:
+      - name: start
+        type: start
+        next: scen_unknown_param
+
+      # ----- Tier 1: unknown param + suggestion ---------------------
+      # `dnspropagation` has `dns_record_type`, not `dnsRecordType`.
+      - name: scen_unknown_param
+        type: connector
+        connector: apivoid
+        operation: dnspropagation
+        params:
+          dnsRecordType: A         # ← unknown, did-you-mean fires
+          req_value: example.com
+        next: scen_picklist_typo
+
+      # ----- Tier 1: picklist enum fuzzy match ---------------------
+      # Allowed: A, AAAA, NS, MX, ...  'AAA' should suggest 'AAAA'.
+      - name: scen_picklist_typo
+        type: connector
+        connector: apivoid
+        operation: dnspropagation
+        params:
+          req_value: example.com
+          dns_record_type: AAA
+        next: scen_picklist_case
+
+      # ----- Tier 1: picklist case-sensitivity --------------------
+      - name: scen_picklist_case
+        type: connector
+        connector: apivoid
+        operation: dnspropagation
+        params:
+          req_value: example.com
+          dns_record_type: aaaa
+        next: scen_int_bad_literal
+
+      # ----- Tier 1: integer param, non-numeric string ------------
+      - name: scen_int_bad_literal
+        type: connector
+        connector: aws-access-analyzer
+        operation: list_analyzers
+        params:
+          type: ACCOUNT
+          size: many              # ← not int-coercible
+        next: scen_bool_bad_value
+
+      # ----- Tier 1: boolean param, non-bool-ish string -----------
+      - name: scen_bool_bad_value
+        type: connector
+        connector: aws-access-analyzer
+        operation: list_analyzers
+        params:
+          type: ACCOUNT
+          assume_role: maybe       # ← not bool-coercible
+        next: scen_jinja_skip
+
+      # ----- Tier 1: Jinja value bypasses static check ------------
+      # No diagnostic should fire -- the value is deferred to runtime.
+      - name: scen_jinja_skip
+        type: connector
+        connector: aws-access-analyzer
+        operation: list_analyzers
+        params:
+          type: ACCOUNT
+          size: "{{ vars.input.params.size }}"
+        next: scen_param_at_top_level
+
+      # ----- Tier 1: connector param written at args top level ----
+      # Resolver auto-lifts into params: with a warning. Compiles ok.
+      - name: scen_param_at_top_level
+        type: connector
+        connector: apivoid
+        operation: dnspropagation
+        req_value: example.com           # ← lifted into params:
+        dns_record_type: A
+        next: scen_unknown_op
+
+      # ----- Tier 1: unknown op + suggestion ----------------------
+      - name: scen_unknown_op
+        type: connector
+        connector: apivoid
+        operation: dnspropogation   # ← typo; suggest 'dnspropagation'
+        params:
+          req_value: example.com
+        next: end
+
+      # ----- Tier 2.3: observed_type ipv4 validator ---------------
+      # abuseipdb.ip_lookup.ip is widget-typed `text` but has been
+      # marked observed_type='ipv4' (seeded for this demo; in
+      # production the live probe lifts this). The resolver now
+      # rejects non-IPv4 literals -- agents that pass 'not-an-ip' or
+      # a hostname get a compile-time diagnostic instead of a runtime
+      # connector failure.
+      - name: scen_ipv4_bad
+        type: connector
+        connector: abuseipdb
+        operation: ip_lookup
+        params:
+          ip: not-an-ip            # ← Tier 2.3 ipv4 validator fires
+          days: 30
+        next: scen_ipv4_jinja_skip
+
+      # Jinja-templated ipv4 value: deferred to runtime -- no diagnostic.
+      - name: scen_ipv4_jinja_skip
+        type: connector
+        connector: abuseipdb
+        operation: ip_lookup
+        params:
+          ip: "{{ vars.input.records.source_ip }}"
+          days: 30
+        next: end
+
+      - name: end
+        type: end

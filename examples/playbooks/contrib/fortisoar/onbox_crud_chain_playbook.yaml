@@ -1,0 +1,58 @@
+collection: PYFSR CRUD Chain
+description: API-triggered self-referencing CRUD chain (create/update/delete + calls itself via /api/triggers). For publish blast-radius testing. Safe to delete.
+visible: true
+
+playbooks:
+  - name: PYFSR CRUD Chain PB
+    is_active: true
+    parameters: [api_body]
+    steps:
+      - name: Start
+        type: api_endpoint
+        route: pyfsr_crud_chain
+        authentication_methods: [""]
+        __triggerLimit: true
+        step_variables:
+          input:
+            params:
+              api_body: "{{vars.request.data}}"
+        next: Create
+      - name: Create
+        type: create_record
+        module: alerts
+        operation: Replace
+        fields:
+        next: Update
+      - name: Update
+        type: update_record
+        record: "{{ vars.steps.Create['@id'] }}"
+        module: alerts
+        fields:
+        next: Delete
+      - name: Delete
+        type: delete_record
+        record: "{{ vars.steps.Create['@id'] }}"
+        next: Recurse?
+      - name: Recurse?
+        type: decision
+        conditions:
+          - display: deeper
+            when: "{{ (vars.input.params.api_body.depth | default(0) | int) > 0 }}"
+            next: Call child
+          - display: stop
+            default: true
+            next: Done
+      - name: Call child
+        type: connector
+        connector: cyops_utilities
+        operation: make_cyops_request
+        params:
+          iri: /api/triggers/1/pyfsr_crud_chain
+          method: POST
+          body:
+            depth: "{{ (vars.input.params.api_body.depth | int) - 1 }}"
+        next: Done
+      - name: Done
+        type: set_variable
+        vars:
+          chain_done: true

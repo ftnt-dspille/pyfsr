@@ -1,0 +1,202 @@
+collection: 10 - SP - ZTPF - FMG Microservices
+description: >-
+  Replacement for the shipped "ZTPF Wait for Condition" runner, which polls with
+  NO delay and NEVER re-checks its attempt budget. Same trigger key, so the
+  existing "Wait for Condition" actions and profile steps are unchanged -- the old
+  playbook (00000000-0000-0000-0000-000000000002) must be set isActive:false so
+  only one fires.
+visible: true
+playbooks:
+- name: '> device step (Running) - ZTPF Wait for Condition (paced)'
+  uuid: 2f9d7c14-6a83-4b52-9e07-c31d5a8b6042
+  is_active: true
+  parameters: []
+  steps:
+  - type: start_on_update
+    name: Start
+    step_variables:
+      input:
+        params: []
+        records:
+        - '{{vars.input.records[0]}}'
+    resource: ztpf_device_automation_steps
+    resources:
+    - ztpf_device_automation_steps
+    __triggerLimit: true
+    triggerOnSource: true
+    fieldbasedtrigger:
+      sort: []
+      limit: 30
+      logic: AND
+      filters:
+      - type: object
+        field: status
+        value: ''
+        _value:
+          '@id': ''
+          display: ''
+          itemValue: ''
+        operator: changed
+      - type: object
+        field: status
+        value: /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+        _value:
+          '@id': /api/3/picklists/b2b405dc-97e6-40cd-98bb-9132e37d5b6d
+          display: Running
+          itemValue: Running
+        operator: eq
+      - type: primitive
+        field: triggerKey
+        value: ZTPF Wait for Condition
+        operator: eq
+        _operator: eq
+    triggerOnReplicate: false
+    next: step_trigger_pre_run
+    top: '40'
+    left: '40'
+  - type: workflow_reference
+    name: step trigger pre_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/1c59904d-0333-48f4-a608-d73a85117e81
+    stepargs_yaml: '{{vars.input.records[0].stepARGS}}'
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: run_automation
+    top: '40'
+    left: '260'
+  - type: set_variable
+    name: run automation
+    vars:
+      max_attempts: |-
+        {%- set args = vars.input.records[0].stepARGS | default('input:\n  max_attempts: 10\n  poll_interval: 30\n') -%}
+        {%- set parsed = args | from_yaml -%}
+        {{ parsed.get('input', {}).get('max_attempts', 10) | default(10) }}
+      poll_interval: |-
+        {%- set args = vars.input.records[0].stepARGS | default('input:\n  max_attempts: 10\n  poll_interval: 30\n') -%}
+        {%- set parsed = args | from_yaml -%}
+        {{ parsed.get('input', {}).get('poll_interval', 30) | default(30) }}
+      device_step_id: '{{vars.input.records[0].id}}'
+    next: check_attempts
+    top: '40'
+    left: '480'
+  - type: decision
+    name: check attempts
+    step_variables: []
+    conditions:
+    - display: poll
+      default: true
+      next: run_proxy_api
+    - display: exceeded
+      when: '{{ vars.max_attempts | int <= 0 }}'
+      next: step_post_run
+    top: '40'
+    left: '700'
+  - type: workflow_reference
+    name: run proxy api
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/41623f62-3a00-5681-8638-8bade02a76e4
+    device_step_id: '{{vars.device_step_id}}'
+    next: check_condition
+    top: '40'
+    left: '920'
+  - type: decision
+    name: check condition
+    step_variables: []
+    conditions:
+    - display: not yet
+      default: true
+      next: pause_between_polls
+    - display: met
+      when: '{{ vars.steps.run_proxy_api.output.output_status.status != "Exceptions Found" }}'
+      next: step_post_run
+    top: '40'
+    left: '1140'
+  # The shipped playbook parsed `poll_interval` and then never used it: `wait and
+  # retry` was a SetVariable that only decremented the counter and routed straight
+  # back to the poll. The loop therefore spun as fast as the proxy call returned --
+  # hammering FortiManager and the device exactly while they were rebooting, and
+  # burning a "60 x 30s = 30 minute" budget in two or three minutes.
+  #
+  # This MUST be the native `Delay` step type (display name "Wait",
+  # 6832e556-b9c7-497a-babe-feda3bd27dbf, script /wf/workflow/tasks/delay), NOT a
+  # connector that sleeps. A code-runner `time.sleep()` blocks a celery worker for
+  # the whole interval; at 100 devices that parks 100 workers for the length of an
+  # upgrade and starves every other playbook on the appliance. The Delay step
+  # deschedules the playbook instead, freeing the worker until it resumes.
+  # `seconds` accepts a string, so a Jinja var works.
+  - type: delay
+    name: pause between polls
+    description: Native Wait step -- DESCHEDULES the playbook so the worker is released
+    delay:
+      days: 0
+      weeks: 0
+      hours: 0
+      minutes: 0
+      seconds: '{{vars.poll_interval}}'
+    next: wait_and_retry
+    top: '200'
+    left: '1140'
+  # Routes to `check attempts`, NOT straight back to the poll. The shipped
+  # playbook wired `wait and retry -> run proxy api`, so `check attempts` was
+  # only ever evaluated once, before the first poll: the counter was decremented
+  # forever and never re-read, making the loop unbounded. A cluster that never
+  # re-forms would poll until FSR's own playbook timeout killed it.
+  - type: set_variable
+    name: wait and retry
+    vars:
+      max_attempts: '{{ vars.max_attempts | int - 1 }}'
+    next: check_attempts
+    top: '200'
+    left: '920'
+  - type: workflow_reference
+    name: step post_run
+    apply_async: false
+    step_variables: []
+    pass_parent_env: false
+    pass_input_record: false
+    workflowReference: /api/3/workflows/9e61ba1a-4371-4d35-825d-9cea8f79feff
+    trigger_step_input_record: '{{vars.input.records[0]}}'
+    next: return
+    top: '40'
+    left: '1360'
+  - type: set_variable
+    name: return
+    vars:
+      output: ''
+      params: '{{vars.input.params}}'
+      status: '{"error":false,"msg":"ok"}'
+    top: '40'
+    left: '1580'
+  annotations:
+  - id: details
+    title: Details
+    body: >-
+      Polls a Proxy API action until its outputStatusTemplate stops reporting
+      "Exceptions Found", waiting `input.poll_interval` seconds between attempts
+      and giving up after `input.max_attempts`. Set both in the step's stepARGS.
+      Any action whose status template flags an exception becomes a retry, which
+      is how the post-upgrade HA rejoin gate rides out the reboot window
+      (0 or 1 members answering reads as "not yet", not as a failure).
+    position:
+      top: 340
+      left: 140
+      width: 340
+  - id: changelog
+    title: Changelog
+    body: >-
+      created to replace the shipped ZTPF Wait for Condition runner
+      (00000000-0000-0000-0000-000000000002), which had two defects: (1)
+      `poll_interval` was parsed but never used, so the retry loop had NO delay
+      and spun at proxy-call speed; (2) `wait and retry` routed straight back to
+      `run proxy api`, bypassing `check attempts`, so the attempt budget was
+      evaluated once and the loop was effectively unbounded. Same trigger key --
+      deactivate the old playbook so only one fires.
+    position:
+      top: 340
+      left: 500
+      width: 340

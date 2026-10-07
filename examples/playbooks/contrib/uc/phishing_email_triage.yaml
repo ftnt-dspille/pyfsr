@@ -1,0 +1,1367 @@
+# UC-01 -- Reported Phishing Email Triage.
+#
+# The volume problem: a "report phish" button produces hundreds of submissions a
+# week, most of them marketing, and the handful that matter are the ones with no
+# URL and no attachment at all. A reputation lookup cannot triage this queue --
+# the dangerous mail in a BEC attempt contains nothing for VirusTotal to score.
+#
+# So this playbook leads with the two techniques that work on the mail itself,
+# and treats reputation as corroboration rather than the verdict:
+#
+#   Start (manual, on an alert carrying the reported email)
+#     -> Phishing Config       set_variable  -- protected domains, brands, VIPs, bars
+#     -> Read Email            set_variable  -- sender/subject/recipient scalars
+#     -> Email Gate            decision
+#          no sender  -> No Email Comment -> end
+#     -> Authenticate Sender   code_snippet  -- SPF/DKIM/DMARC + envelope mismatch
+#     -> Detect Impersonation  code_snippet  -- lookalike domain + display-name abuse
+#     -> Extract URLs          code_snippet  -- UNWRAP rewriter links, then extract
+#     -> URL Gate              decision
+#          has url    -> VirusTotal URL (connector)
+#     -> Find Campaign         find_record   -- other reports from the same domain
+#     -> Summarise Campaign    set_variable  -- flatten recipients to scalars
+#     -> Score Phishing        code_snippet  -- weighted verdict over every signal
+#     -> Apply Verdict         update_record -- severity + classification + status
+#     -> Verdict Comment       create_record -- the analyst-facing writeup
+#     -> Verdict Gate          decision
+#          benign     -> Close As Benign -> Benign Comment -> end
+#          actionable -> Find Existing Indicators -> Assess Indicators
+#                     -> Sender Indicator Gate  (refresh if known, else mint)
+#                     -> URL Indicator Gate     (refresh if known, else mint)
+#                     -> Containment Target (envelope address, lower-cased)
+#                     -> Read Gateway Block List -> block if absent
+#                     -> Verify Gateway Block (read back, assert)
+#                     -> Containment Task -> Handoff Comment -> end
+#
+# Three design decisions worth defending out loud:
+#
+# 1. URLs are unwrapped BEFORE enrichment. Mail security gateways rewrite links,
+#    so the URL sitting in the body belongs to the *rewriter*, not the attacker.
+#    Scoring it reports on a reputable vendor and misses the payload entirely.
+#
+# 2. Containment is a gateway block, and what remains is honestly a task. The
+#    sender is blocked on FortiMail and the block is verified by reading the
+#    list back. Removing copies ALREADY DELIVERED is not automated because the
+#    connector cannot do it -- 26 operations, none of which touches a mailbox.
+#    A gateway sits in front of the mailboxes and has no reach into them, so
+#    that is architecture rather than a missing integration, and the task says
+#    so instead of implying someone will get to it.
+#
+# 3. The block reads before it writes. FortiMail's block_sender_address is NOT
+#    idempotent -- a repeat block returns HTTP 500 / errorNumber -5. So the
+#    second report of the same campaign, the case this playbook exists for,
+#    would be the one that errors.
+#
+# Connectors used: virustotal, code-snippet and fortinet-fortimail, all
+# configured and healthy. Live-verified on FortiSOAR 8.0.0.
+
+collection: Demo Library - Phishing Response
+description: >
+  Triage a reported phishing email on the evidence in the message itself:
+  authenticate the sender, detect domain and display-name impersonation, unwrap
+  rewritten links before enriching them, size the campaign, then score, classify
+  and hand off for containment.
+visible: true
+
+playbooks:
+  - name: Triage Reported Phishing Email
+    description: >
+      One-click phishing verdict from header authentication, impersonation
+      analysis, unwrapped URL reputation and campaign scope.
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        module: alerts
+        button_label: "Triage Phishing Email"
+        next: Phishing Config
+
+      - name: Phishing Config
+        type: set_variable
+        comment: >
+          protected_domains are the domains an attacker would want to imitate --
+          your own, plus any you send mail as. protected_brands are the names a
+          display name might claim; internal function names like Payroll matter
+          more than the company name, because that is what BEC actually uses.
+
+          lookalike_max_distance is how many character edits from a protected
+          domain still counts as a lookalike. 2 catches the realistic typosquats
+          without flagging every unrelated short domain.
+        vars:
+          protected_domains: "example-corp.com,mail.example-corp.com"
+          protected_brands: "Example Corp,ExampleCorp,IT Helpdesk,Payroll,Finance"
+          vip_users: "cfo@example-corp.com,ceo@example-corp.com"
+          campaign_escalate_at: "3"
+          vt_malicious_at: "3"
+          lookalike_max_distance: "2"
+          actionable_at: "35"
+          # The FortiMail session profile the sender block is written to. Named
+          # here rather than in the step so a gateway whose profiles are called
+          # something else is one edit, and so the value is visible next to the
+          # rest of the tuning. `get_profile_name(Session)` lists what a gateway
+          # actually has; the one carrying `isReferenced: 1` is the one attached
+          # to a policy, and blocking on any other profile succeeds and contains
+          # nothing.
+          mail_session_profile: "Inbound_Session"
+          # The name of the VirusTotal connector configuration to score links
+          # against. Named here for the same reason as the session profile: a
+          # second appliance names its configurations differently, or has none
+          # at all, and that must be one edit rather than a step rewrite.
+          # The step also runs with ignore_errors, because reputation is
+          # corroboration in this playbook and a missing configuration must not
+          # be able to stop a triage that scores impersonation and
+          # authentication on its own evidence.
+          vt_config: "test"
+          malicious_at: "60"
+        next: Read Email
+
+      - name: Read Email
+        type: set_variable
+        comment: >
+          senderEmailAddress is the parsed header value and emailFrom is the raw
+          From line; ingestion sources populate one or the other, so fall back.
+          default('', true) is load-bearing -- the two-argument form is what
+          catches None, and default('') alone leaves None in place and kills the
+          length test in the next gate.
+        vars:
+          sender: >-
+            {{ vars.input.records[0].senderEmailAddress | default('', true)
+               or vars.input.records[0].emailFrom | default('', true) }}
+          subject: "{{ vars.input.records[0].emailSubject | default('', true) }}"
+          recipient: >-
+            {{ vars.input.records[0].recipientEmailAddress | default('', true)
+               or vars.input.records[0].emailTo | default('', true) }}
+        next: Email Gate
+
+      - name: Email Gate
+        type: decision
+        comment: >
+          Without a sender there is nothing to authenticate, nothing to compare
+          against the protected domains and no campaign key. Refusing is the
+          correct outcome; guessing a verdict from the body alone is how a
+          phishing queue loses the analyst's trust.
+        conditions:
+          - display: has-sender
+            when: "{{ vars.sender | default('', true) | length > 0 }}"
+            next: Authenticate Sender
+          - display: Else
+            default: true
+            next: No Email Comment
+
+      - name: No Email Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Not triaged as email.</b> This alert carries no sender address
+            in <code>senderEmailAddress</code> or <code>emailFrom</code>, so
+            header authentication, impersonation analysis and campaign scoping
+            all have nothing to work from. Triage it as a generic alert
+            instead.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done No Email
+
+      - name: Done No Email
+        type: end
+
+      # ---------------------------------------------------------------- signals
+
+      - name: Authenticate Sender
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Authentication results are the cheapest high-quality signal in the
+          message and cost no API call. Two distinct checks live here.
+
+          First, the gateway's own verdicts: Authentication-Results carries spf=,
+          dkim= and dmarc=. A dmarc=fail means the domain owner published a
+          policy and this message violated it -- that is the domain owner
+          telling you directly that they did not send it.
+
+          Second, envelope-versus-header agreement. Return-Path is where bounces
+          go and is set by whoever actually injected the message; From is display
+          text the sender chooses freely. A mismatch between them is ordinary for
+          mailing lists but is also exactly how header spoofing looks, so it is
+          scored as weak corroboration rather than proof. Reply-To pointing
+          somewhere other than the sender is the classic reply-hijack setup.
+        params:
+          code: |
+            import re
+
+            headers = '''{{ vars.input.records[0].emailHeaders | default('', true) }}'''
+            sender = '''{{ vars.sender }}'''.strip().lower()
+
+            # Header lookups must NOT depend on line breaks surviving.
+            # The stored emailHeaders field holds real newlines, but they do not
+            # survive templating into this snippet -- so the previous
+            # `^return-path:...$` and `^reply-to:...$` anchored matches silently
+            # found nothing on every message, and the envelope-mismatch and
+            # reply-hijack checks never fired at all. The unanchored
+            # Authentication-Results match worked throughout, which is exactly
+            # why the gap went unnoticed: the step looked like it was parsing
+            # headers correctly.
+            #
+            # This reads a header value as "everything up to the next
+            # header-looking token", which behaves the same whether the block
+            # arrives as separate lines or as one run-on string.
+            def domain_of(address):
+                if "@" in address:
+                    return address.rsplit("@", 1)[1].strip().strip(">").lower()
+                return ""
+
+            sender_domain = domain_of(sender)
+
+            # Prefer the value the platform already parsed, if ingestion set it.
+            declared_domain = '''{{ vars.input.records[0].senderDomain | default('', true) }}'''.strip().lower()
+            if declared_domain:
+                sender_domain = declared_domain
+
+            lowered = headers.lower()
+
+            def header_value(name):
+                """Read a header value without depending on line breaks.
+
+                The stored emailHeaders field holds real newlines, but they do
+                not survive templating into this snippet -- so the previous
+                `^return-path:...$` and `^reply-to:...$` anchored matches
+                silently found nothing on every message, and the envelope and
+                reply-hijack checks never fired at all. The unanchored
+                Authentication-Results match worked throughout, which is exactly
+                why the gap went unnoticed: the step looked like it was parsing
+                headers correctly.
+
+                This takes everything up to the next header-looking token, which
+                behaves the same whether the block arrives as separate lines or
+                as one run-on string.
+                """
+                found = re.search(
+                    name + r":\s*(.*?)(?=\s+[a-z-]+:\s|$)", lowered, re.DOTALL
+                )
+                return found.group(1).strip() if found else ""
+
+            def verdict_for(mechanism):
+                # Matches "spf=pass", "dkim = fail", "dmarc=none" in either the
+                # Authentication-Results header or a Received-SPF line.
+                found = re.search(mechanism + r"\s*=\s*([a-z]+)", lowered)
+                if found:
+                    return found.group(1)
+                return "absent"
+
+            spf = verdict_for("spf")
+            dkim = verdict_for("dkim")
+            dmarc = verdict_for("dmarc")
+
+            BAD = ("fail", "softfail", "permerror", "temperror")
+            failures = [
+                f"{label}={value}"
+                for label, value in (("SPF", spf), ("DKIM", dkim), ("DMARC", dmarc))
+                if value in BAD
+            ]
+
+            # Envelope sender. The platform has a returnPath field, but the header
+            # is authoritative when both are present.
+            return_path = '''{{ vars.input.records[0].returnPath | default('', true) }}'''.strip().lower()
+            header_return = header_value("return-path")
+            if header_return:
+                return_path = header_return
+            return_domain = domain_of(return_path)
+
+            envelope_mismatch = ""
+            if return_domain and sender_domain and return_domain != sender_domain:
+                envelope_mismatch = "yes"
+
+            reply_to = header_value("reply-to")
+            reply_domain = domain_of(reply_to)
+
+            reply_mismatch = ""
+            if reply_domain and sender_domain and reply_domain != sender_domain:
+                reply_mismatch = "yes"
+
+            # The display name as written on the From line, e.g. the Payroll part
+            # of: Payroll <billing@example.net>
+            raw_from = '''{{ vars.input.records[0].emailFrom | default('', true) }}'''.strip()
+            display_name = ""
+            if "<" in raw_from:
+                display_name = raw_from.split("<", 1)[0].strip().strip('"').strip()
+
+            return {
+                "sender_domain": sender_domain or "unknown",
+                "spf": spf,
+                "dkim": dkim,
+                "dmarc": dmarc,
+                "auth_failures": failures,
+                "auth_failure_count": len(failures),
+                "failure_summary": ", ".join(failures) if failures else "none",
+                "envelope_mismatch": envelope_mismatch,
+                "return_domain": return_domain or "n/a",
+                "reply_mismatch": reply_mismatch,
+                "reply_domain": reply_domain or "n/a",
+                "display_name": display_name or "none",
+                "headers_present": "yes" if headers.strip() else "",
+            }
+        next: Detect Impersonation
+
+      - name: Detect Impersonation
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          This is the step that earns the playbook its keep, because it is the
+          only one that fires on a well-crafted BEC attempt: no URL, no
+          attachment, a freshly registered domain with clean reputation, and
+          nothing whatsoever for a reputation service to say about it.
+
+          Two techniques.
+
+          Lookalike domain: normalise the well-known homoglyph substitutions
+          (rn for m, 1/l/i, 0/o, vv for w) and then measure edit distance to
+          each protected domain. A distance inside the bar, or an exact match
+          after normalisation, or the same second-level name under a different
+          suffix, is a deliberate imitation -- these are not typing accidents
+          when they arrive with a payment request.
+
+          Display-name abuse: the From line claims a protected brand or an
+          internal function while the domain is external. Mobile mail clients
+          show the display name and hide the address, which is why this works.
+
+          Note the deliberate exemption: a message genuinely FROM a protected
+          domain is not impersonating it. Without that check every internal mail
+          scores as a perfect lookalike at distance zero.
+        params:
+          code: |
+            def normalise(text):
+                # Fold the substitutions that exist to fool a human reader.
+                text = text.lower()
+                text = text.replace("rn", "m")
+                text = text.replace("vv", "w")
+                text = text.replace("1", "l")
+                text = text.replace("0", "o")
+                text = text.replace("5", "s")
+                text = text.replace("i", "l")
+                return text
+
+            def edit_distance(left, right):
+                # Plain Levenshtein.
+                previous = list(range(len(right) + 1))
+                for i, source in enumerate(left, start=1):
+                    current = [i]
+                    for j, target in enumerate(right, start=1):
+                        current.append(min(
+                            previous[j] + 1,                              # deletion
+                            current[j - 1] + 1,                           # insertion
+                            previous[j - 1] + (source != target),         # substitution
+                        ))
+                    previous = current
+                return previous[-1]
+
+            sender_domain = '''{{ vars.steps.Authenticate_Sender.data.code_output.sender_domain }}'''.strip().lower()
+            display_name = '''{{ vars.steps.Authenticate_Sender.data.code_output.display_name }}'''.strip()
+            bar = int('''{{ vars.lookalike_max_distance }}''' or 2)
+
+            protected = [e.strip().lower() for e in '''{{ vars.protected_domains }}'''.split(",") if e.strip()]
+            brands = [e.strip() for e in '''{{ vars.protected_brands }}'''.split(",") if e.strip()]
+
+            # A message actually from a protected domain is internal, not spoofed.
+            is_internal = sender_domain in protected
+
+            technique = ""
+            candidates = [d for d in protected if d != sender_domain]
+            if candidates:
+                nearest = min(candidates, key=lambda d: edit_distance(sender_domain, d))
+                distance = edit_distance(sender_domain, nearest)
+            else:
+                nearest, distance = "", 99
+
+            # Confidence separates deliberate imitation from coincidence. A domain
+            # that becomes a protected one under homoglyph folding, or reuses the
+            # same second-level name under another suffix, was registered on
+            # purpose. A domain merely two edits away might be unrelated, so it is
+            # scored lower and left for a human to confirm.
+            lookalike = ""
+            confidence = "none"
+            if not is_internal and nearest:
+                normal_sender = normalise(sender_domain)
+                normal_target = normalise(nearest)
+                sender_label = sender_domain.split(".")[0]
+                target_label = nearest.split(".")[0]
+                if normal_sender == normal_target:
+                    lookalike = "yes"
+                    confidence = "high"
+                    technique = "homoglyph substitution"
+                elif sender_label == target_label and sender_domain != nearest:
+                    lookalike = "yes"
+                    confidence = "high"
+                    technique = "same name under a different suffix"
+                elif distance <= bar:
+                    lookalike = "yes"
+                    confidence = "medium"
+                    technique = "character edit within distance " + str(distance)
+
+            # Display-name abuse: claims a protected name, sends from outside.
+            claimed = ""
+            if display_name and not is_internal:
+                lowered_display = display_name.lower()
+                claimed = next(
+                    (b for b in brands if b.lower() in lowered_display), ""
+                )
+
+            impersonation = "none"
+            if lookalike and claimed:
+                impersonation = "domain and display name"
+            elif lookalike:
+                impersonation = "lookalike domain"
+            elif claimed:
+                impersonation = "display name"
+
+            return {
+                "is_internal": "yes" if is_internal else "",
+                "lookalike": lookalike,
+                "nearest_domain": nearest or "n/a",
+                "distance": distance if distance < 99 else -1,
+                "technique": technique or "n/a",
+                "claimed_brand": claimed or "none",
+                "impersonation": impersonation,
+                "confidence": confidence,
+                "impersonating": "yes" if impersonation != "none" else "",
+            }
+        next: Extract URLs
+
+      - name: Extract URLs
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Unwrapping is the point of this step, not extraction.
+
+          By the time a reported message reaches the SOC its links have usually
+          been rewritten by a mail security gateway, so the href in the body
+          points at the gateway vendor and carries the real destination as an
+          encoded parameter. Enriching what you find without unwrapping first
+          produces a clean verdict on a reputable vendor's domain and never
+          looks at the attacker's infrastructure at all. It is the most common
+          way an automated phishing flow reports a false negative.
+
+          Handled here: the ?url= style used by link-rewriting gateways, the
+          urldefense v2 form with its dash-and-underscore transposition, and the
+          generic single-parameter redirectors. Anything unrecognised falls
+          through unchanged rather than being dropped.
+        params:
+          code: |
+            import re
+            from urllib.parse import unquote
+
+            # Decoding is applied twice wherever it is used below, because
+            # link rewriters routinely double-encode the destination.
+
+            body = " ".join([
+                '''{{ vars.input.records[0].emailBody | default('', true) }}''',
+                '''{{ vars.input.records[0].reporterEmailBody | default('', true) }}''',
+                '''{{ vars.input.records[0].url | default('', true) }}''',
+                '''{{ vars.input.records[0].description | default('', true) }}''',
+            ])
+
+            # Harvest attribute values FIRST. Almost every link in a real message
+            # lives inside href="...", and stripping tags before extracting
+            # deletes the attribute along with the tag -- which finds nothing at
+            # all on exactly the mail that matters. Only then strip tags and sweep
+            # the visible text for links that were pasted rather than linked.
+            found = re.findall(
+                r"(?:href|src)\s*=\s*[\"']([^\"']+)[\"']", body, re.IGNORECASE
+            )
+            visible = re.sub(r"<[^>]+>", " ", body)
+            found += re.findall(r"https?://[^\s\"'<>\)\]]+", visible)
+
+            # Drop mailto:, tel: and relative hrefs -- they are not payload links.
+            found = [c for c in found if c.lower().startswith("http")]
+
+            # Domains that only ever appear because something rewrote the link.
+            wrapper_hints = ("safelinks", "urldefense", "protect", "clicktime",
+                             "proofpoint", "mimecast", "barracuda")
+
+            def unwrap(candidate):
+                lowered = candidate.lower()
+                if not any(hint in lowered for hint in wrapper_hints):
+                    return candidate, ""
+
+                # Form one: the destination rides in a query parameter.
+                for key in ("url=", "u=", "target=", "q="):
+                    marker = lowered.find("?" + key)
+                    if marker < 0:
+                        marker = lowered.find("&" + key)
+                    if marker >= 0:
+                        tail = candidate[marker + 1 + len(key):]
+                        # Stop at the next parameter boundary.
+                        tail = tail.split("&")[0]
+                        decoded = unquote(unquote(tail))
+                        if decoded.lower().startswith("http"):
+                            return decoded, candidate
+                        # urldefense v2 transposes these two characters.
+                        swapped = decoded.replace("-", "%").replace("_", "/")
+                        swapped = unquote(swapped)
+                        if swapped.lower().startswith("http"):
+                            return swapped, candidate
+
+                # Form two: the destination is appended after a marker segment.
+                for marker in ("/__", "/https:/", "/http:/"):
+                    position = candidate.find(marker)
+                    if position >= 0:
+                        tail = candidate[position + len(marker):]
+                        tail = tail.split(";")[0].split("__")[0]
+                        if not tail.lower().startswith("http"):
+                            tail = "https://" + tail.lstrip("/")
+                        return unquote(tail), candidate
+
+                return candidate, candidate
+
+            unwrapped = []
+            wrappers = []
+            for candidate in found:
+                destination, wrapper = unwrap(candidate.rstrip(".,;"))
+                if destination not in unwrapped:
+                    unwrapped.append(destination)
+                if wrapper and wrapper not in wrappers:
+                    wrappers.append(wrapper)
+
+            def host_of(link):
+                stripped = re.sub(r"^https?://", "", link)
+                return stripped.split("/")[0].split(":")[0].split("@")[-1].lower()
+
+            hosts = []
+            for link in unwrapped:
+                host = host_of(link)
+                if host and host not in hosts:
+                    hosts.append(host)
+
+            first_url = unwrapped[0] if unwrapped else ""
+
+            return {
+                "urls": unwrapped,
+                "url_count": len(unwrapped),
+                "hosts": hosts,
+                "hosts_joined": ", ".join(hosts) if hosts else "none",
+                "first_url": first_url,
+                "first_host": host_of(first_url) if first_url else "",
+                "was_wrapped": "yes" if wrappers else "",
+                "wrapper_count": len(wrappers),
+                "wrapped_original": wrappers[0] if wrappers else "n/a",
+                "attachments": '''{{ vars.input.records[0].fileNames | default('', true) }}''',
+            }
+        next: URL Gate
+
+      - name: URL Gate
+        type: decision
+        comment: >
+          Reputation is corroboration here, not the verdict. A BEC attempt has
+          no link at all and skips this branch entirely -- and still reaches a
+          Malicious verdict on the impersonation evidence alone, which is the
+          behaviour the test suite asserts.
+        conditions:
+          - display: has-url
+            when: "{{ vars.steps.Extract_URLs.data.code_output.first_url | default('', true) | length > 0 }}"
+            next: Reputation Gate
+          - display: Else
+            default: true
+            next: Find Campaign
+
+      - name: Reputation Gate
+        type: decision
+        comment: >
+          Whether this appliance can score reputation at all. An appliance with
+          no VirusTotal configuration fails the lookup with INTEGRATION-12, and
+          a failed step flips the run's status to `finished with error` while
+          the rest of the branch is still executing -- so a harness that waits
+          for a terminal state returns mid-flight and reads a half-built world.
+          Skipping the step outright is what keeps the run clean.
+
+          Blank `vt_config` therefore means "no reputation service here", not
+          "use the default configuration". The deploy step resolves the knob
+          against the target appliance, so the committed default stays the
+          full-enrichment one.
+        conditions:
+          - display: vt-configured
+            when: "{{ vars.vt_config | default('', true) | length > 0 }}"
+            next: VirusTotal URL
+          - display: Else
+            default: true
+            next: Find Campaign
+
+      - name: VirusTotal URL
+        type: connector
+        connector: virustotal
+        operation: query_url
+        config: "{{ vars.vt_config }}"
+        ignore_errors: true
+        comment: >
+          Scored against the UNWRAPPED destination from the previous step. Point
+          this at the raw body link instead and the demo reports on a mail
+          gateway vendor's reputation.
+
+          ignore_errors covers the case the gate above cannot: a configuration
+          that exists but whose lookup fails -- quota exhausted, key revoked,
+          service unreachable. Reputation is corroboration in this playbook and
+          never the verdict, so scoring defaults the missing result to {} and
+          reports the link as unscored. The run reaches a defensible answer on
+          impersonation and authentication rather than dying on an enrichment
+          it declares optional.
+        params:
+          url: "{{ vars.steps.Extract_URLs.data.code_output.first_url }}"
+        next: Find Campaign
+
+      - name: Find Campaign
+        type: find_record
+        module: alerts
+        comment: >
+          Campaign scope: every other reported message from the same sending
+          domain. Prevalence is a signal in its own right -- one recipient may be
+          targeted, but fifty is a campaign in progress and changes both the
+          urgency and the size of the purge.
+
+          The sentinel matters. An empty filter value matches every record in
+          the module, so an alert with no resolvable domain would otherwise
+          report the entire queue as its own campaign.
+        filters:
+          - field: senderDomain
+            operator: eq
+            value: >-
+              {{ vars.steps.Authenticate_Sender.data.code_output.sender_domain
+                 | default('', true) or '__no_domain__' }}
+        limit: 100
+        next: Summarise Campaign
+
+      - name: Summarise Campaign
+        type: set_variable
+        comment: >
+          find_record's step result IS the row list at runtime -- there is no
+          .data and no hydra envelope. Flattening to scalars here rather than
+          handing structures to the snippet avoids the quoting problems that
+          come with embedding JSON in a code body.
+        vars:
+          campaign_size: "{{ vars.steps.Find_Campaign | default([], true) | length }}"
+          campaign_recipients: >-
+            {{ vars.steps.Find_Campaign | default([], true)
+               | selectattr('recipientEmailAddress')
+               | map(attribute='recipientEmailAddress') | unique | join(',') }}
+          campaign_subjects: >-
+            {{ vars.steps.Find_Campaign | default([], true)
+               | selectattr('emailSubject')
+               | map(attribute='emailSubject') | unique | join(' || ') }}
+        next: Score Phishing
+
+      - name: Score Phishing
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          One block, weighted deliberately, so the reasoning can be argued with
+          rather than reverse-engineered.
+
+          Impersonation carries the most weight (up to 55) because it is
+          intent-bearing: nobody registers a homoglyph of your domain by
+          accident. Authentication failures are worth up to 30 -- a DMARC fail is
+          the domain owner disowning the message. Reputation contributes at most
+          35 and only when there was a link to score, which keeps a BEC attempt
+          from scoring zero. Campaign spread and a VIP recipient add urgency
+          rather than evidence, so they are capped low.
+
+          A message that is genuinely internal and passes authentication is
+          pushed down hard, because the expensive false positive in this use case
+          is quarantining your own payroll notification.
+        params:
+          code: |
+            auth = {{ vars.steps.Authenticate_Sender.data.code_output | default({}) }}
+            spoof = {{ vars.steps.Detect_Impersonation.data.code_output | default({}) }}
+            links = {{ vars.steps.Extract_URLs.data.code_output | default({}) }}
+            reputation = {{ vars.steps.VirusTotal_URL.data | default({}) }}
+
+            stats = (((reputation or {}).get("attributes") or {}).get("last_analysis_stats") or {})
+            vt_malicious = int(stats.get("malicious") or 0)
+            vt_suspicious = int(stats.get("suspicious") or 0)
+            scored_a_link = "yes" if stats else ""
+
+            score = 0
+            reasons = []
+
+            # --- intent: impersonation, up to 55 -----------------------------
+            # A high-confidence lookalike is enough on its own to reach the
+            # actionable bar, which is the behaviour that makes this playbook
+            # useful against BEC: such a message often has no link, no attachment,
+            # and passes its own SPF and DKIM because the attacker owns the domain.
+            if spoof.get("lookalike"):
+                if spoof.get("confidence") == "high":
+                    score = score + 40
+                else:
+                    score = score + 25
+                reasons.append(
+                    "the sending domain imitates " + str(spoof.get("nearest_domain"))
+                    + " by " + str(spoof.get("technique"))
+                )
+            if spoof.get("claimed_brand") not in ("none", None, ""):
+                score = score + 15
+                reasons.append(
+                    "the display name claims " + str(spoof.get("claimed_brand"))
+                    + " from an external domain"
+                )
+
+            # --- provenance: authentication, up to 30 ------------------------
+            failure_count = int(auth.get("auth_failure_count") or 0)
+            if str(auth.get("dmarc")) in ("fail", "softfail"):
+                score = score + 20
+                reasons.append("DMARC failed, so the domain owner disowns it")
+            elif failure_count:
+                score = score + 10 * failure_count
+                reasons.append("authentication problems: " + str(auth.get("failure_summary")))
+            if auth.get("envelope_mismatch"):
+                score = score + 5
+                reasons.append(
+                    "the bounce domain " + str(auth.get("return_domain"))
+                    + " differs from the sending domain"
+                )
+            if auth.get("reply_mismatch"):
+                score = score + 10
+                reasons.append(
+                    "replies would go to " + str(auth.get("reply_domain"))
+                    + " instead of the sender"
+                )
+
+            # --- corroboration: reputation, up to 35 -------------------------
+            bar = int('''{{ vars.vt_malicious_at }}''' or 3)
+            if vt_malicious >= bar:
+                score = score + 35
+                reasons.append(
+                    str(vt_malicious) + " engines call the unwrapped link malicious"
+                )
+            elif vt_malicious or vt_suspicious:
+                score = score + 15
+                reasons.append(
+                    "the unwrapped link has "
+                    + str(vt_malicious) + " malicious and "
+                    + str(vt_suspicious) + " suspicious detections"
+                )
+            if links.get("was_wrapped"):
+                reasons.append(
+                    "the link was rewritten by a mail gateway and was unwrapped "
+                    "before scoring"
+                )
+
+            # --- urgency: spread and target ----------------------------------
+            spread = int('''{{ vars.campaign_size }}''' or 0)
+            spread_bar = int('''{{ vars.campaign_escalate_at }}''' or 3)
+            campaign = ""
+            if spread >= spread_bar:
+                score = score + 10
+                campaign = "yes"
+                reasons.append(
+                    str(spread) + " reports share this sending domain"
+                )
+
+            vips = [e.strip().lower() for e in '''{{ vars.vip_users }}'''.split(",") if e.strip()]
+            recipients = '''{{ vars.campaign_recipients }}'''.lower()
+            hit_vip = next((p for p in vips if p in recipients), "")
+            if hit_vip:
+                score = score + 10
+                reasons.append("a monitored high-value recipient was targeted")
+
+            # --- the expensive false positive --------------------------------
+            if spoof.get("is_internal") and not failure_count:
+                score = score - 30
+                reasons.append(
+                    "it genuinely originates from a protected domain and passes "
+                    "authentication"
+                )
+
+            if score < 0:
+                score = 0
+
+            actionable_bar = int('''{{ vars.actionable_at }}''' or 35)
+            malicious_bar = int('''{{ vars.malicious_at }}''' or 60)
+
+            if score >= malicious_bar:
+                verdict = "Malicious"
+                severity = "Critical" if campaign else "High"
+                classification = "Phishing"
+            elif score >= actionable_bar:
+                verdict = "Suspicious"
+                severity = "Medium"
+                classification = "Phishing"
+            else:
+                verdict = "Benign"
+                severity = "Low"
+                classification = "Non-Phishing"
+
+            headline = "no notable signals"
+            if reasons:
+                headline = reasons[0]
+
+            return {
+                "score": score,
+                "verdict": verdict,
+                "severity": severity,
+                "classification": classification,
+                "actionable": "yes" if score >= actionable_bar else "",
+                "campaign": campaign,
+                "campaign_size": spread,
+                "vip_targeted": hit_vip or "none",
+                "vt_malicious": vt_malicious,
+                "vt_suspicious": vt_suspicious,
+                "scored_a_link": scored_a_link,
+                "reasons": reasons,
+                "rationale": "; ".join(reasons) if reasons else headline,
+                "signal_count": len(reasons),
+            }
+        next: Apply Verdict
+
+      - name: Apply Verdict
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        comment: >
+          severity and emailClassification are only known at runtime, so both go
+          through the picklist filter. Writing the bare name fails validation.
+        fields:
+          severity: '{{ "Severity" | picklist(vars.steps.Score_Phishing.data.code_output.severity, "@id") }}'
+          emailClassification: '{{ "Email Classification" | picklist(vars.steps.Score_Phishing.data.code_output.classification, "@id") }}'
+          status: '{{ "AlertStatus" | picklist("Investigating", "@id") }}'
+          senderDomain: "{{ vars.steps.Authenticate_Sender.data.code_output.sender_domain }}"
+        next: Verdict Comment
+
+      - name: Verdict Comment
+        type: create_record
+        module: comments
+        comment: >
+          The writeup exists so a human can disagree with the verdict. Every
+          signal that moved the score is named, including the reputation lookup
+          when it contributed nothing -- an analyst needs to know the difference
+          between "the link was clean" and "there was no link".
+        fields:
+          content: >
+            <p><b>Phishing triage complete --
+            {{ vars.steps.Score_Phishing.data.code_output.verdict }}</b>
+            ({{ vars.steps.Score_Phishing.data.code_output.score }}/100,
+            classified
+            <b>{{ vars.steps.Score_Phishing.data.code_output.classification }}</b>,
+            severity
+            <b>{{ vars.steps.Score_Phishing.data.code_output.severity }}</b>).</p>
+            <p><b>Why:</b>
+            {{ vars.steps.Score_Phishing.data.code_output.rationale }}.</p>
+            <p><b>Sender authentication:</b> SPF
+            {{ vars.steps.Authenticate_Sender.data.code_output.spf }}, DKIM
+            {{ vars.steps.Authenticate_Sender.data.code_output.dkim }}, DMARC
+            {{ vars.steps.Authenticate_Sender.data.code_output.dmarc }}
+            (failures: {{ vars.steps.Authenticate_Sender.data.code_output.failure_summary }}).
+            Bounce domain
+            {{ vars.steps.Authenticate_Sender.data.code_output.return_domain }},
+            reply-to domain
+            {{ vars.steps.Authenticate_Sender.data.code_output.reply_domain }}.</p>
+            <p><b>Impersonation:</b>
+            {{ vars.steps.Detect_Impersonation.data.code_output.impersonation }}
+            -- nearest protected domain
+            {{ vars.steps.Detect_Impersonation.data.code_output.nearest_domain }}
+            at edit distance
+            {{ vars.steps.Detect_Impersonation.data.code_output.distance }}
+            ({{ vars.steps.Detect_Impersonation.data.code_output.technique }},
+            confidence
+            {{ vars.steps.Detect_Impersonation.data.code_output.confidence }});
+            display name claims
+            {{ vars.steps.Detect_Impersonation.data.code_output.claimed_brand }}.</p>
+            <p><b>Links:</b>
+            {{ vars.steps.Extract_URLs.data.code_output.url_count }} found on
+            host(s) {{ vars.steps.Extract_URLs.data.code_output.hosts_joined }}.
+            Rewritten by a gateway:
+            {{ vars.steps.Extract_URLs.data.code_output.was_wrapped | default('no', true) }}
+            (original
+            {{ vars.steps.Extract_URLs.data.code_output.wrapped_original }}).
+            Reputation of the unwrapped destination:
+            {{ vars.steps.Score_Phishing.data.code_output.vt_malicious }} malicious,
+            {{ vars.steps.Score_Phishing.data.code_output.vt_suspicious }} suspicious
+            {% if not vars.steps.Score_Phishing.data.code_output.scored_a_link %}
+            -- <i>no link was present, so reputation contributed nothing and the
+            verdict rests on the message itself</i>{% endif %}.</p>
+            <p><b>Campaign:</b>
+            {{ vars.steps.Score_Phishing.data.code_output.campaign_size }}
+            report(s) share the sending domain
+            {{ vars.steps.Authenticate_Sender.data.code_output.sender_domain }}.
+            Recipients: {{ vars.campaign_recipients | default('none recorded', true) }}.
+            High-value recipient targeted:
+            {{ vars.steps.Score_Phishing.data.code_output.vip_targeted }}.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Verdict Gate
+
+      # ------------------------------------------------------------ containment
+
+      - name: Verdict Gate
+        type: decision
+        conditions:
+          - display: actionable
+            when: "{{ vars.steps.Score_Phishing.data.code_output.actionable | default('', true) | length > 0 }}"
+            next: Find Existing Indicators
+          - display: Else
+            default: true
+            next: Close As Benign
+
+      - name: Find Existing Indicators
+        type: find_record
+        module: indicators
+        comment: >
+          Look before creating. The indicators module carries a uniqueness
+          constraint on (typeofindicator, value), and a phishing campaign is
+          precisely the case where the same sending domain and the same payload
+          link arrive again and again -- so a blind create fails with a 409 on
+          the second report, which is the report that proves it is a campaign.
+
+          Re-sighting an indicator is also better material than creating one: it
+          says the platform already knew this domain and is seeing it again.
+        filters:
+          - field: value
+            operator: in
+            value:
+              - >-
+                {{ vars.steps.Authenticate_Sender.data.code_output.sender_domain
+                   | default('', true) or '__none__' }}
+              - >-
+                {{ vars.steps.Extract_URLs.data.code_output.first_url
+                   | default('', true) or '__none__' }}
+        limit: 20
+        next: Assess Indicators
+
+      - name: Assess Indicators
+        type: connector
+        connector: code-runner
+        operation: run_python
+        config: Default
+        comment: >
+          Decide per indicator whether this is a first sighting or a repeat. The
+          sentinel in the filter above matters: an `in` filter given an empty
+          list matches every record in the module, so an alert with no URL would
+          otherwise report the entire indicator table as already known.
+        params:
+          code: |
+            rows = {{ vars.steps.Find_Existing_Indicators | default([]) }}
+            sender_domain = '''{{ vars.steps.Authenticate_Sender.data.code_output.sender_domain }}'''.strip()
+            payload_url = '''{{ vars.steps.Extract_URLs.data.code_output.first_url }}'''.strip()
+
+            sender_iri = ""
+            url_iri = ""
+            for row in rows or []:
+                value = str((row or {}).get("value") or "").strip()
+                if value and value == sender_domain and not sender_iri:
+                    sender_iri = (row or {}).get("@id") or ""
+                if value and payload_url and value == payload_url and not url_iri:
+                    url_iri = (row or {}).get("@id") or ""
+
+            return {
+                "sender_known": "yes" if sender_iri else "",
+                "sender_iri": sender_iri,
+                "url_known": "yes" if url_iri else "",
+                "url_iri": url_iri,
+                "known_count": len(rows or []),
+            }
+        next: Sender Indicator Gate
+
+      - name: Sender Indicator Gate
+        type: decision
+        conditions:
+          - display: already-known
+            when: "{{ vars.steps.Assess_Indicators.data.code_output.sender_known | default('', true) | length > 0 }}"
+            next: Refresh Sender Indicator
+          - display: Else
+            default: true
+            next: Mint Sender Indicator
+
+      - name: Refresh Sender Indicator
+        type: update_record
+        module: indicators
+        record: "{{ vars.steps.Assess_Indicators.data.code_output.sender_iri }}"
+        comment: >
+          Only scalar fields are written here. Handing a relationship list to
+          update_record REPLACES the collection rather than appending to it,
+          which would quietly unlink the indicator from every earlier alert that
+          referenced it.
+        fields:
+          reputation: >-
+            {{ "IndicatorReputation" | picklist(vars.steps.Score_Phishing.data.code_output.verdict, "@id") }}
+          description: >
+            Seen again as the sending domain of a reported phishing message,
+            scored {{ vars.steps.Score_Phishing.data.code_output.score }}/100.
+            {{ vars.steps.Score_Phishing.data.code_output.rationale }}.
+          confidence: 90
+        next: URL Indicator Gate
+
+      - name: Mint Sender Indicator
+        type: create_record
+        module: indicators
+        comment: >
+          Minting indicators rather than calling a firewall here is deliberate
+          composition, not a shortcut. UC-04 already blocks an indicator and
+          reads the device back to prove it landed; duplicating that call would
+          give the demo two places to keep in step. This step produces the record
+          that flow consumes.
+        fields:
+          value: "{{ vars.steps.Authenticate_Sender.data.code_output.sender_domain }}"
+          typeofindicator: '{{ "IndicatorType" | picklist("Domain", "@id") }}'
+          reputation: >-
+            {{ "IndicatorReputation" | picklist(vars.steps.Score_Phishing.data.code_output.verdict, "@id") }}
+          indicatorStatus: '{{ "IndicatorStatus" | picklist("TBD", "@id") }}'
+          description: >
+            Sending domain of a reported phishing message scored
+            {{ vars.steps.Score_Phishing.data.code_output.score }}/100.
+            {{ vars.steps.Score_Phishing.data.code_output.rationale }}.
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: URL Indicator Gate
+
+      - name: URL Indicator Gate
+        type: decision
+        conditions:
+          - display: has-url
+            when: "{{ vars.steps.Extract_URLs.data.code_output.first_url | default('', true) | length > 0 }}"
+            next: URL Known Gate
+          - display: Else
+            default: true
+            next: Find Alert Indicators
+
+      - name: URL Known Gate
+        type: decision
+        conditions:
+          - display: already-known
+            when: "{{ vars.steps.Assess_Indicators.data.code_output.url_known | default('', true) | length > 0 }}"
+            next: Refresh URL Indicator
+          - display: Else
+            default: true
+            next: Mint URL Indicator
+
+      - name: Refresh URL Indicator
+        type: update_record
+        module: indicators
+        record: "{{ vars.steps.Assess_Indicators.data.code_output.url_iri }}"
+        fields:
+          reputation: >-
+            {{ "IndicatorReputation" | picklist(vars.steps.Score_Phishing.data.code_output.verdict, "@id") }}
+          description: >
+            Seen again as the unwrapped payload link of a reported phishing
+            message scored
+            {{ vars.steps.Score_Phishing.data.code_output.score }}/100.
+          confidence: 90
+        next: Find Alert Indicators
+
+      - name: Mint URL Indicator
+        type: create_record
+        module: indicators
+        comment: >
+          The UNWRAPPED destination. Minting the gateway's rewritten link would
+          put a mail security vendor on a blocklist.
+        fields:
+          value: "{{ vars.steps.Extract_URLs.data.code_output.first_url }}"
+          typeofindicator: '{{ "IndicatorType" | picklist("URL", "@id") }}'
+          reputation: >-
+            {{ "IndicatorReputation" | picklist(vars.steps.Score_Phishing.data.code_output.verdict, "@id") }}
+          indicatorStatus: '{{ "IndicatorStatus" | picklist("TBD", "@id") }}'
+          description: >
+            Unwrapped payload link from a reported phishing message, scored
+            {{ vars.steps.Score_Phishing.data.code_output.score }}/100 with
+            {{ vars.steps.Score_Phishing.data.code_output.vt_malicious }}
+            engines calling it malicious.
+            Gateway-rewritten original:
+            {{ vars.steps.Extract_URLs.data.code_output.wrapped_original }}.
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Find Alert Indicators
+
+      - name: Find Alert Indicators
+        type: find_record
+        module: indicators
+        comment: >
+          A re-sighted indicator has to end up on THIS alert, or the analyst who
+          reported the message never sees it. Refreshing the indicator cannot do
+          that -- writing a relationship list through update_record replaces the
+          collection instead of appending, which would unlink every earlier
+          alert -- so the link is made from the alert side instead, over the
+          union of what is already attached.
+
+          The filter dot-walks the relationship: `alerts.uuid` on the indicators
+          module resolves through the join rather than needing a second lookup.
+        filters:
+          - field: alerts.uuid
+            operator: eq
+            value: "{{ vars.input.records[0].uuid }}"
+        limit: 100
+        next: Link Known Indicators
+
+      - name: Link Known Indicators
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        comment: >
+          Each operand of the concatenation is parenthesised deliberately: Jinja
+          filter precedence otherwise applies the trailing filter to only the
+          last term and silently drops the rest of the list.
+
+          `select` with no argument keeps the truthy entries, which is what
+          removes the empty string left by an indicator that was newly minted
+          rather than re-sighted.
+        fields:
+          indicators: >-
+            {{ ((vars.steps.Find_Alert_Indicators | default([], true)
+                 | map(attribute='@id') | list)
+                + ([vars.steps.Assess_Indicators.data.code_output.sender_iri,
+                    vars.steps.Assess_Indicators.data.code_output.url_iri]
+                   | select | list)) | unique | list }}
+        next: Containment Target
+
+      - name: Containment Target
+        type: set_variable
+        comment: >
+          THE ENVELOPE ADDRESS, NOT THE DOMAIN. Blocking the whole sending domain
+          is one edit away and is the wrong default: a compromised account at a
+          real business sends the most convincing phish there is, and blocking
+          its domain silently stops every legitimate message from that company
+          too. The domain is already minted as an indicator, so the decision to
+          escalate from address to domain stays with an analyst who can see it.
+
+          Lower-cased once here rather than at each of the four places it is
+          compared, so the block and the verification cannot disagree about
+          casing.
+        vars:
+          blocked_sender: "{{ vars.sender | default('', true) | trim | lower }}"
+        next: Sender Is Blockable
+
+      - name: Sender Is Blockable
+        type: decision
+        comment: >
+          A report with no sender still deserves the rest of containment. The
+          no_sender scenario reaches here with an empty address, and asking the
+          gateway to block "" is a call that either errors or, worse, succeeds
+          and puts a meaningless entry on a production profile.
+        conditions:
+          - display: has-sender
+            when: "{{ vars.blocked_sender | length > 0 }}"
+            next: Read Gateway Block List
+          - display: Else
+            default: true
+            next: Containment Task
+
+      # ---------------------------------------------------------------------
+      # Gateway containment on FortiMail
+      # ---------------------------------------------------------------------
+      # READ BEFORE WRITE, AND THE READ IS NOT DEFENSIVE POLITENESS. FortiMail's
+      # block_sender_address is NOT idempotent: blocking an address that is
+      # already on the list returns HTTP 500 with errorNumber -5, "entry already
+      # exists". Measured on a live gateway, not inferred. So a playbook that
+      # blocks unconditionally works perfectly on a sender it has never seen and
+      # ERRORS on the second report of the same campaign -- which is exactly the
+      # case this use case exists to handle, and exactly the case a first test
+      # run does not reach.
+      #
+      # The same read doubles as the before-state for the verification below.
+      - name: Read Gateway Block List
+        type: connector
+        connector: fortinet-fortimail
+        operation: get_session_block_list
+        config: fmail
+        params:
+          profile_name: "{{ vars.mail_session_profile }}"
+        next: Sender Already Blocked
+
+      - name: Sender Already Blocked
+        type: decision
+        comment: >
+          The list arrives as `collection`, one dict per entry keyed `mkey`.
+          Comparison is case-folded because addresses are not case sensitive in
+          practice and a gateway that stored one casing would otherwise be asked
+          to store the other, hitting the -5 above.
+        conditions:
+          - display: already-blocked
+            when: >-
+              {{ vars.steps.Read_Gateway_Block_List.data.collection
+                 | default([], true) | map(attribute='mkey')
+                 | map('lower') | list
+                 | select('equalto', vars.blocked_sender) | list | length > 0 }}
+            next: Verify Gateway Block
+          - display: Else
+            default: true
+            next: Block Sender At Gateway
+
+      - name: Block Sender At Gateway
+        type: connector
+        connector: fortinet-fortimail
+        operation: block_sender_address
+        config: fmail
+        comment: >
+          The session profile is resolved from a variable rather than named here
+          so a gateway whose profiles are called something else needs one edit in
+          Phishing Config, not a step rewrite.
+        params:
+          profile_name: "{{ vars.mail_session_profile }}"
+          email_address: "{{ vars.blocked_sender }}"
+        next: Verify Gateway Block
+
+      # THE BLOCK IS NOT PROVEN BY THE BLOCK CALL. It is proven by reading the
+      # list back and finding the address on it. FortiEDR's isolate_collector
+      # reports Success for hosts that do not exist, which is the reference case
+      # for why a 200 is not evidence of a state change.
+      - name: Verify Gateway Block
+        type: connector
+        connector: fortinet-fortimail
+        operation: get_session_block_list
+        config: fmail
+        params:
+          profile_name: "{{ vars.mail_session_profile }}"
+        next: Gateway Block Landed
+
+      - name: Gateway Block Landed
+        type: decision
+        conditions:
+          - display: block-landed
+            when: >-
+              {{ vars.steps.Verify_Gateway_Block.data.collection
+                 | default([], true) | map(attribute='mkey')
+                 | map('lower') | list
+                 | select('equalto', vars.blocked_sender) | list | length > 0 }}
+            next: Containment Task
+          - display: Else
+            default: true
+            next: Gateway Block Failed
+
+      - name: Gateway Block Failed
+        type: create_record
+        module: comments
+        comment: >
+          A separate, loud comment rather than a flag folded into the handoff.
+          Containment that silently did not happen is worse than containment that
+          was never attempted, because the alert reads as handled.
+        fields:
+          content: >
+            <p><b>Gateway containment did NOT land.</b> Asked FortiMail to block
+            <code>{{ vars.blocked_sender }}</code> on session profile
+            <code>{{ vars.mail_session_profile }}</code>, but reading the block
+            list back does not show it. The sender is still able to deliver.</p>
+            <p>Check that the profile name exists on the gateway and that the
+            connector configuration has write permission. Do not treat this alert
+            as contained.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Containment Task
+
+      - name: Containment Task
+        type: create_record
+        module: tasks
+        comment: >
+          WHAT IS LEFT AFTER THE GATEWAY BLOCK, AND WHY IT IS STILL A TASK.
+
+          The block above stops the NEXT message. It does nothing about the
+          copies already delivered, and FortiMail cannot: the connector has 26
+          operations and not one of them deletes a message from a mailbox. That
+          is a property of a mail gateway, not a gap in the integration -- a
+          gateway sits in front of the mailboxes and has no reach into them.
+
+          So this task is now the genuinely manual remainder, not a stand-in for
+          an integration nobody wrote. It is deliberately shorter than it was:
+          the steps that the gateway now performs have been removed rather than
+          left in as busywork an analyst would do a second time.
+        fields:
+          name: >
+            Remove delivered copies and check persistence --
+            {{ vars.steps.Authenticate_Sender.data.code_output.sender_domain }}
+          description: >
+            <p>Reported message scored
+            <b>{{ vars.steps.Score_Phishing.data.code_output.score }}/100
+            ({{ vars.steps.Score_Phishing.data.code_output.verdict }})</b>.
+            {{ vars.steps.Score_Phishing.data.code_output.rationale }}.</p>
+            <p><b>Already done automatically -- do not repeat:</b> the sender
+            <code>{{ vars.blocked_sender | default('(none)', true) }}</code> is
+            blocked on FortiMail session profile
+            <code>{{ vars.mail_session_profile }}</code>, verified by reading the
+            block list back. Indicators are minted for the sending domain and the
+            unwrapped link
+            ({{ vars.steps.Extract_URLs.data.code_output.first_host | default('domain only', true) }}).</p>
+            <p><b>Still needs a human, in this order:</b></p>
+            <ol>
+              <li><b>Preserve a copy</b> of one message with full headers before
+                  deleting anything -- deleting first destroys the evidence the
+                  investigation runs on.</li>
+              <li><b>Find the delivered copies.</b> Search for messages from
+                  <code>{{ vars.steps.Authenticate_Sender.data.code_output.sender_domain }}</code>
+                  with subject
+                  <code>{{ vars.subject | default('(none)', true) }}</code>.
+                  {{ vars.steps.Score_Phishing.data.code_output.campaign_size }}
+                  report(s) already arrived, so assume wider delivery than what
+                  was reported. The gateway block does not reach these -- it
+                  stops the next message, not the ones already in mailboxes.</li>
+              <li><b>Soft-delete</b> from the mailboxes found, then confirm the
+                  count removed matches the count found.</li>
+              <li><b>Check for persistence</b> -- forwarding rules or inbox rules
+                  created on any mailbox that interacted with the message. A
+                  removal that leaves a mail-forwarding rule in place has
+                  contained nothing.</li>
+              <li><b>Decide whether to widen the block</b> from the address to
+                  the whole sending domain. Left to a human on purpose: if the
+                  sender is a compromised account at a real business, blocking
+                  its domain stops that company's legitimate mail too.</li>
+            </ol>
+            <p><b>Recipients seen so far:</b>
+            {{ vars.campaign_recipients | default('none recorded', true) }}</p>
+          tasktype: '{{ "TaskType" | picklist("Incident Response", "@id") }}'
+          priority: >-
+            {{ "TaskPriority" | picklist("High", "@id") }}
+          status: '{{ "TaskStatus" | picklist("Open", "@id") }}'
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Handoff Comment
+
+      - name: Handoff Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Containment handed off.</b> Indicators minted for the sending
+            domain
+            <code>{{ vars.steps.Authenticate_Sender.data.code_output.sender_domain }}</code>
+            {% if vars.steps.Extract_URLs.data.code_output.first_url %}and the
+            unwrapped payload link{% endif %}, both at reputation
+            <b>{{ vars.steps.Score_Phishing.data.code_output.verdict }}</b> --
+            ready for the blocking flow to push and verify on the device.</p>
+            {% if vars.blocked_sender %}
+            <p><b>Sender blocked at the gateway.</b>
+            <code>{{ vars.blocked_sender }}</code> is on the FortiMail block list
+            for session profile <code>{{ vars.mail_session_profile }}</code>,
+            confirmed by reading the list back from the device rather than by
+            trusting the block call.</p>
+            {% endif %}
+            <p>A task is open for the part the gateway cannot do: the copies
+            already delivered. A mail gateway sits in front of the mailboxes and
+            has no reach into them, so removing delivered mail stays manual --
+            that is the architecture, not a missing integration.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Actionable
+
+      - name: Done Actionable
+        type: end
+
+      - name: Close As Benign
+        type: update_record
+        module: alerts
+        record: "{{ vars.input.records[0]['@id'] }}"
+        comment: >
+          Auto-closing the marketing mail is most of the value in this use case
+          by volume. The verdict comment above stays as the audit trail, so the
+          decision is reviewable rather than invisible.
+        fields:
+          status: '{{ "AlertStatus" | picklist("Closed", "@id") }}'
+        next: Benign Comment
+
+      - name: Benign Comment
+        type: create_record
+        module: comments
+        fields:
+          content: >
+            <p><b>Closed as non-phishing.</b> Scored
+            {{ vars.steps.Score_Phishing.data.code_output.score }}/100, below the
+            actionable bar of {{ vars.actionable_at }}. No impersonation of a
+            protected domain or brand, and
+            {{ vars.steps.Authenticate_Sender.data.code_output.failure_summary }}
+            for authentication. No analyst time was spent on it.</p>
+          alerts: ["{{ vars.input.records[0]['@id'] }}"]
+        next: Done Benign
+
+      - name: Done Benign
+        type: end

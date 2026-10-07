@@ -1,0 +1,52 @@
+collection: FSRPB Manual-Input Test
+description: |
+  Stage 4 -- adds a manual_input pause between two set_variable steps.
+  The integration test fires this playbook, finds the pending input via
+  `fsrpb inputs list`, responds with the primary option via `fsrpb
+  inputs respond`, and asserts the run finishes.
+visible: true
+
+playbooks:
+  - name: E2E - Manual Input
+    description: start → set_variable → manual_input → terminal.
+    is_active: true
+    steps:
+      - name: Run
+        type: start
+        next: Pre input vars
+
+      - name: Pre input vars
+        type: set_variable
+        next: Choose action
+        vars:
+          before_input: "ready"
+
+      - name: Choose action
+        # Schema mirrored from corpus minimum (data/MANUAL_INPUT.md §2).
+        # All listed fields are present on every working ManualInput step
+        # in the live corpus; omitting them drops the run with a malformed-
+        # URL error in the manual-input handler.
+        type: manual_input
+        next: After input
+        input:
+          schema:
+            title: "E2E test gate"
+            description: "Click Continue to resume the test playbook."
+            inputVariables: []
+        record: ""
+        is_approval: false
+        isRecordLinked: false
+        response_mapping:
+          options:
+            - {option: Continue, primary: true}
+          duplicateOption: false
+          customSuccessMessage: "Awaiting Playbook resumed successfully."
+        inline_channel_list: []
+        external_channel_list: []
+        unauthenticated_input: false
+
+      - name: After input
+        type: set_variable
+        vars:
+          after_input: "resumed"
+          final_status: complete

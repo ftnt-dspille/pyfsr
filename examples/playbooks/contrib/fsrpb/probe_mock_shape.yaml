@@ -1,0 +1,57 @@
+collection: FSRPB Mock Shape Probe
+description: Diagnostic -- test direct-path for_each + code_snippet mock shape in --mock mode.
+visible: true
+
+playbooks:
+  - name: Mock Shape Probe
+    is_active: true
+    steps:
+      - name: Start
+        type: start
+        next: Connector Mock
+
+      - name: Connector Mock
+        type: connector
+        next: Code Snippet Mock
+        connector: microsoft-graph
+        operation: get_all_security_alerts
+        config: ""
+        params:
+          api_version: V2
+        mock_result:
+          value:
+            - id: alert-1
+              title: test alert A
+              evidence: []
+            - id: alert-2
+              title: test alert B
+              evidence: []
+
+      - name: Code Snippet Mock
+        type: code_snippet
+        next: Capture
+        code: |
+          print({'probe': 'hello', 'n': 3})
+        mock_result:
+          code_output:
+            probe: hello
+            n: 3
+
+      - name: Capture
+        type: set_variable
+        next: Try for_each direct
+        vars:
+          snip_direct: "{{ vars.steps.Code_Snippet_Mock.code_output.probe }}"
+          snip_data: "{{ vars.steps.Code_Snippet_Mock.data.code_output.probe }}"
+          conn_direct_count: "{{ vars.steps.Connector_Mock.value | length }}"
+
+      - name: Try for_each direct
+        type: set_variable
+        next: Done
+        for_each:
+          item: "{{ vars.steps.Connector_Mock.value }}"
+        vars:
+          item_id: "{{ vars.item.id }}"
+
+      - name: Done
+        type: end

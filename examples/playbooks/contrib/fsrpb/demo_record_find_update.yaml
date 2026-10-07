@@ -1,0 +1,53 @@
+# Find + Update record CRUD demo. Covers ~38% of corpus (FindRecords +
+# UpdateRecord). Setup inserts a tagged test alert; this playbook
+# finds it by uuid, then updates its description field.
+#
+# FSR canonical shapes (verified live on 8.0.0):
+#   find_record arguments:
+#     module:    'alerts'    -- the module name. Suffix `?$limit=N`
+#                              optional but the API Platform respects it.
+#     query:                  -- query DSL
+#       logic:    'AND' | 'OR'
+#       filters:  [{type:'primitive', field, value, operator, _operator}]
+#       __selectFields: list of fields to fetch (optional)
+#     step_variables: []
+#
+#   update_record arguments (friendly form):
+#     module:   module name (e.g. alerts) -> wire collectionType /api/3/alerts
+#     record:   IRI of the record to update (Jinja from find_record output) ->
+#               wire collection
+#     fields:    {field: value, ...} fields to set
+#     operation:      'Replace' | 'Append'
+#     step_variables: []
+
+collection: FSRPB Demo Record CRUD
+description: Find a tagged alert and update it.
+visible: true
+
+playbooks:
+  - name: FSRPB Find And Update Alert
+    is_active: true
+    parameters: [target_uuid]
+    steps:
+      - name: trigger
+        type: start
+        next: Find target alert
+
+      - name: Find target alert
+        type: find_record
+        next: Stamp description
+        module: alerts
+        filters:
+          - type: primitive
+            field: uuid
+            value: "{{ vars.input.params.target_uuid }}"
+            operator: eq
+            _operator: eq
+      - name: Stamp description
+        type: update_record
+        record: "{{ vars.steps.Find_target_alert[0]['@id'] }}"
+        module: alerts
+        fields:
+          description: "fsrpb e2e -- stamped at {{ vars.task_id }}"
+        operation: Replace
+        step_variables: []
