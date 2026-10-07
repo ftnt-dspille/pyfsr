@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-06
+
 ### Fixed
 - **Prompts with only buttons can be answered.** On a manual input with no
   fields (an approval, or a message with buttons), `manual_input.answer(value)`
