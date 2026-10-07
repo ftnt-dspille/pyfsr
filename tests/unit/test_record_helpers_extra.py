@@ -39,6 +39,10 @@ class _NoopPicklists:
                 out[k] = v
         return out
 
+    def reverse_resolve_record_fields(self, module, data):
+        """Read-side mirror: identity for the unit tests (no HTTP)."""
+        return data
+
 
 class FakeClient:
     """Minimal mock client for testing RecordModuleAPI."""
@@ -328,7 +332,7 @@ def test_create_validate_true_raises_on_bad_type():
 
     with pytest.raises(ValidationError):
         api.create(id="not-an-int", validate=True, resolve_picklists=False)
-    # Validation aborted the call — no POST was made.
+    # Validation aborted the call - no POST was made.
     assert client.calls == []
 
 

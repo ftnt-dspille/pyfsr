@@ -200,7 +200,7 @@ class PicklistsAPI(BaseAPI):
         return None
 
     def options(self, picklist_name: str) -> list[str]:
-        """The valid friendly values (itemValues) of a picklist — what an AI
+        """The valid friendly values (itemValues) of a picklist - what an AI
         should choose from. Cached via :meth:`values`."""
         return [it.get("itemValue") for it in self.values(picklist_name) if it.get("itemValue")]
 
@@ -213,7 +213,7 @@ class PicklistsAPI(BaseAPI):
         if the IRI isn't a known picklist item.
 
         Useful for patching exported playbooks that hardcode picklist IRIs
-        from a different box — reverse-resolve to the friendly name, then
+        from a different box - reverse-resolve to the friendly name, then
         emit a Jinja ``picklist`` filter expression that resolves dynamically.
         """
         if not iri or not iri.startswith("/api/3/picklists/"):
@@ -225,17 +225,69 @@ class PicklistsAPI(BaseAPI):
                     return {"picklist": name, "itemValue": it.itemValue, "iri": iri}
         return None
 
+    def reverse_resolve_record_fields(self, module: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of ``data`` with picklist values mapped back to friendly names.
+
+        The read-side mirror of :meth:`resolve_record_fields`: only fields the
+        module flags as picklist-backed are touched. FortiSOAR returns a
+        picklist field either as a bare IRI string or as the expanded
+        ``{"@id": ..., "itemValue": "High", ...}`` object; both come back as
+        the ``itemValue`` string (``"High"``), as does a multi-select's list of
+        them. Anything else (plain strings, non-picklist fields, IRIs the
+        picklist catalog doesn't know) passes through untouched, so records
+        stay round-trippable -- writes re-resolve friendly values anyway.
+
+        Records carrying no picklist values at all return unchanged without
+        the module-metadata lookup, so plain records cost nothing to humanize.
+        """
+
+        def _is_iri(value: Any) -> bool:
+            return isinstance(value, str) and value.startswith("/api/3/picklists/")
+
+        def _is_expanded(value: Any) -> bool:
+            return (
+                isinstance(value, dict)
+                and isinstance(value.get("itemValue"), str)
+                and str(value.get("@id") or "").startswith("/api/3/picklists/")
+            )
+
+        def _one(value: Any) -> Any:
+            if _is_expanded(value):
+                return value["itemValue"]
+            if _is_iri(value):
+                resolved = self.reverse_resolve(value)
+                return resolved["itemValue"] if resolved else value
+            return value
+
+        def _touches(value: Any) -> bool:
+            if _is_iri(value) or _is_expanded(value):
+                return True
+            return isinstance(value, list) and any(_is_iri(v) or _is_expanded(v) for v in value)
+
+        if not any(_touches(v) for v in data.values()):
+            return data
+
+        field_map = self._field_map(module)
+        out = dict(data)
+        for field, value in out.items():
+            picklist_backed = bool(field_map.get(field))
+            if isinstance(value, list) and value:
+                out[field] = [_one(v) if (picklist_backed or _is_expanded(v)) else v for v in value]
+            elif _is_expanded(value) or (picklist_backed and _is_iri(value)):
+                out[field] = _one(value)
+        return out
+
     def jinja_picklist_expr(self, picklist_name: str, item_value: str, *, key: str = "@id") -> str:
         """Build a Jinja ``picklist`` filter expression for a picklist value.
 
-        Returns ``{{ "PicklistName" | picklist("Value", "@id") }}`` — the
+        Returns ``{{ "PicklistName" | picklist("Value", "@id") }}`` - the
         pattern that resolves dynamically at runtime on any box, avoiding
         hardcoded IRI portability issues.
 
         Args:
             picklist_name: the picklist list name (e.g. ``"AlertState"``).
             item_value: the option's friendly value (e.g. ``"Indicator Extracted"``).
-            key: the key to extract — ``"@id"`` (IRI, default), ``"uuid"``,
+            key: the key to extract - ``"@id"`` (IRI, default), ``"uuid"``,
                 or ``"itemValue"`` (display name). Omit for the full dict.
         """
         return f'{{{{ "{picklist_name}" | picklist("{item_value}", "{key}") }}}}'
@@ -284,7 +336,7 @@ class PicklistsAPI(BaseAPI):
 
         Runs the same resolution :meth:`resolve_record_fields` would, but discards
         the resolved dict and returns only the unresolved picklist values as
-        ``[{field, value, picklist, valid_values}, ...]`` — empty list means every
+        ``[{field, value, picklist, valid_values}, ...]`` - empty list means every
         picklist field resolves cleanly. Lets a caller validate its mappings before
         committing any write.
 
@@ -301,7 +353,7 @@ class PicklistsAPI(BaseAPI):
 
     # --------------------------------------------------------------- write ops
     # Live-verified on 8.0.0. These are NOT
-    # cached-read operations — each performs a real write, then invalidates the
+    # cached-read operations - each performs a real write, then invalidates the
     # read cache so the next :meth:`values`/`resolve` reflects the change.
     #
     # FortiSOAR has no batch "create list + options" endpoint, so the list and
@@ -319,7 +371,7 @@ class PicklistsAPI(BaseAPI):
         """Create a picklist *list* (optionally with initial options).
 
         Args:
-            name: the list's friendly name (unique instance-wide — a duplicate
+            name: the list's friendly name (unique instance-wide - a duplicate
                 409s; use :meth:`get_or_create_picklist` for idempotency).
             system: the ``system`` flag (custom lists are ``False``).
             options: optional initial option labels. A bare string becomes an item
@@ -361,7 +413,7 @@ class PicklistsAPI(BaseAPI):
         """Idempotently ensure picklist ``name`` exists; return ``(list, created)``.
 
         If the list already exists, its options are **not** modified (only the list
-        is ensured) — use :meth:`add_option` to append. Returns ``created=True``
+        is ensured) - use :meth:`add_option` to append. Returns ``created=True``
         only when the list was newly created.
         """
         existing = self.get_picklist(name)
@@ -380,7 +432,7 @@ class PicklistsAPI(BaseAPI):
         """Add an option (item) to an existing picklist.
 
         Args:
-            picklist: the target list — a name, a list IRI
+            picklist: the target list - a name, a list IRI
                 (``/api/3/picklist_names/<uuid>``), or a bare uuid.
             value: the option's friendly label (``itemValue``).
             color: optional hex color (e.g. ``"#FF0000"``).
@@ -396,7 +448,7 @@ class PicklistsAPI(BaseAPI):
         """
         list_iri = self._resolve_list_iri(picklist)
         if list_iri is None:
-            raise ValueError(f"picklist {picklist!r} not found — create it first with create_picklist()")
+            raise ValueError(f"picklist {picklist!r} not found - create it first with create_picklist()")
         payload: dict[str, Any] = {"itemValue": value, "listName": list_iri}
         if color is not None:
             payload["color"] = color
@@ -418,24 +470,24 @@ class PicklistsAPI(BaseAPI):
         """Idempotently ensure option ``value`` exists in ``picklist``; return ``(item, created)``.
 
         If an option with the same ``itemValue`` already exists, it is returned
-        unchanged (its ``color``/``orderIndex`` are **not** modified — only
+        unchanged (its ``color``/``orderIndex`` are **not** modified - only
         presence is ensured). Returns ``created=True`` only when the option was
         newly added.
 
         Args:
-            picklist: the target list — a name, IRI, or bare uuid.
+            picklist: the target list - a name, IRI, or bare uuid.
             value: the option's friendly label (``itemValue``).
             color: hex color for a newly-created option (ignored if existing).
             order: ``orderIndex`` for a newly-created option (ignored if existing).
 
         Returns:
-            ``(PicklistItem, created)`` — the existing item with ``created=False``,
+            ``(PicklistItem, created)`` - the existing item with ``created=False``,
             or the newly-created item with ``created=True``.
         """
         # Check the cached items for an existing match by itemValue.
         list_name = picklist if picklist in self.list() else None
         if list_name is None:
-            # picklist was given as an IRI/uuid — resolve to the name for the cache lookup
+            # picklist was given as an IRI/uuid - resolve to the name for the cache lookup
             list_iri = self._resolve_list_iri(picklist)
             if list_iri is not None:
                 for name, items in self.all().items():
@@ -495,7 +547,7 @@ class PicklistsAPI(BaseAPI):
         """Delete a picklist *list* and (per the platform) cascade-delete its items.
 
         Args:
-            picklist: the list — a name, IRI, or bare uuid.
+            picklist: the list - a name, IRI, or bare uuid.
             missing_ok: when ``True`` (default), an absent list returns ``False``
                 instead of raising.
 

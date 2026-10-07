@@ -150,6 +150,20 @@ class RecordSet(Generic[T]):
         page.members = [self._parse(m, raw=False) for m in page.members]
         return page
 
+    def _resolve_response(self, obj: Any, *, resolve_picklists: bool) -> Any:
+        """Map picklist IRIs in a response record back to friendly values.
+
+        The read-side mirror of the request-side ``resolve_record_fields``:
+        ``severity`` comes back as ``"High"`` instead of its picklist IRI.
+        Only picklist-backed fields are touched; unknown IRIs pass through,
+        so a record round-trips (writes re-resolve friendly values anyway).
+        Skipped on clients without a ``picklists`` API (minimal shims).
+        """
+        picklists = getattr(self.client, "picklists", None)
+        if resolve_picklists and picklists is not None and isinstance(obj, dict):
+            return picklists.reverse_resolve_record_fields(self.module, obj)
+        return obj
+
     # -- reads --------------------------------------------------------------
     @overload
     def get(
@@ -162,6 +176,7 @@ class RecordSet(Generic[T]):
         raw: Literal[True],
         fields: list[str] | tuple[str, ...] | None = ...,
         summary: bool = ...,
+        resolve_picklists: bool = ...,
     ) -> dict[str, Any]: ...
 
     @overload
@@ -175,6 +190,7 @@ class RecordSet(Generic[T]):
         raw: Literal[False] = ...,
         fields: list[str] | tuple[str, ...] | None = ...,
         summary: bool = ...,
+        resolve_picklists: bool = ...,
     ) -> T: ...
 
     def get(
@@ -187,12 +203,16 @@ class RecordSet(Generic[T]):
         raw: bool = False,
         fields: list[str] | tuple[str, ...] | None = None,
         summary: bool = False,
+        resolve_picklists: bool = True,
     ) -> Any:
         """Fetch one record by uuid, ``module:uuid`` shorthand, or IRI.
 
         Returns the bound model (or ``BaseRecord``); pass ``raw=True`` for the
         plain decoded dict. Pass ``show_deleted=True`` to read a soft-deleted
         record from the recycle bin (a plain ``get`` 404s on those).
+
+        Picklist fields come back as friendly values (``"High"``) by default;
+        pass ``resolve_picklists=False`` to keep the raw picklist IRIs.
 
         ``fields=[...]`` / ``summary=True`` trim the result to a token-efficient
         plain dict (handy for agents); see :mod:`pyfsr.projection`.
@@ -203,7 +223,8 @@ class RecordSet(Generic[T]):
             query["$relationships"] = "true"
         if show_deleted:
             query["$showDeleted"] = "true"
-        rec = self._parse(self.client.get(path, params=query or None), raw=raw)
+        resp = self._resolve_response(self.client.get(path, params=query or None), resolve_picklists=resolve_picklists)
+        rec = self._parse(resp, raw=raw)
         if fields or summary:
             return project(rec, fields=fields, summary=summary)
         return rec
@@ -217,6 +238,7 @@ class RecordSet(Generic[T]):
         raw: bool = False,
         fields: list[str] | tuple[str, ...] | None = None,
         summary: bool = False,
+        resolve_picklists: bool = True,
         max_workers: int = 8,
         on_error: str = "none",
     ) -> list[Any]:
@@ -244,6 +266,7 @@ class RecordSet(Generic[T]):
                 raw=raw,
                 fields=fields,
                 summary=summary,
+                resolve_picklists=resolve_picklists,
             )
 
         return map_threaded(_one, list(refs), max_workers=max_workers, on_error=on_error)
@@ -290,6 +313,7 @@ class RecordSet(Generic[T]):
         show_deleted: bool = ...,
         params: dict[str, Any] | None = ...,
         raw: Literal[True],
+        resolve_picklists: bool = ...,
     ) -> HydraPage[dict[str, Any]]: ...
 
     @overload
@@ -301,6 +325,7 @@ class RecordSet(Generic[T]):
         show_deleted: bool = ...,
         params: dict[str, Any] | None = ...,
         raw: Literal[False] = ...,
+        resolve_picklists: bool = ...,
     ) -> HydraPage[T]: ...
 
     def list(
@@ -311,6 +336,7 @@ class RecordSet(Generic[T]):
         show_deleted: bool = False,
         params: dict[str, Any] | None = None,
         raw: bool = False,
+        resolve_picklists: bool = True,
     ) -> HydraPage[Any]:
         """List records via ``GET /api/3/<module>`` (one page).
 
@@ -318,6 +344,8 @@ class RecordSet(Generic[T]):
         :class:`~pyfsr.query.Query`); for free-text search use :meth:`search`;
         to page through all results lazily use :meth:`iterate`.
         Pass ``show_deleted=True`` to include recycle-bin records.
+        Picklist fields come back as friendly values (``"High"``) by default;
+        pass ``resolve_picklists=False`` to keep the raw picklist IRIs.
 
         >>> client = demo_client()
         >>> page = client.records("alerts").list(limit=10)
@@ -330,7 +358,10 @@ class RecordSet(Generic[T]):
         if show_deleted:
             query["$showDeleted"] = "true"
         resp = self.client.get(f"/api/3/{self.module}", params=query)
-        return self._parse_page(HydraPage.from_response(resp, page=page, limit=limit), raw=raw)
+        result = HydraPage.from_response(resp, page=page, limit=limit)
+        if resolve_picklists:
+            result.members = [self._resolve_response(m, resolve_picklists=True) for m in result.members]
+        return self._parse_page(result, raw=raw)
 
     def search(
         self,
@@ -440,6 +471,7 @@ class RecordSet(Generic[T]):
         raw: bool = False,
         fields: list[str] | tuple[str, ...] | None = None,
         summary: bool = False,
+        resolve_picklists: bool = True,
     ) -> Any:
         """Run a structured query via ``POST /api/query/<module>``.
 
@@ -448,6 +480,9 @@ class RecordSet(Generic[T]):
         they are lifted out of the body and sent as params. Pass
         ``show_deleted=True`` to include recycle-bin records (sent both as the
         ``$showDeleted`` param and the ``showDeleted`` body flag the endpoint wants).
+
+        Picklist fields come back as friendly values (``"High"``) by default;
+        pass ``resolve_picklists=False`` to keep the raw picklist IRIs.
 
         Returns a :class:`~pyfsr.pagination.HydraPage`; with ``fields=``/``summary=``
         the members are trimmed and a plain ``{members, total, page, has_next}``
@@ -459,6 +494,8 @@ class RecordSet(Generic[T]):
             body["showDeleted"] = True
         resp = self.client.post(f"/api/query/{self.module}", data=body, params=params)
         page_obj = HydraPage.from_response(resp, page=page, limit=params.get("$limit"))
+        if resolve_picklists:
+            page_obj.members = [self._resolve_response(m, resolve_picklists=True) for m in page_obj.members]
         parsed = self._parse_page(page_obj, raw=raw)
         if fields or summary:
             return project(parsed, fields=fields, summary=summary)
@@ -495,6 +532,7 @@ class RecordSet(Generic[T]):
         show_deleted: bool = ...,
         prefetch: int = ...,
         raw: Literal[True],
+        resolve_picklists: bool = ...,
     ) -> Iterator[dict[str, Any]]: ...
 
     @overload
@@ -507,6 +545,7 @@ class RecordSet(Generic[T]):
         show_deleted: bool = ...,
         prefetch: int = ...,
         raw: Literal[False] = ...,
+        resolve_picklists: bool = ...,
     ) -> Iterator[T]: ...
 
     def iterate(
@@ -518,13 +557,16 @@ class RecordSet(Generic[T]):
         show_deleted: bool = False,
         prefetch: int = 0,
         raw: bool = False,
+        resolve_picklists: bool = True,
     ) -> Iterator[Any]:
         """Lazily yield every matching record across all pages.
 
         Uses the structured query endpoint when ``query`` is given, otherwise a
         plain list. The page size overrides any ``limit`` on the query. Yields
         typed models unless ``raw=True``. Pass ``show_deleted=True`` to include
-        recycle-bin records.
+        recycle-bin records. Picklist fields come back as friendly values
+        (``"High"``) by default; pass ``resolve_picklists=False`` to keep the
+        raw picklist IRIs.
 
         Set ``prefetch=N`` to pipeline the page fetches -- the next ``N`` pages
         download in a background thread pool while you process the current one,
@@ -549,7 +591,7 @@ class RecordSet(Generic[T]):
                 return self.client.post(f"/api/query/{self.module}", data=body, params=params)
 
         for record in paginate(fetch, page_size=page_size, max_records=max_records, prefetch=prefetch):
-            yield self._parse(record, raw=raw)
+            yield self._parse(self._resolve_response(record, resolve_picklists=resolve_picklists), raw=raw)
 
     # -- writes -------------------------------------------------------------
     @overload
@@ -585,8 +627,9 @@ class RecordSet(Generic[T]):
         ``data`` may be a dict or a model instance; the created record is
         returned parsed (or raw, with ``raw=True``). Friendly picklist values
         (e.g. ``"High"``) are mapped to their IRIs via ``client.picklists``
-        before sending -- pass ``resolve_picklists=False`` to skip that (and the
-        metadata lookup it needs) when every value is already an IRI.
+        before sending, and picklist fields in the created record come back as
+        friendly values -- pass ``resolve_picklists=False`` to skip both (and
+        the metadata lookup they need) when every value is already an IRI.
 
         Pass ``strict_picklists=True`` to raise
         :class:`~pyfsr.exceptions.PicklistResolutionError` *before* the POST when
@@ -604,7 +647,8 @@ class RecordSet(Generic[T]):
             data = data.to_dict(exclude_none=True)
         if resolve_picklists:
             data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
-        return self._parse(self.client.post(f"/api/3/{self.module}", data=data), raw=raw)
+        resp = self.client.post(f"/api/3/{self.module}", data=data)
+        return self._parse(self._resolve_response(resp, resolve_picklists=resolve_picklists), raw=raw)
 
     @overload
     def update(
@@ -639,8 +683,9 @@ class RecordSet(Generic[T]):
     ) -> Any:
         """Update a record via ``PUT /api/3/<module>/<uuid>``.
 
-        Friendly picklist values are mapped to IRIs before sending; pass
-        ``resolve_picklists=False`` to skip that (see :meth:`create`). Pass
+        Friendly picklist values are mapped to IRIs before sending, and picklist
+        fields in the updated record come back as friendly values; pass
+        ``resolve_picklists=False`` to skip both (see :meth:`create`). Pass
         ``strict_picklists=True`` to raise pre-flight on an unresolvable value
         (see :meth:`create`).
 
@@ -656,7 +701,8 @@ class RecordSet(Generic[T]):
         if resolve_picklists:
             data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
         path = resolve_record_path(self.module, ref)
-        return self._parse(self.client.put(path, data=data), raw=raw)
+        resp = self.client.put(path, data=data)
+        return self._parse(self._resolve_response(resp, resolve_picklists=resolve_picklists), raw=raw)
 
     @overload
     def get_or_create(
@@ -822,7 +868,8 @@ class RecordSet(Generic[T]):
         if key is None:
             if resolve_picklists:
                 data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
-            return self._parse(self.client.post(f"/api/3/upsert/{self.module}", data=data), raw=raw)
+            resp = self.client.post(f"/api/3/upsert/{self.module}", data=data)
+            return self._parse(self._resolve_response(resp, resolve_picklists=resolve_picklists), raw=raw)
 
         # When a custom key is specified, use get_or_create + update pattern
         existing, created = self.get_or_create(
@@ -840,7 +887,13 @@ class RecordSet(Generic[T]):
         ref = existing.get("@id") or existing.get("uuid") or existing.get("id")
         if not ref:
             raise ValueError("could not determine record reference for update (no @id, uuid, or id)")
-        updated = self.update(ref, data, raw=False, resolve_picklists=False)
+        updated = self.update(
+            ref,
+            data,
+            raw=False,
+            resolve_picklists=resolve_picklists,
+            strict_picklists=strict_picklists,
+        )
         return self._parse(updated, raw=raw)
 
     @overload
@@ -918,7 +971,11 @@ class RecordSet(Generic[T]):
         if not parse:
             return resp
         raw_resp = resp if isinstance(resp, dict) else {}
-        succeeded = [self._parse(row, raw=False) for row in raw_resp.get("success", []) if isinstance(row, dict)]
+        succeeded = [
+            self._parse(self._resolve_response(row, resolve_picklists=resolve_picklists), raw=False)
+            for row in raw_resp.get("success", [])
+            if isinstance(row, dict)
+        ]
         failed = [BulkUpsertFailure.from_raw(msg) for msg in raw_resp.get("failure", []) if isinstance(msg, str)]
         return BulkUpsertResult(succeeded=succeeded, failed=failed, raw=raw_resp)
 
@@ -1002,7 +1059,11 @@ class RecordSet(Generic[T]):
         # partial failure gets -- normalize both to the same shape.
         if "success" not in raw_resp and "failure" not in raw_resp:
             raw_resp = {"success": raw_resp.get("hydra:member", []), "failure": []}
-        succeeded = [self._parse(row, raw=False) for row in raw_resp.get("success", []) if isinstance(row, dict)]
+        succeeded = [
+            self._parse(self._resolve_response(row, resolve_picklists=resolve_picklists), raw=False)
+            for row in raw_resp.get("success", [])
+            if isinstance(row, dict)
+        ]
         failed = [BulkUpsertFailure.from_raw(msg) for msg in raw_resp.get("failure", []) if isinstance(msg, str)]
         return BulkUpsertResult(succeeded=succeeded, failed=failed, raw=raw_resp)
 
@@ -1204,6 +1265,7 @@ class RecordSet(Generic[T]):
         *,
         show_deleted: bool = False,
         raw: bool = False,
+        resolve_picklists: bool = True,
     ) -> T | dict[str, Any] | None:
         """Return the first matching record, or ``None`` if there are none.
 
@@ -1213,16 +1275,19 @@ class RecordSet(Generic[T]):
             latest = client.records("alerts").first(
                 Query().eq("status.itemValue", "Open").sort("createDate", "DESC")
             )
+
+        Picklist fields come back as friendly values (``"High"``) by default;
+        pass ``resolve_picklists=False`` to keep the raw picklist IRIs.
         """
         if query is None:
-            page = self.list(limit=1, show_deleted=show_deleted, raw=raw)
+            page = self.list(limit=1, show_deleted=show_deleted, raw=raw, resolve_picklists=resolve_picklists)
         else:
             if isinstance(query, Query):
                 query = query.limit(1)
             else:
                 query = dict(query)
                 query["limit"] = 1
-            page = self.query(query, show_deleted=show_deleted, raw=raw)
+            page = self.query(query, show_deleted=show_deleted, raw=raw, resolve_picklists=resolve_picklists)
         return page.members[0] if page.members else None
 
     def count(

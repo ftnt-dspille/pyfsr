@@ -6,8 +6,8 @@ module-specific APIs like `client.alerts`.
 
 ```{seealso}
 Runnable examples:
-[`examples/list_alerts.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/list_alerts.py)
-(a minimal read) and
+[`examples/create_and_list_alerts.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/create_and_list_alerts.py)
+(a minimal create + read) and
 [`examples/upload_attachment_record.py`](https://github.com/ftnt-dspille/pyfsr/blob/main/examples/upload_attachment_record.py)
 (file upload + linking an attachment record).
 ```
@@ -32,9 +32,10 @@ A record reference can be a bare uuid, the `module:uuid` shorthand, or a full
 
 ### Return shapes
 
-`get` returns the bound model (here `Alert`); picklist fields come back as their
-IRI string. Pass `raw=True` for the plain decoded dict, where a picklist keeps
-its full `itemValue` block:
+`get` returns the bound model (here `Alert`); picklist fields come back as
+friendly values (`"Low"`) by default. Pass `raw=True` for the plain decoded
+dict, and `resolve_picklists=False` to keep the wire shape (IRI strings or the
+full expanded `itemValue` block the box returns):
 
 ```{doctest}
 >>> client = demo_client()
@@ -42,10 +43,10 @@ its full `itemValue` block:
 >>> alert = alerts.get("9f0eb603-ac1e-41c3-b47b-444589beed39")
 >>> type(alert).__name__, alert.name
 ('Alert', 'Response Capture Test Alert')
->>> alert.severity                       # typed: the picklist IRI string
-'/api/3/picklists/58d0753f-f7e4-403b-953c-b0f521eab759'
->>> raw = alerts.get("9f0eb603-ac1e-41c3-b47b-444589beed39", raw=True)
->>> raw["severity"]["itemValue"], raw["status"]["itemValue"]   # raw: friendly values
+>>> alert.severity                       # typed: friendly picklist value
+'Low'
+>>> raw = alerts.get("9f0eb603-ac1e-41c3-b47b-444589beed39", raw=True, resolve_picklists=False)
+>>> raw["severity"]["itemValue"], raw["status"]["itemValue"]   # raw, unresolved: expanded picklist block
 ('Low', 'Open')
 ```
 
@@ -134,30 +135,38 @@ Reads always come back typed; pass `raw=True` on an individual read (e.g.
 
 ## Picklist resolution
 
-Picklist fields are stored as IRIs, not friendly strings -- but `create`,
-`update`, and `upsert` resolve friendly values for you automatically, so you
-can pass `"High"` / `"Open"` directly:
+Picklist fields are stored as IRIs, not friendly strings -- but pyfsr speaks
+friendly names in both directions by default. `create`, `update`, and `upsert`
+resolve friendly values to IRIs before sending, and reads (including the
+created/updated record that comes back) map picklist IRIs and expanded
+picklist objects back to friendly values, so you can pass and read `"High"` /
+`"Open"` directly:
 
 ```{code-block} python
 alert = client.records("alerts").create({
     "name": "Test Alert",
-    "severity": "High",     # → resolved to the severity IRI
-    "status": "Open",       # → resolved to the status IRI
+    "severity": "High",     # → resolved to the severity IRI on the wire
+    "status": "Open",       # → resolved to the status IRI on the wire
 })
+alert.severity               # → 'High' on the way back
 ```
 
 Resolution only touches fields the module flags as picklist-backed, passes
 already-resolved IRIs through untouched, and is cached per client. Pass
-`resolve_picklists=False` to skip it when every value is already an IRI:
+`resolve_picklists=False` to skip it -- both the friendly→IRI mapping on the
+way out and the IRI→friendly mapping on the way back -- when you want the raw
+wire shape:
 
 ```{code-block} python
 client.records("alerts").create(data, resolve_picklists=False)
+client.records("alerts").get(uuid, resolve_picklists=False)
 ```
 
 Need to resolve a value yourself? `client.picklists` exposes the lower-level
-{func}`~pyfsr.api.picklists.PicklistsAPI.resolve` and
-`resolve_record_fields` helpers (including a `strict=True` mode that raises with
-the valid options on a bad value).
+{func}`~pyfsr.api.picklists.PicklistsAPI.resolve` (friendly→IRI),
+`reverse_resolve` (IRI→friendly), and `resolve_record_fields` /
+`reverse_resolve_record_fields` record-level helpers (including a `strict=True`
+mode that raises with the valid options on a bad value).
 
 ## Bulk writes with per-row results
 

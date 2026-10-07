@@ -4,6 +4,7 @@ import pytest
 
 from pyfsr.api.picklists import PicklistsAPI
 from pyfsr.exceptions import PicklistResolutionError
+from pyfsr.query import Query
 from pyfsr.records import RecordSet
 
 # --- canned server payloads ------------------------------------------------
@@ -251,7 +252,7 @@ def test_recordset_update_resolves_picklists_opt_in():
 # --- strict picklist pre-flight on writes ----------------------------------
 # strict_picklists=True turns an unresolvable friendly value (typo, wrong
 # casing, stale picklist) into a clear pre-flight error naming the field, bad
-# value, and valid options — instead of letting the box return an opaque
+# value, and valid options - instead of letting the box return an opaque
 # FSR_CH_0000001 400. Default False leaves the value in place (back-compatible).
 def test_recordset_create_strict_raises_on_miss():
     api, client = _api()
@@ -262,7 +263,7 @@ def test_recordset_create_strict_raises_on_miss():
     assert err.value == "Nope"
     assert err.picklist == "Severity"
     assert "High" in err.valid_values
-    # No POST reached the wire — the error fired pre-flight.
+    # No POST reached the wire - the error fired pre-flight.
     assert client.post_calls == []
 
 
@@ -301,15 +302,144 @@ def test_recordset_get_or_create_strict_raises_on_miss():
             strict_picklists=True,
         )
     # The lookup query ran (POST /api/query/alerts), but the create half never
-    # fired — strict raised before the POST /api/3/alerts.
+    # fired - strict raised before the POST /api/3/alerts.
     create_posts = [c for c in client.post_calls if c[0] == "/api/3/alerts"]
     assert create_posts == []
+
+
+# --- reverse_resolve_record_fields (read side) ------------------------------
+def test_reverse_resolve_record_fields():
+    api, _ = _api()
+    out = api.reverse_resolve_record_fields(
+        "alerts",
+        {"name": "x", "severity": "/api/3/picklists/sev-high", "status": "/api/3/picklists/st-open"},
+    )
+    assert out == {"name": "x", "severity": "High", "status": "Open"}
+
+
+def test_reverse_resolve_record_fields_multi_select():
+    api, _ = _api()
+    out = api.reverse_resolve_record_fields(
+        "alerts", {"severity": ["/api/3/picklists/sev-high", "/api/3/picklists/sev-low"]}
+    )
+    assert out["severity"] == ["High", "Low"]
+
+
+def test_reverse_resolve_record_fields_unknown_iri_passthrough():
+    """An IRI the picklist catalog doesn't know (deleted item) stays as-is."""
+    api, _ = _api()
+    out = api.reverse_resolve_record_fields("alerts", {"severity": "/api/3/picklists/ghost"})
+    assert out["severity"] == "/api/3/picklists/ghost"
+
+
+def test_reverse_resolve_record_fields_expanded_dict():
+    """The wire shape on 8.0: picklist fields arrive as expanded objects."""
+    api, _ = _api()
+    out = api.reverse_resolve_record_fields(
+        "alerts",
+        {
+            "name": "x",
+            "severity": {
+                "@id": "/api/3/picklists/sev-high",
+                "@type": "Picklist",
+                "itemValue": "High",
+                "uuid": "sev-high",
+            },
+        },
+    )
+    assert out["severity"] == "High"
+
+
+def test_reverse_resolve_record_fields_non_picklist_expanded_ref_untouched():
+    """An expanded *relationship* object (no itemValue) is not a picklist value."""
+    api, _ = _api()
+    ref = {"@id": "/api/3/users/u1", "@type": "User", "name": "admin"}
+    out = api.reverse_resolve_record_fields("alerts", {"assignedTo": ref})
+    assert out["assignedTo"] == ref
+
+
+def test_reverse_resolve_record_fields_no_iris_skips_metadata():
+    """A record with no picklist IRIs returns unchanged without the metadata lookup."""
+    api, client = _api()
+    out = api.reverse_resolve_record_fields("alerts", {"name": "x", "uuid": "u1"})
+    assert out == {"name": "x", "uuid": "u1"}
+    assert [c for c in client.get_calls if "staging_model_metadatas" in c[0]] == []
+
+
+# --- RecordSet read-side integration ---------------------------------------
+class _ReadFakeClient(FakeClient):
+    """FakeClient that can also serve record endpoints from a responses dict."""
+
+    def __init__(self, responses=None):
+        super().__init__()
+        self.responses = responses or {}
+
+    def get(self, endpoint, params=None, **kwargs):
+        if endpoint in self.responses:
+            return self.responses[endpoint]
+        return super().get(endpoint, params, **kwargs)
+
+    def post(self, endpoint, data=None, params=None, **kwargs):
+        if endpoint in self.responses:
+            return self.responses[endpoint]
+        return super().post(endpoint, data, params, **kwargs)
+
+
+def _record_client(responses):
+    client = _ReadFakeClient(responses)
+    client.picklists = PicklistsAPI(client)
+    return client
+
+
+_LIST_RESP = {
+    "hydra:member": [
+        {
+            "uuid": "u1",
+            "name": "x",
+            "severity": "/api/3/picklists/sev-high",
+            "status": "/api/3/picklists/st-open",
+        }
+    ],
+    "hydra:totalItems": 1,
+}
+
+
+def test_recordset_list_resolves_picklists_by_default():
+    client = _record_client({"/api/3/alerts": _LIST_RESP})
+    row = RecordSet(client, "alerts").list().members[0]
+    assert row.severity == "High"
+    assert row.status == "Open"
+
+
+def test_recordset_list_resolution_opt_out():
+    client = _record_client({"/api/3/alerts": _LIST_RESP})
+    row = RecordSet(client, "alerts").list(resolve_picklists=False).members[0]
+    assert row.severity == "/api/3/picklists/sev-high"
+    assert row.status == "/api/3/picklists/st-open"
+
+
+def test_recordset_get_resolves_picklists_by_default():
+    client = _record_client({"/api/3/alerts/u1": _LIST_RESP["hydra:member"][0]})
+    rec = RecordSet(client, "alerts").get("u1")
+    assert rec.severity == "High"
+
+
+def test_recordset_query_resolves_picklists_by_default():
+    client = _record_client({"/api/query/alerts": _LIST_RESP})
+    row = RecordSet(client, "alerts").filter(Query()).members[0]
+    assert row.severity == "High"
+
+
+def test_recordset_create_response_resolves_picklists():
+    client = _record_client({"/api/3/alerts": _LIST_RESP["hydra:member"][0]})
+    rec = RecordSet(client, "alerts").create({"name": "x", "severity": "High"})
+    assert rec.severity == "High"
 
 
 def test_dispatch_create_record_strict_returns_structured_error():
     """The MCP create_record tool surfaces a picklist miss as a structured error
     dict (field/value/picklist/valid_values) so an agent can pick a valid value
-    programmatically — not as an opaque box 400."""
+    programmatically - not as an opaque box 400."""
     from pyfsr.agent import tools
 
     api, base = _api()

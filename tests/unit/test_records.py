@@ -11,11 +11,14 @@ class _NoopPicklists:
 
     create/update/upsert resolve picklists by default now; these tests exercise
     write *mechanics*, so resolution is a passthrough that doesn't perturb the
-    recorded call sequence.
+    recorded call sequence. The read-side mirror is a passthrough too.
     """
 
     def resolve_record_fields(self, module, fields, **kwargs):
         return fields
+
+    def reverse_resolve_record_fields(self, module, data):
+        return data
 
 
 class FakeClient:
@@ -607,7 +610,7 @@ def test_bulk_insert_parse_true_splits_success_and_failure():
 def test_bulk_insert_parse_true_normalizes_all_succeeded_hydra_collection():
     """All-succeeded responses come back as a bare hydra:Collection (live-verified
     on FortiSOAR 8.0.0-6034), unlike the {"success": [...], "failure": [...]}
-    envelope a partial failure gets — both must parse to the same result shape."""
+    envelope a partial failure gets - both must parse to the same result shape."""
     from pyfsr.records import BulkUpsertResult
 
     raw_response = {

@@ -39,7 +39,8 @@ class RecordModuleAPI(BaseAPI):
 
         Args:
             resolve_picklists: When True (default), friendly picklist values are
-                mapped to IRIs before sending.
+                mapped to IRIs before sending, and picklist fields in the
+                returned record come back as friendly values.
             strict_picklists: When True, raise
                 :class:`~pyfsr.exceptions.PicklistResolutionError` *before* the
                 POST when a friendly value doesn't resolve (names the field, bad
@@ -62,10 +63,20 @@ class RecordModuleAPI(BaseAPI):
             self._validate_record(data)
         if resolve_picklists:
             data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
-        return self.client.post(f"/api/3/{self.module}", data=data)
+        resp = self.client.post(f"/api/3/{self.module}", data=data)
+        return self._resolve_response(resp, resolve_picklists=resolve_picklists)
 
-    def list(self, params: dict | None = None) -> dict[str, Any]:
+    def _resolve_response(self, data: dict[str, Any], *, resolve_picklists: bool) -> dict[str, Any]:
+        """Map picklist IRIs in a response record back to friendly values."""
+        if resolve_picklists and isinstance(data, dict):
+            return self.client.picklists.reverse_resolve_record_fields(self.module, data)
+        return data
+
+    def list(self, params: dict | None = None, *, resolve_picklists: bool = True) -> dict[str, Any]:
         """List records, optionally filtered via query parameters.
+
+        Picklist fields come back as friendly values (``"High"``) by default;
+        pass ``resolve_picklists=False`` to keep the raw picklist IRIs.
 
         .. note::
 
@@ -75,11 +86,17 @@ class RecordModuleAPI(BaseAPI):
             returns typed (dict-compatible) records, and offers ``.first()`` /
             ``.list()`` / iteration.
         """
-        return self.client.get(f"/api/3/{self.module}", params=params)
+        resp = self.client.get(f"/api/3/{self.module}", params=params)
+        if resolve_picklists and isinstance(resp, dict):
+            members = resp.get("hydra:member")
+            if isinstance(members, list):
+                resp["hydra:member"] = [self._resolve_response(m, resolve_picklists=True) for m in members]
+        return resp
 
-    def get(self, record_id: str) -> dict[str, Any]:
-        """Get a single record by ID."""
-        return self.client.get(f"/api/3/{self.module}/{record_id}")
+    def get(self, record_id: str, *, resolve_picklists: bool = True) -> dict[str, Any]:
+        """Get a single record by ID; picklist fields come back as friendly values."""
+        resp = self.client.get(f"/api/3/{self.module}/{record_id}")
+        return self._resolve_response(resp, resolve_picklists=resolve_picklists)
 
     def update(
         self,
@@ -96,7 +113,8 @@ class RecordModuleAPI(BaseAPI):
             record_id: The record UUID or IRI to update.
             data: Fields to update (e.g. ``{"status": "Closed"}``).
             resolve_picklists: When True (default), friendly picklist values are
-                mapped to IRIs before sending.
+                mapped to IRIs before sending, and picklist fields in the
+                returned record come back as friendly values.
             strict_picklists: When True, raise pre-flight on an unresolvable
                 picklist value (see :meth:`create`).
             validate: When True, run client-side validation (field types, etc.)
@@ -107,7 +125,8 @@ class RecordModuleAPI(BaseAPI):
             self._validate_record(data)
         if resolve_picklists:
             data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
-        return self.client.put(f"/api/3/{self.module}/{record_id}", data=data)
+        resp = self.client.put(f"/api/3/{self.module}/{record_id}", data=data)
+        return self._resolve_response(resp, resolve_picklists=resolve_picklists)
 
     def delete(self, record_id: str) -> None:
         """Delete a record."""
@@ -153,7 +172,7 @@ class RecordModuleAPI(BaseAPI):
         record model uses ``extra="allow"`` and types its fields as optional,
         this type-checks the *known* fields (e.g. rejecting an ``int`` for a
         ``str``-typed field) while leaving unknown keys and partial updates
-        untouched — so it is safe for both ``create`` and ``update``.
+        untouched - so it is safe for both ``create`` and ``update``.
 
         Modules without a curated model (parsed as the bare ``BaseRecord``) have
         no typed fields to check, so validation is a no-op for them.
@@ -168,7 +187,7 @@ class RecordModuleAPI(BaseAPI):
 
         model = model_for(self.module)
         if model is BaseRecord:
-            # No curated model for this module — nothing typed to validate.
+            # No curated model for this module - nothing typed to validate.
             return
         try:
             model.model_validate(data)

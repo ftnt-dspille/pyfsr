@@ -23,6 +23,7 @@ class FakeClient:
     def __init__(self, responses=None):
         self.calls = []
         self.responses = responses or {}
+        self.picklists = None  # reads skip picklist resolution when absent
 
     def get(self, endpoint, params=None, **kwargs):
         self.calls.append(("GET", endpoint, params, None))

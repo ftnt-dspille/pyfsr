@@ -8,6 +8,9 @@ class _NoopPicklists:
     def resolve_record_fields(self, module, fields, **kwargs):
         return fields
 
+    def reverse_resolve_record_fields(self, module, data):
+        return data
+
 
 class FakeClient:
     def __init__(self, responses=None):
@@ -131,7 +134,7 @@ def test_create_user_dispatches_actor_subtype_by_type():
     assert isinstance(engine.create_user, Appliance)
 
     # record created via an API key: createUser expands to the ApiKey actor
-    # (@type ApiKey, /api/3/api_keys/<uuid>) — live-captured on 8.0.0.
+    # (@type ApiKey, /api/3/api_keys/<uuid>) - live-captured on 8.0.0.
     apikey = Alert.model_validate(
         {"uuid": "a3", "modifyUser": {"@id": "/api/3/api_keys/k-1", "@type": "ApiKey", "name": "svc"}}
     )
@@ -139,7 +142,7 @@ def test_create_user_dispatches_actor_subtype_by_type():
 
 
 def test_str_picklist_field_collapses_to_iri():
-    # severity is typed str — the collapse validator flattens the expanded picklist
+    # severity is typed str - the collapse validator flattens the expanded picklist
     # object to its @id IRI; callers use picklist_uuid() to extract the UUID.
     alert = Alert.model_validate({"uuid": "a1", "severity": {"@id": "/api/3/picklists/p-1", "itemValue": "High"}})
     assert alert.severity == "/api/3/picklists/p-1"

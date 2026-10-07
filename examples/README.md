@@ -9,7 +9,7 @@ self-describing: `<domain>_<action>_<detail>.py`. Most scripts talk to a
 
 | If you want to... | Start here |
 |---|---|
-| ...list alerts (hello world) | [`list_alerts.py`](list_alerts.py) |
+| ...create and list alerts (hello world) | [`create_and_list_alerts.py`](create_and_list_alerts.py) |
 | ...query records with the fluent DSL | [`query_dsl_tour.py`](query_dsl_tour.py) |
 | ...upload a file attachment | [`upload_attachment_record.py`](upload_attachment_record.py) |
 | ...create a module / fields | [`module_create_all_field_types.py`](module_create_all_field_types.py) |
@@ -46,9 +46,13 @@ $EDITOR config.toml
 
 ```toml
 # config.toml
-host = "https://your-fortisoar.example.com"
-token = "your-api-key"          # or use username/password
+[fortisoar]
+base_url = "https://your-fortisoar.example.com"
 verify_ssl = false              # lab appliances often use self-signed certs
+
+[fortisoar.auth]
+type = "api_key"                # or "user_pass" with username/password
+key = "your-api-key"
 ```
 
 A few of the newer scripts prefer environment variables via
@@ -65,7 +69,7 @@ docstring states which it expects.
 
 | Script | What it shows | |
 |---|---|---|
-| [`list_alerts.py`](list_alerts.py) | Minimal "hello world" -- list alerts | live |
+| [`create_and_list_alerts.py`](create_and_list_alerts.py) | Minimal "hello world" -- create an alert (picklist auto-resolution) then list alerts via the typed records surface | live |
 | [`query_dsl_tour.py`](query_dsl_tour.py) | Guided tour of the Query DSL -- see [querying guide](../docs/source/guides/querying.md) | live |
 | [`upload_attachment_record.py`](upload_attachment_record.py) | Upload a file and link it to an attachment record | live |
 

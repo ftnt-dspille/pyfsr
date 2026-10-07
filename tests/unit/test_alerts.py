@@ -81,7 +81,9 @@ def test_create_alert_validation_error(mock_client, mock_response, monkeypatch):
 
 
 def test_create_alert_with_picklist_values(mock_client, mock_response, monkeypatch):
-    """Test creating an alert with proper picklist references"""
+    """Picklist fields come back as friendly values by default (read-side
+    resolution mirrors the write side); opting out keeps the raw expanded
+    picklist objects the box returns."""
     mock_data = load_mock_response("alert_create_response.json")
     severity_data = load_mock_response("alert_severity_picklist.json")
     status_data = load_mock_response("alert_status_picklist.json")
@@ -107,5 +109,9 @@ def test_create_alert_with_picklist_values(mock_client, mock_response, monkeypat
 
     result = mock_client.alerts.create(**alert_data)
     assert result["@type"] == "Alert"
-    assert result["severity"]["@id"] == alert_data["severity"]
-    assert result["status"]["@id"] == alert_data["status"]
+    assert result["severity"] == "Low"
+    assert result["status"] == "Open"
+
+    raw = mock_client.alerts.create(**alert_data, resolve_picklists=False)
+    assert raw["severity"]["@id"] == alert_data["severity"]
+    assert raw["status"]["@id"] == alert_data["status"]

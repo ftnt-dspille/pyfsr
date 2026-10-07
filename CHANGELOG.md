@@ -2,7 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.24.0] - 2026-10-07
+
+### Added
+- **Reads speak friendly picklist names.** Picklist fields now resolve in both
+  directions by default: `create`/`update`/`upsert` already mapped friendly
+  values (`"High"`) to the IRIs the API stores on the way out; now every read
+  (`get`, `get_many`, `list`, `search`, `query`/`filter`, `first`, `iterate`,
+  and the record that comes back from a write) maps picklist values back to
+  friendly values on the way in -- whether the box returns a bare IRI string
+  or the expanded `{"itemValue": "High", ...}` object. `client.alerts` /
+  `client.incidents` / `client.tasks` and the generic `client.records(module)`
+  surface all behave the same. Pass `resolve_picklists=False` on any of them
+  to keep the raw wire shape (the flag now governs both directions of a call).
+  Records that carry no picklist values skip the module-metadata lookup
+  entirely, so plain reads cost nothing extra.
+
+### Fixed
+- **`upsert(..., key=...)` on an existing record no longer sends unresolved
+  picklist values.** The find-then-update path passed `resolve_picklists=False`
+  to the inner `update()` while `data` still held friendly values
+  (`"High"`), so the PUT went over the wire unresolved and the box rejected
+  it. The update now applies the same resolution the create path uses.
 
 ### Changed
 - `examples/playbooks/contrib/` holds real copies of the contributed playbooks

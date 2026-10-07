@@ -12,6 +12,9 @@ class _NoopPicklists:
     def resolve_record_fields(self, module, fields, **kwargs):
         return fields
 
+    def reverse_resolve_record_fields(self, module, data):
+        return data
+
 
 class FakeClient:
     def __init__(self, responses=None):

@@ -1,9 +1,9 @@
-"""The alerts module — ``client.alerts``.
+"""The alerts module - ``client.alerts``.
 
 A typed shortcut over :class:`~pyfsr.records.RecordSet` for the alerts module:
 create/read/update alerts with friendly picklist values (``severity``,
 ``status``, ``type``) resolved to IRIs automatically. Reads return raw Hydra
-dicts rather than typed models — see :doc:`/guides/records` for the
+dicts rather than typed models - see :doc:`/guides/records` for the
 dict-vs-model distinction and when to reach for each.
 """
 
@@ -16,7 +16,7 @@ class AlertsAPI(BaseAPI):
     """Typed shortcut for the alerts module.
 
     ``client.alerts`` is a thin wrapper over :class:`~pyfsr.records.RecordSet`
-    that returns raw dicts (Hydra envelopes) instead of typed models — see
+    that returns raw dicts (Hydra envelopes) instead of typed models - see
     :doc:`/guides/records` for the dict-vs-model distinction.
 
     >>> client = demo_client()
@@ -42,8 +42,9 @@ class AlertsAPI(BaseAPI):
         Args:
             resolve_picklists (bool): When True (default), friendly picklist
                 values (e.g. ``severity="High"``) are mapped to the IRIs the API
-                stores before sending. Pass ``resolve_picklists=False`` to skip
-                that (and the metadata lookup it needs) when every value is
+                stores before sending, and picklist fields in the created alert
+                come back as friendly values. Pass ``resolve_picklists=False`` to
+                skip that (and the metadata lookup it needs) when every value is
                 already an IRI.
             **data (Any): Keyword arguments containing alert configuration.
                 The following keys are expected:
@@ -67,11 +68,22 @@ class AlertsAPI(BaseAPI):
         """
         if resolve_picklists:
             data = self.client.picklists.resolve_record_fields(self.module, data)
-        return self.client.post(f"/api/3/{self.module}", data=data)
+        resp = self.client.post(f"/api/3/{self.module}", data=data)
+        return self._resolve_response(resp, resolve_picklists=resolve_picklists)
 
-    def list(self, params: dict | None = None) -> dict[str, Any]:
+    def _resolve_response(self, data: dict[str, Any], *, resolve_picklists: bool) -> dict[str, Any]:
+        """Map picklist IRIs in a response back to friendly values."""
+        if resolve_picklists and isinstance(data, dict):
+            return self.client.picklists.reverse_resolve_record_fields(self.module, data)
+        return data
+
+    def list(self, params: dict | None = None, *, resolve_picklists: bool = True) -> dict[str, Any]:
         """
         List all alerts with optional filtering.
+
+        Picklist fields (``severity``, ``status``) come back as friendly values
+        (``"High"``) by default; pass ``resolve_picklists=False`` to keep the
+        raw picklist IRIs.
 
         .. note::
 
@@ -90,6 +102,8 @@ class AlertsAPI(BaseAPI):
 
         Args:
             params: Optional query parameters for filtering results
+            resolve_picklists: When True (default), map picklist IRIs in the
+                returned alerts to friendly values.
 
         Returns:
             Dict[str, Any]: List of alerts matching the criteria
@@ -103,14 +117,21 @@ class AlertsAPI(BaseAPI):
                 # List with filtering
                 filtered = client.alerts.list({"severity": "High"})
         """
-        return self.client.get(f"/api/3/{self.module}", params=params)
+        resp = self.client.get(f"/api/3/{self.module}", params=params)
+        if resolve_picklists and isinstance(resp, dict):
+            members = resp.get("hydra:member")
+            if isinstance(members, list):
+                resp["hydra:member"] = [self._resolve_response(m, resolve_picklists=True) for m in members]
+        return resp
 
-    def get(self, alert_id: str) -> dict[str, Any]:
+    def get(self, alert_id: str, *, resolve_picklists: bool = True) -> dict[str, Any]:
         """
         Get a specific alert by ID.
 
         Args:
             alert_id: The unique identifier of the alert
+            resolve_picklists: When True (default), map picklist IRIs in the
+                returned alert to friendly values.
 
         Returns:
             Dict[str, Any]: The alert object
@@ -122,7 +143,8 @@ class AlertsAPI(BaseAPI):
                 print(alert['name'])
         """
 
-        return self.client.get(f"/api/3/{self.module}/{alert_id}")
+        resp = self.client.get(f"/api/3/{self.module}/{alert_id}")
+        return self._resolve_response(resp, resolve_picklists=resolve_picklists)
 
     def update(self, alert_id: str, data: dict[str, Any], *, resolve_picklists: bool = True) -> dict[str, Any]:
         """
@@ -132,7 +154,8 @@ class AlertsAPI(BaseAPI):
             alert_id: The unique identifier of the alert
             data: Updated alert properties
             resolve_picklists: When True (default), friendly picklist values are
-                mapped to IRIs before sending; pass False to skip that.
+                mapped to IRIs before sending, and picklist fields in the
+                updated alert come back as friendly values.
 
         Returns:
             Dict[str, Any]: The updated alert object
@@ -147,7 +170,8 @@ class AlertsAPI(BaseAPI):
         """
         if resolve_picklists:
             data = self.client.picklists.resolve_record_fields(self.module, data)
-        return self.client.put(f"/api/3/{self.module}/{alert_id}", data=data)
+        resp = self.client.put(f"/api/3/{self.module}/{alert_id}", data=data)
+        return self._resolve_response(resp, resolve_picklists=resolve_picklists)
 
     def delete(self, alert_id: str) -> None:
         """
