@@ -158,10 +158,6 @@ exclude = [
     ".coveragerc",
     ".python-version",
     "uv.lock",
-    # Symlinks to playbooks in other local projects, by absolute path: they
-    # don't resolve anywhere else, and `python -m build` refuses an sdist that
-    # carries them (this failed the 0.23.0 publish).
-    "examples/playbooks/contrib",
 ]
 
 [tool.mypy]
