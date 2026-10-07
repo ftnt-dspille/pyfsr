@@ -346,3 +346,49 @@ def test_captured_unwired_prompt_has_no_step_iri():
     row = ManualInput.model_validate(cap.UNWIRED_MANUAL_INPUT_RETRIEVE_RESPONSE)
     # A Manual Input step with no `next:` -> its button carries no step_iri.
     assert row.response_mapping.options[0].step_iri is None
+
+
+# ---------------------------------------------------------------------------
+# Prompts with only buttons: the value names the button
+# ---------------------------------------------------------------------------
+
+
+def _buttons_only():
+    doc = _retrieve_doc(
+        options=[{"option": "Reject", "step_iri": "/iri/reject"}, {"option": "Approve", "step_iri": "/iri/approve"}]
+    )
+    doc["input"]["schema"]["inputVariables"] = []
+    return doc
+
+
+@pytest.mark.parametrize("value,iri", [("Approve", "/iri/approve"), (0, "/iri/reject")])
+def test_answer_value_presses_the_button_when_the_prompt_has_no_fields(value, iri):
+    client = FakeClient(retrieve=_buttons_only())
+    ManualInputAPI(client).answer(value, input_id=5)
+    body = next(p[1] for p in client.posts if "wfinput_resume" in p[0])
+    assert (body["step_iri"], body["input"]) == (iri, {})
+
+
+def test_answer_unknown_button_label_still_raises():
+    client = FakeClient(retrieve=_buttons_only())
+    with pytest.raises(LookupError):
+        ManualInputAPI(client).answer("Maybe", input_id=5)
+
+
+def test_auto_answer_takes_a_button_and_inputs():
+    from types import SimpleNamespace
+
+    from pyfsr.api.playbooks import PlaybooksAPI
+
+    calls = []
+    mi = SimpleNamespace(id=5, input=SimpleNamespace(schema_=SimpleNamespace(title="Review", inputVariables=[])))
+    manual_input = SimpleNamespace(pending_for_run=lambda task_id: [mi], answer=lambda *a, **kw: calls.append((a, kw)))
+    api = PlaybooksAPI(SimpleNamespace(manual_input=manual_input))
+    on_poll = api._make_auto_answer("t-1", {"Review": {"option": "Approve", "inputs": {"why": "ok"}}})
+    on_poll(None)
+    on_poll(None)  # answered once only
+    assert calls == [((), {"input_id": 5, "option": "Approve", "inputs": {"why": "ok"}})]
+
+    calls.clear()
+    api._make_auto_answer("t-1", {"Review": "Approve"})(None)
+    assert calls == [(("Approve",), {"input_id": 5})]

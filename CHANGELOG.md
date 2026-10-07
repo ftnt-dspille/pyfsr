@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **Prompts with only buttons can be answered.** On a manual input with no
+  fields (an approval, or a message with buttons), `manual_input.answer(value)`
+  now presses the button that `value` names (label or index), as the
+  `run_and_wait(answers=...)` docs already said. Before, it tried to put the
+  value in a field and raised `ValueError`. `answers=` also takes
+  `{"option": "<button>", "inputs": {...}}` to press a specific button and fill
+  fields in one answer.
 - **Updating an existing playbook with `playbooks.upsert_playbooks()` (and
   `workflow_collections.deploy()`) now changes its flow.** Before, new steps
   were created but never attached to the playbook, and routes were never

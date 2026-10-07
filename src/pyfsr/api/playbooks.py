@@ -2929,7 +2929,13 @@ class PlaybooksAPI(BaseAPI):
                         f"  [auto-answer] {matched_key!r} -> {value!r} (input_id={mi_id})",
                         file=sys.stderr,
                     )
-                    self.client.manual_input.answer(value, input_id=mi_id)
+                    if isinstance(value, dict) and ("option" in value or "inputs" in value):
+                        # {"option": <button>, "inputs": {...}}: a button plus field values
+                        self.client.manual_input.answer(
+                            input_id=mi_id, option=value.get("option", 0), inputs=value.get("inputs")
+                        )
+                    else:
+                        self.client.manual_input.answer(value, input_id=mi_id)
                     answered.add(mi_id)
             return None
 
@@ -2969,8 +2975,10 @@ class PlaybooksAPI(BaseAPI):
         separate :meth:`~pyfsr.api.manual_input.ManualInputAPI.answer` call. The
         dict keys match by the prompt's **title** (the step's ``title:`` field)
         or by **input variable name** (e.g. ``"my_number"``); the value is the
-        answer to submit. For multi-button prompts (approval), pass the option
-        label or index as the value (e.g. ``"Approve"`` or ``0``)::
+        answer to submit. For a prompt with only buttons (an approval, or a
+        message with buttons), pass the button label or index as the value (e.g.
+        ``"Approve"`` or ``0``). To press a specific button *and* fill fields,
+        pass ``{"option": "Submit", "inputs": {"reason": "ok"}}``::
 
             result = client.playbooks.run_and_wait(
                 "Validate Six Digit Number",

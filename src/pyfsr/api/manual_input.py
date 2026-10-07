@@ -492,9 +492,10 @@ class ManualInputAPI(BaseAPI):
 
         Args:
             value: a scalar answer for a **single**-variable input prompt; mapped
-                to the input's declared variable name automatically. For an
-                approval/button-only step, omit it. For a multi-variable prompt,
-                use ``inputs=`` instead.
+                to the input's declared variable name automatically. On a prompt
+                with no input variables (an approval, or a message with buttons)
+                it names the button to press instead -- a label or an index, the
+                same as ``option=``. For a multi-variable prompt, use ``inputs=``.
             by_title: select the pending input whose ``title`` -- the prompt's
                 schema title, i.e. the Manual Input step's ``title:`` -- matches
                 exactly. Titles are not unique (the same step pausing in two
@@ -563,6 +564,10 @@ class ManualInputAPI(BaseAPI):
         options = (full.response_mapping.options if full.response_mapping else None) or []
         if not options:
             raise LookupError(f"manual input {input_id} exposes no response options")
+        if inputs is None and value is not None and not self._variable_names(full):
+            # A prompt with only buttons has no field to put a value in: the
+            # value names the button (label or index), as for an approval.
+            option, value = value, None
         opt = self._pick_option(options, option)
 
         # A button is wired to its next step at author time: the step's
@@ -621,10 +626,14 @@ class ManualInputAPI(BaseAPI):
         raise LookupError(f"no response option labelled {option!r}; available: {labels}")
 
     @staticmethod
-    def _map_scalar(full: ManualInput, value: Any) -> dict[str, Any]:
+    def _variable_names(full: ManualInput) -> builtins.list[str]:
         schema_ = full.input.schema_ if full.input else None
         variables = (schema_.inputVariables if schema_ else None) or []
-        names = [v.name for v in variables if v.name]
+        return [v.name for v in variables if v.name]
+
+    @classmethod
+    def _map_scalar(cls, full: ManualInput, value: Any) -> dict[str, Any]:
+        names = cls._variable_names(full)
         if len(names) != 1:
             raise ValueError(
                 f"prompt declares {len(names)} input variable(s) ({names}); pass a full "
