@@ -4,7 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.23.0] - 2026-10-06
+## [0.23.1] - 2026-10-06
+
+### Fixed
+- **The source distribution builds again.** 0.23.0 was tagged but never reached
+  PyPI: its sdist carried symlinks to absolute local paths under
+  `examples/playbooks/contrib/`, which `python -m build` refuses to unpack.
+  That folder is now left out of the sdist. 0.23.1 contains everything listed
+  under 0.23.0.
+
+## [0.23.0] - 2026-10-06 (not published)
 
 ### Fixed
 - **Prompts with only buttons can be answered.** On a manual input with no
