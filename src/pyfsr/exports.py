@@ -390,13 +390,16 @@ class Export:
             )
             return out
 
-        out.append(
-            Finding(
-                Severity.INFO,
-                "kind.solution_pack",
-                f"solution pack {self.name} {self.version}: install with solution_packs.install_from_file()",
-            )
+        bundles = any(
+            i.install_mode == "tgz" and i.member and i.category in ("connectors", "widgets")
+            for i in self.installers()
         )
+        how = (
+            "install with import_config.import_file() (it bundles its own connector/widget installers)"
+            if bundles
+            else "install with solution_packs.install_from_file()"
+        )
+        out.append(Finding(Severity.INFO, "kind.solution_pack", f"solution pack {self.name} {self.version}: {how}"))
         if self.info.get("type") != "solutionpack":
             out.append(
                 Finding(
@@ -724,6 +727,18 @@ class Export:
             )
 
         out += self._check_post_install()
+        out += self._check_bundled_installers()
+
+        for w in self.contents.get("widgets") or []:
+            if isinstance(w, dict) and not w.get("name"):
+                out.append(
+                    Finding(
+                        Severity.WARNING,
+                        "pack.widget_entry_unnamed",
+                        f"contents.widgets entry {w!r} has no 'name' (the widget's title); the platform "
+                        "exports {apiName, name}, and an entry without name leaves the pack's widget list empty",
+                    )
+                )
 
         deps = self.info.get("dependencies")
         if isinstance(deps, list):
@@ -733,6 +748,36 @@ class Export:
                         Finding(Severity.ERROR, "pack.dependency_malformed", f"dependency entry {d!r} has no name")
                     )
         return out
+
+    def _check_bundled_installers(self) -> list[Finding]:
+        """A pack that carries its own connector/widget tgz.
+
+        Content Hub (``solution_packs.install_from_file()``) imports a pack as a
+        *SolutionPack Import*, and cyops-api installs a bundled ``install_mode:
+        tgz`` connector or widget only for a non-SolutionPack import -- a pack is
+        expected to pull them from Fortinet's catalog. So a pack whose
+        connectors/widgets are not in the catalog registers, creates its
+        dashboards and playbooks, and silently installs none of them. Through
+        the Import Wizard (``import_config.import_file()``) the same zip installs
+        them (widgets land as drafts to publish).
+        """
+        bundled = [
+            i for i in self.installers()
+            if i.install_mode == "tgz" and i.member and i.category in ("connectors", "widgets")
+        ]
+        if not bundled:
+            return []
+        names = ", ".join(f"{i.name} {i.version or ''}".strip() for i in bundled)
+        return [
+            Finding(
+                Severity.WARNING,
+                "pack.bundled_installers_need_import_wizard",
+                f"bundles {len(bundled)} connector/widget installer(s) ({names}). A Content Hub install "
+                "(solution_packs.install_from_file) skips bundled tgz and takes them from Fortinet's "
+                "catalog; install with the Import Wizard (import_config.import_file) unless they are "
+                "published there, then publish the widgets",
+            )
+        ]
 
     def _check_post_install(self) -> list[Finding]:
         """The post-install configuration wizard hook.

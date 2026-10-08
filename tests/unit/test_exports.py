@@ -139,9 +139,17 @@ def codes(path: Path, **kw: Any) -> list[str]:
         return [f.code for f in exp.problems(**kw)]
 
 
+# The fixture bundles a code-runner tgz on purpose (the installer checks need
+# one), so every fixture pack draws the install-route advice. It has its own
+# tests below; the shape tests set it aside.
+ROUTE_ADVICE = "pack.bundled_installers_need_import_wizard"
+
+
 def blocking(path: Path, **kw: Any) -> list[str]:
     with Export.open(path) as exp:
-        return [f.code for f in exp.problems(**kw) if f.severity is not Severity.INFO]
+        return [
+            f.code for f in exp.problems(**kw) if f.severity is not Severity.INFO and f.code != ROUTE_ADVICE
+        ]
 
 
 def info_with(**changes: Any) -> dict[str, Any]:
@@ -457,7 +465,7 @@ def test_validate_raises_on_errors_and_lists_them(tmp_path: Path) -> None:
 def test_validate_returns_non_fatal_findings_on_a_clean_pack(tmp_path: Path) -> None:
     with Export.open(build_export(tmp_path)) as exp:
         remaining = exp.validate()
-    assert all(f.severity is Severity.INFO for f in remaining)
+    assert all(f.severity is Severity.INFO or f.code == ROUTE_ADVICE for f in remaining)
 
 
 def test_validate_strict_promotes_warnings(tmp_path: Path) -> None:
@@ -466,3 +474,39 @@ def test_validate_strict_promotes_warnings(tmp_path: Path) -> None:
         exp.validate()  # warning only -- tolerated by default
         with pytest.raises(ExportValidationError):
             exp.validate(strict=True)
+
+
+# --------------------------------------------------------------------------- install route
+
+
+def test_a_pack_bundling_its_own_installer_is_told_to_use_the_import_wizard(tmp_path: Path) -> None:
+    """Content Hub imports a pack as a SolutionPack Import, and cyops-api installs
+    a bundled tgz only for a non-SolutionPack import -- so through Content Hub
+    the pack registers but its own connector never installs."""
+    with Export.open(build_export(tmp_path)) as exp:
+        found = {f.code: f for f in exp.problems()}
+    advice = found[ROUTE_ADVICE]
+    assert advice.severity is Severity.WARNING
+    assert "code-runner" in advice.message and "import_config.import_file" in advice.message
+    assert "import_config.import_file" in found["kind.solution_pack"].message
+
+
+def test_a_catalog_only_pack_keeps_the_content_hub_route(tmp_path: Path) -> None:
+    def rpm_only(rows: list[dict[str, Any]]) -> None:
+        for r in rows:
+            r["install_mode"] = "rpm"
+            r.pop("installer_path", None)
+
+    path = build_export(tmp_path, connectors__data_dot_json=data_json(rpm_only),
+                        connectors__code_runner_1_dot_0_dot_0_dot_tgz=None)
+    with Export.open(path) as exp:
+        found = {f.code: f for f in exp.problems()}
+    assert ROUTE_ADVICE not in found
+    assert "solution_packs.install_from_file" in found["kind.solution_pack"].message
+
+
+def test_a_widget_entry_without_its_title_is_flagged(tmp_path: Path) -> None:
+    info = info_with(contents={**PACK_INFO["contents"], "widgets": [{"apiName": "myWidget", "title": "My Widget"}]})
+    assert "pack.widget_entry_unnamed" in codes(build_export(tmp_path, info=info))
+    named = info_with(contents={**PACK_INFO["contents"], "widgets": [{"apiName": "myWidget", "name": "My Widget"}]})
+    assert "pack.widget_entry_unnamed" not in codes(build_export(tmp_path, info=named))
