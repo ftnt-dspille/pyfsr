@@ -2145,6 +2145,14 @@ class ConnectorsAPI(BaseAPI):
                 return row
         return None
 
+    def _own_agent(self, connector: str) -> str | None:
+        """The appliance's own agentId as its install of ``connector`` reports it
+        (``connector_detail``'s top-level ``agent``), or ``None``."""
+        try:
+            return self.connector_detail(connector).get("agent")
+        except ValueError:
+            return None
+
     def _install_name(self, install_id: int) -> str | None:
         """The connector name of an install id -- an agent's install included."""
         try:
@@ -2205,6 +2213,16 @@ class ConnectorsAPI(BaseAPI):
         version = version or self.resolve_version(connector)
         agent = self._agent_id(agent)
         existing = self._find_configuration_by_name(connector, name, agent=agent)
+        keep_agent = agent
+        if existing and agent is None:
+            keep_agent = existing.get("agent")
+            # Every configuration on the appliance's own install carries the
+            # appliance's agentId. It is not a registered remote agent, so
+            # passing it on made update_configuration raise "no agent named
+            # ..." -- and the except below then returned the old row as if the
+            # update had landed. Omitted, the row stays on the appliance.
+            if keep_agent and keep_agent == self._own_agent(connector):
+                keep_agent = None
 
         def _write() -> ConnectorConfig:
             if existing:
@@ -2215,7 +2233,7 @@ class ConnectorsAPI(BaseAPI):
                     name=name,
                     version=version,
                     default=default,
-                    agent=agent if agent is not None else existing.get("agent"),
+                    agent=keep_agent,
                     validate=validate,
                     autofill=autofill,
                 )
@@ -2232,6 +2250,10 @@ class ConnectorsAPI(BaseAPI):
 
         try:
             return _write()
+        except (ValueError, ConfigValidationError):
+            # Raised before anything was sent (unresolvable agent, bad config).
+            # Re-finding the row would report the OLD config as written.
+            raise
         except Exception:
             # The write may have persisted before a post-save hook raised -- verify
             # by re-fetch rather than trusting the status code.

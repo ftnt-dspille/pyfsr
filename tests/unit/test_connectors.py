@@ -1185,6 +1185,34 @@ def test_upsert_updates_in_place_and_preserves_agent():
     assert all(e != "/api/integration/configuration/" for e, _ in client.post_calls)
 
 
+def test_upsert_updates_a_config_on_the_appliances_own_install():
+    """Every config on the appliance's install carries the appliance's agentId,
+    which is no registered remote agent. Passing it on raised "no agent named"
+    before the PUT, and the old row came back as if the update had landed --
+    a rotated key was silently never written (seen live on 8.0)."""
+    api, client = _scripted()
+    client.detail = {
+        "agent": "appliance-self",
+        "configuration": [{"name": "prod", "config_id": "cfg-7", "agent": "appliance-self"}],
+    }
+    api.upsert_configuration("virustotal", {"k": "rotated"}, name="prod", validate=False, autofill=False)
+    endpoint, body = client.put_calls[-1]
+    assert endpoint == "/api/integration/configuration/cfg-7/"
+    assert body["config"] == {"k": "rotated"}
+    assert "agent" not in body  # stays on the appliance
+
+
+def test_upsert_raises_a_pre_write_failure_instead_of_returning_the_old_row():
+    api, client = _scripted()
+    client.detail = {
+        "agent": "appliance-self",
+        "configuration": [{"name": "prod", "config_id": "cfg-7", "agent": "agent-gone"}],
+    }
+    with pytest.raises(ValueError, match="no agent named"):
+        api.upsert_configuration("virustotal", {"k": "rotated"}, name="prod", validate=False, autofill=False)
+    assert client.put_calls == []
+
+
 def test_upsert_tolerates_persisted_despite_500():
     api, client = _scripted()
     # create raises (post-save hook 500), but a re-fetch finds the row -> success
