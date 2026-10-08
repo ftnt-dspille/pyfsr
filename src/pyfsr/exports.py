@@ -391,8 +391,7 @@ class Export:
             return out
 
         bundles = any(
-            i.install_mode == "tgz" and i.member and i.category in ("connectors", "widgets")
-            for i in self.installers()
+            i.install_mode == "tgz" and i.member and i.category in ("connectors", "widgets") for i in self.installers()
         )
         how = (
             "install with import_config.import_file() (it bundles its own connector/widget installers)"
@@ -762,7 +761,8 @@ class Export:
         them (widgets land as drafts to publish).
         """
         bundled = [
-            i for i in self.installers()
+            i
+            for i in self.installers()
             if i.install_mode == "tgz" and i.member and i.category in ("connectors", "widgets")
         ]
         if not bundled:

@@ -147,9 +147,7 @@ ROUTE_ADVICE = "pack.bundled_installers_need_import_wizard"
 
 def blocking(path: Path, **kw: Any) -> list[str]:
     with Export.open(path) as exp:
-        return [
-            f.code for f in exp.problems(**kw) if f.severity is not Severity.INFO and f.code != ROUTE_ADVICE
-        ]
+        return [f.code for f in exp.problems(**kw) if f.severity is not Severity.INFO and f.code != ROUTE_ADVICE]
 
 
 def info_with(**changes: Any) -> dict[str, Any]:
@@ -497,8 +495,9 @@ def test_a_catalog_only_pack_keeps_the_content_hub_route(tmp_path: Path) -> None
             r["install_mode"] = "rpm"
             r.pop("installer_path", None)
 
-    path = build_export(tmp_path, connectors__data_dot_json=data_json(rpm_only),
-                        connectors__code_runner_1_dot_0_dot_0_dot_tgz=None)
+    path = build_export(
+        tmp_path, connectors__data_dot_json=data_json(rpm_only), connectors__code_runner_1_dot_0_dot_0_dot_tgz=None
+    )
     with Export.open(path) as exp:
         found = {f.code: f for f in exp.problems()}
     assert ROUTE_ADVICE not in found

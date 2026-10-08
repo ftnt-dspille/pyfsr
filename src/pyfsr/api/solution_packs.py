@@ -1,4 +1,4 @@
-"""Solution packs — ``client.solution_packs``.
+"""Solution packs - ``client.solution_packs``.
 
 Install, export, and manage FortiSOAR solution packs (bundled modules,
 playbooks, connectors, and views shipped as one unit). Packs can be resolved by
@@ -78,7 +78,7 @@ class SolutionPackAPI(BaseAPI):
         template_uuid = template["uuid"] if isinstance(template, dict) else str(template).rstrip("/").split("/")[-1]
 
         if not output_path:
-            # The export payload is a .zip archive, not JSON — name it accordingly.
+            # The export payload is a .zip archive, not JSON - name it accordingly.
             output_path = f"{pack['name']}_{pack['version']}.zip"
 
         return self.export_config.export_by_template_uuid(
@@ -97,16 +97,16 @@ class SolutionPackAPI(BaseAPI):
     ) -> SolutionPackInstallResponse | InstallJobStatus:
         """Install a solution pack from Content Hub by ``name`` + ``version``.
 
-        Posts ``{"name", "version"}`` to ``POST /api/3/solutionpacks/install`` —
+        Posts ``{"name", "version"}`` to ``POST /api/3/solutionpacks/install`` -
         the same call the Content Hub *Install* button makes. The install runs
         asynchronously as an import job.
 
         ``build_number`` selects which build of ``version`` to fetch. **Omit it and
-        the appliance falls back to the repo's ``latest`` build path** — which 404s
+        the appliance falls back to the repo's ``latest`` build path** - which 404s
         on a repo that publishes numbered builds without a ``latest`` alias (a
         self-hosted mirror typically does). The appliance reports that 404 as
         ``Unable to download <name> file. Please check the network connection to
-        <repo>``, which blames the network for what is really a missing artifact —
+        <repo>``, which blames the network for what is really a missing artifact -
         so if you hit that error against a working repo, pass the ``buildNumber``
         from the catalog row (``client.content_hub.search_available_packs()``)
         rather than debugging connectivity.
@@ -127,7 +127,7 @@ class SolutionPackAPI(BaseAPI):
             :class:`~pyfsr.models.SolutionPackInstallResponse` (the SolutionPack
             record plus ``importJob``) when ``wait=False`` so callers can access
             ``.job_id`` for polling. :class:`~pyfsr.models.InstallJobStatus` when
-            ``wait=True`` — check ``status == "Import Complete"`` for success.
+            ``wait=True`` - check ``status == "Import Complete"`` for success.
 
         Example:
             >>> client = demo_client()
@@ -170,18 +170,52 @@ class SolutionPackAPI(BaseAPI):
             raise
         return InstallJobStatus.model_validate(resp if isinstance(resp, dict) else {"status": resp})
 
-    def wait_for_install(self, job_id: str, *, interval: float = 3.0, timeout: float = 300.0) -> InstallJobStatus:
+    def wait_for_install(
+        self,
+        job_id: str,
+        *,
+        interval: float = 3.0,
+        timeout: float = 300.0,
+        draft_grace: float = 10.0,
+    ) -> InstallJobStatus:
         """Poll an install import job until it reaches a terminal status.
+
+        A re-upload of a pack that is already staged (``replace=True``) leaves its
+        job in ``Draft``: the server waits for the import options to be generated
+        and the run triggered, which the Content Hub UI does and nothing else
+        will. A job still ``Draft`` after ``draft_grace`` seconds is driven the
+        same way (generate options, then trigger), so the wait ends on the
+        install's real outcome rather than timing out on a job that never starts.
+        Pass ``draft_grace=None`` to only observe.
 
         Returns the latest :class:`~pyfsr.models.InstallJobStatus`. On timeout,
         returns the last poll with a non-terminal ``status`` rather than raising.
         """
-        deadline = time.monotonic() + timeout
+        start = time.monotonic()
+        deadline = start + timeout
+        driven = False
         status = self.install_status(job_id)
         while str(status.status or "").strip().lower() not in _INSTALL_TERMINAL and time.monotonic() < deadline:
+            if (
+                not driven
+                and draft_grace is not None
+                and str(status.status or "").strip().lower() == "draft"
+                and time.monotonic() - start >= draft_grace
+            ):
+                self._drive_draft(job_id, timeout=max(deadline - time.monotonic(), interval))
+                driven = True
             time.sleep(interval)
             status = self.install_status(job_id)
         return status
+
+    def _drive_draft(self, job_id: str, *, timeout: float) -> None:
+        """Generate a Draft import job's options and trigger it, as the UI does."""
+        from .import_config import ImportConfigAPI
+
+        ic = ImportConfigAPI(self.client)
+        ic.generate_options(job_id)
+        ic.wait_for_options(job_id, timeout=timeout)
+        ic.trigger(job_id)
 
     def uninstall(self, name: str) -> None:
         """Uninstall a solution pack by name.
@@ -217,7 +251,7 @@ class SolutionPackAPI(BaseAPI):
 
         Resolves the builder's content selection to a full export ``options``
         payload, then ``POST``\\s ``/api/3/solutionpacks`` with the pack metadata
-        and a nested ``SolutionPack Export`` template — the same shape the Content
+        and a nested ``SolutionPack Export`` template - the same shape the Content
         Hub *Create Solution Pack* wizard posts. The pack is created ``local`` and
         ``draft``; ``publish=True`` marks it ``installed`` (available) rather than
         a development draft.
@@ -228,7 +262,7 @@ class SolutionPackAPI(BaseAPI):
                 a development draft.
 
         Returns:
-            :class:`~pyfsr.models.SolutionPackInstallResponse` — the created pack
+            :class:`~pyfsr.models.SolutionPackInstallResponse` - the created pack
             record (``.uuid``, ``.name``, ``.version``).
 
         Example:
@@ -288,7 +322,7 @@ class SolutionPackAPI(BaseAPI):
         defaults to ``solutionpack`` server-side), the same multipart endpoint the
         Content Hub *Upload* button uses. This is the file counterpart of
         :meth:`install` (which fetches by name/version from the repo) and returns
-        the same shape — a pack record carrying the async import job.
+        the same shape - a pack record carrying the async import job.
 
         Args:
             path: filesystem path to the pack bundle.
@@ -301,7 +335,7 @@ class SolutionPackAPI(BaseAPI):
         Returns:
             :class:`~pyfsr.models.SolutionPackInstallResponse` (with ``.job_id``
             for polling) when ``wait=False``; :class:`~pyfsr.models.InstallJobStatus`
-            when ``wait=True`` — check ``status == "Import Complete"``.
+            when ``wait=True`` - check ``status == "Import Complete"``.
 
         Example:
             .. code-block:: python

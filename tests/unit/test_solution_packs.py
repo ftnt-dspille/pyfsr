@@ -101,9 +101,9 @@ def test_install_wait(mock_client, mock_response, monkeypatch):
                 "uuid": "pack-uuid",
                 "importJob": {"uuid": "job-uuid"},
             },
-            # GET /api/3/import_jobs/job-uuid  (first poll — not done yet)
+            # GET /api/3/import_jobs/job-uuid  (first poll - not done yet)
             {"status": "Importing", "progressPercent": 50},
-            # GET /api/3/import_jobs/job-uuid  (second poll — done)
+            # GET /api/3/import_jobs/job-uuid  (second poll - done)
             {"status": "Import Complete", "progressPercent": 100},
         ]
     )
@@ -130,7 +130,7 @@ def test_uninstall_success(mock_client, mock_response, monkeypatch):
             return mock_response(
                 json_data={"hydra:member": [{"uuid": "pack-uuid", "name": "SOAR Framework", "installed": True}]}
             )
-        # DELETE — return 204-style empty
+        # DELETE - return 204-style empty
         return mock_response(json_data={}, status_code=204)
 
     monkeypatch.setattr("requests.Session.request", fake_request)
@@ -297,3 +297,36 @@ def test_post_install_config_model_parses_live_shape():
     assert isinstance(cfg.widgets[0], PostInstallWidget)
     assert cfg.widgets[0].autoLaunch is True
     assert cfg["enabled"] is True  # dict-compatible
+
+
+def test_wait_for_install_drives_a_job_left_in_draft(mock_client, monkeypatch):
+    """A replace=True re-upload leaves the job Draft until the options are
+    generated and the run triggered -- the UI does that, nothing else does. The
+    wait drives it instead of timing out on a job that never starts."""
+    from pyfsr.api.import_config import ImportConfigAPI
+    from pyfsr.models._integration import InstallJobStatus
+
+    statuses = iter(["Draft", "Draft", "Importing", "Import Complete"])
+    monkeypatch.setattr(
+        mock_client.solution_packs, "install_status", lambda job: InstallJobStatus(status=next(statuses))
+    )
+    calls = []
+    monkeypatch.setattr(ImportConfigAPI, "generate_options", lambda self, job: calls.append(("generate", job)))
+    monkeypatch.setattr(
+        ImportConfigAPI, "wait_for_options", lambda self, job, **kw: calls.append(("options", job)) or {}
+    )
+    monkeypatch.setattr(ImportConfigAPI, "trigger", lambda self, job: calls.append(("trigger", job)) or {})
+
+    out = mock_client.solution_packs.wait_for_install("job-1", interval=0, draft_grace=0)
+    assert out.status == "Import Complete"
+    assert calls == [("generate", "job-1"), ("options", "job-1"), ("trigger", "job-1")]
+
+
+def test_wait_for_install_can_only_observe_a_draft(mock_client, monkeypatch):
+    from pyfsr.api.import_config import ImportConfigAPI
+    from pyfsr.models._integration import InstallJobStatus
+
+    monkeypatch.setattr(mock_client.solution_packs, "install_status", lambda job: InstallJobStatus(status="Draft"))
+    monkeypatch.setattr(ImportConfigAPI, "trigger", lambda self, job: pytest.fail("must not trigger"))
+    out = mock_client.solution_packs.wait_for_install("job-1", interval=0, timeout=0.01, draft_grace=None)
+    assert out.status == "Draft"
