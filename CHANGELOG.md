@@ -2,6 +2,87 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.25.0] - 2026-10-09
+
+### Added
+- **`system.license_identity()` -- durable appliance identity, typed.** Parses
+  the license details (`GET /api/auth/license?param=license_details`) into a
+  `LicenseIdentity` model: the per-appliance **license serial** (the one
+  identity that survives URL / port / proxy changes -- exactly what
+  provenance and drift tooling needs when a base_url comparison would read
+  one box's two listeners as two different boxes), the cluster's primary
+  `node_id`, edition, product name and build. Cluster-safe: prefers the
+  primary-role node. The models reference page is regenerated to match.
+
+### Fixed
+- **`run_env()` / `run_failure()` / `child_runs()` / `step_status()` accept
+  the `RunSummary` object `last_run()` returns.** Passing the summary back
+  used to die with ``could not resolve a run pk from RunSummary(...)`` -- the
+  model's ``str()`` looks like neither a pk nor an IRI -- forcing callers to
+  remember ``.pk``. The run resolvers now unwrap ``pk`` / ``task_id`` / ``@id``
+  from a ``RunSummary`` themselves.
+- **`update_configuration` now documents that read-modify-write of secret
+  fields is safe** (the appliance re-encrypts on save; ciphertext may differ,
+  plaintext does not) -- and that *scrubbing* secrets to placeholders, the
+  intuitive "safety" move, is what actually destroys live credentials. Same
+  note added to `upsert_configuration`.
+- **Config writes no longer silently drop unknown keys.** Three stacked
+  silent-drops conspired to make a typo'd config field name an invisible
+  no-op (seen live: a `verify: false` that persisted `true` - root cause was
+  a mix-up between this connector's `verify` field and FortiSIEM's
+  `verify_ssl`, and nothing anywhere said the key was being dropped):
+  `_materialize_config` (the `autofill` step) *stripped* undeclared keys from
+  the payload before validation ever saw them; `validate_config` classified
+  unknowns without making them invalid; and the appliance itself drops
+  undeclared keys on save. `_materialize_config` now passes unknown keys
+  through verbatim, and every validated config write runs an unknown-key
+  gate: keys no schema branch declares are **refused by default**
+  (`ConfigValidationError` with a did-you-mean of the closest declared name,
+  before any wire traffic); keys declared under inactive `onchange` branches
+  (stale fields from before a select was switched) only warn, so
+  read-modify-write of real rows keeps working. When nothing is refused at
+  least a `UserWarning` is emitted. The stance is
+  `refuse_unknown: bool | None = None` on `create_configuration`,
+  `update_configuration`, and `upsert_configuration`: `None` defers to
+  `validate` (default calls refuse; explicit `validate=False` keeps the
+  legacy silent path untouched), while an explicit `True`/`False` implies
+  `validate=True` (the gate needs the schema) and sets the policy. An empty
+  or unreadable schema disables the gate rather than blocking the write.
+- **`update_configuration` detects swapped positional args.** The signature
+  is `(connector, config_id, config)`; passing the dict and the uuid the
+  other way round previously failed with an opaque
+  `'str' object has no attribute 'get'` deep in `_collect_field_problems`.
+  It now raises a `TypeError` that names the likely swap before any wire
+  traffic.
+
+- **`upsert(..., key=...)` on an existing record no longer sends unresolved
+  picklist values.** The find-then-update path passed `resolve_picklists=False`
+  to the inner `update()` while `data` still held friendly values
+  (`"High"`), so the PUT went over the wire unresolved and the box rejected
+  it. The update now applies the same resolution the create path uses.
+
+### Changed
+- `examples/playbooks/contrib/` holds real copies of the contributed playbooks
+  instead of links to other local projects, which did not resolve outside one
+  machine.
+- **`solution_packs.wait_for_install` drives an install job left in `Draft`**
+  instead of waiting on a job that never started.
+- **`exports`: a pack that bundles its own connector/widget tgz is told to
+  use the Import Wizard** -- the flow that can actually stage the bundled
+  binary, instead of a zip import that cannot.
+- **`upsert_configuration` really updates a config on the appliance's own
+  install** (the update path no longer duplicates on a same-name config).
+- **Library: `scheduled-hunt-summarize-notify` counted zero forever.** The
+  severity counts queried `vars.steps.<find_record step>.data | json_query`,
+  but a find_record's output IS the bare list -- `.data` renders empty, so
+  every count fired as 0 on every scheduled run. Fixed to query the step
+  reference directly. Also, the platform-generated `dynamicallySelected`
+  enumeration param (present on every live op, never in public RPM-derived
+  packaged defs) is treated as catalog-cold offline -- a *different*
+  unknown_param, a real typo, still fails hard.
+- **`fsr_playbooks` pin widened to `<0.8`** -- the 0.7 series is verified
+  compatible (compiler entry points unchanged).
+
 ## [0.24.0] - 2026-10-07
 
 ### Added
@@ -17,18 +98,6 @@ All notable changes to this project will be documented in this file.
   to keep the raw wire shape (the flag now governs both directions of a call).
   Records that carry no picklist values skip the module-metadata lookup
   entirely, so plain reads cost nothing extra.
-
-### Fixed
-- **`upsert(..., key=...)` on an existing record no longer sends unresolved
-  picklist values.** The find-then-update path passed `resolve_picklists=False`
-  to the inner `update()` while `data` still held friendly values
-  (`"High"`), so the PUT went over the wire unresolved and the box rejected
-  it. The update now applies the same resolution the create path uses.
-
-### Changed
-- `examples/playbooks/contrib/` holds real copies of the contributed playbooks
-  instead of links to other local projects, which did not resolve outside one
-  machine.
 
 ## [0.23.1] - 2026-10-06
 
