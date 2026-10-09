@@ -253,6 +253,23 @@ def test_run_env_reshapes_env_and_steps():
     assert step["result"] == {"data": 2}
 
 
+def test_run_env_accepts_the_runsummary_last_run_returns():
+    """last_run()/child_runs() return RunSummary objects; run_env() must accept
+    one back instead of failing with 'could not resolve a run pk' (the model's
+    str() looks like neither a pk nor an IRI)."""
+    merged = {
+        **_run("/api/wf/api/workflows/903/", "PB", "finished", "2026-10-09T00:34:52Z", uuid="pb-uuid"),
+        **_run_with_steps("903"),
+    }
+    client = FakeClient(workflows=[merged])
+    api = PlaybooksAPI(client)
+    summary = api.last_run(playbook_uuid="pb-uuid")
+    assert summary is not None
+    env = api.run_env(summary)
+    assert env["status"] == "finished"
+    assert env["env"]["wf_id"] == "903"
+
+
 def test_run_env_carries_playbook_name():
     """RunEnv exposes the run's playbook name (for pulling the live playbook back)."""
     client = FakeClient(workflows=[_run_with_steps("902")])

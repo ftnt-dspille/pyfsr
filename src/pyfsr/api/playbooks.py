@@ -1803,7 +1803,7 @@ class PlaybooksAPI(BaseAPI):
 
     def child_runs(
         self,
-        parent: str | int,
+        parent: str | int | RunSummary,
         *,
         limit: int = 100,
     ) -> builtins.list[RunSummary]:
@@ -1836,7 +1836,7 @@ class PlaybooksAPI(BaseAPI):
         members = self._fetch_runs_both(limit=limit, parent_filter=f"parent_wf={pk}")[:limit]
         return [_shape_run(m) for m in members]
 
-    def has_async_children(self, parent: str | int) -> bool:
+    def has_async_children(self, parent: str | int | RunSummary) -> bool:
         """Whether a run dispatched async sub-playbook children.
 
         Checks for the ``#has_async_childwf_cyops`` tag FortiSOAR stamps on a run
@@ -1853,8 +1853,25 @@ class PlaybooksAPI(BaseAPI):
             return False
         return "has_async_childwf_cyops" in str(run.get("tags") or "")
 
-    def _resolve_run_pk(self, parent: str | int) -> str | None:
-        """Coerce a pk / @id-path / task_id into a numeric run pk string."""
+    def _resolve_run_pk(self, parent: str | int | RunSummary | RunSummary) -> str | None:
+        """Coerce a pk / @id-path / task_id / :class:`RunSummary` into a pk string.
+
+        Accepting :class:`RunSummary` lets callers pass the object returned by
+        :meth:`last_run` / :meth:`child_runs` straight back in -- otherwise the
+        ``str()`` of the model looks like neither a pk nor an IRI and the call
+        dies with ``could not resolve a run pk``.
+        """
+        if isinstance(parent, RunSummary):
+            for candidate in (
+                getattr(parent, "pk", None),
+                getattr(parent, "task_id", None),
+                (parent.model_dump().get("@id") if hasattr(parent, "model_dump") else None),
+            ):
+                if candidate:
+                    pk = self._resolve_run_pk(candidate)
+                    if pk:
+                        return pk
+            return None
         if isinstance(parent, int):
             return str(parent)
         s = str(parent).strip()
@@ -2061,7 +2078,7 @@ class PlaybooksAPI(BaseAPI):
 
         return _run_failure_from_full(self.get_execution(pk, step_detail=True), pk)
 
-    def run_failure(self, run: str | int) -> RunFailure | None:
+    def run_failure(self, run: str | int | RunSummary) -> RunFailure | None:
         """Failure projection for a SPECIFIC run -- by pk, ``@id`` path, or task_id.
 
         The by-run counterpart to :meth:`why_failed` (which locates the most
@@ -2080,7 +2097,7 @@ class PlaybooksAPI(BaseAPI):
             return None
         return _run_failure_from_full(self.get_execution(str(pk), step_detail=True), str(pk))
 
-    def run_env(self, run: str | int) -> RunEnv:
+    def run_env(self, run: str | int | RunSummary) -> RunEnv:
         """Return a run's execution environment + per-step results.
 
         ``run`` may be a run pk, an ``@id`` path, or a ``task_id`` (what
@@ -2142,7 +2159,7 @@ class PlaybooksAPI(BaseAPI):
             steps=steps,
         )
 
-    def step_status(self, run: str | int, step_name: str) -> str | None:
+    def step_status(self, run: str | int | RunSummary, step_name: str) -> str | None:
         """The status of one step in a run (or ``None`` if the step isn't found).
 
         Use this to assert on a step's *verifiable* outcome rather than chasing a
@@ -2166,7 +2183,7 @@ class PlaybooksAPI(BaseAPI):
 
     def run_tree(
         self,
-        run: str | int,
+        run: str | int | RunSummary,
         *,
         depth: int = 3,
         limit: int = 100,
@@ -2249,7 +2266,7 @@ class PlaybooksAPI(BaseAPI):
 
     def step_timeline(
         self,
-        run: str | int,
+        run: str | int | RunSummary,
         *,
         slow_threshold_ms: int = 30_000,
     ) -> list[RunStepSnapshot]:
@@ -2294,7 +2311,7 @@ class PlaybooksAPI(BaseAPI):
         playbook: str | None = None,
         *,
         playbook_uuid: str | None = None,
-        run: str | int | None = None,
+        run: str | int | RunSummary | None = None,
     ) -> dict[str, Any]:
         """Diff a playbook's **definition** (step graph) against a **run** (executed steps).
 
