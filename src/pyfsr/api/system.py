@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..models._system import DailyActionCount
+from ..models._system import DailyActionCount, LicenseIdentity
 from .base import BaseAPI
 
 
@@ -23,7 +23,7 @@ class SystemAPI(BaseAPI):
     """Version, permissions, feature flags, cluster health, and licensing."""
 
     def version(self) -> dict[str, Any]:
-        """Build version (``GET /api/version``). Public — no auth required.
+        """Build version (``GET /api/version``). Public - no auth required.
 
         Example:
             >>> client = demo_client()
@@ -35,7 +35,7 @@ class SystemAPI(BaseAPI):
     def permissions(self) -> dict[str, Any]:
         """The caller's effective permissions (``GET /api/permissions/current``).
 
-        A module -> ``{create, read, update, delete, execute}`` boolean map —
+        A module -> ``{create, read, update, delete, execute}`` boolean map -
         authoritative for UI/automation gating.
 
         Example:
@@ -77,7 +77,7 @@ class SystemAPI(BaseAPI):
             'Active'
 
         .. note::
-            Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+            Requires JWT auth - raises ``UnsupportedAuthOperationError`` under
             ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
         """
         return self.client.get("/api/auth/cluster/health")
@@ -96,7 +96,7 @@ class SystemAPI(BaseAPI):
             'FortiFlex'
 
         .. note::
-            Requires JWT auth — raises ``UnsupportedAuthOperationError`` under
+            Requires JWT auth - raises ``UnsupportedAuthOperationError`` under
             ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
         """
         params: dict[str, Any] = {}
@@ -105,6 +105,48 @@ class SystemAPI(BaseAPI):
         if param is not None:
             params["param"] = param
         return self.client.get("/api/auth/license", params=params or None)
+
+    def license_identity(self) -> LicenseIdentity:
+        """Durable appliance identity parsed from the license details.
+
+        ``GET /api/auth/license?param=license_details`` carries the
+        per-appliance **serial number** (e.g. ``FSRVMTEST260001``) and, on
+        clusters, a per-node registry id. The serial is the one identity that
+        survives URL / port / proxy changes -- unlike a base_url comparison,
+        which is the whole reason catalog-provenance stamping prefers it when
+        present. Cluster-safe: prefers the ``primary`` node's serial.
+
+        Returns a typed :class:`~pyfsr.models.LicenseIdentity` (fields
+        ``None`` when the license payload omits them). Raises whatever
+        :meth:`license` raises when the endpoint is unreachable; callers
+        treat identity as advisory.
+        """
+        payload = self.license(param="license_details")
+        if not isinstance(payload, dict):
+            return LicenseIdentity()
+        details = payload.get("details") or {}
+        nodes = payload.get("nodes") or {}
+        pick = None
+        for nd in nodes.values():
+            if not isinstance(nd, dict):
+                continue
+            meta = nd.get("node") or {}
+            if meta.get("role") == "primary" or meta.get("nodeName") == "primary":
+                pick = nd
+                break
+            if pick is None:
+                pick = nd
+        if pick is None:
+            pick = {}
+        node_meta = pick.get("node") or {}
+        node_details = pick.get("details") or {}
+        return LicenseIdentity(
+            serial_no=node_details.get("serial_no") or details.get("serial_no"),
+            node_id=node_meta.get("nodeId") or node_meta.get("node_id"),
+            edition=payload.get("edition") or details.get("edition"),
+            product_name=payload.get("product_name"),
+            fsr_version=(node_meta.get("nodeMetadata") or {}).get("fsrVersion"),
+        )
 
     def daily_action_count(self) -> DailyActionCount:
         """Daily action-count license usage (``GET /api/wf/workflow/config/?section=license``).
@@ -134,7 +176,7 @@ class SystemAPI(BaseAPI):
     def deploy_license(self, license_key: str) -> dict[str, Any]:
         """Deploy a license over an already-active one (``POST /api/auth/license``).
 
-        Authenticated renewal/replacement — requires a previously valid license
+        Authenticated renewal/replacement - requires a previously valid license
         to be active. For first-time activation on a fresh appliance use
         :meth:`deploy_license_public`.
         """
@@ -162,13 +204,13 @@ class SystemAPI(BaseAPI):
 
     def install_flex_license(self, license_token: str, *, node_id: str | None = None) -> dict[str, Any]:
         """Submit a FortiFlex token for redemption (``POST /api/public/license``
-        ``install_flex_license``). Unauthenticated — works under the
+        ``install_flex_license``). Unauthenticated - works under the
         ``FSR-Auth-018`` duplicate-license lockout.
 
         Unlike :meth:`deploy_license` / :meth:`deploy_license_public`, which take
         a *signed license JWT*, this takes the short FortiFlex entitlement token
         and has the appliance redeem it against the licensing server (token →
-        license, server-side). Redemption is asynchronous — poll
+        license, server-side). Redemption is asynchronous - poll
         :meth:`flex_license_status`, or use :meth:`deploy_flex_license` which
         does both. **FortiFlex tokens are single-use**: a failed redemption
         spends the token; mint a fresh one (from an ACTIVE entitlement) to retry.
@@ -195,10 +237,10 @@ class SystemAPI(BaseAPI):
         Submits the token (:meth:`install_flex_license`) then polls
         :meth:`flex_license_status` until ``depl_status`` is ``finished`` or
         ``failed`` (or ``timeout`` seconds elapse). Returns
-        ``{"ok", "depl_status", "depl_message", "install", "polls"}`` — ``ok`` is
+        ``{"ok", "depl_status", "depl_message", "install", "polls"}`` - ``ok`` is
         True only on a ``finished`` deployment. Never raises on a ``failed``
         redemption; the failure is reported in the returned dict (the token is
-        spent regardless — mint a fresh one to retry).
+        spent regardless - mint a fresh one to retry).
 
         On a license-locked appliance no credential authenticates, so build the
         client with ``public=True`` (a no-auth client for the unauthenticated

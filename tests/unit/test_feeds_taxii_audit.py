@@ -11,6 +11,7 @@ from pyfsr.api.system import SystemAPI
 from pyfsr.api.taxii import TaxiiAPI
 from pyfsr.models import (
     ApiKeyUser,
+    LicenseIdentity,
     StixBundleResult,
     StixMalware,
     StixObject,
@@ -567,6 +568,64 @@ def test_api_key_plaintext_none_when_masked_even_though_key_nonempty():
 
 
 # -------------------------------------------------------------------- system
+_LICENSE_DETAILS = {
+    "expired": False,
+    "edition": "MT",
+    "product_name": "FortiSOAR",
+    "nodes": {
+        "3e6b0f8f1234567890abcdef12345678": {
+            "details": {
+                "serial_no": "FSRVMTEST260001",
+                "edition": "MT",
+            },
+            "node": {
+                "nodeId": "3e6b0f8f1234567890abcdef12345678",
+                "status": "active",
+                "role": "primary",
+                "nodeMetadata": {"mode": "operational", "fsrVersion": "8.0.0-6034"},
+            },
+        },
+    },
+}
+
+
+def test_system_license_identity_reads_serial_and_node():
+    """license_identity() returns a typed LicenseIdentity -- the serial is the
+    one value that survives URL/port/proxy changes, which is why catalog
+    provenance stamping prefers it."""
+    c = FakeClient(get_resp=_LICENSE_DETAILS)
+    ident = SystemAPI(c).license_identity()
+    assert c.calls[-1][1] == "/api/auth/license"
+    assert c.calls[-1][2] == {"param": "license_details"}
+    assert ident.serial_no == "FSRVMTEST260001"
+    assert ident.node_id == "3e6b0f8f1234567890abcdef12345678"
+    assert ident.edition == "MT"
+    assert ident.product_name == "FortiSOAR"
+    assert ident.fsr_version == "8.0.0-6034"
+
+
+def test_system_license_identity_prefers_the_primary_node_on_clusters():
+    nodes = {
+        "secondary-node": {
+            "details": {"serial_no": "SECONDARY-SERIAL"},
+            "node": {"nodeId": "secondary-node", "role": "secondary"},
+        },
+        "primary-node": {
+            "details": {"serial_no": "PRIMARY-SERIAL"},
+            "node": {"nodeId": "primary-node", "role": "primary"},
+        },
+    }
+    c = FakeClient(get_resp={**_LICENSE_DETAILS, "nodes": nodes})
+    assert SystemAPI(c).license_identity().serial_no == "PRIMARY-SERIAL"
+
+
+def test_system_license_identity_tolerates_a_missing_payload():
+    c = FakeClient(get_resp="not a dict")
+    ident = SystemAPI(c).license_identity()
+    assert isinstance(ident, LicenseIdentity)
+    assert (ident.serial_no, ident.node_id, ident.edition, ident.product_name, ident.fsr_version) == (None,) * 5
+
+
 def test_system_simple_gets():
     c = FakeClient(get_resp={"ok": True})
     s = SystemAPI(c)

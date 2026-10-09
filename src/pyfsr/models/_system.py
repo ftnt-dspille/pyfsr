@@ -1,12 +1,12 @@
 """Typed models for FortiSOAR's stable, platform-owned *system* entities.
 
 Unlike user-mutable modules (alerts/incidents, which routinely gain custom
-fields), these entities have **fixed, platform-owned schemas** — playbooks,
+fields), these entities have **fixed, platform-owned schemas** - playbooks,
 playbook collections, playbook runs, and Content Hub items. That makes them the
 highest-value targets for hard typing (see the SDK roadmap §7).
 
 These are **curated by hand** (live-verified against a dev box), not generated
-from the OpenAPI spec — the curated spec doesn't carry these schemas. Every
+from the OpenAPI spec - the curated spec doesn't carry these schemas. Every
 model still subclasses :class:`~pyfsr.models.base.BaseRecord`, so it stays
 dict-compatible and tolerates extra/unknown fields (``extra="allow"``).
 """
@@ -95,7 +95,7 @@ class WorkflowCollection(BaseRecord):
 
 
 class ReusableBlock(BaseRecord):
-    """A **reusable playbook block** — a ``workflow_groups`` row with ``reusable=true``.
+    """A **reusable playbook block** - a ``workflow_groups`` row with ``reusable=true``.
 
     The saved, re-droppable step group surfaced in the playbook editor and the
     Configuration Export wizard's *Playbook Blocks* category. From
@@ -145,7 +145,7 @@ class WorkflowRun(BaseRecord):
 class FeaturedTag(ApiResult):
     """A marketplace "featured" badge on a Content Hub item.
 
-    The ``featuredTags`` array on a :class:`ContentHubItem` carries these —
+    The ``featuredTags`` array on a :class:`ContentHubItem` carries these -
     live-verified shape is ``{"tag": "preview", "color": "#2d87e3"}`` (the label
     and the hex colour the catalog UI renders the chip with). Dict-compatible,
     so ``tag["tag"]`` works alongside ``tag.tag``.
@@ -159,9 +159,9 @@ class AggregateRow(ApiResult):
     """One row of a server-side aggregation.
 
     Returned by :meth:`~pyfsr.records.RecordSet.aggregate`. The keys are the
-    aliases supplied to that call — group-by fields keep the field's last path
+    aliases supplied to that call - group-by fields keep the field's last path
     segment, metrics use their explicit alias, and ``count=True`` adds
-    ``total`` — so the shape is entirely caller-defined and every key lives in
+    ``total`` - so the shape is entirely caller-defined and every key lives in
     ``extra``. Dict-compatible (``row["total"]`` works alongside
     :meth:`value`); :meth:`value` is just a typed accessor for one alias.
 
@@ -186,8 +186,8 @@ class PostInstallWidget(ApiResult):
     wizard: the dropdown sets ``name``/``label``/``version`` together, and the two
     controls beside it set ``buttonLabel`` (the launch button's text, required
     when the action is enabled) and ``autoLaunch`` ("Launch automatically the
-    first time"). ``autoLaunchTriggered`` is runtime-only — the install flow sets
-    it after the first auto-launch — and is never authored. Dict-compatible.
+    first time"). ``autoLaunchTriggered`` is runtime-only - the install flow sets
+    it after the first auto-launch - and is never authored. Dict-compatible.
     """
 
     name: str | None = None
@@ -201,7 +201,7 @@ class PostInstallWidget(ApiResult):
 class PostInstallConfig(ApiResult):
     """A solution pack's *post-install action* (``infoContent.postInstallConfig``).
 
-    Live shape ``{"enabled": true, "widgets": [{...}]}`` — ``enabled`` mirrors the
+    Live shape ``{"enabled": true, "widgets": [{...}]}`` - ``enabled`` mirrors the
     wizard's *Configure post-install action* checkbox and ``widgets`` holds the
     widget(s) to offer after install (the wizard authors exactly one). There is no
     matching pre-install action in the wizard; the ``preInstall``/``postInstall``
@@ -218,7 +218,7 @@ class ContentHubItem(BaseRecord):
     Returned by ``client.content_hub`` searches. Stable, platform-owned schema
     (the marketplace catalog shape). Subclassed by :class:`SolutionPack`,
     :class:`ContentHubConnector`, and :class:`Widget`, which add nothing of their
-    own today — the catalog returns one flat shape discriminated by ``type`` —
+    own today - the catalog returns one flat shape discriminated by ``type`` -
     but exist so callers can ``isinstance``-narrow and so future per-type fields
     have a home.
     """
@@ -261,7 +261,7 @@ class Appliance(BaseRecord):
     One of the concrete subtypes of an *actor*: FortiSOAR stores all security
     principals in a single ``actors`` table using single-table inheritance keyed
     on the ``record_type`` discriminator (root-verified against the appliance's
-    Doctrine entities — ``Person`` extends ``Actor``, same ``actors`` table). An
+    Doctrine entities - ``Person`` extends ``Actor``, same ``actors`` table). An
     ``Appliance`` is the ``record_type == "Appliance"`` sibling of a human
     :class:`User` (``record_type == "Person"``); it appears as ``createUser`` /
     ``modifyUser`` on records created by the playbook engine itself, where
@@ -271,7 +271,7 @@ class Appliance(BaseRecord):
 
     name: str | None = None
     # The shared ``actors`` table carries a ``title`` column, but only ``Person``
-    # rows populate it — an Appliance omits the key entirely on the wire and is
+    # rows populate it - an Appliance omits the key entirely on the wire and is
     # identified by ``name`` instead. Declared so ``title`` is safe to read across
     # the whole :data:`Actor` union rather than raising on the non-Person subtypes.
     title: str | None = None
@@ -294,7 +294,7 @@ class User(BaseRecord):
     base ``Actor`` entity, same ``actors`` table); the sibling subtypes are
     :class:`Appliance` (``record_type == "Appliance"``) and the :class:`ApiKey`
     actor (``record_type == "ApiKey"``). ``@type`` on the wire is ``Person`` and the module
-    slug is ``people`` — the ``/api/3/people`` collection is the person-only view
+    slug is ``people`` - the ``/api/3/people`` collection is the person-only view
     of the shared table, whereas ``/api/3/actors`` spans all subtypes.
 
     This is the entity behind every ``createUser`` / ``modifyUser`` /
@@ -340,7 +340,7 @@ class Team(BaseRecord):
 
     Teams own records (the ``owners`` relationship) and scope visibility. The
     module slug is ``teams``; ``@type`` on the wire is ``Team``. The schema is
-    deliberately slim — verified against a live 7.6.5 box, a team record carries
+    deliberately slim - verified against a live 7.6.5 box, a team record carries
     only ``name``/``description``/``importedBy`` beyond the JSON-LD/uuid envelope.
     """
 
@@ -378,7 +378,7 @@ class Notification(BaseRecord):
 
     The per-user bell-icon notifications the platform raises for record events
     (task assignments, approvals, SLA breaches, …). This is a ``rule`` API entity,
-    not a ``/api/3`` module, so there is no JSON-LD envelope — ``uuid`` is the
+    not a ``/api/3`` module, so there is no JSON-LD envelope - ``uuid`` is the
     identity and ``id_iri``/``record_type`` stay ``None``. The listing is fetched
     with **POST** (see :class:`~pyfsr.api.notifications.NotificationsAPI`), not GET.
     Field set re-verified against a live 8.0.0 box (no drift).
@@ -600,7 +600,7 @@ class QueryFilter(ApiResult):
     ``type`` is **not** cosmetic and must not be dropped: FortiSOAR **silently
     ignores a filter that omits it** (and silently ignores every filter when the
     enclosing body omits ``logic``), returning *all* records rather than an
-    error — see :class:`QueryDefinition`. Use ``primitive`` for scalars,
+    error - see :class:`QueryDefinition`. Use ``primitive`` for scalars,
     ``object`` for picklist/IRI values, ``datetime`` for dates.
 
     A nested group sets ``logic`` + ``filters`` instead of ``field``/``value``.
@@ -621,7 +621,7 @@ class QueryDefinition(ApiResult):
 
     .. warning::
        ``logic`` is **load-bearing**. Omit it and FortiSOAR drops every filter on
-       the floor and returns the whole module — no error, no warning. Same for a
+       the floor and returns the whole module - no error, no warning. Same for a
        filter missing :attr:`QueryFilter.type`. Live-verified on 8.0.0::
 
            {"filters": [{"field": "source", "operator": "eq", "value": "nope"}]}
@@ -647,12 +647,12 @@ class QueryDefinition(ApiResult):
 class SystemQuery(BaseRecord):
     """A saved **dataset** from ``/api/3/system_queries/``.
 
-    A system query is a named, module-scoped filter — what the UI calls a
+    A system query is a named, module-scoped filter - what the UI calls a
     *dataset*. Beyond driving saved views, a dataset on ``threat_intel_feeds``
     **is a TAXII collection**: the collection id served at
     ``/api/taxii/1/collections/<id>/objects`` *is* this record's ``uuid``
     (live-verified on 8.0.0). That is how FortiSOAR publishes an outgoing threat
-    feed — see :class:`~pyfsr.api.taxii.TaxiiAPI`.
+    feed - see :class:`~pyfsr.api.taxii.TaxiiAPI`.
 
     ``models`` is the target module's ``model_metadatas`` IRI (expanded to the
     full object on read).
@@ -682,11 +682,11 @@ class ApiKey(BaseRecord):
     """An **API-key binding** record from ``/api/3/api_keys/``.
 
     This is the *scope* object that binds roles/teams to an API-key user (the
-    user record carrying the key material, created via ``/api/auth/users`` —
+    user record carrying the key material, created via ``/api/auth/users`` -
     :class:`ApiKeyUser`). It is also an **actor**: it's the ``record_type ==
     "ApiKey"`` subtype of the shared ``actors`` table, so a record created via an
     API key expands its ``createUser`` / ``modifyUser`` to this record (``@type ==
-    "ApiKey"``, IRI ``/api/3/api_keys/<uuid>`` — live-verified on 8.0.0).
+    "ApiKey"``, IRI ``/api/3/api_keys/<uuid>`` - live-verified on 8.0.0).
     ``@type`` on the wire is ``ApiKey``; the module slug is ``api_keys``. The
     key value itself is masked on every read here ��� the plaintext lives on the
     API-key user, recoverable only at create time (or via ``show_api_key`` when
@@ -694,7 +694,7 @@ class ApiKey(BaseRecord):
     """
 
     name: str | None = None
-    # See the note on :class:`Appliance` — the shared ``actors`` table's ``title``
+    # See the note on :class:`Appliance` - the shared ``actors`` table's ``title``
     # column is populated only by ``Person`` rows; declared here so ``title`` reads
     # safely across the :data:`Actor` union.
     title: str | None = None
@@ -711,12 +711,12 @@ class ApiKey(BaseRecord):
     id: int | None = None
 
 
-#: A FortiSOAR **actor** — any security principal in the shared ``actors`` table.
+#: A FortiSOAR **actor** - any security principal in the shared ``actors`` table.
 #: The table is single-table-inheritance keyed on ``record_type``; the three
 #: subtypes that surface as expanded relationship targets (``createUser`` /
 #: ``modifyUser``) are the human :class:`User` (``@type == "Person"``), the
 #: :class:`Appliance` (playbook engine, ``@type == "Appliance"``), and the
-#: :class:`ApiKey` actor (``@type == "ApiKey"``, IRI ``/api/3/api_keys/<uuid>`` —
+#: :class:`ApiKey` actor (``@type == "ApiKey"``, IRI ``/api/3/api_keys/<uuid>`` -
 #: what ``createUser`` expands to on a record created via an API key;
 #: live-verified on 8.0.0). :meth:`BaseRecord.create_user` / ``modify_user``
 #: return this union.
@@ -733,7 +733,7 @@ class ApiKeyMaterial(BaseRecord):
 
     Carries the key value (masked unless read with ``show_api_key`` under
     ``retrievable_mode``) and its validity/status metadata. Modeled as a
-    ``BaseRecord`` so ``ak.get("key")`` / ``ak.get("retrievable")`` work — the
+    ``BaseRecord`` so ``ak.get("key")`` / ``ak.get("retrievable")`` work - the
     plaintext-recovery helper in :mod:`pyfsr.api.api_keys` relies on that.
     """
 
@@ -749,7 +749,7 @@ class ApiKeyUser(BaseRecord):
     """An **API-key user** from ``/api/auth/users`` (``usersresp[0]``).
 
     The user record that carries key material (``user_type == 9``), linked to the
-    :class:`ApiKey` binding — which is the actual actor-table row (``record_type
+    :class:`ApiKey` binding - which is the actual actor-table row (``record_type
     == "ApiKey"``) that shows up on ``createUser``/``modifyUser``. Distinct from a
     People :class:`User`. This ``/api/auth/users`` shape is not a JSON-LD
     ``/api/3`` collection (no ``@id``/``@type`` on the wire), but ``BaseRecord``
@@ -803,7 +803,7 @@ class ExportConnectorRef(ApiResult):
     """One connector entry in an export template's ``options.connectors``.
 
     Field set captured from a live 7.6.5 export-template ``options.connectors[]``
-    entry — every value is a scalar (str/bool/int).
+    entry - every value is a scalar (str/bool/int).
     """
 
     name: str | None = None
@@ -827,7 +827,7 @@ class ExportOptions(ApiResult):
 
     ``connectors`` is modeled (see :class:`ExportConnectorRef`). The manifest's
     other selection lists are preserved verbatim in ``extra`` rather than typed,
-    because their element shapes have not been captured populated from live wire —
+    because their element shapes have not been captured populated from live wire -
     they are added here as they are observed, never guessed.
 
     Live-verified on 8.0.0, an ``options`` manifest carries up to 25 category keys:
@@ -864,16 +864,16 @@ class Attachment(BaseRecord):
     # Tenancy/conflict keys (``conflict``/``tenant``/``tenantRecordId``) also ride
     # the wire; they stay in ``extra`` (live-verified 8.0.0).
 
-    # FortiSOAR returns ``[]``/``""`` for an unset reference — normalize to None.
+    # FortiSOAR returns ``[]``/``""`` for an unset reference - normalize to None.
     _empty_refs = field_validator("file", "assignee", "createUser", "modifyUser", mode="before")(_empty_to_none)
 
 
 class ExportTemplate(BaseRecord):
-    """An ``/api/3/export_templates`` record — a reusable export selection.
+    """An ``/api/3/export_templates`` record - a reusable export selection.
 
     Field set captured from a live ``/api/3/export_templates`` response.
     ``options`` is the typed :class:`ExportOptions` selection manifest. ``type``
-    distinguishes the export kind — live-verified on 8.0.0 the values are
+    distinguishes the export kind - live-verified on 8.0.0 the values are
     ``"Export Wizard"`` (a normal config export) and ``"SolutionPack Export"``.
     Export bookkeeping (``metadata``, ``solutionPack``) rides the wire but stays
     in ``extra`` until its element shape is captured populated.
@@ -889,7 +889,7 @@ class ExportTemplate(BaseRecord):
     modifyDate: float | None = None
     id: int | str | None = None
 
-    # ``options`` comes back as ``[]`` when empty — normalize to None.
+    # ``options`` comes back as ``[]`` when empty - normalize to None.
     _empty_options = field_validator("options", mode="before")(_empty_to_none)
 
 
@@ -902,7 +902,7 @@ class AIAgent(ContentHubItem):
 
     AI agents ship through the same Content Hub catalog as packs and connectors and
     are served by the same ``/api/query/solutionpacks`` endpoint (``@type`` on the
-    wire is ``SolutionPack``) — only the ``type`` discriminator differs. ``name`` is
+    wire is ``SolutionPack``) - only the ``type`` discriminator differs. ``name`` is
     the agent id (e.g. ``"conversation"``) and ``label`` its display name (e.g.
     ``"Chat Assistant"``); either resolves an agent via
     :meth:`~pyfsr.api.content_hub.ContentHubSearch.get_installed_ai_agent`.
@@ -913,7 +913,7 @@ class Report(BaseRecord):
     """A **report** (``GET /api/3/reporting``).
 
     The report definitions behind the SOAR UI's *Reports* section. Note the display
-    name is ``displayName``, **not** ``name`` — there is no ``name`` field on this
+    name is ``displayName``, **not** ``name`` - there is no ``name`` field on this
     entity, which is why report lookups match on ``displayName``.
 
     ``config`` holds the report layout/definition and ``filterArray`` its saved
@@ -941,7 +941,7 @@ class NavigationView(BaseRecord):
 
     A single view record (not a collection) describing the left-hand navigation.
     ``config["navigation"]`` is the list of top-level sections, each a dict with a
-    ``title`` and optional nested ``items`` — those titles are what the ``views``
+    ``title`` and optional nested ``items`` - those titles are what the ``views``
     export category ships. Use
     :meth:`~pyfsr.api.views.ViewsAPI.navigation_sections` to read them without
     walking ``config`` by hand.
@@ -1017,7 +1017,7 @@ class ContentHubConnector(ContentHubItem):
     """A Content Hub **connector** listing (``type == "connector"``).
 
     Named ``ContentHubConnector`` to avoid clashing with the live
-    ``client.connectors`` (execution) surface — this is the *catalog* entry.
+    ``client.connectors`` (execution) surface - this is the *catalog* entry.
     """
 
 
@@ -1044,7 +1044,7 @@ class ConnectorVersionInfo(ApiResult):
 
     Returned by :meth:`~pyfsr.api.content_hub.ContentHubSearch.connector_versions`.
     This is the *repo* manifest (``{repo}/.../latest/info.json``), a different
-    shape from the on-box :class:`ContentHubConnector` catalog entry — most
+    shape from the on-box :class:`ContentHubConnector` catalog entry - most
     notably it carries :attr:`availableVersions`, every version ever published.
     Curated fields are typed; the rest (``scm``, ``help``, icon paths, …) stay in
     ``extra``. Dict-compatible, so ``info["availableVersions"]`` still works.
@@ -1072,7 +1072,7 @@ class RepoConnectorEntry(ContentHubItem):
     (``repo.fortisoar.fortinet.com/connectors/info/connectors.json``).
 
     Returned by :func:`pyfsr.repo.list_connectors` /
-    :func:`pyfsr.repo.search_connectors` — the no-appliance catalog, distinct
+    :func:`pyfsr.repo.search_connectors` - the no-appliance catalog, distinct
     from the on-box :class:`ContentHubConnector` (which needs an appliance).
     The manifest is **latest-version-only** per connector and carries the RPM
     packaging fields the catalog entry doesn't; those are typed here. The
@@ -1087,7 +1087,7 @@ class RepoConnectorEntry(ContentHubItem):
 
     # The manifest sends ``category`` as a plain string ("Digital assistant")
     # for most entries but as a list (``["Ticket Management"]``) for ~19 of 721
-    # — a real shape difference from the on-box catalog (:class:`ContentHubItem`),
+    # - a real shape difference from the on-box catalog (:class:`ContentHubItem`),
     # which always types it as a list. Accept both; normalize via the property.
     category: str | list[Any] | None = None
 
@@ -1205,7 +1205,7 @@ class PicklistName(ApiResult):
     """A picklist *list* (the taxonomy an option belongs to), from
     ``GET /api/3/picklist_names`` or a create.
 
-    Each list carries a friendly ``name`` (unique instance-wide — a duplicate POST
+    Each list carries a friendly ``name`` (unique instance-wide - a duplicate POST
     409s with ``UniqueConstraintViolationException``), a ``system`` flag, and its
     ``picklists`` items (embedded only when the request asks for
     ``$relationships=true``; absent/empty otherwise). ``iri`` is the
@@ -1223,7 +1223,7 @@ class PicklistName(ApiResult):
 
     @property
     def iri(self) -> str | None:
-        """The list's IRI (``/api/3/picklist_names/<uuid>``) — what an option's
+        """The list's IRI (``/api/3/picklist_names/<uuid>``) - what an option's
         ``listName`` field references."""
         if self.id_iri:
             return self.id_iri
@@ -1237,19 +1237,19 @@ class PicklistName(ApiResult):
 
 
 class SystemViewTemplate(ApiResult):
-    """A ``system_view_templates`` row — a module/layout's view configuration.
+    """A ``system_view_templates`` row - a module/layout's view configuration.
 
     From ``GET /api/3/system_view_templates`` (bulk list) or
     ``GET /api/views/1/{name}`` (single named template), used by
     :class:`~pyfsr.api.view_templates.ViewTemplatesAPI`. A "default" is not a
-    separate resource — it's this row's ``isDefault`` flag, exactly one of
+    separate resource - it's this row's ``isDefault`` flag, exactly one of
     which is ``True`` per ``(module, viewOptions)`` pair (verified live, 8.0).
 
     Template **names are not unique across layouts**: a module ships one
     "Default Layout" row per ``viewOptions`` (``list``/``detail``/``form``),
     so resolving a template by name alone must also scope by ``viewOptions``
     (see ``UserSettingsAPI.resolve_view_template``, which learned this the
-    hard way). ``config`` (the layout body — rows/columns/widgets) is typed
+    hard way). ``config`` (the layout body - rows/columns/widgets) is typed
     loosely since its shape varies by ``type``; the JSON-LD envelope
     (``@context``/``@type``) rides through ``extra``. Dict-compatible.
     """
@@ -1285,7 +1285,7 @@ class SystemViewTemplate(ApiResult):
 
 
 class DailyActionCount(ApiResult):
-    """Daily action-count license usage — ``client.system.daily_action_count()``.
+    """Daily action-count license usage - ``client.system.daily_action_count()``.
 
     From ``GET /api/wf/workflow/config/?section=license`` (the endpoint the UI's
     ``getDailyActionCount`` calls). Counters are decrypted by the workflow engine.
@@ -1311,8 +1311,26 @@ class DailyActionCount(ApiResult):
 
     @property
     def used_today(self) -> int | None:
-        """Actions consumed so far today (``daily_action_limit - remaining_actions``),
+        """Actions consumed so far (``daily_action_limit - remaining_actions``),
         or ``None`` when not enforced."""
         if not self.enforced or self.remaining_actions is None:
             return None
         return self.daily_action_limit - self.remaining_actions
+
+
+class LicenseIdentity(ApiResult):
+    """Durable per-appliance identity parsed from the license details.
+
+    ``GET /api/auth/license?param=license_details`` carries the appliance's
+    license **serial number** -- the one identity that survives URL, port and
+    proxy changes, which is what catalog-provenance and drift tooling keys on
+    when a base_url comparison would read two listeners of the same box as
+    two different appliances. Values are ``None`` when the license payload
+    doesn't carry them (a box can answer but omit a node block, etc.).
+    """
+
+    serial_no: str | None = None
+    node_id: str | None = None
+    edition: str | None = None
+    product_name: str | None = None
+    fsr_version: str | None = None
