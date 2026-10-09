@@ -1382,7 +1382,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "coverage", marker = "extra == 'test'", specifier = ">=7.6.9" },
-    { name = "fsr-playbooks", marker = "extra == 'playbooks'", specifier = ">=0.6.22,<0.7" },
+    { name = "fsr-playbooks", marker = "extra == 'playbooks'", specifier = ">=0.6.22,<0.8" },
     { name = "furo", marker = "extra == 'docs'", specifier = ">=2024.8.6" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0,<3" },
     { name = "mcp", marker = "extra == 'test'", specifier = ">=1.0,<3" },
