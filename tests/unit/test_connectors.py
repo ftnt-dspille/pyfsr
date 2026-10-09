@@ -470,6 +470,147 @@ def test_create_configuration_with_config_id_and_agent():
     assert body["agent"] == "agent-9"
 
 
+# A fully-valid FSM config plus one typo'd field -- the shape that silently
+# no-oped live: the write "succeeds", the real field keeps its previous value.
+_FSM_CONFIG_WITH_TYPO = {
+    "fsm_type": "FortiSIEM",
+    "server": "https://siem.example.com",
+    "username": "admin",
+    "password": "secret",
+    "organization": "Super",
+    "verify_ssl": True,
+    "verify_ssx": False,
+}
+
+
+# A routed fake: schema fetches and the config write must not share a canned
+# response, or model_validate chokes on the schema body (FakeClient answers
+# every POST with the same payload).
+class _RoutedConfigClient(FakeClient):
+    def post(self, endpoint, data=None, params=None, **kwargs):
+        if endpoint.startswith("/api/integration/connectors/") and "/configuration/" not in endpoint:
+            return _SIEM_SCHEMA
+        return super().post(endpoint, data=data, params=params, **kwargs)
+
+
+def _config_writes(client):
+    return [c for c in client.post_calls + client.put_calls if "/integration/configuration" in c[0]]
+
+
+def test_create_configuration_warns_on_unknown_config_keys():
+    api, client = _api(post_resp=_CREATED_CONFIG)
+    client.__class__ = _RoutedConfigClient
+    with pytest.warns(UserWarning, match="did you mean .verify_ssl."):
+        api.create_configuration(
+            "fortinet-fortisiem",
+            _FSM_CONFIG_WITH_TYPO,
+            name="prod",
+            validate=True,
+            autofill=False,
+            refuse_unknown=False,
+        )
+    # the write still happens, body unchanged (server authority drops the key)
+    _, body = client.post_calls[-1]
+    assert body["config"] == _FSM_CONFIG_WITH_TYPO
+
+
+def test_create_configuration_refuses_unknown_by_default():
+    api, client = _api(post_resp=_SIEM_SCHEMA)
+    with pytest.raises(Exception, match="verify_ssx") as exc:
+        api.create_configuration("fortinet-fortisiem", _FSM_CONFIG_WITH_TYPO, name="prod")
+    # refused before any configuration write (schema fetch may have happened)
+    assert _config_writes(client) == []
+    assert "refuse_unknown=False" in str(exc.value)
+
+
+def test_create_configuration_refuse_unknown_true_implies_validate():
+    api, client = _api(post_resp=_SIEM_SCHEMA)
+    # validate=False alone would skip the unknown-key gate; refuse_unknown=True
+    # must not silently no-op the same way -- it turns validation back on.
+    with pytest.raises(Exception, match="verify_ssx"):
+        api.create_configuration(
+            "fortinet-fortisiem", _FSM_CONFIG_WITH_TYPO, name="prod", validate=False, refuse_unknown=True
+        )
+    assert _config_writes(client) == []
+
+
+def test_validate_false_alone_keeps_the_legacy_silent_path():
+    """refuse_unknown=None (default) defers to validate: an explicit
+    validate=False keeps the pre-gate behavior untouched."""
+    import warnings as _warnings
+
+    api, client = _api(post_resp=_CREATED_CONFIG)
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("error")
+        api.create_configuration("fortinet-fortisiem", _FSM_CONFIG_WITH_TYPO, name="prod", validate=False)
+    assert len(_config_writes(client)) == 1
+
+
+def test_update_configuration_detects_swapped_config_and_config_id():
+    api, client = _api(post_resp=_SIEM_SCHEMA)
+    with pytest.raises(TypeError, match="swap"):
+        api.update_configuration("virustotal", _FSM_CONFIG_WITH_TYPO, "vt-alt", name="Alt")
+    assert client.put_calls == []  # never reached the wire
+
+
+def test_update_configuration_warns_on_unknown_config_keys():
+    api, client = _api(post_resp=_CREATED_CONFIG)
+    client.__class__ = _RoutedConfigClient
+    # virustotal "Alt" row exists in _CONFIGURED -> update path, config_id vt-alt
+    with pytest.warns(UserWarning, match="silently drop"):
+        api.update_configuration(
+            "virustotal",
+            "vt-alt",
+            _FSM_CONFIG_WITH_TYPO,
+            name="Alt",
+            validate=True,
+            autofill=False,
+            refuse_unknown=False,
+        )
+    endpoint, body = client.put_calls[-1]
+    assert endpoint == "/api/integration/configuration/vt-alt/"
+    assert body["config"] == _FSM_CONFIG_WITH_TYPO
+
+
+def test_gated_branch_keys_warn_but_write():
+    """Read-modify-write with stale onchange-branch keys must keep working even
+    under refusal: switching a select leaves the other branch's fields in the
+    dict; those are *declared*, just inactive -- warn, don't refuse."""
+    api, client = _api(post_resp=_CREATED_CONFIG)
+    client.__class__ = _RoutedConfigClient
+    gated = {
+        "fsm_type": "FortiSIEM",
+        "server": "https://siem.example.com",
+        "username": "admin",
+        "password": "secret",
+        "organization": "Super",
+        "verify_ssl": True,
+    }
+    # every field declared; FortiSIEM branch selected; nothing refused, no warn
+    api.create_configuration("fortinet-fortisiem", gated, name="prod", default=False)
+    assert len(_config_writes(client)) == 1
+
+    # switch the select -- the FortiSIEM fields become branch-inactive unknowns,
+    # plus one genuinely undeclared key to prove refusal still bites alongside.
+    mixed = {**gated, "fsm_type": "SomethingElse", "totally_unknown": 1}
+    with pytest.raises(Exception, match="totally_unknown"):
+        api.create_configuration("fortinet-fortisiem", mixed, name="prod2")
+    assert len(_config_writes(client)) == 1
+
+    # ...and without the undeclared key the gated-only write goes through.
+    gated_only = {k: v for k, v in mixed.items() if k != "totally_unknown"}
+    with pytest.warns(UserWarning, match="onchange branches inactive"):
+        api.create_configuration("fortinet-fortisiem", gated_only, name="prod3")
+    assert len(_config_writes(client)) == 2
+
+
+def test_upsert_refuses_unknown_by_default():
+    api, client = _api(post_resp=_SIEM_SCHEMA)
+    with pytest.raises(Exception, match="verify_ssx"):
+        api.upsert_configuration("virustotal", _FSM_CONFIG_WITH_TYPO, name="Alt")
+    assert _config_writes(client) == []
+
+
 def test_create_configuration_clears_cache():
     api, client = _api(post_resp=_CREATED_CONFIG)
     api.list_configured()  # prime

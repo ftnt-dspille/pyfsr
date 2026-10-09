@@ -44,6 +44,7 @@ Example:
 
 from __future__ import annotations
 
+import difflib
 import json
 import mimetypes
 import re
@@ -1457,6 +1458,13 @@ class ConnectorsAPI(BaseAPI):
             branch = (field.get("onchange") or {}).get(_onchange_key(value))
             if isinstance(branch, list):
                 out.update(self._materialize_config(branch, overrides))
+        for leftover in overrides:
+            # Keys the schema doesn't declare pass through verbatim: silently
+            # stripping them here hid typos from validate_config's unknown
+            # check (and from the server) -- the write "succeeded" while the
+            # appliance dropped them unseen.
+            if leftover not in out:
+                out[leftover] = overrides[leftover]
         return out
 
     def required_config_fields(
@@ -1532,6 +1540,94 @@ class ConnectorsAPI(BaseAPI):
             invalid=invalid,
             unknown=unknown,
             errors=errors,
+        )
+
+    def _schema_field_names(self, fields: list[dict[str, Any]]) -> list[str]:
+        """Every config field name declared anywhere in a schema -- including
+        ``onchange``-gated branches -- for did-you-mean suggestions."""
+        names: list[str] = []
+        for field in fields:
+            name = field.get("name")
+            if name:
+                names.append(name)
+            for branch in (field.get("onchange") or {}).values():
+                if isinstance(branch, list):
+                    names.extend(self._schema_field_names(branch))
+        return names
+
+    def _gate_unknown_config_keys(
+        self,
+        connector: str,
+        version: str | None,
+        check: ConfigValidationResult,
+        *,
+        refuse_unknown: bool,
+    ) -> None:
+        """Surface ``validate_config``'s ``unknown`` findings on every config write.
+
+        A typo'd field name (``"verify_ssl"`` for a connector that declares
+        ``"verify"``) is not ``invalid`` -- validation passes and the appliance
+        accepts the write, **silently dropping** the unknown key. The save reports
+        success while the real field keeps its previous/default value: a switch
+        that just won't turn off, with nothing in the logs. Unknown keys split
+        into two classes with different treatment:
+
+        - **undeclared** -- named nowhere in the schema: almost certainly a
+          typo. Refused by default (``refuse_unknown=True``), else warned.
+        - **branch-gated** -- declared under an ``onchange`` branch that the
+          config's current selections leave inactive (read-modify-write of a
+          row whose ``auth_type`` switched): only ever warned, never refused;
+          round-tripping stale branch keys is legitimate.
+        """
+        unknown = getattr(check, "unknown", None) or []
+        if not unknown:
+            return
+        fields = self.config_schema(connector, version=version) or []
+        all_names = self._schema_field_names(fields)
+        if not all_names:
+            # No usable schema (fieldless connector / unreadable response):
+            # classification is impossible -- nothing to say, don't block.
+            return
+        undeclared = [k for k in unknown if k not in all_names]
+        gated = [k for k in unknown if k in all_names]
+        listed = ""
+        if undeclared:
+            listed = ", ".join(
+                f"{key!r} (did you mean {close[0]!r}?)"
+                if (close := difflib.get_close_matches(key, all_names, n=1, cutoff=0.6))
+                else f"{key!r}"
+                for key in undeclared
+            )
+        if undeclared and refuse_unknown is not False:
+            raise ConfigValidationError(
+                f"{connector!r} {version or ''}configuration has field(s) no schema "
+                f"branch declares, which the appliance would silently drop: {listed}. "
+                "Refusing the write; pass refuse_unknown=False to write anyway "
+                "with a warning.",
+                errors=[
+                    {
+                        "field": key,
+                        "code": "unknown_field",
+                        "message": f"{key!r} is not declared anywhere in the connector's config schema",
+                    }
+                    for key in undeclared
+                ],
+            )
+        parts = []
+        if undeclared:
+            parts.append(f"field(s) no schema branch declares -- the appliance silently drops them on write: {listed}")
+        if gated:
+            parts.append(
+                "field(s) declared only under onchange branches inactive for the "
+                "current selections -- the appliance drops them on write: " + ", ".join(repr(k) for k in gated)
+            )
+        warnings.warn(
+            f"{connector!r} {version or ''}configuration has unknown "
+            + "; also ".join(parts)
+            + ". The real fields keep their previous/default values while "
+            "the save still reports success.",
+            category=UserWarning,
+            stacklevel=3,
         )
 
     def _collect_field_problems(
@@ -1620,6 +1716,7 @@ class ConnectorsAPI(BaseAPI):
         agent: str | None = None,
         validate: bool = True,
         autofill: bool = True,
+        refuse_unknown: bool | None = None,
         exist_ok: bool = False,
         refresh: bool = True,
     ) -> ConnectorConfig:
@@ -1660,6 +1757,16 @@ class ConnectorsAPI(BaseAPI):
                 only at *playbook runtime* (see :meth:`default_config`). Your
                 explicit values always win. Pass ``False`` to send ``config``
                 verbatim (default ``True``).
+            refuse_unknown: guard against keys the appliance would silently
+                drop (a typo'd name saves "successfully" while the real field
+                keeps its previous value). ``None`` (default) defers to
+                ``validate``: validated writes refuse keys no schema branch
+                declares, and inactive-``onchange``-branch keys (stale fields
+                from before a select was switched) only warn, so
+                read-modify-write of real rows keeps working. ``True`` /
+                ``False`` set the stance explicitly and imply
+                ``validate=True`` (the gate needs the schema); ``False``
+                always warns but writes.
             exist_ok: when ``True``, if a configuration with the same ``name``
                 already exists for this connector/agent pair, delegate to
                 :meth:`upsert_configuration` instead of raising
@@ -1698,6 +1805,8 @@ class ConnectorsAPI(BaseAPI):
                 else f"{connector!r} is not installed; install it before configuring "
                 "(client.connectors.install(name, version))"
             )
+        if refuse_unknown is not None:
+            validate = True  # an explicit stance implies the schema check the gate needs
         if autofill:
             config = self._materialize_config(self.config_schema(connector, version=version), config)
         if validate:
@@ -1706,6 +1815,7 @@ class ConnectorsAPI(BaseAPI):
                 # Convert to the new ConfigValidationError with structured errors
                 msg = _format_validation_error(connector, check)
                 raise ConfigValidationError(msg, errors=check.errors)
+            self._gate_unknown_config_keys(connector, version, check, refuse_unknown=refuse_unknown)
         body: dict[str, Any] = {
             "connector": connector_id,
             "connector_name": connector,
@@ -1755,6 +1865,7 @@ class ConnectorsAPI(BaseAPI):
         agent: str | None = None,
         validate: bool = True,
         autofill: bool = True,
+        refuse_unknown: bool | None = None,
         refresh: bool = True,
     ) -> ConnectorConfig:
         """Update an existing connector configuration by ``config_id``.
@@ -1764,6 +1875,14 @@ class ConnectorsAPI(BaseAPI):
         rotate credentials on a configured connector -- e.g. re-stamp a FortiSIEM
         ``password`` or a refreshed token. ``config`` is sent whole, so include
         every field, not just the changed one.
+
+        A read-modify-write is safe, including for secrets: writes return
+        secrets *encrypted at rest*, and the appliance re-encrypts whatever it
+        stores on save -- re-sending the encrypted values a read returned keeps
+        the plaintext unchanged (the stored ciphertext may legitimately differ
+        after the call; same guarantee :meth:`set_default_configuration`
+        relies on). Do NOT scrub secret fields to placeholders as a "safety"
+        measure: that overwrites live credentials with garbage.
 
         Like :meth:`create_configuration`, the integer ``connector`` id is
         resolved automatically, and ``config`` is structurally validated first
@@ -1781,6 +1900,11 @@ class ConnectorsAPI(BaseAPI):
             validate: structurally check ``config`` against the schema first
                 (default ``True``).
             autofill: fill any schema-defaulted fields ``config`` omits (default ``True``).
+            refuse_unknown: reject the write when ``config`` has keys no
+                schema branch declares (the appliance would silently drop
+                them); inactive-onchange-branch keys only warn. ``None``
+                (default) defers to ``validate``; ``True``/``False`` imply
+                ``validate=True``.
             refresh: drop the cached configured-connector listing afterwards
                 (default ``True``).
 
@@ -1795,6 +1919,16 @@ class ConnectorsAPI(BaseAPI):
         version = version or self.resolve_version(connector)
         if not version:
             raise ValueError(f"{connector!r} version unknown; pass version=")
+        if isinstance(config, str) or not isinstance(config, dict):
+            if isinstance(config_id, dict):
+                raise TypeError(
+                    "update_configuration(connector, config_id, config): did you swap "
+                    f"config_id and config? Got config_id={type(config_id).__name__}, "
+                    f"config={type(config).__name__} -- config must be the field dict."
+                )
+            raise TypeError(
+                f"config must be a dict of the connector's configuration values, got {type(config).__name__}"
+            )
         agent = self._agent_id(agent)
         connector_id = self._install_id(connector, version, agent)
         if connector_id is None:
@@ -1803,6 +1937,8 @@ class ConnectorsAPI(BaseAPI):
                 if agent
                 else f"{connector!r} is not installed"
             )
+        if refuse_unknown is not None:
+            validate = True  # an explicit stance implies the schema check the gate needs
         if autofill:
             config = self._materialize_config(self.config_schema(connector, version=version), config)
         if validate:
@@ -1810,6 +1946,7 @@ class ConnectorsAPI(BaseAPI):
             if not check.valid:
                 msg = _format_validation_error(connector, check)
                 raise ConfigValidationError(msg, errors=check.errors)
+            self._gate_unknown_config_keys(connector, version, check, refuse_unknown=refuse_unknown)
         body: dict[str, Any] = {
             "connector": connector_id,
             "connector_name": connector,
@@ -2172,6 +2309,7 @@ class ConnectorsAPI(BaseAPI):
         agent: str | None = None,
         validate: bool = True,
         autofill: bool = True,
+        refuse_unknown: bool | None = None,
     ) -> ConnectorConfig:
         """Create a named configuration, or update it in place if one already
         exists with the same ``name`` -- the idempotent write the UI's *Save*
@@ -2181,7 +2319,9 @@ class ConnectorsAPI(BaseAPI):
         ``PUT``s to its ``config_id`` (preserving the existing ``agent`` unless
         ``agent`` is given), else ``POST``s a new one. Unlike calling
         :meth:`create_configuration` twice -- which 400s on
-        ``"name, connector, agent must be unique"`` -- this updates the second time.
+        ``"name, connector, agent must be unique"`` -- this updates the second
+        time. Re-sending the encrypted secrets a read returned is safe -- see
+        :meth:`update_configuration`.
 
         Tolerates the platform's *persisted-despite-500* case: a connector's own
         ``on_add_config`` / ``on_update_config`` hook can raise **after** the row
@@ -2201,6 +2341,12 @@ class ConnectorsAPI(BaseAPI):
                 (default ``True``).
             autofill: fill any schema-defaulted fields ``config`` omits,
                 including onchange-revealed sub-fields (default ``True``).
+            refuse_unknown: unknown-key guard, forwarded to
+                :meth:`create_configuration` / :meth:`update_configuration`.
+                ``None`` (default) defers to ``validate``: validated writes
+                refuse keys no schema branch declares, warn on inactive
+                ``onchange``-branch keys. ``True``/``False`` imply
+                ``validate=True``.
 
         Returns:
             The persisted :class:`~pyfsr.models.ConnectorConfig`.
@@ -2236,6 +2382,7 @@ class ConnectorsAPI(BaseAPI):
                     agent=keep_agent,
                     validate=validate,
                     autofill=autofill,
+                    refuse_unknown=refuse_unknown,
                 )
             return self.create_configuration(
                 connector,
@@ -2246,6 +2393,7 @@ class ConnectorsAPI(BaseAPI):
                 agent=agent,
                 validate=validate,
                 autofill=autofill,
+                refuse_unknown=refuse_unknown,
             )
 
         try:
