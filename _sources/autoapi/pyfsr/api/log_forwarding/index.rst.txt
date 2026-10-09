@@ -1,0 +1,138 @@
+pyfsr.api.log_forwarding
+========================
+
+.. py:module:: pyfsr.api.log_forwarding
+
+.. autoapi-nested-parse::
+
+   Log forwarding -- ``client.log_forwarding``.
+
+   Wraps the *Settings → Log Forwarding* page, which sends appliance logs to an
+   external syslog server. The UI talks to the gateway config store at
+   ``/api/gateway/config/syslog``:
+
+   * ``GET``            -- list of configs (``[]`` when none is set up)
+   * ``POST``           -- create; the body carries a client-generated ``uuid``
+   * ``PUT``            -- update; the body is the whole config object
+   * ``DELETE /{uuid}`` -- remove (the UI does this when you untick *enabled*)
+
+   The appliance renders each config into rsyslog (``/etc/rsyslog.d``), the same
+   mechanism as ``csadm log forward``; the UI and CLI configs share one store.
+
+   Field rules (from the gateway's ``SyslogConfig`` bean validation, 8.0.1)::
+
+       field                 required  constraint
+       uuid                  yes       UUID; the client generates it on create
+       config_name           yes       non-blank, ^[a-zA-Z0-9]*$ (no spaces, dashes or dots)
+       server                yes       FQDN, "localhost" or IPv4; no IPv6, no single-label names
+       port                  yes       1-65535
+       protocol              no        tcp | udp | relp
+       syslog_filters        no        list of application | audit
+       enabled               no        bool
+       tls                   no        bool; csadm then needs ca_cert
+       ca_cert/client_cert/
+         client_key          no        PEM text, max 10000 chars each
+       audit_filter_setting  no        the UI's audit-rule object
+
+   A body that fails validation returns "One or more required inputs are missing."
+
+   ``syslog_filters`` picks what is forwarded:
+
+   * ``"application"`` -- FortiSOAR service logs **and** the OS syslog stream
+     (sshd logins, sudo, ...). Commands typed in an interactive shell are not in
+     the OS syslog stream unless shell/exec auditing is enabled on the appliance.
+   * ``"audit"`` -- the FortiSOAR application audit log (record/playbook/user
+     activity), optionally narrowed by ``audit_filter_setting``.
+
+   .. rubric:: Example
+
+   >>> cfg = client.log_forwarding.create("10.0.0.5", 514, config_name="siem",
+   ...                                    protocol="tcp", filters=["application", "audit"])
+   >>> client.log_forwarding.delete(cfg["uuid"])
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.api.log_forwarding.LOG_FILTERS
+   pyfsr.api.log_forwarding.PROTOCOLS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.log_forwarding.LogForwardingAPI
+
+
+Module Contents
+---------------
+
+.. py:data:: LOG_FILTERS
+   :value: ('application', 'audit')
+
+
+.. py:data:: PROTOCOLS
+   :value: ('udp', 'tcp', 'relp')
+
+
+.. py:class:: LogForwardingAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Create, read, update, and delete syslog forwarding configs.
+
+
+   .. py:method:: list() -> list[dict[str, Any]]
+
+      Return every forwarding config (``[]`` when none exist).
+
+
+
+   .. py:method:: get(config_uuid: str) -> dict[str, Any] | None
+
+      Return the config with ``config_uuid``, or ``None``.
+
+
+
+   .. py:method:: create(server: str, port: int = 514, *, config_name: str, protocol: str = 'udp', filters: list[str] | None = None, enabled: bool = True, tls: bool = False, ca_cert: str = '', client_cert: str = '', client_key: str = '', audit_filter_setting: dict[str, Any] | None = None) -> dict[str, Any]
+
+      Add a forwarding destination.
+
+      :param server: Syslog server FQDN, ``localhost`` or IPv4 address (required).
+      :param port: Server port, 1-65535 (required).
+      :param config_name: Name for the config; letters and digits only (required).
+      :param protocol: ``udp``, ``tcp`` or ``relp``.
+      :param filters: Any of ``application`` / ``audit``; defaults to ``["application"]``
+                      like the UI.
+      :param enabled: Whether forwarding is active.
+      :param tls: Use TLS (requires ``ca_cert``).
+      :param ca_cert: CA chain PEM text, for TLS.
+      :param client_cert: Client certificate PEM text, for mutual TLS.
+      :param client_key: Client key PEM text, for mutual TLS.
+      :param audit_filter_setting: The UI's audit-rule object
+                                   (``{"auditFilter": {"filters": [...]}}``); omit to forward all audit events.
+
+      :returns: The created config as stored by the appliance.
+
+
+
+   .. py:method:: update(config_uuid: str, **changes: Any) -> dict[str, Any]
+
+      Change fields on an existing config (read, merge, PUT the whole object).
+
+      :raises KeyError: no config has ``config_uuid``.
+
+
+
+   .. py:method:: delete(config_uuid: str) -> Any
+
+      Remove a forwarding config.
+
+
+

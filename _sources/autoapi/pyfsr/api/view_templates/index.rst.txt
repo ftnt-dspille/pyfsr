@@ -1,0 +1,258 @@
+pyfsr.api.view_templates
+========================
+
+.. py:module:: pyfsr.api.view_templates
+
+.. autoapi-nested-parse::
+
+   View template CRUD and role/condition-based default template assignment.
+
+   This module wraps the system view template (SVT) **write** surface complementing the
+   read-only :class:`~pyfsr.api.views.ViewsAPI`. It handles:
+
+   - **Template read/write** — ``/api/views/1/{name}`` (GET, PUT, POST for named view template
+     CRUD). A named template can be assigned as the active template for a module/layout via the
+     platform's view-resolution logic.
+   - **Default template assignment** — a default is the ``isDefault`` flag on a
+     ``system_view_templates`` row (keyed by ``(module, viewOptions)``), saved via
+     ``bulkupsert/system_view_templates``. There is **no** ``/api/3/template/{type}/default``
+     endpoint (it 400s "Invalid Type", verified 8.0).
+   - **Template enumeration** — ``/api/3/system_view_templates`` (GET list, POST single create).
+   - **Bulk operations** — ``/api/3/bulkupsert/system_view_templates`` (POST bulk upsert).
+
+   Read methods return :class:`~pyfsr.models.SystemViewTemplate` — dict-compatible
+   (``t["name"]``/``t.get(...)`` keep working) but with typed attribute access too.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> [t.name for t in client.view_templates.list_templates(module="alerts")]
+   ['Default Layout', 'Default Layout', 'Default Layout', 'CrowdStrike']
+   >>> default = client.view_templates.get_default_template("alerts", "detail")
+   >>> default.name, default.isDefault
+   ('Default Layout', True)
+
+   **Note on role/condition-based visibility (Issue 1290905/1289639):**
+
+   FortiSOAR 8.0 **may** expose role or condition fields for template visibility control
+   (template shown only to users with specific roles or matching a condition). The exact
+   field names are currently unknown and not yet discovered on a live appliance. This
+   wrapper accepts these fields via ``**extra`` parameters in write methods and passes them
+   through unchanged. Known candidate field names (unconfirmed):
+
+   - ``roles`` — list of role names or UUIDs
+   - ``displayConditions`` — list of condition objects
+   - ``visibilityCondition`` — single condition object
+   - ``restrictedAccess`` — boolean or permission spec
+   - ``conditions`` — generic condition list
+
+   Once the field name is confirmed (via 8.0 appliance inspection), this module should be
+   updated to add explicit typed parameters instead of accepting ``**extra``.
+
+   Example (once field name is known)::
+
+       # After confirmation, this would become a typed parameter:
+       client.view_templates.create_template(
+           "MyTemplate",
+           config={...},
+           module="alerts",
+           viewOptions="detail",
+           roles=["Full App Permissions", "SOC Analyst"],  # future: typed once confirmed
+       )
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.view_templates.ViewTemplatesAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: ViewTemplatesAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Read/write system view templates and manage role/condition-based defaults.
+
+   Complements :class:`~pyfsr.api.views.ViewsAPI` (which resolves the *active*
+   template for a module/layout) by exposing the *write* surface for template
+   management, including default-template assignment and (on 8.0+) role/condition
+   visibility control.
+
+   Example::
+
+       # Create a named template
+       tpl = client.view_templates.create_template(
+           "Custom Detail Layout",
+           config={
+               "rows": [
+                   {"columns": [{"widgets": [{"type": "editableForm", "config": []}]}]},
+               ]
+           },
+           module="alerts",
+           viewOptions="detail",
+           type="rows",
+       )
+
+       # Set it as the default for its module/layout (flips isDefault on the row)
+       client.view_templates.set_default_template(tpl)
+
+       # Fetch the active default for alert detail layouts
+       default = client.view_templates.get_default_template("alerts", "detail")
+
+
+   .. py:method:: get_template(name: str) -> pyfsr.models._system.SystemViewTemplate
+
+      Fetch a named view template by name (``GET /api/views/1/{name}``).
+
+      :param name: Template name (e.g., ``"Custom Detail Layout"``).
+
+      :returns: The template record, typed as :class:`~pyfsr.models.SystemViewTemplate`
+                (``name``, ``config``, ``module``, ``viewOptions``, ``uuid``, ``type``,
+                ``isDefault``, plus any role/condition fields via dict-style access).
+
+      :raises FortiSOARException: if the template does not exist (404).
+
+
+
+   .. py:method:: list_templates(module: str | None = None) -> list[pyfsr.models._system.SystemViewTemplate]
+
+      List all system view templates, optionally filtered by module.
+
+      :param module: Optional module name (e.g., ``"alerts"``) to filter templates
+                     for that module only. If None, returns all templates.
+
+      :returns: List of :class:`~pyfsr.models.SystemViewTemplate` (each with ``uuid``,
+                ``name``, ``module``, ``type``, ``viewOptions``, ``isDefault``, ``config``).
+
+
+
+   .. py:method:: get_default_template(module: str, kind: str = 'detail') -> pyfsr.models._system.SystemViewTemplate | None
+
+      Return the **default** view template for ``module`` and layout ``kind``.
+
+      Defaults are not a separate endpoint: on FortiSOAR (verified 8.0) a default
+      is simply the ``system_view_templates`` row carrying ``isDefault: true`` for
+      a given ``(module, viewOptions)`` pair. (The ``/api/3/template/{type}/default``
+      path an earlier draft assumed does not exist — it 400s with "Invalid Type".)
+
+      :param module: Module name (e.g. ``"alerts"``).
+      :param kind: Layout — one of ``"list"``, ``"detail"`` (default), or ``"form"``.
+
+      :returns: The default SVT row for that module/layout, or ``None`` if none is flagged.
+
+      :raises ValueError: if ``kind`` is not one of the three layout kinds.
+
+
+
+   .. py:method:: create_template(name: str, config: dict[str, Any], *, module: str, viewOptions: str, type: str = 'rows', isDefault: bool = False, uuid: str | None = None, **extra: Any) -> pyfsr.models._system.SystemViewTemplate
+
+      Create a new named view template (``POST /api/views/1/{name}``).
+
+      :param name: Template name (e.g., ``"Custom Detail Layout"``).
+      :param config: Template layout configuration (dict with ``rows``, widgets, etc.).
+      :param module: Module name (e.g., ``"alerts"``).
+      :param viewOptions: One of ``"list"``, ``"detail"``, or ``"form"``.
+      :param type: Storage type, one of ``"rows"`` or ``"form"``. Defaults to ``"rows"``.
+      :param isDefault: Whether this should be the default template for the module/layout.
+                        Defaults to False.
+      :param uuid: Optional explicit UUID. If not provided, a new UUID will be generated.
+      :param \*\*extra: Additional fields (e.g., role/condition fields once they are
+                        discovered on 8.0). These are passed through unchanged to the API.
+
+      :returns: The created template record, typed as :class:`~pyfsr.models.SystemViewTemplate`.
+
+      :raises FortiSOARException: on validation errors or API failures.
+
+
+
+   .. py:method:: get_or_create_template(name: str, config: dict[str, Any], *, module: str, viewOptions: str, type: str = 'rows', isDefault: bool = False, uuid: str | None = None, **extra: Any) -> tuple[pyfsr.models._system.SystemViewTemplate, bool]
+
+      Idempotently ensure a view template ``name`` exists; return ``(template, created)``.
+
+      Existence is checked by name (view-template names are unique across the
+      ``/api/views/{viewset}/{name}`` endpoint). If it already exists, the row is
+      returned unchanged (its ``config``/``isDefault``/``extra`` are **not**
+      modified). Returns ``created=True`` only when the template was newly created.
+
+
+
+   .. py:method:: update_template(name: str, config: dict[str, Any] | None = None, *, viewOptions: str | None = None, type: str | None = None, isDefault: bool | None = None, module: str | None = None, **extra: Any) -> pyfsr.models._system.SystemViewTemplate
+
+      Update an existing named view template (``PUT /api/views/1/{name}``).
+
+      Only the fields you provide are updated; omitted fields retain their current values
+      (server-side merge).
+
+      :param name: Template name.
+      :param config: New layout configuration. If None, the current config is retained.
+      :param viewOptions: New viewOptions (``"list"``, ``"detail"``, or ``"form"``).
+                          If None, retained.
+      :param type: New type (``"rows"`` or ``"form"``). If None, retained.
+      :param isDefault: New default flag. If None, retained.
+      :param module: New module. If None, retained.
+      :param \*\*extra: Additional fields (role/condition fields) to merge. Passed through
+                        unchanged to the API.
+
+      :returns: The updated template record, typed as :class:`~pyfsr.models.SystemViewTemplate`.
+
+      :raises FortiSOARException: if the template does not exist or validation fails.
+
+
+
+   .. py:method:: bulk_upsert_templates(templates: list[dict[str, Any] | pyfsr.models._system.SystemViewTemplate], *, unique_fields: list[str] | None = None) -> dict[str, Any]
+
+      Bulk upsert system view templates (``POST /api/3/bulkupsert/system_view_templates``).
+
+      :param templates: List of template records to upsert — plain dicts or
+                        :class:`~pyfsr.models.SystemViewTemplate` instances (e.g. straight
+                        from :meth:`list_templates`), mixed freely. Each should have at
+                        minimum ``name``, ``uuid``, ``module``, ``viewOptions``, ``config``,
+                        ``type``.
+      :param unique_fields: Fields that define uniqueness for upsert. Defaults to ``["uuid"]``.
+                            Change to ``["name"]`` or ``["module", "viewOptions"]`` if needed.
+
+      :returns: The bulk operation result (typically ``{"upserted": N}`` or similar).
+
+      :raises FortiSOARException: on validation or API failures.
+
+
+
+   .. py:method:: set_default_template(template: dict[str, Any] | pyfsr.models._system.SystemViewTemplate, *, isDefault: bool = True) -> dict[str, Any]
+
+      Mark a ``system_view_templates`` row as the default for its module/layout.
+
+      A default is the ``isDefault`` flag on an SVT row, not a separate resource —
+      the editor's "Mark as default" sets ``isDefault = true`` on the full template
+      and saves it through ``bulkupsert/system_view_templates`` (the
+      ``/api/3/template/{type}/default`` path an earlier draft assumed does not exist;
+      it 400s "Invalid Type"). This mirrors that: it upserts the **whole** row with
+      the flag flipped.
+
+      :param template: A complete SVT row — a dict or :class:`~pyfsr.models.SystemViewTemplate`
+                       (as returned by :meth:`get_template` or an entry from
+                       :meth:`list_templates`). Pass the full row, not a fragment —
+                       ``bulkupsert`` replaces by ``uuid``, so a partial body would drop fields.
+      :param isDefault: Flag value to write (default ``True``; ``False`` to unset).
+
+      :returns: The bulk-upsert response.
+
+      :raises ValueError: if ``template`` has no ``uuid``.
+
+      .. note::
+
+         The platform enforces **exactly one default per ``(module, viewOptions)``**
+         (verified live, 8.0): promoting a row to default auto-demotes the previously
+         default row server-side. The corollary — you cannot directly *unset* the
+         lone default (``isDefault=False`` on the only default 500s on
+         ``bulkupsert/system_view_templates``); instead **promote another row**, which
+         demotes this one. So to change a module's default, call this on the new row.
+
+
+

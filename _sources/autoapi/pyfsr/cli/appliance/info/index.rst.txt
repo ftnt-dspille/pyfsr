@@ -1,0 +1,29 @@
+pyfsr.cli.appliance.info
+========================
+
+.. py:module:: pyfsr.cli.appliance.info
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance info`` — one-shot identity card.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.info.identity
+
+
+Module Contents
+---------------
+
+.. py:function:: identity(facts: pyfsr.cli.appliance.facts.Facts) -> dict[str, str]
+
+   Resolve the 'where am I / what are the magic values' card.
+
+   Device UUID is shown masked (it doubles as the DB/ES password).
+
+

@@ -1,0 +1,560 @@
+pyfsr.ai_eval.score
+===================
+
+.. py:module:: pyfsr.ai_eval.score
+
+.. autoapi-nested-parse::
+
+   Score one investigation against a scenario's ground truth, and aggregate runs.
+
+   Every number comes from the investigation's 8.0.1 trace
+   (:meth:`pyfsr.api.ai.AITracesAPI.investigation`) plus its result summary; the
+   stub servers' fixed answers make it deterministic which calls *could* have
+   surfaced which facts.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.ai_eval.score.WEIGHTS
+   pyfsr.ai_eval.score.DEFAULT_PRICING
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.ai_eval.score.TokenPricing
+   pyfsr.ai_eval.score.ScoredCall
+   pyfsr.ai_eval.score.ExpectedCallResult
+   pyfsr.ai_eval.score.FactResult
+   pyfsr.ai_eval.score.RunScore
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.ai_eval.score.score_run
+   pyfsr.ai_eval.score.composite
+   pyfsr.ai_eval.score.aggregate
+
+
+Module Contents
+---------------
+
+.. py:data:: WEIGHTS
+
+.. py:class:: TokenPricing(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   What an investigation's tokens cost.
+
+   Defaults are FortiAI's: 5,000,000 tokens a month included per appliance,
+   top-ups at $100 per 500,000 tokens (``usd_per_million=200``). FortiAI meters
+   input and output tokens alike. For a native provider profile (your own
+   OpenAI/Anthropic/Gemini key) set ``usd_per_million`` to a blended rate, or
+   ``input_usd_per_million``/``output_usd_per_million`` to price the two apart.
+
+
+   .. py:attribute:: usd_per_million
+      :type:  float
+      :value: 200.0
+
+
+
+   .. py:attribute:: input_usd_per_million
+      :type:  float | None
+      :value: None
+
+
+
+   .. py:attribute:: output_usd_per_million
+      :type:  float | None
+      :value: None
+
+
+
+   .. py:attribute:: free_tokens_per_month
+      :type:  int
+      :value: 5000000
+
+
+
+   .. py:method:: cost(input_tokens: int, output_tokens: int, billed_tokens: int | None = None) -> float
+
+      USD for one investigation; ``billed_tokens`` (the metered count) wins when given.
+
+
+
+.. py:data:: DEFAULT_PRICING
+
+.. py:class:: ScoredCall(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   !!! abstract "Usage Documentation"
+       [Models](../concepts/models.md)
+
+   A base class for creating Pydantic models.
+
+   :ivar __class_vars__: The names of the class variables defined on the model.
+   :ivar __private_attributes__: Metadata about the private attributes of the model.
+   :ivar __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.
+
+   :ivar __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.
+   :ivar __pydantic_core_schema__: The core schema of the model.
+   :ivar __pydantic_custom_init__: Whether the model has a custom `__init__` function.
+   :ivar __pydantic_decorators__: Metadata containing the decorators defined on the model.
+                                  This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.
+   :ivar __pydantic_generic_metadata__: A dictionary containing metadata about generic Pydantic models.
+                                        The `origin` and `args` items map to the [`__origin__`][genericalias.__origin__]
+                                        and [`__args__`][genericalias.__args__] attributes of [generic aliases][types-genericalias],
+                                        and the `parameter` item maps to the `__parameter__` attribute of generic classes.
+   :ivar __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.
+   :ivar __pydantic_post_init__: The name of the post-init method for the model, if defined.
+   :ivar __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].
+   :ivar __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.
+   :ivar __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.
+
+   :ivar __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.
+   :ivar __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.
+
+   :ivar __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]
+                             is set to `'allow'`.
+   :ivar __pydantic_fields_set__: The names of fields explicitly set during instantiation.
+   :ivar __pydantic_private__: Values of private attributes set on the model instance.
+
+
+
+   .. py:attribute:: server
+      :type:  str | None
+
+
+   .. py:attribute:: tool
+      :type:  str | None
+
+
+   .. py:attribute:: args
+      :type:  dict[str, Any]
+      :value: None
+
+
+
+   .. py:attribute:: selected_by
+      :type:  str
+      :value: 'code'
+
+
+
+   .. py:attribute:: agent
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: rule
+      :type:  int | None
+      :value: None
+
+
+
+   .. py:attribute:: distractor
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: failed
+      :type:  bool
+      :value: False
+
+
+
+.. py:class:: ExpectedCallResult(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   !!! abstract "Usage Documentation"
+       [Models](../concepts/models.md)
+
+   A base class for creating Pydantic models.
+
+   :ivar __class_vars__: The names of the class variables defined on the model.
+   :ivar __private_attributes__: Metadata about the private attributes of the model.
+   :ivar __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.
+
+   :ivar __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.
+   :ivar __pydantic_core_schema__: The core schema of the model.
+   :ivar __pydantic_custom_init__: Whether the model has a custom `__init__` function.
+   :ivar __pydantic_decorators__: Metadata containing the decorators defined on the model.
+                                  This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.
+   :ivar __pydantic_generic_metadata__: A dictionary containing metadata about generic Pydantic models.
+                                        The `origin` and `args` items map to the [`__origin__`][genericalias.__origin__]
+                                        and [`__args__`][genericalias.__args__] attributes of [generic aliases][types-genericalias],
+                                        and the `parameter` item maps to the `__parameter__` attribute of generic classes.
+   :ivar __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.
+   :ivar __pydantic_post_init__: The name of the post-init method for the model, if defined.
+   :ivar __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].
+   :ivar __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.
+   :ivar __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.
+
+   :ivar __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.
+   :ivar __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.
+
+   :ivar __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]
+                             is set to `'allow'`.
+   :ivar __pydantic_fields_set__: The names of fields explicitly set during instantiation.
+   :ivar __pydantic_private__: Values of private attributes set on the model instance.
+
+
+
+   .. py:attribute:: server
+      :type:  str
+
+
+   .. py:attribute:: tool
+      :type:  str
+
+
+   .. py:attribute:: args
+      :type:  str
+
+
+   .. py:attribute:: chain
+      :type:  bool
+
+
+   .. py:attribute:: required
+      :type:  bool
+
+
+   .. py:attribute:: called
+      :type:  bool
+
+
+   .. py:attribute:: right_query
+      :type:  bool
+
+
+   .. py:attribute:: selected_by
+      :type:  str | None
+      :value: None
+
+
+
+.. py:class:: FactResult(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   !!! abstract "Usage Documentation"
+       [Models](../concepts/models.md)
+
+   A base class for creating Pydantic models.
+
+   :ivar __class_vars__: The names of the class variables defined on the model.
+   :ivar __private_attributes__: Metadata about the private attributes of the model.
+   :ivar __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.
+
+   :ivar __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.
+   :ivar __pydantic_core_schema__: The core schema of the model.
+   :ivar __pydantic_custom_init__: Whether the model has a custom `__init__` function.
+   :ivar __pydantic_decorators__: Metadata containing the decorators defined on the model.
+                                  This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.
+   :ivar __pydantic_generic_metadata__: A dictionary containing metadata about generic Pydantic models.
+                                        The `origin` and `args` items map to the [`__origin__`][genericalias.__origin__]
+                                        and [`__args__`][genericalias.__args__] attributes of [generic aliases][types-genericalias],
+                                        and the `parameter` item maps to the `__parameter__` attribute of generic classes.
+   :ivar __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.
+   :ivar __pydantic_post_init__: The name of the post-init method for the model, if defined.
+   :ivar __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].
+   :ivar __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.
+   :ivar __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.
+
+   :ivar __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.
+   :ivar __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.
+
+   :ivar __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]
+                             is set to `'allow'`.
+   :ivar __pydantic_fields_set__: The names of fields explicitly set during instantiation.
+   :ivar __pydantic_private__: Values of private attributes set on the model instance.
+
+
+
+   .. py:attribute:: id
+      :type:  str
+
+
+   .. py:attribute:: what
+      :type:  str
+
+
+   .. py:attribute:: chain
+      :type:  bool
+
+
+   .. py:attribute:: required
+      :type:  bool
+
+
+   .. py:attribute:: retrieved
+      :type:  bool
+
+
+   .. py:attribute:: in_answers
+      :type:  bool
+
+
+   .. py:attribute:: in_summary
+      :type:  bool
+
+
+.. py:class:: RunScore(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   !!! abstract "Usage Documentation"
+       [Models](../concepts/models.md)
+
+   A base class for creating Pydantic models.
+
+   :ivar __class_vars__: The names of the class variables defined on the model.
+   :ivar __private_attributes__: Metadata about the private attributes of the model.
+   :ivar __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.
+
+   :ivar __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.
+   :ivar __pydantic_core_schema__: The core schema of the model.
+   :ivar __pydantic_custom_init__: Whether the model has a custom `__init__` function.
+   :ivar __pydantic_decorators__: Metadata containing the decorators defined on the model.
+                                  This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.
+   :ivar __pydantic_generic_metadata__: A dictionary containing metadata about generic Pydantic models.
+                                        The `origin` and `args` items map to the [`__origin__`][genericalias.__origin__]
+                                        and [`__args__`][genericalias.__args__] attributes of [generic aliases][types-genericalias],
+                                        and the `parameter` item maps to the `__parameter__` attribute of generic classes.
+   :ivar __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.
+   :ivar __pydantic_post_init__: The name of the post-init method for the model, if defined.
+   :ivar __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].
+   :ivar __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.
+   :ivar __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.
+
+   :ivar __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.
+   :ivar __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.
+
+   :ivar __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]
+                             is set to `'allow'`.
+   :ivar __pydantic_fields_set__: The names of fields explicitly set during instantiation.
+   :ivar __pydantic_private__: Values of private attributes set on the model instance.
+
+
+
+   .. py:attribute:: scenario
+      :type:  str
+
+
+   .. py:attribute:: task_id
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: status
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: classification
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: verdict
+      :type:  float
+      :value: 0.0
+
+
+
+   .. py:attribute:: tool_recall
+      :type:  float | None
+      :value: None
+
+
+
+   .. py:attribute:: query_accuracy
+      :type:  float | None
+      :value: None
+
+
+
+   .. py:attribute:: chain_recall
+      :type:  float | None
+      :value: None
+
+
+
+   .. py:attribute:: precision
+      :type:  float | None
+      :value: None
+
+
+
+   .. py:attribute:: fact_retrieval
+      :type:  float | None
+      :value: None
+
+
+
+   .. py:attribute:: fact_use
+      :type:  float | None
+      :value: None
+
+
+
+   .. py:attribute:: fact_in_summary
+      :type:  float | None
+      :value: None
+
+
+
+   .. py:attribute:: composite
+      :type:  float
+      :value: 0.0
+
+
+
+   .. py:attribute:: eval_calls
+      :type:  int
+      :value: 0
+
+
+
+   .. py:attribute:: wasted_calls
+      :type:  int
+      :value: 0
+
+
+
+   .. py:attribute:: distractor_calls
+      :type:  int
+      :value: 0
+
+
+
+   .. py:attribute:: failed_calls
+      :type:  int
+      :value: 0
+
+
+
+   .. py:attribute:: lost_facts
+      :type:  list[str]
+      :value: None
+
+
+
+   .. py:attribute:: expected
+      :type:  list[ExpectedCallResult]
+      :value: None
+
+
+
+   .. py:attribute:: facts
+      :type:  list[FactResult]
+      :value: None
+
+
+
+   .. py:attribute:: calls
+      :type:  list[ScoredCall]
+      :value: None
+
+
+
+   .. py:attribute:: trace_metrics
+      :type:  dict[str, Any]
+      :value: None
+
+
+
+   .. py:attribute:: duration_s
+      :type:  float | None
+      :value: None
+
+
+
+   .. py:attribute:: error
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: input_tokens
+      :type:  int | None
+      :value: None
+
+
+
+   .. py:attribute:: output_tokens
+      :type:  int | None
+      :value: None
+
+
+
+   .. py:attribute:: total_tokens
+      :type:  int | None
+      :value: None
+
+
+
+   .. py:attribute:: llm_calls
+      :type:  int | None
+      :value: None
+
+
+
+   .. py:attribute:: metered_tokens
+      :type:  int | None
+      :value: None
+
+
+
+   .. py:attribute:: cost_usd
+      :type:  float | None
+      :value: None
+
+
+
+.. py:function:: score_run(suite: pyfsr.ai_eval.scenario.Suite, scenario: pyfsr.ai_eval.scenario.Scenario, inv: pyfsr.models.InvestigationTrace | None, *, summary: Any = None, classification: str | None = None, duration_s: float | None = None, metered_tokens: int | None = None, pricing: TokenPricing = DEFAULT_PRICING) -> RunScore
+
+   Score one finished investigation.
+
+   ``summary`` is the result's summary payload (anything JSON-able; searched
+   for facts); ``classification`` the verdict label (e.g. ``"Malicious"``).
+   ``metered_tokens`` is the FortiAI balance drop over the run, when measured;
+   cost is priced from it, else from the traced tokens.
+
+
+.. py:function:: composite(score: RunScore) -> float
+
+   Weighted mean of the available component scores (missing ones are skipped).
+
+
+.. py:function:: aggregate(scores: list[RunScore], pricing: TokenPricing = DEFAULT_PRICING) -> dict[str, Any]
+
+   Per-scenario summary over repeated runs: score spread, verdicts, and how
+   often each expected call / fact was hit -- the "what should have been used"
+   view -- plus what was actually used instead, and what it cost.
+
+

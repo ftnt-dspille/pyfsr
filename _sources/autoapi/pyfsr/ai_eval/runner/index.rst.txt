@@ -1,0 +1,183 @@
+pyfsr.ai_eval.runner
+====================
+
+.. py:module:: pyfsr.ai_eval.runner
+
+.. autoapi-nested-parse::
+
+   Deploy the stub MCP servers to an appliance and run scored investigations.
+
+   ::
+
+       from pyfsr.ai_eval import load_suite, deploy, run_suite
+
+       suite = load_suite()                     # bundled default suite
+       dep = deploy(client, suite)              # connector + fixtures + MCP servers + agent allowlists
+       report = run_suite(client, suite, runs=3)
+       print(report["summary"]["overall"])
+
+   Deployment is idempotent: the connector is re-installed in place, the
+   configuration and MCP servers are upserted by name, and allowlists only gain
+   missing entries (and lose eval servers an agent is no longer listed for).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.ai_eval.runner.CONNECTOR
+   pyfsr.ai_eval.runner.STUB_DIR
+   pyfsr.ai_eval.runner.DEFAULT_PORT
+   pyfsr.ai_eval.runner.CONFIG_NAME
+   pyfsr.ai_eval.runner.ALERT_SOURCE
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.ai_eval.runner.Deployment
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.ai_eval.runner.deploy
+   pyfsr.ai_eval.runner.teardown
+   pyfsr.ai_eval.runner.call_log
+   pyfsr.ai_eval.runner.create_alert
+   pyfsr.ai_eval.runner.run_scenario
+   pyfsr.ai_eval.runner.run_suite
+
+
+Module Contents
+---------------
+
+.. py:data:: CONNECTOR
+   :value: 'fsr-ai-eval-stub'
+
+
+.. py:data:: STUB_DIR
+
+.. py:data:: DEFAULT_PORT
+   :value: 18900
+
+
+.. py:data:: CONFIG_NAME
+   :value: 'ai-eval'
+
+
+.. py:data:: ALERT_SOURCE
+   :value: 'pyfsr ai_eval'
+
+
+.. py:class:: Deployment(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   !!! abstract "Usage Documentation"
+       [Models](../concepts/models.md)
+
+   A base class for creating Pydantic models.
+
+   :ivar __class_vars__: The names of the class variables defined on the model.
+   :ivar __private_attributes__: Metadata about the private attributes of the model.
+   :ivar __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.
+
+   :ivar __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.
+   :ivar __pydantic_core_schema__: The core schema of the model.
+   :ivar __pydantic_custom_init__: Whether the model has a custom `__init__` function.
+   :ivar __pydantic_decorators__: Metadata containing the decorators defined on the model.
+                                  This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.
+   :ivar __pydantic_generic_metadata__: A dictionary containing metadata about generic Pydantic models.
+                                        The `origin` and `args` items map to the [`__origin__`][genericalias.__origin__]
+                                        and [`__args__`][genericalias.__args__] attributes of [generic aliases][types-genericalias],
+                                        and the `parameter` item maps to the `__parameter__` attribute of generic classes.
+   :ivar __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.
+   :ivar __pydantic_post_init__: The name of the post-init method for the model, if defined.
+   :ivar __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].
+   :ivar __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.
+   :ivar __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.
+
+   :ivar __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.
+   :ivar __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.
+
+   :ivar __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]
+                             is set to `'allow'`.
+   :ivar __pydantic_fields_set__: The names of fields explicitly set during instantiation.
+   :ivar __pydantic_private__: Values of private attributes set on the model instance.
+
+
+
+   .. py:attribute:: port
+      :type:  int
+
+
+   .. py:attribute:: servers
+      :type:  dict[str, str]
+      :value: None
+
+
+
+   .. py:attribute:: agents
+      :type:  dict[str, list[str]]
+      :value: None
+
+
+
+   .. py:attribute:: fixtures
+      :type:  dict[str, Any]
+      :value: None
+
+
+
+.. py:function:: deploy(client: pyfsr.client.FortiSOAR, suite: pyfsr.ai_eval.scenario.Suite, *, port: int = DEFAULT_PORT, install: bool = True, validate: bool = True) -> Deployment
+
+   Install the stub connector, load the suite's fixtures, register one MCP
+   server per suite server and allow it for the suite's agents.
+
+   Custom connectors need the appliance's connector development mode on
+   (``client.system_settings.set_development_mode(connectors=True)``).
+
+
+.. py:function:: teardown(client: pyfsr.client.FortiSOAR, suite: pyfsr.ai_eval.scenario.Suite, *, uninstall: bool = False) -> None
+
+   Remove the suite's MCP servers from every agent and delete them.
+
+
+.. py:function:: call_log(client: pyfsr.client.FortiSOAR, *, since: float | None = None, clear: bool = False) -> list[dict[str, Any]]
+
+   Every tool call the stub servers answered (independent of FortiSOAR's traces).
+
+
+.. py:function:: create_alert(client: pyfsr.client.FortiSOAR, scenario: pyfsr.ai_eval.scenario.Scenario, *, tag: str | None = None) -> dict[str, Any]
+
+   Create the scenario's alert (a fresh ``sourceId`` each time).
+
+
+.. py:function:: run_scenario(client: pyfsr.client.FortiSOAR, suite: pyfsr.ai_eval.scenario.Suite, scenario: pyfsr.ai_eval.scenario.Scenario | str, *, runs: int = 1, alert: dict[str, Any] | None = None, interval: float = 6.0, timeout: float = 1200.0, on_run: Any = None, meter: bool = True, pricing: pyfsr.ai_eval.score.TokenPricing = DEFAULT_PRICING) -> list[pyfsr.ai_eval.score.RunScore]
+
+   Investigate one scenario's alert ``runs`` times and score each run.
+
+   The same alert is re-investigated each time (created once unless ``alert``
+   is given), so the spread across runs is the investigation's own variance.
+   ``on_run(score)`` is called after each run (progress printing).
+
+   With ``meter`` the FortiAI token balance is read before and after each run;
+   the drop is the run's ``metered_tokens``. Anything else using FortiAI on the
+   appliance at the same time (chat, other investigations) inflates it.
+
+
+.. py:function:: run_suite(client: pyfsr.client.FortiSOAR, suite: pyfsr.ai_eval.scenario.Suite, *, runs: int = 1, scenarios: list[str] | None = None, **kwargs: Any) -> dict[str, Any]
+
+   Run every (or the named) scenario ``runs`` times.
+
+   Returns ``{"summary": aggregate(...), "runs": [RunScore dicts]}``.
+
+
