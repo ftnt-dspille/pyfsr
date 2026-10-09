@@ -4,7 +4,7 @@
 # inputs: vars.input (trigger context, none required)
 # outputs: a comment record with the digest summary
 # connectors: cyops_utilities (no external connectors); # swap-in: <your connector> (config: <uuid or name>) if needed for comment posting
-# adapts-to: SOC monitoring intent – recurring alert summary and notification
+# adapts-to: SOC monitoring intent - recurring alert summary and notification
 
 collection: 00. Playbook Learning SP - Specific Playbooks
 description: ''
@@ -40,10 +40,12 @@ playbooks:
       - type: set_variable
         name: Summarize Severity Counts
         vars:
-          critical_count: "{{ (vars.steps.Find_Recent_Alerts.data | json_query('[?severity==`critical`].severity') ) | length }}"
-          high_count: "{{ (vars.steps.Find_Recent_Alerts.data | json_query('[?severity==`high`].severity') ) | length }}"
-          medium_count: "{{ (vars.steps.Find_Recent_Alerts.data | json_query('[?severity==`medium`].severity') ) | length }}"
-          low_count: "{{ (vars.steps.Find_Recent_Alerts.data | json_query('[?severity==`low`].severity') ) | length }}"
+          # find_record's output IS the list of records (no .data wrapper):
+          # json_query the bare step reference, or every count renders 0.
+          critical_count: "{{ (vars.steps.Find_Recent_Alerts | json_query('[?severity==`critical`].severity') ) | length }}"
+          high_count: "{{ (vars.steps.Find_Recent_Alerts | json_query('[?severity==`high`].severity') ) | length }}"
+          medium_count: "{{ (vars.steps.Find_Recent_Alerts | json_query('[?severity==`medium`].severity') ) | length }}"
+          low_count: "{{ (vars.steps.Find_Recent_Alerts | json_query('[?severity==`low`].severity') ) | length }}"
         next: Post Digest Comment
 
       - type: create_record

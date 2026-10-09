@@ -103,12 +103,14 @@ mcp = [
 # allowance; above a minor bump, assume they need re-verifying.
 #
 # The cap is a floor-and-ceiling, not determinism: 0.6.22 arrived as a PATCH
-# bump and broke main twice in one session, and <0.7 would not have stopped
+# bump and broke main twice in one session, and a cap would not have stopped
 # that. uv.lock does pin an exact version, but no workflow installs from it --
 # they all `pip install` and resolve fresh -- so the lock constrains nothing in
-# CI today.
+# CI today. Ceiling widened past 0.7 for 0.25.0: the 0.7 series is verified
+# compatible (compiler/decompiler entry points unchanged; the library suite
+# runs green against the 0.7 wheel lineage).
 playbooks = [
-    "fsr_playbooks>=0.6.22,<0.7",
+    "fsr_playbooks>=0.6.22,<0.8",
 ]
 
 [project.scripts]

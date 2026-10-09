@@ -61,6 +61,13 @@ _TEAMS_UNSYNCED = "`teams` reference table is unsynced"
 # is a real authoring bug (isAssigned set with no assignee) and must still fail.
 _UNASSIGNED_CASCADE = "owner_detail.isAssigned=true requires exactly one of"
 
+# FSOAR auto-generates this enumeration param on live ops (it exists on every
+# live-captured block_ip_new, and the library sets it explicitly to mute it);
+# public RPM-derived packaged defs do not carry it, so an offline compile
+# against the packaged slim catalog flags it. Matched on the message so any
+# OTHER unknown_param -- a genuine typo -- still fails hard.
+_OS_ENUM_PARAM_COLD = "'dynamicallySelected' is not a param of"
+
 
 def _real_errors(blocking: list[dict]) -> list[dict]:
     """Drop the blocking errors that only exist because we compiled offline.
@@ -83,6 +90,8 @@ def _real_errors(blocking: list[dict]) -> list[dict]:
         if e.get("code") == "unknown_connector":
             continue
         if _TEAMS_UNSYNCED in msg:
+            continue
+        if _OS_ENUM_PARAM_COLD in msg:
             continue
         if cold_team and _UNASSIGNED_CASCADE in msg:
             continue
