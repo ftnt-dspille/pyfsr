@@ -108,6 +108,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from ..auth.base import BaseAuth
+from ..auth.guards import ensure_jwt
 from ..exceptions import APIError, ResourceNotFoundError
 from ..exceptions import PermissionError as FortiSOARPermissionError
 from ..models._ai import (
@@ -1712,7 +1714,17 @@ class AIApi(BaseAPI):
             ...     if not s.valid:
             ...         print(f"{s.name}: {s.error}")
         """
-        return [MCPServerStatus.model_validate(m) for m in _as_list(self.client.get("/api/ai/mcp/status"))]
+        statuses = [MCPServerStatus.model_validate(m) for m in _as_list(self.client.get("/api/ai/mcp/status"))]
+        if BaseAuth.OPERATION_FORWARDED_BEARER in getattr(self.client.auth, "unsupported_operations", ()):
+            denied = [s.name for s in statuses if not s.valid and str(s.error or "").startswith("401")]
+            if denied:
+                warnings.warn(
+                    f"{', '.join(denied)}: 401 Unauthorized. Built-in (FSR-auth) MCP servers run on the caller's "
+                    "JWT, and this client authenticates with an API key, so their status is not meaningful here. "
+                    "Use a username/password client to check them.",
+                    stacklevel=2,
+                )
+        return statuses
 
     def validate_mcp_server(self, config: dict[str, Any]) -> MCPValidateResult:
         """Probe an MCP-server config *before* persisting it.
@@ -1791,6 +1803,18 @@ class AIApi(BaseAPI):
         auth = dict(auth or {"type": "NONE"})
         if token is not None:
             auth["value"] = token
+        if str(auth.get("type", "")).upper() == "FSR" and not auth.get("value"):
+            # Built-in servers store no credential: fsr-ai replays the caller's JWT.
+            ensure_jwt(
+                self,
+                BaseAuth.OPERATION_FORWARDED_BEARER,
+                "built-in (FSR-auth) MCP servers authenticate with the caller's JWT; pass token=<jwt> or use a "
+                "username/password client",
+                what=f"MCP server {name_or_uuid!r}",
+            )
+            header = self.client.auth.get_auth_headers().get("Authorization", "")
+            if header.lower().startswith("bearer "):
+                auth["value"] = header.split(" ", 1)[1]
         verify = rec.get("verify", self.client.verify_ssl)
         # An OAUTH2 server's token endpoint is called with the same TLS setting as the server.
         auth.setdefault("verify", verify)
@@ -1803,6 +1827,11 @@ class AIApi(BaseAPI):
         and opens a real MCP ``tools/list`` -- the same reach fsr-ai's agent uses
         (streamable-HTTP + auth header), driven from your own process. Thinner
         than :meth:`mcp_tool_catalog` (one server, typed :class:`~pyfsr.models.MCPTool`).
+
+        Built-in servers (``FSR`` auth, ``internal`` type) store no credential and register a
+        ``https://localhost/mcp/...`` URL: they authenticate with the caller's JWT, so an API-key
+        client raises :class:`~pyfsr.exceptions.UnsupportedAuthOperationError` unless ``token=`` is
+        given, and they are only reachable from the appliance itself.
 
         ``token`` supplies the credential value when the stored one is masked or
         you want to override it. For an ``OAUTH2`` server (8.0.1+), pass a token

@@ -1,6 +1,6 @@
 """No-auth strategy for FortiSOAR public endpoints.
 
-A handful of FortiSOAR endpoints are intentionally unauthenticated — build
+A handful of FortiSOAR endpoints are intentionally unauthenticated - build
 version (``GET /api/version``) and the public license API
 (``POST /api/public/license``, used for first-time activation and FortiFlex
 token redemption). On a *fresh* or *license-locked* appliance there are no
@@ -17,7 +17,7 @@ from .base import BaseAuth
 
 
 class NoAuth(BaseAuth):
-    """Unauthenticated strategy — for public endpoints only (no credentials)."""
+    """Unauthenticated strategy - for public endpoints only (no credentials)."""
 
     def __init__(self, base_url: str = "", verify_ssl: bool = True):
         super().__init__()
@@ -30,8 +30,10 @@ class NoAuth(BaseAuth):
             self.OPERATION_CONFIG_IMPORT,
             self.OPERATION_PLAYBOOK,
             self.OPERATION_SOLUTION_PACK,
+            self.OPERATION_BULKUPSERT,
+            self.OPERATION_FORWARDED_BEARER,
         }
 
     def get_auth_headers(self) -> dict:
-        """No credentials — send no auth header."""
+        """No credentials - send no auth header."""
         return {}

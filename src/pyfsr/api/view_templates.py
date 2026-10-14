@@ -3,17 +3,17 @@
 This module wraps the system view template (SVT) **write** surface complementing the
 read-only :class:`~pyfsr.api.views.ViewsAPI`. It handles:
 
-- **Template read/write** — ``/api/views/1/{name}`` (GET, PUT, POST for named view template
+- **Template read/write** - ``/api/views/1/{name}`` (GET, PUT, POST for named view template
   CRUD). A named template can be assigned as the active template for a module/layout via the
   platform's view-resolution logic.
-- **Default template assignment** — a default is the ``isDefault`` flag on a
+- **Default template assignment** - a default is the ``isDefault`` flag on a
   ``system_view_templates`` row (keyed by ``(module, viewOptions)``), saved via
   ``bulkupsert/system_view_templates``. There is **no** ``/api/3/template/{type}/default``
   endpoint (it 400s "Invalid Type", verified 8.0).
-- **Template enumeration** — ``/api/3/system_view_templates`` (GET list, POST single create).
-- **Bulk operations** — ``/api/3/bulkupsert/system_view_templates`` (POST bulk upsert).
+- **Template enumeration** - ``/api/3/system_view_templates`` (GET list, POST single create).
+- **Bulk operations** - ``/api/3/bulkupsert/system_view_templates`` (POST bulk upsert).
 
-Read methods return :class:`~pyfsr.models.SystemViewTemplate` — dict-compatible
+Read methods return :class:`~pyfsr.models.SystemViewTemplate` - dict-compatible
 (``t["name"]``/``t.get(...)`` keep working) but with typed attribute access too.
 
 Example:
@@ -32,11 +32,11 @@ field names are currently unknown and not yet discovered on a live appliance. Th
 wrapper accepts these fields via ``**extra`` parameters in write methods and passes them
 through unchanged. Known candidate field names (unconfirmed):
 
-- ``roles`` — list of role names or UUIDs
-- ``displayConditions`` — list of condition objects
-- ``visibilityCondition`` — single condition object
-- ``restrictedAccess`` — boolean or permission spec
-- ``conditions`` — generic condition list
+- ``roles`` - list of role names or UUIDs
+- ``displayConditions`` - list of condition objects
+- ``visibilityCondition`` - single condition object
+- ``restrictedAccess`` - boolean or permission spec
+- ``conditions`` - generic condition list
 
 Once the field name is confirmed (via 8.0 appliance inspection), this module should be
 updated to add explicit typed parameters instead of accepting ``**extra``.
@@ -57,6 +57,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ..auth.base import BaseAuth
+from ..auth.guards import requires_jwt
 from ..models._system import SystemViewTemplate
 from ..pagination import extract_members
 from .base import BaseAPI
@@ -165,11 +167,11 @@ class ViewTemplatesAPI(BaseAPI):
         Defaults are not a separate endpoint: on FortiSOAR (verified 8.0) a default
         is simply the ``system_view_templates`` row carrying ``isDefault: true`` for
         a given ``(module, viewOptions)`` pair. (The ``/api/3/template/{type}/default``
-        path an earlier draft assumed does not exist — it 400s with "Invalid Type".)
+        path an earlier draft assumed does not exist - it 400s with "Invalid Type".)
 
         Args:
             module: Module name (e.g. ``"alerts"``).
-            kind: Layout — one of ``"list"``, ``"detail"`` (default), or ``"form"``.
+            kind: Layout - one of ``"list"``, ``"detail"`` (default), or ``"form"``.
 
         Returns:
             The default SVT row for that module/layout, or ``None`` if none is flagged.
@@ -322,6 +324,7 @@ class ViewTemplatesAPI(BaseAPI):
         assert isinstance(result, dict)
         return SystemViewTemplate.model_validate(result)
 
+    @requires_jwt(BaseAuth.OPERATION_BULKUPSERT, "/api/3/bulkupsert/* rejects API keys with a misleading 500")
     def bulk_upsert_templates(
         self,
         templates: list[dict[str, Any] | SystemViewTemplate],
@@ -331,7 +334,7 @@ class ViewTemplatesAPI(BaseAPI):
         """Bulk upsert system view templates (``POST /api/3/bulkupsert/system_view_templates``).
 
         Args:
-            templates: List of template records to upsert — plain dicts or
+            templates: List of template records to upsert - plain dicts or
                 :class:`~pyfsr.models.SystemViewTemplate` instances (e.g. straight
                 from :meth:`list_templates`), mixed freely. Each should have at
                 minimum ``name``, ``uuid``, ``module``, ``viewOptions``, ``config``,
@@ -362,7 +365,7 @@ class ViewTemplatesAPI(BaseAPI):
     ) -> dict[str, Any]:
         """Mark a ``system_view_templates`` row as the default for its module/layout.
 
-        A default is the ``isDefault`` flag on an SVT row, not a separate resource —
+        A default is the ``isDefault`` flag on an SVT row, not a separate resource -
         the editor's "Mark as default" sets ``isDefault = true`` on the full template
         and saves it through ``bulkupsert/system_view_templates`` (the
         ``/api/3/template/{type}/default`` path an earlier draft assumed does not exist;
@@ -370,9 +373,9 @@ class ViewTemplatesAPI(BaseAPI):
         the flag flipped.
 
         Args:
-            template: A complete SVT row — a dict or :class:`~pyfsr.models.SystemViewTemplate`
+            template: A complete SVT row - a dict or :class:`~pyfsr.models.SystemViewTemplate`
                 (as returned by :meth:`get_template` or an entry from
-                :meth:`list_templates`). Pass the full row, not a fragment —
+                :meth:`list_templates`). Pass the full row, not a fragment -
                 ``bulkupsert`` replaces by ``uuid``, so a partial body would drop fields.
             isDefault: Flag value to write (default ``True``; ``False`` to unset).
 
@@ -385,7 +388,7 @@ class ViewTemplatesAPI(BaseAPI):
         Note:
             The platform enforces **exactly one default per ``(module, viewOptions)``**
             (verified live, 8.0): promoting a row to default auto-demotes the previously
-            default row server-side. The corollary — you cannot directly *unset* the
+            default row server-side. The corollary - you cannot directly *unset* the
             lone default (``isDefault=False`` on the only default 500s on
             ``bulkupsert/system_view_templates``); instead **promote another row**, which
             demotes this one. So to change a module's default, call this on the new row.

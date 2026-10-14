@@ -27,6 +27,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ..auth.base import BaseAuth
+from ..auth.guards import jwt_only
 from ..exceptions import APIError, ApikeyCreateUnavailable
 from ..models import ApiKeyUser
 from .base import BaseAPI
@@ -44,6 +46,7 @@ _STATUS_ACTIVE = 1
 _OPS = frozenset({"REVOKE", "ACTIVATE", "DEACTIVATE", "REGENERATE", "RESET_VALIDITY"})
 
 
+@jwt_only(BaseAuth.OPERATION_AUTH, "the DAS /api/auth routes reject API keys")
 class ApiKeyUsersAPI(BaseAPI):
     """Create, inspect, and run lifecycle ops on API-key users."""
 

@@ -1,7 +1,7 @@
-"""Configuration export/import — ``client.export_config``.
+"""Configuration export/import - ``client.export_config``.
 
 Export a FortiSOAR configuration (modules, playbooks, picklists, roles, and other
-content) to a portable archive and import it into another instance — the basis
+content) to a portable archive and import it into another instance - the basis
 for backup/restore and multi-environment provisioning. Some operations depend on
 the active auth method; the API checks support before running.
 """
@@ -11,6 +11,7 @@ import time
 from typing import Any
 
 from ..auth.base import BaseAuth
+from ..auth.guards import requires_jwt
 from ..models._export import (
     ActorSelection,
     AiAgentSelection,
@@ -71,7 +72,7 @@ class ExportTemplate:
     ``add_module`` exports a module's **schema**; ``add_record_set`` exports its
     **records** (data), optionally filtered. Entry shapes and their
     required/optional fields are backed by typed models in
-    :mod:`pyfsr.models._export`, established against a live 8.0.0 appliance — in
+    :mod:`pyfsr.models._export`, established against a live 8.0.0 appliance - in
     particular a record set only emits records when its query carries a ``limit``.
 
     The name-based categories (``add_picklist`` / ``add_connector`` /
@@ -88,11 +89,11 @@ class ExportTemplate:
         self._auto_select_picklists = auto_select_picklists
         self._modules: list[ModuleSelection] = []
         self._record_sets: list[RecordSet] = []
-        # Indices into _record_sets whose limit is "all" — the real record count is
+        # Indices into _record_sets whose limit is "all" - the real record count is
         # resolved live at create_template time (build() emits a placeholder limit).
         self._record_set_count_all: set[int] = set()
         # Per-category dependency auto-selection (metadata.autoSelectDeps, a
-        # {<category>: bool} map — e.g. {"ai_agents": True}, live-verified on 8.0.0).
+        # {<category>: bool} map - e.g. {"ai_agents": True}, live-verified on 8.0.0).
         self._auto_select_deps: dict[str, bool] = {}
         # View templates are resolved live: the wizard picks a (module, layouts)
         # pair and looks up the real system_view_template rows to embed, rather
@@ -214,7 +215,7 @@ class ExportTemplate:
         """Export a playbook **global variable** by name.
 
         Global variables ride under the Playbooks category on the wire
-        (``options.playbooks.globalVariables`` — a bare name list), matching the
+        (``options.playbooks.globalVariables`` - a bare name list), matching the
         wizard, which sources them from ``GET /api/wf/api/dynamic-variable/``. The
         name is validated against the live list at
         :meth:`ExportConfigAPI.create_template` time.
@@ -241,7 +242,7 @@ class ExportTemplate:
 
         Emitted as a bare name list (``options.appSettings``). Valid names are the
         wizard's fixed set: ``systemSettings``, ``LDAP``, ``RADIUS``, ``TOKEN``,
-        ``HA``, ``sso``, ``syslog``, ``proxy`` — validated at
+        ``HA``, ``sso``, ``syslog``, ``proxy`` - validated at
         :meth:`ExportConfigAPI.create_template` time.
         """
         self._app_settings.append(name)
@@ -295,7 +296,7 @@ class ExportTemplate:
         Args:
             *sections: top-level navigation section titles to export. Passing none
                 exports every section of the live navigation.
-            replace: ``mergeType`` for the export — ``False`` (default) layers the
+            replace: ``mergeType`` for the export - ``False`` (default) layers the
                 sections onto the target's existing nav, ``True`` overwrites it.
         """
         self._navigation.append({"sections": list(sections), "merge": not replace})
@@ -317,7 +318,7 @@ class ExportTemplate:
         Delivery rules (the SOAR UI's *Rules* / notification rules) live in the
         rule-engine app. The name is resolved to its uuid at
         :meth:`ExportConfigAPI.create_template` time and emitted as the Export
-        Wizard's ``{type: "rule", value, label, include}`` entry — the shape the
+        Wizard's ``{type: "rule", value, label, include}`` entry - the shape the
         export engine requires to actually write the rule into the archive
         (live-verified: emits ``rules/<name>.json``).
         """
@@ -398,7 +399,7 @@ class ExportTemplate:
             module: the module whose records to export (e.g. ``"alerts"``).
             query: a :class:`~pyfsr.query.Query`, a raw ``Query.to_body()`` dict,
                 or ``None`` to export every record (up to ``limit``).
-            limit: max records to emit. **Required trigger** — the export engine
+            limit: max records to emit. **Required trigger** - the export engine
                 emits records only when the query carries a ``limit`` (live-verified
                 on 8.0.0); a record set without one exports nothing. There is no
                 "unlimited" on the wire, so pass ``"all"`` to have
@@ -438,7 +439,7 @@ class ExportTemplate:
         return self
 
     def build(self) -> dict[str, Any]:
-        """Return the **offline** template ``options`` — the categories needing no lookup.
+        """Return the **offline** template ``options`` - the categories needing no lookup.
 
         Covers modules, record sets, and view templates. Name-based categories
         (picklists / connectors / playbook collections) require a live lookup and
@@ -482,7 +483,7 @@ class ExportTemplate:
 
     @property
     def metadata(self) -> dict[str, Any]:
-        """The template ``metadata`` — ``autoSelectPicklists`` plus any ``autoSelectDeps``."""
+        """The template ``metadata`` - ``autoSelectPicklists`` plus any ``autoSelectDeps``."""
         md: dict[str, Any] = {"autoSelectPicklists": self._auto_select_picklists}
         if self._auto_select_deps:
             md["autoSelectDeps"] = dict(self._auto_select_deps)
@@ -504,7 +505,7 @@ def _slugify_pack_name(label: str) -> str:
 class SolutionPackBuilder(ExportTemplate):
     """Author a **solution pack** from selected content, plus pack metadata.
 
-    A solution pack is a "SolutionPack Export" template (the content selection —
+    A solution pack is a "SolutionPack Export" template (the content selection -
     modules, playbooks, connectors, roles, …) wrapped with pack metadata (label,
     version, tags, and an optional post-install action). This subclasses
     :class:`ExportTemplate`, so every content ``add_*`` method is inherited and
@@ -572,7 +573,7 @@ class SolutionPackBuilder(ExportTemplate):
         button_label: str = "Configure",
         auto_launch: bool = False,
     ) -> "SolutionPackBuilder":
-        """Configure the **post-install action** — a widget offered after install.
+        """Configure the **post-install action** - a widget offered after install.
 
         Mirrors the wizard's *Configure post-install action*: pick a widget by
         ``name``/``version``, set the launch ``button_label`` (required by the UI
@@ -665,7 +666,7 @@ class ExportConfigAPI(BaseAPI):
         """Look up an export template's uuid by name.
 
         The server-side ``name`` filter is a prefix/contains match, so results are
-        re-checked for an exact name here. Names aren't unique — the most recently
+        re-checked for an exact name here. Names aren't unique - the most recently
         created match wins, which is what the wizard's own list shows first.
         """
         matching = [t for t in self.client.export_templates.list({"name": template_name}) if t.name == template_name]
@@ -706,7 +707,7 @@ class ExportConfigAPI(BaseAPI):
             by the client's get() method.
         """
         # The files endpoint returns JSON metadata by default and only streams the
-        # raw archive when asked for octet-stream — without this header the GET
+        # raw archive when asked for octet-stream - without this header the GET
         # comes back as a dict and the write below would fail.
         content = self.client.get(file_iri, headers={"Accept": "application/octet-stream"})
 
@@ -752,6 +753,7 @@ class ExportConfigAPI(BaseAPI):
         file_iri = status["file"]["@id"]
         return self._download_export(file_iri, output_path)
 
+    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "configuration export is not available to API keys")
     def export_by_template_uuid(
         self, template_uuid: str, output_path: str | None = None, poll_interval: int = 5
     ) -> str:
@@ -784,11 +786,11 @@ class ExportConfigAPI(BaseAPI):
             >>> archive
             b'ZIPBYTES'
         """
-        self._check_auth_support(operation=BaseAuth.OPERATION_CONFIG_EXPORT)
         return self._export_with_template(
             template_uuid=template_uuid, output_path=output_path, poll_interval=poll_interval
         )
 
+    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "configuration export is not available to API keys")
     def export_by_template_name(
         self, template_name: str, output_path: str | None = None, poll_interval: int = 5
     ) -> str:
@@ -821,7 +823,6 @@ class ExportConfigAPI(BaseAPI):
             >>> archive
             b'ZIPBYTES'
         """
-        self._check_auth_support(operation=BaseAuth.OPERATION_CONFIG_EXPORT)
         template_uuid = self._get_template_uuid(template_name)
         filename = f"{template_name.lower().replace(' ', '_')}.zip" if not output_path else None
 
@@ -952,6 +953,7 @@ class ExportConfigAPI(BaseAPI):
 
         return self.create_export_template(name=name, options=options, metadata=metadata)
 
+    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "creating export templates is not available to API keys")
     def create_export_template(
         self, name: str, options: dict[str, Any], metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
@@ -973,7 +975,7 @@ class ExportConfigAPI(BaseAPI):
         Example:
             >>> from pyfsr import Query
             >>> from pyfsr.api.export_config import ExportTemplate
-            >>> client = demo_client()
+            >>> client = demo_client_jwt()   # creating templates needs JWT (API keys are rejected)
             >>> tmpl = (
             ...     ExportTemplate("Alert backup")
             ...     .add_module("alerts", fields=["name", "status", "severity"])
@@ -1204,7 +1206,7 @@ class ExportConfigAPI(BaseAPI):
         Uses the typed :meth:`~pyfsr.api.view_templates.ViewTemplatesAPI.list_templates`
         surface, keeps the requested layouts, and renders each as a
         :class:`~pyfsr.models.ViewTemplateSelection` (``{uuid, module, viewOptions,
-        filters}``) — the objects the export engine embeds (live-verified 8.0.0).
+        filters}``) - the objects the export engine embeds (live-verified 8.0.0).
         """
         wanted = set(view_options)
         rows = [
@@ -1234,7 +1236,7 @@ class ExportConfigAPI(BaseAPI):
         """Raise if the appliance predates 8.0.0, where ``feature`` first shipped.
 
         A permissive no-op when the version can't be determined (``version_tuple``
-        returns ``None``) — we don't block on an unknown rather than guessing.
+        returns ``None``) - we don't block on an unknown rather than guessing.
         """
         v = self.client.version_tuple()
         if v is not None and v < (8, 0, 0):
@@ -1243,6 +1245,7 @@ class ExportConfigAPI(BaseAPI):
                 f"{'.'.join(map(str, v))}); the category exists only on 8.0.0 and later."
             )
 
+    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "configuration export is not available to API keys")
     def export_record_data(
         self,
         module: str,
@@ -1259,14 +1262,14 @@ class ExportConfigAPI(BaseAPI):
 
         The SDK equivalent of the export wizard's record-set export: build a
         throwaway template with one filtered record set, run the export,
-        download the archive, and — unless ``cleanup_template=False`` — delete the
+        download the archive, and - unless ``cleanup_template=False`` - delete the
         temporary template.
 
         Args:
             module: the module whose records to export (e.g. ``"alerts"``).
             query: a :class:`~pyfsr.query.Query`, a raw ``Query.to_body()`` dict,
                 or ``None`` to export every record (up to ``limit``).
-            limit: max records to emit (the required export trigger — see
+            limit: max records to emit (the required export trigger - see
                 :meth:`ExportTemplate.add_record_set`). Raise for large sets.
             include_correlations: also pull correlated/linked records.
             output_path: where to write the ``.zip`` (default: cwd, derived name).
@@ -1293,7 +1296,6 @@ class ExportConfigAPI(BaseAPI):
             >>> archive
             b'ZIPBYTES'
         """
-        self._check_auth_support(operation=BaseAuth.OPERATION_CONFIG_EXPORT)
 
         template = ExportTemplate(f"pyfsr_records_{module}").add_record_set(
             module, query=query, limit=limit, include_correlations=include_correlations, label=label
@@ -1321,6 +1323,7 @@ class ExportConfigAPI(BaseAPI):
         """Delete an export template by uuid (``DELETE /api/3/export_templates/<uuid>``)."""
         self.client.delete(f"/api/3/export_templates/{template_uuid}")
 
+    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "configuration export is not available to API keys")
     def export_connector(
         self,
         connector_name: str,
@@ -1335,19 +1338,19 @@ class ExportConfigAPI(BaseAPI):
         Builds a one-connector export template straight from the installed
         connector record (so it works for installed-only connectors that the
         Content Hub search wouldn't surface), triggers the export, downloads the
-        archive, and — unless ``cleanup_template=False`` — deletes the throwaway
+        archive, and - unless ``cleanup_template=False`` - deletes the throwaway
         template it created.
 
         The downloaded ``.zip`` contains ``<file>/connectors/data.json`` whose
         ``configurations[]`` preserve each ``config_id`` and carry secrets in the
-        appliance's encrypted form — feed it straight to
+        appliance's encrypted form - feed it straight to
         ``client.import_config.import_file`` to restore.
 
         Args:
             connector_name: connector machine name (e.g. ``"code-snippet"``).
             output_path: where to write the ``.zip`` (default: cwd, derived name).
             include_configurations: include the connector's saved configs
-                (default True — the whole point of a backup).
+                (default True - the whole point of a backup).
             cleanup_template: delete the temporary export template afterwards.
             poll_interval: seconds between export-status polls.
 
@@ -1357,7 +1360,6 @@ class ExportConfigAPI(BaseAPI):
         Raises:
             ValueError: if ``connector_name`` is not installed.
         """
-        self._check_auth_support(operation=BaseAuth.OPERATION_CONFIG_EXPORT)
 
         resp = self.client.get("/api/integration/connectors/", params={"name": connector_name})
         data = (resp or {}).get("data") or []

@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`@requires_jwt` / `@jwt_only` / `ensure_jwt` (`pyfsr.auth.guards`) -- fail fast on
+  JWT-only operations.** An API-key client now gets an `UnsupportedAuthOperationError`
+  that names the method, the reason and the fix *before* any request is sent, instead of
+  a 401/500 from deep in the product. Applied to everything under `/api/auth/*`
+  (`system.cluster_health/license/license_identity/deploy_license`, `api_users`,
+  `auth_config`), the config exports and `create_export_template`, and the `bulkupsert` callers
+  (`playbooks.create_playbooks`, `view_templates.bulk_upsert_templates`).
+- **`BaseAuth.OPERATION_FORWARDED_BEARER`** (unsupported for API-key and no-auth): fsr-ai's
+  built-in `FSR`-auth MCP servers replay the *caller's JWT*, so an API key has nothing to
+  forward. `ai.list_registered_tools` / `call_registered_tool` raise up front for such a
+  server (a JWT client sends its own bearer; `token=` still overrides), and
+  `ai.mcp_status()` warns when an API-key client sees their 401s, which are not real outages.
+
 ## [0.25.0] - 2026-10-09
 
 ### Added

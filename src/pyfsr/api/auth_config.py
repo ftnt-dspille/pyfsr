@@ -1,8 +1,8 @@
-"""Authentication / DAS config — ``/api/auth/config`` (session timeout, 2FA, …).
+"""Authentication / DAS config - ``/api/auth/config`` (session timeout, 2FA, …).
 
 These settings live in the ``cyops-auth`` (DAS) service, not the PHP platform,
 so they are reached under the ``/api/auth/*`` prefix rather than ``/api/3``.
-The most-tuned values are in the ``TOKEN`` section — idle timeout, token
+The most-tuned values are in the ``TOKEN`` section - idle timeout, token
 lifetime, max session length.
 
 Accessed as ``client.auth_config``. Requires username/password auth (the DAS
@@ -20,7 +20,7 @@ Example:
     >>> client.auth_config.set("max_session", 1440)  # doctest: +SKIP
 
 .. note::
-    Requires username/password auth — raises ``UnsupportedAuthOperationError``
+    Requires username/password auth - raises ``UnsupportedAuthOperationError``
     under ``demo_client()``'s ``APIKeyAuth`` (hence ``demo_client_jwt()`` here).
     The read (``get``) replays offline; the writes (``set*``) stay ``+SKIP``.
 """
@@ -31,6 +31,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from ..auth.base import BaseAuth
+from ..auth.guards import jwt_only
 from ..pagination import extract_members
 from .base import BaseAPI
 
@@ -53,6 +55,7 @@ class AuthConfigRow(BaseModel):
     value: Any = None
 
 
+@jwt_only(BaseAuth.OPERATION_AUTH, "the DAS /api/auth routes reject API keys")
 class AuthConfigAPI(BaseAPI):
     """Read/write the DAS authentication config (``/api/auth/config``)."""
 
@@ -84,7 +87,7 @@ class AuthConfigAPI(BaseAPI):
 
         ``PUT /api/auth/config`` with the ``API-KEYS.retrievable_mode`` option.
         When **on at the time a key is created**, that key stays retrievable for
-        its lifetime even if the global flag is later flipped off — so
+        its lifetime even if the global flag is later flipped off - so
         :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.get` with
         ``show_api_key=True`` can recover the plaintext on re-runs. The key
         plaintext is also returned in the create response regardless of this

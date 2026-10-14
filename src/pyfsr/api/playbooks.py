@@ -32,6 +32,8 @@ from uuid import uuid4 as _uuid4
 
 from pydantic import ValidationError
 
+from ..auth.base import BaseAuth
+from ..auth.guards import requires_jwt
 from ..models import (
     CreatePlaybookRequest,
     CreateVersionRequest,
@@ -1408,6 +1410,7 @@ class PlaybooksAPI(BaseAPI):
                 # exceptions._rollup_bulk_failures now names the real cause.
                 pass
 
+    @requires_jwt(BaseAuth.OPERATION_BULKUPSERT, "/api/3/bulkupsert/* rejects API keys with a misleading 500")
     def create_playbooks(
         self,
         rows: builtins.list[dict[str, Any]],

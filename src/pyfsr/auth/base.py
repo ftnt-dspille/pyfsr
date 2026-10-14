@@ -15,6 +15,9 @@ class BaseAuth(ABC):
     OPERATION_PLAYBOOK = "playbook"  # Playbook operations
     OPERATION_SOLUTION_PACK = "solution_pack"  # Solution pack operations
     OPERATION_BULKUPSERT = "bulkupsert"  # /api/3/bulkupsert/* endpoints
+    #: fsr-ai replays the *caller's* JWT (``Forwarded-Authorization: Bearer``) to
+    #: the built-in ``FSR``-auth MCP servers, so an API-key caller has nothing to forward.
+    OPERATION_FORWARDED_BEARER = "forwarded_bearer"
 
     def __init__(self):
         """Initialize base auth class"""

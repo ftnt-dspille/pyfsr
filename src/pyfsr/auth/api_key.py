@@ -15,6 +15,12 @@ class APIKeyAuth(BaseAuth):
     - Cannot use /auth endpoints
     - Cannot export configurations
     - Cannot use /api/3/bulkupsert/* endpoints (product bug on 8.0.0; use JWT)
+    - Cannot reach the built-in (``FSR``-auth) MCP servers: fsr-ai replays the
+      caller's JWT to them (:data:`BaseAuth.OPERATION_FORWARDED_BEARER`)
+
+    Methods that need a JWT are marked with :func:`pyfsr.auth.guards.requires_jwt`,
+    which raises :class:`~pyfsr.exceptions.UnsupportedAuthOperationError` before
+    any request is sent.
 
     Args:
         base_url: Base URL of the FortiSOAR instance
@@ -48,6 +54,9 @@ class APIKeyAuth(BaseAuth):
             # returns bool `true` instead of the user id). Fail fast and
             # legibly here instead of letting that 500 surface. JWT works.
             self.OPERATION_BULKUPSERT,
+            # fsr-ai's built-in (``FSR``-auth) MCP servers run on the caller's
+            # forwarded JWT; an API key has none, so they answer 401.
+            self.OPERATION_FORWARDED_BEARER,
         }
 
         self._validate_api_key()

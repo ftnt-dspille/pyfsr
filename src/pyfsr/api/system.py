@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..auth.base import BaseAuth
+from ..auth.guards import requires_jwt
 from ..models._system import DailyActionCount, LicenseIdentity
 from .base import BaseAPI
 
@@ -64,6 +66,7 @@ class SystemAPI(BaseAPI):
         """
         return self.client.get("/api/product/feature-access")
 
+    @requires_jwt(BaseAuth.OPERATION_AUTH, "the DAS /api/auth routes reject API keys")
     def cluster_health(self) -> Any:
         """Per-node HA cluster health (``GET /api/auth/cluster/health``).
 
@@ -83,6 +86,7 @@ class SystemAPI(BaseAPI):
         return self.client.get("/api/auth/cluster/health")
 
     # ----------------------------------------------------------------- license
+    @requires_jwt(BaseAuth.OPERATION_AUTH, "the DAS /api/auth routes reject API keys")
     def license(self, *, node_id: str | None = None, param: str | None = None) -> dict[str, Any]:
         """Current license state (``GET /api/auth/license``).
 
@@ -106,6 +110,7 @@ class SystemAPI(BaseAPI):
             params["param"] = param
         return self.client.get("/api/auth/license", params=params or None)
 
+    @requires_jwt(BaseAuth.OPERATION_AUTH, "the DAS /api/auth routes reject API keys")
     def license_identity(self) -> LicenseIdentity:
         """Durable appliance identity parsed from the license details.
 
@@ -173,6 +178,7 @@ class SystemAPI(BaseAPI):
         resp = self.client.get("/api/wf/workflow/config/", params={"section": "license"})
         return DailyActionCount.model_validate(resp if isinstance(resp, dict) else {})
 
+    @requires_jwt(BaseAuth.OPERATION_AUTH, "the DAS /api/auth routes reject API keys")
     def deploy_license(self, license_key: str) -> dict[str, Any]:
         """Deploy a license over an already-active one (``POST /api/auth/license``).
 
