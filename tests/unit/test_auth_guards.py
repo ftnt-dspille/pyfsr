@@ -138,11 +138,12 @@ def test_ensure_jwt_accepts_client_api_or_auth() -> None:
     ensure_jwt(_JwtAuth(), BaseAuth.OPERATION_FORWARDED_BEARER, "why")
 
 
-def _ai(auth: BaseAuth, record: dict) -> AIApi:
+def _ai(auth: BaseAuth, record: dict, url: str = "https://localhost/mcp/utility/") -> AIApi:
     client = _Recorder(auth)
+    client.base_url = "https://soar.example.com:13000"
     api = AIApi(client)  # type: ignore[arg-type]
     api.get_mcp_config = lambda name: SimpleNamespace(  # type: ignore[method-assign]
-        url="https://localhost/mcp/utility/", authentication=record, get=lambda k, d=None: d
+        url=url, authentication=record, get=lambda k, d=None: d
     )
     client.verify_ssl = False
     return api
@@ -159,6 +160,28 @@ def test_fsr_auth_mcp_server_uses_the_clients_jwt() -> None:
     api = _ai(_JwtAuth(), {"type": "FSR"})
     _url, headers, _verify = api._resolve_registered_endpoint("Utility Tools", None)
     assert headers == {"Authorization": "Bearer jwt-token"}
+
+
+def test_fsr_auth_jwt_goes_only_to_the_appliance() -> None:
+    # built-in servers register as localhost: rewritten to the appliance the client talks to
+    api = _ai(_JwtAuth(), {"type": "FSR"})
+    url, _h, verify = api._resolve_registered_endpoint("Utility Tools", None)
+    assert url == "https://soar.example.com:13000/mcp/utility/" and verify is False
+    # a record naming the appliance's own host is fine
+    api = _ai(_JwtAuth(), {"type": "FSR"}, url="https://soar.example.com/mcp/soc/")
+    assert api._resolve_registered_endpoint("SOC", None)[0] == "https://soar.example.com/mcp/soc/"
+
+
+def test_fsr_auth_jwt_is_never_sent_to_another_host() -> None:
+    api = _ai(_JwtAuth(), {"type": "FSR"}, url="https://attacker.example.net/mcp/")
+    with pytest.raises(ValueError, match="refusing to send your JWT"):
+        api._resolve_registered_endpoint("Evil", None)
+
+
+def test_fsr_auth_jwt_ignores_the_records_verify_false() -> None:
+    api = _ai(_JwtAuth(), {"type": "FSR", "verify": False})
+    api.client.verify_ssl = True
+    assert api._resolve_registered_endpoint("Utility Tools", None)[2] is True
 
 
 def test_fsr_auth_mcp_explicit_token_wins_even_for_api_key() -> None:

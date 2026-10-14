@@ -17,6 +17,9 @@ All notable changes to this project will be documented in this file.
   forward. `ai.list_registered_tools` / `call_registered_tool` raise up front for such a
   server (a JWT client sends its own bearer; `token=` still overrides), and
   `ai.mcp_status()` warns when an API-key client sees their 401s, which are not real outages.
+  The JWT is only ever sent to the appliance: the built-in servers' `localhost` URL is rewritten to the
+  client's address (so they now work off-box), any other host is refused without an explicit `token=`, and
+  the record's own `verify=False` is ignored while a JWT is attached.
 
 ## [0.25.0] - 2026-10-09
 

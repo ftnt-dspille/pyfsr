@@ -1812,9 +1812,26 @@ class AIApi(BaseAPI):
                 "username/password client",
                 what=f"MCP server {name_or_uuid!r}",
             )
+            # Only ever hand the caller's JWT to the appliance itself: a record can name any URL.
+            from urllib.parse import urlparse, urlunparse
+
+            own = urlparse(self.client.base_url if "//" in self.client.base_url else f"https://{self.client.base_url}")
+            target = urlparse(rec.url)
+            if target.hostname in ("localhost", "127.0.0.1", "::1"):
+                # Built-in servers register as https://localhost/mcp/...; nginx on the appliance fronts them.
+                url = urlunparse(target._replace(scheme=own.scheme or "https", netloc=own.netloc))
+            elif target.hostname and target.hostname == own.hostname:
+                url = rec.url
+            else:
+                raise ValueError(
+                    f"MCP server {name_or_uuid!r} points at {target.hostname!r}, which is not this appliance "
+                    f"({own.hostname!r}); refusing to send your JWT there. Pass token= explicitly to use it anyway."
+                )
             header = self.client.auth.get_auth_headers().get("Authorization", "")
             if header.lower().startswith("bearer "):
                 auth["value"] = header.split(" ", 1)[1]
+            auth["verify"] = self.client.verify_ssl  # never the record's own verify=False while a JWT is attached
+            return url, build_mcp_auth_headers(auth), self.client.verify_ssl
         verify = rec.get("verify", self.client.verify_ssl)
         # An OAUTH2 server's token endpoint is called with the same TLS setting as the server.
         auth.setdefault("verify", verify)
@@ -1828,10 +1845,11 @@ class AIApi(BaseAPI):
         (streamable-HTTP + auth header), driven from your own process. Thinner
         than :meth:`mcp_tool_catalog` (one server, typed :class:`~pyfsr.models.MCPTool`).
 
-        Built-in servers (``FSR`` auth, ``internal`` type) store no credential and register a
-        ``https://localhost/mcp/...`` URL: they authenticate with the caller's JWT, so an API-key
-        client raises :class:`~pyfsr.exceptions.UnsupportedAuthOperationError` unless ``token=`` is
-        given, and they are only reachable from the appliance itself.
+        Built-in servers (``FSR`` auth, ``internal`` type) store no credential: they authenticate with the
+        caller's JWT. A JWT client sends its own bearer, and only to the appliance itself (their
+        ``https://localhost/mcp/...`` URL is rewritten to the client's address; a record naming any other
+        host is refused unless ``token=`` is given). An API-key client raises
+        :class:`~pyfsr.exceptions.UnsupportedAuthOperationError` unless ``token=`` is given.
 
         ``token`` supplies the credential value when the stored one is masked or
         you want to override it. For an ``OAUTH2`` server (8.0.1+), pass a token
