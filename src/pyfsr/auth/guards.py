@@ -42,7 +42,7 @@ def _auth_of(obj: Any) -> Any:
 
 
 def ensure_jwt(obj: Any, operation: str, reason: str, *, what: str | None = None) -> None:
-    """Raise :class:`UnsupportedAuthOperationError` if ``obj``'s auth cannot do ``operation``.
+    """Raise ``UnsupportedAuthOperationError`` if ``obj``'s auth cannot do ``operation``.
 
     ``obj`` is a client, an API shortcut (anything with ``.client``) or an auth
     strategy. Use this for a check that depends on arguments (for example only

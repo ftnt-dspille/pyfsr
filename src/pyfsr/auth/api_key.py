@@ -12,15 +12,15 @@ class APIKeyAuth(BaseAuth):
     API Key authentication handler for FortiSOAR.
 
     API key authentication has several limitations:
+
     - Cannot use /auth endpoints
     - Cannot export configurations
     - Cannot use /api/3/bulkupsert/* endpoints (product bug on 8.0.0; use JWT)
-    - Cannot reach the built-in (``FSR``-auth) MCP servers: fsr-ai replays the
-      caller's JWT to them (:data:`BaseAuth.OPERATION_FORWARDED_BEARER`)
+    - Cannot reach the built-in (``FSR``-auth) MCP servers: fsr-ai replays the caller's JWT to them
+      (``BaseAuth.OPERATION_FORWARDED_BEARER``)
 
-    Methods that need a JWT are marked with :func:`pyfsr.auth.guards.requires_jwt`,
-    which raises :class:`~pyfsr.exceptions.UnsupportedAuthOperationError` before
-    any request is sent.
+    Methods that need a JWT are marked with ``pyfsr.auth.guards.requires_jwt``, which raises
+    ``UnsupportedAuthOperationError`` before any request is sent.
 
     Args:
         base_url: Base URL of the FortiSOAR instance
