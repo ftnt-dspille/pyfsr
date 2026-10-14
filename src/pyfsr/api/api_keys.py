@@ -19,6 +19,16 @@ mirroring the product:
 :class:`~pyfsr.api.users.UsersAPI` maps, the same convention as
 :meth:`~pyfsr.api.users.UsersAPI.create`.
 
+**Teams matter for agents.** A record is owned by the team(s) of whoever creates
+it, and an *agent* record is then configured by the appliance's own message
+router, which can only read records on the team the agent is linked to (the
+**SOC Team** by default). An API key on any other team creates agent records the
+router cannot see: the record sticks at ``Configuration In Progress`` forever,
+the router logs ``404 .../api/3/agents/<uuid>``, and the same ``agents.create``
+works with a username/password. Keep keys that provision agents on ``SOC Team``
+(:data:`DEFAULT_TEAM`); :meth:`ApiKeysAPI.grants` reads a key's teams and roles
+and :meth:`ApiKeysAPI.ensure_team` repairs them.
+
 Accessed as ``client.api_keys``.
 
 Example:
@@ -40,6 +50,10 @@ from ..pagination import extract_members
 from .base import BaseAPI
 
 _BASE = "/api/3/api_keys"
+
+#: The team agent records are linked to by default, and so the team a key that
+#: provisions agents must be on. :meth:`ApiKeysAPI.ensure_usable` prefers it.
+DEFAULT_TEAM = "SOC Team"
 
 _logger = logging.getLogger(__name__)
 
@@ -245,8 +259,10 @@ class ApiKeysAPI(BaseAPI):
 
         **Auto-discovery of teams and roles.** FortiSOAR requires an API key
         to be on at least one team to create records, and without roles the key
-        has no permissions at all. When ``teams`` is ``None``, the first
-        available team is auto-assigned (with a warning). When ``roles`` is
+        has no permissions at all. When ``teams`` is ``None``, ``"SOC Team"``
+        is assigned if the instance has it (agent records are linked to it by
+        default, and a key on another team cannot provision agents), otherwise
+        the first available team (with a warning). When ``roles`` is
         ``None``, ``"Full App Permissions"`` is used if it exists on the
         instance (with a warning). Pass explicit ``teams``/``roles`` to
         override.
@@ -262,16 +278,22 @@ class ApiKeysAPI(BaseAPI):
         # ── auto-discover teams when omitted ──────────────────────────────
         # FortiSOAR requires at least one team on an API key to create records.
         # Without it, every write returns 403 "A user must be on at least one
-        # team in order to create records." Auto-assign the first available
-        # team so the returned key is immediately usable.
+        # team in order to create records." Auto-assign DEFAULT_TEAM when the box
+        # has it (agent records are linked to it, and a key on another team
+        # creates agents the router cannot configure), else the first team.
         if teams is None:
             available_teams = client.teams.list()
             if available_teams:
-                teams = [available_teams[0]["name"]]
+                names = [t["name"] for t in available_teams]
+                teams = [DEFAULT_TEAM if DEFAULT_TEAM in names else names[0]]
                 _logger.warning(
-                    "ensure_usable: no teams specified -- auto-assigned %r. "
+                    "ensure_usable: no teams specified -- auto-assigned %r%s. "
                     "Pass teams=[...] explicitly to control team membership.",
                     teams[0],
+                    ""
+                    if teams[0] == DEFAULT_TEAM
+                    else f" ({DEFAULT_TEAM!r} does not exist here; agents created with this key "
+                    "will not be configured by the message router)",
                 )
             else:
                 _logger.warning(
@@ -333,6 +355,55 @@ class ApiKeysAPI(BaseAPI):
         return binding, plaintext
 
     # --------------------------------------------------------------- helpers
+    def grants(self, name: str) -> dict[str, Any] | None:
+        """Team and role *names* of the API key ``name``, or ``None`` when no such key exists.
+
+        The list view omits them and the binding returns IRIs only with
+        ``$relationships=true``; this resolves both to names. Returns
+        ``{"uuid", "teams": [...], "roles": [...]}``.
+
+        Example:
+            >>> client = demo_client()
+            >>> client.api_keys.grants("no-such-key") is None
+            True
+        """
+        binding = next((k for k in self.list() if k.get("name") == name), None)
+        if binding is None:
+            return None
+        full = self.client.get(f"{_BASE}/{binding['uuid']}", params={"$relationships": "true"})
+
+        def names(kind: str, iris: Any) -> list[str]:
+            members = extract_members(self.client.get(f"/api/3/{kind}", params={"$limit": 200}))
+            by_id = {m["uuid"]: m["name"] for m in members}
+            return [by_id.get(str(i).rsplit("/", 1)[-1], str(i)) for i in iris or []]
+
+        return {
+            "uuid": binding["uuid"],
+            "teams": names("teams", full.get("teams")),
+            "roles": names("roles", full.get("roles")),
+        }
+
+    def ensure_team(self, name: str, team: str = DEFAULT_TEAM) -> dict[str, Any]:
+        """Make sure the key ``name`` is on ``team``, keeping the teams it already has.
+
+        Does not regenerate the key, so the plaintext in use stays valid. Returns the
+        key's grants (see :meth:`grants`) after the change.
+
+        Raises:
+            LookupError: the key does not exist.
+            ValueError: ``team`` does not exist on this instance.
+        """
+        g = self.grants(name)
+        if g is None:
+            raise LookupError(f"no API key named {name!r}")
+        if team in g["teams"]:
+            return g
+        if team not in [t["name"] for t in self.client.teams.list()]:
+            on = ", ".join(g["teams"]) or "no team"
+            raise ValueError(f"team {team!r} does not exist on this instance (key {name!r} is on: {on})")
+        self.update(g["uuid"], teams=[*g["teams"], team])
+        return self.grants(name) or g
+
     def _resolve_roles(self, roles: list[str]) -> list[str]:
         """Accept role UUIDs or names; return UUIDs (delegates to RolesAPI)."""
         return self.client.roles._resolve_roles(roles)

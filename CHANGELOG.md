@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`api_keys.grants(name)` / `api_keys.ensure_team(name, team="SOC Team")`** -- read a key's team and
+  role *names* (the binding returns IRIs only with `$relationships=true`) and put it on a team without
+  regenerating it.
+
+### Changed
+- **`api_keys.ensure_usable` prefers `SOC Team`** over "the first team on the box" when no `teams=` is
+  given. Agent records are linked to the SOC Team and the appliance's message router configures them as
+  its own user; an API key on any other team creates agents that stick at `Configuration In Progress`
+  (the router logs `404 .../api/3/agents/<uuid>`), while the same call works with a username/password.
+  It warns when `SOC Team` does not exist. Documented on `agents.create` and in the `api_keys` module docs.
+
 ## [0.25.1] - 2026-10-14
 
 ### Added

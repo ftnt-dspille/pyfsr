@@ -108,6 +108,12 @@ class AgentsAPI(BaseAPI):
         full picklist IRI. Creating the record does **not** install anything; follow with
         :meth:`installer`.
 
+        The record is linked to a team (the **SOC Team** by default) and the appliance's
+        message router configures it as its own user, so an API-key client must be on that
+        team (see :meth:`~pyfsr.api.api_keys.ApiKeysAPI.ensure_team`). On another team the
+        record is created but sticks at ``Configuration In Progress`` and the router logs a
+        404 for it; a username/password client does not hit this.
+
         Example:
             >>> client = demo_client()
             >>> router = "/api/3/routers/3a2b1c0d-9e8f-4a7b-6c5d-4e3f2a1b0c9d"
