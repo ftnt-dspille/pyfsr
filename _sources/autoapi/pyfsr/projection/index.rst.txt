@@ -1,0 +1,99 @@
+pyfsr.projection
+================
+
+.. py:module:: pyfsr.projection
+
+.. autoapi-nested-parse::
+
+   Record projection / summarization for token-efficient agent reads.
+
+   FortiSOAR records hydrate into large, deeply-nested dicts (expanded picklists,
+   relationship objects, audit metadata). Handing one straight to an LLM burns
+   context fast. These helpers trim a record down to what an agent actually needs:
+
+   - :func:`to_jsonable` — normalize a model / page / mixed structure to plain JSON.
+   - :func:`project_record` — keep an explicit ``fields`` allow-list, or a compact
+     ``summary`` of the identity + triage fields, collapsing expanded picklist and
+     relationship objects to their readable value.
+
+   This is the generic, dependency-light port of the fsrpb ``get_record``
+   projection (which trimmed ~96% of the payload). It is opt-in everywhere:
+   ``RecordSet`` reads return full typed models unless you pass ``fields=`` /
+   ``summary=``, and the tool registry applies it on the agent's behalf.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.projection.SUMMARY_FIELDS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.projection.to_jsonable
+   pyfsr.projection.iri_to_uuid
+   pyfsr.projection.project_record
+   pyfsr.projection.project
+
+
+Module Contents
+---------------
+
+.. py:data:: SUMMARY_FIELDS
+   :type:  tuple[str, Ellipsis]
+   :value: ('@id', 'uuid', 'name', 'label', 'title', 'displayName', 'status', 'severity', 'state', 'phase',...
+
+
+.. py:function:: to_jsonable(obj: Any) -> Any
+
+   Recursively coerce models / pages into plain JSON-serializable values.
+
+   ``BaseRecord`` → its aliased dict (``@id``/``@type`` form), ``HydraPage`` →
+   ``{members, total, page, has_next}``, lists/dicts are walked; everything else
+   is returned as-is.
+
+
+.. py:function:: iri_to_uuid(value: Any) -> str | None
+
+   Extract the uuid from a FortiSOAR IRI, record, or model.
+
+   FortiSOAR identifies records by IRI (``@id``, e.g. ``/api/3/alerts/<uuid>``);
+   the uuid is the last path segment. This accepts whatever you have on hand and
+   returns the uuid, or ``None`` if none can be found:
+
+   - a **string** IRI (``"/api/3/alerts/abc-123"`` → ``"abc-123"``) or a bare uuid
+     (returned unchanged),
+   - a **record dict** — preferring ``@id``, then a literal ``uuid`` / ``id`` key,
+   - a **model** (``BaseRecord``/``ApiResult``) — normalized then read the same way.
+
+   Replaces the recurring ``rec["@id"].split("/")[-1] if "@id" in rec else rec["id"]``
+   idiom.
+
+
+.. py:function:: project_record(record: Any, *, fields: list[str] | tuple[str, Ellipsis] | None = None, summary: bool = False) -> Any
+
+   Trim a single record (model or dict) for token-efficient consumption.
+
+   With ``fields`` given, keep exactly those keys (plus ``@id``/``uuid`` so the
+   result stays addressable). With ``summary=True`` and no ``fields``, keep the
+   :data:`SUMMARY_FIELDS` that are present and collapse expanded picklist /
+   relationship objects to their label. With neither, the record is returned
+   unchanged (as a plain dict). Non-dict inputs are returned untouched.
+
+
+.. py:function:: project(obj: Any, *, fields: list[str] | tuple[str, Ellipsis] | None = None, summary: bool = False) -> Any
+
+   Project a record, a list of records, or a :class:`HydraPage`.
+
+   Dispatches :func:`project_record` over the members of a page / list and
+   preserves the page envelope (``total``/``page``/``has_next``). A bare record
+   is projected directly. With no ``fields``/``summary`` this is just
+   :func:`to_jsonable`.
+
+

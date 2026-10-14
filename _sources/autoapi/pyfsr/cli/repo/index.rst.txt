@@ -1,0 +1,86 @@
+pyfsr.cli.repo
+==============
+
+.. py:module:: pyfsr.cli.repo
+
+.. autoapi-nested-parse::
+
+   ``pyfsr repo`` command group ��� discover and download from Fortinet's content repo.
+
+   Unlike the API-based ``playbook``/``records`` groups (which need a live
+   appliance), these subcommands hit Fortinet's **public, unauthenticated** content
+   repository (``repo.fortisoar.fortinet.com``) — no box, no token. They wrap
+   :mod:`pyfsr.repo`.
+
+   Subcommands:
+
+   - ``reachable`` — cheap reachability check (exit 0/1).
+   - ``list-connectors [--category CAT]`` — every connector in the public manifest
+     (latest version only; ~720 rows).
+   - ``search <term>`` — case-insensitive substring search over the manifest.
+   - ``versions <name>`` — every published version of one connector.
+   - ``info <kind> <name> <version>`` — per-version ``info.json`` for a
+     connector / widget / solution-pack.
+   - ``download <kind> <name> <version> [--dest PATH]`` — fetch a specific-version
+     archive.
+
+   Discovery note: connectors have a public manifest, so ``list-connectors`` /
+   ``search`` / ``versions`` are full no-appliance discovery. Widgets and
+   solution-packs have **no public manifest** — use ``client.content_hub`` on an
+   appliance to list/search those, then ``info``/``download`` here once you know
+   the slug+version.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.repo.cmd_reachable
+   pyfsr.cli.repo.cmd_list_connectors
+   pyfsr.cli.repo.cmd_search
+   pyfsr.cli.repo.cmd_versions
+   pyfsr.cli.repo.cmd_info
+   pyfsr.cli.repo.cmd_download
+   pyfsr.cli.repo.build_subparser
+
+
+Module Contents
+---------------
+
+.. py:function:: cmd_reachable(args: argparse.Namespace) -> int
+
+   Cheap reachability check; exit 0 if the repo answers, 1 otherwise.
+
+
+.. py:function:: cmd_list_connectors(args: argparse.Namespace) -> int
+
+   List every connector in the public manifest (latest version only).
+
+
+.. py:function:: cmd_search(args: argparse.Namespace) -> int
+
+   Search the connector manifest by free-text term (name/label/desc/category).
+
+
+.. py:function:: cmd_versions(args: argparse.Namespace) -> int
+
+   Print every published version of one connector.
+
+
+.. py:function:: cmd_info(args: argparse.Namespace) -> int
+
+   Print the per-version info.json for a connector / widget / solution-pack.
+
+
+.. py:function:: cmd_download(args: argparse.Namespace) -> int
+
+   Download a connector / widget / solution-pack archive by exact name+version.
+
+
+.. py:function:: build_subparser(sub: argparse._SubParsersAction) -> None
+
+   Wire the ``repo`` subcommands onto an existing subparsers object.
+
+

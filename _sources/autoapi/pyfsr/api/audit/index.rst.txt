@@ -1,0 +1,274 @@
+pyfsr.api.audit
+===============
+
+.. py:module:: pyfsr.api.audit
+
+.. autoapi-nested-parse::
+
+   Audit-log gateway (``/api/gateway/audit``).
+
+   Query FortiSOAR's audit activity store — the per-record change history the
+   UI shows in the "Audit Log" widget on an alert/record. Each entry records
+   who changed what, when, and which playbook (if any) was responsible.
+
+   The primary filter is ``entity_uuid`` — the record UUID to trace. Time
+   windows (``start_date`` / ``end_date``) are epoch milliseconds and optional.
+   The response is Spring-paginated: ``{"number": <page>, "content": [...]}``;
+   walk pages until ``content`` is empty.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> result = client.audit.activities(entity_uuid="9f0eb603-ac1e-41c3-b47b-444589beed39")
+   >>> result["content"][0]["operation"]
+   'Link'
+   >>> result["content"][0]["playbookName"]
+   'Extract Indicators (Alerts)'
+   >>> count = client.audit.count(entity_uuid="9f0eb603-ac1e-41c3-b47b-444589beed39")
+   >>> count["total"]
+   4
+   >>> ops = client.audit.operations(operation_type="module_detail")  # doctest: +SKIP
+   >>> "Link" in ops  # doctest: +SKIP
+   True
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.audit.AuditAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: AuditAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Query and manage FortiSOAR audit activity records.
+
+   Accessed as ``client.audit``. The audit store records every create/update/
+   link/unlink/comment/trigger on a record, including which playbook made the
+   change (``playbookName`` / ``playbookIri`` fields).
+
+
+   .. py:method:: activities(start_date: Any = None, end_date: Any = None, *, entity_uuid: str | None = None, page: int = 0, limit: int = 10, operation: str | None = None, component: str | None = None, user_id: str | None = None, entity_type: str | None = None, search: str | None = None) -> dict[str, Any]
+
+      Query a slice of audit records (``POST /api/gateway/audit/activities``).
+
+      The primary filter is ``entity_uuid`` — the record UUID to trace
+      (matching the UI's audit-log widget). Time windows (``start_date`` /
+      ``end_date``) are optional; accept epoch seconds, epoch milliseconds,
+      or ISO-8601 strings.
+
+      The response is Spring-paginated: ``{"number": <page>, "content": [...]}``.
+      Walk pages (incrementing ``page``) until ``content`` is empty.
+
+      Each record carries: ``operation`` (``"Create"``, ``"Update"``,
+      ``"Link"``, ``"Unlink"``, ``"Comment"``, ``"Trigger"``, …),
+      ``transactionDate`` (epoch ms), ``user`` (``"Playbook"`` for playbook
+      changes), ``playbookName`` / ``playbookIri`` (when a playbook did it),
+      ``entityType``, ``entityUuid``, ``displayName``, ``title``,
+      ``data`` (linked entity details), ``linkEntityDetails``.
+
+      :param start_date: window start (epoch s/ms or ISO string; ``None`` = no bound).
+      :param end_date: window end (epoch s/ms or ISO string; ``None`` = no bound).
+      :param entity_uuid: the record UUID to filter by (the primary filter).
+      :param page: 0-indexed page number (default 0).
+      :param limit: page size (default 10).
+      :param operation: filter by operation type (see :meth:`operations`).
+      :param component: filter by component (e.g. ``"crudhub"``).
+      :param user_id: filter by user UUID.
+      :param entity_type: filter by entity type (e.g. ``"alerts"``).
+      :param search: free-text search across audit fields.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> result = client.audit.activities(entity_uuid="9f0eb603-ac1e-41c3-b47b-444589beed39")
+      >>> len(result["content"])
+      1
+      >>> result["content"][0]["operation"]
+      'Link'
+
+
+
+   .. py:method:: count(start_date: Any = None, end_date: Any = None, *, entity_uuid: str | None = None, operation: str | None = None, component: str | None = None, user_id: str | None = None, entity_type: str | None = None, search: str | None = None) -> dict[str, Any]
+
+      Total audit-record count (``POST /api/gateway/audit/activities/count``).
+
+      Same filters as :meth:`activities` but without paging. Returns
+      ``{"total": <int>}``.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> result = client.audit.count(entity_uuid="9f0eb603-ac1e-41c3-b47b-444589beed39")
+      >>> result["total"]
+      4
+
+
+
+   .. py:method:: get(audit_id: str) -> dict[str, Any]
+
+      Fetch a single audit record by id
+      (``GET /api/gateway/audit/activities/{audit_id}``).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> record = client.audit.get("9314875")
+      >>> record["operation"]
+      'Link'
+
+
+
+   .. py:method:: operations(*, operation_type: str | None = None) -> Any
+
+      List the valid ``operation`` values (``GET /api/gateway/audit/operations``).
+
+      Pass ``operation_type="module_detail"`` for the per-record operations
+      (``Create``, ``Update``, ``Link``, ``Unlink``, ``Comment``,
+      ``Trigger``, ``Import``, ``Update During Import``,
+      ``Replication Failed``, ``Executed Action``). Without it, returns
+      the system-level operations (``login``, ``logout``, ``create``, …).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> ops = client.audit.operations()
+      >>> "login" in ops
+      True
+      >>> "Link" in client.audit.operations(operation_type="module_detail")  # doctest: +SKIP
+      True
+
+
+
+   .. py:method:: disable_ttl() -> None
+
+      Stop automatic purging of audit logs (``DELETE .../activities/ttl``).
+
+      The documented Fortinet recipe to disable the audit-log TTL auto-purge.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.audit.disable_ttl()
+
+
+
+   .. py:method:: purge(filters: dict[str, Any] | None = None) -> None
+
+      Mass-delete audit records by body filter (``DELETE .../activities``).
+
+      .. warning::
+          Destructive and effectively irreversible — deletes audit history
+          matching ``filters`` (an unfiltered call may purge everything). The
+          server's exact filter semantics are unverified; use with caution.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.audit.purge(filters={"operation": "login"})
+
+
+
+   .. py:method:: all_activities(*, entity_uuid: str | None = None, start_date: Any = None, end_date: Any = None, operation: str | None = None, component: str | None = None, user_id: str | None = None, entity_type: str | None = None, search: str | None = None, page_size: int = 100, max_pages: int = 50) -> list[dict[str, Any]]
+
+      Fetch *all* matching audit records by walking pages until empty.
+
+      Convenience wrapper around :meth:`activities` that handles pagination
+      automatically. Returns the combined ``content`` list from all pages.
+
+      :param entity_uuid: the record UUID to filter by.
+      :param start_date: optional window start (epoch s/ms or ISO).
+      :param end_date: optional window end (epoch s/ms or ISO).
+      :param operation: filter by operation type.
+      :param component: filter by component.
+      :param user_id: filter by user UUID.
+      :param entity_type: filter by entity type.
+      :param search: free-text search across audit fields.
+      :param page_size: records per page (default 100).
+      :param max_pages: safety cap (default 50 — 5000 records max).
+
+      :returns: A flat list of audit record dicts, sorted oldest-first by
+                ``transactionDate``.
+
+
+
+   .. py:method:: lifecycle(entity_uuid: str, *, entity_type: str | None = None, include_executions: bool = True, start_date: Any = None, end_date: Any = None) -> pyfsr.models._audit.RecordLifecycle
+
+      Build a full change-history timeline for a record.
+
+      Combines audit-log entries (field changes, links, comments, triggers)
+      with playbook executions into a single sorted timeline — answering
+      "what happened to this alert, in what order, and which playbooks
+      did what?"
+
+      Each :class:`~pyfsr.models.LifecycleEntry` carries a timestamp,
+      ``kind`` (``"audit"`` or ``"execution"``), the operation (e.g.
+      ``"Update"``, ``"Link"``, ``"finished"``), and the playbook name
+      when a playbook was responsible. The :class:`~pyfsr.models.RecordLifecycle`
+      result provides filtered views: ``.by_playbook``, ``.field_changes``,
+      ``.links``, ``.comments``, ``.playbook_names``, and ``.summary()``.
+
+      :param entity_uuid: the record UUID to trace (the primary filter).
+      :param entity_type: optional entity type filter (e.g. ``"alerts"``).
+      :param include_executions: when ``True`` (default), also query playbook
+                                 execution history and merge into the timeline. The audit log
+                                 already records playbook names, so this adds run-level detail
+                                 (status, pk) but isn't strictly necessary for a basic timeline.
+      :param start_date: optional window start (epoch s/ms or ISO string).
+      :param end_date: optional window end (epoch s/ms or ISO string).
+
+      :returns: A :class:`~pyfsr.models.RecordLifecycle` with sorted ``entries``,
+                ``audit_count``, ``execution_count``, and convenience filters.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> life = client.audit.lifecycle("9f0eb603-ac1e-41c3-b47b-444589beed39")  # doctest: +SKIP
+      >>> life.summary()  # doctest: +SKIP
+      'alerts 9f0eb603: 3 audit events, 2 playbook runs, 3 playbooks involved'
+      >>> [e.operation for e in life.by_playbook]  # doctest: +SKIP
+      ['Create', 'Link', 'Link', 'finished']
+
+
+
+   .. py:method:: execution_context(run_pk: str, *, window_seconds: int = 60) -> pyfsr.models._audit.ExecutionContext
+
+      Build the audit context around a specific playbook run.
+
+      Answers "why did this playbook see state X when I expected state Y?"
+      by showing what *else* was happening to the same record during (and
+      just before) the run. Cross-references the audit log with the run's
+      time window to surface concurrent changes from other playbooks or
+      manual actions.
+
+      :param run_pk: the execution pk (from ``RunSummary.pk`` or
+                     ``RunResult.pk``).
+      :param window_seconds: buffer (in seconds) added before and after the
+                             run's time window. The run's own ``created``→``modified``
+                             timestamps define the core window; this expands it so
+                             changes just before the run started or just after it
+                             finished are included. Default 60s.
+
+      :returns: An :class:`~pyfsr.models.ExecutionContext` with concurrent
+                changes, concurrent runs, and prior changes.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> ctx = client.audit.execution_context("636714")  # doctest: +SKIP
+      >>> ctx.summary()  # doctest: +SKIP
+      'run Extract Indicators (pk=636714) finished, on alerts 0e4b9e32,
+       3 concurrent changes, 0 concurrent runs'
+      >>> [c.playbook_name for c in ctx.concurrent_changes]  # doctest: +SKIP
+      ['Extract Indicators (Alerts)', 'Extract Indicators (Alerts)']
+
+
+
