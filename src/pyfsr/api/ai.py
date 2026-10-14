@@ -1817,20 +1817,17 @@ class AIApi(BaseAPI):
 
             own = urlparse(self.client.base_url if "//" in self.client.base_url else f"https://{self.client.base_url}")
             target = urlparse(rec.url)
-            if target.hostname in ("localhost", "127.0.0.1", "::1"):
-                # Built-in servers register as https://localhost/mcp/...; nginx on the appliance fronts them.
-                url = urlunparse(target._replace(scheme=own.scheme or "https", netloc=own.netloc))
-            elif target.hostname and target.hostname == own.hostname:
-                url = rec.url
-            else:
+            if target.hostname not in ("localhost", "127.0.0.1", "::1", own.hostname):
                 raise ValueError(
                     f"MCP server {name_or_uuid!r} points at {target.hostname!r}, which is not this appliance "
                     f"({own.hostname!r}); refusing to send your JWT there. Pass token= explicitly to use it anyway."
                 )
+            # Always the appliance's own origin (scheme + host + port); only the record's path/query is kept.
+            url = urlunparse(target._replace(scheme=own.scheme or "https", netloc=own.netloc))
             header = self.client.auth.get_auth_headers().get("Authorization", "")
-            if header.lower().startswith("bearer "):
-                auth["value"] = header.split(" ", 1)[1]
-            auth["verify"] = self.client.verify_ssl  # never the record's own verify=False while a JWT is attached
+            # Fresh dict: the record's header_name/prefix must not decide where the JWT lands. The header is
+            # always `Authorization`, which httpx drops on a cross-origin redirect.
+            auth = {"type": "FSR", "value": header.split(" ", 1)[1] if header.lower().startswith("bearer ") else ""}
             return url, build_mcp_auth_headers(auth), self.client.verify_ssl
         verify = rec.get("verify", self.client.verify_ssl)
         # An OAUTH2 server's token endpoint is called with the same TLS setting as the server.

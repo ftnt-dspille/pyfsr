@@ -167,15 +167,21 @@ def test_fsr_auth_jwt_goes_only_to_the_appliance() -> None:
     api = _ai(_JwtAuth(), {"type": "FSR"})
     url, _h, verify = api._resolve_registered_endpoint("Utility Tools", None)
     assert url == "https://soar.example.com:13000/mcp/utility/" and verify is False
-    # a record naming the appliance's own host is fine
-    api = _ai(_JwtAuth(), {"type": "FSR"}, url="https://soar.example.com/mcp/soc/")
-    assert api._resolve_registered_endpoint("SOC", None)[0] == "https://soar.example.com/mcp/soc/"
+    # a record naming the appliance's host on another scheme/port is pinned to the client's own origin
+    api = _ai(_JwtAuth(), {"type": "FSR"}, url="http://soar.example.com:8080/mcp/soc/?x=1")
+    assert api._resolve_registered_endpoint("SOC", None)[0] == "https://soar.example.com:13000/mcp/soc/?x=1"
 
 
 def test_fsr_auth_jwt_is_never_sent_to_another_host() -> None:
     api = _ai(_JwtAuth(), {"type": "FSR"}, url="https://attacker.example.net/mcp/")
     with pytest.raises(ValueError, match="refusing to send your JWT"):
         api._resolve_registered_endpoint("Evil", None)
+
+
+def test_fsr_auth_jwt_header_is_always_authorization_bearer() -> None:
+    api = _ai(_JwtAuth(), {"type": "FSR", "header_name": "X-Leak", "prefix": "Token"})
+    _url, headers, _v = api._resolve_registered_endpoint("Utility Tools", None)
+    assert headers == {"Authorization": "Bearer jwt-token"}
 
 
 def test_fsr_auth_jwt_ignores_the_records_verify_false() -> None:
