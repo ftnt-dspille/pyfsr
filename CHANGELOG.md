@@ -9,6 +9,13 @@ All notable changes to this project will be documented in this file.
   role *names* (the binding returns IRIs only with `$relationships=true`) and put it on a team without
   regenerating it.
 
+- **`Agent.owners` and `agents.create(teams=..., ensure_team="SOC Team")`.** The agent model now has
+  the `owners` (team) field. `create` checks the owners it gets back and, when the SOC Team is missing,
+  deletes and recreates the record with it added (keeping the creator's teams): the appliance's message
+  router reads the owners at creation, so adding the team later does not unstick a record. Verified
+  live: a key on another team stuck at `Configuration In Progress`; `[SOC Team, <its team>]` configured.
+  `teams=` sets the owners explicitly; `ensure_team=None` opts out.
+
 ### Changed
 - **`api_keys.ensure_usable` prefers `SOC Team`** over "the first team on the box" when no `teams=` is
   given. Agent records are linked to the SOC Team and the appliance's message router configures them as

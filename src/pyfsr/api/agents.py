@@ -15,6 +15,16 @@ Creating a working agent is a two-step dance, mirroring the product:
    run on the agent host. Connectors can be baked into that bundle, or pushed later with
    ``install_connector()``.
 
+**Teams.** An agent record is owned by team(s) (``owners``), by default the creator's. The
+appliance's message router configures a new agent as its own user, one second after it is
+created, and can only read records owned by the **SOC Team**. A record whose owners lack it
+sticks at ``Configuration In Progress`` (the router logs ``404 .../api/3/agents/<uuid>``);
+this is how an API key on another team fails while a username/password works. The owners are
+read at creation, so adding the team later does **not** unstick it: delete and recreate.
+:meth:`AgentsAPI.create` therefore checks the owners it gets back and, when the SOC Team is
+missing, recreates the record with it added (``ensure_team``); pass ``teams=[...]`` to set the
+owners yourself. Keep the creator on a team in ``owners`` too, or it cannot read what it made.
+
 Example:
     >>> client = demo_client()
     >>> router = "/api/3/routers/3a2b1c0d-9e8f-4a7b-6c5d-4e3f2a1b0c9d"
@@ -28,11 +38,15 @@ Example:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ..models._agents import Agent, AgentConnectorStatus
 from ..pagination import extract_members
+from .api_keys import DEFAULT_TEAM
 from .base import BaseAPI
+
+_logger = logging.getLogger(__name__)
 
 _BASE = "/api/3/agents"
 _AGENT_INSTALLER = "/api/integration/agent-installer/?format=json"
@@ -99,6 +113,8 @@ class AgentsAPI(BaseAPI):
         router: str | dict[str, Any],
         installer_type: str = "docker",
         description: str = "",
+        teams: list[str] | None = None,
+        ensure_team: str | None = DEFAULT_TEAM,
     ) -> Agent:
         """Register a new agent (``POST /api/3/agents``); returns the created record.
 
@@ -108,11 +124,15 @@ class AgentsAPI(BaseAPI):
         full picklist IRI. Creating the record does **not** install anything; follow with
         :meth:`installer`.
 
-        The record is linked to a team (the **SOC Team** by default) and the appliance's
-        message router configures it as its own user, so an API-key client must be on that
-        team (see :meth:`~pyfsr.api.api_keys.ApiKeysAPI.ensure_team`). On another team the
-        record is created but sticks at ``Configuration In Progress`` and the router logs a
-        404 for it; a username/password client does not hit this.
+        ``teams`` sets the record's ``owners`` (team names or IRIs). Left as ``None`` the
+        server uses the creator's teams, and ``ensure_team`` (default ``"SOC Team"``, the team
+        the appliance's message router can read) is then enforced: if the owners that come back
+        lack it, the record is deleted and recreated with it added, keeping the creator's own
+        teams so the creator can still read it. Without that team the record sticks at
+        ``Configuration In Progress`` and the router logs a 404 for it (typical for an API key
+        on another team; a username/password client is usually on the SOC Team). Adding the
+        team afterwards does not help: the router acts on the create. Pass
+        ``ensure_team=None`` to opt out; an explicit ``teams`` is used as given.
 
         Example:
             >>> client = demo_client()
@@ -128,7 +148,35 @@ class AgentsAPI(BaseAPI):
             "installerType": _INSTALLER_PICKLISTS.get(installer_type, installer_type),
             "description": description,
         }
+        if teams is not None:
+            body["owners"] = self.client.teams._resolve_teams(list(teams))
         resp = self.client.post(_BASE, data=body)
+        agent = Agent.model_validate(resp if isinstance(resp, dict) else {})
+        if teams is not None or not ensure_team:
+            return agent
+        owners = [o if isinstance(o, str) else o.get("@id", "") for o in agent.owners or []]
+        if not owners:
+            return agent  # the server did not say who owns it; nothing to compare
+        try:
+            wanted = self.client.teams._resolve_teams([ensure_team])[0]
+        except Exception:
+            _logger.warning(
+                "agents.create: team %r does not exist here; the message router will not be able to configure agent %r",
+                ensure_team,
+                name,
+            )
+            return agent
+        if wanted in owners:
+            return agent
+        _logger.warning(
+            "agents.create: %r was created owned by %s, without %r; recreating it with "
+            "that team added (the router configures an agent only if it can read it)",
+            name,
+            owners,
+            ensure_team,
+        )
+        self.delete(agent.uuid)
+        resp = self.client.post(_BASE, data={**body, "owners": [*owners, wanted]})
         return Agent.model_validate(resp if isinstance(resp, dict) else {})
 
     def get_or_create(

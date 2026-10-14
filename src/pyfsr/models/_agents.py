@@ -25,6 +25,10 @@ class Agent(BaseRecord):
     router: RecordIRI | dict[str, Any] | None = None
     installerType: PicklistIRI | None = None
     configurationHealth: PicklistIRI | None = None
+    #: Teams the record is linked to (IRIs, or dicts with ``@id``). Defaults to the creator's
+    #: teams. The appliance's message router configures a new agent as its own user, so this
+    #: must include the SOC Team; see :meth:`pyfsr.api.agents.AgentsAPI.create`.
+    owners: list[RecordIRI | dict[str, Any]] | None = None
 
 
 class AgentConnectorStatus(BaseRecord):
