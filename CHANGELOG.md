@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.25.1] - 2026-10-14
 
 ### Added
 - **`@requires_jwt` / `@jwt_only` / `ensure_jwt` (`pyfsr.auth.guards`) -- fail fast on
