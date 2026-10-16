@@ -564,7 +564,9 @@ class ConnectorConfig(ApiResult):
     config: dict[str, Any] = Field(default_factory=dict)
     connector: int | None = None
     agent: str | None = None
-    teams: list[Any] = Field(default_factory=list)
+    # Owner teams, as bare team uuids on the wire. Non-empty = a Private configuration:
+    # only those teams see it on the connector page and may run actions with it.
+    teams: list[str] = Field(default_factory=list)
     remote_status: dict[str, Any] = Field(default_factory=dict)
     health_status: dict[str, Any] = Field(default_factory=dict)
 

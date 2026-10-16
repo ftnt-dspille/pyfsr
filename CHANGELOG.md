@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Team hierarchy writes: `teams.create/update(parents=, children=, siblings=)`, `teams.add_parents()`
+  and `teams.hierarchy()`.** Names, uuids or IRIs. A parent team's members see and edit what its child
+  teams own; child teams of one parent do not see each other. Live-verified on 8.0.0: with "SOC Team"
+  as parent of per-student teams, the Playbook appliance can update a student's alert and instructors
+  see students' Private connector configurations, while other students still get 403.
+  `get_or_create(parents=)` adds a missing parent to an existing team.
+- **`TeamRef` model; `Team.parents/children/siblings` typed** as `TeamRef | str` (expanded row or bare
+  IRI), with `parent_names`/`child_names`/`sibling_names`. The `Team` docstring no longer claims a team
+  carries only name/description. `ConnectorConfig.teams` is typed `list[str]` (owner team uuids).
+
 - **`connectors.create_configuration(teams=...)`** (also `update_configuration` and
   `upsert_configuration`) -- owner teams by name, uuid or `/api/3/teams/<uuid>` IRI, which make a
   configuration *Private*: only those teams see it on the connector page and may run actions with it
