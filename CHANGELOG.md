@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **`connectors.create_configuration(teams=...)`** (also `update_configuration` and
+  `upsert_configuration`) -- owner teams by name, uuid or `/api/3/teams/<uuid>` IRI, which make a
+  configuration *Private*: only those teams see it on the connector page and may run actions with it
+  (others get `CS-INTEGRATION-5`). On an update, leaving `teams` out keeps the current owners; `[]`
+  makes it public. Naming a team needs Security: Read, so the error says to pass a uuid when the
+  user cannot list teams.
+
 - **`pyfsr connector icon <svg> --connector DIR`** (and `pyfsr.connector_icon.make_connector_icons`) -- build
   a connector's large (80x80) and small (32x32) icon PNGs from an SVG, e.g. one from icons.fortinet.com,
   laid out like the stock Fortinet connector icons. Draws the SVG with whichever of `rsvg-convert`,

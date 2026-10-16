@@ -449,6 +449,81 @@ def test_create_configuration_unknown_connector_raises():
         api.create_configuration("brand-new", {"k": "v"}, name="c", version="1.0", validate=False)
 
 
+_TEAM_UUID = "0d2570c3-97c3-459c-98f3-427c21f788eb"
+
+
+def _api_with_teams(**kw):
+    """A ConnectorsAPI whose client also knows one team, "s00-team"."""
+    from pyfsr.api.teams import TeamsAPI
+
+    api, client = _api(**kw)
+    client.teams = TeamsAPI(client)
+    client.teams._team_cache = {"s00-team": {"name": "s00-team", "uuid": _TEAM_UUID}}
+    return api, client
+
+
+def test_create_configuration_owner_teams_make_it_private():
+    api, client = _api_with_teams(post_resp={"config_id": "x"})
+    api.create_configuration(
+        "virustotal",
+        {"key": "v"},
+        name="c",
+        teams=["s00-team", _TEAM_UUID, f"/api/3/teams/{_TEAM_UUID}"],
+        validate=False,
+        autofill=False,
+    )
+    _, body = client.post_calls[0]
+    assert body["teams"] == [f"/api/3/teams/{_TEAM_UUID}"] * 3
+
+
+def test_create_configuration_without_teams_sends_none():
+    api, client = _api_with_teams(post_resp={"config_id": "x"})
+    api.create_configuration("virustotal", {"key": "v"}, name="c", validate=False, autofill=False)
+    assert "teams" not in client.post_calls[0][1]
+
+
+def test_create_configuration_unknown_team_raises_before_posting():
+    import pytest
+
+    api, client = _api_with_teams()
+    with pytest.raises(ValueError, match="team 'nope' not found"):
+        api.create_configuration("virustotal", {"key": "v"}, name="c", teams=["nope"], validate=False, autofill=False)
+    assert client.post_calls == []
+
+
+def test_team_names_without_teams_read_say_to_pass_a_uuid():
+    import pytest
+
+    from pyfsr.api.teams import TeamsAPI
+    from pyfsr.exceptions import PermissionError as FSRPermissionError
+
+    api, client = _api(post_resp={"config_id": "x"})
+
+    class NoTeamsRead(TeamsAPI):
+        def list(self, params=None):
+            raise FSRPermissionError("Access Denied.")
+
+    client.teams = NoTeamsRead(client)
+    with pytest.raises(ValueError, match="pass the team uuid"):
+        api.create_configuration(
+            "virustotal", {"key": "v"}, name="c", teams=["s00-team"], validate=False, autofill=False
+        )
+    api.create_configuration("virustotal", {"key": "v"}, name="c", teams=[_TEAM_UUID], validate=False, autofill=False)
+    assert client.post_calls[-1][1]["teams"] == [f"/api/3/teams/{_TEAM_UUID}"]  # a uuid needs no lookup
+
+
+def test_update_configuration_keeps_teams_unless_given():
+    api, client = _api_with_teams()
+    api.update_configuration("virustotal", "cfg-1", {"key": "v"}, name="c", validate=False, autofill=False)
+    assert "teams" not in client.put_calls[-1][1]  # omitted, the PUT keeps the current owners
+    api.update_configuration("virustotal", "cfg-1", {"key": "v"}, name="c", teams=[], validate=False, autofill=False)
+    assert client.put_calls[-1][1]["teams"] == []  # [] makes it public
+    api.update_configuration(
+        "virustotal", "cfg-1", {"key": "v"}, name="c", teams=["s00-team"], validate=False, autofill=False
+    )
+    assert client.put_calls[-1][1]["teams"] == [f"/api/3/teams/{_TEAM_UUID}"]
+
+
 # A realistic POST response from /api/integration/configuration/ -- the saved
 # config record (status is the int active-flag, not a string "Success").
 _CREATED_CONFIG = {"config_id": "cfg-1", "name": "c", "status": 1, "connector": 16}
