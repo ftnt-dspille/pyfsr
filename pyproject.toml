@@ -45,7 +45,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# `pyfsr connector icon` (SVG -> connector icon PNGs).
+icons = ["Pillow>=10"]
 test = [
+    "Pillow>=10",
     "coverage>=7.6.9",
     "pytest",
     "pytest-cov",

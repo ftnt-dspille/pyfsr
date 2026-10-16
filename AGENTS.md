@@ -58,6 +58,18 @@ pyfsr playbook lint flow.yaml        # live preflight: connector steps missing c
 pyfsr playbook deploy flow.yaml      # compile and create on the appliance
 ```
 
+## Connector icons (pyfsr CLI)
+
+```bash
+pip install 'pyfsr[icons]'
+pyfsr connector icon FortiAIGate.svg --connector path/to/connector   # writes images/<icon_large_name> (80x80) + <icon_small_name> (32x32)
+```
+
+Takes an SVG (Fortinet's library is https://icons.fortinet.com) and lays it out like the stock Fortinet
+connector icons. It draws the SVG with `rsvg-convert`, `cairosvg`, macOS Quick Look or headless Chrome,
+whichever is installed. The FORTINET wordmark is copied from the connector's current icons (or
+`--wordmark-from DIR`); `--no-wordmark` omits it.
+
 ## Trigger + wait for a playbook (the simple way)
 
 ```python

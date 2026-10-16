@@ -12,6 +12,7 @@ import sys
 
 from . import _output
 from . import ai_eval as ai_eval_cmds
+from . import connector as connector_cmds
 from . import instances as instances_cmds
 from . import jinja as jinja_cmds
 from . import llm as llm_cmds
@@ -496,6 +497,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     repo_sub = p_repo.add_subparsers(dest="repo_command", required=True)
     repo_cmds.build_subparser(repo_sub)
+
+    # --- connector group (top-level; local connector-package helpers, no appliance) ---
+    p_connector = sub.add_parser("connector", help="local connector-package helpers (icons); no appliance")
+    connector_sub = p_connector.add_subparsers(dest="connector_command", required=True)
+    connector_cmds.build_subparser(connector_sub)
 
     # --- widget group (top-level; upload + publish on a live appliance) ---
     p_widget = sub.add_parser("widget", help="upload + publish widgets on a live appliance")

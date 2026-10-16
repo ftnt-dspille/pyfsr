@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **`pyfsr connector icon <svg> --connector DIR`** (and `pyfsr.connector_icon.make_connector_icons`) -- build
+  a connector's large (80x80) and small (32x32) icon PNGs from an SVG, e.g. one from icons.fortinet.com,
+  laid out like the stock Fortinet connector icons. Draws the SVG with whichever of `rsvg-convert`,
+  `cairosvg`, macOS Quick Look or headless Chrome is installed. The FORTINET wordmark is copied from the
+  connector's existing icons (or `--wordmark-from DIR`), not bundled; `--no-wordmark` leaves it off.
+  New `pyfsr[icons]` extra (Pillow).
+
 - **`api_keys.grants(name)` / `api_keys.ensure_team(name, team="SOC Team")`** -- read a key's team and
   role *names* (the binding returns IRIs only with `$relationships=true`) and put it on a team without
   regenerating it.
