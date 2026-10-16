@@ -216,10 +216,17 @@ def build_icon(art: Image, spec: IconSpec, wordmark: Image | None = None) -> Ima
 
 def _icon_names(connector_dir: Path) -> tuple[str, str]:
     info = json.loads((connector_dir / "info.json").read_text(encoding="utf-8"))
-    try:
-        return info["icon_large_name"], info["icon_small_name"]
-    except KeyError as exc:
-        raise ValueError(f"{connector_dir / 'info.json'} has no {exc.args[0]}") from None
+    names = []
+    for key in ("icon_large_name", "icon_small_name"):
+        name = info.get(key)
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"{connector_dir / 'info.json'} has no {key}")
+        # info.json is part of the package being edited, so treat it as untrusted: the
+        # name must be a bare .png filename, never a path that could leave images/.
+        if Path(name).name != name or name in {".", ".."} or Path(name).suffix.lower() != ".png":
+            raise ValueError(f"{key} {name!r} must be a plain .png file name, not a path")
+        names.append(name)
+    return names[0], names[1]
 
 
 def make_connector_icons(

@@ -91,6 +91,16 @@ def test_missing_icon_names_in_info_json(tmp_path):
         make_connector_icons(tmp_path / "a.svg", root, rasterizer=_draw)
 
 
+@pytest.mark.parametrize("bad", ["../evil.png", "/tmp/evil.png", "sub/x.png", "..", "x.svg", ""])
+def test_icon_names_that_are_paths_are_rejected(tmp_path, bad):
+    root = tmp_path / "c"
+    root.mkdir()
+    (root / "info.json").write_text(json.dumps({"icon_large_name": bad, "icon_small_name": "s.png"}))
+    with pytest.raises(ValueError):
+        make_connector_icons(tmp_path / "a.svg", root, rasterizer=_draw)
+    assert not (tmp_path / "evil.png").exists()
+
+
 def test_transparent_render_is_flattened_onto_white(tmp_path):
     def draw(svg: Path, png: Path, size: int) -> None:
         Image.new("RGBA", (size, size), (0, 0, 0, 0)).save(png)
