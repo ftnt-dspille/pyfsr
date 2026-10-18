@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help lint format test typecheck check docs docs-doctest docs-examples \
+.PHONY: help lint format test typecheck check ci docs docs-doctest docs-examples \
 	docs-check release release-check
 
 help: ## Show this help
@@ -31,7 +31,7 @@ typecheck: ## mypy over the typed surface
 test: ## pytest with coverage
 	$(RUN) pytest tests/ --cov=pyfsr --cov-report=term-missing
 
-check: lint format typecheck test ## Everything CI runs, locally
+check: lint format typecheck test ## Fast gates (no docs); `make ci` for all of CI
 
 # The docs gates. Kept out of `check` on purpose: a full Sphinx build is
 # minutes where the rest of `check` is seconds, and AutoAPI alone is ~70% of
@@ -51,6 +51,8 @@ docs-examples: ## Fail if a file's {doctest} count dropped below its baseline
 	$(RUN) python scripts/check_doc_examples.py --check-floor
 
 docs-check: docs docs-doctest docs-examples ## Every docs gate
+
+ci: check docs-check ## Everything CI runs, locally (slow: includes the Sphinx build)
 
 
 release-check: ## Release preflight only -- changes nothing
