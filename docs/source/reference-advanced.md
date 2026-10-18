@@ -18,4 +18,5 @@ autoapi/pyfsr/query_models/index
 autoapi/pyfsr/spec/index
 autoapi/pyfsr/utils/index
 autoapi/pyfsr/ai_eval/index
+autoapi/pyfsr/connector_icon/index
 ```

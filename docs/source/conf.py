@@ -147,6 +147,10 @@ nitpick_ignore = [
     # alias (not a class) and `ConfigSchema` is internal to _integration.
     ("py:class", "Actor"),
     ("py:class", "ConfigSchema"),
+    # connector_icon: `Rasterizer` is a Callable alias; Pillow has no intersphinx
+    # inventory here (Pillow is an optional extra).
+    ("py:class", "Rasterizer"),
+    ("py:class", "PIL.Image.Image"),
     # ApiResult is re-exported from pyfsr.models but documented at its canonical
     # private module; the "Bases:" xref from public subclasses resolves at
     # runtime but not under `-n`.

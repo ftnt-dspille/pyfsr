@@ -32,10 +32,10 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from PIL import Image
+    import PIL.Image
 
 __all__ = ["IconSpec", "LARGE", "SMALL", "make_connector_icons", "rasterize_svg", "build_icon"]
 
@@ -61,12 +61,12 @@ LARGE = IconSpec(size=80, art_top=7, art_height=54, wordmark_rows=(66, 74), word
 SMALL = IconSpec(size=32, art_top=2, art_height=21, wordmark_rows=(25, 30), wordmark_cols=(2, 30))
 
 
-def _pil() -> Image:
+def _pil() -> Any:
     try:
         from PIL import Image
     except ImportError as exc:  # pragma: no cover - exercised only without the extra
         raise ImportError("connector icons need Pillow: pip install 'pyfsr[icons]'") from exc
-    return Image  # type: ignore[return-value]
+    return Image
 
 
 # -- rasterisers ---------------------------------------------------------------
@@ -135,7 +135,7 @@ def _available() -> list[tuple[str, Rasterizer]]:
     return found
 
 
-def rasterize_svg(svg: str | Path, *, size: int = 800, rasterizer: Rasterizer | None = None) -> Image:
+def rasterize_svg(svg: str | Path, *, size: int = 800, rasterizer: Rasterizer | None = None) -> PIL.Image.Image:
     """Draw ``svg`` to a ``size``-px RGB image on white, using the first available rasteriser."""
     Image = _pil()
     svg = Path(svg)
@@ -166,7 +166,7 @@ def rasterize_svg(svg: str | Path, *, size: int = 800, rasterizer: Rasterizer | 
 # -- composition ---------------------------------------------------------------
 
 
-def _trim(img: Image) -> Image:
+def _trim(img: PIL.Image.Image) -> PIL.Image.Image:
     """Crop to the non-white artwork."""
     from PIL import ImageChops
 
@@ -176,7 +176,7 @@ def _trim(img: Image) -> Image:
     return img.crop(box)
 
 
-def _wordmark(icon_png: Path, spec: IconSpec) -> Image | None:
+def _wordmark(icon_png: Path, spec: IconSpec) -> PIL.Image.Image | None:
     """The wordmark strip of an existing icon, or None if there isn't one there."""
     Image = _pil()
     try:
@@ -191,14 +191,14 @@ def _wordmark(icon_png: Path, spec: IconSpec) -> Image | None:
     return strip if _trim_or_none(strip) is not None else None
 
 
-def _trim_or_none(img: Image) -> Image | None:
+def _trim_or_none(img: PIL.Image.Image) -> PIL.Image.Image | None:
     try:
         return _trim(img)
     except ValueError:
         return None
 
 
-def build_icon(art: Image, spec: IconSpec, wordmark: Image | None = None) -> Image:
+def build_icon(art: PIL.Image.Image, spec: IconSpec, wordmark: PIL.Image.Image | None = None) -> PIL.Image.Image:
     """Place the artwork (and wordmark, if given) on a white ``spec.size`` square."""
     Image = _pil()
     art = _trim(art)
