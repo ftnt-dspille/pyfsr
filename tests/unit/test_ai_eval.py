@@ -86,9 +86,7 @@ def test_scoring_matcher_agrees_with_listener(suite, tool, args, rule):
 def test_listener_over_the_real_mcp_client(suite, tmp_path):
     pytest.importorskip("mcp")
     from mcp import ClientSession
-    from mcp.client import streamable_http
-
-    connect = getattr(streamable_http, "streamable_http_client", None) or streamable_http.streamablehttp_client
+    from mcp.client.streamable_http import streamable_http_client
 
     fixtures = tmp_path / "fixtures.json"
     fixtures.write_text(json.dumps(suite.fixtures()))
@@ -98,7 +96,7 @@ def test_listener_over_the_real_mcp_client(suite, tmp_path):
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
 
     async def session():
-        async with connect(f"http://127.0.0.1:{port}/mcp/threat_intel") as (r, w, _):
+        async with streamable_http_client(f"http://127.0.0.1:{port}/mcp/threat_intel") as (r, w):
             async with ClientSession(r, w) as s:
                 init = await s.initialize()
                 tools = await s.list_tools()
@@ -110,9 +108,9 @@ def test_listener_over_the_real_mcp_client(suite, tmp_path):
         init, tools, hit, miss = asyncio.run(session())
     finally:
         httpd.shutdown()
-    assert init.serverInfo.name == "Eval Threat Intel"
+    assert init.server_info.name == "Eval Threat Intel"
     assert [t.name for t in tools.tools] == ["ti_lookup"]
-    assert tools.tools[0].inputSchema["required"] == ["indicator"]
+    assert tools.tools[0].input_schema["required"] == ["indicator"]
     # fsr-ai's standard envelope, as the built-in servers answer
     assert json.loads(hit.content[0].text)["status"] == "success"
     assert json.loads(hit.content[0].text)["result"]["attribution"] == "QakBot C2 infrastructure"

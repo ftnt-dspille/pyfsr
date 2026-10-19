@@ -92,20 +92,32 @@ def _server_path(server: str) -> str:
 
 
 def _tools_to_models(tools: Any) -> list[MCPTool]:
-    return [MCPTool(name=t.name, description=t.description, inputSchema=t.inputSchema) for t in tools]
+    return [MCPTool(name=t.name, description=t.description, inputSchema=t.input_schema) for t in tools]
 
 
-def _new_httpx_client(verify: Any, **kw: Any) -> Any:
-    """Build the ``httpx.AsyncClient`` every MCP session uses.
+def _new_httpx_client(verify: Any, headers: dict[str, str] | None = None, **kw: Any) -> Any:
+    """Build the ``httpx2.AsyncClient`` every MCP session uses.
+
+    mcp 2.x transports run on the ``httpx2`` distribution and take a
+    caller-built client (``http_client=``) instead of ``headers=`` plus an
+    ``httpx_client_factory``, so auth headers and ``verify`` land here.
 
     ``follow_redirects=True`` is required: some registered servers 307-redirect a
     trailing-slash path (e.g. the bridge answers ``/mcp/fortisiem/`` with a
     redirect to ``/mcp/fortisiem``); without it the MCP handshake dies with a bare
     ``ExceptionGroup`` wrapping the 307 (live-verified against a real server).
+    The 2.x SDK applies its own same-origin redirect rule and does not consult
+    the client's ``follow_redirects`` setting, but the flag also governs any
+    direct use of the returned client.
     """
-    import httpx
+    import httpx2
 
-    return httpx.AsyncClient(verify=verify, follow_redirects=True, **kw)
+    if headers is not None:
+        kw["headers"] = headers
+    # Mirror the SDK transport's defaults (30s calls, 5min SSE read) -- a bare
+    # AsyncClient would have no read timeout for a long-lived SSE stream.
+    kw.setdefault("timeout", httpx2.Timeout(30.0, read=300.0))
+    return httpx2.AsyncClient(verify=verify, follow_redirects=True, **kw)
 
 
 def _bearer_headers(auth: dict[str, Any]) -> dict[str, str]:
@@ -322,37 +334,39 @@ class MCPSession:
 
     async def _worker(self) -> None:
         from mcp import ClientSession
-        from mcp.client.streamable_http import streamablehttp_client
+        from mcp.client.streamable_http import streamable_http_client
 
         client = self._api.client
         url = self._api._url_for(self._server)
         headers = client.auth.get_auth_headers()
         verify = client.verify_ssl
 
-        async with streamablehttp_client(
-            url,
-            headers=headers,
-            httpx_client_factory=lambda **kw: _new_httpx_client(verify, **kw),
-        ) as (read, write, _get_session_id):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                self._queue = asyncio.Queue()
-                self._ready.set()
-                while True:
-                    item = await self._queue.get()
-                    if item is None:  # shutdown sentinel from __exit__
-                        break
-                    method, args, future = item
-                    try:
-                        if method == "list_tools":
-                            result = await session.list_tools()
-                            future.set_result(_tools_to_models(result.tools))
-                        else:  # "call_tool"
-                            name, arguments = args
-                            result = await session.call_tool(name, arguments or {})
-                            future.set_result(_content_to_result(result.content))
-                    except Exception as exc:  # noqa: BLE001 - propagate to the caller's thread
-                        future.set_exception(exc)
+        # Same mcp 2.x contract as _run_at: caller-built client, (read, write)
+        # yield, and pyfsr closes the client it built.
+        http = _new_httpx_client(verify, headers=headers)
+        try:
+            async with streamable_http_client(url, http_client=http) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    self._queue = asyncio.Queue()
+                    self._ready.set()
+                    while True:
+                        item = await self._queue.get()
+                        if item is None:  # shutdown sentinel from __exit__
+                            break
+                        method, args, future = item
+                        try:
+                            if method == "list_tools":
+                                result = await session.list_tools()
+                                future.set_result(_tools_to_models(result.tools))
+                            else:  # "call_tool"
+                                name, arguments = args
+                                result = await session.call_tool(name, arguments or {})
+                                future.set_result(_content_to_result(result.content))
+                        except Exception as exc:  # noqa: BLE001 - propagate to the caller's thread
+                            future.set_exception(exc)
+        finally:
+            await http.aclose()
 
     def _dispatch(self, method: str, args: Any) -> Any:
         if self._loop is None or self._queue is None:
@@ -415,16 +429,19 @@ class NativeMCPApi(BaseAPI):
         """
         _require_mcp_sdk()
         from mcp import ClientSession
-        from mcp.client.streamable_http import streamablehttp_client
+        from mcp.client.streamable_http import streamable_http_client
 
-        async with streamablehttp_client(
-            url,
-            headers=headers,
-            httpx_client_factory=lambda **kw: _new_httpx_client(verify, **kw),
-        ) as (read, write, _get_session_id):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                return await coro_factory(session)
+        # mcp 2.x: the transport takes a caller-built httpx2 client (no
+        # headers=/factory args), yields (read, write), and leaves closing a
+        # caller-built client to us.
+        http = _new_httpx_client(verify, headers=headers)
+        try:
+            async with streamable_http_client(url, http_client=http) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    return await coro_factory(session)
+        finally:
+            await http.aclose()
 
     def list_tools_at(self, url: str, headers: dict[str, str], *, verify: Any = None) -> list[MCPTool]:
         """List tools of *any* MCP server at ``url`` (auth already in ``headers``).

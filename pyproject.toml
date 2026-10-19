@@ -53,7 +53,7 @@ test = [
     "pytest",
     "pytest-cov",
     "pytest-mock",
-    "mcp>=1.0,<3", # exercise the optional pyfsr[mcp] server in CI (2.0 renamed APIs)
+    "mcp>=2,<3", # exercise the optional pyfsr[mcp] server in CI (2.x APIs: httpx2, constructor handlers)
     # tomllib is stdlib from 3.11; the tests import this backport below that.
     # Declared here rather than installed ad hoc in CI so the extra is complete.
     "tomli; python_version < '3.11'",
@@ -88,8 +88,10 @@ docs = [
 
 # Optional generic MCP server: `python -m pyfsr.agent.mcp` over the tool registry.
 # Pulls in the Model Context Protocol SDK; the core library never imports it.
+# 2.x only: 2.0 renamed the client transport (streamable_http_client, httpx2)
+# and the lowlevel server handlers (constructor kwargs, not decorators).
 mcp = [
-    "mcp>=1.0,<3",
+    "mcp>=2,<3",
 ]
 
 # Author playbooks in YAML and deploy them (`pyfsr playbook`, import_from_yaml).

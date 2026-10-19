@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import types
 from contextlib import asynccontextmanager
 
 import pytest
@@ -60,10 +61,12 @@ class FakeClient:
 
 
 class FakeTool:
+    """Stands in for an mcp 2.x ``types.Tool`` (snake_case fields)."""
+
     def __init__(self, name, description="", input_schema=None):
         self.name = name
         self.description = description
-        self.inputSchema = input_schema or {"type": "object"}
+        self.input_schema = input_schema or {"type": "object"}
 
 
 class FakeToolsResult:
@@ -113,22 +116,22 @@ class FakeSession:
 
 
 def _fake_transport_factory(session_factory):
-    """Build a fake ``streamablehttp_client`` returning ``session_factory()``'s session."""
+    """Build a fake ``streamable_http_client`` (mcp 2.x transport)."""
 
     @asynccontextmanager
-    async def _factory(url, headers=None, httpx_client_factory=None):
-        yield (object(), object(), None)
+    async def _factory(url, **_kw):
+        yield (object(), object())
 
     return _factory
 
 
 def _patch_mcp(monkeypatch, session):
-    """Patch the two lazily-imported symbols native_mcp._run reaches for."""
+    """Patch the two lazily-imported symbols native_mcp reaches for."""
     import mcp
     import mcp.client.streamable_http as streamable_http
 
     monkeypatch.setattr(mcp, "ClientSession", lambda read, write: session)
-    monkeypatch.setattr(streamable_http, "streamablehttp_client", _fake_transport_factory(None))
+    monkeypatch.setattr(streamable_http, "streamable_http_client", _fake_transport_factory(None))
 
 
 # -- list_tools / call_tool happy paths ----------------------------------------
@@ -345,15 +348,61 @@ def test_build_mcp_auth_headers_oauth2_nested_config_and_token_override(monkeypa
 
 @pytest.mark.requires_extra("mcp")
 def test_new_httpx_client_follows_redirects():
+    import httpx2
+
     from pyfsr.api.native_mcp import _new_httpx_client
 
     client = _new_httpx_client(verify=False)
     try:
+        assert isinstance(client, httpx2.AsyncClient)
         assert client.follow_redirects is True
     finally:
         import anyio
 
         anyio.run(client.aclose)
+
+
+@pytest.mark.requires_extra("mcp")
+def test_transport_gets_prebuilt_client_and_pyfsr_closes_it(monkeypatch):
+    """mcp 2.x transport contract: pyfsr builds the httpx2 client with the auth
+    headers and verify baked in, hands it over as ``http_client=``, and closes
+    it after the session -- the SDK leaves a caller-built client open."""
+    transport_kw: dict = {}
+    session = FakeSession(call_result_text='{"ok": true}')
+
+    class FakeAsyncClient:
+        def __init__(self, **kw):
+            self.kw = kw
+            self.closed = False
+
+        async def aclose(self):
+            self.closed = True
+
+    monkeypatch.setitem(
+        sys.modules, "httpx2", types.SimpleNamespace(AsyncClient=FakeAsyncClient, Timeout=lambda *a, **kw: None)
+    )
+
+    import mcp
+    import mcp.client.streamable_http as streamable_http
+
+    @asynccontextmanager
+    async def recording_transport(url, **kw):
+        transport_kw.update(kw)
+        yield (object(), object())
+
+    monkeypatch.setattr(mcp, "ClientSession", lambda read, write: session)
+    monkeypatch.setattr(streamable_http, "streamable_http_client", recording_transport)
+
+    api = NativeMCPApi(FakeClient())
+    result = api.call_tool("soc", "get_alert")
+
+    assert result == {"ok": True}
+    http = transport_kw["http_client"]
+    assert isinstance(http, FakeAsyncClient)
+    assert http.kw["verify"] is False
+    assert http.kw["follow_redirects"] is True
+    assert http.kw["headers"] == {"Authorization": "Bearer tok"}
+    assert http.closed is True
 
 
 # -- call_tool_at / list_tools_at (arbitrary registered server) ----------------
@@ -400,7 +449,7 @@ def test_retries_once_on_auth_error_when_auth_can_refresh(monkeypatch):
     import mcp.client.streamable_http as streamable_http
 
     monkeypatch.setattr(mcp, "ClientSession", lambda read, write: next(sessions))
-    monkeypatch.setattr(streamable_http, "streamablehttp_client", _fake_transport_factory(None))
+    monkeypatch.setattr(streamable_http, "streamable_http_client", _fake_transport_factory(None))
 
     auth = FakeAuth(can_refresh=True)
     api = NativeMCPApi(FakeClient(auth=auth))
@@ -434,7 +483,7 @@ def test_retries_on_exceptiongroup_wrapped_httpx_status_error(monkeypatch):
     import mcp.client.streamable_http as streamable_http
 
     monkeypatch.setattr(mcp, "ClientSession", lambda read, write: next(sessions))
-    monkeypatch.setattr(streamable_http, "streamablehttp_client", _fake_transport_factory(None))
+    monkeypatch.setattr(streamable_http, "streamable_http_client", _fake_transport_factory(None))
 
     auth = FakeAuth(can_refresh=True)
     api = NativeMCPApi(FakeClient(auth=auth))
@@ -492,12 +541,12 @@ def test_session_reuses_one_handshake_across_calls(monkeypatch):
     import mcp.client.streamable_http as streamable_http
 
     @asynccontextmanager
-    async def counting_transport(url, headers=None, httpx_client_factory=None):
+    async def counting_transport(url, **_kw):
         transport_calls["n"] += 1
-        yield (object(), object(), None)
+        yield (object(), object())
 
     monkeypatch.setattr(mcp, "ClientSession", lambda read, write: session_obj)
-    monkeypatch.setattr(streamable_http, "streamablehttp_client", counting_transport)
+    monkeypatch.setattr(streamable_http, "streamable_http_client", counting_transport)
 
     api = NativeMCPApi(FakeClient())
     with api.session("soc") as s:
@@ -525,9 +574,9 @@ def test_session_closes_transport_and_session_on_exit(monkeypatch):
             return False
 
     @asynccontextmanager
-    async def tracked_transport(url, headers=None, httpx_client_factory=None):
+    async def tracked_transport(url, **_kw):
         try:
-            yield (object(), object(), None)
+            yield (object(), object())
         finally:
             closed["transport"] = True
 
@@ -536,7 +585,7 @@ def test_session_closes_transport_and_session_on_exit(monkeypatch):
 
     session_obj = TrackedFakeSession()
     monkeypatch.setattr(mcp, "ClientSession", lambda read, write: session_obj)
-    monkeypatch.setattr(streamable_http, "streamablehttp_client", tracked_transport)
+    monkeypatch.setattr(streamable_http, "streamable_http_client", tracked_transport)
 
     api = NativeMCPApi(FakeClient())
     with api.session("soc"):

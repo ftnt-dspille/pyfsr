@@ -24,6 +24,13 @@ All notable changes to this project will be documented in this file.
   `teams=` sets the owners explicitly; `ensure_team=None` opts out.
 
 ### Changed
+- **mcp 2.x only (`mcp>=2,<3`).** mcp 2.0 renamed the client transport
+  (`streamablehttp_client` -> `streamable_http_client`, `httpx` -> `httpx2`, the caller now builds and
+  closes the HTTP client, and the yield is `(read, write)` without the session-id callback) and the
+  lowlevel server API (constructor `on_list_tools=`/`on_call_tool=` handlers taking
+  `(context, params)` instead of the `@server.list_tools()` decorators; `Tool.input_schema` and
+  `InitializeResult.server_info` are snake_case). `client.mcp` and `pyfsr.agent.mcp` are written
+  against the 2.x APIs. The scheduled latest-deps CI run caught this the week mcp 2.x hit PyPI.
 - **`api_keys.ensure_usable` prefers `SOC Team`** over "the first team on the box" when no `teams=` is
   given. Agent records are linked to the SOC Team and the appliance's message router configures them as
   its own user; an API key on any other team creates agents that stick at `Configuration In Progress`
