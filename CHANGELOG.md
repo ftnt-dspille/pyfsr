@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [0.26.0] - 2026-10-20
 
 ### Added
+
+- **`run_and_wait(env=...)`** -- trigger values as top-level body keys, the shape
+  that populates `vars.input.params.<name>` for a playbook whose start step declares
+  `inputVariables` (the shape the UI Execute dialog produces). The `inputs=` parameter
+  lands as `vars.inputs` and does not bind those playbooks; both parameters' docstrings
+  now say so. Live-verified on 8.0.0: with `env=`, `vars.input.params.hostname` carried
+  the passed value; with `inputs=`, `vars.input.params.hostname` stayed null while
+  `vars.inputs.hostname` held it.
 - **Team hierarchy writes: `teams.create/update(parents=, children=, siblings=)`, `teams.add_parents()`
   and `teams.hierarchy()`.** Names, uuids or IRIs. A parent team's members see and edit what its child
   teams own; child teams of one parent do not see each other. Live-verified on 8.0.0: with "SOC Team"
