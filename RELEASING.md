@@ -72,10 +72,13 @@ simple index. The two waits are separate on purpose -- the JSON API learns about
 a version before the index serves it, so polling only the JSON API declares
 success while `pip install` still fails.
 
-> **Not yet proven end-to-end.** 0.18.8 shipped, but that run ended in a
-> false-negative timeout from a broken prober (fixed in `abf03f74`). The
-> tag → release → double-wait sequence has never completed cleanly in one go.
-> Treat the next release as its first real exercise, not as a proven path.
+> **Not yet proven end-to-end.** 0.18.8 ended in a false-negative timeout from
+> a broken prober (fixed in `abf03f74`), and 0.26.0 in another: on a machine
+> without `python3 -m pip` the script fell back to `uv pip download`, which uv
+> does not have, so every probe failed and the wait timed out after the release
+> had gone out. The uv fallback now does a dry-run install instead. If the final
+> wait times out, check PyPI by hand (`uv pip install pyfsr==X` in a scratch
+> venv) before assuming the release failed.
 
 The `Publish Python Package` workflow (`.github/workflows/publish.yml`) fires on
 the created release, runs the full test matrix via `pr-tests.yml`, builds the

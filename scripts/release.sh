@@ -50,8 +50,10 @@ if python3 -m pip --version >/dev/null 2>&1; then
     PROBE=(python3 -m pip download --no-deps --quiet --dest)
     PROBE_NAME="python3 -m pip"
 elif command -v uv >/dev/null; then
-    PROBE=(uv pip download --no-deps --quiet --dest)
-    PROBE_NAME="uv pip"
+    # uv has no `pip download`; a dry-run install into a scratch target resolves
+    # against the index without installing (exit 1 while the version is absent).
+    PROBE=(uv pip install --dry-run --no-deps --quiet --refresh-package pyfsr --target)
+    PROBE_NAME="uv pip install --dry-run"
 else
     die "no pip or uv available to verify the published version is installable"
 fi
