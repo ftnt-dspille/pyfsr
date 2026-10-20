@@ -2972,7 +2972,6 @@ class PlaybooksAPI(BaseAPI):
         module: str | None = None,
         route_uuid: str | None = None,
         inputs: dict[str, Any] | None = None,
-        env: dict[str, Any] | None = None,
         answers: dict[str, Any] | None = None,
         timeout: float = 120,
         poll_interval: float = 3,
@@ -3026,14 +3025,6 @@ class PlaybooksAPI(BaseAPI):
                 When omitted but ``record_uuid`` + ``module`` are given, the
                 route is resolved from the playbook definition automatically.
             inputs: manual-input parameters (merged into trigger body).
-                **Caveat (live-verified, see :meth:`trigger`):** these land in
-                the run env as top-level ``vars.inputs`` -- a playbook reading
-                ``vars.input.params.<name>`` (its trigger's declared
-                ``inputVariables``) will NOT see them. For that, use ``env=``.
-            env: trigger values sent as **top-level** body keys. This is what
-                populates ``vars.input.params.<name>`` for a playbook whose
-                start step declares ``inputVariables`` -- the same shape the
-                UI Execute dialog produces.
             answers: auto-answer manual_input/approval gates during polling.
                 Keys match the prompt's title (the step's ``title:``) or the
                 input variable name; values are the answers to submit.
@@ -3095,7 +3086,7 @@ class PlaybooksAPI(BaseAPI):
                 playbook_uuid=playbook_uuid,
             )
         else:
-            resp = self.trigger(playbook_uuid, inputs=inputs, env=env)
+            resp = self.trigger(playbook_uuid, inputs=inputs)
         resp = TriggerResponse(**resp) if isinstance(resp, dict) else resp
         if not resp.task_ids:
             raise ValueError("trigger returned no task_id")
