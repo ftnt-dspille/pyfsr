@@ -176,7 +176,7 @@ def _mcp_tools(registry: Any | None = None) -> list[Any]:
             props = dict(schema.get("properties") or {})
             props["instance"] = instance_prop
             schema["properties"] = props
-        tools.append(types.Tool(name=t["name"], description=t["description"], inputSchema=schema))
+        tools.append(types.Tool(name=t["name"], description=t["description"], input_schema=schema))
     if registry is not None:
         tools.append(
             types.Tool(
@@ -186,7 +186,7 @@ def _mcp_tools(registry: Any | None = None) -> list[Any]:
                     "which is default). Pass the chosen alias as the 'instance' argument of any "
                     "other tool."
                 ),
-                inputSchema={"type": "object", "properties": {}},
+                input_schema={"type": "object", "properties": {}},
             )
         )
     return tools
@@ -228,24 +228,24 @@ def build_server(target: Any) -> Server:
     """Create an MCP :class:`~mcp.server.lowlevel.Server` bound to ``target``.
 
     ``target`` is an :class:`~pyfsr.instances.InstanceRegistry` (multi-instance) or
-    a single :class:`~pyfsr.client.FortiSOAR` (back-compat). Registers ``list_tools``
-    and ``call_tool`` handlers; errors are surfaced as structured JSON content by
-    :func:`pyfsr.agent.tools.dispatch`, so a tool call never crashes the session.
+    a single :class:`~pyfsr.client.FortiSOAR` (back-compat). Registers the
+    ``tools/list`` and ``tools/call`` handlers (the mcp 2.x constructor API --
+    handlers take ``(context, params)`` and return the result model); errors are
+    surfaced as structured JSON content by :func:`pyfsr.agent.tools.dispatch`, so
+    a tool call never crashes the session.
     """
+    import mcp.types as types
     from mcp.server.lowlevel import Server
 
     registry = _as_registry(target)
-    server: Server = Server(SERVER_NAME)
 
-    @server.list_tools()
-    async def list_tools() -> list[Any]:
-        return _mcp_tools(registry)
+    async def on_list_tools(ctx: Any, params: Any) -> Any:
+        return types.ListToolsResult(tools=_mcp_tools(registry))
 
-    @server.call_tool()
-    async def call_tool(name: str, arguments: dict[str, Any] | None) -> list[Any]:
-        return _route_call(registry, name, arguments)
+    async def on_call_tool(ctx: Any, params: Any) -> Any:
+        return types.CallToolResult(content=_route_call(registry, params.name, params.arguments))
 
-    return server
+    return Server(SERVER_NAME, on_list_tools=on_list_tools, on_call_tool=on_call_tool)
 
 
 async def serve(registry: InstanceRegistry | None = None, *, client: FortiSOAR | None = None) -> None:

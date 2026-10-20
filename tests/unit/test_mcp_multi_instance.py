@@ -49,11 +49,11 @@ def test_registry_tools_gain_instance_arg_and_meta_tool():
     assert names == {t["name"] for t in tools.tool_schemas()} | {mcp_mod.LIST_INSTANCES}
 
     sample = next(t for t in mcp_tools if t.name == "get_record")
-    inst = sample.inputSchema["properties"]["instance"]
+    inst = sample.input_schema["properties"]["instance"]
     assert inst["type"] == "string"
     assert inst["enum"] == ["a", "b"]
     # Original required fields are untouched by the injection.
-    assert set(sample.inputSchema["required"]) == {"module", "ref"}
+    assert set(sample.input_schema["required"]) == {"module", "ref"}
 
 
 def test_no_registry_means_no_instance_arg():
@@ -61,7 +61,7 @@ def test_no_registry_means_no_instance_arg():
     names = {t.name for t in mcp_tools}
     assert mcp_mod.LIST_INSTANCES not in names
     sample = next(t for t in mcp_tools if t.name == "get_record")
-    assert "instance" not in sample.inputSchema["properties"]
+    assert "instance" not in sample.input_schema["properties"]
 
 
 # -- routing ----------------------------------------------------------------
@@ -97,5 +97,4 @@ def test_route_call_unknown_instance_is_structured_error():
 def test_build_server_accepts_registry():
     server = mcp_mod.build_server(FakeRegistry())
     assert server.name == "pyfsr"
-    handler_names = {req.__name__ for req in server.request_handlers}
-    assert {"ListToolsRequest", "CallToolRequest"} <= handler_names
+    assert {"tools/list", "tools/call"} <= set(server._request_handlers)

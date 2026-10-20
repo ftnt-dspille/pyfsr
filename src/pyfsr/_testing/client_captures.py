@@ -1456,9 +1456,20 @@ GLOBAL_SEARCH_RESPONSE = {
     }
 }
 
-# POST /api/query/alerts/<query-uuid> -- execute a saved (persisted) query.
+# POST /api/query/<module> with a saved query's body -- run_persisted.
 PERSISTED_QUERY_RESPONSE = {
     "hydra:member": [ALERT_GET_RESPONSE],
+    "hydra:totalItems": 1,
+}
+
+# POST /api/query/alerts/<uuid>/indicators -- the indicators linked to one alert.
+RELATED_QUERY_RESPONSE = {
+    "@context": "/api/3/contexts/Indicator",
+    "@id": "/api/3/indicators",
+    "@type": "hydra:Collection",
+    "hydra:member": [
+        {"@id": "/api/3/indicators/9b8295fa-1b83-4c47-8a51-2f0d3c6e7a10", "@type": "Indicator", "value": "8.8.8.8"}
+    ],
     "hydra:totalItems": 1,
 }
 

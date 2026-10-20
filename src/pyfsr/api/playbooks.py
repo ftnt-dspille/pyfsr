@@ -34,6 +34,7 @@ from pydantic import ValidationError
 
 from ..auth.base import BaseAuth
 from ..auth.guards import requires_jwt
+from ..exceptions import ResourceNotFoundError
 from ..models import (
     CreatePlaybookRequest,
     CreateVersionRequest,
@@ -3469,7 +3470,8 @@ class PlaybooksAPI(BaseAPI):
         """Fire a playbook by its trigger's endpoint name.
 
         ``POST /api/triggers/1/{name}`` (or ``/api/triggers/1/deferred/{name}``
-        when ``deferred=True``, which always 202s and runs on a worker). This is
+        when ``deferred=True``, which always 202s and runs on a worker -- but
+        on 8.0.0 that route 404s for every name, live-verified; the error says so). This is
         the named-webhook trigger route -- distinct from :meth:`trigger`, which
         uses the manual-execute (``notrigger``) route by playbook uuid. Returns
         the trigger response (typically ``{"task_id": ...}``).
@@ -3493,12 +3495,21 @@ class PlaybooksAPI(BaseAPI):
             raise ValueError("trigger_by_name() requires a non-empty name")
         prefix = "/api/triggers/1/deferred/" if deferred else "/api/triggers/1/"
         post_kwargs: dict[str, Any] = {} if request_timeout is None else {"timeout": request_timeout}
-        resp = self.client.post(
-            f"{prefix}{name.strip('/ ')}",
-            data=body or {},
-            raise_on_status=raise_on_status,
-            **post_kwargs,
-        )
+        try:
+            resp = self.client.post(
+                f"{prefix}{name.strip('/ ')}",
+                data=body or {},
+                raise_on_status=raise_on_status,
+                **post_kwargs,
+            )
+        except ResourceNotFoundError as exc:
+            if deferred:
+                raise ResourceNotFoundError(
+                    f"{prefix}{name} not found. On 8.0.0 the deferred route 404s for every endpoint name "
+                    "(before authentication); call trigger_by_name(name) without deferred=True.",
+                    exc.response,
+                ) from exc
+            raise
         if not raise_on_status:
             return resp
         return TriggerResponse(**resp) if isinstance(resp, dict) else resp

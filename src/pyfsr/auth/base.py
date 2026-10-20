@@ -18,6 +18,10 @@ class BaseAuth(ABC):
     #: fsr-ai replays the *caller's* JWT (``Forwarded-Authorization: Bearer``) to
     #: the built-in ``FSR``-auth MCP servers, so an API-key caller has nothing to forward.
     OPERATION_FORWARDED_BEARER = "forwarded_bearer"
+    #: Create/update of an Actor record (``/api/3/people``, ``/appliances``, ``/api_keys``).
+    OPERATION_ACTOR_WRITE = "actor_write"
+    #: fsr-ai called directly at ``/ai/...`` (nginx -> fsr-ai, which takes only a Bearer JWT or HMAC).
+    OPERATION_AI_DIRECT = "ai_direct"
 
     def __init__(self):
         """Initialize base auth class"""

@@ -57,6 +57,16 @@ class APIKeyAuth(BaseAuth):
             # fsr-ai's built-in (``FSR``-auth) MCP servers run on the caller's
             # forwarded JWT; an API key has none, so they answer 401.
             self.OPERATION_FORWARDED_BEARER,
+            # Config import hands the caller's credential to the import job as
+            # an HMAC token; an API key is not one, so option generation dies
+            # ("Fingerprint has invalid number of parts.") and the job sits at
+            # InProgress forever. Same product bug as export.
+            self.OPERATION_CONFIG_IMPORT,
+            # The server refuses an API key's create/update of people,
+            # appliances and api_keys (403 whatever the key's role).
+            self.OPERATION_ACTOR_WRITE,
+            # fsr-ai's own auth takes a Bearer JWT or HMAC, never an API key.
+            self.OPERATION_AI_DIRECT,
         }
 
         self._validate_api_key()

@@ -32,6 +32,8 @@ class NoAuth(BaseAuth):
             self.OPERATION_SOLUTION_PACK,
             self.OPERATION_BULKUPSERT,
             self.OPERATION_FORWARDED_BEARER,
+            self.OPERATION_ACTOR_WRITE,
+            self.OPERATION_AI_DIRECT,
         }
 
     def get_auth_headers(self) -> dict:

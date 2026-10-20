@@ -733,3 +733,14 @@ def test_request_bulkupsert_blocked_for_api_key(monkeypatch):
         client.post("/api/3/bulkupsert/workflows", data=[{"name": "x"}])
     assert "bulkupsert" in str(exc.value)
     assert "JWT" in str(exc.value) or "username" in str(exc.value)
+
+    # The rest of the bulk family has the same sub-request bug (live-verified on
+    # 8.0.0: per-row "Invalid credentials." while a single-record PUT works).
+    for method, endpoint in (
+        ("POST", "/api/3/insert/alerts"),
+        ("PUT", "/api/3/update/alerts"),
+        ("DELETE", "/api/3/delete/widgets"),
+        ("POST", "insert/alerts"),  # prefix-less, as RecordSet passes some paths
+    ):
+        with pytest.raises(UnsupportedAuthOperationError):
+            client.request(method, endpoint, data={"data": []})

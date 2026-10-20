@@ -22,6 +22,11 @@ All notable changes to this project will be documented in this file.
   makes it public. Naming a team needs Security: Read, so the error says to pass a uuid when the
   user cannot list teams.
 
+- **`search.query_related(collection, record_id, field, filters=..., logic="AND")`** -- query the
+  records linked to one record (`POST /api/query/{collection}/{id}/{field}`, e.g. an alert's
+  `indicators`). The server needs both `logic` and `filters` in the body; an empty body is a 400.
+  Live-verified on 8.0.0 and 8.0.1 with a JWT and with an API key.
+
 - **`pyfsr connector icon <svg> --connector DIR`** (and `pyfsr.connector_icon.make_connector_icons`) -- build
   a connector's large (80x80) and small (32x32) icon PNGs from an SVG, e.g. one from icons.fortinet.com,
   laid out like the stock Fortinet connector icons. Draws the SVG with whichever of `rsvg-convert`,
@@ -41,11 +46,59 @@ All notable changes to this project will be documented in this file.
   `teams=` sets the owners explicitly; `ensure_team=None` opts out.
 
 ### Changed
+- **mcp 2.x only (`mcp>=2,<3`).** mcp 2.0 renamed the client transport
+  (`streamablehttp_client` -> `streamable_http_client`, `httpx` -> `httpx2`, the caller now builds and
+  closes the HTTP client, and the yield is `(read, write)` without the session-id callback) and the
+  lowlevel server API (constructor `on_list_tools=`/`on_call_tool=` handlers taking
+  `(context, params)` instead of the `@server.list_tools()` decorators; `Tool.input_schema` and
+  `InitializeResult.server_info` are snake_case). `client.mcp` and `pyfsr.agent.mcp` are written
+  against the 2.x APIs. The scheduled latest-deps CI run caught this the week mcp 2.x hit PyPI.
 - **`api_keys.ensure_usable` prefers `SOC Team`** over "the first team on the box" when no `teams=` is
   given. Agent records are linked to the SOC Team and the appliance's message router configures them as
   its own user; an API key on any other team creates agents that stick at `Configuration In Progress`
   (the router logs `404 .../api/3/agents/<uuid>`), while the same call works with a username/password.
   It warns when `SOC Team` does not exist. Documented on `agents.create` and in the `api_keys` module docs.
+
+### Fixed
+- **API-key clients now fail fast on three more routes FortiSOAR refuses them on**, with an
+  `UnsupportedAuthOperationError` that says to use a JWT client instead of the server's bare error.
+  Each was measured on 8.0.0 and 8.0.1 with an API key that has the JWT user's roles and teams:
+  - create/update of `people`, `appliances` and `api_keys` (`users.create/update`,
+    `api_keys.create/update`, or any `POST`/`PUT` to those paths): the server answers 403 "Access
+    Denied." whatever the key's role (`OPERATION_ACTOR_WRITE`, checked in `client.request`);
+  - any direct `/ai/...` call, e.g. `ai.import_agent`: fsr-ai takes only a Bearer JWT or HMAC and
+    answers 401 (`OPERATION_AI_DIRECT`);
+  - config import (`import_config.import_file`, `dry_run`, `generate_options`, `trigger`): the job's
+    options are never generated and the import never runs, the same product bug as export. API-key
+    clients now list `OPERATION_CONFIG_IMPORT` as unsupported.
+- **`search.run_persisted` / `system_queries.run` called a route that does not exist.**
+  `POST /api/query/{collection}/{query_id}` 404s on 8.0.0 and 8.0.1. They now load the saved query
+  (`/api/3/user_queries`, then `/api/3/system_queries`) and post its body to `POST
+  /api/query/{collection}`, as the UI does. `limit`/`page` go out as `$limit`/`$page` (the server
+  ignores them in the body); `orderby` replaces the stored `sort` (`$orderby` is ignored too).
+- **`api_keys.ensure_usable` no longer logs "key ... has NO roles or teams bound".** The warning is
+  for a bare `api_users.create`; `ensure_usable` binds the key straight after. New
+  `api_users.create(warn_unbound=False)` turns it off.
+- **Config export no longer polls forever.** `export_by_template_uuid` / `export_by_template_name` /
+  `export_connector` / `export_record_data` gave up never: a job that fails or never starts left the
+  caller spinning. The poll now raises `APIError` on the job's `errorMessage` and `TimeoutError` after
+  600s, naming a job that never left 0%. Live-verified on 8.0.0: an API-key export job is created and
+  never runs (the `requires_jwt` guard is right; its message now says so).
+- **`client.ai.traces` on an appliance older than 8.0.1** said "Access Denied." (a permission error) for
+  every call; the tracer store only exists from 8.0.1. It now raises `APIError("AI traces need FortiSOAR
+  8.0.1+; this appliance is 8.0.0")`. Live-verified on 8.0.0.
+- **Role and team IRIs** (`/api/3/roles/<uuid>`, `/api/3/teams/<uuid>`) are accepted wherever a role or team
+  uuid or name is, as `api_keys.create` already documented. A person's `roles` / `teams` come back as IRIs, so
+  passing them straight to `api_keys.ensure_usable(roles=..., teams=...)` raised "role not found" -- after it
+  had already created the API-key user, leaving an unbound key behind.
+- **`playbooks.trigger_by_name(name, deferred=True)`** on 8.0.0: the deferred route 404s for every
+  endpoint name, before authentication (a bogus credential gets the same 404; the plain route answers the
+  same name). The `ResourceNotFoundError` now says so and points at `deferred=False`. Live-verified on 8.0.0.
+- **API-key guard covers the whole bulk family.** `/api/3/insert`, `/api/3/update` and `/api/3/delete`
+  have bulkupsert's sub-request bug: every row fails with `Invalid credentials.` under an API key, while
+  the single-record routes work. `records(...).bulk_insert`, `widgets.remove` and any raw call to those
+  routes now raise `UnsupportedAuthOperationError` up front, as bulkupsert already did. Live-verified on
+  8.0.0 and 8.0.1.
 
 ## [0.25.1] - 2026-10-14
 

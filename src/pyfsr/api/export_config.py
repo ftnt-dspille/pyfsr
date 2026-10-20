@@ -12,6 +12,7 @@ from typing import Any
 
 from ..auth.base import BaseAuth
 from ..auth.guards import requires_jwt
+from ..exceptions import APIError
 from ..models._export import (
     ActorSelection,
     AiAgentSelection,
@@ -723,12 +724,27 @@ class ExportConfigAPI(BaseAPI):
 
         return download_path
 
-    def _poll_export_completion(self, job_uuid: str, poll_interval: int = 5) -> ExportJobResult:
-        """Poll until export is complete"""
+    def _poll_export_completion(self, job_uuid: str, poll_interval: int = 5, timeout: float = 600.0) -> ExportJobResult:
+        """Poll until export is complete.
+
+        Raises ``APIError`` when the job reports an ``errorMessage``, and
+        ``TimeoutError`` after ``timeout`` seconds. A job that never leaves an
+        empty status at 0% never started: that is what an API-key export does
+        (live-verified on 8.0.0 -- the job record is created, nothing runs).
+        """
+        deadline = time.monotonic() + timeout
         while True:
             status = self._get_export_status(job_uuid)
             if status.status == "Export Complete":
                 return status
+            if status.errorMessage:
+                raise APIError(f"export job {job_uuid} failed: {status.errorMessage}")
+            if time.monotonic() >= deadline:
+                hint = " (it never started; an API-key export does this)" if not status.status else ""
+                raise TimeoutError(
+                    f"export job {job_uuid} not complete after {timeout}s: "
+                    f"status={status.status!r}, progress={status.progressPercent}%{hint}"
+                )
             time.sleep(poll_interval)
 
     def _export_with_template(
@@ -753,7 +769,7 @@ class ExportConfigAPI(BaseAPI):
         file_iri = status["file"]["@id"]
         return self._download_export(file_iri, output_path)
 
-    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "configuration export is not available to API keys")
+    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "an API key's export job is created but never runs")
     def export_by_template_uuid(
         self, template_uuid: str, output_path: str | None = None, poll_interval: int = 5
     ) -> str:
@@ -790,7 +806,7 @@ class ExportConfigAPI(BaseAPI):
             template_uuid=template_uuid, output_path=output_path, poll_interval=poll_interval
         )
 
-    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "configuration export is not available to API keys")
+    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "an API key's export job is created but never runs")
     def export_by_template_name(
         self, template_name: str, output_path: str | None = None, poll_interval: int = 5
     ) -> str:
@@ -1245,7 +1261,7 @@ class ExportConfigAPI(BaseAPI):
                 f"{'.'.join(map(str, v))}); the category exists only on 8.0.0 and later."
             )
 
-    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "configuration export is not available to API keys")
+    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "an API key's export job is created but never runs")
     def export_record_data(
         self,
         module: str,
@@ -1323,7 +1339,7 @@ class ExportConfigAPI(BaseAPI):
         """Delete an export template by uuid (``DELETE /api/3/export_templates/<uuid>``)."""
         self.client.delete(f"/api/3/export_templates/{template_uuid}")
 
-    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "configuration export is not available to API keys")
+    @requires_jwt(BaseAuth.OPERATION_CONFIG_EXPORT, "an API key's export job is created but never runs")
     def export_connector(
         self,
         connector_name: str,

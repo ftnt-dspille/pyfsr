@@ -36,6 +36,7 @@ from typing import Any
 
 from ..models import ModulePermission, Role
 from ..pagination import extract_members
+from ..utils.iri import uuid_from_iri
 from ..utils.validation import is_uuid as _is_uuid
 from .base import BaseAPI
 
@@ -93,7 +94,9 @@ class RolesAPI(BaseAPI):
         self._module_cache = None
 
     def _resolve_role_uuid(self, role: str) -> str:
-        """Accept a role uuid or name and return the uuid."""
+        """Accept a role uuid, IRI (``/api/3/roles/<uuid>``) or name and return the uuid."""
+        if role.startswith("/api/3/roles/"):
+            role = uuid_from_iri(role) or role
         if _is_uuid(role):
             return role.strip()
         record = self._role_by_name().get(role)
@@ -123,7 +126,7 @@ class RolesAPI(BaseAPI):
         return self.role_map().get(name)
 
     def _resolve_roles(self, roles: list[str]) -> list[str]:
-        """Accept role UUIDs or names; return UUIDs. Raises ``ValueError`` for unknown names."""
+        """Accept role UUIDs, IRIs or names; return UUIDs. Raises ``ValueError`` for unknown names."""
         return [self._resolve_role_uuid(r) for r in roles]
 
     # ------------------------------------------------------------------- read

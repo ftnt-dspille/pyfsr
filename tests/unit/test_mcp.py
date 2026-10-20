@@ -40,7 +40,7 @@ def test_mcp_tools_mirror_registry():
     names = {t.name for t in mcp_tools}
     assert "get_record" in names and "run_connector_operation" in names
     sample = next(t for t in mcp_tools if t.name == "get_record")
-    assert sample.inputSchema["type"] == "object"
+    assert sample.input_schema["type"] == "object"
     assert sample.description
 
 
@@ -122,7 +122,5 @@ def test_call_unknown_tool_returns_structured_error():
 def test_build_server_registers_handlers():
     server = mcp_mod.build_server(FakeClient())
     assert server.name == "pyfsr"
-    # low-level Server records handlers keyed by their MCP request type.
-    handler_names = {req.__name__ for req in server.request_handlers}
-    assert "ListToolsRequest" in handler_names
-    assert "CallToolRequest" in handler_names
+    # mcp 2.x low-level Server records handlers keyed by MCP method.
+    assert {"tools/list", "tools/call"} <= set(server._request_handlers)

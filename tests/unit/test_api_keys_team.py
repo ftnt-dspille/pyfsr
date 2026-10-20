@@ -86,7 +86,7 @@ def test_ensure_team_reports_a_missing_key_or_team():
 
 
 class _Users:
-    def create(self, *, api_key_validity):
+    def create(self, *, api_key_validity, warn_unbound=True):
         return {"uuid": "u1", "api_key": {"key": "plain"}}
 
 
