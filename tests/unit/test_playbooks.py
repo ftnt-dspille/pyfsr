@@ -804,6 +804,19 @@ def test_trigger_by_name_and_deferred():
     assert c.calls[-1][1] == "/api/triggers/1/deferred/my-hook"
 
 
+def test_trigger_by_name_deferred_404_says_use_the_plain_route():
+    from pyfsr.exceptions import ResourceNotFoundError
+
+    class _Missing(_Rec):
+        def post(self, *a, **k):
+            raise ResourceNotFoundError("Not Found")
+
+    with pytest.raises(ResourceNotFoundError, match="without deferred=True"):
+        PlaybooksAPI(_Missing()).trigger_by_name("my-hook", deferred=True)
+    with pytest.raises(ResourceNotFoundError, match="^Not Found$"):
+        PlaybooksAPI(_Missing()).trigger_by_name("my-hook")
+
+
 def test_trigger_by_name_rejects_blank():
     with pytest.raises(ValueError):
         PlaybooksAPI(_Rec()).trigger_by_name("")

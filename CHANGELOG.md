@@ -50,6 +50,9 @@ All notable changes to this project will be documented in this file.
   uuid or name is, as `api_keys.create` already documented. A person's `roles` / `teams` come back as IRIs, so
   passing them straight to `api_keys.ensure_usable(roles=..., teams=...)` raised "role not found" -- after it
   had already created the API-key user, leaving an unbound key behind.
+- **`playbooks.trigger_by_name(name, deferred=True)`** on 8.0.0: the deferred route 404s for every
+  endpoint name, before authentication (a bogus credential gets the same 404; the plain route answers the
+  same name). The `ResourceNotFoundError` now says so and points at `deferred=False`. Live-verified on 8.0.0.
 
 ## [0.25.1] - 2026-10-14
 
