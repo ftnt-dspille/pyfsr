@@ -79,7 +79,8 @@ def complete_initial_password_reset(
     r = _requests.post(
         f"{base}/auth/authenticate",
         json={"credentials": {"loginid": loginid, "password": initial_password}},
-        verify=verify, timeout=timeout,
+        verify=verify,
+        timeout=timeout,
     )
     try:
         body = r.json()
@@ -109,7 +110,8 @@ def complete_initial_password_reset(
         f"{base}/api/auth/users",
         headers={"Authorization": f"Bearer {reset_token}"},
         json={"uuid": user_uuid, "password": new_password},
-        verify=verify, timeout=timeout,
+        verify=verify,
+        timeout=timeout,
     )
     if r2.status_code not in (200, 204):
         # Don't echo the raw body: the request carried a password + JWT and the
@@ -119,9 +121,7 @@ def complete_initial_password_reset(
             msg = err.get("message") or err.get("error") or err.get("reason") or "no detail"
         except Exception:
             msg = "non-JSON response"
-        raise RuntimeError(
-            f"PUT /api/auth/users failed: HTTP {r2.status_code} ({msg})"
-        )
+        raise RuntimeError(f"PUT /api/auth/users failed: HTTP {r2.status_code} ({msg})")
     return {"loginid": loginid, "user_uuid": user_uuid, "status": "reset-complete"}
 
 
