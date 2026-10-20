@@ -8,6 +8,7 @@ from . import content_catalog, repo
 from .api.ai import pack_agent
 from .api.connectors import ConnectorPackageError, pack_connector, validate_connector_source
 from .api.export_config import ExportTemplate
+from .api.users import complete_initial_password_reset
 from .appliance import Appliance
 from .client import FortiSOAR
 from .concurrency import ConcurrencyResult, compute_overlap
@@ -84,6 +85,7 @@ __all__ = [
     "pack_connector",
     "validate_connector_source",
     "ExportTemplate",
+    "complete_initial_password_reset",
     "Query",
     "QueryBody",
     "JinjaIssue",

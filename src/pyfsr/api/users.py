@@ -1,4 +1,4 @@
-"""The users module -- ``client.users``.
+"""The users module -- ``client.users`` + ``complete_initial_password_reset``.
 
 Manage FortiSOAR users (People records + auth credentials) via ``/api/3/people``.
 Each user is two linked records -- a **People** profile and an internal **auth
@@ -18,14 +18,111 @@ names; names are resolved via a per-instance cache populated on first use.
 
 from __future__ import annotations
 
+import base64
 import builtins
+import json as _json
 from typing import Any, cast
+
+import requests as _requests
 
 from ..exceptions import handle_api_error
 from ..models import Role, Team, User
 from ..pagination import extract_members
 from ..utils.validation import is_uuid as _is_uuid
 from .base import BaseAPI
+
+
+def complete_initial_password_reset(
+    base_url: str,
+    loginid: str,
+    initial_password: str,
+    new_password: str,
+    *,
+    verify_ssl: bool = True,
+    ca_bundle: str | None = None,
+    timeout: float = 15,
+) -> dict[str, Any]:
+    """Complete FortiSOAR's first-login forced password reset.
+
+    FortiSOAR returns HTTP 401 with ``strategy="reset"`` and a reset JWT on
+    ``POST /auth/authenticate`` when the user has never changed from the
+    initial password (e.g. ``csadmin`` on a fresh install, or any new user
+    with the "force password change on first login" flag set). The UI then
+    posts the new password to ``PUT /api/auth/users`` carrying that JWT as
+    a Bearer token. This helper does the same, without a FortiSOAR client
+    (one can't be built until the reset is complete).
+
+    Verified on FortiSOAR 8.0.0 marketplace BYOL AMI; endpoint path shown
+    above is what the UI itself calls (captured via DevTools).
+
+    Args:
+        base_url: ``https://<host>/``.
+        loginid: Login id of the user to reset (e.g. ``csadmin``).
+        initial_password: The current (initial) password.
+        new_password: The password to set. Must pass the FortiSOAR policy.
+        verify_ssl: ``True`` to verify TLS; set ``False`` for a self-signed
+            lab appliance.
+        ca_bundle: Path to a CA bundle (overrides ``verify_ssl`` when set).
+        timeout: Per-request timeout in seconds.
+
+    Returns:
+        Dict with ``{"loginid", "user_uuid", "status"}``.
+
+    Raises:
+        ValueError: when the initial login does NOT return the reset
+            strategy (either credentials are wrong, or no reset is required).
+        RuntimeError: when the PUT returns a non-2xx.
+    """
+    verify: bool | str = ca_bundle if ca_bundle else verify_ssl
+    base = base_url.rstrip("/")
+
+    r = _requests.post(
+        f"{base}/auth/authenticate",
+        json={"credentials": {"loginid": loginid, "password": initial_password}},
+        verify=verify,
+        timeout=timeout,
+    )
+    try:
+        body = r.json()
+    except Exception:
+        body = {}
+    if not (r.status_code == 401 and body.get("strategy") == "reset" and body.get("token")):
+        # Scrub credential-shaped keys (the reset JWT) before surfacing in an
+        # exception, which can land in logs. Report only safe diagnostic fields.
+        safe = {k: v for k, v in body.items() if k not in ("token", "password")}
+        raise ValueError(
+            f"expected 401 strategy=reset + token on first login; "
+            f"got HTTP {r.status_code} body={safe!r} -- check loginid/initial password, "
+            f"or the user may not need a reset (try a normal login)"
+        )
+    reset_token = body["token"]
+
+    # The reset JWT's payload carries the user's uuid; the PUT body needs it.
+    try:
+        payload_b64 = reset_token.split(".")[1]
+        padded = payload_b64 + "=" * (-len(payload_b64) % 4)
+        claims = _json.loads(base64.urlsafe_b64decode(padded))
+        user_uuid = claims["uuid"]
+    except Exception as e:
+        raise RuntimeError(f"could not decode reset JWT: {e}") from e
+
+    r2 = _requests.put(
+        f"{base}/api/auth/users",
+        headers={"Authorization": f"Bearer {reset_token}"},
+        json={"uuid": user_uuid, "password": new_password},
+        verify=verify,
+        timeout=timeout,
+    )
+    if r2.status_code not in (200, 204):
+        # Don't echo the raw body: the request carried a password + JWT and the
+        # server may reflect fragments. Keep status + any safe reason text.
+        try:
+            err = r2.json()
+            msg = err.get("message") or err.get("error") or err.get("reason") or "no detail"
+        except Exception:
+            msg = "non-JSON response"
+        raise RuntimeError(f"PUT /api/auth/users failed: HTTP {r2.status_code} ({msg})")
+    return {"loginid": loginid, "user_uuid": user_uuid, "status": "reset-complete"}
 
 
 class UsersAPI(BaseAPI):

@@ -62,6 +62,7 @@ from ..exceptions import (
     ConnectorConfigNotFoundError,
     ResourceNotFoundError,
 )
+from ..exceptions import PermissionError as FSRPermissionError
 from ..models._integration import (
     ConfigValidationResult,
     ConnectorConfig,
@@ -1704,6 +1705,21 @@ class ConnectorsAPI(BaseAPI):
                 )
 
     # ------------------------------------------------------------- configure
+    def _team_iris(self, teams: list[str]) -> list[str]:
+        """Owner teams as the ``/api/3/teams/<uuid>`` IRIs a configuration takes."""
+        if isinstance(teams, str):
+            teams = [teams]
+        bare = [t.rsplit("/", 1)[-1] if str(t).startswith("/api/3/teams/") else t for t in teams]
+        try:
+            uuids = self.client.teams._resolve_teams(bare)
+        except FSRPermissionError as e:
+            # A uuid needs no lookup; a name does, and many roles cannot list teams.
+            raise ValueError(
+                f"cannot resolve team names {bare!r}: this user may not read /api/3/teams "
+                "(needs Security: Read); pass the team uuid or /api/3/teams/<uuid> IRI instead"
+            ) from e
+        return [f"/api/3/teams/{u}" for u in uuids]
+
     def create_configuration(
         self,
         connector: str,
@@ -1714,6 +1730,7 @@ class ConnectorsAPI(BaseAPI):
         default: bool = False,
         config_id: str | None = None,
         agent: str | None = None,
+        teams: list[str] | None = None,
         validate: bool = True,
         autofill: bool = True,
         refuse_unknown: bool | None = None,
@@ -1748,6 +1765,13 @@ class ConnectorsAPI(BaseAPI):
                 ``agentId`` or uuid; the configuration is attached to that
                 agent's own install of the connector. Omit to use
                 the appliance's self-agent.
+            teams: owner teams -- names, uuids or ``/api/3/teams/<uuid>`` IRIs;
+                omit for a public configuration. A
+                configuration with owner teams is *Private* in the UI: only
+                members of those teams see it in the connector's page and may
+                run actions with it (others get ``CS-INTEGRATION-5``; live-verified
+                on 8.0.0). Note ``GET /api/integration/configuration/`` still lists
+                it, with its non-secret fields, to anyone with Connectors read.
             validate: structurally check ``config`` against the connector's
                 schema first (via :meth:`validate_config`) and raise on a missing
                 required field -- turns the server's opaque 500 into a clear
@@ -1828,6 +1852,8 @@ class ConnectorsAPI(BaseAPI):
             body["config_id"] = config_id
         if agent is not None:
             body["agent"] = agent
+        if teams is not None:
+            body["teams"] = self._team_iris(teams)
         try:
             resp = self.client.post("/api/integration/configuration/", data=body)
         except APIError as e:
@@ -1844,6 +1870,7 @@ class ConnectorsAPI(BaseAPI):
                     version=version,
                     default=default,
                     agent=agent,
+                    teams=teams,
                     validate=False,  # already validated
                     autofill=False,  # already autofilled
                 )
@@ -1863,6 +1890,7 @@ class ConnectorsAPI(BaseAPI):
         version: str | None = None,
         default: bool = False,
         agent: str | None = None,
+        teams: list[str] | None = None,
         validate: bool = True,
         autofill: bool = True,
         refuse_unknown: bool | None = None,
@@ -1897,6 +1925,13 @@ class ConnectorsAPI(BaseAPI):
             default: mark this the connector's default configuration.
             agent: run the connector on a remote agent -- name, ``agentId`` or
                 uuid (omit to keep existing).
+            teams: owner teams -- names, uuids or ``/api/3/teams/<uuid>`` IRIs.
+                Omit to keep the current ones; ``[]`` makes it public. A
+                configuration with owner teams is *Private* in the UI: only
+                members of those teams see it in the connector's page and may
+                run actions with it (others get ``CS-INTEGRATION-5``; live-verified
+                on 8.0.0). Note ``GET /api/integration/configuration/`` still lists
+                it, with its non-secret fields, to anyone with Connectors read.
             validate: structurally check ``config`` against the schema first
                 (default ``True``).
             autofill: fill any schema-defaulted fields ``config`` omits (default ``True``).
@@ -1958,6 +1993,8 @@ class ConnectorsAPI(BaseAPI):
         }
         if agent is not None:
             body["agent"] = agent
+        if teams is not None:  # omitted, the PUT keeps the current owner teams (live-verified on 8.0.0)
+            body["teams"] = self._team_iris(teams)
         resp = self.client.put(f"/api/integration/configuration/{config_id}/", data=body)
         if refresh:
             self.clear_cache()
@@ -2307,6 +2344,7 @@ class ConnectorsAPI(BaseAPI):
         version: str | None = None,
         default: bool = False,
         agent: str | None = None,
+        teams: list[str] | None = None,
         validate: bool = True,
         autofill: bool = True,
         refuse_unknown: bool | None = None,
@@ -2337,6 +2375,8 @@ class ConnectorsAPI(BaseAPI):
             default: mark this the connector's default configuration.
             agent: run the connector on a remote agent -- name, ``agentId`` or
                 uuid (omit for self-agent).
+            teams: owner teams (names, uuids or IRIs) that make it Private; see
+                :meth:`create_configuration`. Omit to keep an existing row's teams.
             validate: structurally check ``config`` against the schema first
                 (default ``True``).
             autofill: fill any schema-defaulted fields ``config`` omits,
@@ -2380,6 +2420,7 @@ class ConnectorsAPI(BaseAPI):
                     version=version,
                     default=default,
                     agent=keep_agent,
+                    teams=teams,
                     validate=validate,
                     autofill=autofill,
                     refuse_unknown=refuse_unknown,
@@ -2391,6 +2432,7 @@ class ConnectorsAPI(BaseAPI):
                 version=version,
                 default=default,
                 agent=agent,
+                teams=teams,
                 validate=validate,
                 autofill=autofill,
                 refuse_unknown=refuse_unknown,

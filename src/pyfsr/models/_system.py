@@ -335,13 +335,31 @@ class User(BaseRecord):
         return " ".join(parts) or None
 
 
+class TeamRef(BaseRecord):
+    """Another team as it appears in a team's ``parents``/``children``/``siblings``.
+
+    With ``$relationships=true`` each row is the related team record (``@id``,
+    ``uuid``, ``name``, ``description``); without it the row is the bare IRI
+    string, which is why :class:`Team` types these lists as ``TeamRef | str``.
+    """
+
+    name: str | None = None
+    description: str | None = None
+
+
 class Team(BaseRecord):
     """A FortiSOAR **team** record from ``/api/3/teams/``.
 
     Teams own records (the ``owners`` relationship) and scope visibility. The
-    module slug is ``teams``; ``@type`` on the wire is ``Team``. The schema is
-    deliberately slim - verified against a live 7.6.5 box, a team record carries
-    only ``name``/``description``/``importedBy`` beyond the JSON-LD/uuid envelope.
+    module slug is ``teams``; ``@type`` on the wire is ``Team``. Live-verified on
+    8.0.0 (``$relationships=true``) a team carries ``name``, ``description``,
+    ``importedBy``, its members (``actors``) and its place in the team hierarchy
+    (``parents``, ``children``, ``siblings``).
+
+    The hierarchy decides who sees owned records: members of a *parent* team see
+    and edit what its child teams own, child teams of one parent do not see each
+    other, and siblings share both ways. Write it with
+    :meth:`~pyfsr.api.teams.TeamsAPI.create` / ``update`` / ``add_parents``.
     """
 
     name: str | None = None
@@ -353,9 +371,25 @@ class Team(BaseRecord):
     # actors and Appliance actors (the "Playbook"/"Access Node" engine appliances),
     # so this parses as the full Actor union, falling back to the IRI string.
     actors: list[Actor | str] | None = None
-    parents: list[Any] | None = None
-    siblings: list[Any] | None = None
-    children: list[Any] | None = None
+    parents: list[TeamRef | str] | None = None
+    siblings: list[TeamRef | str] | None = None
+    children: list[TeamRef | str] | None = None
+
+    def _names(self, rows: list[TeamRef | str] | None) -> list[str]:
+        return [r.name or r.uuid or "" if isinstance(r, TeamRef) else r for r in rows or []]
+
+    @property
+    def parent_names(self) -> list[str]:
+        """Parent team names (IRIs for rows read without ``$relationships``)."""
+        return self._names(self.parents)
+
+    @property
+    def child_names(self) -> list[str]:
+        return self._names(self.children)
+
+    @property
+    def sibling_names(self) -> list[str]:
+        return self._names(self.siblings)
 
 
 class EmailTemplate(BaseRecord):
