@@ -53,6 +53,11 @@ All notable changes to this project will be documented in this file.
 - **`playbooks.trigger_by_name(name, deferred=True)`** on 8.0.0: the deferred route 404s for every
   endpoint name, before authentication (a bogus credential gets the same 404; the plain route answers the
   same name). The `ResourceNotFoundError` now says so and points at `deferred=False`. Live-verified on 8.0.0.
+- **API-key guard covers the whole bulk family.** `/api/3/insert`, `/api/3/update` and `/api/3/delete`
+  have bulkupsert's sub-request bug: every row fails with `Invalid credentials.` under an API key, while
+  the single-record routes work. `records(...).bulk_insert`, `widgets.remove` and any raw call to those
+  routes now raise `UnsupportedAuthOperationError` up front, as bulkupsert already did. Live-verified on
+  8.0.0 and 8.0.1.
 
 ## [0.25.1] - 2026-10-14
 

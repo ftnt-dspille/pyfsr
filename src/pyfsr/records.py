@@ -1036,7 +1036,7 @@ class RecordSet(Generic[T]):
             envelope; this method normalizes that case so ``parse=True``
             always yields a consistent :class:`BulkUpsertResult` either way.
 
-        >>> client = demo_client()
+        >>> client = demo_client_jwt()  # bulk routes need JWT (API keys are rejected)
         >>> result = client.records("alerts").bulk_insert(
         ...     [{"name": "Response Capture Test Alert"}], parse=True
         ... )

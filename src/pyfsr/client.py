@@ -107,6 +107,10 @@ def _mask_headers(headers: dict) -> dict:
     return masked
 
 
+#: Bulk routes whose per-row sub-requests reject API keys ("Invalid credentials.").
+_BULK_ROUTES = ("/api/3/bulkupsert/", "/api/3/insert/", "/api/3/update/", "/api/3/delete/")
+
+
 class FortiSOAR:
     """
     Main FortiSOAR client class for interacting with the FortiSOAR API.
@@ -612,14 +616,18 @@ class FortiSOAR:
         # Check operation support based on endpoint
         if endpoint.startswith("/api/auth/"):
             self.auth.check_operation_supported(BaseAuth.OPERATION_AUTH)
-        # /api/3/bulkupsert/* rejects API-key auth on 8.0.0, answering a
-        # misleading `Invalid credentials.` 500 (product bug -- see
-        # troubleshooting/BUG-bulkupsert-api-key-invalid-credentials.md).
+        # The bulk routes (/api/3/bulkupsert|insert|update|delete/*) reject
+        # API-key auth on 8.0.0 and 8.0.1: each row runs as a sub-request, and
+        # every one fails with a misleading `Invalid credentials.` (product bug
+        # -- see troubleshooting/BUG-bulkupsert-api-key-invalid-credentials.md).
         # Fail fast with an actionable message rather than forwarding that
         # 500, which is especially treacherous for playbook creation:
         # upsert_playbooks routes NEW rows through bulkupsert and silently
         # creates nothing while reporting success. JWT is unaffected.
-        if "/bulkupsert/" in endpoint and BaseAuth.OPERATION_BULKUPSERT in getattr(
+        bulk = endpoint if endpoint.startswith("/") else f"/{endpoint}"
+        if not bulk.startswith("/api/"):
+            bulk = f"/api/3{bulk}"
+        if bulk.startswith(_BULK_ROUTES) and BaseAuth.OPERATION_BULKUPSERT in getattr(
             self.auth, "unsupported_operations", set()
         ):
             from .exceptions import UnsupportedAuthOperationError
@@ -628,14 +636,13 @@ class FortiSOAR:
                 BaseAuth.OPERATION_BULKUPSERT,
                 self.auth.auth_type,
                 message=(
-                    f"{endpoint} cannot be called with API-key auth: the "
-                    "/api/3/bulkupsert/* endpoint family rejects API keys on "
-                    "FortiSOAR 8.0.0 with a misleading 'Invalid credentials.' "
-                    "500 (product bug). Use a username/password (JWT) client "
-                    "for anything that creates playbooks, collections, or "
-                    "bulk-inserts records -- e.g. FortiSOAR(base_url, "
-                    "username=..., password=...). Plain POST/PUT on "
-                    "/api/3/workflows still work with an API key."
+                    f"{endpoint} cannot be called with API-key auth: the bulk "
+                    "routes (/api/3/bulkupsert, /insert, /update, /delete) run each row "
+                    "as a sub-request, and those reject API keys with a misleading "
+                    "'Invalid credentials.' (product bug, live-verified on 8.0.0 and "
+                    "8.0.1). Use a username/password (JWT) client -- FortiSOAR(base_url, "
+                    "username=..., password=...) -- or the single-record routes "
+                    "(POST/PUT/DELETE /api/3/<module>[/<uuid>]), which take an API key."
                 ),
             )
 
