@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **`search.query_related(collection, record_id, field, filters=..., logic="AND")`** -- query the
+  records linked to one record (`POST /api/query/{collection}/{id}/{field}`, e.g. an alert's
+  `indicators`). The server needs both `logic` and `filters` in the body; an empty body is a 400.
+  Live-verified on 8.0.0 and 8.0.1 with a JWT and with an API key.
+
 - **`pyfsr connector icon <svg> --connector DIR`** (and `pyfsr.connector_icon.make_connector_icons`) -- build
   a connector's large (80x80) and small (32x32) icon PNGs from an SVG, e.g. one from icons.fortinet.com,
   laid out like the stock Fortinet connector icons. Draws the SVG with whichever of `rsvg-convert`,
@@ -38,6 +43,14 @@ All notable changes to this project will be documented in this file.
   It warns when `SOC Team` does not exist. Documented on `agents.create` and in the `api_keys` module docs.
 
 ### Fixed
+- **`search.run_persisted` / `system_queries.run` called a route that does not exist.**
+  `POST /api/query/{collection}/{query_id}` 404s on 8.0.0 and 8.0.1. They now load the saved query
+  (`/api/3/user_queries`, then `/api/3/system_queries`) and post its body to `POST
+  /api/query/{collection}`, as the UI does. `limit`/`page` go out as `$limit`/`$page` (the server
+  ignores them in the body); `orderby` replaces the stored `sort` (`$orderby` is ignored too).
+- **`api_keys.ensure_usable` no longer logs "key ... has NO roles or teams bound".** The warning is
+  for a bare `api_users.create`; `ensure_usable` binds the key straight after. New
+  `api_users.create(warn_unbound=False)` turns it off.
 - **Config export no longer polls forever.** `export_by_template_uuid` / `export_by_template_name` /
   `export_connector` / `export_record_data` gave up never: a job that fails or never starts left the
   caller spinning. The poll now raises `APIError` on the job's `errorMessage` and `TimeoutError` after

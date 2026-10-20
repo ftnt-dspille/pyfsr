@@ -404,7 +404,7 @@ class _FakeApiUsers:
         self._regen = regen_resp if regen_resp is not None else {"uuid": "u-1", "api_key": {"key": "fresh"}}
         self.calls = []  # (op, uuid-ish)
 
-    def create(self, *, api_key_validity):
+    def create(self, *, api_key_validity, warn_unbound=True):
         self.calls.append(("create", api_key_validity))
         return self._create
 
@@ -660,8 +660,39 @@ def test_search_min_length_enforced():
         SearchAPI(FakeClient()).search("ab", index=["alerts"])
 
 
-def test_search_run_persisted():
+def test_search_run_persisted_replays_the_saved_body():
+    # There is no "run saved query" route: load the query, post its body.
+    saved = {"query": {"logic": "AND", "filters": [{"field": "name", "operator": "eq", "value": "x"}]}}
+    c = FakeClient(get_resp=saved)
+    SearchAPI(c).run_persisted("alerts", "q-1", limit=50, orderby="-name")
+    assert c.calls[0][:2] == ("GET", "/api/3/user_queries/q-1")
+    method, endpoint, data, params = c.calls[-1]
+    assert endpoint == "/api/query/alerts"
+    assert data["filters"] == saved["query"]["filters"]
+    assert data["sort"] == [{"field": "name", "direction": "DESC"}]
+    assert params == {"$limit": 50}
+
+
+def test_search_run_persisted_falls_back_to_system_queries():
+    from pyfsr.exceptions import ResourceNotFoundError
+
+    class Client(FakeClient):
+        def get(self, endpoint, params=None, **kw):
+            self.calls.append(("GET", endpoint, params))
+            if "user_queries" in endpoint:
+                raise ResourceNotFoundError("not found")
+            return {"query": {"logic": "AND", "filters": []}}
+
+    c = Client()
+    SearchAPI(c).run_persisted("threat_intel_feeds", "ds-1")
+    assert [call[1] for call in c.calls] == [
+        "/api/3/user_queries/ds-1",
+        "/api/3/system_queries/ds-1",
+        "/api/query/threat_intel_feeds",
+    ]
+
+
+def test_search_query_related_always_sends_logic_and_filters():
     c = FakeClient()
-    SearchAPI(c).run_persisted("alerts", "q-1", limit=50, orderby="+name")
-    assert c.calls[-1][1] == "/api/query/alerts/q-1"
-    assert c.calls[-1][2] == {"$limit": 50, "$orderby": "+name"}
+    SearchAPI(c).query_related("alerts", "a-1", "indicators", limit=5)
+    assert c.calls[-1] == ("POST", "/api/query/alerts/a-1/indicators", {"logic": "AND", "filters": []}, {"$limit": 5})

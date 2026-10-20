@@ -330,7 +330,7 @@ class ApiKeysAPI(BaseAPI):
             # and read it straight from the regenerate response.
             plaintext = _response_plaintext(client.api_users.regenerate(user_uuid, api_key_validity=api_key_validity))
         else:
-            u = client.api_users.create(api_key_validity=api_key_validity)
+            u = client.api_users.create(api_key_validity=api_key_validity, warn_unbound=False)
             user_uuid = u["uuid"]
             binding = self.create(name=name, user_uuid=user_uuid, roles=roles, teams=teams)
             created = True

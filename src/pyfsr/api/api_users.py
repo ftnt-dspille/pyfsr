@@ -117,6 +117,7 @@ class ApiKeyUsersAPI(BaseAPI):
         api_key_validity: int,
         type: int = _TYPE_API_KEY,
         status: int = _STATUS_ACTIVE,
+        warn_unbound: bool = True,
     ) -> ApiKeyUser:
         """Create an API-key user (``POST /api/auth/users``).
 
@@ -132,6 +133,8 @@ class ApiKeyUsersAPI(BaseAPI):
            unbound key authenticates (200 on read endpoints) but gets 403 on
            every write -- FortiSOAR requires at least one team to create records.
            Prefer ``ensure_usable`` unless you need the two-step control.
+           A warning is logged as a reminder; pass ``warn_unbound=False`` when
+           the binding follows straight after (``ensure_usable`` does).
 
         Raises:
             ApikeyCreateUnavailable: when the box has the 7.6.5/8.0.0
@@ -164,13 +167,14 @@ class ApiKeyUsersAPI(BaseAPI):
             raise
         members = self._members(resp)
         user = ApiKeyUser.model_validate(members[0] if members else (resp if isinstance(resp, dict) else {}))
-        _logger.warning(
-            "api_users.create: key for user %s is created but has NO roles or "
-            "teams bound -- it will get 403 on all writes. Call "
-            "client.api_keys.create(name=..., user_uuid=...) or "
-            "client.api_keys.ensure_usable(name=..., ...) to bind permissions.",
-            user.get("uuid"),
-        )
+        if warn_unbound:
+            _logger.warning(
+                "api_users.create: key for user %s is created but has NO roles or "
+                "teams bound -- it will get 403 on all writes. Call "
+                "client.api_keys.create(name=..., user_uuid=...) or "
+                "client.api_keys.ensure_usable(name=..., ...) to bind permissions.",
+                user.get("uuid"),
+            )
         return user
 
     def lifecycle(

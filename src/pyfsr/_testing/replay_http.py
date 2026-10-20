@@ -202,10 +202,12 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("GET", "/api/auth/config", cap.AUTH_CONFIG_TOKEN_ROWS),
         # SearchAPI -- global search + persisted-query execution.
         _entry("POST", "/api/search", cap.GLOBAL_SEARCH_RESPONSE),
+        _entry("POST", "/api/query/threat_intel_feeds", cap.PERSISTED_QUERY_RESPONSE),
+        _entry("GET", "/api/3/user_queries/7d245801-38d7-4400-9453-7bf7c42b7353", {}, status=404),
         _entry(
             "POST",
-            "/api/query/alerts/6f1c9e2a-6b7a-4b0a-9a1e-2f6a5c9b3d10",
-            cap.PERSISTED_QUERY_RESPONSE,
+            "/api/query/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39/indicators",
+            cap.RELATED_QUERY_RESPONSE,
         ),
         # FeedsAPI -- bulk trigger-bypassing ingest for threat-intel + records.
         _entry("POST", "/api/ingest-feeds/indicators", cap.INDICATORS_INGEST_RESPONSE),
