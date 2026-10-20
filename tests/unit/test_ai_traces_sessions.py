@@ -370,3 +370,36 @@ def test_connector_assistant_page_context():
     )
     AIApi(c).connector_assistant().ask("build a connector", interval=0)
     assert c.calls[0][2]["context"] == {"pageName": "main.marketplace.workspace"}
+
+
+# ------------------------------------------------------- version gate (8.0.0)
+
+
+class _NoTracesClient(FakeClient):
+    """An appliance whose gateway refuses every traces route, like 8.0.0 does."""
+
+    def __init__(self, version):
+        super().__init__()
+        self._version = version
+
+    def version_tuple(self):
+        return self._version
+
+    def get(self, endpoint, params=None, **kw):
+        from pyfsr.exceptions import PermissionError as FortiSOARPermissionError
+
+        raise FortiSOARPermissionError("Access Denied.")
+
+
+def test_traces_on_8_0_0_say_they_need_8_0_1():
+    from pyfsr.exceptions import APIError
+
+    with pytest.raises(APIError, match=r"need FortiSOAR 8\.0\.1\+; this appliance is 8\.0\.0"):
+        AITracesAPI(_NoTracesClient((8, 0, 0))).list()
+
+
+def test_traces_denial_on_8_0_1_is_left_alone():
+    from pyfsr.exceptions import PermissionError as FortiSOARPermissionError
+
+    with pytest.raises(FortiSOARPermissionError):
+        AITracesAPI(_NoTracesClient((8, 0, 1))).health()

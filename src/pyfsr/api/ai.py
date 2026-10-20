@@ -429,9 +429,33 @@ class AITracesAPI(BaseAPI):
         ...     print("  " * depth, node.name, node.duration_ms)
     """
 
+    #: First release with the tracer store; older ones answer every traces route 403/404.
+    MIN_VERSION = (8, 0, 1)
+
+    def _too_old(self, exc: Exception) -> Exception:
+        """Turn the 403/404 an appliance without traces gives into an error that says so."""
+        version_tuple = getattr(self.client, "version_tuple", None)
+        have = version_tuple() if version_tuple else None
+        if have and have < self.MIN_VERSION:
+            need = ".".join(map(str, self.MIN_VERSION))
+            return APIError(f"AI traces need FortiSOAR {need}+; this appliance is {'.'.join(map(str, have))}")
+        return exc
+
+    def _get(self, path: str, **kwargs: Any) -> Any:
+        try:
+            return self.client.get(path, **kwargs)
+        except (FortiSOARPermissionError, ResourceNotFoundError) as exc:
+            raise self._too_old(exc) from exc
+
+    def _delete(self, path: str, **kwargs: Any) -> Any:
+        try:
+            return self.client.delete(path, **kwargs)
+        except (FortiSOARPermissionError, ResourceNotFoundError) as exc:
+            raise self._too_old(exc) from exc
+
     def health(self) -> bool:
         """``True`` when the tracer store answers ``GET /api/ai/traces/health``."""
-        resp = self.client.get(f"{_TRACES}/health")
+        resp = self._get(f"{_TRACES}/health")
         return isinstance(resp, dict) and resp.get("status") == "ok"
 
     def list(
@@ -464,7 +488,7 @@ class AITracesAPI(BaseAPI):
             params["session_id"] = session_id
         if cursor is not None:
             params["cursor"] = str(cursor)
-        resp = self.client.get(f"{_TRACES}/", params=params)
+        resp = self._get(f"{_TRACES}/", params=params)
         rows = resp.get("traces", []) if isinstance(resp, dict) else []
         return [TraceSummary.model_validate(r) for r in rows]
 
@@ -521,7 +545,7 @@ class AITracesAPI(BaseAPI):
         sub-agent runs it submitted.
         """
         _check_io(io)
-        resp = self.client.get(f"{_TRACES}/{trace_id}", params={"depth": depth, "io": io})
+        resp = self._get(f"{_TRACES}/{trace_id}", params={"depth": depth, "io": io})
         return TraceNode.model_validate((resp or {}).get("root") or {})
 
     def execution_tree(
@@ -533,20 +557,20 @@ class AITracesAPI(BaseAPI):
         ``max_traces`` (1-100). An investigation typically spans ~10 traces.
         """
         _check_io(io)
-        resp = self.client.get(
+        resp = self._get(
             f"{_TRACES}/{trace_id}/execution-tree", params={"depth": depth, "io": io, "max_traces": max_traces}
         )
         return ExecutionTree.model_validate(resp if isinstance(resp, dict) else {})
 
     def spans(self, trace_id: str) -> list[TraceSpan]:
         """Every span of one trace, flat, with full I/O (``.../{trace_id}/spans``)."""
-        resp = self.client.get(f"{_TRACES}/{trace_id}/spans")
+        resp = self._get(f"{_TRACES}/{trace_id}/spans")
         rows = resp.get("spans", []) if isinstance(resp, dict) else []
         return [TraceSpan.model_validate(r) for r in rows]
 
     def span(self, span_id: str) -> TraceSpan:
         """One span with full input/output -- the Step Details panel (``.../spans/{span_id}``)."""
-        return TraceSpan.model_validate(self.client.get(f"{_TRACES}/spans/{span_id}") or {})
+        return TraceSpan.model_validate(self._get(f"{_TRACES}/spans/{span_id}") or {})
 
     def span_subtree(self, span_id: str, *, depth: int = 10, io: str = "summary") -> TraceNode:
         """The subtree rooted at one span, e.g. a single agent's work inside a larger run.
@@ -561,7 +585,7 @@ class AITracesAPI(BaseAPI):
         """
         _check_io(io)
         try:
-            resp = self.client.get(f"{_TRACES}/spans/{span_id}/tree", params={"depth": depth, "io": io})
+            resp = self._get(f"{_TRACES}/spans/{span_id}/tree", params={"depth": depth, "io": io})
             return TraceNode.model_validate((resp or {}).get("root") or {})
         except ResourceNotFoundError:
             trace_id = self.span(span_id).trace_id
@@ -575,7 +599,7 @@ class AITracesAPI(BaseAPI):
 
     def span_children(self, span_id: str) -> list[dict[str, Any]]:
         """Direct children of a span (``.../spans/{span_id}/children``)."""
-        resp = self.client.get(f"{_TRACES}/spans/{span_id}/children")
+        resp = self._get(f"{_TRACES}/spans/{span_id}/children")
         return resp.get("children", []) if isinstance(resp, dict) else []
 
     def span_lineage(self, span_id: str, *, direction: str = "both", max_hops: int = 5) -> dict[str, Any]:
@@ -592,17 +616,15 @@ class AITracesAPI(BaseAPI):
         """
         if direction not in ("both", "upstream", "downstream"):
             raise ValueError(f"direction must be both/upstream/downstream, got {direction!r}")
-        return self.client.get(
-            f"{_TRACES}/spans/{span_id}/lineage", params={"direction": direction, "max_hops": max_hops}
-        )
+        return self._get(f"{_TRACES}/spans/{span_id}/lineage", params={"direction": direction, "max_hops": max_hops})
 
     def tokens(self, trace_id: str) -> dict[str, Any]:
         """Token totals for one trace (``.../tokens/{trace_id}``)."""
-        return self.client.get(f"{_TRACES}/tokens/{trace_id}")
+        return self._get(f"{_TRACES}/tokens/{trace_id}")
 
     def session_tokens(self, session_id: str) -> dict[str, Any]:
         """Token totals across a chat session (``.../tokens/session/{session_id}``)."""
-        return self.client.get(f"{_TRACES}/tokens/session/{session_id}")
+        return self._get(f"{_TRACES}/tokens/session/{session_id}")
 
     def llm_calls(self, trace_id: str) -> list[TraceSpan]:
         """Every LLM call in a run and its sub-runs, with provider/model/usage filled in.
@@ -673,7 +695,7 @@ class AITracesAPI(BaseAPI):
         if (days is None) == (before is None):
             raise ValueError("pass exactly one of days= or before=")
         body: dict[str, Any] = {"days": int(days)} if days is not None else {"date": before}
-        return self.client.delete(f"{_TRACES}/delete", data=body)
+        return self._delete(f"{_TRACES}/delete", data=body)
 
 
 #: Wrapper spans around every LLM call; not reasoning steps, and their errors are noise.

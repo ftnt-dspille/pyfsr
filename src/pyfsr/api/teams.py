@@ -22,6 +22,7 @@ from typing import Any
 
 from ..models import Team
 from ..pagination import extract_members
+from ..utils.iri import uuid_from_iri
 from ..utils.validation import is_uuid as _is_uuid
 from .base import BaseAPI
 
@@ -39,7 +40,9 @@ class TeamsAPI(BaseAPI):
         return self._team_cache
 
     def _resolve_team_uuid(self, team: str) -> str:
-        """Accept a team uuid or name and return the uuid."""
+        """Accept a team uuid, IRI (``/api/3/teams/<uuid>``) or name and return the uuid."""
+        if team.startswith("/api/3/teams/"):
+            team = uuid_from_iri(team) or team
         if _is_uuid(team):
             return team.strip()
         record = self._team_by_name().get(team)
@@ -57,7 +60,7 @@ class TeamsAPI(BaseAPI):
         return self.team_map().get(name)
 
     def _resolve_teams(self, teams: list[str]) -> list[str]:
-        """Accept team UUIDs or names; return UUIDs. Raises ``ValueError`` for unknown names."""
+        """Accept team UUIDs, IRIs or names; return UUIDs. Raises ``ValueError`` for unknown names."""
         return [self._resolve_team_uuid(t) for t in teams]
 
     # ------------------------------------------------------------------- read

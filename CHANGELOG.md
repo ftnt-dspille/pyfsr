@@ -43,6 +43,13 @@ All notable changes to this project will be documented in this file.
   caller spinning. The poll now raises `APIError` on the job's `errorMessage` and `TimeoutError` after
   600s, naming a job that never left 0%. Live-verified on 8.0.0: an API-key export job is created and
   never runs (the `requires_jwt` guard is right; its message now says so).
+- **`client.ai.traces` on an appliance older than 8.0.1** said "Access Denied." (a permission error) for
+  every call; the tracer store only exists from 8.0.1. It now raises `APIError("AI traces need FortiSOAR
+  8.0.1+; this appliance is 8.0.0")`. Live-verified on 8.0.0.
+- **Role and team IRIs** (`/api/3/roles/<uuid>`, `/api/3/teams/<uuid>`) are accepted wherever a role or team
+  uuid or name is, as `api_keys.create` already documented. A person's `roles` / `teams` come back as IRIs, so
+  passing them straight to `api_keys.ensure_usable(roles=..., teams=...)` raised "role not found" -- after it
+  had already created the API-key user, leaving an unbound key behind.
 
 ## [0.25.1] - 2026-10-14
 
