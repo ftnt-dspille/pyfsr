@@ -86,9 +86,12 @@ def complete_initial_password_reset(
     except Exception:
         body = {}
     if not (r.status_code == 401 and body.get("strategy") == "reset" and body.get("token")):
+        # Scrub credential-shaped keys (the reset JWT) before surfacing in an
+        # exception, which can land in logs. Report only safe diagnostic fields.
+        safe = {k: v for k, v in body.items() if k not in ("token", "password")}
         raise ValueError(
             f"expected 401 strategy=reset + token on first login; "
-            f"got HTTP {r.status_code} body={body!r} -- check loginid/initial password, "
+            f"got HTTP {r.status_code} body={safe!r} -- check loginid/initial password, "
             f"or the user may not need a reset (try a normal login)"
         )
     reset_token = body["token"]
@@ -109,8 +112,15 @@ def complete_initial_password_reset(
         verify=verify, timeout=timeout,
     )
     if r2.status_code not in (200, 204):
+        # Don't echo the raw body: the request carried a password + JWT and the
+        # server may reflect fragments. Keep status + any safe reason text.
+        try:
+            err = r2.json()
+            msg = err.get("message") or err.get("error") or err.get("reason") or "no detail"
+        except Exception:
+            msg = "non-JSON response"
         raise RuntimeError(
-            f"PUT /api/auth/users failed: HTTP {r2.status_code} body={r2.text[:300]}"
+            f"PUT /api/auth/users failed: HTTP {r2.status_code} ({msg})"
         )
     return {"loginid": loginid, "user_uuid": user_uuid, "status": "reset-complete"}
 
