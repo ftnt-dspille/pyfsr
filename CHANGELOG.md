@@ -37,6 +37,13 @@ All notable changes to this project will be documented in this file.
   (the router logs `404 .../api/3/agents/<uuid>`), while the same call works with a username/password.
   It warns when `SOC Team` does not exist. Documented on `agents.create` and in the `api_keys` module docs.
 
+### Fixed
+- **Config export no longer polls forever.** `export_by_template_uuid` / `export_by_template_name` /
+  `export_connector` / `export_record_data` gave up never: a job that fails or never starts left the
+  caller spinning. The poll now raises `APIError` on the job's `errorMessage` and `TimeoutError` after
+  600s, naming a job that never left 0%. Live-verified on 8.0.0: an API-key export job is created and
+  never runs (the `requires_jwt` guard is right; its message now says so).
+
 ## [0.25.1] - 2026-10-14
 
 ### Added

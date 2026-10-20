@@ -12,6 +12,7 @@ import pytest
 
 from pyfsr import Query
 from pyfsr.api.export_config import ExportConfigAPI, ExportTemplate
+from pyfsr.exceptions import APIError
 
 
 class FakeClient:
@@ -279,6 +280,25 @@ def test_export_with_template_polls_then_downloads(tmp_path):
     result = api._export_with_template("tmpl-1", output_path=str(out), poll_interval=0)
     assert result == str(out)
     assert out.read_bytes() == b"ZIPBYTES"
+
+
+def test_poll_export_raises_on_error_message():
+    def handler(m, u, **k):
+        return {"status": None, "errorMessage": "template not found"}
+
+    api, _ = _api(handler)
+    with pytest.raises(APIError, match="template not found"):
+        api._poll_export_completion("ejob-1", poll_interval=0)
+
+
+def test_poll_export_times_out_on_a_job_that_never_starts():
+    # What an API-key export looks like on 8.0.0: the job exists, nothing runs.
+    def handler(m, u, **k):
+        return {"status": None, "errorMessage": "", "progressPercent": 0}
+
+    api, _ = _api(handler)
+    with pytest.raises(TimeoutError, match="never started"):
+        api._poll_export_completion("ejob-1", poll_interval=0, timeout=0)
 
 
 # --------------------------------------------------------------- ExportTemplate builder
