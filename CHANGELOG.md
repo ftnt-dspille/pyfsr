@@ -43,6 +43,17 @@ All notable changes to this project will be documented in this file.
   It warns when `SOC Team` does not exist. Documented on `agents.create` and in the `api_keys` module docs.
 
 ### Fixed
+- **API-key clients now fail fast on three more routes FortiSOAR refuses them on**, with an
+  `UnsupportedAuthOperationError` that says to use a JWT client instead of the server's bare error.
+  Each was measured on 8.0.0 and 8.0.1 with an API key that has the JWT user's roles and teams:
+  - create/update of `people`, `appliances` and `api_keys` (`users.create/update`,
+    `api_keys.create/update`, or any `POST`/`PUT` to those paths): the server answers 403 "Access
+    Denied." whatever the key's role (`OPERATION_ACTOR_WRITE`, checked in `client.request`);
+  - any direct `/ai/...` call, e.g. `ai.import_agent`: fsr-ai takes only a Bearer JWT or HMAC and
+    answers 401 (`OPERATION_AI_DIRECT`);
+  - config import (`import_config.import_file`, `dry_run`, `generate_options`, `trigger`): the job's
+    options are never generated and the import never runs, the same product bug as export. API-key
+    clients now list `OPERATION_CONFIG_IMPORT` as unsupported.
 - **`search.run_persisted` / `system_queries.run` called a route that does not exist.**
   `POST /api/query/{collection}/{query_id}` 404s on 8.0.0 and 8.0.1. They now load the saved query
   (`/api/3/user_queries`, then `/api/3/system_queries`) and post its body to `POST

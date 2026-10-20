@@ -48,6 +48,8 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..auth.base import BaseAuth
+from ..auth.guards import requires_jwt
 from ..exceptions import FortiSOARException, describe_migrate_failure, is_migrate_transient
 from ..exports import Export, ExportKind, Finding
 from ..models._integration import ImportJobResult
@@ -189,6 +191,9 @@ class ImportConfigAPI(BaseAPI):
             raise ValueError(f"could not determine import-job uuid from response: {resp!r}")
         return uuid
 
+    @requires_jwt(
+        BaseAuth.OPERATION_CONFIG_IMPORT, "an API key's import job is created but its options are never generated"
+    )
     def generate_options(self, job_uuid: str) -> None:
         """Trigger option generation for an import job (async; returns immediately).
 
@@ -238,6 +243,9 @@ class ImportConfigAPI(BaseAPI):
             time.sleep(interval)
         raise TimeoutError(f"import job {job_uuid} options not ready after {timeout}s")
 
+    @requires_jwt(
+        BaseAuth.OPERATION_CONFIG_IMPORT, "an API key's import job is created but its options are never generated"
+    )
     def trigger(self, job_uuid: str) -> dict[str, Any]:
         """Start the import run (``PUT /api/import/<job>``; async)."""
         return self.client.put(f"/api/import/{job_uuid}")
@@ -309,6 +317,9 @@ class ImportConfigAPI(BaseAPI):
             time.sleep(interval)
 
     # ------------------------------------------------------------- high level
+    @requires_jwt(
+        BaseAuth.OPERATION_CONFIG_IMPORT, "an API key's import job is created but its options are never generated"
+    )
     def dry_run(
         self,
         zip_path: str,
@@ -394,6 +405,9 @@ class ImportConfigAPI(BaseAPI):
             except Exception:  # noqa: BLE001 -- leaving a stray job behind is not worth raising over
                 pass
 
+    @requires_jwt(
+        BaseAuth.OPERATION_CONFIG_IMPORT, "an API key's import job is created but its options are never generated"
+    )
     def import_file(
         self,
         zip_path: str,

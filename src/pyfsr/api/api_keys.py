@@ -142,7 +142,7 @@ class ApiKeysAPI(BaseAPI):
                 :meth:`~pyfsr.api.teams.TeamsAPI.team_uuid_by_name`).
 
         Example:
-            >>> client = demo_client()
+            >>> client = demo_client_jwt()
             >>> key = client.api_keys.create(
             ...     name="test-key",
             ...     user_uuid="550e8400-e29b-41d4-a716-446655440007"
@@ -164,7 +164,7 @@ class ApiKeysAPI(BaseAPI):
         ``roles``/``teams`` accept IRIs or names, like :meth:`create`.
 
         Example:
-            >>> client = demo_client()
+            >>> client = demo_client_jwt()
             >>> key = client.api_keys.update("660e8400-e29b-41d4-a716-446655440008", name="updated-key")
             >>> key["name"]
             'api-key-demo'

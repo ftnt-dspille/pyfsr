@@ -109,6 +109,8 @@ def _mask_headers(headers: dict) -> dict:
 
 #: Bulk routes whose per-row sub-requests reject API keys ("Invalid credentials.").
 _BULK_ROUTES = ("/api/3/bulkupsert/", "/api/3/insert/", "/api/3/update/", "/api/3/delete/")
+# A create or update of an Actor: the collection or one record, not a sub-route.
+_ACTOR_WRITE = re.compile(r"/api/3/(people|appliances|api_keys)(/[^/?]+)?/?(\?.*)?")
 
 
 class FortiSOAR:
@@ -643,6 +645,38 @@ class FortiSOAR:
                     "8.0.1). Use a username/password (JWT) client -- FortiSOAR(base_url, "
                     "username=..., password=...) -- or the single-record routes "
                     "(POST/PUT/DELETE /api/3/<module>[/<uuid>]), which take an API key."
+                ),
+            )
+
+        unsupported = getattr(self.auth, "unsupported_operations", set())
+        if (
+            method.upper() in ("POST", "PUT")
+            and _ACTOR_WRITE.fullmatch(bulk)
+            and BaseAuth.OPERATION_ACTOR_WRITE in unsupported
+        ):
+            from .exceptions import UnsupportedAuthOperationError
+
+            raise UnsupportedAuthOperationError(
+                BaseAuth.OPERATION_ACTOR_WRITE,
+                self.auth.auth_type,
+                message=(
+                    f"{method.upper()} {endpoint} cannot be called with API-key auth: FortiSOAR "
+                    "refuses an API key's create/update of people, appliances and api_keys "
+                    "(403 whatever the key's role; live-verified on 8.0.0 and 8.0.1). Use a "
+                    "username/password (JWT) client -- FortiSOAR(base_url, username=..., password=...)."
+                ),
+            )
+        if f"/{endpoint.lstrip('/')}".startswith("/ai/") and BaseAuth.OPERATION_AI_DIRECT in unsupported:
+            from .exceptions import UnsupportedAuthOperationError
+
+            raise UnsupportedAuthOperationError(
+                BaseAuth.OPERATION_AI_DIRECT,
+                self.auth.auth_type,
+                message=(
+                    f"{endpoint} cannot be called with API-key auth: /ai/... goes straight to "
+                    "fsr-ai, which accepts only a Bearer JWT or HMAC (401 for an API key). Use "
+                    "the /api/ai/... route (it takes an API key, but drops multipart uploads) "
+                    "or a username/password (JWT) client."
                 ),
             )
 
