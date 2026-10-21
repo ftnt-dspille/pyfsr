@@ -1,25 +1,99 @@
 # AGENTS.md -- pyfsr
 
-Guide for coding agents (Copilot, Cursor, Windsurf, Claude, etc.) working with
-pyfsr. For Jinja/picklist/audit details, see the sections below from the
-original file.
+Guide for coding agents (Claude Code, OpenCode, Copilot, Cursor, etc.) working
+with pyfsr, and for agents driving a FortiSOAR box THROUGH pyfsr's MCP server.
 
 ## What this is
 
 **pyfsr** is a batteries-included Python client for the FortiSOAR REST API --
-typed CRUD, query DSL, picklist resolution, connector execution, playbook-run
-history, and an AI/agent tool registry + MCP server. It also has a CLI for
-appliance ops, playbook authoring, and record management.
+typed CRUD, query DSL, picklist resolution, connector execution and
+installation, playbook-run history, user/module admin, and an AI/agent tool
+registry + MCP server (`pyfsr-mcp`). It also has a CLI for appliance ops,
+playbook authoring, connector development, and record management.
 
 The sibling [`fsr_playbooks`](https://pypi.org/project/fsr-playbooks/) package
 does YAML → FortiSOAR playbook **compilation**. pyfsr does the **transport**:
-push compiled playbooks, trigger them, query records. They're separate packages.
+push compiled playbooks, trigger them, query records. pyfsr's
+`compile_playbook_yaml`/`publish_playbook` tools call fsr_playbooks through the
+`pyfsr[playbooks]` extra, so an agent gets the whole authoring loop from one
+server.
+
+## Wire up your agent in two minutes
+
+```bash
+pip install 'pyfsr[mcp]'
+pyfsr agent init --url fortisoar.example.com --api-key '<your-api-key>'
+```
+
+`agent init` verifies the connection with a real whoami call, then prints the
+MCP config snippet to paste: `--claude-code` (a project `.mcp.json`),
+`--opencode` (`opencode.json`), `--copilot` (`.vscode/mcp.json`), or all three.
+Ready-made examples live in [`examples/mcp/`](examples/mcp/). No local install
+at all: configure the server command as
+`uvx --from 'pyfsr[mcp]' pyfsr-mcp`.
+
+First tool call in any session: `whoami` -- it confirms who you are, which box
+you're on, and the FortiSOAR version before anything else runs.
+
+## Safety model (read this before writing anything)
+
+Every agent surface (the MCP server, `to_anthropic_tools`/`to_openai_tools`,
+and `dispatch`) shares one policy gate:
+
+- `FSR_MCP_READONLY=1` -- mutating tools are hidden from the listing AND
+  refused if called by name. Start here when exploring an unfamiliar box.
+- `FSR_MCP_ALLOW_TOOLS` / `FSR_MCP_DENY_TOOLS` -- comma-separated tool names or
+  globs (e.g. `FSR_MCP_DENY_TOOLS=appliance_*,delete_*`).
+- High-impact tools (`delete_record`, `delete_module`, `delete_schedule`,
+  `publish`, `create_user`, `install_connector`) never run without
+  `confirm: true` in the call's arguments. Tell the user exactly what will
+  change before setting it.
+- `FortiSOAR(..., dry_run=True)` skips every POST/PUT/PATCH/DELETE at the
+  client level (reads still work) -- useful for rehearsing a script.
+
+**Never trust a 200: verify the effect.** After every write, read the state
+back and check it:
+
+| You just did | Verify with |
+|---|---|
+| `create_record` / `update_record` | `get_record` on the returned uuid; check the fields landed |
+| `create_module` + `publish` | `describe_module`; then a test `create_record` in it |
+| `publish_playbook` | trigger it, then `wait_for_playbook_run` + `diagnose_run` |
+| `install_connector` | `healthcheck_connector` (status 'Available'); `list_connector_operations` |
+| connector configuration writes | `healthcheck_connector`; `run_connector_operation` on a read-only op |
+| `create_user` | `whoami` as that user, or query the people module |
+| anything on a record | `record_lifecycle` shows the full change timeline |
+
+## Capability map (what to use for what)
+
+| Task | Tools (MCP) / API |
+|---|---|
+| connect + verify | `whoami`; `list_modules` |
+| discover schema | `list_modules`, `describe_module`, `list_picklists`, `get_picklist_values` |
+| records | `search_records`, `query_records`, `get_record`, `create_record`, `update_record`, `upsert_record`, `get_or_create_record` |
+| users | `create_user` (idempotent by email); `client.users` for roles/teams detail |
+| custom modules | `create_module` (fields + `grant_to`), then `publish`; `delete_module` to remove |
+| connectors: discover | `list_connectors`, `list_connector_operations` (live), `default_connector_config` |
+| connectors: run | `run_connector_operation`; `healthcheck_connector` first |
+| connectors: install | `install_connector` (Content Hub name or local .tgz) |
+| connectors: build | CLI `pyfsr connector scaffold / package / deploy` (see below) |
+| playbooks: author | `compile_playbook_yaml` (offline), `publish_playbook` |
+| playbooks: run + debug | `last_playbook_run`, `wait_for_playbook_run`, `why_playbook_failed`, `diagnose_run` |
+| investigation | `investigate_alert`, `get_investigation_result`; write findings back with `update_record` |
+| audit trail | `record_lifecycle`, `execution_context`, `audit_activities` |
+| scheduling | `schedule_playbook`, `trigger_schedule_now`, `schedule_audit`, `delete_schedule` |
+| box internals (SSH) | `appliance_*` (read-only; needs `PYFSR_APPLIANCE_*` env) |
+
+Errors come back as data, never exceptions: `{"error": {type, message, tool,
+status_code, method, url, body}}`, plus `valid_values` on a picklist miss. Read
+the body snippet -- it usually names the exact field the box rejected.
 
 ## Setup
 
 ```bash
 pip install pyfsr
-pip install 'pyfsr[mcp]'    # + generic MCP server
+pip install 'pyfsr[mcp]'        # + the MCP server
+pip install 'pyfsr[playbooks]'  # + YAML playbook compile/publish
 ```
 
 Python 3.10+. Pydantic v2. MIT.
@@ -57,6 +131,24 @@ pyfsr playbook compile flow.yaml     # emit the FSR import envelope (offline)
 pyfsr playbook lint flow.yaml        # live preflight: connector steps missing config
 pyfsr playbook deploy flow.yaml      # compile and create on the appliance
 ```
+
+## Connector development (the full ConnectorsV2 loop)
+
+```bash
+pyfsr connector scaffold acme-threat-feed      # minimal installable skeleton
+# ... edit operations.py + info.json ...
+pyfsr connector package acme-threat-feed       # dist/acme-threat-feed-1.0.0.tgz
+FSR_BASE_URL=fortisoar.example.com FSR_API_KEY='<your-api-key>' \
+  pyfsr connector deploy acme-threat-feed \
+  --config-json '{"server": "https://service.example.com"}'
+```
+
+The scaffold ships one config field (`server`), one operation (`ping`) and a
+health check, so it installs and runs end to end before any real logic exists.
+`deploy` packages (if given a directory), installs with `$replace` (idempotent
+redeploys), waits for the connector to activate, upserts the configuration as
+default, and healthchecks. Same flow from Python: `pyfsr.connector_dev`
+(`scaffold_connector`, `package_connector`, `deploy_connector`).
 
 ## Connector icons (pyfsr CLI)
 
@@ -118,7 +210,7 @@ client.playbooks.why_failed(run_pk)
 ```python
 from pyfsr import FortiSOAR, Query
 
-client = FortiSOAR("soar.example.com", "your-api-key")
+client = FortiSOAR("fortisoar.example.com", token="<your-api-key>")
 
 incidents = client.records("incidents")
 inc = incidents.get("0d2c...")          # by uuid, "module:uuid", or IRI

@@ -84,7 +84,15 @@ def _clean_env(monkeypatch):
 
 def test_destructive_tools_are_exactly_the_documented_set():
     destructive = {t.name for t in tools.list_tools() if t.destructive}
-    assert destructive == {"delete_record", "delete_module", "delete_schedule", "publish"}
+    assert destructive == {
+        "delete_record",
+        "delete_module",
+        "delete_schedule",
+        "publish",
+        # privilege-raising, so confirm-gated like the deletes:
+        "create_user",
+        "install_connector",
+    }
 
 
 def test_every_destructive_tool_is_mutating():
@@ -189,11 +197,9 @@ def test_confirm_truthy_string_is_not_enough(client):
 
 
 def test_destructive_schema_advertises_confirm():
-    for name in ("delete_record", "delete_module", "delete_schedule", "publish"):
-        schema = tools.get_tool(name).rendered_schema()
-        assert "confirm" in schema["properties"]
-    # and non-destructive schemas don't grow one
-    assert "confirm" not in tools.get_tool("create_record").rendered_schema()["properties"]
+    for t in tools.list_tools():
+        has_confirm = "confirm" in t.rendered_schema()["properties"]
+        assert has_confirm == t.destructive, t.name
 
 
 def test_rendered_schema_does_not_mutate_the_spec():
@@ -271,6 +277,7 @@ def test_create_user_is_get_or_create(client):
             "email": "ana@example.com",
             "roles": ["Security Analyst"],
             "options": {"access_type": "concurrent"},
+            "confirm": True,
         },
     )
     assert out["created"] is True
@@ -288,20 +295,42 @@ def test_list_connector_operations_slims_live_ops(client):
 
 
 def test_install_connector_from_hub_with_healthcheck(client):
-    out = tools.dispatch(client, "install_connector", {"name": "virustotal"})
+    out = tools.dispatch(client, "install_connector", {"name": "virustotal", "confirm": True})
     assert client.connectors.installed == [("hub", "virustotal", None)]
     assert out["healthcheck"]["status"] == "Available"
 
 
 def test_install_connector_from_file(client):
-    out = tools.dispatch(client, "install_connector", {"path": "/tmp/custom-conn.tgz", "replace": True})
+    out = tools.dispatch(
+        client, "install_connector", {"path": "/tmp/custom-conn.tgz", "replace": True, "confirm": True}
+    )
     assert client.connectors.installed == [("file", "/tmp/custom-conn.tgz", True)]
     assert out["install"]["name"] == "custom-conn"
 
 
 def test_install_connector_requires_name_or_path(client):
-    out = tools.dispatch(client, "install_connector", {})
+    out = tools.dispatch(client, "install_connector", {"confirm": True})
     assert out["error"]["type"] == "ValueError"
+
+
+def test_privileged_tools_require_confirm(client):
+    for name, args in (
+        ("install_connector", {"name": "virustotal"}),
+        (
+            "create_user",
+            {
+                "loginid": "x",
+                "password": "p",
+                "firstname": "F",
+                "lastname": "L",
+                "email": "x@example.com",
+                "roles": ["Application Administrator"],
+            },
+        ),
+    ):
+        out = tools.dispatch(client, name, args)
+        assert out["error"]["type"] == "confirmation_required", name
+    assert client.connectors.installed == []
 
 
 _LAB_YAML = """

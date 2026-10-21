@@ -11,6 +11,7 @@ import json
 import sys
 
 from . import _output
+from . import agent_setup as agent_cmds
 from . import ai_eval as ai_eval_cmds
 from . import connector as connector_cmds
 from . import instances as instances_cmds
@@ -485,6 +486,11 @@ def build_parser() -> argparse.ArgumentParser:
     eval_sub = p_eval.add_subparsers(dest="ai_eval_command", required=True)
     ai_eval_cmds.build_subparser(eval_sub)
 
+    # --- agent group (top-level; wire a coding agent to a box) ---
+    p_agent = sub.add_parser("agent", help="coding-agent setup: verify a box, print MCP config snippets")
+    agent_sub = p_agent.add_subparsers(dest="agent_command", required=True)
+    agent_cmds.build_subparser(agent_sub)
+
     # --- llm group (top-level; which LLM FortiAI uses, third-party swap) ---
     p_llm = sub.add_parser("llm", help="FortiAI reasoning profiles: status, add a third-party LLM, switch agents")
     llm_sub = p_llm.add_subparsers(dest="llm_command", required=True)
@@ -498,8 +504,8 @@ def build_parser() -> argparse.ArgumentParser:
     repo_sub = p_repo.add_subparsers(dest="repo_command", required=True)
     repo_cmds.build_subparser(repo_sub)
 
-    # --- connector group (top-level; local connector-package helpers, no appliance) ---
-    p_connector = sub.add_parser("connector", help="local connector-package helpers (icons); no appliance")
+    # --- connector group (top-level; the ConnectorsV2 dev loop) ---
+    p_connector = sub.add_parser("connector", help="connector dev loop: scaffold, package, deploy, icons")
     connector_sub = p_connector.add_subparsers(dest="connector_command", required=True)
     connector_cmds.build_subparser(connector_sub)
 

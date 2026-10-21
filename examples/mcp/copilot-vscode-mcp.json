@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "fortisoar": {
+      "command": "uvx",
+      "args": ["--from", "pyfsr[mcp]", "pyfsr-mcp"],
+      "env": {
+        "FSR_BASE_URL": "fortisoar.example.com",
+        "FSR_API_KEY": "<your-api-key>",
+        "FSR_VERIFY_SSL": "false"
+      }
+    }
+  }
+}

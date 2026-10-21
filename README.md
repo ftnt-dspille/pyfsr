@@ -35,8 +35,8 @@ pip install 'pyfsr[mcp]'
 ```python
 from pyfsr import FortiSOAR, Query
 
-# API-key auth, or ("username", "password")
-client = FortiSOAR("soar.example.com", "your-api-key")
+# API-key auth (or username="..." + password="...")
+client = FortiSOAR("fortisoar.example.com", token="<your-api-key>")
 
 # Generic, typed CRUD for ANY module via client.records(module)
 incidents = client.records("incidents")

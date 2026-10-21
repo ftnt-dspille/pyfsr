@@ -55,11 +55,12 @@ class ToolSpec:
     live client and returns a JSON-serializable result.
 
     ``mutating`` marks a tool that writes to the appliance (create/update/run/
-    install/schedule); ``destructive`` marks the subset that removes or
-    irreversibly commits state (delete/publish). The safety gate in
-    :func:`dispatch` reads these: ``FSR_MCP_READONLY=1`` refuses every mutating
-    tool, and a destructive tool always requires ``confirm: true`` in its
-    arguments. A destructive tool is always also mutating (enforced in tests).
+    schedule); ``destructive`` marks the subset that removes state, irreversibly
+    commits it, or raises privilege (delete/publish, plus install_connector --
+    it ships executable code -- and create_user -- it grants roles). The safety
+    gate in :func:`dispatch` reads these: ``FSR_MCP_READONLY=1`` refuses every
+    mutating tool, and a destructive tool always requires ``confirm: true`` in
+    its arguments. A destructive tool is always also mutating (enforced in tests).
     """
 
     name: str
@@ -90,8 +91,8 @@ class ToolSpec:
         props = dict(schema.get("properties") or {})
         props["confirm"] = {
             "type": "boolean",
-            "description": "This operation is destructive and never runs without confirm=true. "
-            "Set it only after telling the user exactly what will be removed or committed.",
+            "description": "This operation is high-impact (destructive or privileged) and never "
+            "runs without confirm=true. Set it only after telling the user exactly what will change.",
         }
         schema["properties"] = props
         return schema
@@ -1798,6 +1799,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
         ),
         _h_create_user,
         mutating=True,
+        destructive=True,  # grants roles: privilege-raising, so confirm-gated
     ),
     ToolSpec(
         "list_connector_operations",
@@ -1834,6 +1836,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
         ),
         _h_install_connector,
         mutating=True,
+        destructive=True,  # installs executable code on the appliance, so confirm-gated
     ),
     ToolSpec(
         "compile_playbook_yaml",
@@ -2054,8 +2057,8 @@ def _policy_refusal(spec: ToolSpec, arguments: dict[str, Any]) -> dict[str, Any]
         return {
             "error": {
                 "type": "confirmation_required",
-                "message": f"{spec.name} is destructive and did not run. "
-                "Confirm with the user what will be removed or committed, then retry "
+                "message": f"{spec.name} is high-impact and did not run. "
+                "Confirm with the user exactly what will change, then retry "
                 "the same call with confirm=true.",
                 "tool": spec.name,
                 "hint": "retry with confirm=true",
