@@ -205,16 +205,33 @@ def _h_query_records(
     return project(page, fields=fields, summary=summary)
 
 
+def _write_result(rec, data) -> Any:
+    """Compact write confirmation: identity summary + the fields the caller sent.
+
+    A full record (an alert is ~6 KB) overflows the output cap, so returning it
+    raw hands the agent a truncation envelope and buries the uuid it needs for
+    the read-back (live-verified on 8.0.0). The summary keeps @id/uuid plus the
+    triage identity, and echoing the written fields lets the agent confirm the
+    values landed without a second call.
+    """
+    out = project(rec, summary=True)
+    if isinstance(out, dict) and isinstance(data, dict):
+        rec_json = to_jsonable(rec)
+        if isinstance(rec_json, dict):
+            out["written"] = {k: rec_json.get(k, "<not echoed>") for k in data}
+    return out
+
+
 def _h_create_record(client, *, module, data, resolve_picklists=True, strict_picklists=True) -> Any:
     rec = client.records(module).create(data, resolve_picklists=resolve_picklists, strict_picklists=strict_picklists)
-    return to_jsonable(rec)
+    return _write_result(rec, data)
 
 
 def _h_update_record(client, *, module, ref, data, resolve_picklists=True, strict_picklists=True) -> Any:
     rec = client.records(module).update(
         ref, data, resolve_picklists=resolve_picklists, strict_picklists=strict_picklists
     )
-    return to_jsonable(rec)
+    return _write_result(rec, data)
 
 
 def _h_delete_record(client, *, module, ref, hard=False) -> Any:
@@ -286,7 +303,8 @@ def _h_healthcheck_connector(client, *, connector, config=None) -> Any:
 
 
 def _h_run_connector_operation(client, *, connector, operation, params=None, config=None) -> Any:
-    return client.connectors.execute(connector, operation, params=params or {}, config=config)
+    # ExecuteResult is a model, not a dict: keep the registry's JSON-safe promise.
+    return to_jsonable(client.connectors.execute(connector, operation, params=params or {}, config=config))
 
 
 #: The FortiAI Agentic Assistant connector that owns the chat-session store.
@@ -457,25 +475,64 @@ def _h_compile_playbook_yaml(client, *, yaml_text) -> Any:
     return out
 
 
-def _h_publish_playbook(client, *, yaml_text) -> Any:
+def _h_publish_playbook(client, *, yaml_text, overwrite_changed=False) -> Any:
     result = _compile_playbook_yaml(yaml_text)
     if not result.ok:
         return {"ok": False, "published": False, "errors": _compile_errors(result)}
+    # deploy() (not a bare upsert_playbooks) so the playbooks land in a VISIBLE
+    # named collection: upserting the workflow rows alone creates playbooks
+    # that run but appear in no collection (live-verified on 8.0.0). deploy
+    # also pre-flights uuid ownership and fails closed when the box has UI
+    # edits the YAML lacks (retry with overwrite_changed=true to discard them).
+    report = client.workflow_collections.deploy(result.fsr_json, overwrite_changed=bool(overwrite_changed))
     compiled = _compiled_collection(result)
     rows = compiled.get("workflows") or []
-    upsert = client.playbooks.upsert_playbooks(rows)
-    names = [w.get("name") for w in rows if isinstance(w, dict)]
     return {
         "ok": True,
         "published": True,
         "collection": compiled.get("name"),
-        "playbooks": names,
-        "result": to_jsonable(upsert),
+        "playbooks": [w.get("name") for w in rows if isinstance(w, dict)],
+        "result": to_jsonable(report),
         "note": "Verify with last_playbook_run / wait_for_playbook_run after triggering.",
     }
 
 
 # -- module admin -----------------------------------------------------------
+def _coerce_field_specs(fields):
+    """Translate simple ``{name, type[, picklist][, required][, label]}`` specs
+    into real attribute metadata via the typed builders.
+
+    Hand-built dicts with a bare display type (``text``, ``picklist``) pass the
+    staging POST but fail at publish with "Attribute type 'text' does not exist"
+    (live-verified on 8.0.0), so the natural agent shape is translated here. A
+    spec that already carries ``formType`` is treated as full metadata and
+    passed through untouched.
+    """
+    if not fields:
+        return fields
+    # Classmethod builders: independent of the client, so test fakes work too.
+    from ..api.modules_admin import ModulesAdminAPI
+
+    out = []
+    for f in fields:
+        if not isinstance(f, dict) or "formType" in f or "type" not in f:
+            out.append(f)
+            continue
+        spec = dict(f)
+        name = spec.pop("name")
+        ftype = spec.pop("type")
+        picklist = spec.pop("picklist", None)
+        if ftype in ("picklist", "multiselectpicklist") or picklist:
+            out.append(
+                ModulesAdminAPI.picklist_field(
+                    name, picklist or "Severity", multi=ftype == "multiselectpicklist", **spec
+                )
+            )
+        else:
+            out.append(ModulesAdminAPI.typed_field(name, ftype, **spec))
+    return out
+
+
 def _h_create_module(
     client,
     *,
@@ -487,6 +544,7 @@ def _h_create_module(
     options=None,
 ) -> Any:
     """Create a module in staging (publish to make it live). RBAC optional via grant_to."""
+    fields = _coerce_field_specs(fields)
     kwargs: dict[str, Any] = {"label": label, "plural": plural, "fields": fields, "grant_to": grant_to}
     # Drop None-valued kwargs so create_module's own defaults apply; merge passthrough options.
     kwargs = {k: v for k, v in kwargs.items() if v is not None}
@@ -667,14 +725,14 @@ def _h_upsert_record(client, *, module, data, key=None, resolve_picklists=True, 
     rec = client.records(module).upsert(
         data, key=key, resolve_picklists=resolve_picklists, strict_picklists=strict_picklists
     )
-    return to_jsonable(rec)
+    return _write_result(rec, data)
 
 
 def _h_get_or_create_record(client, *, module, data, key="uuid", resolve_picklists=True, strict_picklists=True) -> Any:
     record, created = client.records(module).get_or_create(
         data, key=key, resolve_picklists=resolve_picklists, strict_picklists=strict_picklists
     )
-    return {"record": to_jsonable(record), "created": bool(created)}
+    return {"record": _write_result(record, data), "created": bool(created)}
 
 
 # -- scheduling -------------------------------------------------------------
@@ -1261,8 +1319,11 @@ _TOOLS: tuple[ToolSpec, ...] = (
                 "module": _MODULE,
                 "fields": {
                     "type": "array",
-                    "description": "Field definitions (each a {name, type, ...} dict). "
-                    "Use describe_module on an existing module to see the field-spec shape.",
+                    "description": "Field definitions, each {name, type[, picklist][, required][, label]}. "
+                    "type is a display type: text, textarea, richtext, integer, decimal, datetime, "
+                    "checkbox, email, url, phone, ipv4, filehash, or picklist (then also pass "
+                    "picklist: the picklist name, e.g. 'Severity'). Full attribute-metadata dicts "
+                    "(with formType) pass through unchanged.",
                     "items": {"type": "object"},
                 },
                 "label": {"type": "string", "description": "Display label (defaults to module name)."},
@@ -1852,12 +1913,20 @@ _TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "publish_playbook",
-        "Compile playbook YAML and push the resulting playbooks to the appliance "
-        "(create-or-update keyed by workflow uuid, existing playbooks updated in place). "
-        "Returns {ok, published, playbooks, result}. Verify afterwards by triggering and "
-        "wait_for_playbook_run. Requires the optional fsr_playbooks package.",
+        "Compile playbook YAML and deploy it to the appliance as a named, visible "
+        "collection (create-or-update in place, uuid-ownership pre-flight). Fails "
+        "closed if a live playbook has UI-edited steps the YAML lacks; pass "
+        "overwrite_changed=true only after telling the user those edits will be "
+        "discarded. Returns {ok, published, playbooks, result}. Verify afterwards by "
+        "triggering and wait_for_playbook_run. Requires the optional fsr_playbooks package.",
         _obj(
-            {"yaml_text": {"type": "string", "description": "The playbook collection YAML source."}},
+            {
+                "yaml_text": {"type": "string", "description": "The playbook collection YAML source."},
+                "overwrite_changed": {
+                    "type": "boolean",
+                    "description": "Discard live UI-edited steps the YAML lacks (default false: fail closed).",
+                },
+            },
             ["yaml_text"],
         ),
         _h_publish_playbook,

@@ -775,7 +775,28 @@ class WorkflowCollectionsAPI(BaseAPI):
                 target_live = resolved
                 target_uuid = resolved.uuid if hasattr(resolved, "uuid") else resolved.get("uuid")
         except Exception:
-            target_live = None  # not found by name -> fresh create under envelope uuid
+            target_live = None  # not found by name -> try the envelope uuid below
+
+        if target_live is None and target_uuid:
+            # The envelope uuid may already be owned by a LIVE collection under a
+            # different name -- e.g. the "Imported collection <uuid8>" stub the
+            # platform auto-creates when workflows are upserted with no collection
+            # (live-verified on 8.0.0). Creating would 409 on the uuid, so adopt
+            # that row and rename it to the envelope's name.
+            try:
+                adopted = self.get(target_uuid, relationships=True)
+            except Exception:
+                adopted = None
+            adopted_uuid = getattr(adopted, "uuid", None) or (
+                adopted.get("uuid") if isinstance(adopted, dict) else None
+            )
+            if adopted is not None and adopted_uuid == target_uuid:
+                target_live = adopted
+                live_name = getattr(adopted, "name", None) or (
+                    adopted.get("name") if isinstance(adopted, dict) else None
+                )
+                if col_name and live_name != col_name:
+                    self.update(target_uuid, name=col_name)
 
         # 2) backup the live collection before any change
         backup_path = None

@@ -352,7 +352,11 @@ def test_dispatch_create_module_grant_to(client):
     module, kwargs = client.store["create_module"]
     assert module == "crew"
     assert kwargs["grant_to"] == ["Full App Permissions"]
-    assert kwargs["fields"] == [{"name": "alias", "type": "text"}]
+    # The friendly {name, type} spec is translated to real attribute metadata:
+    # a bare display type passes staging but fails at publish (live-verified).
+    field = kwargs["fields"][0]
+    assert field["name"] == "alias"
+    assert field["type"] == "string" and field.form_type == "text"
 
 
 def test_dispatch_create_module_drops_none_defaults(client):
@@ -508,7 +512,7 @@ def test_dispatch_passes_small_result_through(monkeypatch):
     monkeypatch.setenv("FSR_MCP_OUTPUT_CAP", "4000")
 
     class _SmallRS:
-        def create(self, data, **kw):
+        def get(self, ref, **kw):
             return {"uuid": "abc", "name": "small"}
 
     class SmallClient:
@@ -517,7 +521,7 @@ def test_dispatch_passes_small_result_through(monkeypatch):
         def records(self, module, **kw):
             return _SmallRS()
 
-    out = tools.dispatch(SmallClient(), "create_record", {"module": "alerts", "data": {}})
+    out = tools.dispatch(SmallClient(), "get_record", {"module": "alerts", "ref": "abc", "summary": False})
     assert out == {"uuid": "abc", "name": "small"}
     assert "_truncated" not in out
 
@@ -527,7 +531,7 @@ def test_dispatch_cap_disable(monkeypatch):
     monkeypatch.setenv("FSR_MCP_OUTPUT_CAP", "0")
 
     class _HugeRS:
-        def create(self, data, **kw):
+        def get(self, ref, **kw):
             return {"name": "x" * 10_000}
 
     class BigClient:
@@ -536,7 +540,7 @@ def test_dispatch_cap_disable(monkeypatch):
         def records(self, module, **kw):
             return _HugeRS()
 
-    out = tools.dispatch(BigClient(), "create_record", {"module": "alerts", "data": {}})
+    out = tools.dispatch(BigClient(), "get_record", {"module": "alerts", "ref": "a", "summary": False})
     assert out == {"name": "x" * 10_000}
     assert "_truncated" not in out
 

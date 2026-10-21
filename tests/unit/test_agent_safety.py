@@ -369,17 +369,23 @@ def test_compile_playbook_yaml_offline(client):
 
 
 @pytest.mark.skipif(not _has_playbooks_extra(), reason="fsr_playbooks (pyfsr[playbooks]) not installed")
-def test_publish_playbook_compiles_then_upserts(client):
-    class _PB:
-        def upsert_playbooks(self, rows):
-            self.rows = rows
-            return {"upserted": len(rows)}
+def test_publish_playbook_compiles_then_deploys_a_collection(client):
+    # deploy(), not a bare workflow upsert: upserted workflows alone run but
+    # appear in no visible collection (live-verified on 8.0.0).
+    class _WC:
+        def deploy(self, data, *, overwrite_changed=False):
+            self.envelope = data
+            self.overwrite_changed = overwrite_changed
+            return {"collection": "Agent Lab Pack", "created": 1, "updated": 0}
 
-    client.playbooks = _PB()
+    client.workflow_collections = _WC()
     out = tools.dispatch(client, "publish_playbook", {"yaml_text": _LAB_YAML})
     assert out["ok"] and out["published"]
-    rows = client.playbooks.rows
+    assert out["collection"] == "Agent Lab Pack"
+    env = client.workflow_collections.envelope
+    rows = env["data"][0]["workflows"]
     assert rows and "uuid" in rows[0] and len(rows[0]["steps"]) == 3
+    assert client.workflow_collections.overwrite_changed is False
 
 
 @pytest.mark.skipif(not _has_playbooks_extra(), reason="fsr_playbooks (pyfsr[playbooks]) not installed")
