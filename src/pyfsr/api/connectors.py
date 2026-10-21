@@ -2311,13 +2311,21 @@ class ConnectorsAPI(BaseAPI):
         for row in detail.get("configuration") or []:
             if row.get("name") == name and (agent is None or row.get("agent") == agent):
                 return row
-        for cfg in self.list_configurations(name=name):
-            row = cfg.model_dump() if hasattr(cfg, "model_dump") else dict(cfg)
-            if agent is not None and row.get("agent") != agent:
-                continue
-            if row.get("connector") is not None and self._install_name(row["connector"]) == connector:
-                return row
-        return None
+        # Walk every page of the name filter: a config past page 1 (more than
+        # ``page_size`` configs share the name across agents) must still be found.
+        page_size = 100
+        page = 1
+        while True:
+            rows = self.list_configurations(name=name, page=page, page_size=page_size)
+            for cfg in rows:
+                row = cfg.model_dump() if hasattr(cfg, "model_dump") else dict(cfg)
+                if agent is not None and row.get("agent") != agent:
+                    continue
+                if row.get("connector") is not None and self._install_name(row["connector"]) == connector:
+                    return row
+            if len(rows) < page_size:
+                return None
+            page += 1
 
     def _own_agent(self, connector: str) -> str | None:
         """The appliance's own agentId as its install of ``connector`` reports it
