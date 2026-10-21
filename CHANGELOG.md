@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`ai.delete_mcp_tools()` takes plain strings.** The wire validates
+  `DELETE /mcp/tools/delete` as a JSON array of strings; the previously
+  documented `[{"uuid": .., "name": ..}]` object shape answers
+  `422 Input should be a valid string` (live-verified on 8.0.0-6034).
+  On 8.0.0 the delete itself is a no-op (every string tried answers 204
+  but leaves the tool catalog unchanged) -- the docstring now says so and
+  points at `update_connector_mcp_server_tools()` (whose PUT does apply).
 - **`playbooks.retry()` now uses GET.** The API guide documents POST, but 8.0.0
   answers 405 `Method "POST" not allowed.`; the working verb is GET and the
   response is a queue acknowledgement -- `{"task_id": "...", "result": "workflow

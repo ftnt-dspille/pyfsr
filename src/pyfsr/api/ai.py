@@ -2271,12 +2271,20 @@ class AIApi(BaseAPI):
             },
         )
 
-    def delete_mcp_tools(self, tools: list[dict[str, str]]) -> None:
+    def delete_mcp_tools(self, tools: list[str]) -> None:
         """Remove specific tools from a hosted MCP server (``DELETE /mcp/tools/delete``).
 
-        ``tools`` is ``[{"uuid": <server_uuid>, "name": <operation_name>}, ...]``.
-        Prefer :meth:`update_connector_mcp_server_tools` for a full tool-set
-        replacement; use this for a targeted removal.
+        The wire validates ``tools`` as a plain JSON array of STRINGS --
+        object items (``{"uuid": .., "name": ..}``) answer
+        ``422 Input should be a valid string`` (live-verified on
+        8.0.0-6034; the object shape some doc sources show is not what the
+        route parses). Pass tool names or tool uuids.
+
+        **8.0.0 caveat:** every string tried (tool name, tool uuid, hosted
+        server name) answers ``204`` but leaves the tool catalog unchanged
+        -- the delete is currently a no-op on this build. Prefer
+        :meth:`update_connector_mcp_server_tools` for a full tool-set
+        replacement (that PUT does apply).
         """
         self.client.request("DELETE", "/mcp/tools/delete", data=tools)
 

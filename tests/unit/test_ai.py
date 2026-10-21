@@ -754,8 +754,10 @@ def test_update_connector_mcp_server_tools_computes_removals():
 def test_delete_mcp_tools_sends_delete_request():
     c = RecordingClient()
     ai = AIApi(c)
-    ai.delete_mcp_tools([{"uuid": "m-imap", "name": "fetch_email"}])
-    assert ("DELETE", "/mcp/tools/delete", [{"uuid": "m-imap", "name": "fetch_email"}]) in c.calls
+    # Wire contract (live-verified 8.0.0): a plain list of strings --
+    # object items {"uuid": .., "name": ..} answer 422 string_type.
+    ai.delete_mcp_tools(["fetch_email"])
+    assert ("DELETE", "/mcp/tools/delete", ["fetch_email"]) in c.calls
 
 
 # ------------------------------------------------------------- get_mcp_config
