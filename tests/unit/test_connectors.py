@@ -2452,3 +2452,56 @@ def test_a_name_shared_by_two_agents_is_refused():
     with pytest.raises(ValueError, match="2 agents are named 'lab'"):
         resolve_agent_id(Two(), "lab")
     assert resolve_agent_id(Two(), "a2") == "a2"
+
+
+# -- configuration lookup walks every page of the name filter ----------------
+def _paged_config_client(rows):
+    """A client serving ``/api/integration/configuration/`` the way the live
+    endpoint pages: ``page`` / ``page_size`` honoured, ``name`` filters rows."""
+
+    class Paged(FakeClient):
+        def get(self, endpoint, params=None, **kwargs):
+            if endpoint != "/api/integration/configuration/":
+                return super().get(endpoint, params=params, **kwargs)
+            params = dict(params or {})
+            self.get_calls.append((endpoint, params))
+            size = params.get("page_size", 30)
+            page = params.get("page", 1)
+            matched = [r for r in rows if r["name"] == params.get("name", r["name"])]
+            chunk = matched[(page - 1) * size : page * size]
+            return {
+                "status": "ok",
+                "totalItems": len(matched),
+                "nextPage": page + 1 if page * size < len(matched) else None,
+                "data": chunk,
+            }
+
+    return Paged()
+
+
+def _lab_row(i, agent):
+    return {"id": i, "config_id": f"cfg-{i}", "name": "Lab", "agent": agent, "connector": 16, "status": 1}
+
+
+def test_find_configuration_by_name_follows_pages_to_a_config_on_page_two(monkeypatch):
+    # 100 same-named configs fill page 1 (default page_size); the one we want
+    # (agent ag-2) is the first row of page 2. Reading page 1 only misses it.
+    rows = [_lab_row(i, "ag-1") for i in range(100)] + [_lab_row(900, "ag-2")]
+    client = _paged_config_client(rows)
+    api = ConnectorsAPI(client)
+    monkeypatch.setattr(api, "connector_detail", lambda connector: {"configuration": []})
+    monkeypatch.setattr(api, "_install_name", lambda install_id: "virustotal")
+    found = api._find_configuration_by_name("virustotal", "Lab", agent="ag-2")
+    assert found is not None and found["config_id"] == "cfg-900"
+    pages = [p["page"] for ep, p in client.get_calls if ep == "/api/integration/configuration/"]
+    assert pages == [1, 2]
+
+
+def test_find_configuration_by_name_stops_when_pages_are_exhausted(monkeypatch):
+    rows = [_lab_row(i, "ag-1") for i in range(100)]  # full page 1, nothing after
+    client = _paged_config_client(rows)
+    api = ConnectorsAPI(client)
+    monkeypatch.setattr(api, "connector_detail", lambda connector: {"configuration": []})
+    monkeypatch.setattr(api, "_install_name", lambda install_id: "virustotal")
+    assert api._find_configuration_by_name("virustotal", "Lab", agent="ag-2") is None
+    assert len([c for c in client.get_calls if c[0] == "/api/integration/configuration/"]) <= 3
