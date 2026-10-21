@@ -109,8 +109,11 @@ def _verify(args: argparse.Namespace) -> dict | None:
 def _write_env_file(path: Path, args: argparse.Namespace) -> None:
     lines = [f"{k}={v}" for k, v in _env_block(args).items()]
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n")
-    os.chmod(path, 0o600)
+    # Create with 0600 from the first byte (no write-then-chmod exposure window).
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write("\n".join(lines) + "\n")
+    os.chmod(path, 0o600)  # an O_TRUNC of a pre-existing looser file keeps its old mode
 
 
 def cmd_init(args: argparse.Namespace) -> int:
