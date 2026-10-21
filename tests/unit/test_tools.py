@@ -315,7 +315,7 @@ def test_dispatch_create_record(client):
 
 
 def test_dispatch_delete_record(client):
-    out = tools.dispatch(client, "delete_record", {"module": "alerts", "ref": "u1", "hard": True})
+    out = tools.dispatch(client, "delete_record", {"module": "alerts", "ref": "u1", "hard": True, "confirm": True})
     assert out == {"deleted": "u1", "module": "alerts", "hard": True}
     assert client.store["deleted"] == ("u1", True)
 
@@ -363,7 +363,7 @@ def test_dispatch_create_module_drops_none_defaults(client):
 
 
 def test_dispatch_delete_module(client):
-    out = tools.dispatch(client, "delete_module", {"module": "crew", "drop_orphan_tables": "Facts"})
+    out = tools.dispatch(client, "delete_module", {"module": "crew", "drop_orphan_tables": "Facts", "confirm": True})
     assert out["module"] == "crew"
     module, kwargs = client.store["delete_module"]
     assert module == "crew"
@@ -371,7 +371,7 @@ def test_dispatch_delete_module(client):
 
 
 def test_dispatch_publish(client):
-    out = tools.dispatch(client, "publish", {"timeout": 30})
+    out = tools.dispatch(client, "publish", {"timeout": 30, "confirm": True})
     assert out["status"] == "Success"
     assert client.store["publish"]["timeout"] == 30
 

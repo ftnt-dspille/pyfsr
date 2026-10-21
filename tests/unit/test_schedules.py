@@ -312,7 +312,7 @@ def test_tool_trigger_schedule_now_by_task_id():
 
 def test_tool_delete_schedule_calls_delete_by_name():
     c = _FakeClient()
-    out = dispatch(c, "delete_schedule", {"name": "nightly-recon"})
+    out = dispatch(c, "delete_schedule", {"name": "nightly-recon", "confirm": True})
     assert out == {"deleted": True, "name": "nightly-recon"}
     assert c.schedules.delete_calls == ["nightly-recon"]
 

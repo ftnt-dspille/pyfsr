@@ -53,20 +53,48 @@ class ToolSpec:
     ``input_schema`` is a JSON Schema (draft 2020-12 compatible object schema)
     describing the tool's arguments; ``handler`` runs the operation against a
     live client and returns a JSON-serializable result.
+
+    ``mutating`` marks a tool that writes to the appliance (create/update/run/
+    install/schedule); ``destructive`` marks the subset that removes or
+    irreversibly commits state (delete/publish). The safety gate in
+    :func:`dispatch` reads these: ``FSR_MCP_READONLY=1`` refuses every mutating
+    tool, and a destructive tool always requires ``confirm: true`` in its
+    arguments. A destructive tool is always also mutating (enforced in tests).
     """
 
     name: str
     description: str
     input_schema: dict[str, Any]
     handler: Callable[..., Any]
+    mutating: bool = False
+    destructive: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        """Generic ``{name, description, input_schema}`` (no handler)."""
+        """Generic ``{name, description, input_schema}`` (no handler).
+
+        A destructive tool's schema is rendered with the ``confirm`` argument
+        the dispatch gate requires, so agents discover it instead of hitting a
+        confirmation_required error first.
+        """
         return {
             "name": self.name,
             "description": self.description,
-            "input_schema": self.input_schema,
+            "input_schema": self.rendered_schema(),
         }
+
+    def rendered_schema(self) -> dict[str, Any]:
+        """The input schema as an agent should see it (``confirm`` injected)."""
+        if not self.destructive:
+            return self.input_schema
+        schema = dict(self.input_schema)
+        props = dict(schema.get("properties") or {})
+        props["confirm"] = {
+            "type": "boolean",
+            "description": "This operation is destructive and never runs without confirm=true. "
+            "Set it only after telling the user exactly what will be removed or committed.",
+        }
+        schema["properties"] = props
+        return schema
 
 
 # Reusable schema fragments -------------------------------------------------
@@ -298,6 +326,151 @@ def _h_list_ai_config(client) -> Any:
         "features_enabled": client.ai.features_enabled(),
         "llm_configs": client.ai.list_llm_configs(),
         "mcp_servers": client.ai.list_mcp_servers(),
+    }
+
+
+# -- identity / onboarding ----------------------------------------------------
+def _h_whoami(client) -> Any:
+    """Who am I + where am I: the connect-and-verify handshake for an agent."""
+    out: dict[str, Any] = {
+        "user": client.users.whoami(),
+        "base_url": getattr(client, "base_url", None),
+    }
+    try:
+        out["version"] = client.system.version()
+    except Exception as exc:  # noqa: BLE001 - version is best-effort garnish
+        out["version_error"] = str(exc)
+    return out
+
+
+def _h_create_user(client, *, loginid, password, firstname, lastname, email, roles, options=None) -> Any:
+    user, created = client.users.get_or_create(loginid, password, firstname, lastname, email, roles, **(options or {}))
+    return {"user": to_jsonable(user), "created": bool(created)}
+
+
+# -- connector install / discovery -------------------------------------------
+def _h_list_connector_operations(client, *, connector, version=None) -> Any:
+    ops = client.connectors.operations(connector, version=version)
+    slim = []
+    for op in ops:
+        d = op.model_dump() if hasattr(op, "model_dump") else dict(op)
+        entry = {
+            "operation": d.get("operation") or d.get("name"),
+            "title": d.get("title"),
+            "description": d.get("description"),
+            "parameters": [
+                {
+                    "name": p.get("name"),
+                    "title": p.get("title"),
+                    "type": p.get("type"),
+                    "required": p.get("required", False),
+                }
+                for p in (d.get("parameters") or [])
+                if isinstance(p, dict)
+            ],
+        }
+        slim.append({k: v for k, v in entry.items() if v not in (None, "")})
+    return {"connector": connector, "operations": slim, "count": len(slim)}
+
+
+def _h_install_connector(client, *, name=None, path=None, version=None, replace=False, wait=True, timeout=300.0) -> Any:
+    if path:
+        result = client.connectors.install_from_file(path, replace=replace, wait=wait, timeout=timeout)
+    elif name:
+        result = client.connectors.install(name, version=version, wait=wait, timeout=timeout)
+    else:
+        raise ValueError("install_connector requires 'name' (Content Hub) or 'path' (local .tgz)")
+    out: dict[str, Any] = {"install": to_jsonable(result)}
+    probe = name
+    if probe is None and isinstance(result, dict):
+        probe = result.get("name")
+    if probe:
+        try:
+            out["healthcheck"] = to_jsonable(client.connectors.healthcheck(probe))
+        except Exception as exc:  # noqa: BLE001 - a fresh unconfigured connector often has no config yet
+            out["healthcheck_error"] = str(exc)
+    return out
+
+
+# -- playbook authoring (YAML -> box) -----------------------------------------
+def _playbooks_compiler():
+    """Import the optional fsr_playbooks compiler (pyfsr[playbooks] extra)."""
+    try:
+        from fsr_playbooks.compiler import compile_yaml as _compile  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise FortiSOARException(
+            "playbook YAML compilation needs the optional fsr_playbooks package: pip install 'pyfsr[playbooks]'"
+        ) from exc
+    return _compile
+
+
+def _compile_playbook_yaml(yaml_text: str):
+    """Compile playbook YAML against the packaged reference catalog."""
+    from pathlib import Path
+
+    compile_yaml = _playbooks_compiler()
+    db_path = os.environ.get("FSRPB_DB")
+    if db_path:
+        return compile_yaml(yaml_text, Path(db_path))
+    from fsr_playbooks._db import default_db_path  # type: ignore[import-not-found]
+
+    return compile_yaml(yaml_text, default_db_path())
+
+
+def _compile_errors(result) -> list[dict[str, Any]]:
+    return [
+        {
+            "code": str(getattr(e, "code", "")),
+            "message": getattr(e, "message", str(e)),
+            "path": getattr(e, "path", None),
+            "severity": getattr(e, "severity", "error"),
+        }
+        for e in getattr(result, "errors", [])
+    ]
+
+
+def _compiled_collection(result) -> dict[str, Any]:
+    """Unwrap a CompileResult's emitted JSON to the collection dict.
+
+    ``fsr_json`` is the FSR import envelope ``{"data": [collection]}`` (newer
+    fsr_playbooks also expose it via ``compiled_json()``); the collection carries
+    the ``workflows`` rows that upsert_playbooks takes.
+    """
+    j = result.fsr_json or {}
+    data = j.get("data")
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        return data[0]
+    return j
+
+
+def _h_compile_playbook_yaml(client, *, yaml_text) -> Any:
+    # Offline: compiles against the packaged catalog; `client` is unused.
+    result = _compile_playbook_yaml(yaml_text)
+    out: dict[str, Any] = {"ok": bool(result.ok), "errors": _compile_errors(result)}
+    if result.ok:
+        compiled = _compiled_collection(result)
+        wfs = compiled.get("workflows") or []
+        out["collection"] = compiled.get("name")
+        out["playbooks"] = [w.get("name") for w in wfs if isinstance(w, dict)]
+        out["note"] = "Compiled clean. Call publish_playbook with the same yaml_text to push it."
+    return out
+
+
+def _h_publish_playbook(client, *, yaml_text) -> Any:
+    result = _compile_playbook_yaml(yaml_text)
+    if not result.ok:
+        return {"ok": False, "published": False, "errors": _compile_errors(result)}
+    compiled = _compiled_collection(result)
+    rows = compiled.get("workflows") or []
+    upsert = client.playbooks.upsert_playbooks(rows)
+    names = [w.get("name") for w in rows if isinstance(w, dict)]
+    return {
+        "ok": True,
+        "published": True,
+        "collection": compiled.get("name"),
+        "playbooks": names,
+        "result": to_jsonable(upsert),
+        "note": "Verify with last_playbook_run / wait_for_playbook_run after triggering.",
     }
 
 
@@ -848,6 +1021,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["module", "data"],
         ),
         _h_create_record,
+        mutating=True,
     ),
     ToolSpec(
         "update_record",
@@ -871,6 +1045,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["module", "ref", "data"],
         ),
         _h_update_record,
+        mutating=True,
     ),
     ToolSpec(
         "delete_record",
@@ -888,6 +1063,8 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["module", "ref"],
         ),
         _h_delete_record,
+        mutating=True,
+        destructive=True,
     ),
     ToolSpec(
         "list_picklists",
@@ -974,6 +1151,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["connector", "operation"],
         ),
         _h_run_connector_operation,
+        mutating=True,
     ),
     ToolSpec(
         "list_agent_sessions",
@@ -1053,6 +1231,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["ref"],
         ),
         _h_investigate_alert,
+        mutating=True,
     ),
     ToolSpec(
         "get_investigation_result",
@@ -1102,6 +1281,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["module"],
         ),
         _h_create_module,
+        mutating=True,
     ),
     ToolSpec(
         "delete_module",
@@ -1129,6 +1309,8 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["module"],
         ),
         _h_delete_module,
+        mutating=True,
+        destructive=True,
     ),
     ToolSpec(
         "publish",
@@ -1146,6 +1328,8 @@ _TOOLS: tuple[ToolSpec, ...] = (
             }
         ),
         _h_publish,
+        mutating=True,
+        destructive=True,
     ),
     ToolSpec(
         "default_connector_config",
@@ -1199,6 +1383,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["connector", "config", "name"],
         ),
         _h_create_connector_configuration,
+        mutating=True,
     ),
     ToolSpec(
         "update_connector_configuration",
@@ -1219,6 +1404,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["connector", "config_id", "config", "name"],
         ),
         _h_update_connector_configuration,
+        mutating=True,
     ),
     ToolSpec(
         "set_default_connector_config",
@@ -1242,6 +1428,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["connector"],
         ),
         _h_set_default_connector_config,
+        mutating=True,
     ),
     ToolSpec(
         "upsert_connector_configuration",
@@ -1262,6 +1449,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["connector", "config", "name"],
         ),
         _h_upsert_connector_configuration,
+        mutating=True,
     ),
     ToolSpec(
         "last_playbook_run",
@@ -1439,6 +1627,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["module", "data"],
         ),
         _h_upsert_record,
+        mutating=True,
     ),
     ToolSpec(
         "get_or_create_record",
@@ -1465,6 +1654,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["module", "data"],
         ),
         _h_get_or_create_record,
+        mutating=True,
     ),
     ToolSpec(
         "schedule_playbook",
@@ -1501,6 +1691,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["name", "cron"],
         ),
         _h_schedule_playbook,
+        mutating=True,
     ),
     ToolSpec(
         "trigger_schedule_now",
@@ -1517,6 +1708,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
             }
         ),
         _h_trigger_schedule_now,
+        mutating=True,
     ),
     ToolSpec(
         "delete_schedule",
@@ -1528,6 +1720,8 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["name"],
         ),
         _h_delete_schedule,
+        mutating=True,
+        destructive=True,
     ),
     ToolSpec(
         "schedule_audit",
@@ -1569,6 +1763,102 @@ _TOOLS: tuple[ToolSpec, ...] = (
             ["use_case"],
         ),
         _h_map_use_case,
+    ),
+    ToolSpec(
+        "whoami",
+        "Identify the calling user and appliance: loginid, email, person/user UUIDs, the base "
+        "URL this server targets, and the FortiSOAR version. Call this FIRST to verify the "
+        "connection and credentials before doing anything else.",
+        _obj({}),
+        _h_whoami,
+    ),
+    ToolSpec(
+        "create_user",
+        "Idempotently create a FortiSOAR user (looked up by email; an existing user is returned "
+        "unchanged with created=false). roles takes friendly role names or UUIDs, e.g. "
+        "['Full App Permissions']. Returns {user, created}.",
+        _obj(
+            {
+                "loginid": {"type": "string", "description": "Login username (unique)."},
+                "password": {"type": "string", "description": "Initial password (create path only)."},
+                "firstname": {"type": "string", "description": "First name."},
+                "lastname": {"type": "string", "description": "Last name."},
+                "email": {"type": "string", "description": "Email address -- the idempotency key."},
+                "roles": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Role names or UUIDs to grant, e.g. ['Security Analyst'].",
+                },
+                "options": {
+                    "type": "object",
+                    "description": "Extra create options passed through (access_type, active, department, teams, ...).",
+                },
+            },
+            ["loginid", "password", "firstname", "lastname", "email", "roles"],
+        ),
+        _h_create_user,
+        mutating=True,
+    ),
+    ToolSpec(
+        "list_connector_operations",
+        "List a connector's operations LIVE from the appliance: operation name, title, "
+        "description, and each parameter's name/type/required. Use after list_connectors to "
+        "discover what a connector can do and what run_connector_operation expects in params.",
+        _obj(
+            {
+                "connector": _CONNECTOR,
+                "version": {"type": "string", "description": "Connector version (resolved if omitted)."},
+            },
+            ["connector"],
+        ),
+        _h_list_connector_operations,
+    ),
+    ToolSpec(
+        "install_connector",
+        "Install a connector: by name from Content Hub, or by path to a local .tgz bundle "
+        "(path wins when both are given). Waits for the install job by default, then "
+        "healthchecks. Configure it afterwards with default_connector_config + "
+        "upsert_connector_configuration.",
+        _obj(
+            {
+                "name": {"type": "string", "description": "Content Hub connector name, e.g. 'virustotal'."},
+                "path": {"type": "string", "description": "Local filesystem path to a connector .tgz."},
+                "version": {"type": "string", "description": "Version to install (Content Hub path only)."},
+                "replace": {
+                    "type": "boolean",
+                    "description": "Re-install over an existing same-version install (default false).",
+                },
+                "wait": {"type": "boolean", "description": "Block until the install job finishes (default true)."},
+                "timeout": {"type": "number", "description": "Max seconds to wait (default 300)."},
+            }
+        ),
+        _h_install_connector,
+        mutating=True,
+    ),
+    ToolSpec(
+        "compile_playbook_yaml",
+        "Compile fsr_playbooks-format playbook YAML to FortiSOAR JSON OFFLINE (no appliance "
+        "I/O) and report {ok, errors[], playbooks[]}. Always compile before publish_playbook; "
+        "fix every non-warning error first. Requires the optional fsr_playbooks package "
+        "(pip install 'pyfsr[playbooks]').",
+        _obj(
+            {"yaml_text": {"type": "string", "description": "The playbook collection YAML source."}},
+            ["yaml_text"],
+        ),
+        _h_compile_playbook_yaml,
+    ),
+    ToolSpec(
+        "publish_playbook",
+        "Compile playbook YAML and push the resulting playbooks to the appliance "
+        "(create-or-update keyed by workflow uuid, existing playbooks updated in place). "
+        "Returns {ok, published, playbooks, result}. Verify afterwards by triggering and "
+        "wait_for_playbook_run. Requires the optional fsr_playbooks package.",
+        _obj(
+            {"yaml_text": {"type": "string", "description": "The playbook collection YAML source."}},
+            ["yaml_text"],
+        ),
+        _h_publish_playbook,
+        mutating=True,
     ),
     # --- appliance verbs (read-only; SSH/local via PYFSR_APPLIANCE_* env) ---
     ToolSpec(
@@ -1698,11 +1988,87 @@ _TOOLS: tuple[ToolSpec, ...] = (
 REGISTRY: dict[str, ToolSpec] = {t.name: t for t in _TOOLS}
 
 
+# --------------------------------------------------------------------------- safety gate
+#
+# One gate, read both at listing time (so a filtered tool is never advertised) and
+# at dispatch time (so a filtered tool is refused even if an agent calls it by
+# name). Every consumer -- the MCP server, to_anthropic_tools, to_openai_tools and
+# home-grown loops using dispatch -- therefore shares the same policy.
+#
+# - FSR_MCP_READONLY=1        refuse every mutating tool (destructive included).
+# - FSR_MCP_ALLOW_TOOLS=a,b*  expose only matching tools (fnmatch globs).
+# - FSR_MCP_DENY_TOOLS=a,b*   hide matching tools (applied after ALLOW).
+# - destructive tools always require confirm=true in their arguments.
+
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def readonly_mode(env: dict[str, str] | None = None) -> bool:
+    """Whether ``FSR_MCP_READONLY`` requests a read-only tool surface."""
+    e = os.environ if env is None else env
+    return str(e.get("FSR_MCP_READONLY", "")).strip().lower() in _TRUTHY
+
+
+def _globs(var: str, env: dict[str, str] | None = None) -> list[str]:
+    e = os.environ if env is None else env
+    raw = str(e.get(var, "") or "")
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def tool_enabled(spec: ToolSpec, env: dict[str, str] | None = None) -> bool:
+    """Apply the env policy (readonly / allow / deny) to one tool."""
+    from fnmatch import fnmatchcase
+
+    if readonly_mode(env) and spec.mutating:
+        return False
+    allow = _globs("FSR_MCP_ALLOW_TOOLS", env)
+    if allow and not any(fnmatchcase(spec.name, pat) for pat in allow):
+        return False
+    deny = _globs("FSR_MCP_DENY_TOOLS", env)
+    if deny and any(fnmatchcase(spec.name, pat) for pat in deny):
+        return False
+    return True
+
+
+def enabled_tools(env: dict[str, str] | None = None) -> list[ToolSpec]:
+    """The registry filtered by the current env policy (what an agent may see)."""
+    return [t for t in _TOOLS if tool_enabled(t, env)]
+
+
+def _policy_refusal(spec: ToolSpec, arguments: dict[str, Any]) -> dict[str, Any] | None:
+    """Return an error dict when the env policy or confirm gate blocks this call."""
+    if not tool_enabled(spec):
+        reason = (
+            "read-only mode (FSR_MCP_READONLY) blocks mutating tools"
+            if readonly_mode() and spec.mutating
+            else "this tool is disabled by FSR_MCP_ALLOW_TOOLS/FSR_MCP_DENY_TOOLS"
+        )
+        return {
+            "error": {
+                "type": "ToolDisabled",
+                "message": f"{spec.name} is not available: {reason}.",
+                "tool": spec.name,
+            }
+        }
+    if spec.destructive and arguments.get("confirm") is not True:
+        return {
+            "error": {
+                "type": "confirmation_required",
+                "message": f"{spec.name} is destructive and did not run. "
+                "Confirm with the user what will be removed or committed, then retry "
+                "the same call with confirm=true.",
+                "tool": spec.name,
+                "hint": "retry with confirm=true",
+            }
+        }
+    return None
+
+
 # --------------------------------------------------------------------------- public API
 
 
 def list_tools() -> list[ToolSpec]:
-    """Return every registered :class:`ToolSpec`."""
+    """Return every registered :class:`ToolSpec` (unfiltered; see :func:`enabled_tools`)."""
     return list(_TOOLS)
 
 
@@ -1712,13 +2078,19 @@ def get_tool(name: str) -> ToolSpec:
 
 
 def tool_schemas() -> list[dict[str, Any]]:
-    """Generic ``[{name, description, input_schema}, ...]`` for every tool."""
-    return [t.to_dict() for t in _TOOLS]
+    """Generic ``[{name, description, input_schema}, ...]`` for every enabled tool.
+
+    Honors the env safety policy (``FSR_MCP_READONLY`` / ``FSR_MCP_ALLOW_TOOLS`` /
+    ``FSR_MCP_DENY_TOOLS``), so a filtered tool is never advertised to the agent.
+    """
+    return [t.to_dict() for t in enabled_tools()]
 
 
 def to_anthropic_tools() -> list[dict[str, Any]]:
     """Tool definitions in Anthropic tool-use shape (``input_schema`` key)."""
-    return [{"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in _TOOLS]
+    return [
+        {"name": t.name, "description": t.description, "input_schema": t.rendered_schema()} for t in enabled_tools()
+    ]
 
 
 def to_openai_tools() -> list[dict[str, Any]]:
@@ -1729,10 +2101,10 @@ def to_openai_tools() -> list[dict[str, Any]]:
             "function": {
                 "name": t.name,
                 "description": t.description,
-                "parameters": t.input_schema,
+                "parameters": t.rendered_schema(),
             },
         }
-        for t in _TOOLS
+        for t in enabled_tools()
     ]
 
 
@@ -1748,6 +2120,30 @@ def _agent_error(exc: Exception, *, tool: str) -> dict[str, Any]:
         status = getattr(resp, "status_code", None)
         if status is not None:
             err["status_code"] = status
+        # Method + path + a body snippet turn "400 Bad Request" into something an
+        # agent can act on without replaying the call under http_trace.
+        req = getattr(resp, "request", None)
+        method = getattr(req, "method", None)
+        if method:
+            err["method"] = method
+        url = getattr(resp, "url", None) or getattr(req, "url", None)
+        if url:
+            # Path only: the host is the user's own box, but keeping errors
+            # host-free makes transcripts safe to paste anywhere.
+            try:
+                from urllib.parse import urlsplit
+
+                parts = urlsplit(str(url))
+                err["url"] = parts.path + (f"?{parts.query}" if parts.query else "")
+            except ValueError:
+                err["url"] = str(url)
+        body = getattr(resp, "text", None)
+        if body:
+            snippet = str(body).strip()
+            if len(snippet) > 600:
+                snippet = snippet[:600] + "..."
+            if snippet and snippet not in err["message"]:
+                err["body"] = snippet
     # Surface the structured fields of a picklist miss so the agent can pick a
     # valid value programmatically instead of parsing the message string.
     if isinstance(exc, PicklistResolutionError):
@@ -1888,6 +2284,12 @@ def dispatch(client, name: str, arguments: dict[str, Any] | None = None) -> Any:
     ``FSR_MCP_OUTPUT_CAP``, ``0`` disables) so a single huge return can't flood
     the agent's context -- an over-budget result comes back as a structured
     truncation envelope with a preview + a hint to narrow the call.
+
+    The safety policy is enforced here as well as at listing time: a tool
+    filtered by ``FSR_MCP_READONLY``/``FSR_MCP_ALLOW_TOOLS``/``FSR_MCP_DENY_TOOLS``
+    is refused even when called by name, and a destructive tool without
+    ``confirm: true`` returns a ``confirmation_required`` error without touching
+    the appliance.
     """
     spec = REGISTRY.get(name)
     if spec is None:
@@ -1898,8 +2300,14 @@ def dispatch(client, name: str, arguments: dict[str, Any] | None = None) -> Any:
                 "tool": name,
             }
         }
+    args = dict(arguments or {})
+    refusal = _policy_refusal(spec, args)
+    if refusal is not None:
+        return refusal
+    # confirm is a gate argument, not a handler argument.
+    args.pop("confirm", None)
     try:
-        result = spec.handler(client, **(arguments or {}))
+        result = spec.handler(client, **args)
     except TypeError as exc:  # bad/missing arguments for the handler
         return _agent_error(exc, tool=name)
     except Exception as exc:  # noqa: BLE001 - surface every failure as data to the agent

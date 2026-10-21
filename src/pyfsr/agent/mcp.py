@@ -4,13 +4,23 @@ Point an MCP-capable agent at *any* FortiSOAR with one command::
 
     FSR_BASE_URL=soar.example.com FSR_API_KEY=... python -m pyfsr.agent.mcp
 
-This is a deliberately thin, generic consumer of :mod:`pyfsr.agent.tools`: it exposes
-the same 16 core operations (record CRUD, schema discovery, picklists,
-connectors, playbook runs) as MCP tools, listing them from
-:func:`pyfsr.agent.tools.tool_schemas` and executing them through
-:func:`pyfsr.agent.tools.dispatch`. It is intentionally distinct from fsrpb's
-authoring/domain MCP and the connector's on-platform MCP — no YAML compiler, no
+This is a deliberately thin, generic consumer of :mod:`pyfsr.agent.tools`: it
+exposes the full tool registry (record CRUD, schema + module admin, picklists,
+connectors incl. install and live operation listing, playbook runs and YAML
+publishing, users, audit, AI investigation, read-only appliance verbs) as MCP
+tools, listing them from :func:`pyfsr.agent.tools.tool_schemas` and executing
+them through :func:`pyfsr.agent.tools.dispatch`. It is intentionally distinct
+from fsrpb's authoring/domain MCP and the connector's on-platform MCP — no
 agent UX, just raw FortiSOAR access.
+
+**Safety.** The tool surface is policy-filtered at list AND call time (see
+:mod:`pyfsr.agent.tools`):
+
+- ``FSR_MCP_READONLY=1`` — hide and refuse every mutating tool.
+- ``FSR_MCP_ALLOW_TOOLS`` / ``FSR_MCP_DENY_TOOLS`` — comma-separated names or
+  fnmatch globs to narrow the surface.
+- Destructive tools (``delete_record``, ``delete_module``, ``delete_schedule``,
+  ``publish``) never run without ``confirm: true`` in their arguments.
 
 Requires the optional dependency: ``pip install 'pyfsr[mcp]'``.
 
