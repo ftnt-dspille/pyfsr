@@ -2133,6 +2133,14 @@ WORKFLOW_CONTROL_RESPONSE = {
     "status": "started",
 }
 
+# GET /api/wf/api/workflows/{pk}/retry/ -- retry queue acknowledgement.
+# Live-captured on 8.0.0-6034: retry is a GET (the guide's POST 405s) and the
+# body carries a fresh task_id for the retried run, not a "status" field.
+WORKFLOW_RETRY_RESPONSE = {
+    "task_id": "b0afba58-9dbe-44dd-a6e6-7227e33990dc",
+    "result": "workflow retry queued",
+}
+
 # POST /api/triggers/1/{name} and /api/triggers/1/deferred/{name} -- named-webhook trigger.
 TRIGGER_BY_NAME_RESPONSE = {"task_id": "c0afba58-9dbe-44dd-a6e6-7227e33990dd"}
 
@@ -2169,7 +2177,22 @@ AGENT_INSTALLER_BLOB_RESPONSE = {"placeholder": "install-bundle-bytes"}
 AGENT_INSTALL_CONNECTOR_RESPONSE = {"result": "Success"}
 
 # GET /api/integration/agent-heartbeat/{agent}/ -- SME-bus liveness probe.
-AGENT_HEARTBEAT_RESPONSE = {"agent": "edge-1", "status": "alive", "latency_ms": 42}
+AGENT_HEARTBEAT_RESPONSE = {
+    # Live-captured shape on 8.0.0: the 200 body is the queued health-check
+    # REQUEST ROW (remote_status starts "in-progress"); there is no top-level
+    # "status": "alive" -- the old fixture shape was never sent by an appliance.
+    "id": 89,
+    "result": {},
+    "action": "health-check",
+    "remote_status": {"status": "in-progress"},
+    "request_payload": {},
+    "created": "2026-01-01T00:00:00Z",
+    "modified": "2026-01-01T00:00:00Z",
+    "log_records": None,
+    "connector": None,
+    "configuration": None,
+    "agent": "0123456789abcdef0123456789abcdef",
+}
 
 # POST /api/integration/connectors/agents/{name}/{version}/ -- per-agent install status.
 AGENT_CONNECTOR_INSTALL_STATUS_RESPONSE = [

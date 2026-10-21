@@ -268,6 +268,12 @@ class AgentsAPI(BaseAPI):
         ``GET /api/integration/connectors/?name=<name>&format=json``); a version the catalog
         doesn't know returns a bare 500. Poll :meth:`connector_install_status` for progress.
 
+        The 8.0.0 response is a queue acknowledgement --
+        ``{"remote_status": {"status": "awaiting"}, "message": "Installing connector
+        <name> version <ver>"}`` -- and the queue row is an **upsert** keyed on
+        (connector, version, agent), so re-posting the same triple does not
+        accumulate rows (live-verified on 8.0.0-6034).
+
         Example:
             >>> client = demo_client()
             >>> client.agents.install_connector("edge-1", name="cyops_utilities", version="3.7.1")
@@ -287,12 +293,24 @@ class AgentsAPI(BaseAPI):
         }
         return self.client.post(_INSTALL_CONNECTOR, data=body)
 
-    def upgrade_connector(self, agent_id: str, *, name: str, version: str) -> dict[str, Any]:
+    def upgrade_connector(
+        self,
+        agent_id: str,
+        *,
+        name: str,
+        version: str,
+        rpm_full_name: str | None = None,
+    ) -> dict[str, Any]:
         """Upgrade an installed connector on a remote agent to ``version``.
 
-        ``PUT /api/integration/install-connector/`` - same body shape the install
-        proxy uses (``{name, version, agent_id}``). The appliance proxies the
-        upgrade to ``agent_id`` over SME; poll :meth:`connector_install_status`
+        ``PUT /api/integration/install-connector/``. On 8.0.0 the route rejects a
+        body without an rpm name -- 400 ``Invalid Input :: No connector rpm name
+        or rpm_full_name was provided`` (live-verified on 8.0.0-6034) -- so
+        ``rpm_full_name`` defaults to ``{name}-{version}.rpm``; pass the exact
+        bundle name when you know it. The appliance proxies the upgrade to
+        ``agent_id`` over SME, so this only completes against a **connected**
+        agent: an agent that is merely a record (health "Awaiting Remote Node
+        Connection") answers a bare 500. Poll :meth:`connector_install_status`
         for progress. To go the other way (downgrade/reinstall) pass the target
         ``version`` explicitly.
 
@@ -303,14 +321,31 @@ class AgentsAPI(BaseAPI):
         """
         if not isinstance(agent_id, str) or not agent_id.strip():
             raise ValueError("upgrade_connector() requires a non-empty agent_id")
-        body = {"name": name, "version": version, "agent_id": agent_id}
+        body = {
+            "name": name,
+            "version": version,
+            "agent_id": agent_id,
+            "rpm_full_name": rpm_full_name if rpm_full_name is not None else f"{name}-{version}.rpm",
+        }
         return self.client.put(_INSTALL_CONNECTOR, data=body)
 
-    def uninstall_connector(self, agent_id: str, *, name: str, version: str) -> dict[str, Any]:
+    def uninstall_connector(
+        self,
+        agent_id: str,
+        *,
+        name: str,
+        version: str,
+        rpm_full_name: str | None = None,
+    ) -> dict[str, Any]:
         """Uninstall a connector from a remote agent.
 
         ``DELETE /api/integration/install-connector/`` with ``{name, version,
-        agent_id}``. Distinct from the appliance-level
+        agent_id, rpm_full_name}``. On 8.0.0 the route rejects a body without an
+        rpm name -- 400 ``Invalid Input :: No connector rpm name was provided``
+        (live-verified on 8.0.0-6034) -- so ``rpm_full_name`` defaults to
+        ``{name}-{version}.rpm``. Like :meth:`upgrade_connector`, this is
+        proxied over SME and only completes against a **connected** agent.
+        Distinct from the appliance-level
         :meth:`~pyfsr.api.connectors.ConnectorsAPI.uninstall`, which removes a
         connector from the appliance's self-agent by integer id.
 
@@ -321,7 +356,12 @@ class AgentsAPI(BaseAPI):
         """
         if not isinstance(agent_id, str) or not agent_id.strip():
             raise ValueError("uninstall_connector() requires a non-empty agent_id")
-        body = {"name": name, "version": version, "agent_id": agent_id}
+        body = {
+            "name": name,
+            "version": version,
+            "agent_id": agent_id,
+            "rpm_full_name": rpm_full_name if rpm_full_name is not None else f"{name}-{version}.rpm",
+        }
         resp = self.client.request("DELETE", _INSTALL_CONNECTOR, data=body)
         try:
             return resp.json()
@@ -332,14 +372,26 @@ class AgentsAPI(BaseAPI):
         """Probe a remote agent's liveness over the secure-message bus.
 
         ``GET /api/integration/agent-heartbeat/{agent}/`` - round-trips a
-        heartbeat to the named agent and returns its response. This reflects the
-        *current* SME-bus state, independent of the agent record's asynchronously
-        updated ``configurationHealth.itemValue`` field.
+        heartbeat to the named agent and returns its response. ``agent_id`` is
+        the agent record's ``agentId`` (the 32-hex bus identity) -- **not** the
+        record uuid, which answers 500 (live-verified on 8.0.0-6034).
+
+        This reflects the *current* SME-bus state, independent of the agent
+        record's asynchronously updated ``configurationHealth.itemValue``
+        field. The 200 body is the queued health-check **request row**, not an
+        immediate pong -- ``remote_status`` starts at ``in-progress`` and even
+        an unreachable agent records a row::
+
+            {"id": 89, "result": {}, "action": "health-check",
+             "remote_status": {"status": "in-progress"}, "request_payload": {},
+             "created": "...", "modified": "...", "log_records": null,
+             "connector": null, "configuration": null, "agent": "<agentId>"}
 
         Example:
             >>> client = demo_client()
-            >>> client.agents.heartbeat("edge-1")["status"]
-            'alive'
+            >>> row = client.agents.heartbeat("0123456789abcdef0123456789abcdef")
+            >>> row["action"]
+            'health-check'
         """
         if not isinstance(agent_id, str) or not agent_id.strip():
             raise ValueError("heartbeat() requires a non-empty agent_id")

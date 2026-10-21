@@ -283,6 +283,44 @@ def test_pending_for_run_empty_when_no_run_matches_task_id():
     assert client.gets == []  # never queried manual-wf-input
 
 
+def test_pending_for_run_wait_absorbs_registration_race(monkeypatch):
+    # A run registers in the log store a beat after trigger() returns (measured
+    # up to ~10s on 8.0.0): with wait>0 the lookup re-polls log_list instead of
+    # answering an empty list that reads as "no pending inputs".
+    sleeps = []
+    monkeypatch.setattr("pyfsr.api.manual_input.time.sleep", sleeps.append)
+
+    class _LateRunPlaybooks:
+        def __init__(self):
+            self.calls = 0
+
+        def log_list(self, *, task_id=None, limit=None, **kw):
+            self.calls += 1
+            if self.calls < 3:
+                return {"hydra:member": []}
+            return {"hydra:member": [{"@id": "/wf/api/workflows/149764/"}]}
+
+    class _C(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.playbooks = _LateRunPlaybooks()
+            self.gets = []
+
+        def get(self, endpoint, params=None, **kwargs):
+            self.gets.append((endpoint, params))
+            if endpoint == "/api/wf/api/manual-wf-input/":
+                return {"hydra:member": [_pending_doc()], "hydra:nextPage": None}
+            return super().get(endpoint, params=params, **kwargs)
+
+    client = _C()
+    out = ManualInputAPI(client).pending_for_run("tid", wait=30)
+    assert client.playbooks.calls == 3  # two empty polls, then registered
+    assert len(sleeps) == 2
+    ep, params = client.gets[-1]
+    assert params["workflow"] == "149764"
+    assert len(out) == 1
+
+
 # ---------------------------------------------------------------------------
 # Captured wire shapes -- these pin the fixtures to what a live 8.0.0 box
 # actually returns. The three endpoints do NOT share a shape, and an earlier

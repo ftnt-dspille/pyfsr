@@ -63,6 +63,7 @@ from ..projection import project
 from ..query import Query
 from ..utils.iri import uuid_from_iri
 from ..utils.validation import is_uuid
+from ._people import resolve_user_iri as _resolve_user_iri
 from .base import BaseAPI
 
 
@@ -3184,12 +3185,19 @@ class PlaybooksAPI(BaseAPI):
         step_iri: str | None = None,
         step_id: str | None = None,
         approved: bool | None = None,
+        user: str | None = None,
     ) -> dict[str, Any]:
         """Resume a run waiting on manual input / approval.
 
         POSTs to ``/api/wf/api/workflows/<pk>/wfinput_resume/``. ``input`` is the
         manual-input value payload; ``approved`` (when set) drives an approval
         step. The other args identify which waiting step to resume.
+
+        ``user`` is the ``/api/3/people`` IRI the submission is attributed to.
+        On 8.0.0 the route 500s when the body carries no ``user`` (live-verified
+        on 8.0.0-6034), so ``None`` (default) resolves one automatically --
+        preferring an admin, else the first people record. Pass an explicit IRI
+        to attribute the action to a specific account.
 
         Example:
             >>> client = demo_client()
@@ -3201,6 +3209,8 @@ class PlaybooksAPI(BaseAPI):
         """
         if not isinstance(run_pk, str) or not run_pk.strip():
             raise ValueError("resume() requires a non-empty run pk")
+        if user is None:
+            user = _resolve_user_iri(self.client)
         req = _build(
             ResumeRequest,
             "resume",
@@ -3209,6 +3219,7 @@ class PlaybooksAPI(BaseAPI):
             step_id=step_id,
             manual_input_id=manual_input_id,
             approved=approved,
+            user=user,
         )
         return self.client.post(
             f"/api/wf/api/workflows/{run_pk.strip()}/wfinput_resume/?format=json",
@@ -3228,15 +3239,22 @@ class PlaybooksAPI(BaseAPI):
         return self.client.post(f"/api/wf/api/workflows/{_pk(run_pk)}/start/", data={})
 
     def retry(self, run_pk: str) -> dict[str, Any]:
-        """Retry a failed run from its failed step (``POST .../workflows/{pk}/retry/``).
+        """Retry a failed run from its failed step (``GET .../workflows/{pk}/retry/``).
+
+        The verb is a **GET** on 8.0.0 -- the API guide documents POST, but that
+        answers 405 ``Method "POST" not allowed.`` (live-verified on
+        8.0.0-6034). The response is a queue acknowledgement carrying a fresh
+        ``task_id`` for the retried run:
 
         Example:
             >>> client = demo_client()
             >>> result = client.playbooks.retry("3")
-            >>> result.get("status")
-            'started'
+            >>> result["task_id"]
+            'b0afba58-9dbe-44dd-a6e6-7227e33990dc'
+            >>> result["result"]
+            'workflow retry queued'
         """
-        return self.client.post(f"/api/wf/api/workflows/{_pk(run_pk)}/retry/", data={})
+        return self.client.get(f"/api/wf/api/workflows/{_pk(run_pk)}/retry/")
 
     def approval(
         self,

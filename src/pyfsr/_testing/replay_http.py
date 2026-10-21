@@ -320,9 +320,11 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("POST", "/api/wf/api/dynamic-variable/", cap.DYNAMIC_VARIABLE_CREATE_RESPONSE),
         _entry("PUT", "/api/wf/api/dynamic-variable/9/", cap.DYNAMIC_VARIABLE_UPDATE_RESPONSE),
         _entry("DELETE", "/api/wf/api/dynamic-variable/9/", None, status=204),
-        # start/retry on any workflow pk.
+        # start/retry on any workflow pk. Retry is a GET on 8.0.0 (the guide's
+        # POST answers 405) and answers a queue acknowledgement with a fresh
+        # task_id -- live-captured shape.
         _entry("POST", "/api/wf/api/workflows/1/start/", cap.WORKFLOW_CONTROL_RESPONSE),
-        _entry("POST", "/api/wf/api/workflows/3/retry/", cap.WORKFLOW_CONTROL_RESPONSE),
+        _entry("GET", "/api/wf/api/workflows/3/retry/", cap.WORKFLOW_RETRY_RESPONSE),
         # wfinput_resume -- resume response on any workflow pk.
         _entry("POST", "/api/wf/api/workflows/2/wfinput_resume/", cap.WFINPUT_RESUME_RESPONSE),
         # Manual input list (GET for approval workflows).
@@ -380,7 +382,9 @@ _FIXTURES: dict[tuple[str, str], dict] = dict(
         _entry("POST", "/api/integration/install-connector/", cap.AGENT_INSTALL_CONNECTOR_RESPONSE),
         _entry("PUT", "/api/integration/install-connector/", cap.AGENT_INSTALL_CONNECTOR_RESPONSE),
         _entry("DELETE", "/api/integration/install-connector/", cap.AGENT_INSTALL_CONNECTOR_RESPONSE),
-        _entry("GET", "/api/integration/agent-heartbeat/edge-1/", cap.AGENT_HEARTBEAT_RESPONSE),
+        _entry(
+            "GET", "/api/integration/agent-heartbeat/0123456789abcdef0123456789abcdef/", cap.AGENT_HEARTBEAT_RESPONSE
+        ),
         _entry(
             "POST",
             "/api/integration/connectors/agents/cyops_utilities/3.7.1/",

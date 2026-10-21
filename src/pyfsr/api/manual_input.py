@@ -28,6 +28,7 @@ Example:
 from __future__ import annotations
 
 import builtins
+import time
 from typing import Any, Literal, overload
 
 import requests
@@ -35,6 +36,7 @@ import requests
 from ..models._system import ManualInput, ManualInputOption, ManualInputResume
 from ..pagination import paginate_offset
 from ..utils.iri import uuid_from_iri
+from ._people import resolve_user_iri as _resolve_user_iri
 from .base import BaseAPI
 
 _BASE = "/api/wf/api/manual-wf-input/"
@@ -161,6 +163,7 @@ class ManualInputAPI(BaseAPI):
         self,
         task_id: str,
         *,
+        wait: float = 0,
         is_approval: bool | None = None,
         ordering: str = "-id",
         limit: int | None = None,
@@ -199,6 +202,13 @@ class ManualInputAPI(BaseAPI):
         Args:
             task_id: the ``task_id`` returned by
                 :meth:`~pyfsr.api.playbooks.PlaybooksAPI.trigger`.
+            wait: seconds to keep re-checking ``log_list`` for the run to
+                **register** before giving up. A run appears in the log store a
+                beat after ``trigger()`` returns (measured: up to ~10s on
+                8.0.0), so a caller that resumes straight after triggering
+                should pass ``wait=15`` -- with the default ``0`` an immediate
+                empty result may simply mean "not registered yet", not "no
+                pending inputs".
             is_approval: client-side filter -- ``True`` for approval gates only,
                 ``False`` for plain data-input prompts only, ``None`` (default)
                 for both.
@@ -210,27 +220,38 @@ class ManualInputAPI(BaseAPI):
                 pass ``False`` for raw dicts.
 
         Returns:
-            The run's pending inputs (empty if the run has none -- it has
-            already finished or is not paused on a manual input/approval step).
+            The run's pending inputs. Empty when the run has none (it already
+            finished, is not paused on a manual input/approval step) -- or,
+            right after a trigger, when it has not **registered** yet; pass
+            ``wait=`` a few seconds to absorb that race.
 
         Example:
             >>> client = demo_client()  # doctest: +SKIP
             >>> run = client.playbooks.trigger("Triage Alert", follow=False)  # doctest: +SKIP
-            >>> pending = client.manual_input.pending_for_run(run.task_id)  # doctest: +SKIP
+            >>> pending = client.manual_input.pending_for_run(run.task_id, wait=15)  # doctest: +SKIP
             >>> pending[0].input["schema"]["title"]  # doctest: +SKIP
             'Approve ingestion of the fetched indicators?'
 
             .. note::
                 Requires playbook/run state setup, so this example is ``+SKIP``.
         """
-        # task_id -> run pk (the @id path's trailing segment).
-        resp = self.client.playbooks.log_list(task_id=task_id, limit=1)
-        members = resp.get("hydra:member", []) if isinstance(resp, dict) else (resp if isinstance(resp, list) else [])
-        if not members or not isinstance(members[0], dict):
-            return []
-        rpk = uuid_from_iri(members[0].get("@id"))
-        if not rpk:
-            return []
+        # task_id -> run pk (the @id path's trailing segment). The run shows up
+        # in the log store a beat after trigger() answers, so re-check until
+        # `wait` elapses (the default 0 keeps the old single-shot behaviour).
+        deadline = time.monotonic() + max(0.0, wait)
+        rpk = None
+        while True:
+            resp = self.client.playbooks.log_list(task_id=task_id, limit=1)
+            members = (
+                resp.get("hydra:member", []) if isinstance(resp, dict) else (resp if isinstance(resp, list) else [])
+            )
+            if members and isinstance(members[0], dict):
+                rpk = uuid_from_iri(members[0].get("@id"))
+                if rpk:
+                    break
+            if time.monotonic() >= deadline:
+                return []
+            time.sleep(2.0)
 
         params: dict[str, Any] = {
             "format": "json",
@@ -600,15 +621,7 @@ class ManualInputAPI(BaseAPI):
 
     def _resolve_user_iri(self) -> str:
         """A people IRI to submit a manual input as (prefer an admin)."""
-        resp = self.client.get("/api/3/people", params={"$limit": 50})
-        members = resp.get("hydra:member", []) if isinstance(resp, dict) else []
-        if not members:
-            raise LookupError("no people records found to submit the manual input as")
-        for m in members:
-            name = f"{m.get('firstname') or ''} {m.get('lastname') or ''}".lower()
-            if "admin" in name:
-                return m["@id"]
-        return members[0]["@id"]
+        return _resolve_user_iri(self.client)
 
     @staticmethod
     def _pick_option(

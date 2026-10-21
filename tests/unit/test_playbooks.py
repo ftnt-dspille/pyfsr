@@ -42,6 +42,21 @@ class FakeClient:
                     {},
                 )
             return {"hydra:member": self._workflows}
+        if endpoint.startswith("/api/3/people"):
+            return {
+                "hydra:member": [
+                    {
+                        "@id": "/api/3/people/11111111-1111-1111-1111-111111111111",
+                        "firstname": "Ada",
+                        "lastname": "Lovelace",
+                    },
+                    {
+                        "@id": "/api/3/people/22222222-2222-2222-2222-222222222222",
+                        "firstname": "CS",
+                        "lastname": "Admin",
+                    },
+                ]
+            }
         return {}
 
     def post(self, endpoint, data=None, params=None, **kwargs):
@@ -208,6 +223,23 @@ def test_resume_posts_to_wfinput_resume():
     assert body["approved"] is True
 
 
+def test_resume_resolves_user_automatically():
+    # 8.0.0 500s on a wfinput_resume body without `user`; the default resolves
+    # a people IRI, preferring an admin.
+    client = FakeClient()
+    PlaybooksAPI(client).resume("run-1", manual_input_id=1)
+    _, body = client.post_calls[0]
+    assert body["user"] == "/api/3/people/22222222-2222-2222-2222-222222222222"
+
+
+def test_resume_passes_explicit_user():
+    client = FakeClient()
+    PlaybooksAPI(client).resume("run-1", manual_input_id=1, user="/api/3/people/99999999-9999-9999-9999-999999999999")
+    _, body = client.post_calls[0]
+    assert body["user"] == "/api/3/people/99999999-9999-9999-9999-999999999999"
+    assert not any(ep.startswith("/api/3/people") for ep, _ in client.get_calls)
+
+
 def test_resume_omits_approved_when_none():
     client = FakeClient()
     PlaybooksAPI(client).resume("run-1", manual_input_id=1)
@@ -218,6 +250,16 @@ def test_resume_omits_approved_when_none():
 def test_resume_blank_pk_raises():
     with pytest.raises(ValueError):
         PlaybooksAPI(FakeClient()).resume("", manual_input_id=1)
+
+
+# -- retry ------------------------------------------------------------------
+def test_retry_is_a_get():
+    # 8.0.0 answers POST .../retry/ with 405 "Method POST not allowed";
+    # the working verb is GET and the body is a queue acknowledgement.
+    client = FakeClient()
+    PlaybooksAPI(client).retry("144002")
+    assert client.get_calls[-1][0] == "/api/wf/api/workflows/144002/retry/"
+    assert client.post_calls == []
 
 
 # -- get(step_detail=) / run_env -------------------------------------------
@@ -614,12 +656,13 @@ class _Rec:
         return self._resp
 
 
-def test_start_retry_post_empty_body():
+def test_start_retry_verbs():
     c = _Rec()
     PlaybooksAPI(c).start("pk-1")
     assert c.calls[-1][:3] == ("POST", "/api/wf/api/workflows/pk-1/start/", {})
+    # Retry is a GET on 8.0.0 -- POST answers 405 "Method POST not allowed."
     PlaybooksAPI(c).retry("pk-1")
-    assert c.calls[-1][:3] == ("POST", "/api/wf/api/workflows/pk-1/retry/", {})
+    assert c.calls[-1][:3] == ("GET", "/api/wf/api/workflows/pk-1/retry/", None)
 
 
 def test_approval_body():

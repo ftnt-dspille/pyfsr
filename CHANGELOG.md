@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **`playbooks.retry()` now uses GET.** The API guide documents POST, but 8.0.0
+  answers 405 `Method "POST" not allowed.`; the working verb is GET and the
+  response is a queue acknowledgement -- `{"task_id": "...", "result": "workflow
+  retry queued"}` -- not the `{"status": "started"}` the doctest claimed.
+  Live-verified on 8.0.0-6034.
+- **`playbooks.resume()` sends `user`.** `wfinput_resume` 500s (HTML) on 8.0.0
+  when the body carries no `user` people-IRI. `resume()` now accepts `user=`
+  and resolves one automatically when omitted (prefers an admin, else the first
+  people record) -- the same recipe `manual_input.resume()` already used, now
+  shared via `pyfsr.api._people.resolve_user_iri()`. Live-verified: the
+  no-user body 500s, the auto-resolved body answers
+  `"Awaiting Playbook resumed successfully."`.
+- **`agents.upgrade_connector()` / `agents.uninstall_connector()` send
+  `rpm_full_name`.** On 8.0.0 the route rejects the old `{name, version,
+  agent_id}` body with 400 `Invalid Input :: No connector rpm name ... was
+  provided`. Both methods take `rpm_full_name=` now and default to
+  `{name}-{version}.rpm`. Both proxy over SME and only complete against a
+  **connected** agent -- a disconnected one answers a bare 500.
+  Live-verified on 8.0.0-6034 (validation passes; disconnected proxy 500s).
+
+### Changed
+
+- **Docstring accuracy for the agent surface.** `agents.heartbeat()`: the key
+  is the agent record's 32-hex `agentId` (the record uuid answers 500), and the
+  200 body is the queued health-check request row
+  (`{id, action: "health-check", remote_status: {status: "in-progress"}, ...}`)
+  -- there is no top-level `"status": "alive"`. `agents.install_connector()`:
+  the 8.0.0 response is
+  `{"remote_status": {"status": "awaiting"}, "message": "Installing connector ..."}`,
+  and the queue row is an upsert keyed on (connector, version, agent), so
+  re-posting the same triple does not accumulate rows.
+- **`manual_input.pending_for_run(task_id, wait=)`** absorbs the run-registration
+  race: a run shows up in the log store a beat after `trigger()` returns
+  (measured up to ~10s on 8.0.0), and the previous single-shot lookup answered
+  an empty list that read as "no pending inputs". `wait=15` is the recommended
+  value right after a trigger; the default `0` keeps the old behaviour.
+
 ## [0.26.0] - 2026-10-20
 
 ### Added

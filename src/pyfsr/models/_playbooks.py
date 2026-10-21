@@ -327,6 +327,7 @@ class ResumeRequest(_RequestModel):
     step_iri: str | None = None
     step_id: str | None = None
     approved: bool | None = None
+    user: str | None = None
 
     def to_body(self) -> dict[str, Any]:
         """Render the manual-input/approval resume JSON body."""
@@ -338,6 +339,8 @@ class ResumeRequest(_RequestModel):
         }
         if self.approved is not None:
             body["approved"] = bool(self.approved)
+        if self.user is not None:
+            body["user"] = self.user
         return body
 
 

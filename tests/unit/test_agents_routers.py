@@ -167,20 +167,31 @@ def test_routers_first_none_when_empty():
 def test_upgrade_connector_puts_spec_body():
     c = RecordingClient(post_payload={"status": "ok"})
     AgentsAPI(c).upgrade_connector("hash-1", name="hello-world", version="1.0.4")
+    # 8.0.0 rejects the route without an rpm name (400 "No connector rpm name
+    # or rpm_full_name was provided"), so the default carries {name}-{version}.rpm.
     assert c.calls[-1] == (
         "PUT",
         "/api/integration/install-connector/?format=json",
-        {"name": "hello-world", "version": "1.0.4", "agent_id": "hash-1"},
+        {"name": "hello-world", "version": "1.0.4", "agent_id": "hash-1", "rpm_full_name": "hello-world-1.0.4.rpm"},
     )
+
+
+def test_upgrade_connector_passes_explicit_rpm_name():
+    c = RecordingClient(post_payload={"status": "ok"})
+    AgentsAPI(c).upgrade_connector(
+        "hash-1", name="hello-world", version="1.0.4", rpm_full_name="hello_world-1.0.4-x86_64.rpm"
+    )
+    assert c.calls[-1][2]["rpm_full_name"] == "hello_world-1.0.4-x86_64.rpm"
 
 
 def test_uninstall_connector_deletes_with_body():
     c = RecordingClient(post_payload={"status": "ok"})
     AgentsAPI(c).uninstall_connector("hash-1", name="hello-world", version="1.0.4")
+    # Same 8.0.0 validation as the PUT ("No connector rpm name was provided").
     assert c.calls[-1] == (
         "DELETE",
         "/api/integration/install-connector/?format=json",
-        {"name": "hello-world", "version": "1.0.4", "agent_id": "hash-1"},
+        {"name": "hello-world", "version": "1.0.4", "agent_id": "hash-1", "rpm_full_name": "hello-world-1.0.4.rpm"},
     )
 
 
