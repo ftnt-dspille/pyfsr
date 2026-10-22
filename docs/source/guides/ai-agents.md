@@ -227,9 +227,9 @@ Each read tool is cached, so the discovery steps are cheap to repeat.
 `dispatch(client, name, arguments)` runs one tool and returns a JSON-safe,
 token-trimmed result -- never raises; a failure comes back as `{"error": {...}}`.
 The read tools resolve against the replay session `demo_client()` builds, so
-their return shapes are doctested here (write ops need a live appliance):
+their return shapes are shown here (these tools now live in `fsr-agentic-toolkit`, so the examples are illustrative and not run by this repo's doctests):
 
-```{doctest}
+```{code-block} pycon
 >>> from fsr_agentic_toolkit.verbs.tools import dispatch
 >>> client = demo_client()
 >>> r = dispatch(client, "get_record", {"module": "alerts",
@@ -265,7 +265,7 @@ The write tools (`create_record` / `update_record` / `delete_record`) replay
 against the same captured alert, so their return shapes are doctested too -- an
 agent learns the envelope each tool returns without a live box:
 
-```{doctest}
+```{code-block} pycon
 >>> client = demo_client()
 >>> created = dispatch(client, "create_record", {"module": "alerts",
 ...     "data": {"name": "New Alert"}})
@@ -286,7 +286,7 @@ resolve (typo, wrong casing) comes back as a structured, actionable error --
 field, bad value, and the valid options -- instead of an opaque box 400, because
 the MCP write tools default `strict_picklists=True`:
 
-```{doctest}
+```{code-block} pycon
 >>> client = demo_client()
 >>> out = dispatch(client, "create_record", {"module": "alerts",
 ...     "data": {"severity": "Nope"}})
@@ -312,7 +312,7 @@ hypothesize → plan → gather evidence over MCP → verdict). With `wait=false
 recommended next actions). Captured from a live 8.0 appliance; the verdict is
 trimmed (one representative finding/hypothesis/log; all nine phase states kept):
 
-```{doctest}
+```{code-block} pycon
 >>> client = demo_client()
 >>> started = dispatch(client, "investigate_alert", {
 ...     "ref": "alerts:9f0eb603-ac1e-41c3-b47b-444589beed39"})
