@@ -226,7 +226,16 @@ class InstanceRegistry:
 
         ``path`` defaults to :func:`default_search_path`. This is the entry point
         the MCP server uses: multi-instance when configured, single-box otherwise.
+
+        An explicit box in the environment (``FSR_BASE_URL``) beats the implicit
+        ``~/.pyfsr/instances.toml``: a process started with one box's env must not
+        answer for the registry's default alias, which is another box. Naming the
+        file (``path`` or ``$PYFSR_INSTANCES``) still selects the registry.
         """
+        if path is None and not (os.environ.get("PYFSR_INSTANCES") or "").strip():
+            source = os.environ if env is None else env
+            if (source.get("FSR_BASE_URL") or "").strip():
+                return cls.from_single_env(env)
         path = Path(path).expanduser() if path is not None else default_search_path()
         if path.exists():
             return cls.from_config_file(path)

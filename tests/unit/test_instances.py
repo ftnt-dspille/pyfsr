@@ -454,3 +454,46 @@ def test_single_env_registry_has_no_appliance_profiles():
     assert reg.appliance_names() == []
     with pytest.raises(ValueError, match="no \\[instances.default.appliance\\] subtable"):
         reg.transport()
+
+
+# -- an explicit box in the environment beats the implicit registry ------------
+# A process started with one box's FSR_BASE_URL answered for the registry's
+# default alias (another box) because ~/.pyfsr/instances.toml existed.
+
+def _home_registry(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    (home / ".pyfsr").mkdir(parents=True)
+    _write(home / ".pyfsr" / "instances.toml", (
+        'default = "other"\n'
+        '[instances.other]\nbase_url = "https://other.example.com"\n'
+        '[instances.other.auth]\ntype = "api_key"\nkey = "k1"\n'))
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("PYFSR_INSTANCES", raising=False)
+
+
+def test_env_box_beats_the_implicit_registry(tmp_path, monkeypatch):
+    _home_registry(tmp_path, monkeypatch)
+    reg = InstanceRegistry.load(env={"FSR_BASE_URL": "https://lab.example.com", "FSR_API_KEY": "k"})
+    assert reg.names() == ["default"]
+    assert reg.configs["default"].base_url == "https://lab.example.com"
+
+
+def test_env_box_in_os_environ_beats_the_implicit_registry(tmp_path, monkeypatch):
+    _home_registry(tmp_path, monkeypatch)
+    monkeypatch.setenv("FSR_BASE_URL", "https://lab.example.com")
+    monkeypatch.setenv("FSR_API_KEY", "k")
+    reg = InstanceRegistry.load()
+    assert reg.configs[reg.default].base_url == "https://lab.example.com"
+
+
+def test_naming_the_registry_still_selects_it(tmp_path, monkeypatch):
+    _home_registry(tmp_path, monkeypatch)
+    monkeypatch.setenv("PYFSR_INSTANCES", str(tmp_path / "home" / ".pyfsr" / "instances.toml"))
+    reg = InstanceRegistry.load(env={"FSR_BASE_URL": "https://lab.example.com", "FSR_API_KEY": "k"})
+    assert reg.default == "other"
+
+
+def test_no_env_box_uses_the_registry(tmp_path, monkeypatch):
+    _home_registry(tmp_path, monkeypatch)
+    monkeypatch.delenv("FSR_BASE_URL", raising=False)
+    assert InstanceRegistry.load(env={}).default == "other"
