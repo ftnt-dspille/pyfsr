@@ -559,3 +559,44 @@ def test_deploy_adopts_a_live_stub_collection_owning_the_uuid():
     assert renames and renames[0][2].get("name") == "Agent Lab"
     # ...and no duplicate collection was POSTed
     assert not any(call[0] == "POST" and call[1] == "/api/3/workflow_collections" for call in c.calls)
+
+
+def _writes(c):
+    """Calls that change the box (reads through POST /api/query do not count)."""
+    return [call for call in c.calls if call[0] in ("PUT", "DELETE")
+            or (call[0] == "POST" and not str(call[1]).startswith("/api/query"))]
+
+
+def _uuid_owner_case(live):
+    wf_uuid = "33333333-3333-3333-3333-333333333333"
+    col_uuid = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    envelope = {"type": "workflow_collections", "data": [
+        {"uuid": col_uuid, "name": "Agent Lab",
+         "workflows": [{"uuid": wf_uuid, "name": "WF", "steps": []}]}]}
+    c = _DeployClient(query_members=[])
+    c.responses[f"/api/3/workflow_collections/{col_uuid}"] = {"uuid": col_uuid, **live(col_uuid)}
+    return c, envelope, col_uuid
+
+
+def test_deploy_refuses_to_adopt_a_named_collection_owning_the_uuid():
+    """A collection with a real name is someone's, not the import stub."""
+    c, env, col_uuid = _uuid_owner_case(lambda u: {"name": "Customer Playbooks", "workflows": []})
+    with pytest.raises(ValueError, match=col_uuid):
+        WorkflowCollectionsAPI(c).deploy(env)
+    assert not _writes(c)
+
+
+def test_deploy_refuses_a_stub_holding_other_workflows():
+    c, env, col_uuid = _uuid_owner_case(lambda u: {
+        "name": f"Imported collection {u[:8]}",
+        "workflows": [{"uuid": "44444444-4444-4444-4444-444444444444", "name": "Other"}]})
+    with pytest.raises(ValueError, match="not in this source"):
+        WorkflowCollectionsAPI(c).deploy(env, prune=True)
+    assert not _writes(c)
+
+
+def test_deploy_dry_run_reports_the_rename_without_doing_it():
+    c, env, col_uuid = _uuid_owner_case(lambda u: {"name": f"Imported collection {u[:8]}", "workflows": []})
+    rep = WorkflowCollectionsAPI(c).deploy(env, dry_run=True)
+    assert rep["rename"] == {"from": f"Imported collection {col_uuid[:8]}", "to": "Agent Lab"}
+    assert not _writes(c)

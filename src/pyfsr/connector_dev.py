@@ -27,12 +27,24 @@ from typing import Any
 #: Files every installable connector bundle must contain.
 REQUIRED_FILES = ("info.json", "connector.py", "operations.py", "requirements.txt")
 
-#: Paths never shipped in a bundle (mirrors the ConnectorsV2 package.sh exclusions).
+#: Paths never shipped in a bundle (the ConnectorsV2 package.sh exclusions, plus
+#: secrets and environments). Matched per path SEGMENT, so a nested ``sub/.env`` or
+#: ``lib/.venv/`` is excluded as surely as a top-level one.
 _EXCLUDE = re.compile(
-    r"^(\.git/|\.gitignore$|\.env|dist/|scripts/|tests/|README\.md$|release_notes\.md$"
-    r"|__pycache__/|.*\.pyc$|\.DS_Store$|.*/__pycache__/)"
+    r"(^|/)("
+    r"\.git(/|$)|\.gitignore$|\.env[^/]*$|\.venv(/|$)|venv(/|$)|__pycache__(/|$)"
+    r"|[^/]*\.pyc$|\.DS_Store$|[^/]*\.pem$|[^/]*\.key$|id_rsa[^/]*$|\.pyfsr(/|$)|\.netrc$"
+    r"|credentials(\.[^/]*)?$|[^/]*secrets?\.(json|ya?ml|toml|ini)$"
+    r")"
+    r"|^(dist/|scripts/|tests/|README\.md$|release_notes\.md$)"
 )
 
+#: Outside git, only these connector files ship (an allowlist, so a stray file in
+#: the working tree never rides along).
+_ALLOW_UNTRACKED = re.compile(
+    r"^(info\.json|requirements\.txt|[^/]+\.py|[^/]+/[^/].*\.py"
+    r"|images/[^/]+\.(png|svg|jpg|jpeg|gif)|playbooks/.+|docs/.+)$"
+)
 
 def _validate_name(name: str) -> str:
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
@@ -206,7 +218,8 @@ def _bundle_files(root: Path) -> list[str]:
     except (OSError, subprocess.CalledProcessError):
         files = []
     if not files:
-        files = [str(p.relative_to(root)) for p in sorted(root.rglob("*")) if p.is_file()]
+        files = [rel for p in sorted(root.rglob("*")) if p.is_file()
+                 and _ALLOW_UNTRACKED.match(rel := p.relative_to(root).as_posix())]
     return [f for f in files if not _EXCLUDE.search(f)]
 
 

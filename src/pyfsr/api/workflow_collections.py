@@ -777,26 +777,33 @@ class WorkflowCollectionsAPI(BaseAPI):
         except Exception:
             target_live = None  # not found by name -> try the envelope uuid below
 
+        pending_rename: str | None = None
         if target_live is None and target_uuid:
             # The envelope uuid may already be owned by a LIVE collection under a
-            # different name -- e.g. the "Imported collection <uuid8>" stub the
-            # platform auto-creates when workflows are upserted with no collection
-            # (live-verified on 8.0.0). Creating would 409 on the uuid, so adopt
-            # that row and rename it to the envelope's name.
+            # different name -- the "Imported collection <uuid8>" stub the platform
+            # auto-creates when workflows are upserted with no collection
+            # (live-verified on 8.0.0). Creating would 409 on the uuid. Adopt it ONLY
+            # when it is clearly that stub: the stub's name, and no workflows beyond
+            # the envelope's. Anything else is someone's collection; refuse.
             try:
                 adopted = self.get(target_uuid, relationships=True)
             except Exception:
                 adopted = None
-            adopted_uuid = getattr(adopted, "uuid", None) or (
-                adopted.get("uuid") if isinstance(adopted, dict) else None
-            )
-            if adopted is not None and adopted_uuid == target_uuid:
+            adopted_d = adopted.to_dict() if hasattr(adopted, "to_dict") else adopted
+            if isinstance(adopted_d, dict) and adopted_d.get("uuid") == target_uuid:
+                live_name = adopted_d.get("name") or ""
+                extra = [w.get("uuid") for w in (adopted_d.get("workflows") or [])
+                         if w.get("uuid") not in local_wfs]
+                if live_name != f"Imported collection {target_uuid[:8]}" or extra:
+                    raise ValueError(
+                        f"deploy aborted -- collection uuid {target_uuid} is already used by "
+                        f"the live collection {live_name!r}"
+                        + (f" holding {len(extra)} workflow(s) not in this source" if extra else "")
+                        + ". It is not the platform's auto-created import stub, so it will not "
+                        "be adopted or renamed. Rename the source collection or give it a new uuid.")
                 target_live = adopted
-                live_name = getattr(adopted, "name", None) or (
-                    adopted.get("name") if isinstance(adopted, dict) else None
-                )
                 if col_name and live_name != col_name:
-                    self.update(target_uuid, name=col_name)
+                    pending_rename = col_name
 
         # 2) backup the live collection before any change
         backup_path = None
@@ -881,6 +888,8 @@ class WorkflowCollectionsAPI(BaseAPI):
             "pruned": [],
             "dry_run": dry_run,
         }
+        if pending_rename:
+            report["rename"] = {"from": f"Imported collection {target_uuid[:8]}", "to": pending_rename}
         if dry_run:
             return report
 
@@ -897,6 +906,11 @@ class WorkflowCollectionsAPI(BaseAPI):
                 "  Update your source first (export the live collection to YAML and merge), "
                 f"or pass overwrite_changed=True to delete them deliberately.{where}"
             )
+
+        # The adopted import stub takes the source's name only now: after the
+        # backup, the ownership and divergence guards, and the dry_run return.
+        if pending_rename:
+            self.update(target_uuid, name=pending_rename)
 
         # 4) ensure the collection exists, then upsert workflows in place. A
         # collection in the recycle bin still owns its uuid and name, so creating

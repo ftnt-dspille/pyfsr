@@ -114,3 +114,41 @@ def test_deploy_times_out_when_never_active(tmp_path):
     client.connectors.list_configured = lambda refresh=False: []
     with pytest.raises(TimeoutError):
         deploy_connector(client, root, timeout=0.1)
+
+
+_SECRETS = ["sub/.env", ".env.local", ".venv/lib/x.py", "lib/venv/y.py", "keys/server.pem",
+            "deploy/id_rsa", "conf/.netrc", ".pyfsr/instances.toml", "creds/credentials",
+            "app.key", "nested/__pycache__/m.pyc"]
+
+
+def _bundle_names(root):
+    with tarfile.open(package_connector(root)) as tar:
+        return tar.getnames()
+
+
+def _plant(root, extra=()):
+    for rel in (*_SECRETS, *extra):
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("secret\n")
+
+
+def test_package_never_ships_secrets_or_environments_untracked(tmp_path):
+    root = tmp_path / "acme-feed"
+    scaffold_connector("acme-feed", root)
+    _plant(root, extra=("notes.txt", "data/dump.csv"))
+    names = {n.removeprefix("acme-feed/") for n in _bundle_names(root)}
+    assert not names & {*_SECRETS, "notes.txt", "data/dump.csv"}, names
+    assert "info.json" in names and "operations.py" in names
+
+
+def test_package_never_ships_secrets_even_when_git_tracked(tmp_path):
+    import subprocess
+    root = tmp_path / "acme-feed"
+    scaffold_connector("acme-feed", root)
+    _plant(root)
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-f", "."], cwd=root, check=True)
+    names = {n.removeprefix("acme-feed/") for n in _bundle_names(root)}
+    assert not names & set(_SECRETS), names
+    assert "connector.py" in names
