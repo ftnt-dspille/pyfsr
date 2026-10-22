@@ -1933,3 +1933,30 @@ def test_module_descriptions_guard():
 
     with pytest.raises(ValueError, match="descriptions"):
         ModulesAdminAPI._guard_module_descriptions({"type": "skills", "descriptions": "Skill"})
+
+
+# --- default plural label -------------------------------------------------------
+# A blind label + "s" showed "Agent Lab Assetss" in the UI.
+
+import pytest  # noqa: E402
+
+from pyfsr.api.modules_admin import _default_plural  # noqa: E402
+
+
+@pytest.mark.parametrize(("label", "plural"), [
+    ("Agent Lab Assets", "Agent Lab Assets"),
+    ("Heist", "Heists"),
+    ("Process", "Processes"),
+    ("Box", "Boxes"),
+    ("Patch", "Patches"),
+    ("Policy", "Policies"),
+    ("Gateway", "Gateways"),
+])
+def test_default_plural(label, plural):
+    assert _default_plural(label) == plural
+
+
+def test_guard_fills_a_missing_plural_without_doubling_the_s():
+    payload = {"type": "agentlab_assets", "descriptions": {"singular": "Agent Lab Assets"}}
+    ModulesAdminAPI._guard_module_descriptions(payload)
+    assert payload["descriptions"]["plural"] == "Agent Lab Assets"
