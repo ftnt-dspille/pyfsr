@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.27.0]
+
+### Changed
+
+- **The agent layer moved to `fsr-agentic-toolkit`.** `pyfsr-mcp` is now a thin
+  shim that hands off to the toolkit's MCP server.
+- `modules_admin.publish()` waits out a publish already in flight and reports progress.
+- `modules_admin` default plural no longer doubles a trailing `s`.
+- An explicit `FSR_BASE_URL` beats the implicit `~/.pyfsr/instances.toml`.
+
+### Security
+
+- Deploy adopts only the auto-generated import stub; packaging never ships secrets.
+
 ### Fixed
 
 - **`ai.delete_mcp_tools()` takes plain strings.** The wire validates
