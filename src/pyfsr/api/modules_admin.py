@@ -229,6 +229,23 @@ def _parse_version(raw: str | dict[str, Any]) -> tuple[int, int, int] | None:
     return (int(m.group(1)), int(m.group(2) or 0), int(m.group(3) or 0))
 
 
+
+def _default_plural(label: str) -> str:
+    """English plural for a module label when the caller gives none.
+
+    A blind ``label + "s"`` turned "Agent Lab Assets" into "Agent Lab Assetss" in
+    the UI. A label already ending in a single ``s`` is taken as plural; ``ss``,
+    ``x``, ``z``, ``ch`` and ``sh`` take ``es``; a consonant + ``y`` takes ``ies``.
+    """
+    low = label.lower()
+    if low.endswith("s") and not low.endswith("ss"):
+        return label
+    if low.endswith(("ss", "x", "z", "ch", "sh")):
+        return f"{label}es"
+    if low.endswith("y") and len(low) > 1 and low[-2] not in "aeiou":
+        return f"{label[:-1]}ies"
+    return f"{label}s"
+
 class ModulesAdminAPI(BaseAPI):
     """Create modules, add/alter fields, and publish schema changes."""
 
@@ -938,7 +955,7 @@ class ModulesAdminAPI(BaseAPI):
         module = payload.get("type") or payload.get("module") or "<unknown>"
         desc = payload.get("descriptions")
         if desc is None or desc == [] or desc == {}:
-            payload["descriptions"] = {"singular": module, "plural": f"{module}s"}
+            payload["descriptions"] = {"singular": module, "plural": _default_plural(module)}
             return
         if not isinstance(desc, dict):
             raise ValueError(
@@ -950,7 +967,7 @@ class ModulesAdminAPI(BaseAPI):
         if not isinstance(fixed.get("singular"), str) or not fixed["singular"].strip():
             fixed["singular"] = str(module)
         if not isinstance(fixed.get("plural"), str) or not fixed["plural"].strip():
-            fixed["plural"] = f"{fixed['singular']}s"
+            fixed["plural"] = _default_plural(fixed["singular"])
         payload["descriptions"] = fixed
 
     @staticmethod
@@ -1336,7 +1353,7 @@ class ModulesAdminAPI(BaseAPI):
             "module": module,
             "tableName": module,
             "displayName": display_template,
-            "descriptions": {"singular": label, "plural": plural or f"{label}s"},
+            "descriptions": {"singular": label, "plural": plural or _default_plural(label)},
             "ownable": ownable,
             "userOwnable": ownable,
             "taggable": taggable,
