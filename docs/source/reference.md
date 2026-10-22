@@ -51,19 +51,13 @@ autoapi/pyfsr/authoring/index
 
 ```{toctree}
 :maxdepth: 1
-:caption: Agent & MCP
-
-autoapi/pyfsr/agent/index
-```
-
-```{toctree}
-:maxdepth: 1
 :caption: CLI, appliance & content
 
 autoapi/pyfsr/cli/index
 autoapi/pyfsr/appliance/index
 autoapi/pyfsr/repo/index
 autoapi/pyfsr/content_catalog/index
+autoapi/pyfsr/connector_dev/index
 ```
 
 ```{toctree}

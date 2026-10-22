@@ -46,6 +46,7 @@ _ALLOW_UNTRACKED = re.compile(
     r"|images/[^/]+\.(png|svg|jpg|jpeg|gif)|playbooks/.+|docs/.+)$"
 )
 
+
 def _validate_name(name: str) -> str:
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
         raise ValueError(
@@ -218,8 +219,11 @@ def _bundle_files(root: Path) -> list[str]:
     except (OSError, subprocess.CalledProcessError):
         files = []
     if not files:
-        files = [rel for p in sorted(root.rglob("*")) if p.is_file()
-                 and _ALLOW_UNTRACKED.match(rel := p.relative_to(root).as_posix())]
+        files = [
+            rel
+            for p in sorted(root.rglob("*"))
+            if p.is_file() and _ALLOW_UNTRACKED.match(rel := p.relative_to(root).as_posix())
+        ]
     return [f for f in files if not _EXCLUDE.search(f)]
 
 

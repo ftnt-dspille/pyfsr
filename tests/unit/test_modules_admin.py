@@ -1943,15 +1943,18 @@ import pytest  # noqa: E402
 from pyfsr.api.modules_admin import _default_plural  # noqa: E402
 
 
-@pytest.mark.parametrize(("label", "plural"), [
-    ("Agent Lab Assets", "Agent Lab Assets"),
-    ("Heist", "Heists"),
-    ("Process", "Processes"),
-    ("Box", "Boxes"),
-    ("Patch", "Patches"),
-    ("Policy", "Policies"),
-    ("Gateway", "Gateways"),
-])
+@pytest.mark.parametrize(
+    ("label", "plural"),
+    [
+        ("Agent Lab Assets", "Agent Lab Assets"),
+        ("Heist", "Heists"),
+        ("Process", "Processes"),
+        ("Box", "Boxes"),
+        ("Patch", "Patches"),
+        ("Policy", "Policies"),
+        ("Gateway", "Gateways"),
+    ],
+)
 def test_default_plural(label, plural):
     assert _default_plural(label) == plural
 
@@ -1966,13 +1969,13 @@ def test_guard_fills_a_missing_plural_without_doubling_the_s():
 # Live: the box answered publish with 503 progress states ("Generating Models",
 # "Clearing Cache", ...) and the call returned them as errors without waiting.
 
+
 def test_publish_waits_out_a_publish_already_in_flight():
     from types import SimpleNamespace
 
     from pyfsr.exceptions import FortiSOARException
 
-    states = ["Generating Models", "Generating Models", "Clearing Cache",
-              "Cleaning Up Old Backups", "Encrypt Database"]
+    states = ["Generating Models", "Generating Models", "Clearing Cache", "Cleaning Up Old Backups", "Encrypt Database"]
 
     class BusyClient(RecordingClient):
         def __init__(self):

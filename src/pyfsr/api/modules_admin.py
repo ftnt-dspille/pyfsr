@@ -230,7 +230,6 @@ def _parse_version(raw: str | dict[str, Any]) -> tuple[int, int, int] | None:
     return (int(m.group(1)), int(m.group(2) or 0), int(m.group(3) or 0))
 
 
-
 def _default_plural(label: str) -> str:
     """English plural for a module label when the caller gives none.
 
@@ -246,6 +245,7 @@ def _default_plural(label: str) -> str:
     if low.endswith("y") and len(low) > 1 and low[-2] not in "aeiou":
         return f"{label[:-1]}ies"
     return f"{label}s"
+
 
 class ModulesAdminAPI(BaseAPI):
     """Create modules, add/alter fields, and publish schema changes."""
@@ -2408,9 +2408,7 @@ class ModulesAdminAPI(BaseAPI):
         self._flush_pending_nav()
         return self._maybe_reset_stale_log(result, reset_stale_log)
 
-    def _wait_until_idle(
-        self, deadline: float, poll_interval: float, progress: Callable[[str], None] | None
-    ) -> None:
+    def _wait_until_idle(self, deadline: float, poll_interval: float, progress: Callable[[str], None] | None) -> None:
         """Block while the box answers with migrate progress states (a publish in flight).
 
         Probes the cheap pending-changes read; a transient answer (5xx / a progress state)
@@ -2430,9 +2428,7 @@ class ModulesAdminAPI(BaseAPI):
                     progress(state)
                 last = state
                 if time.monotonic() >= deadline:
-                    raise TimeoutError(
-                        f"the box is still busy with a publish ({state}); try again shortly"
-                    ) from exc
+                    raise TimeoutError(f"the box is still busy with a publish ({state}); try again shortly") from exc
                 time.sleep(poll_interval)
 
     def _maybe_reset_stale_log(self, result: dict[str, Any], reset_stale_log: bool | Any) -> dict[str, Any]:

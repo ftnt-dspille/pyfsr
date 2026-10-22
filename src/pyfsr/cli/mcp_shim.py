@@ -3,6 +3,7 @@
 pyfsr is the SDK only. This entry point hands off to the toolkit's server when it
 is installed, so existing MCP configs keep working, and otherwise says how to get it.
 """
+
 from __future__ import annotations
 
 import shutil

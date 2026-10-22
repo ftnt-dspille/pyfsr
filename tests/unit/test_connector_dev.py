@@ -116,9 +116,19 @@ def test_deploy_times_out_when_never_active(tmp_path):
         deploy_connector(client, root, timeout=0.1)
 
 
-_SECRETS = ["sub/.env", ".env.local", ".venv/lib/x.py", "lib/venv/y.py", "keys/server.pem",
-            "deploy/id_rsa", "conf/.netrc", ".pyfsr/instances.toml", "creds/credentials",
-            "app.key", "nested/__pycache__/m.pyc"]
+_SECRETS = [
+    "sub/.env",
+    ".env.local",
+    ".venv/lib/x.py",
+    "lib/venv/y.py",
+    "keys/server.pem",
+    "deploy/id_rsa",
+    "conf/.netrc",
+    ".pyfsr/instances.toml",
+    "creds/credentials",
+    "app.key",
+    "nested/__pycache__/m.pyc",
+]
 
 
 def _bundle_names(root):
@@ -144,6 +154,7 @@ def test_package_never_ships_secrets_or_environments_untracked(tmp_path):
 
 def test_package_never_ships_secrets_even_when_git_tracked(tmp_path):
     import subprocess
+
     root = tmp_path / "acme-feed"
     scaffold_connector("acme-feed", root)
     _plant(root)

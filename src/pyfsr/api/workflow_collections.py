@@ -792,15 +792,15 @@ class WorkflowCollectionsAPI(BaseAPI):
             adopted_d = adopted.to_dict() if hasattr(adopted, "to_dict") else adopted
             if isinstance(adopted_d, dict) and adopted_d.get("uuid") == target_uuid:
                 live_name = adopted_d.get("name") or ""
-                extra = [w.get("uuid") for w in (adopted_d.get("workflows") or [])
-                         if w.get("uuid") not in local_wfs]
+                extra = [w.get("uuid") for w in (adopted_d.get("workflows") or []) if w.get("uuid") not in local_wfs]
                 if live_name != f"Imported collection {target_uuid[:8]}" or extra:
                     raise ValueError(
                         f"deploy aborted -- collection uuid {target_uuid} is already used by "
                         f"the live collection {live_name!r}"
                         + (f" holding {len(extra)} workflow(s) not in this source" if extra else "")
                         + ". It is not the platform's auto-created import stub, so it will not "
-                        "be adopted or renamed. Rename the source collection or give it a new uuid.")
+                        "be adopted or renamed. Rename the source collection or give it a new uuid."
+                    )
                 target_live = adopted
                 if col_name and live_name != col_name:
                     pending_rename = col_name

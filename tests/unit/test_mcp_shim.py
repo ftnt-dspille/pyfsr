@@ -1,4 +1,5 @@
 """pyfsr-mcp hands off to fsr-agentic-toolkit, or explains how to install it."""
+
 from __future__ import annotations
 
 import builtins

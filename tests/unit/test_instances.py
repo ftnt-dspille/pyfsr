@@ -460,13 +460,18 @@ def test_single_env_registry_has_no_appliance_profiles():
 # A process started with one box's FSR_BASE_URL answered for the registry's
 # default alias (another box) because ~/.pyfsr/instances.toml existed.
 
+
 def _home_registry(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".pyfsr").mkdir(parents=True)
-    _write(home / ".pyfsr" / "instances.toml", (
-        'default = "other"\n'
-        '[instances.other]\nbase_url = "https://other.example.com"\n'
-        '[instances.other.auth]\ntype = "api_key"\nkey = "k1"\n'))
+    _write(
+        home / ".pyfsr" / "instances.toml",
+        (
+            'default = "other"\n'
+            '[instances.other]\nbase_url = "https://other.example.com"\n'
+            '[instances.other.auth]\ntype = "api_key"\nkey = "k1"\n'
+        ),
+    )
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.delenv("PYFSR_INSTANCES", raising=False)
 

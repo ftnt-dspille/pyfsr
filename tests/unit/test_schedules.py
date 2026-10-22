@@ -245,22 +245,6 @@ class _FakeClient:
         self.schedules = _FakeSchedules()
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # -- audit ----------------------------------------------------------------------
 class _AuditClient:
     """Routes GETs by path: schedule list, workflow lookup, run tables."""
@@ -361,5 +345,3 @@ def test_audit_flags_failing_last_run():
     )
     a = SchedulesAPI(c).audit("nightly")
     assert any("'failed'" in p for p in a["problems"])
-
-
