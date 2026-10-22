@@ -92,21 +92,9 @@ client = EnvConfig.from_env().client()
 
 ## AI / agent-friendly
 
-pyfsr ships a transport-neutral **tool registry** for the core operations, with
-token-efficient results and structured (never-raised) errors -- feed it to
-Anthropic tool-use, OpenAI function calling, your own agent loop, or the bundled
-MCP server.
-
-```python
-from pyfsr.agent.tools import to_anthropic_tools, to_openai_tools, dispatch
-
-tools = to_anthropic_tools()             # or to_openai_tools(), or tool_schemas()
-
-# ... your model picks a tool ...
-result = dispatch(client, "search_records",
-                  {"module": "alerts", "summary": True, "limit": 10})
-# result is JSON-safe and trimmed; failures come back as {"error": {...}}
-```
+The agent layer (tool registry, MCP server, workflows) lives in
+[`fsr-agentic-toolkit`](https://pypi.org/project/fsr-agentic-toolkit/); the
+`pyfsr-mcp` command hands off to it when it is installed.
 
 Reads accept `summary=True` or `fields=[...]` to keep payloads small:
 
