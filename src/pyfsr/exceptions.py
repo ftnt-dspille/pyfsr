@@ -287,6 +287,7 @@ _MIGRATE_TRANSIENT_MARKERS = (
     "migrat",  # "migrating" / "migration in progress"
     "schema update",
     "clearing cache",
+    "generating models",
     "backup",
     "service temporarily unavailable",
     "service unavailable",

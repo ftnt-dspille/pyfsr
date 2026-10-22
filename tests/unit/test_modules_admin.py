@@ -1960,3 +1960,51 @@ def test_guard_fills_a_missing_plural_without_doubling_the_s():
     payload = {"type": "agentlab_assets", "descriptions": {"singular": "Agent Lab Assets"}}
     ModulesAdminAPI._guard_module_descriptions(payload)
     assert payload["descriptions"]["plural"] == "Agent Lab Assets"
+
+
+# --- a box already mid-publish is waited out ------------------------------------
+# Live: the box answered publish with 503 progress states ("Generating Models",
+# "Clearing Cache", ...) and the call returned them as errors without waiting.
+
+def test_publish_waits_out_a_publish_already_in_flight():
+    from types import SimpleNamespace
+
+    from pyfsr.exceptions import FortiSOARException
+
+    states = ["Generating Models", "Generating Models", "Clearing Cache",
+              "Cleaning Up Old Backups", "Encrypt Database"]
+
+    class BusyClient(RecordingClient):
+        def __init__(self):
+            super().__init__()
+            self._ts = 100
+            self.busy = list(states)
+
+        def get(self, endpoint, params=None, **kw):
+            self.calls.append(("GET", endpoint, params))
+            if endpoint == "/api/publish/error":
+                self._ts += 1
+                return {"status": "Success", "last_publish_time": self._ts}
+            if self.busy:
+                raise FortiSOARException(self.busy.pop(0), SimpleNamespace(status_code=503))
+            return super().get(endpoint, params=params, **kw)
+
+    c = BusyClient()
+    seen = []
+    result = ModulesAdminAPI(c).publish(poll_interval=0, progress=seen.append)
+    assert result["status"] == "Success"
+    assert seen == ["Generating Models", "Clearing Cache", "Cleaning Up Old Backups", "Encrypt Database"]
+    assert [x for x in c.calls if x[0] == "PUT"] == [("PUT", "/api/publish", {})]
+
+
+def test_publish_times_out_naming_the_state_when_the_box_stays_busy():
+    from types import SimpleNamespace
+
+    from pyfsr.exceptions import FortiSOARException
+
+    class StuckClient(RecordingClient):
+        def get(self, endpoint, params=None, **kw):
+            raise FortiSOARException("Generating Models", SimpleNamespace(status_code=503))
+
+    with pytest.raises(TimeoutError, match="Generating Models"):
+        ModulesAdminAPI(StuckClient()).publish(timeout=0, poll_interval=0)

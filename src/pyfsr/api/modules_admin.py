@@ -63,6 +63,7 @@ from __future__ import annotations
 import re
 import time
 import uuid as _uuid
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
 
 import requests
@@ -2261,8 +2262,16 @@ class ModulesAdminAPI(BaseAPI):
         poll_interval: float = 10.0,
         precheck: bool = True,
         reset_stale_log: bool | Any = False,
+        progress: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         """Commit **all** pending staged schema changes to live (``PUT /api/publish``).
+
+        **A box already mid-publish is waited out, not reported as an error.** While a
+        migrate runs (one started from the UI, or an earlier call), every read answers 503
+        with a progress state ("Generating Models", "Clearing Cache", "Cleaning Up Old
+        Backups", "Encrypt Database"). The pre-PUT reads (precheck, pending changes) ride
+        those states until the box is idle, within ``timeout``. ``progress``, when given, is
+        called with each distinct state seen, so a caller can show it instead of guessing.
 
         ⚠️ Appliance-wide: this publishes every pending change in staging across the whole
         instance, not just modules you touched. On a shared appliance, confirm nothing else
@@ -2357,6 +2366,8 @@ class ModulesAdminAPI(BaseAPI):
                 publish finishes in any state other than ``Success``.
             TimeoutError: if the publish does not complete within ``timeout``.
         """
+        deadline = time.monotonic() + timeout
+        self._wait_until_idle(deadline, poll_interval, progress)
         if precheck:
             bad = self.find_invalid_drafts()
             if bad:
@@ -2396,6 +2407,33 @@ class ModulesAdminAPI(BaseAPI):
         self._flush_pending_grants()
         self._flush_pending_nav()
         return self._maybe_reset_stale_log(result, reset_stale_log)
+
+    def _wait_until_idle(
+        self, deadline: float, poll_interval: float, progress: Callable[[str], None] | None
+    ) -> None:
+        """Block while the box answers with migrate progress states (a publish in flight).
+
+        Probes the cheap pending-changes read; a transient answer (5xx / a progress state)
+        means a migrate is running, so wait and retry. Any other error propagates. Raises
+        :class:`TimeoutError` if the box is still busy at ``deadline``.
+        """
+        last = None
+        while True:
+            try:
+                self.pending_changes()
+                return
+            except Exception as exc:  # noqa: BLE001 -- classified below
+                if not self._is_publish_transient(exc):
+                    raise
+                state = str(getattr(exc, "message", "") or exc).strip()[:120] or "publish in progress"
+                if progress is not None and state != last:
+                    progress(state)
+                last = state
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        f"the box is still busy with a publish ({state}); try again shortly"
+                    ) from exc
+                time.sleep(poll_interval)
 
     def _maybe_reset_stale_log(self, result: dict[str, Any], reset_stale_log: bool | Any) -> dict[str, Any]:
         """Truncate a poisoned publish-error log iff the caller opted in and it is stale.
