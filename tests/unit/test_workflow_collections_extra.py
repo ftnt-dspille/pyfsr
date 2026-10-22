@@ -526,3 +526,36 @@ def test_fingerprint_ignores_how_the_box_returns_the_same_definition():
     assert _wf_fingerprint(local) == _wf_fingerprint(live)
     live["steps"][0]["arguments"] = {"params": {"x": 1}}
     assert _wf_fingerprint(local) != _wf_fingerprint(live)
+
+
+def test_deploy_adopts_a_live_stub_collection_owning_the_uuid():
+    """A bare upsert_playbooks leaves an auto-created "Imported collection
+    <uuid8>" stub owning the envelope uuid (live-verified on 8.0.0). deploy()
+    must adopt and rename that stub, not POST a duplicate (which 409s)."""
+    wf_uuid = "33333333-3333-3333-3333-333333333333"
+    col_uuid = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    envelope = {
+        "type": "workflow_collections",
+        "data": [
+            {
+                "uuid": col_uuid,
+                "name": "Agent Lab",
+                "workflows": [{"uuid": wf_uuid, "name": "WF", "steps": []}],
+            }
+        ],
+    }
+    c = _DeployClient(query_members=[])
+    # name search finds nothing, but GET by the envelope uuid returns the stub
+    c.responses[f"/api/3/workflow_collections/{col_uuid}"] = {
+        "uuid": col_uuid,
+        "name": f"Imported collection {col_uuid[:8]}",
+        "workflows": [],
+    }
+    a = WorkflowCollectionsAPI(c)
+    rep = a.deploy(envelope)
+    assert rep["created"] == [wf_uuid]
+    # the stub was renamed to the envelope name...
+    renames = [call for call in c.calls if call[0] == "PUT" and call[1].endswith(col_uuid)]
+    assert renames and renames[0][2].get("name") == "Agent Lab"
+    # ...and no duplicate collection was POSTed
+    assert not any(call[0] == "POST" and call[1] == "/api/3/workflow_collections" for call in c.calls)
