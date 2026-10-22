@@ -290,7 +290,7 @@ def _env_truthy(value: str | None) -> bool:
 def transport_from_env(env: dict[str, str] | None = None) -> Transport:
     """Build an appliance :class:`Transport` from ``PYFSR_APPLIANCE_*`` env vars.
 
-    Mirrors :func:`pyfsr.agent.mcp.client_from_env` but for the SSH/local
+    Mirrors fsr-agentic-toolkit's ``client_from_env`` but for the SSH/local
     command transport the appliance verbs use (not the REST client). Recognized
     vars: ``PYFSR_APPLIANCE_HOST`` (required for SSH; absent → local if on-box),
     ``PYFSR_APPLIANCE_USER`` (default ``csadmin``), ``PYFSR_APPLIANCE_PASSWORD``,

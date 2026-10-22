@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from pyfsr.agent import tools
 from pyfsr.api.playbooks import PlaybooksAPI
 
 
@@ -222,31 +221,3 @@ def test_diagnose_run_no_definition_when_uuid_missing():
 
 
 # --- MCP dispatch surfaces the structured diff -----------------------------
-def test_dispatch_diagnose_run():
-    client = DiagnoseClient(
-        definition=_definition(
-            "u1",
-            "Block IP",
-            [_step("Start", "cybersponse.abstract_trigger"), _step("Block", "Connectors")],
-        ),
-        runs=[_run("1042", "failed", [])],
-        run_by_pk={
-            "1042": _run(
-                "1042",
-                "failed",
-                [
-                    _run_step("Start", "finished"),
-                    _run_step("Block", "failed", result={"Error message": "boom"}),
-                ],
-            )
-        },
-    )
-    out = tools.dispatch(client, "diagnose_run", {"playbook_uuid": "u1"})
-    assert out["verdict"] == "failed"
-    assert out["failing_step"] == "Block"
-    assert out["error_message"] == "boom"
-    assert out["not_reached"] == []
-    # The tool is registered + documented for an agent.
-    spec = {t["name"]: t for t in tools.tool_schemas()}
-    assert "diagnose_run" in spec
-    assert "verdict" in (spec["diagnose_run"]["description"] or "")

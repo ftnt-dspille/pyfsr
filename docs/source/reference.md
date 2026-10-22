@@ -11,8 +11,7 @@ The complete, auto-generated reference for every pyfsr module and class.
 - **Models** -- typed Pydantic records (`Alert`, `Incident`, …)
 - **Config** -- environment-driven setup ({class}`pyfsr.config.EnvConfig`)
 - **Instances** -- named multi-appliance client registry ({class}`pyfsr.instances.InstanceRegistry`)
-- **Tools** -- agent tool registry ({mod}`pyfsr.agent.tools`)
-- **MCP** -- bundled Model Context Protocol server ({mod}`pyfsr.agent.mcp`)
+- **Agent tools and MCP** -- moved to the separate `fsr-agentic-toolkit` package (`pyfsr-mcp` now hands off to it)
 
 ## Full reference
 

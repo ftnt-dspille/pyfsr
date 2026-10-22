@@ -18,7 +18,7 @@ This is the thing an agentic AI stack (fsr-ai, or your own agent) calls into --
   servers (e.g. FortiSIEM's own MCP) that FortiSOAR's agents are allowed to
   call. That's registration/allowlisting; this module is the appliance
   answering as an MCP server itself.
-- :mod:`pyfsr.agent.mcp` -- the reverse direction: makes *pyfsr* act as an MCP
+- fsr-agentic-toolkit -- the reverse direction: makes the SDK act as an MCP
   server, exposing its own CRUD/schema tool registry to an external agent.
 
 Auth passes through the caller's own FortiSOAR credential: the gateway

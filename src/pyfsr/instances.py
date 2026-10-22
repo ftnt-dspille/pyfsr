@@ -13,7 +13,7 @@ a GA instance, a customer's demo box — without re-wiring host/auth each time.
 
 It is the multi-instance counterpart of :class:`~pyfsr.config.EnvConfig` (which
 resolves exactly one appliance) and is what the bundled MCP server
-(:mod:`pyfsr.agent.mcp`) uses to route a tool call's ``instance`` argument to the
+(fsr-agentic-toolkit's MCP server) uses to route a tool call's ``instance`` argument to the
 right box.
 
 Config file (TOML, default ``~/.pyfsr/instances.toml``)::

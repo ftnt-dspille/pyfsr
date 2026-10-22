@@ -152,7 +152,7 @@ __all__ = [
     # concurrency analysis
     "compute_overlap",
     "ConcurrencyResult",
-    # agent surface lives under ``pyfsr.agent`` (tools registry + MCP + archetypes),
-    # intentionally not flattened into the top-level namespace.
+    # the agent surface (tools registry, MCP server, workflows) is fsr-agentic-toolkit,
+    # a separate package built on this SDK.
     "__version__",
 ]

@@ -230,7 +230,7 @@ The read tools resolve against the replay session `demo_client()` builds, so
 their return shapes are doctested here (write ops need a live appliance):
 
 ```{doctest}
->>> from pyfsr.agent.tools import dispatch
+>>> from fsr_agentic_toolkit.verbs.tools import dispatch
 >>> client = demo_client()
 >>> r = dispatch(client, "get_record", {"module": "alerts",
 ...     "ref": "9f0eb603-ac1e-41c3-b47b-444589beed39"})
@@ -749,7 +749,7 @@ trimming, picklist IRIs, and error reporting so the agent stays on task.
 ## The registry
 
 ```{code-block} python
-from pyfsr.agent.tools import list_tools, tool_schemas, dispatch
+from fsr_agentic_toolkit.verbs.tools import list_tools, tool_schemas, dispatch
 
 list_tools()        # names of every registered tool
 tool_schemas()      # raw JSON-Schema definitions
@@ -772,7 +772,7 @@ import json
 
 import anthropic
 from pyfsr import FortiSOAR
-from pyfsr.agent.tools import to_anthropic_tools, dispatch
+from fsr_agentic_toolkit.verbs.tools import to_anthropic_tools, dispatch
 
 soar = FortiSOAR("soar.example.com", "your-api-token")
 llm = anthropic.Anthropic()                 # reads ANTHROPIC_API_KEY
@@ -826,7 +826,7 @@ not the registry.
 ## OpenAI function calling
 
 ```{code-block} python
-from pyfsr.agent.tools import to_openai_tools, dispatch
+from fsr_agentic_toolkit.verbs.tools import to_openai_tools, dispatch
 
 tools = to_openai_tools()                          # feed to chat.completions
 result = dispatch(client, "search_records", {"module": "alerts"})
@@ -838,7 +838,7 @@ Install the extra and run the server over the tool registry:
 
 ```{code-block} bash
 pip install "pyfsr[mcp]"
-python -m pyfsr.agent.mcp
+fsr-agentic-toolkit mcp
 ```
 
 The server reads `FSR_*` environment variables (see
@@ -848,16 +848,16 @@ tools to any MCP-compatible host.
 ### MCP client config (Copilot, Cursor, Windsurf, Claude)
 
 The pyfsr MCP server runs over stdio, so any MCP-compatible client can drive
-it. Point your tool at `python -m pyfsr.agent.mcp` with the `FSR_*`
+it. Point your tool at `fsr-agentic-toolkit mcp` with the `FSR_*`
 environment set:
 
 **Claude Desktop / Claude Code** (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
-    "pyfsr": {
-      "command": "python",
-      "args": ["-m", "pyfsr.agent.mcp"],
+    "fsr-agentic-toolkit": {
+      "command": "fsr-agentic-toolkit",
+      "args": ["mcp"],
       "env": {
         "FSR_BASE_URL": "https://fortisoar.example.com:13000",
         "FSR_API_KEY": "<your-api-key>"
@@ -871,9 +871,9 @@ environment set:
 ```json
 {
   "mcpServers": {
-    "pyfsr": {
-      "command": "python",
-      "args": ["-m", "pyfsr.agent.mcp"],
+    "fsr-agentic-toolkit": {
+      "command": "fsr-agentic-toolkit",
+      "args": ["mcp"],
       "env": {
         "FSR_BASE_URL": "https://fortisoar.example.com:13000",
         "FSR_API_KEY": "<your-api-key>"
@@ -887,9 +887,9 @@ environment set:
 ```json
 {
   "servers": {
-    "pyfsr": {
-      "command": "python",
-      "args": ["-m", "pyfsr.agent.mcp"],
+    "fsr-agentic-toolkit": {
+      "command": "fsr-agentic-toolkit",
+      "args": ["mcp"],
       "env": {
         "FSR_BASE_URL": "https://fortisoar.example.com:13000",
         "FSR_API_KEY": "<your-api-key>"
@@ -957,7 +957,7 @@ and recipes. The two don't overlap on the four tasks, so running both gives an
 agent the full create-configure-run-build loop with no gaps.
 
 ```{seealso}
-The {mod}`pyfsr.agent.tools` and {mod}`pyfsr.agent.mcp` modules in the {doc}`../reference`
+The `fsr-agentic-toolkit` package (its `verbs.tools` and `verbs.mcp` modules)
 for the complete tool list and dispatch signatures.
 ```
 

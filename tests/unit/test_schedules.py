@@ -2,7 +2,6 @@
 
 import pytest
 
-from pyfsr.agent.tools import dispatch
 from pyfsr.api.schedules import SchedulesAPI, _parse_cron, _utc_offset
 from pyfsr.models import ScheduledTask
 
@@ -246,75 +245,20 @@ class _FakeClient:
         self.schedules = _FakeSchedules()
 
 
-def test_tool_schedule_playbook_resolves_name_and_creates():
-    c = _FakeClient(iri="/api/3/workflows/pb-uuid")
-    out = dispatch(c, "schedule_playbook", {"name": "nightly-recon", "playbook": "Nightly Recon", "cron": "7 2 * * *"})
-    assert out == {"id": "fernet-new", "name": "nightly-recon", "enabled": True}
-    assert c.schedules.create_calls == [
-        (
-            "nightly-recon",
-            "/api/3/workflows/pb-uuid",
-            "7 2 * * *",
-            {"timezone": "UTC", "enabled": True, "exit_if_running": True},
-        )
-    ]
 
 
-def test_tool_schedule_playbook_with_uuid_skips_resolve():
-    c = _FakeClient(iri=None)  # resolve_iri would return None; uuid path must not call it
-    out = dispatch(c, "schedule_playbook", {"name": "x", "playbook_uuid": "abc-uuid", "cron": "7 2 * * *"})
-    assert out["id"] == "fernet-new"
-    assert c.schedules.create_calls[0][1] == "/api/3/workflows/abc-uuid"
 
 
-def test_tool_schedule_playbook_unknown_playbook_returns_error():
-    c = _FakeClient(iri=None)
-    out = dispatch(c, "schedule_playbook", {"name": "x", "playbook": "Nope", "cron": "7 2 * * *"})
-    assert "error" in out and "Nope" in out["error"]["message"]
 
 
-def test_tool_schedule_playbook_requires_playbook_or_uuid():
-    c = _FakeClient()
-    out = dispatch(c, "schedule_playbook", {"name": "x", "cron": "7 2 * * *"})
-    assert "error" in out
 
 
-def test_tool_schedule_playbook_forwards_timezone_and_flags():
-    c = _FakeClient()
-    dispatch(
-        c,
-        "schedule_playbook",
-        {
-            "name": "x",
-            "playbook": "P",
-            "cron": "0 0 * * 1",
-            "timezone": "America/Chicago",
-            "enabled": False,
-            "exit_if_running": False,
-        },
-    )
-    _, _, _, kw = c.schedules.create_calls[0]
-    assert kw == {"timezone": "America/Chicago", "enabled": False, "exit_if_running": False}
 
 
-def test_tool_trigger_schedule_now_by_name():
-    c = _FakeClient()
-    out = dispatch(c, "trigger_schedule_now", {"name": "nightly-recon"})
-    assert out == {"message": "The associated workflow is successfully triggered"}
-    assert c.schedules.trigger_calls == [("nightly-recon", None)]
 
 
-def test_tool_trigger_schedule_now_by_task_id():
-    c = _FakeClient()
-    dispatch(c, "trigger_schedule_now", {"task_id": "fernet-direct"})
-    assert c.schedules.trigger_calls == [(None, "fernet-direct")]
 
 
-def test_tool_delete_schedule_calls_delete_by_name():
-    c = _FakeClient()
-    out = dispatch(c, "delete_schedule", {"name": "nightly-recon"})
-    assert out == {"deleted": True, "name": "nightly-recon"}
-    assert c.schedules.delete_calls == ["nightly-recon"]
 
 
 # -- audit ----------------------------------------------------------------------
@@ -419,11 +363,3 @@ def test_audit_flags_failing_last_run():
     assert any("'failed'" in p for p in a["problems"])
 
 
-def test_schedule_audit_tool_dispatches():
-    c = _AuditClient(
-        sched_row=_sched_row(),
-        wf={"name": "Nightly Recon"},
-        live_runs=[{"name": "Nightly Recon", "status": "finished", "created": "t1"}],
-    )
-    out = dispatch(c, "schedule_audit", {"name": "nightly"})
-    assert out["firing"] is True and out["problems"] == []
