@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.28.0]
+
+### Changed
+
+- **API-key clients now service the bulk routes.** `/api/3/{bulkupsert,insert,update,delete}/*`
+  reject API-key auth on 8.0.0/8.0.1 with a misleading "Invalid credentials." 500
+  (product bug). `FortiSOAR.request()` no longer fails these for an API-key
+  client -- it transparently decomposes each batch into the single-record routes
+  the key can use (`bulkupsert` -> per-row natural-key `POST /api/3/upsert/<module>`;
+  `insert` -> `POST /api/3/<module>`; `update` -> `PUT /api/3/<module>/<uuid>`;
+  `delete` -> `DELETE /api/3/<module>/<uuid>`; `bulkupsert/workflows` routes
+  through `playbooks.upsert_playbooks` because nested step/route children break a
+  naive upsert) and rebuilds the same `{"success": [...], "failure": [...]}`
+  envelope. A JWT client still hits the real bulk route unchanged. This makes
+  `records.bulk_upsert`, `create_playbooks`, `bulk_upsert_templates`,
+  `modules_admin.create_view_templates` and full `provision_module` work under an
+  API key (live-verified end-to-end on 8.0.0-6034). The `@requires_jwt(BULKUPSERT)`
+  guards on `create_playbooks` / `bulk_upsert_templates` are dropped.
+
 ## [0.27.0]
 
 ### Changed
