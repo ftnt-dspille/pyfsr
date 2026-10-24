@@ -706,21 +706,33 @@ def test_retry_defaults_unchanged(mock_client):
     assert retry.status_forcelist == (429, 500, 502, 503, 504)
 
 
-def test_request_bulkupsert_blocked_for_api_key(monkeypatch):
-    """API-key clients must fail fast on /api/3/bulkupsert/* with a clear message,
-    never forwarding the misleading 'Invalid credentials.' 500 the box returns
-    (product bug BUG-bulkupsert-api-key-invalid-credentials). No network call
-    should be made."""
+def test_api_key_bulk_routes_serviced_via_single_routes(monkeypatch):
+    """New contract: an API-key client no longer fails on /api/3/bulkupsert/* (or
+    the rest of the /insert,/update,/delete bulk family). The bulk routes reject
+    API keys with a misleading 'Invalid credentials.' 500 (product bug
+    BUG-bulkupsert-api-key-invalid-credentials), so the client decomposes each
+    batch into the single-record routes the key CAN use -- no bulk route ever
+    reaches the wire, and the call still returns the success/failure envelope. A
+    JWT client keeps hitting the real bulk route (test_api_key_bulk_fallback)."""
+    import io
+    import json as _json
+
     from pyfsr import FortiSOAR
-    from pyfsr.exceptions import UnsupportedAuthOperationError
 
     # API-key auth validates by GET /api/3/people at construction -> allow it.
     monkeypatch.setattr(requests, "get", lambda *a, **k: type("R", (), {"status_code": 200, "text": ""})())
 
-    def explode(*a, **k):  # any real request would be a test failure
-        raise AssertionError("network request must not be made for a blocked op")
+    seen: list[tuple[str, str]] = []
 
-    monkeypatch.setattr(requests.Session, "request", explode)
+    def fake_request(self, method, url, *a, **k):
+        seen.append((method.upper(), url))
+        r = requests.Response()
+        r.status_code = 200
+        r.headers["Content-Type"] = "application/json"
+        r.raw = io.BytesIO(_json.dumps({"uuid": "u", "@id": "/api/3/alerts/u"}).encode())
+        return r
+
+    monkeypatch.setattr(requests.Session, "request", fake_request)
 
     client = FortiSOAR(
         base_url="https://test.fortisoar.com",
@@ -729,18 +741,19 @@ def test_request_bulkupsert_blocked_for_api_key(monkeypatch):
         suppress_insecure_warnings=True,
     )
 
-    with pytest.raises(UnsupportedAuthOperationError) as exc:
-        client.post("/api/3/bulkupsert/workflows", data=[{"name": "x"}])
-    assert "bulkupsert" in str(exc.value)
-    assert "JWT" in str(exc.value) or "username" in str(exc.value)
+    # bulkupsert -> per-row natural-key upsert; insert -> per-row create;
+    # update -> per-row PUT by uuid; delete -> per-row DELETE by uuid.
+    env = client.post("/api/3/bulkupsert/alerts", data=[{"name": "x"}, {"name": "y"}])
+    assert isinstance(env, dict) and "success" in env and len(env["success"]) == 2
+    client.request("POST", "/api/3/insert/alerts", data={"data": [{"name": "z"}]})
+    client.request("PUT", "/api/3/update/alerts", data=[{"uuid": "u", "name": "z"}])
+    client.request("DELETE", "/api/3/delete/widgets", data=[{"uuid": "u"}])
+    client.request("POST", "insert/alerts", data={"data": [{"name": "p"}]})  # prefix-less path
 
-    # The rest of the bulk family has the same sub-request bug (live-verified on
-    # 8.0.0: per-row "Invalid credentials." while a single-record PUT works).
-    for method, endpoint in (
-        ("POST", "/api/3/insert/alerts"),
-        ("PUT", "/api/3/update/alerts"),
-        ("DELETE", "/api/3/delete/widgets"),
-        ("POST", "insert/alerts"),  # prefix-less, as RecordSet passes some paths
-    ):
-        with pytest.raises(UnsupportedAuthOperationError):
-            client.request(method, endpoint, data={"data": []})
+    wire = [u for _, u in seen]
+    for bad in ("/bulkupsert/", "/insert/", "/update/", "/delete/"):
+        assert not any(bad in u for u in wire), f"{bad} must not reach the wire for an API key"
+    assert sum(u.endswith("/api/3/upsert/alerts") for u in wire) == 2, "both upsert rows on the wire"
+    assert any(u.endswith("/api/3/alerts") for m, u in seen if m == "POST"), "insert became a single create"
+    assert any(u.endswith("/api/3/alerts/u") for m, u in seen if m == "PUT"), "update became a single PUT"
+    assert any(u.endswith("/api/3/widgets/u") for m, u in seen if m == "DELETE"), "delete became a single DELETE"

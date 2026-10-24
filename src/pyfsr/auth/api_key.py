@@ -15,7 +15,11 @@ class APIKeyAuth(BaseAuth):
 
     - Cannot use /auth endpoints
     - Cannot export configurations
-    - Cannot use /api/3/bulkupsert/* endpoints (product bug on 8.0.0; use JWT)
+    - Cannot call the /api/3/bulkupsert|insert|update|delete/* routes directly
+      (product bug on 8.0.0/8.0.1) -- but the client no longer fails on them: it
+      transparently decomposes each batch into the single-record routes the key
+      CAN use (see :meth:`FortiSOAR._bulk_via_single_routes`), so ``bulk_upsert``
+      and friends work under an API key.
     - Cannot reach the built-in (``FSR``-auth) MCP servers: fsr-ai replays the caller's JWT to them
       (``BaseAuth.OPERATION_FORWARDED_BEARER``)
 
@@ -51,8 +55,10 @@ class APIKeyAuth(BaseAuth):
             # /api/3/bulkupsert/* rejects API-key auth on 8.0.0 with a
             # misleading `Invalid credentials.` 500 (product bug: the
             # sub-request short-circuit in ApiKeyProvider::validateFingerprint
-            # returns bool `true` instead of the user id). Fail fast and
-            # legibly here instead of letting that 500 surface. JWT works.
+            # returns bool `true` instead of the user id). Listing the op keeps
+            # it declared as a known API-key limitation; the client reads this
+            # flag to DECOMPOSE a bulk call into single-record routes (which the
+            # key can use) rather than to refuse it. JWT hits the bulk route.
             self.OPERATION_BULKUPSERT,
             # fsr-ai's built-in (``FSR``-auth) MCP servers run on the caller's
             # forwarded JWT; an API key has none, so they answer 401.

@@ -82,7 +82,7 @@ from .models import (
     Workflow,
     WorkflowCollection,
 )
-from .records import RecordSet
+from .records import RecordSet, resolve_record_path
 from .utils.file_operations import FileOperations
 
 logger = logging.getLogger("pyfsr")
@@ -632,21 +632,17 @@ class FortiSOAR:
         if bulk.startswith(_BULK_ROUTES) and BaseAuth.OPERATION_BULKUPSERT in getattr(
             self.auth, "unsupported_operations", set()
         ):
-            from .exceptions import UnsupportedAuthOperationError
-
-            raise UnsupportedAuthOperationError(
-                BaseAuth.OPERATION_BULKUPSERT,
-                self.auth.auth_type,
-                message=(
-                    f"{endpoint} cannot be called with API-key auth: the bulk "
-                    "routes (/api/3/bulkupsert, /insert, /update, /delete) run each row "
-                    "as a sub-request, and those reject API keys with a misleading "
-                    "'Invalid credentials.' (product bug, live-verified on 8.0.0 and "
-                    "8.0.1). Use a username/password (JWT) client -- FortiSOAR(base_url, "
-                    "username=..., password=...) -- or the single-record routes "
-                    "(POST/PUT/DELETE /api/3/<module>[/<uuid>]), which take an API key."
-                ),
-            )
+            # The bulk routes reject API-key auth (product bug: each row runs as
+            # a sub-request and re-auth of the forwarded key dies with a
+            # misleading "Invalid credentials." 500 -- see
+            # troubleshooting/BUG-bulkupsert-api-key-invalid-credentials.md).
+            # Rather than fail, decompose the batch into the single-record
+            # routes (POST/PUT/DELETE /api/3/<module>[/<uuid>], and the
+            # natural-key POST /api/3/upsert/<module>), which DO accept an API
+            # key, and rebuild the same {"success": [...], "failure": [...]}
+            # envelope the bulk endpoint would have returned. A JWT client never
+            # reaches this branch and hits the real bulk route unchanged.
+            return self._bulk_via_single_routes(bulk, method, data)
 
         unsupported = getattr(self.auth, "unsupported_operations", set())
         if (
@@ -872,6 +868,144 @@ class FortiSOAR:
         response.raw = io.BytesIO(_json.dumps(body).encode())
         response.encoding = "utf-8"
         return response
+
+    @staticmethod
+    def _synth_json_response(url: str, body: dict | list, status: int = 200) -> requests.Response:
+        """Wrap an already-computed JSON ``body`` as a :class:`requests.Response`.
+
+        Lets an internal code path (e.g. the API-key bulk fallback) return
+        through the same ``request() -> _safe_json()`` pipeline a real HTTP call
+        would, so callers that read ``.json()`` or expect a parsed dict are
+        unaffected.
+        """
+        import io
+        import json as _json
+
+        response = requests.Response()
+        response.status_code = status
+        response.url = url
+        response.headers["Content-Type"] = "application/json"
+        response.raw = io.BytesIO(_json.dumps(body).encode())
+        response.encoding = "utf-8"
+        return response
+
+    @staticmethod
+    def _bulk_rows(data: dict | list | None) -> tuple[list[dict], list[str]]:
+        """Pull the rows and uniqueness keys out of a bulk-route payload.
+
+        The bulk endpoints are called with three shapes:
+
+        - a bare ``list`` of rows (``bulkupsert/<module>``, ``bulkupsert/workflows``),
+        - ``{"__data": [...], "__unique": [...]}`` (``bulkupsert/system_view_templates``),
+        - ``{"data": [...]}`` (``insert/<module>``).
+
+        Returns ``(rows, unique_fields)``; ``unique_fields`` defaults to
+        ``["uuid"]`` (the platform's natural match key) when the payload does not
+        specify ``__unique``.
+        """
+        if isinstance(data, list):
+            return [r for r in data if isinstance(r, dict)], ["uuid"]
+        if isinstance(data, dict):
+            if isinstance(data.get("__data"), list):
+                unique = data.get("__unique") or ["uuid"]
+                return [r for r in data["__data"] if isinstance(r, dict)], list(unique)
+            if isinstance(data.get("data"), list):
+                return [r for r in data["data"] if isinstance(r, dict)], ["uuid"]
+            # A lone record dict -- treat as a one-row batch.
+            return [data], ["uuid"]
+        return [], ["uuid"]
+
+    @staticmethod
+    def _bulk_failure_line(index: int, exc: Exception) -> str:
+        """Format one failed row to match FortiSOAR's bulk ``failure`` strings.
+
+        The real endpoint reports a failed row as
+        ``"POST method for object at index #N in the request payload failed with
+        error: {json}"``; :class:`~pyfsr.records.BulkUpsertFailure.from_raw` and
+        :func:`~pyfsr.exceptions._rollup_bulk_failures` both parse that shape, so
+        the fallback emits it too (with the real exception type/message in the
+        embedded JSON) and partial-failure handling keeps working.
+        """
+        import json as _json
+
+        inner = _json.dumps({"type": type(exc).__name__, "message": str(exc)})
+        return f"POST method for object at index #{index} in the request payload failed with error: {inner}"
+
+    def _bulk_via_single_routes(self, endpoint: str, method: str, data: dict | list | None) -> requests.Response:
+        """API-key fallback for a ``/api/3/{bulkupsert,insert,update,delete}/<module>`` call.
+
+        Decomposes the batch into the single-record routes the API key *can*
+        use and rebuilds the ``{"success": [...], "failure": [...]}`` envelope.
+        A per-row error is captured (never raised) so one bad row fails exactly
+        that row, matching the bulk endpoint's own partial-failure behaviour.
+        """
+        parts = endpoint.strip("/").split("/")  # ['api', '3', '<family>', '<module>']
+        family = parts[2] if len(parts) > 2 else ""
+        module = parts[3] if len(parts) > 3 else ""
+        rows, unique = self._bulk_rows(data)
+
+        # workflows carry nested step/route children; bulkupsert/workflows is
+        # create-only and a naive per-row upsert leaves broken playbooks (the
+        # reason playbooks.upsert_playbooks exists). Route there instead -- it
+        # creates/updates through single-record routes that accept an API key.
+        if module in ("workflows",) and family in ("bulkupsert", "insert"):
+            from .exceptions import APIError
+
+            success: list[Any] = []
+            failure: list[str] = []
+            for i, row in enumerate(rows):
+                try:
+                    res = self.playbooks.upsert_playbooks([row])
+                    got = res.get("success") if isinstance(res, dict) else None
+                    success.extend(got if isinstance(got, list) else [res])
+                except APIError as exc:
+                    failure.append(self._bulk_failure_line(i, exc))
+                except Exception as exc:  # noqa: BLE001
+                    failure.append(self._bulk_failure_line(i, exc))
+            return self._synth_json_response(endpoint, {"success": success, "failure": failure})
+
+        success = []
+        failure = []
+        for i, row in enumerate(rows):
+            try:
+                rec = self._single_record_write(family, module, row, unique)
+                if rec is not None:
+                    success.append(rec)
+            except Exception as exc:  # noqa: BLE001
+                failure.append(self._bulk_failure_line(i, exc))
+        return self._synth_json_response(endpoint, {"success": success, "failure": failure})
+
+    def _single_record_write(self, family: str, module: str, row: dict, unique: list[str]) -> Any:
+        """Perform the single-record equivalent of one bulk row for ``family``.
+
+        - ``bulkupsert`` -> natural-key ``POST /api/3/upsert/<module>`` (or a
+          get-or-create+update when ``unique`` is a non-uuid field set),
+        - ``insert`` -> ``POST /api/3/<module>`` (pure create),
+        - ``update`` -> ``PUT /api/3/<module>/<uuid>``,
+        - ``delete`` -> ``DELETE /api/3/<module>/<uuid>`` (returns ``None``).
+
+        Picklist values are already resolved by the calling bulk method, so no
+        further resolution happens here.
+        """
+        if family == "bulkupsert":
+            if unique and unique != ["uuid"]:
+                # Non-uuid uniqueness: find-by-key then update, else create.
+                return self.records(module).upsert(row, key=unique, raw=True, resolve_picklists=False)
+            return self.post(f"/api/3/upsert/{module}", data=row)
+        if family == "insert":
+            return self.post(f"/api/3/{module}", data=row)
+        if family == "update":
+            ref = row.get("uuid") or row.get("@id") or row.get("id")
+            if not ref:
+                raise ValueError(f"update of {module} needs a uuid/@id on the row")
+            return self.put(resolve_record_path(module, str(ref)), data=row)
+        if family == "delete":
+            ref = row.get("uuid") or row.get("@id") or row.get("id")
+            if not ref:
+                raise ValueError(f"delete of {module} needs a uuid/@id on the row")
+            self.delete(resolve_record_path(module, str(ref)))
+            return None
+        raise ValueError(f"unsupported bulk family: {family!r}")
 
     @overload
     def get(
