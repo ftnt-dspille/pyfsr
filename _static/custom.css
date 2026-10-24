@@ -1,0 +1,62 @@
+/* Furo theme tweaks for pyfsr. */
+
+/* Slightly rounded code blocks and a touch more padding in cards. */
+div[class^="highlight"] {
+  border-radius: 6px;
+}
+
+/* sphinx-design grid cards: lift on hover for a more polished landing page. */
+.sd-card {
+  border-radius: 8px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.sd-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+/* Make the card title links inherit the card color (not the link blue). */
+.sd-card-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* --- Left sidebar navigation -------------------------------------------- */
+/* The AutoAPI "API Reference" toctree is deep and fully expands along the
+   active path, which makes the sidebar taller than the viewport. Give the
+   tree its own scroll region (independent of the search box / version
+   heading above it) instead of letting the whole sidebar overflow. */
+.sidebar-tree {
+  max-height: calc(100vh - var(--sidebar-item-height) * 3 - 4rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 0.5rem;
+}
+
+/* Slim the scrollbar so it doesn't eat into the nav width. */
+.sidebar-tree::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar-tree::-webkit-scrollbar-thumb {
+  background: var(--color-sidebar-search-border);
+  border-radius: 3px;
+}
+
+/* --- Sidebar footer (GitHub icon / edit links) --------------------------- */
+/* Furo pins the footer icons at the bottom of the sidebar scroll container;
+   on short viewports (and especially with iOS Safari's bottom chrome) the
+   icon row gets clipped. Force it to stay fully visible with room to spare. */
+.sidebar-container .sidebar-scroll {
+  padding-bottom: 1rem;
+}
+.sidebar-container .sidebar-footer {
+  min-height: 2.5rem;
+  padding-bottom: env(safe-area-inset-bottom, 0.75rem);
+}
+
+/* Same clipping can happen on the in-page "Next/Previous" + GitHub footer
+   at the bottom of the article on mobile widths. */
+.content-icon-container,
+footer {
+  padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+}

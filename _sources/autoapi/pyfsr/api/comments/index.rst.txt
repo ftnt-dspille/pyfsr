@@ -1,0 +1,113 @@
+pyfsr.api.comments
+==================
+
+.. py:module:: pyfsr.api.comments
+
+.. autoapi-nested-parse::
+
+   The comments module — ``client.comments``.
+
+   Comments are the analyst notes attached to records. A comment is its own record
+   (``/api/3/comments``) linked to one or more parent records (alerts, incidents,
+   tasks, …) through the parent module's relationship field. ``create`` derives
+   that relationship field from the record IRI, so a comment attaches to any module
+   without per-module wiring.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.comments.CommentsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: CommentsAPI(client)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Create and manage FortiSOAR comments (the analyst notes attached to records).
+
+   A comment is its own record (``/api/3/comments``) linked to one or more parent
+   records (alerts, incidents, tasks, ...) through the parent module's relationship
+   field. ``create`` derives that relationship field from the record IRI, so a
+   comment can be attached to any module without per-module wiring.
+
+   .. rubric:: Example
+
+   .. code-block:: python
+
+       client.comments.create(
+           "Triaged — false positive, closing.",
+           record="/api/3/alerts/1234-...",
+       )
+
+
+   .. py:attribute:: module
+      :value: 'comments'
+
+
+
+   .. py:method:: create(content: str, *, record: str | list[str] | None = None, **data: Any) -> dict[str, Any]
+
+      Create a comment, optionally linked to one or more parent records.
+
+      :param content: The comment body text.
+      :param record: A record IRI (``/api/3/<module>/<uuid>``) or list of IRIs to
+                     attach the comment to. All IRIs must belong to the same module;
+                     the relationship field is derived from that module name.
+      :param \*\*data: Extra fields merged into the payload (e.g. ``file`` for an
+                       attachment IRI).
+
+      :returns: The created comment object.
+
+      .. rubric:: Example
+
+      .. code-block:: python
+
+          client.comments.create(
+              "Looks malicious — escalating.",
+              record="/api/3/incidents/abcd-...",
+          )
+
+
+
+   .. py:method:: list(params: dict | None = None) -> dict[str, Any]
+
+      List comments, optionally filtered via query parameters.
+
+      Doctest:
+
+          >>> from pyfsr._testing import demo_client
+          >>> client = demo_client()
+          >>> result = client.comments.list()
+          >>> len(result.get("hydra:member", []))
+          2
+          >>> result["hydra:totalItems"]
+          2
+
+
+
+   .. py:method:: get(comment_id: str) -> dict[str, Any]
+
+      Get a single comment by ID.
+
+
+
+   .. py:method:: update(comment_id: str, data: dict[str, Any]) -> dict[str, Any]
+
+      Update a comment (e.g. edit its ``content``).
+
+
+
+   .. py:method:: delete(comment_id: str) -> None
+
+      Delete a comment.
+
+
+

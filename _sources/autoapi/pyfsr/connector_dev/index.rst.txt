@@ -1,0 +1,86 @@
+pyfsr.connector_dev
+===================
+
+.. py:module:: pyfsr.connector_dev
+
+.. autoapi-nested-parse::
+
+   Local ConnectorsV2 development helpers: scaffold, package, deploy.
+
+   The full connector flow a coding agent (or a human) drives from a checkout:
+
+   1. :func:`scaffold_connector` -- write a minimal, installable connector skeleton
+      (``info.json``, ``connector.py``, ``operations.py``, ``requirements.txt``).
+   2. edit the generated files (add operations, config fields, icons).
+   3. :func:`package_connector` -- build the ``dist/<name>-<version>.tgz`` bundle
+      FortiSOAR installs, preferring git-tracked files.
+   4. :func:`deploy_connector` -- upload the bundle (``$replace`` so redeploys are
+      idempotent), wait for the connector to activate, optionally configure it, and
+      healthcheck.
+
+   CLI: ``pyfsr connector scaffold|package|deploy`` (see :mod:`pyfsr.cli.connector`).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.connector_dev.REQUIRED_FILES
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.connector_dev.scaffold_connector
+   pyfsr.connector_dev.package_connector
+   pyfsr.connector_dev.wait_for_active
+   pyfsr.connector_dev.deploy_connector
+
+
+Module Contents
+---------------
+
+.. py:data:: REQUIRED_FILES
+   :value: ('info.json', 'connector.py', 'operations.py', 'requirements.txt')
+
+
+.. py:function:: scaffold_connector(name: str, directory: str | pathlib.Path | None = None, *, label: str | None = None, description: str = 'A custom FortiSOAR connector.') -> list[pathlib.Path]
+
+   Write a minimal, installable ConnectorsV2 skeleton and return the paths.
+
+   The skeleton has one configuration field (``server``), one operation
+   (``ping``) and a health check, so it packages, installs, configures and runs
+   end to end before any real logic is added. Refuses to overwrite: the target
+   directory must not already contain any of the generated files.
+
+
+.. py:function:: package_connector(directory: str | pathlib.Path = '.', *, out_dir: str | pathlib.Path | None = None) -> pathlib.Path
+
+   Build ``<out_dir>/<name>-<version>.tgz`` unpacking to one ``<name>/`` dir.
+
+   Ports the ConnectorsV2 ``package.sh``: prefer git-tracked files, drop tests,
+   packaging furniture and caches, and require the four core files. Returns the
+   bundle path. ``out_dir`` defaults to ``<directory>/dist``.
+
+
+.. py:function:: wait_for_active(client, name: str, timeout: float = 180.0, interval: float = 3.0) -> None
+
+   Poll ``list_configured(refresh=True)`` until ``name`` shows up active.
+
+   The install job finishing does not mean the connector record is live yet
+   (live-verified in lab deploys), so installs must wait on the listing.
+
+
+.. py:function:: deploy_connector(client, source: str | pathlib.Path, *, config: dict[str, Any] | None = None, config_name: str = 'Default', replace: bool = True, timeout: float = 180.0) -> dict[str, Any]
+
+   Package (if ``source`` is a checkout), install, activate, configure, healthcheck.
+
+   ``source`` is a connector directory (packaged first) or a built ``.tgz``.
+   With ``config``, an idempotent named configuration is upserted and marked
+   default, then healthchecked. Returns a summary dict of what happened.
+
+
