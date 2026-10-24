@@ -18,8 +18,8 @@ class APIKeyAuth(BaseAuth):
     - Cannot call the /api/3/bulkupsert|insert|update|delete/* routes directly
       (product bug on 8.0.0/8.0.1) -- but the client no longer fails on them: it
       transparently decomposes each batch into the single-record routes the key
-      CAN use (see :meth:`FortiSOAR._bulk_via_single_routes`), so ``bulk_upsert``
-      and friends work under an API key.
+      CAN use (``FortiSOAR._bulk_via_single_routes``), so ``bulk_upsert`` and
+      friends work under an API key.
     - Cannot reach the built-in (``FSR``-auth) MCP servers: fsr-ai replays the caller's JWT to them
       (``BaseAuth.OPERATION_FORWARDED_BEARER``)
 
