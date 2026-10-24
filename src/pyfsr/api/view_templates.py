@@ -57,8 +57,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ..auth.base import BaseAuth
-from ..auth.guards import requires_jwt
 from ..models._system import SystemViewTemplate
 from ..pagination import extract_members
 from .base import BaseAPI
@@ -324,7 +322,6 @@ class ViewTemplatesAPI(BaseAPI):
         assert isinstance(result, dict)
         return SystemViewTemplate.model_validate(result)
 
-    @requires_jwt(BaseAuth.OPERATION_BULKUPSERT, "/api/3/bulkupsert/* rejects API keys with a misleading 500")
     def bulk_upsert_templates(
         self,
         templates: list[dict[str, Any] | SystemViewTemplate],

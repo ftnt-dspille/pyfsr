@@ -928,10 +928,12 @@ class RecordSet(Generic[T]):
 
         .. note::
             The ``/api/3/bulkupsert/*`` family rejects **API-key** auth on
-            8.0.0 (a product bug returns a misleading ``Invalid credentials.``
-            500). An API-key client raises
-            :class:`~pyfsr.exceptions.UnsupportedAuthOperationError` up front
-            rather than making the call; use a username/password (JWT) client.
+            8.0.0/8.0.1 (a product bug returns a misleading ``Invalid
+            credentials.`` 500). This still works under an API-key client: the
+            client transparently decomposes the batch into single-record
+            natural-key upserts (``POST /api/3/upsert/<module>``) and rebuilds
+            the same ``{"success": [...], "failure": [...]}`` envelope. A JWT
+            client hits the real bulk route unchanged.
 
         ``rows`` is a list of dicts or model instances. Each row is matched the
         same way as :meth:`upsert`. By default the raw server response is

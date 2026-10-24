@@ -12,9 +12,7 @@ from pyfsr.api.ai import AIApi
 from pyfsr.api.api_users import ApiKeyUsersAPI
 from pyfsr.api.auth_config import AuthConfigAPI
 from pyfsr.api.export_config import ExportConfigAPI
-from pyfsr.api.playbooks import PlaybooksAPI
 from pyfsr.api.system import SystemAPI
-from pyfsr.api.view_templates import ViewTemplatesAPI
 from pyfsr.auth.api_key import APIKeyAuth
 from pyfsr.auth.base import BaseAuth
 from pyfsr.auth.guards import ensure_jwt, jwt_only, requires_jwt
@@ -118,8 +116,9 @@ def test_jwt_only_class_guards_public_methods_only() -> None:
         (ExportConfigAPI, lambda a: a.export_by_template_uuid("x")),
         (ExportConfigAPI, lambda a: a.export_by_template_name("x")),
         (ExportConfigAPI, lambda a: a.create_export_template("x", {})),
-        (PlaybooksAPI, lambda a: a.create_playbooks([])),
-        (ViewTemplatesAPI, lambda a: a.bulk_upsert_templates([])),
+        # create_playbooks / bulk_upsert_templates are no longer JWT-only: an
+        # API-key client now services /api/3/bulkupsert/* via single-record
+        # routes (see test_api_key_bulk_fallback + test_client bulk-serviced test).
     ],
 )
 def test_known_jwt_only_surfaces_reject_api_key(api_cls, call) -> None:
