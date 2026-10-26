@@ -276,6 +276,13 @@ class RolesAPI(BaseAPI):
             can_update: Update permission flag (defaults to ``True``).
             can_delete: Delete permission flag (defaults to ``True``).
             can_execute: Execute permission flag (defaults to ``True``).
+
+        Note:
+            This works under API-key auth too (live-verified on 8.0.0): a key
+            carrying the roles module grant can rewrite role permissions -- as
+            can ``POST``/``DELETE`` on ``/api/3/roles`` -- including
+            potentially the role the key itself belongs to. Treat API-key
+            custody accordingly.
         """
         role_uuid = self._resolve_role_uuid(role)
         module_iri = self._resolve_module_iri(module)
