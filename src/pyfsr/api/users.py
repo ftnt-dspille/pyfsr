@@ -21,6 +21,7 @@ from __future__ import annotations
 import base64
 import builtins
 import json as _json
+import warnings
 from typing import Any, cast
 
 import requests as _requests
@@ -214,8 +215,13 @@ class UsersAPI(BaseAPI):
             phone_work: Optional work phone number.
             phone_mobile: Optional mobile phone number.
             teams: Optional team UUIDs **or** friendly names (e.g. ``["Tier 1 SOC"]``).
+                Omitting it emits a :class:`UserWarning` that lists the tenant's
+                team names: the wire accepts teamless users (das saves the record
+                with ``teams: []``) but team-scoped RBAC may leave them unable to
+                see or own records, and the UI's Add User wizard requires a team.
             role_uuids: Deprecated alias for ``roles``.
-            team_uuids: Deprecated alias for ``teams``.
+            team_uuids: Deprecated alias for ``teams`` (passing it suppresses the
+                no-team warning).
             typed: parse the result into a :class:`~pyfsr.models.User` (default);
                 pass ``False`` for the raw dict.
 
@@ -229,6 +235,31 @@ class UsersAPI(BaseAPI):
         """
         effective_roles = role_uuids if role_uuids is not None else roles
         effective_teams = team_uuids if team_uuids is not None else teams
+
+        if not effective_teams:
+            # The wire accepts teamless users -- das saves the People record
+            # with ``teams: []`` (live-verified 8.0.0) -- but the UI's Add User
+            # wizard requires a team, and team-scoped RBAC can leave a
+            # teamless user unable to see or own records. Warn before the
+            # POST (no mutation yet) and list the tenant's teams so the
+            # caller can add one to the call instead of hunting for names.
+            try:
+                names = sorted(self.client.teams.team_map())
+            except Exception:  # noqa: BLE001 - the warning must not depend on the lookup
+                names = []
+            options = ""
+            if names:
+                shown = ", ".join(repr(n) for n in names[:8])
+                extra = len(names) - 8
+                options = f" Available team names: {shown}" + (f" (+{extra} more)." if extra > 0 else ".")
+            warnings.warn(
+                f"creating user {loginid!r} with no team: das saves the People record "
+                f"with 'teams: []' and team-scoped RBAC may leave it unable to see or "
+                f"own records (the Add User wizard requires a team).{options} "
+                f"Pass teams=[...] to assign one.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         payload: dict[str, Any] = {
             "firstname": firstname,
@@ -324,7 +355,9 @@ class UsersAPI(BaseAPI):
         given credentials, roles, and profile fields (``created=True``).
 
         Accepts the same keyword arguments as :meth:`create` (``access_type``,
-        ``active``, ``department``, ``teams``, etc.).
+        ``active``, ``department``, ``teams``, etc.). Like :meth:`create`, the
+        create path warns when no team is given -- pass ``teams`` to avoid the
+        warning and give the new user data visibility.
 
         Args:
             loginid: Login username (must be unique). Used only on the create path.

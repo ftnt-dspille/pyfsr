@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **`UsersAPI.create` warns when no team is given.** das saves a teamless
+  People record with `teams: []` (the wire does not require a team), but the
+  UI's Add User wizard requires one and team-scoped RBAC may leave a teamless
+  user unable to see or own records. The warning fires before any mutation and
+  lists the tenant's available team names so the caller can add `teams=[...]`
+  to the call (live-verified: team assignment accepts UUID, IRI and name forms
+  and sticks in all three; a teamless user on 8.0.0 still logs in and sees
+  role-visible records). Passing the legacy `team_uuids=` suppresses the
+  warning. `teams` stays optional -- no silent default team is ever invented.
+
 ## [0.28.0]
 
 ### Changed

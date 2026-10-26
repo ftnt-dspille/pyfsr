@@ -9,6 +9,7 @@ is a first-class ``TeamsAPI``; ``client.users`` team/role helpers delegate to it
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import pytest
@@ -599,6 +600,58 @@ def test_users_shims_delegate_to_roles_and_teams():
     assert users.team_uuid_by_name("Tier 1") == _T_UID
     assert users._resolve_roles(["Analyst"]) == [_R_UID]
     assert users._resolve_teams(["Tier 1"]) == [_T_UID]
+
+
+# ----------------------------------------------------------------- users.create
+def _users_create_client() -> _FakeClient:
+    c = _api_keys_client()
+    c.route(
+        "POST", "/api/3/people", {"uuid": "p1", "@id": "/api/3/people/p1", "firstname": "Jane", "lastname": "Smith"}
+    )
+    c.route("POST", "/api/3/resetpassword", "Password Changed sucessfully")
+    return c
+
+
+def test_users_create_without_teams_warns_and_lists_available_names():
+    """No-team creates warn before the POST and offer the tenant's team names."""
+    c = _users_create_client()
+    with pytest.warns(UserWarning, match="no team") as record:
+        UsersAPI(c).create("j.smith", "Str0ng!Pass", "Jane", "Smith", "j.smith@corp.example", roles=["Analyst"])
+    msg = str(record[0].message)
+    assert "Tier 1" in msg  # available team names offered back to the caller
+    body = next(call[2] for call in c.calls if call[0] == "POST" and call[1] == "/api/3/people")
+    assert "teams" not in body  # no silent default team is ever invented
+
+
+def test_users_create_with_teams_is_silent_and_posts_resolved_uuids():
+    c = _users_create_client()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any warning fails the test
+        UsersAPI(c).create(
+            "j.smith", "Str0ng!Pass", "Jane", "Smith", "j.smith@corp.example", roles=["Analyst"], teams=["Tier 1"]
+        )
+    body = next(call[2] for call in c.calls if call[0] == "POST" and call[1] == "/api/3/people")
+    assert body["teams"] == [_T_UID]
+    assert body["roles"] == [_R_UID]
+    assert body["user"]["status"] == 1
+
+
+def test_users_create_legacy_team_uuids_suppresses_warning():
+    c = _users_create_client()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        UsersAPI(c).create(
+            "j.smith",
+            "Str0ng!Pass",
+            "Jane",
+            "Smith",
+            "j.smith@corp.example",
+            roles=["Analyst"],
+            role_uuids=[_R_UID],
+            team_uuids=[_T_UID],
+        )
+    body = next(call[2] for call in c.calls if call[0] == "POST" and call[1] == "/api/3/people")
+    assert body["teams"] == [_T_UID]
 
 
 # ----------------------------------------------------------------- records() accessor
