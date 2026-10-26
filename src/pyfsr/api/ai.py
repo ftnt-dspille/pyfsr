@@ -109,7 +109,7 @@ from pathlib import Path
 from typing import Any
 
 from ..auth.base import BaseAuth
-from ..auth.guards import ensure_jwt
+from ..auth.guards import ensure_jwt, requires_jwt
 from ..exceptions import APIError, ResourceNotFoundError
 from ..exceptions import PermissionError as FortiSOARPermissionError
 from ..models._ai import (
@@ -2321,6 +2321,10 @@ class AIApi(BaseAPI):
         """
         return AgentPackage.from_dir(source_dir)
 
+    @requires_jwt(
+        BaseAuth.OPERATION_AUTH,
+        "the /ai/ front door rejects API-key uploads (401, same as a bogus credential)",
+    )
     def import_agent(
         self,
         path: str,

@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from pyfsr.api.ai import AIApi
+from pyfsr.api.api_keys import ApiKeysAPI
 from pyfsr.api.api_users import ApiKeyUsersAPI
 from pyfsr.api.auth_config import AuthConfigAPI
 from pyfsr.api.export_config import ExportConfigAPI
@@ -211,3 +212,32 @@ def test_mcp_status_silent_for_jwt() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         AIApi(client).mcp_status()  # type: ignore[arg-type]
+
+
+def test_api_key_writes_require_jwt() -> None:
+    """POST/PUT /api/3/api_keys answer 403 under an API key (admin grants included)."""
+    client = _Recorder(_api_key_auth())
+    with pytest.raises(UnsupportedAuthOperationError) as exc:
+        ApiKeysAPI(client).create(name="x", user_uuid="880e8400-e29b-41d4-a716-446655440000")  # type: ignore[arg-type]
+    assert client.calls == []
+    assert exc.value.operation == BaseAuth.OPERATION_AUTH
+    with pytest.raises(UnsupportedAuthOperationError):
+        ApiKeysAPI(client).update("660e8400-e29b-41d4-a716-446655440000", name="y")  # type: ignore[arg-type]
+    assert client.calls == []
+
+
+def test_api_key_writes_allowed_under_jwt() -> None:
+    client = _Recorder(_JwtAuth())
+    ApiKeysAPI(client).create(name="x", user_uuid="880e8400-e29b-41d4-a716-446655440000")  # type: ignore[arg-type]
+    assert client.calls and client.calls[0][1][0] == "/api/3/api_keys"
+
+
+def test_agent_import_requires_jwt() -> None:
+    """POST /ai/agent/import answers 401 (same as a bogus credential) under an API key."""
+    client = _Recorder(_api_key_auth())
+    with pytest.raises(UnsupportedAuthOperationError) as exc:
+        AIApi(client).import_agent("/tmp/agent.zip")  # type: ignore[arg-type]
+    assert client.calls == []
+    assert exc.value.operation == BaseAuth.OPERATION_AUTH
+    assert ApiKeysAPI.create.__requires_jwt__ == BaseAuth.OPERATION_AUTH
+    assert AIApi.import_agent.__requires_jwt__ == BaseAuth.OPERATION_AUTH

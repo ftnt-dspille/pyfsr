@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **`ApiKeysAPI.create`/`update` and `AIApi.import_agent` now require JWT.**
+  Wire-verified under a real API key (admin-equivalent grants included):
+  `POST`/`PUT /api/3/api_keys` answer 403 Access Denied, and
+  `POST /ai/agent/import` answers 401 (same as a bogus credential). Both now
+  fail fast client-side with `UnsupportedAuthOperationError` instead of
+  forwarding the request. `ApiKeysAPI.delete` stays unguarded -- the probe can
+  only show auth passing (404 from the handler on a bogus uuid), not whether a
+  real deletion is RBAC-allowed.
+
+### Changed
+
 - **`UsersAPI.create` warns when no team is given.** das saves a teamless
   People record with `teams: []` (the wire does not require a team), but the
   UI's Add User wizard requires one and team-scoped RBAC may leave a teamless

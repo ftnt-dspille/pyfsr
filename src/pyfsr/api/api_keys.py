@@ -45,6 +45,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ..auth.base import BaseAuth
+from ..auth.guards import requires_jwt
 from ..models import ApiKey
 from ..pagination import extract_members
 from .base import BaseAPI
@@ -122,6 +124,11 @@ class ApiKeysAPI(BaseAPI):
         """
         return ApiKey.model_validate(self.client.get(f"{_BASE}/{uuid}"))
 
+    @requires_jwt(
+        BaseAuth.OPERATION_AUTH,
+        "the api_keys module refuses writes from API-key principals (403 Access "
+        "Denied, even with admin-equivalent grants)",
+    )
     def create(
         self,
         *,
@@ -157,6 +164,11 @@ class ApiKeysAPI(BaseAPI):
             body["teams"] = self._resolve_teams(list(teams))
         return ApiKey.model_validate(self.client.post(_BASE, data=body))
 
+    @requires_jwt(
+        BaseAuth.OPERATION_AUTH,
+        "the api_keys module refuses writes from API-key principals (403 Access "
+        "Denied, even with admin-equivalent grants)",
+    )
     def update(self, uuid: str, **fields: Any) -> ApiKey:
         """Partially update an API-key binding (``PUT /api/3/api_keys/{uuid}``).
 

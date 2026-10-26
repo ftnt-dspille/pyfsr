@@ -599,11 +599,19 @@ class UsersAPI(BaseAPI):
         )
 
     def whoami(self) -> dict[str, Any]:
-        """Identify the calling user, whatever the client authenticated with.
+        """Identify the calling user (JWT clients only).
 
         Combines ``GET /api/3/actors/current`` (the People profile) with
         ``GET /api/auth/users?uuid=<userId>`` (the das login record). The login
         ID is the username typed on the login page.
+
+        API-key clients raise :class:`~pyfsr.exceptions.UnsupportedAuthOperationError`
+        here: the das user-administration route is admin-only (403 under an API
+        key, live-verified), and pyfsr refuses it client-side to match. An
+        API-key principal has no People record at all (``GET /api/3/people
+        ?userId=<its userId>`` comes back empty) -- its self-description is the
+        ``ApiKey`` actor returned by ``GET /api/3/actors/current`` (which works
+        under both auth modes).
 
         Returns:
             ``{"loginid", "person_uuid", "user_id", "email", "name"}`` --
