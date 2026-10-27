@@ -672,6 +672,26 @@ def test_search_rejects_empty_terms():
         SearchAPI(FakeClient()).search("", index=["alerts"])
 
 
+def test_search_api_instance_is_callable():
+    # client.search("term", index=[...]) -- the alias for .search().
+    c = FakeClient(post_resp={"totalItems": 0, "results": [], "context_code": 200})
+    SearchAPI(c)("8.8.8.8", index=["alerts"])
+    assert c.calls[-1] == ("POST", "/api/search", {"q": ["8.8.8.8"], "index": ["alerts"]}, None)
+
+
+def test_search_missing_index_raises_helpful_error():
+    # The server's 400 for a missing index is cryptic; the client explains
+    # what an index IS (module api names) before the call is ever sent.
+    with pytest.raises(ValueError, match="module api names"):
+        SearchAPI(FakeClient()).search("malware")
+
+
+def test_search_passes_search_type_through():
+    c = FakeClient(post_resp={"totalItems": 0, "results": [], "context_code": 200})
+    SearchAPI(c).search("malware", index=["alerts"], search_type="phrase_prefix")
+    assert c.calls[-1][2]["searchType"] == "phrase_prefix"
+
+
 def test_search_run_persisted_replays_the_saved_body():
     # There is no "run saved query" route: load the query, post its body.
     saved = {"query": {"logic": "AND", "filters": [{"field": "name", "operator": "eq", "value": "x"}]}}
