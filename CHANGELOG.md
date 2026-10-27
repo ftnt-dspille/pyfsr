@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Global search results are hydrated into typed records by default.**
+  `client.search("malware", index=["alerts"])` now returns a
+  `GlobalSearchResult`: iterate it for typed `BaseRecord` objects
+  (picklist fields resolved to friendly values), `.total` for the match
+  count across all pages, `.hits` for the raw Elasticsearch hits,
+  `.skipped`/`raw` for the full fidelity. Each hit's `_source['@id']`
+  (the only reliable handle -- the `_source` projection varies between
+  calls) is fetched concurrently via `RecordSet.get_many` (ordered,
+  bounded thread pool); a hit whose record no longer resolves (deleted
+  since indexing, or not permission-visible) is dropped from `.records`
+  but stays in `.hits` instead of failing the search. Pass
+  `hydrate=False` for the previous behavior -- the raw measured wire
+  dict `{totalItems, results, context_code}`. Live-verified on 8.0.0:
+  typed hydration with friendly picklists, mixed `Alert`/`Workflow`
+  types from a multi-index search, stale-hit skip, and warm-pool timing
+  (6 records in 0.55s pooled vs 1.58s serial; the first
+  picklist-resolving read in a process warms the picklist catalog once).
+
+### Changed
+
+- **`SearchAPI` is callable and a missing `index` fails with a helpful
+  error.** `client.search("malware", index=["alerts"])` works without the
+  `.search` stutter, and omitting `index` raises a `ValueError` that
+  explains what an index is (module api names, the same ones
+  `client.records` takes) before the request is sent, instead of the
+  server's cryptic multi-line 400.
+
 ## [0.29.0] - 2026-10-26
 
 ### Changed

@@ -6,7 +6,7 @@ from pyfsr.api.api_keys import ApiKeysAPI, _api_key_plaintext
 from pyfsr.api.api_users import ApiKeyUsersAPI
 from pyfsr.api.audit import AuditAPI
 from pyfsr.api.feeds import FeedIngestResult, IngestFeedsAPI
-from pyfsr.api.search import SearchAPI
+from pyfsr.api.search import GlobalSearchResult, SearchAPI
 from pyfsr.api.system import SystemAPI
 from pyfsr.api.taxii import TaxiiAPI
 from pyfsr.models import (
@@ -24,11 +24,13 @@ from pyfsr.models._stix import parse_stix_object
 
 
 class FakeClient:
-    def __init__(self, *, get_resp=None, post_resp=None, put_resp=None):
+    def __init__(self, *, get_resp=None, post_resp=None, put_resp=None, get_many_resp=None):
         self.calls = []
         self._get = get_resp
         self._post = post_resp
         self._put = put_resp
+        self._get_many = get_many_resp
+        self.get_many_calls = []  # (module, refs) per records(module).get_many()
 
     def get(self, endpoint, params=None, **kw):
         self.calls.append(("GET", endpoint, params))
@@ -44,6 +46,27 @@ class FakeClient:
 
     def delete(self, endpoint, params=None, **kw):
         self.calls.append(("DELETE", endpoint, kw.get("data"), params))
+
+    def records(self, module):
+        return _FakeRecordSet(module, self)
+
+
+class _FakeRecordSet:
+    """Stand-in for RecordSet: records get_many() fan-out without touching calls."""
+
+    def __init__(self, module, client):
+        self.module = module
+        self._client = client
+
+    def get_many(self, refs, **kw):
+        self._client.get_many_calls.append((self.module, tuple(refs)))
+        resp = self._client._get_many
+        if resp is None:
+            return [None] * len(refs)
+        if isinstance(resp, list):
+            assert len(resp) == len(refs), "canned get_many list must align with refs"
+            return list(resp)
+        return [resp] * len(refs)
 
 
 # --------------------------------------------------------------------- feeds
@@ -690,6 +713,96 @@ def test_search_passes_search_type_through():
     c = FakeClient(post_resp={"totalItems": 0, "results": [], "context_code": 200})
     SearchAPI(c).search("malware", index=["alerts"], search_type="phrase_prefix")
     assert c.calls[-1][2]["searchType"] == "phrase_prefix"
+
+
+_SEARCH_HITS = {
+    "totalItems": 2,
+    "context_code": 200,
+    "results": [
+        {
+            "_index": "cyops_alerts",
+            "_id": "a-1",
+            "_score": 9.0,
+            "_source": {"@id": "/api/3/alerts/a-1", "displayName": "A"},
+        },
+        {
+            "_index": "cyops_incidents",
+            "_id": "i-1",
+            "_score": 8.0,
+            "_source": {"@id": "/api/3/incidents/i-1", "displayName": "I"},
+        },
+    ],
+}
+
+
+def test_search_hydrates_hits_into_records_by_default():
+    # Default: each hit's @id is fetched via the module's RecordSet.get_many
+    # and the response becomes a GlobalSearchResult.
+    rec = object()
+    c = FakeClient(post_resp=_SEARCH_HITS, get_many_resp=rec)
+    result = SearchAPI(c).search("malware", index=["alerts", "incidents"])
+    assert isinstance(result, GlobalSearchResult)
+    assert result.total == 2
+    assert result.records == [rec, rec]  # hit order preserved across modules
+    assert result.hits == _SEARCH_HITS["results"]
+    assert result.skipped == 0
+    assert result.raw is _SEARCH_HITS
+    # one fan-out per module, refs are the hit IRIs
+    assert c.get_many_calls == [
+        ("alerts", ("/api/3/alerts/a-1",)),
+        ("incidents", ("/api/3/incidents/i-1",)),
+    ]
+    assert list(result) == result.records and len(result) == 2
+
+
+def test_search_hydration_skips_unresolvable_hits():
+    # A stale hit (deleted since indexing / not visible) slots as None in
+    # get_many -- it is dropped from .records but stays in .hits.
+    raw = {
+        "totalItems": 2,
+        "context_code": 200,
+        "results": [
+            {"_index": "cyops_alerts", "_id": "a-1", "_score": 9.0, "_source": {"@id": "/api/3/alerts/a-1"}},
+            {"_index": "cyops_alerts", "_id": "a-2", "_score": 8.0, "_source": {"@id": "/api/3/alerts/a-2"}},
+        ],
+    }
+    rec = object()
+    c = FakeClient(post_resp=raw, get_many_resp=[None, rec])
+    result = SearchAPI(c).search("malware", index=["alerts"])
+    assert result.records == [rec]  # stale hit dropped, hit order kept
+    assert result.skipped == 1
+    assert len(result.hits) == 2
+    assert c.get_many_calls == [("alerts", ("/api/3/alerts/a-1", "/api/3/alerts/a-2"))]
+
+
+def test_search_hydration_falls_back_to_index_and_id():
+    # A hit without _source.@id is hydrated via _index (cyops_ prefix
+    # stripped) + _id.
+    raw = {
+        "totalItems": 1,
+        "context_code": 200,
+        "results": [
+            {
+                "_index": "cyops_incidents",
+                "_id": "i-9",
+                "_score": 1.0,
+                "_source": {"uuid": "i-9", "displayName": "no iri"},
+            },
+        ],
+    }
+    rec = object()
+    c = FakeClient(post_resp=raw, get_many_resp=rec)
+    result = SearchAPI(c).search("x", index=["incidents"])
+    assert result.records == [rec]
+    assert c.get_many_calls == [("incidents", ("/api/3/incidents/i-9",))]
+
+
+def test_search_hydrate_false_returns_raw_wire_dict():
+    # The documented opt-out: exactly the measured wire shape, no fan-out.
+    c = FakeClient(post_resp=_SEARCH_HITS, get_many_resp=object())
+    result = SearchAPI(c).search("malware", index=["alerts"], hydrate=False)
+    assert result is _SEARCH_HITS
+    assert c.get_many_calls == []
 
 
 def test_search_run_persisted_replays_the_saved_body():
