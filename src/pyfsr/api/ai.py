@@ -107,6 +107,7 @@ from collections.abc import Iterator
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from ..auth.base import BaseAuth
 from ..auth.guards import ensure_jwt, requires_jwt
@@ -829,6 +830,22 @@ def _agent_run(trace_id: str, spans: list[TraceSpan]) -> AgentRun:
 def _check_io(io: str) -> None:
     if io not in TRACE_IO_MODES:
         raise ValueError(f"io must be one of {sorted(TRACE_IO_MODES)}, got {io!r}")
+
+
+def _agent_path_seg(value: str, field: str) -> str:
+    """Validate an agent ``name``/``version`` and URL-encode it for a path segment.
+
+    These land in ``/api/ai/agent/{name}/{version}`` routes (including the DELETE
+    uninstall). The value is interpolated straight into the request path, so a raw
+    ``/`` or ``..`` would change which resource is hit. Reject anything that is not a
+    plain, single-segment token and ``quote`` the rest so legitimate characters
+    (spaces, ``+``) survive the round trip.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} must be a non-empty string, got {value!r}")
+    if "/" in value or "\\" in value or value in (".", "..") or "\x00" in value:
+        raise ValueError(f"{field} {value!r} is not a valid single path segment")
+    return quote(value, safe="")
 
 
 #: The planner's built-in tool table (8.0.1 ``investigation-planning``
@@ -2304,7 +2321,7 @@ class AIApi(BaseAPI):
 
     def get_agent(self, name: str, version: str) -> AgentRecord:
         """Fetch one AI agent's details (``GET /api/ai/agent/{name}/{version}``)."""
-        resp = self.client.get(f"/api/ai/agent/{name}/{version}")
+        resp = self.client.get(f"/api/ai/agent/{_agent_path_seg(name, 'name')}/{_agent_path_seg(version, 'version')}")
         return AgentRecord.model_validate(resp if isinstance(resp, dict) else {})
 
     # ----------------------------------------------------- import / export
@@ -2481,7 +2498,9 @@ class AIApi(BaseAPI):
         the row.
         """
         try:
-            resp = self.client.get(f"/api/ai/agent/config/{name}/{version}")
+            resp = self.client.get(
+                f"/api/ai/agent/config/{_agent_path_seg(name, 'name')}/{_agent_path_seg(version, 'version')}"
+            )
         except APIError as err:
             if err.status_code != 500:
                 raise
@@ -2584,7 +2603,9 @@ class AIApi(BaseAPI):
             raise ValueError(f"no installed agent named {name!r}")
         if agent.system and not force:
             raise ValueError(f"{name!r} is a built-in agent; pass force=True to delete it anyway")
-        self.client.delete(f"/api/ai/agent/{name}/{agent.version or '1.0.0'}")
+        seg_name = _agent_path_seg(agent.name or name, "name")
+        seg_version = _agent_path_seg(agent.version or "1.0.0", "version")
+        self.client.delete(f"/api/ai/agent/{seg_name}/{seg_version}")
 
     # ------------------------------------------- investigation tool table (8.0.1)
     def _tool_list_record(self) -> Any:

@@ -31,6 +31,20 @@ def test_uninstall_agent_deletes_by_name_and_version():
     assert client.deleted == ["/api/ai/agent/my-agent/1.2.0"]
 
 
+def test_uninstall_agent_rejects_traversal_in_name():
+    # A name that tries to climb the path must never reach the DELETE as a raw segment.
+    api, client = _api([SimpleNamespace(name="../../llm/config", version="1.0.0", system=False)])
+    with pytest.raises(ValueError, match="valid single path segment"):
+        api.uninstall_agent("../../llm/config")
+    assert client.deleted == []
+
+
+def test_uninstall_agent_quotes_special_chars():
+    api, client = _api([SimpleNamespace(name="my agent", version="1.0.0", system=False)])
+    api.uninstall_agent("my agent")
+    assert client.deleted == ["/api/ai/agent/my%20agent/1.0.0"]
+
+
 def test_uninstall_agent_unknown_name_raises():
     api, client = _api([])
     with pytest.raises(ValueError, match="no installed agent"):
