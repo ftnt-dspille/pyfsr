@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-10-27
+
 ### Added
 
 - **Global search results are hydrated into typed records by default.**
