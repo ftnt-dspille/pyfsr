@@ -1442,18 +1442,25 @@ AUTH_CONFIG_TOKEN_ROWS = {
     ]
 }
 
-# POST /api/search -- cross-module Elasticsearch text search.
+# POST /api/search -- cross-module Elasticsearch text search. Measured shape:
+# {totalItems, results[raw ES hits], context_code} (NOT the fabricated
+# ES-took/hits envelope this fixture used to carry).
 GLOBAL_SEARCH_RESPONSE = {
-    "hits": {
-        "total": 1,
-        "hits": [
-            {
-                "_index": "alerts",
-                "_id": "9f0eb603-ac1e-41c3-b47b-444589beed39",
-                "_source": {"name": "Response Capture Test Alert", "severity": "Low"},
-            }
-        ],
-    }
+    "totalItems": 1,
+    "results": [
+        {
+            "_index": "cyops_alerts",
+            "_id": "9f0eb603-ac1e-41c3-b47b-444589beed39",
+            "_score": 9.33,
+            "_source": {
+                "@id": "/api/3/alerts/9f0eb603-ac1e-41c3-b47b-444589beed39",
+                "@type": "Alert",
+                "name": "Response Capture Test Alert",
+                "severity": "Low",
+            },
+        }
+    ],
+    "context_code": 200,
 }
 
 # POST /api/query/<module> with a saved query's body -- run_persisted.

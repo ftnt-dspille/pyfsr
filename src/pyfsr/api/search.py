@@ -6,8 +6,8 @@ as ``client.search``. (Ad-hoc per-module queries are built with
 
 Example:
     >>> client = demo_client()
-    >>> results = client.search.search("8.8.8.8", index=["alerts", "incidents"])
-    >>> results["hits"]["total"]
+    >>> results = client.search.search(["8.8.8.8"], index=["alerts", "incidents"])
+    >>> results["totalItems"]
     1
     >>> qid = "7d245801-38d7-4400-9453-7bf7c42b7353"
     >>> client.search.run_persisted("threat_intel_feeds", qid, limit=50)["hydra:totalItems"]
@@ -27,7 +27,7 @@ class SearchAPI(BaseAPI):
 
     def search(
         self,
-        q: str,
+        q: str | list[str],
         *,
         index: list[str],
         size: int | None = None,
@@ -39,20 +39,33 @@ class SearchAPI(BaseAPI):
     ) -> dict[str, Any]:
         """Cross-module text search (``POST /api/search``), Elasticsearch-backed.
 
-        ``q`` is the query string (**min 3 chars**, enforced server-side);
-        ``index`` is the list of module api names to search. Results are RBAC/team
-        scoped automatically. Optional: ``size``/``offset`` paging, ``sort``,
-        ``search_type``, and ``modify_date_gte``/``modify_date_lte`` (epoch ms).
+        ``q`` is one term or a list of terms -- the server requires an ARRAY
+        (a bare string in the body crashes the PHP controller with
+        ``400 TypeError``, so this method always sends ``["<term>", ...]``).
+        There is NO min-length rule despite the server's 400 message: 2-char
+        terms answer 200. ``index`` is the list of module api names to search;
+        an index list that filters to empty (unknown module or no permission)
+        answers ``400 "You must indicate which index to search on."``.
+        Results are RBAC/team scoped automatically. Optional: ``size``/
+        ``offset`` paging, ``sort``, ``search_type``, and
+        ``modify_date_gte``/``modify_date_lte`` (epoch).
+
+        Returns the measured ``{totalItems, results, context_code}`` shape
+        where each ``results`` entry is a raw ES hit (``_index``, ``_id``,
+        ``_score``, ``_source``).
 
         Example:
             >>> client = demo_client()
             >>> results = client.search.search("8.8.8.8", index=["alerts"])
-            >>> results["hits"]["hits"][0]["_source"]["severity"]
+            >>> results["totalItems"]
+            1
+            >>> results["results"][0]["_source"]["severity"]
             'Low'
         """
-        if not isinstance(q, str) or len(q.strip()) < 3:
-            raise ValueError("search() requires a query string of at least 3 characters")
-        body: dict[str, Any] = {"q": q, "index": list(index)}
+        terms = [q] if isinstance(q, str) else list(q)
+        if not terms or not all(isinstance(t, str) and t.strip() for t in terms):
+            raise ValueError("search() requires at least one non-empty search term (the server 400s an empty q list)")
+        body: dict[str, Any] = {"q": terms, "index": list(index)}
         for key, val in (
             ("size", size),
             ("offset", offset),

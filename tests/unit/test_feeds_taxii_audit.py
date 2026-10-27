@@ -647,17 +647,29 @@ def test_system_deploy_license_public_action():
 
 
 # -------------------------------------------------------------------- search
-def test_search_builds_body():
-    c = FakeClient(post_resp={"hits": []})
+def test_search_normalizes_string_q_to_list():
+    # The controller requires q as an ARRAY (a bare string 400s with a PHP
+    # TypeError), so the client always sends the list form.
+    c = FakeClient(post_resp={"totalItems": 0, "results": [], "context_code": 200})
     SearchAPI(c).search("8.8.8.8", index=["alerts"], size=10)
     method, endpoint, data, params = c.calls[-1]
     assert endpoint == "/api/search"
-    assert data == {"q": "8.8.8.8", "index": ["alerts"], "size": 10}
+    assert data == {"q": ["8.8.8.8"], "index": ["alerts"], "size": 10}
 
 
-def test_search_min_length_enforced():
+def test_search_accepts_term_list_verbatim():
+    c = FakeClient(post_resp={"totalItems": 0, "results": [], "context_code": 200})
+    SearchAPI(c).search(["malware", "ransomware"], index=["alerts", "incidents"])
+    method, endpoint, data, params = c.calls[-1]
+    assert data == {"q": ["malware", "ransomware"], "index": ["alerts", "incidents"]}
+
+
+def test_search_rejects_empty_terms():
+    # Mirrors the server 400 for an empty q list.
     with pytest.raises(ValueError):
-        SearchAPI(FakeClient()).search("ab", index=["alerts"])
+        SearchAPI(FakeClient()).search([], index=["alerts"])
+    with pytest.raises(ValueError):
+        SearchAPI(FakeClient()).search("", index=["alerts"])
 
 
 def test_search_run_persisted_replays_the_saved_body():
