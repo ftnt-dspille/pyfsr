@@ -7,7 +7,7 @@ pack archive to disk. Content discovery is delegated to
 :class:`~pyfsr.api.content_hub.ContentHubSearch`.
 
 Example:
-    >>> client = demo_client()
+    >>> client = demo_client_jwt()  # Content Hub install needs JWT auth
     >>> resp = client.solution_packs.install("SOAR Framework", "2.2.1")
     >>> resp.name
     'SOAR Framework'
@@ -137,7 +137,7 @@ class SolutionPackAPI(BaseAPI):
             ``wait=True`` - check ``status == "Import Complete"`` for success.
 
         Example:
-            >>> client = demo_client()
+            >>> client = demo_client_jwt()  # Content Hub install needs JWT auth
             >>> resp = client.solution_packs.install("SOAR Framework", "2.2.1")
             >>> resp.name
             'SOAR Framework'

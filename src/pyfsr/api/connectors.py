@@ -653,7 +653,7 @@ class ConnectorsAPI(BaseAPI):
         Example:
             >>> import io, tarfile, tempfile
             >>> from pathlib import Path
-            >>> client = demo_client()
+            >>> client = demo_client_jwt()  # connector install needs JWT auth
             >>> with tempfile.TemporaryDirectory() as tmp:
             ...     tgz = Path(tmp) / "demo-connector.tgz"
             ...     with tarfile.open(tgz, "w:gz") as tar:
