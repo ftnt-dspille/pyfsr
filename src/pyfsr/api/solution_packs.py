@@ -18,6 +18,8 @@ Example:
 import time
 from typing import Any
 
+from ..auth.base import BaseAuth
+from ..auth.guards import requires_jwt
 from ..exceptions import APIError
 from ..models._integration import InstallJobStatus
 from ..models._system import SolutionPackInstallResponse
@@ -85,6 +87,11 @@ class SolutionPackAPI(BaseAPI):
             template_uuid=template_uuid, output_path=output_path, poll_interval=poll_interval
         )
 
+    @requires_jwt(
+        BaseAuth.OPERATION_SOLUTIONPACK_INSTALL,
+        "Content Hub install forwards the caller's credential to the integrations service as a "
+        "Bearer token; an API key is not a JWT, so the import stalls at Draft and never runs",
+    )
     def install(
         self,
         name: str,

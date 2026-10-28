@@ -79,3 +79,33 @@ def test_api_key_import_file_is_refused_before_upload(tmp_path):
     bundle.write_bytes(b"PK")
     with pytest.raises(UnsupportedAuthOperationError):
         demo_client().import_config.import_file(str(bundle))
+
+
+def test_api_key_solutionpack_install_is_refused():
+    # Content Hub install's async connector-import step forwards the caller's
+    # credential as a Bearer token; an API key is not a JWT, so the job stalls
+    # at Draft forever. Live-verified on 8.0.1: JWT installs process, the same
+    # install under an API key never leaves Draft. The guard fails fast instead.
+    with pytest.raises(UnsupportedAuthOperationError) as exc:
+        demo_client().solution_packs.install("http", "1.0.0")
+    assert exc.value.operation == BaseAuth.OPERATION_SOLUTIONPACK_INSTALL
+    assert "JWT" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda c: c.connectors.install("http", "1.0.0"),
+        lambda c: c.connectors.install_from_file("/tmp/does-not-matter.tgz"),
+        lambda c: c.connectors.install_from_dir("/tmp/does-not-matter"),
+    ],
+)
+def test_api_key_connector_install_is_refused(call):
+    with pytest.raises(UnsupportedAuthOperationError) as exc:
+        call(demo_client())
+    assert exc.value.operation == BaseAuth.OPERATION_SOLUTIONPACK_INSTALL
+
+
+def test_jwt_solutionpack_install_passes_guard():
+    # The guard follows the auth class: a JWT client is not blocked by it.
+    _passes_guard(lambda: demo_client_jwt().solution_packs.install("http", "1.0.0"))

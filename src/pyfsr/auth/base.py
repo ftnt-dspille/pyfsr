@@ -14,6 +14,11 @@ class BaseAuth(ABC):
     OPERATION_CONFIG_IMPORT = "config_import"  # Import configuration
     OPERATION_PLAYBOOK = "playbook"  # Playbook operations
     OPERATION_SOLUTION_PACK = "solution_pack"  # Solution pack operations
+    #: Content Hub install (solution pack or connector). The async connector-import
+    #: step forwards the caller's credential to the integrations service as a Bearer
+    #: token; an API-key (HMAC) session is not a JWT, so the import never runs and the
+    #: job sits at Draft with no error. Reads/search on solution packs are fine.
+    OPERATION_SOLUTIONPACK_INSTALL = "solutionpack_install"
     OPERATION_BULKUPSERT = "bulkupsert"  # /api/3/bulkupsert/* endpoints
     #: fsr-ai replays the *caller's* JWT (``Forwarded-Authorization: Bearer``) to
     #: the built-in ``FSR``-auth MCP servers, so an API-key caller has nothing to forward.

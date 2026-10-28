@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-10-27
+
+### Added
+
+- **Content Hub install (solution pack and connector) now requires a JWT.**
+  The async connector-import step forwards the caller's credential to the
+  integrations service as a `Bearer` token; an API-key (HMAC) session is not a
+  JWT, so the import never runs and the install job sits at `Draft` with no
+  error. `SolutionPacksAPI.install`, `ConnectorsAPI.install`,
+  `install_from_file` and `install_from_dir` now raise a clear
+  `UnsupportedAuthOperationError` up front when called on an API-key client,
+  instead of stalling silently. Reads and search on solution packs and connectors are
+  unaffected. Use a username/password (JWT) client to install. Live-verified on
+  8.0.1.
+
 ## [0.30.0] - 2026-10-27
 
 ### Added

@@ -55,6 +55,8 @@ import warnings
 from pathlib import Path
 from typing import Any
 
+from ..auth.base import BaseAuth
+from ..auth.guards import requires_jwt
 from ..exceptions import (
     APIError,
     ConfigurationExistsError,
@@ -558,6 +560,11 @@ class ConnectorsAPI(BaseAPI):
         self._configured = None
 
     # ------------------------------------------------------------- install
+    @requires_jwt(
+        BaseAuth.OPERATION_SOLUTIONPACK_INSTALL,
+        "Content Hub install forwards the caller's credential to the integrations service as a "
+        "Bearer token; an API key is not a JWT, so the import stalls at Draft and never runs",
+    )
     def install(
         self,
         name: str,
@@ -601,6 +608,11 @@ class ConnectorsAPI(BaseAPI):
             self.clear_cache()
         return final
 
+    @requires_jwt(
+        BaseAuth.OPERATION_SOLUTIONPACK_INSTALL,
+        "installing a connector forwards the caller's credential to the integrations service as a "
+        "Bearer token; an API key is not a JWT, so the import stalls at Draft and never runs",
+    )
     def install_from_file(
         self,
         path: str,
@@ -668,6 +680,11 @@ class ConnectorsAPI(BaseAPI):
             return resp
         return self.wait_for_install(job_id, interval=interval, timeout=timeout)
 
+    @requires_jwt(
+        BaseAuth.OPERATION_SOLUTIONPACK_INSTALL,
+        "installing a connector forwards the caller's credential to the integrations service as a "
+        "Bearer token; an API key is not a JWT, so the import stalls at Draft and never runs",
+    )
     def install_from_dir(
         self,
         source_dir: str,

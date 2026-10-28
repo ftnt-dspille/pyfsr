@@ -68,6 +68,15 @@ class APIKeyAuth(BaseAuth):
             # ("Fingerprint has invalid number of parts.") and the job sits at
             # InProgress forever. Same product bug as export.
             self.OPERATION_CONFIG_IMPORT,
+            # Content Hub install (solution pack / connector) runs an async
+            # connector-import step that forwards the caller's credential to the
+            # integrations service as `Bearer <credentials>`
+            # (SolutionPackController::_installIntegration). For an API-key (HMAC)
+            # session that credential is the key fingerprint, not a JWT, so the
+            # downstream import never runs and the job sits at Draft with no
+            # error. Live-verified on 8.0.1: JWT installs process, the same
+            # install under an API key stalls at Draft. Use a JWT client.
+            self.OPERATION_SOLUTIONPACK_INSTALL,
             # The server refuses an API key's create/update of people,
             # appliances and api_keys (403 whatever the key's role).
             self.OPERATION_ACTOR_WRITE,
