@@ -101,6 +101,7 @@ from pyfsr.connector_dev import _bump_version  # noqa: E402
 
 class _VersionedConnectors(_FakeConnectors):
     """A fake that reports an already-installed version, like the real box."""
+
     def __init__(self, installed_version):
         super().__init__()
         self._installed = installed_version
@@ -115,10 +116,17 @@ def _installed_info_version(tgz_path):
         return json.loads(tar.extractfile(f"{name}/info.json").read())["version"]
 
 
-@pytest.mark.parametrize("v,expected", [
-    ("1.0.0", "1.0.1"), ("1.2.9", "1.2.10"), ("2.5.0", "2.5.1"),
-    ("1.0", "1.1"), ("3", "4"), ("1.0.0-dev", "1.0.1"),
-])
+@pytest.mark.parametrize(
+    "v,expected",
+    [
+        ("1.0.0", "1.0.1"),
+        ("1.2.9", "1.2.10"),
+        ("2.5.0", "2.5.1"),
+        ("1.0", "1.1"),
+        ("3", "4"),
+        ("1.0.0-dev", "1.0.1"),
+    ],
+)
 def test_bump_version(v, expected):
     assert _bump_version(v) == expected
 
@@ -160,20 +168,24 @@ def test_deploy_first_install_does_not_bump(tmp_path):
 
 def test_scaffold_ops_builds_real_api_foundation(tmp_path):
     import ast
+
     root = tmp_path / "acme-edr"
-    scaffold_connector("acme-edr", root, label="Acme EDR", ops=[
-        {"operation": "get_device", "method": "GET",
-         "parameters": [{"name": "device_id", "required": True}]},
-        {"operation": "isolate_device", "method": "POST",
-         "parameters": [{"name": "device_id", "required": True}]},
-    ])
+    scaffold_connector(
+        "acme-edr",
+        root,
+        label="Acme EDR",
+        ops=[
+            {"operation": "get_device", "method": "GET", "parameters": [{"name": "device_id", "required": True}]},
+            {"operation": "isolate_device", "method": "POST", "parameters": [{"name": "device_id", "required": True}]},
+        ],
+    )
     info = json.loads((root / "info.json").read_text())
     assert [o["operation"] for o in info["operations"]] == ["get_device", "isolate_device"]
     assert {f["name"] for f in info["configuration"]["fields"]} == {"base_url", "api_key", "verify"}
     ops_src = (root / "operations.py").read_text()
     ast.parse(ops_src)  # valid python
     # antipattern-clean by construction: TLS verify from config, quoted path, no bypass
-    assert "verify=config.get(\"verify\", True)" in ops_src
+    assert 'verify=config.get("verify", True)' in ops_src
     assert "quote(" in ops_src
     assert "verify=False" not in ops_src
     # a handler + a dispatch entry per op

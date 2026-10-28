@@ -224,11 +224,11 @@ def _multi_operations_py(name: str, label: str, ops: list[dict]) -> str:
         reads = "\n    ".join(f"{_op_slug(n)} = params.get({n!r})" for n in required) or "pass"
         query = ", ".join(f"{n!r}: params.get({n!r})" for n in required)
         out.append(
-            f'\n\ndef {slug}(config, params):\n'
-            f'    # TODO: set the real path segments, query and body for this operation.\n'
-            f'    {reads}\n'
-            f'    return _request(config, {op.get("method", "GET").upper()!r}, '
-            f'[{slug!r}], query={{{query}}}, body=None)\n'
+            f"\n\ndef {slug}(config, params):\n"
+            f"    # TODO: set the real path segments, query and body for this operation.\n"
+            f"    {reads}\n"
+            f"    return _request(config, {op.get('method', 'GET').upper()!r}, "
+            f"[{slug!r}], query={{{query}}}, body=None)\n"
         )
     out.append('\n\ndef check_health(config):\n    _request(config, "GET", [], query={})\n    return True\n')
     items = ",\n".join(f"    {_op_slug(op['operation'])!r}: {_op_slug(op['operation'])}" for op in ops)
@@ -239,29 +239,55 @@ def _multi_operations_py(name: str, label: str, ops: list[dict]) -> str:
 def _info_json_multi(name: str, label: str, description: str, ops: list[dict]) -> dict[str, Any]:
     info = _info_json(name, label, description)
     info["configuration"]["fields"] = [
-        {"name": "base_url", "title": "Server URL", "type": "text",
-         "required": True, "visible": True, "editable": True},
-        {"name": "api_key", "title": "API Key", "type": "password",
-         "required": True, "visible": True, "editable": True},
-        {"name": "verify", "title": "Verify SSL", "type": "checkbox",
-         "required": False, "visible": True, "editable": True, "value": True},
+        {
+            "name": "base_url",
+            "title": "Server URL",
+            "type": "text",
+            "required": True,
+            "visible": True,
+            "editable": True,
+        },
+        {
+            "name": "api_key",
+            "title": "API Key",
+            "type": "password",
+            "required": True,
+            "visible": True,
+            "editable": True,
+        },
+        {
+            "name": "verify",
+            "title": "Verify SSL",
+            "type": "checkbox",
+            "required": False,
+            "visible": True,
+            "editable": True,
+            "value": True,
+        },
     ]
-    info["operations"] = [{
-        "operation": _op_slug(op["operation"]),
-        "title": op.get("title") or _op_slug(op["operation"]).replace("_", " ").title(),
-        "description": op.get("description", op.get("title", op["operation"])),
-        "category": "investigation",
-        "annotation": _op_slug(op["operation"]),
-        "enabled": True,
-        "parameters": [{
-            "name": p["name"],
-            "title": p.get("title") or p["name"].replace("_", " ").title(),
-            "type": p.get("type", "text"),
-            "required": bool(p.get("required", False)),
-            "visible": True, "editable": True,
-        } for p in op.get("parameters", [])],
-        "output_schema": op.get("output_schema", {}),
-    } for op in ops]
+    info["operations"] = [
+        {
+            "operation": _op_slug(op["operation"]),
+            "title": op.get("title") or _op_slug(op["operation"]).replace("_", " ").title(),
+            "description": op.get("description", op.get("title", op["operation"])),
+            "category": "investigation",
+            "annotation": _op_slug(op["operation"]),
+            "enabled": True,
+            "parameters": [
+                {
+                    "name": p["name"],
+                    "title": p.get("title") or p["name"].replace("_", " ").title(),
+                    "type": p.get("type", "text"),
+                    "required": bool(p.get("required", False)),
+                    "visible": True,
+                    "editable": True,
+                }
+                for p in op.get("parameters", [])
+            ],
+            "output_schema": op.get("output_schema", {}),
+        }
+        for op in ops
+    ]
     return info
 
 
@@ -361,8 +387,9 @@ def _bump_version(version: str, part: str = "patch") -> str:
     return f"{version}.1"
 
 
-def package_connector(directory: str | Path = ".", *, out_dir: str | Path | None = None,
-                      version: str | None = None) -> Path:
+def package_connector(
+    directory: str | Path = ".", *, out_dir: str | Path | None = None, version: str | None = None
+) -> Path:
     """Build ``<out_dir>/<name>-<version>.tgz`` unpacking to one ``<name>/`` dir.
 
     Ports the ConnectorsV2 ``package.sh``: prefer git-tracked files, drop tests,
@@ -394,6 +421,7 @@ def package_connector(directory: str | Path = ".", *, out_dir: str | Path | None
         for rel in files:
             if rel == "info.json" and version != src_version:
                 import io
+
                 data = json.dumps({**info, "version": version}, indent=2).encode()
                 ti = tarfile.TarInfo(f"{name}/info.json")
                 ti.size = len(data)
@@ -463,10 +491,11 @@ def deploy_connector(
     the SAME version over a changed bundle can leave a stale "ghost" alongside the
     new code. ``on_existing_version`` controls what happens when the box already
     has this connector at the version being deployed:
-      - ``"bump_patch"`` (default): bump the patch and ship that instead (only for a
-        directory source, which can be repackaged); the result records ``bumped``.
-      - ``"error"``: raise, so the caller bumps info.json deliberately.
-      - ``"allow"``: install over it anyway (the old behaviour).
+
+    - ``"bump_patch"`` (default): bump the patch and ship that instead (only for a
+      directory source, which can be repackaged); the result records ``bumped``.
+    - ``"error"``: raise, so the caller bumps info.json deliberately.
+    - ``"allow"``: install over it anyway (the old behaviour).
     """
     src = Path(source)
     if src.is_dir():
