@@ -145,23 +145,35 @@ class ApiKeysAPI(BaseAPI):
                 :meth:`~pyfsr.api.api_users.ApiKeyUsersAPI.create`).
             roles: optional role IRIs or names (resolved via
                 :meth:`~pyfsr.api.roles.RolesAPI.role_uuid_by_name`).
-            teams: optional team IRIs or names (resolved via
+            teams: team IRIs or names (resolved via
                 :meth:`~pyfsr.api.teams.TeamsAPI.team_uuid_by_name`).
+                **Required** -- at least one. A key with no team gets 403 on
+                every record create/update, so an empty ``teams`` is refused
+                (``ValueError``).
 
         Example:
             >>> client = demo_client_jwt()
             >>> key = client.api_keys.create(
             ...     name="test-key",
-            ...     user_uuid="550e8400-e29b-41d4-a716-446655440007"
+            ...     user_uuid="550e8400-e29b-41d4-a716-446655440007",
+            ...     teams=["SOC Team"],
             ... )
             >>> key["name"]
             'api-key-demo'
         """
+        if not teams:
+            # A team is REQUIRED: a key with an empty ``teams`` authenticates
+            # and reads fine but gets 403 on every record create/update, which
+            # is silent misconfiguration. Refuse before the POST.
+            raise ValueError(
+                f"cannot create API key {name!r} with no team: a teamless key gets 403 "
+                "on every record create/update (FortiSOAR requires at least one team). "
+                "Pass teams=[...]."
+            )
         body: dict[str, Any] = {"name": name, "userId": user_uuid}
         if roles is not None:
             body["roles"] = self._resolve_roles(list(roles))
-        if teams is not None:
-            body["teams"] = self._resolve_teams(list(teams))
+        body["teams"] = self._resolve_teams(list(teams))
         return ApiKey.model_validate(self.client.post(_BASE, data=body))
 
     @requires_jwt(

@@ -372,10 +372,21 @@ def test_api_keys_create_passes_iris_through():
     assert body["teams"] == ["/api/3/teams/t-1"]
 
 
-def test_api_keys_create_omits_empty_roles_teams():
+def test_api_keys_create_refuses_without_a_team():
+    """A key with no team is 403 on every write, so create() refuses before the POST."""
     c = _api_keys_client(post_resp={"uuid": "k-1"})
-    ApiKeysAPI(c).create(name="k", user_uuid="u-1")
-    assert c.calls[-1][2] == {"name": "k", "userId": "u-1"}
+    with pytest.raises(ValueError, match="no team"):
+        ApiKeysAPI(c).create(name="k", user_uuid="u-1")
+    assert not any(call[0] == "POST" for call in c.calls)  # no mutation
+
+
+def test_api_keys_create_omits_empty_roles_but_posts_team():
+    c = _api_keys_client(post_resp={"uuid": "k-1"})
+    ApiKeysAPI(c).create(name="k", user_uuid="u-1", teams=["TeamB"])
+    body = c.calls[-1][2]
+    assert body["name"] == "k" and body["userId"] == "u-1"
+    assert "roles" not in body  # empty roles still omitted
+    assert body["teams"]  # team is always posted
 
 
 def test_api_keys_list_unwraps_hydra_members():

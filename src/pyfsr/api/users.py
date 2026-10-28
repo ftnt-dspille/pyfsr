@@ -21,7 +21,6 @@ from __future__ import annotations
 import base64
 import builtins
 import json as _json
-import warnings
 from typing import Any, cast
 
 import requests as _requests
@@ -214,14 +213,12 @@ class UsersAPI(BaseAPI):
             department: Optional department name.
             phone_work: Optional work phone number.
             phone_mobile: Optional mobile phone number.
-            teams: Optional team UUIDs **or** friendly names (e.g. ``["Tier 1 SOC"]``).
-                Omitting it emits a :class:`UserWarning` that lists the tenant's
-                team names: the wire accepts teamless users (das saves the record
-                with ``teams: []``) but team-scoped RBAC may leave them unable to
-                see or own records, and the UI's Add User wizard requires a team.
+            teams: Team UUIDs **or** friendly names (e.g. ``["Tier 1 SOC"]``).
+                **Required** -- at least one. A teamless user gets 403 on every
+                record create/update, so creating one is refused (``ValueError``)
+                before the POST, with the tenant's team names listed.
             role_uuids: Deprecated alias for ``roles``.
-            team_uuids: Deprecated alias for ``teams`` (passing it suppresses the
-                no-team warning).
+            team_uuids: Deprecated alias for ``teams``.
             typed: parse the result into a :class:`~pyfsr.models.User` (default);
                 pass ``False`` for the raw dict.
 
@@ -237,28 +234,24 @@ class UsersAPI(BaseAPI):
         effective_teams = team_uuids if team_uuids is not None else teams
 
         if not effective_teams:
-            # The wire accepts teamless users -- das saves the People record
-            # with ``teams: []`` (live-verified 8.0.0) -- but the UI's Add User
-            # wizard requires a team, and team-scoped RBAC can leave a
-            # teamless user unable to see or own records. Warn before the
-            # POST (no mutation yet) and list the tenant's teams so the
-            # caller can add one to the call instead of hunting for names.
+            # A team is REQUIRED. The wire would accept a teamless user (das
+            # saves the People record with ``teams: []``, live-verified 8.0.0),
+            # but such a user gets 403 on every record create/update and the
+            # UI's Add User wizard forbids it too. Refuse before the POST (no
+            # mutation yet) and list the tenant's teams so the caller can pick.
             try:
                 names = sorted(self.client.teams.team_map())
-            except Exception:  # noqa: BLE001 - the warning must not depend on the lookup
+            except Exception:  # noqa: BLE001 - the error must not depend on the lookup
                 names = []
             options = ""
             if names:
                 shown = ", ".join(repr(n) for n in names[:8])
                 extra = len(names) - 8
                 options = f" Available team names: {shown}" + (f" (+{extra} more)." if extra > 0 else ".")
-            warnings.warn(
-                f"creating user {loginid!r} with no team: das saves the People record "
-                f"with 'teams: []' and team-scoped RBAC may leave it unable to see or "
-                f"own records (the Add User wizard requires a team).{options} "
-                f"Pass teams=[...] to assign one.",
-                UserWarning,
-                stacklevel=2,
+            raise ValueError(
+                f"cannot create user {loginid!r} with no team: a teamless user gets 403 "
+                f"on every record create/update (FortiSOAR requires at least one team).{options} "
+                f"Pass teams=[...]."
             )
 
         payload: dict[str, Any] = {

@@ -37,6 +37,9 @@ class _Recorder:
     def __init__(self, auth: BaseAuth) -> None:
         self.auth = auth
         self.calls: list[tuple] = []
+        # api_keys.create resolves teams through client.teams; a uuid/IRI needs
+        # no network, so a passthrough stub keeps this recorder offline.
+        self.teams = SimpleNamespace(_resolve_teams=lambda ts: list(ts))
 
     def get(self, *a, **k):
         self.calls.append(("get", a, k))
@@ -228,7 +231,11 @@ def test_api_key_writes_require_jwt() -> None:
 
 def test_api_key_writes_allowed_under_jwt() -> None:
     client = _Recorder(_JwtAuth())
-    ApiKeysAPI(client).create(name="x", user_uuid="880e8400-e29b-41d4-a716-446655440000")  # type: ignore[arg-type]
+    ApiKeysAPI(client).create(
+        name="x",
+        user_uuid="880e8400-e29b-41d4-a716-446655440000",
+        teams=["990e8400-e29b-41d4-a716-446655440001"],  # a team is required (uuid passes through unresolved)
+    )  # type: ignore[arg-type]
     assert client.calls and client.calls[0][1][0] == "/api/3/api_keys"
 
 

@@ -612,15 +612,15 @@ def _users_create_client() -> _FakeClient:
     return c
 
 
-def test_users_create_without_teams_warns_and_lists_available_names():
-    """No-team creates warn before the POST and offer the tenant's team names."""
+def test_users_create_without_teams_refuses_and_lists_available_names():
+    """No-team creates are refused before the POST and offer the tenant's team names."""
     c = _users_create_client()
-    with pytest.warns(UserWarning, match="no team") as record:
+    with pytest.raises(ValueError, match="no team") as exc:
         UsersAPI(c).create("j.smith", "Str0ng!Pass", "Jane", "Smith", "j.smith@corp.example", roles=["Analyst"])
-    msg = str(record[0].message)
+    msg = str(exc.value)
     assert "Tier 1" in msg  # available team names offered back to the caller
-    body = next(call[2] for call in c.calls if call[0] == "POST" and call[1] == "/api/3/people")
-    assert "teams" not in body  # no silent default team is ever invented
+    # the POST never fires: a teamless user is refused, not silently created
+    assert not any(call[0] == "POST" and call[1] == "/api/3/people" for call in c.calls)
 
 
 def test_users_create_with_teams_is_silent_and_posts_resolved_uuids():

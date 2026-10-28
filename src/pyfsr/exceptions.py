@@ -453,6 +453,22 @@ def handle_api_error(response):
     error_type = error_data.get("type", "")
     message = _extract_message(error_data) or "Unknown error occurred"
 
+    # Teamless-actor guardrail. FortiSOAR refuses record create/update from a
+    # principal that is on no team ("A user must be on at least one team in
+    # order to create records"). For an API key this is silent misconfiguration
+    # -- the key authenticates fine and reads work, but every write is rejected.
+    # Surface the actual cause and the fix instead of the bare server string.
+    # Matched on the message (the status varies: 400 on create, 403 on update).
+    if "must be on at least one team" in message.lower():
+        hint = (
+            "The authenticated principal is not assigned to any team, so FortiSOAR "
+            "refuses record create/update. If this is an API key, give the key a team "
+            "(Settings > API Keys, or add it to a team's `actors`); a key with an empty "
+            "`teams` cannot write. Otherwise use a username/password (JWT) client whose "
+            "user is on a team -- FortiSOAR(base_url, username=..., password=...)."
+        )
+        raise PermissionError(f"{message}\n\n{hint}", response, error_type=error_type)
+
     if response.status_code == 400:
         if "ValidationException" in error_type:
             raise ValidationError(message, response, error_type=error_type)

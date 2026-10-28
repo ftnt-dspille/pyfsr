@@ -234,6 +234,7 @@ def test_users_get_or_create_absent_creates():
         lastname="Jones",
         email="bob@corp.example",
         roles=["Analyst"],
+        teams=["990e8400-e29b-41d4-a716-446655440001"],  # a team is required (uuid passes through unresolved)
     )
     assert created is True
     assert user.email == "bob@corp.example"
