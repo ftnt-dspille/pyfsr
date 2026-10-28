@@ -28,12 +28,16 @@ Example:
 from __future__ import annotations
 
 import builtins
+import datetime as _dt
+import re
 import time
+from pathlib import Path
 from typing import Any, Literal, overload
 
 import requests
 
-from ..models._system import ManualInput, ManualInputOption, ManualInputResume
+from ..models import BaseRecord
+from ..models._system import ManualInput, ManualInputOption, ManualInputResume, ManualInputVariable
 from ..pagination import paginate_offset
 from ..utils.iri import uuid_from_iri
 from ._people import resolve_user_iri as _resolve_user_iri
@@ -51,6 +55,36 @@ _LIST = f"{_BASE}list_wfinput/"
 _RESUME_TIMEOUT = 180
 
 AssignedTo = Literal["me", "myTeams", "all"]
+PromptType = Literal["InputBased", "DecisionBased"]
+
+#: Fields the live ``WorkflowInputView`` actually filters on via ``GET`` query
+#: params (``filterset_fields``). ``is_approval`` is deliberately NOT here: the
+#: GET view silently ignores it (live-verified 8.0.0) -- approval-only scoping
+#: must go through :meth:`ManualInputAPI.list` (the POST ``list_wfinput`` body).
+_GET_FILTER_FIELDS = ("id", "record", "type", "workflow", "timeout", "unauthenticated_input")
+#: Fields the GET view *declares* in ``ordering_fields``. NB ``name`` is listed
+#: but is NOT a column on the WorkflowInput model, so ``?ordering=name`` makes
+#: Django raise ``FieldError`` -> HTTP 500 (live-verified 8.0.0; same root cause
+#: as the ``search`` 500, whose ``search_fields=('$name','$id')`` hit the same
+#: phantom ``name``). Only ``id``/``timeout`` actually work.
+_GET_ORDERING_FIELDS = ("id", "name", "timeout")
+#: The subset that does not 500 -- what :meth:`find` accepts.
+_USABLE_ORDERING_FIELDS = ("id", "timeout")
+
+
+def _record_iri(record: str | dict[str, Any] | BaseRecord) -> str:
+    """Coerce a record reference to its ``@id`` IRI for a ``record=`` filter."""
+    if isinstance(record, str):
+        return record
+    if isinstance(record, BaseRecord):
+        iri = getattr(record, "id_iri", None) or getattr(record, "uuid", None)
+        if iri:
+            return iri
+    if isinstance(record, dict):
+        iri = record.get("@id") or record.get("iri")
+        if iri:
+            return iri
+    raise ValueError(f"cannot derive a record IRI from {record!r}; pass an '/api/3/<module>/<uuid>' string")
 
 
 class ManualInputAPI(BaseAPI):
@@ -102,7 +136,7 @@ class ManualInputAPI(BaseAPI):
     def list(
         self,
         *,
-        assigned_to: AssignedTo = "me",
+        assigned_to: AssignedTo = "all",
         is_approval: bool | None = None,
         unauthenticated_input: bool = False,
         ordering: str = "-id",
@@ -112,10 +146,19 @@ class ManualInputAPI(BaseAPI):
     ) -> builtins.list[ManualInput] | builtins.list[dict[str, Any]]:
         """Return pending manual inputs in the given assignment scope.
 
+        This is the *inbox* query (``POST list_wfinput/``): the only place
+        ``assigned_to`` and ``is_approval`` filter server-side. To filter by the
+        linked ``record``, prompt ``type`` or ``workflow`` run id instead, use
+        :meth:`find` (a ``GET`` with real DRF filtering) -- those are ignored here.
+
         Args:
-            assigned_to: assignment scope, sent in the POST body -- ``"me"``
-                (default, inputs assigned to the caller), ``"myTeams"`` (caller's
-                teams), or ``"all"``.
+            assigned_to: assignment scope, sent in the POST body -- ``"all"``
+                (default), ``"me"`` (inputs assigned to the caller), or
+                ``"myTeams"`` (caller's teams). The default is ``"all"`` on
+                purpose: an **unassigned** prompt (a Manual Input step with no
+                ``assign_to:``) is invisible to ``"me"``/``"myTeams"``, so the
+                old ``"me"`` default silently returned nothing for the common
+                unassigned case (live-verified 8.0.0).
             is_approval: ``True`` for approval gates only, ``False`` for plain
                 data-input prompts only, ``None`` (default) for both. Sent in the
                 POST body.
@@ -159,6 +202,117 @@ class ManualInputAPI(BaseAPI):
             return [ManualInput.model_validate(m) for m in members]
         return members
 
+    def find(
+        self,
+        *,
+        record: str | dict[str, Any] | BaseRecord | None = None,
+        type: PromptType | None = None,
+        workflow: int | str | None = None,
+        is_approval: bool | None = None,
+        ordering: str = "-id",
+        limit: int | None = None,
+        offset: int = 0,
+        typed: bool = True,
+    ) -> builtins.list[ManualInput] | builtins.list[dict[str, Any]]:
+        """Filter pending manual inputs server-side with a ``GET`` (full rows).
+
+        The ``GET /api/wf/api/manual-wf-input/`` view is a real DRF filterset --
+        unlike :meth:`list` (the POST inbox query) it filters on the prompt's
+        own columns and returns **full** rows (``input`` + ``response_mapping`` +
+        the numeric ``workflow`` run id), so a row from here is ready for
+        :meth:`resume`/:meth:`answer` without a second :meth:`retrieve`.
+
+        Args:
+            record: only inputs linked to this record -- a module record's IRI,
+                or a record dict/model (its ``@id`` is used). A Manual Input step
+                links a record via its ``record:`` arg; unlinked prompts have an
+                empty ``record`` and won't match.
+            type: ``"InputBased"`` (prompts with a form) or ``"DecisionBased"``
+                (button-only). NB a button-only **approval** gate is stored as
+                ``type="DecisionBased", is_approval=True`` -- *not* a distinct
+                ``"ApprovalManualInput"`` type (live-verified 8.0.0).
+            workflow: a single run's **numeric** pk -- the run-scoped filter the
+                UI uses (see :meth:`pending_for_run`, which resolves a ``task_id``
+                to this for you).
+            is_approval: approval gates only (``True``) / data prompts only
+                (``False``). Applied **client-side**: the GET view silently
+                ignores an ``is_approval`` query param, so it cannot filter there.
+            ordering: sort field -- only ``id`` or ``timeout`` (optional ``-``
+                prefix). ``name`` is declared by the view but 500s (it is not a
+                real column), so it is rejected here; ``search`` is not offered
+                for the same reason (the SearchFilter's ``$name`` 500s on 8.0.0).
+            limit: page size (``None`` fetches every page).
+            offset: starting offset for a single-page fetch.
+            typed: parse into :class:`~pyfsr.models.ManualInput` (default).
+
+        Example:
+            >>> client = demo_client()  # doctest: +SKIP
+            >>> # every approval gate on the box, newest first:
+            >>> client.manual_input.find(type="DecisionBased", is_approval=True)  # doctest: +SKIP
+        """
+        if type is not None and type not in ("InputBased", "DecisionBased"):
+            raise ValueError(f"type must be 'InputBased' or 'DecisionBased', not {type!r}")
+        if ordering and ordering.lstrip("-") not in _USABLE_ORDERING_FIELDS:
+            hint = (
+                " ('name' is declared by the view but 500s -- it is not a real column)"
+                if ordering.lstrip("-") == "name"
+                else ""
+            )
+            raise ValueError(
+                f"ordering={ordering!r} is not usable; choose from "
+                f"{_USABLE_ORDERING_FIELDS} (optionally '-' prefixed){hint}"
+            )
+
+        params: dict[str, Any] = {"format": "json", "ordering": ordering}
+        if record is not None:
+            params["record"] = _record_iri(record)
+        if type is not None:
+            params["type"] = type
+        if workflow is not None:
+            params["workflow"] = workflow
+
+        if limit is not None:
+            params["limit"] = limit
+            params["offset"] = offset
+            members = self._members(self.client.get(_BASE, params=params))
+        else:
+            members = paginate_offset(
+                lambda page_offset: self.client.get(_BASE, params=dict(params, offset=page_offset)),
+                offset=offset,
+            )
+
+        if is_approval is not None:
+            members = [m for m in members if bool(m.get("is_approval")) is is_approval]
+
+        if typed:
+            return [ManualInput.model_validate(m) for m in members]
+        return members
+
+    def pending_for_record(
+        self,
+        record: str | dict[str, Any] | BaseRecord,
+        *,
+        is_approval: bool | None = None,
+        ordering: str = "-id",
+        limit: int | None = None,
+        offset: int = 0,
+        typed: bool = True,
+    ) -> builtins.list[ManualInput] | builtins.list[dict[str, Any]]:
+        """Pending manual inputs linked to one record -- ``find(record=...)``.
+
+        The reliable "what is this alert/incident waiting on a human for?" join:
+        a Manual Input step that sets ``record:`` surfaces here. ``record`` is the
+        record's IRI or a record dict/model.
+        """
+        return self.find(
+            record=record,
+            is_approval=is_approval,
+            ordering=ordering,
+            limit=limit,
+            offset=offset,
+            typed=typed,
+        )
+
     def pending_for_run(
         self,
         task_id: str,
@@ -190,14 +344,17 @@ class ManualInputAPI(BaseAPI):
         Each row's ``title`` is the prompt's schema title (the Manual Input
         step's ``title:``), not the step name.
 
-        An approval gate -- a Manual Input step with ``is_approval: true``,
-        which the wire reports as ``type: "ApprovalManualInput"`` -- surfaces
-        here with ``is_approval=True`` even though it does NOT appear in the
-        ``approvals`` module. (This is distinct from the legacy ``approval``
-        step type, which writes to the ``approvals`` module and never reaches
-        this queue.) This is how you find the ``manual_input_id`` to pass to
-        :meth:`resume` to drive the gate: the modern approval step resumes via
-        ``wfinput_resume``, not the ``/approval/`` endpoint.
+        An approval gate -- a Manual Input step with ``is_approval: true`` --
+        surfaces here with ``is_approval=True`` even though it does NOT appear in
+        the ``approvals`` module. Its ``type`` is the ordinary ``InputBased`` or
+        ``DecisionBased`` (a button-only gate is ``DecisionBased``); there is no
+        separate ``"ApprovalManualInput"`` type on the wire -- ``is_approval`` is
+        the only distinguishing flag (live-verified 8.0.0). (This is distinct
+        from the legacy ``approval`` step type, which writes to the ``approvals``
+        module and never reaches this queue.) This is how you find the
+        ``manual_input_id`` to drive the gate: the modern approval step resumes
+        via ``wfinput_resume`` (see :meth:`approve` / :meth:`reject`), not the
+        legacy ``/approval/`` endpoint.
 
         Args:
             task_id: the ``task_id`` returned by
@@ -557,25 +714,8 @@ class ManualInputAPI(BaseAPI):
             raise ValueError("pass exactly one of by_title= or input_id=")
 
         if input_id is None:
-            rows = self.list(assigned_to=assigned_to)
-            matches = [mi for mi in rows if (mi.title or "") == by_title]
-            if not matches:
-                available = sorted({mi.title for mi in rows if mi.title})
-                raise LookupError(
-                    f"no pending manual input titled {by_title!r} in scope "
-                    f"assigned_to={assigned_to!r}. .title is the prompt's schema "
-                    f"title (the Manual Input step's `title:`), not the step name "
-                    f"-- it only matches the step name when the step sets no "
-                    f"`title:`. Pending titles in scope: {available or 'none'}"
-                )
-            if len(matches) > 1:
-                raise LookupError(
-                    f"{len(matches)} pending manual inputs are titled {by_title!r} "
-                    f"(ids {[mi.id for mi in matches]}) -- titles are not unique, so "
-                    f"answering by title could resume the wrong run. Pass input_id=, "
-                    f"or use pending_for_run(task_id) to scope to one run."
-                )
-            input_id = matches[0].id
+            assert by_title is not None
+            input_id = self._find_by_title(by_title, assigned_to)
 
         user_iri = user or self._resolve_user_iri()
 
@@ -606,6 +746,8 @@ class ManualInputAPI(BaseAPI):
 
         if inputs is None and value is not None:
             inputs = self._map_scalar(full, value)
+        if inputs:
+            inputs = self._coerce_inputs(full, inputs)
 
         assert full.workflow is not None  # retrieve always populates the numeric run id
         assert full.step_id is not None
@@ -617,6 +759,233 @@ class ManualInputAPI(BaseAPI):
             user=user_iri,
             input=inputs,
             timeout=timeout,
+        )
+
+    def approve(
+        self,
+        *,
+        input_id: int | str | None = None,
+        by_title: str | None = None,
+        comment: str | None = None,
+        inputs: dict[str, Any] | None = None,
+        user: str | None = None,
+        assigned_to: AssignedTo = "all",
+        timeout: float | None = None,
+    ) -> ManualInputResume:
+        """Approve a paused **approval gate** and resume its playbook.
+
+        Presses the gate's *primary* (Approve) button. Select the gate with
+        ``input_id=`` or ``by_title=`` (exactly one). A ``comment`` is recorded
+        only if the approval step collects a text field for it (named like
+        ``comment``/``message``/``reason``/``note``); otherwise pass the field
+        values through ``inputs=``. See :meth:`reject` for the mirror.
+        """
+        return self._decide(
+            approve=True,
+            input_id=input_id,
+            by_title=by_title,
+            comment=comment,
+            inputs=inputs,
+            user=user,
+            assigned_to=assigned_to,
+            timeout=timeout,
+        )
+
+    def reject(
+        self,
+        *,
+        input_id: int | str | None = None,
+        by_title: str | None = None,
+        comment: str | None = None,
+        inputs: dict[str, Any] | None = None,
+        user: str | None = None,
+        assigned_to: AssignedTo = "all",
+        timeout: float | None = None,
+    ) -> ManualInputResume:
+        """Reject a paused approval gate and resume down its reject branch.
+
+        Presses the gate's non-primary (Reject) button. Raises if the prompt has
+        only one option (then it is not an approve/reject gate -- use
+        :meth:`answer`). Arguments mirror :meth:`approve`.
+        """
+        return self._decide(
+            approve=False,
+            input_id=input_id,
+            by_title=by_title,
+            comment=comment,
+            inputs=inputs,
+            user=user,
+            assigned_to=assigned_to,
+            timeout=timeout,
+        )
+
+    def _decide(
+        self,
+        *,
+        approve: bool,
+        input_id: int | str | None,
+        by_title: str | None,
+        comment: str | None,
+        inputs: dict[str, Any] | None,
+        user: str | None,
+        assigned_to: AssignedTo,
+        timeout: float | None,
+    ) -> ManualInputResume:
+        if (by_title is None) == (input_id is None):
+            raise ValueError("pass exactly one of by_title= or input_id=")
+        if input_id is None:
+            assert by_title is not None
+            input_id = self._find_by_title(by_title, assigned_to)
+
+        user_iri = user or self._resolve_user_iri()
+        full = self.retrieve(input_id, owners=user_iri)
+        assert isinstance(full, ManualInput)
+        options = (full.response_mapping.options if full.response_mapping else None) or []
+        if not options:
+            raise LookupError(f"manual input {input_id} exposes no response options")
+
+        opt = self._decision_option(options, approve=approve)
+        step_iri = opt.get("step_iri") if isinstance(opt, dict) else opt.step_iri
+        if not step_iri:
+            label = opt.get("option") if isinstance(opt, dict) else opt.option
+            raise ValueError(
+                f"the {'approve' if approve else 'reject'} option {label!r} on manual input "
+                f"{input_id} has no step_iri (the Manual Input step has no `next:` wired to it), "
+                f"so the run cannot be resumed down that branch."
+            )
+
+        merged = self._decision_inputs(full, comment, inputs)
+        if merged:
+            merged = self._coerce_inputs(full, merged)
+
+        assert full.workflow is not None
+        assert full.step_id is not None
+        return self.resume(
+            full.workflow,
+            step_iri=step_iri,
+            step_id=full.step_id,
+            manual_input_id=int(input_id),
+            user=user_iri,
+            input=merged,
+            timeout=timeout,
+        )
+
+    def _find_by_title(self, by_title: str, assigned_to: AssignedTo) -> int:
+        """Resolve a pending input by its (schema) title to a numeric id, or raise."""
+        rows = self.list(assigned_to=assigned_to)
+        matches = [mi for mi in rows if (mi.title or "") == by_title]
+        if not matches:
+            available = sorted({mi.title for mi in rows if mi.title})
+            raise LookupError(
+                f"no pending manual input titled {by_title!r} in scope "
+                f"assigned_to={assigned_to!r}. .title is the prompt's schema "
+                f"title (the Manual Input step's `title:`), not the step name "
+                f"-- it only matches the step name when the step sets no "
+                f"`title:`. Pending titles in scope: {available or 'none'}"
+            )
+        if len(matches) > 1:
+            raise LookupError(
+                f"{len(matches)} pending manual inputs are titled {by_title!r} "
+                f"(ids {[mi.id for mi in matches]}) -- titles are not unique, so "
+                f"acting by title could resume the wrong run. Pass input_id=, "
+                f"or use pending_for_run(task_id) to scope to one run."
+            )
+        assert matches[0].id is not None
+        return int(matches[0].id)
+
+    _APPROVE_WORDS = ("approve", "approved", "yes", "allow", "accept", "confirm", "proceed", "continue", "ok")
+    _REJECT_WORDS = ("reject", "rejected", "deny", "denied", "no", "decline", "cancel", "abort", "block")
+
+    @classmethod
+    def _decision_option(
+        cls,
+        options: builtins.list[dict[str, Any]] | builtins.list[ManualInputOption],
+        *,
+        approve: bool,
+    ) -> dict[str, Any] | ManualInputOption:
+        """Pick the Approve or Reject button -- safely.
+
+        Never lets ``approve`` and ``reject`` resolve to the *same* option: it
+        classifies buttons by label (approve/yes/allow vs reject/deny/no), then
+        falls back to the ``primary`` flag only to pick Approve, and raises when
+        it cannot tell the two apart (rather than silently inverting the
+        decision). Pass ``option=`` to :meth:`answer` to choose explicitly.
+        """
+        if len(options) == 1:
+            raise LookupError(
+                "this prompt has a single response option, so it is not an approve/reject "
+                "gate -- use answer() to press its one button."
+            )
+
+        def label(o: Any) -> str:
+            return ((o.get("option") if isinstance(o, dict) else getattr(o, "option", None)) or "").strip().lower()
+
+        def is_primary(o: Any) -> bool:
+            return bool(o.get("primary") if isinstance(o, dict) else getattr(o, "primary", None))
+
+        def matches(o: Any, words: tuple[str, ...]) -> bool:
+            toks = set(re.findall(r"[a-z]+", label(o)))
+            return any(w in toks for w in words)
+
+        approve_opts = [o for o in options if matches(o, cls._APPROVE_WORDS)]
+        reject_opts = [o for o in options if matches(o, cls._REJECT_WORDS)]
+
+        if approve:
+            if len(approve_opts) == 1:
+                return approve_opts[0]
+            primary = [o for o in options if is_primary(o)]
+            if len(primary) == 1 and primary[0] not in reject_opts:
+                return primary[0]
+            # last resort: a 2-button prompt with exactly one clear Reject
+            if len(options) == 2 and len(reject_opts) == 1 and not approve_opts:
+                return next(o for o in options if o is not reject_opts[0])
+            raise LookupError(
+                f"cannot identify the Approve button among {[label(o) for o in options]} "
+                f"-- pass option= (a label or index) to answer(), or use answer() directly."
+            )
+
+        # reject
+        if len(reject_opts) == 1:
+            chosen = reject_opts[0]
+        elif len(options) == 2:
+            appr = cls._decision_option(options, approve=True)  # raises if Approve is unclear
+            others = [o for o in options if o is not appr]
+            if not others:
+                raise LookupError("cannot identify a distinct Reject button -- pass option= to answer().")
+            chosen = others[0]
+        else:
+            raise LookupError(
+                f"cannot identify the Reject button among {[label(o) for o in options]} "
+                f"-- pass option= (a label or index) to answer(), or use answer() directly."
+            )
+        # belt-and-suspenders: Reject must never coincide with Approve
+        if approve_opts and chosen in approve_opts:
+            raise LookupError(
+                "the resolved Reject button is also an Approve button -- refusing to guess; pass option= to answer()."
+            )
+        return chosen
+
+    def _decision_inputs(
+        self,
+        full: ManualInput,
+        comment: str | None,
+        inputs: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        merged: dict[str, Any] = dict(inputs or {})
+        if comment is None:
+            return merged
+        varmap = self._var_map(full)
+        for name in varmap:
+            if name in merged:
+                continue
+            if any(tok in name.lower() for tok in ("comment", "message", "reason", "note", "remark")):
+                merged[name] = comment
+                return merged
+        raise ValueError(
+            "comment= was given but this approval step collects no text field for it "
+            f"(prompt fields: {sorted(varmap) or 'none'}). An in-system approval has no "
+            "comment channel unless the step declares one -- drop comment=, or pass the "
+            "field explicitly via inputs=."
         )
 
     def _resolve_user_iri(self) -> str:
@@ -653,6 +1022,45 @@ class ManualInputAPI(BaseAPI):
                 f"inputs={{name: value}} dict instead of a scalar value="
             )
         return {names[0]: value}
+
+    @staticmethod
+    def _var_map(full: ManualInput) -> dict[str, ManualInputVariable]:
+        schema_ = full.input.schema_ if full.input else None
+        variables = (schema_.inputVariables if schema_ else None) or []
+        return {v.name: v for v in variables if v.name}
+
+    def _coerce_inputs(self, full: ManualInput, inputs: dict[str, Any]) -> dict[str, Any]:
+        """Turn Python-friendly answer values into the wire shapes the box expects.
+
+        Best-effort and never fatal for the common cases: a value already in wire
+        form (an IRI string, a JSON-native scalar/dict) is left untouched. Handles
+        record objects/dicts -> ``@id`` (lookups), ``datetime``/``date`` -> ISO
+        8601, and an explicit ``pathlib.Path`` -> an uploaded attachment IRI
+        (a plain ``str`` is NEVER uploaded, so the server schema cannot drive a
+        local-file read). Lists are coerced element-wise.
+        """
+        return {name: self._coerce_value(value) for name, value in inputs.items()}
+
+    def _coerce_value(self, value: Any) -> Any:
+        if isinstance(value, (list, tuple)):
+            return [self._coerce_value(v) for v in value]
+        if isinstance(value, BaseRecord):
+            return getattr(value, "id_iri", None) or getattr(value, "uuid", None) or value
+        if isinstance(value, dict) and ("@id" in value or "iri" in value):
+            return value.get("@id") or value.get("iri")
+        if isinstance(value, _dt.datetime) or isinstance(value, _dt.date):
+            return value.isoformat()
+        if isinstance(value, Path):
+            # An explicit Path is the ONLY thing we upload. A plain ``str`` is
+            # always sent as-is, even on a file/image field: never let the
+            # server-provided schema plus a string the caller meant as text
+            # decide to read and exfiltrate a local file. To upload, the caller
+            # opts in by wrapping the path: inputs={"evidence": Path("/tmp/x")}.
+            if value.is_file():
+                att = self.client.attachments.create_from_file(str(value))
+                return _record_iri(att if isinstance(att, (dict, BaseRecord)) else {"@id": att})
+            raise ValueError(f"file input {str(value)!r} is not an existing file")
+        return value
 
     def delete(self, input_id: int | str) -> None:
         """Delete a pending manual input by its ``id`` (``DELETE .../<id>/``, 204).
