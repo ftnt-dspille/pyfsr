@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import builtins
 import datetime as _dt
+import re
 import time
 from pathlib import Path
 from typing import Any, Literal, overload
@@ -892,28 +893,77 @@ class ManualInputAPI(BaseAPI):
         assert matches[0].id is not None
         return int(matches[0].id)
 
-    @staticmethod
+    _APPROVE_WORDS = ("approve", "approved", "yes", "allow", "accept", "confirm", "proceed", "continue", "ok")
+    _REJECT_WORDS = ("reject", "rejected", "deny", "denied", "no", "decline", "cancel", "abort", "block")
+
+    @classmethod
     def _decision_option(
+        cls,
         options: builtins.list[dict[str, Any]] | builtins.list[ManualInputOption],
         *,
         approve: bool,
     ) -> dict[str, Any] | ManualInputOption:
-        def is_primary(o: Any) -> bool:
-            return bool(o.get("primary") if isinstance(o, dict) else getattr(o, "primary", None))
+        """Pick the Approve or Reject button -- safely.
 
-        if approve:
-            for o in options:
-                if is_primary(o):
-                    return o
-            return options[0]  # no explicit primary -> first button is Approve
-        # reject: the non-primary / other button
-        non_primary = [o for o in options if not is_primary(o)]
+        Never lets ``approve`` and ``reject`` resolve to the *same* option: it
+        classifies buttons by label (approve/yes/allow vs reject/deny/no), then
+        falls back to the ``primary`` flag only to pick Approve, and raises when
+        it cannot tell the two apart (rather than silently inverting the
+        decision). Pass ``option=`` to :meth:`answer` to choose explicitly.
+        """
         if len(options) == 1:
             raise LookupError(
                 "this prompt has a single response option, so it is not an approve/reject "
                 "gate -- use answer() to press its one button."
             )
-        return non_primary[0] if non_primary else options[-1]
+
+        def label(o: Any) -> str:
+            return ((o.get("option") if isinstance(o, dict) else getattr(o, "option", None)) or "").strip().lower()
+
+        def is_primary(o: Any) -> bool:
+            return bool(o.get("primary") if isinstance(o, dict) else getattr(o, "primary", None))
+
+        def matches(o: Any, words: tuple[str, ...]) -> bool:
+            toks = set(re.findall(r"[a-z]+", label(o)))
+            return any(w in toks for w in words)
+
+        approve_opts = [o for o in options if matches(o, cls._APPROVE_WORDS)]
+        reject_opts = [o for o in options if matches(o, cls._REJECT_WORDS)]
+
+        if approve:
+            if len(approve_opts) == 1:
+                return approve_opts[0]
+            primary = [o for o in options if is_primary(o)]
+            if len(primary) == 1 and primary[0] not in reject_opts:
+                return primary[0]
+            # last resort: a 2-button prompt with exactly one clear Reject
+            if len(options) == 2 and len(reject_opts) == 1 and not approve_opts:
+                return next(o for o in options if o is not reject_opts[0])
+            raise LookupError(
+                f"cannot identify the Approve button among {[label(o) for o in options]} "
+                f"-- pass option= (a label or index) to answer(), or use answer() directly."
+            )
+
+        # reject
+        if len(reject_opts) == 1:
+            chosen = reject_opts[0]
+        elif len(options) == 2:
+            appr = cls._decision_option(options, approve=True)  # raises if Approve is unclear
+            others = [o for o in options if o is not appr]
+            if not others:
+                raise LookupError("cannot identify a distinct Reject button -- pass option= to answer().")
+            chosen = others[0]
+        else:
+            raise LookupError(
+                f"cannot identify the Reject button among {[label(o) for o in options]} "
+                f"-- pass option= (a label or index) to answer(), or use answer() directly."
+            )
+        # belt-and-suspenders: Reject must never coincide with Approve
+        if approve_opts and chosen in approve_opts:
+            raise LookupError(
+                "the resolved Reject button is also an Approve button -- refusing to guess; pass option= to answer()."
+            )
+        return chosen
 
     def _decision_inputs(
         self,
@@ -979,42 +1029,37 @@ class ManualInputAPI(BaseAPI):
         variables = (schema_.inputVariables if schema_ else None) or []
         return {v.name: v for v in variables if v.name}
 
-    @staticmethod
-    def _var_kind(var: ManualInputVariable | None) -> str:
-        """A normalized, lower-cased widget kind for coercion decisions."""
-        if var is None:
-            return ""
-        return (var.formType or var.dataType or var.type or "").lower()
-
     def _coerce_inputs(self, full: ManualInput, inputs: dict[str, Any]) -> dict[str, Any]:
         """Turn Python-friendly answer values into the wire shapes the box expects.
 
-        Best-effort and never fatal: a value already in wire form (an IRI string,
-        a JSON-native scalar/dict) is left untouched, and any coercion that cannot
-        be made confidently passes the value through for the server to validate.
-        Handles record objects/dicts -> ``@id`` (lookups), ``datetime``/``date``
-        -> ISO 8601, and a local file path on a file/image field -> an uploaded
-        attachment IRI. Lists are coerced element-wise.
+        Best-effort and never fatal for the common cases: a value already in wire
+        form (an IRI string, a JSON-native scalar/dict) is left untouched. Handles
+        record objects/dicts -> ``@id`` (lookups), ``datetime``/``date`` -> ISO
+        8601, and an explicit ``pathlib.Path`` -> an uploaded attachment IRI
+        (a plain ``str`` is NEVER uploaded, so the server schema cannot drive a
+        local-file read). Lists are coerced element-wise.
         """
-        varmap = self._var_map(full)
-        return {name: self._coerce_value(varmap.get(name), value) for name, value in inputs.items()}
+        return {name: self._coerce_value(value) for name, value in inputs.items()}
 
-    def _coerce_value(self, var: ManualInputVariable | None, value: Any) -> Any:
+    def _coerce_value(self, value: Any) -> Any:
         if isinstance(value, (list, tuple)):
-            return [self._coerce_value(var, v) for v in value]
+            return [self._coerce_value(v) for v in value]
         if isinstance(value, BaseRecord):
             return getattr(value, "id_iri", None) or getattr(value, "uuid", None) or value
         if isinstance(value, dict) and ("@id" in value or "iri" in value):
             return value.get("@id") or value.get("iri")
         if isinstance(value, _dt.datetime) or isinstance(value, _dt.date):
             return value.isoformat()
-        if isinstance(value, str) and self._var_kind(var) in ("file", "image"):
-            try:
-                if Path(value).is_file():
-                    att = self.client.attachments.create_from_file(value)
-                    return _record_iri(att if isinstance(att, (dict, BaseRecord)) else {"@id": att})
-            except Exception:
-                pass  # fall through: let the box reject it with a real message
+        if isinstance(value, Path):
+            # An explicit Path is the ONLY thing we upload. A plain ``str`` is
+            # always sent as-is, even on a file/image field: never let the
+            # server-provided schema plus a string the caller meant as text
+            # decide to read and exfiltrate a local file. To upload, the caller
+            # opts in by wrapping the path: inputs={"evidence": Path("/tmp/x")}.
+            if value.is_file():
+                att = self.client.attachments.create_from_file(str(value))
+                return _record_iri(att if isinstance(att, (dict, BaseRecord)) else {"@id": att})
+            raise ValueError(f"file input {str(value)!r} is not an existing file")
         return value
 
     def delete(self, input_id: int | str) -> None:

@@ -6,6 +6,7 @@ contract offline.
 """
 
 import datetime as dt
+from pathlib import Path
 
 import pytest
 
@@ -139,16 +140,44 @@ def test_reject_on_single_option_raises():
         ManualInputAPI(c).reject(input_id=9)
 
 
+def test_approve_and_reject_never_resolve_to_the_same_option():
+    # SECURITY: two buttons, neither flagged primary and neither label recognizable
+    # -> we must NOT silently press the same button for both. Both must raise.
+    opts = [
+        {"option": "Button One", "step_iri": "/api/3/wf-steps/a"},
+        {"option": "Button Two", "step_iri": "/api/3/wf-steps/b"},
+    ]
+    with pytest.raises(LookupError):
+        ManualInputAPI(FakeClient(retrieve=_full(options=opts))).approve(input_id=9)
+    with pytest.raises(LookupError):
+        ManualInputAPI(FakeClient(retrieve=_full(options=opts))).reject(input_id=9)
+
+
+def test_reject_uses_label_not_primary_when_approve_is_primary():
+    # Approve is primary; Reject identified by label -> distinct step_iris.
+    opts = [
+        {"option": "Approve", "primary": True, "step_iri": "/api/3/wf-steps/app"},
+        {"option": "Deny", "step_iri": "/api/3/wf-steps/deny"},
+    ]
+    c = FakeClient(retrieve=_full(options=opts))
+    ManualInputAPI(c).reject(input_id=9)
+    assert c.posts[-1][1]["step_iri"] == "/api/3/wf-steps/deny"
+
+
+_GATE = [
+    {"option": "Approve", "primary": True, "step_iri": "/x-app"},
+    {"option": "Reject", "step_iri": "/x-rej"},
+]
+
+
 def test_comment_maps_into_a_comment_field():
-    opts = [{"option": "Approve", "primary": True, "step_iri": "/x"}]
-    c = FakeClient(retrieve=_full(options=opts, variables=[{"name": "approver_comment"}]))
+    c = FakeClient(retrieve=_full(options=_GATE, variables=[{"name": "approver_comment"}]))
     ManualInputAPI(c).approve(input_id=9, comment="ship it")
     assert c.posts[-1][1]["input"] == {"approver_comment": "ship it"}
 
 
 def test_comment_without_a_field_raises():
-    opts = [{"option": "Approve", "primary": True, "step_iri": "/x"}]
-    c = FakeClient(retrieve=_full(options=opts, variables=[]))
+    c = FakeClient(retrieve=_full(options=_GATE, variables=[]))
     with pytest.raises(ValueError):
         ManualInputAPI(c).approve(input_id=9, comment="nowhere to go")
 
@@ -172,7 +201,7 @@ def test_coerce_datetime_and_record_and_file(tmp_path):
         inputs={
             "when": dt.datetime(2026, 1, 2, 3, 4, 5),
             "host": {"@id": "/api/3/assets/h1"},
-            "evidence": str(evidence),  # a real file path -> uploaded
+            "evidence": Path(evidence),  # explicit Path -> uploaded
             "note": "plain text stays",
         },
     )
@@ -184,13 +213,23 @@ def test_coerce_datetime_and_record_and_file(tmp_path):
     assert c.attachments.uploaded == [str(evidence)]
 
 
-def test_file_kind_non_path_string_passes_through():
-    # a file-kind field whose value isn't an existing path must NOT be eaten
+def test_string_is_never_auto_uploaded_even_on_a_file_field(tmp_path):
+    # SECURITY: a plain str that happens to be a real local path on a server-
+    # declared file field must NOT be read/uploaded -- only an explicit Path is.
+    real = tmp_path / "secret.txt"
+    real.write_text("do not exfiltrate")
     opts = [{"option": "Submit", "primary": True, "step_iri": "/x"}]
     c = FakeClient(retrieve=_full(options=opts, variables=[{"name": "evidence", "formType": "file"}]))
-    ManualInputAPI(c).answer(input_id=9, inputs={"evidence": "/api/3/attachments/existing"})
-    assert c.posts[-1][1]["input"]["evidence"] == "/api/3/attachments/existing"
-    assert c.attachments.uploaded == []
+    ManualInputAPI(c).answer(input_id=9, inputs={"evidence": str(real)})
+    assert c.posts[-1][1]["input"]["evidence"] == str(real)  # sent as-is
+    assert c.attachments.uploaded == []  # nothing uploaded
+
+
+def test_path_that_is_not_a_file_raises(tmp_path):
+    opts = [{"option": "Submit", "primary": True, "step_iri": "/x"}]
+    c = FakeClient(retrieve=_full(options=opts, variables=[{"name": "evidence", "formType": "file"}]))
+    with pytest.raises(ValueError):
+        ManualInputAPI(c).answer(input_id=9, inputs={"evidence": Path(tmp_path / "missing.bin")})
 
 
 def test_record_iri_helper():
