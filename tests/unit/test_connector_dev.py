@@ -93,6 +93,110 @@ class _FakeClient:
         self.connectors = _FakeConnectors()
 
 
+# --- ghost-connector guard -------------------------------------------------
+
+from pyfsr.api.connectors import ConnectorPackageError  # noqa: E402
+from pyfsr.connector_dev import _bump_version  # noqa: E402
+
+
+class _VersionedConnectors(_FakeConnectors):
+    """A fake that reports an already-installed version, like the real box."""
+    def __init__(self, installed_version):
+        super().__init__()
+        self._installed = installed_version
+
+    def resolve_version(self, name):
+        return self._installed
+
+
+def _installed_info_version(tgz_path):
+    with tarfile.open(tgz_path) as tar:
+        name = tar.getnames()[0].split("/", 1)[0]
+        return json.loads(tar.extractfile(f"{name}/info.json").read())["version"]
+
+
+@pytest.mark.parametrize("v,expected", [
+    ("1.0.0", "1.0.1"), ("1.2.9", "1.2.10"), ("2.5.0", "2.5.1"),
+    ("1.0", "1.1"), ("3", "4"), ("1.0.0-dev", "1.0.1"),
+])
+def test_bump_version(v, expected):
+    assert _bump_version(v) == expected
+
+
+def test_deploy_bumps_patch_when_same_version_already_installed(tmp_path):
+    root = tmp_path / "acme-feed"
+    scaffold_connector("acme-feed", root)  # version 1.0.0
+    client = _FakeClient()
+    client.connectors = _VersionedConnectors("1.0.0")
+    result = deploy_connector(client, root)
+    assert result["bumped"] == "1.0.1"
+    assert result["version"] == "1.0.1"
+    # the bundle actually installed carries the bumped version (no ghost)
+    installed_tgz = client.connectors.calls[0][1]
+    assert installed_tgz.endswith("acme-feed-1.0.1.tgz")
+    assert _installed_info_version(installed_tgz) == "1.0.1"
+    # the SOURCE info.json is left untouched
+    assert json.loads((root / "info.json").read_text())["version"] == "1.0.0"
+
+
+def test_deploy_errors_on_same_version_when_requested(tmp_path):
+    root = tmp_path / "acme-feed"
+    scaffold_connector("acme-feed", root)
+    client = _FakeClient()
+    client.connectors = _VersionedConnectors("1.0.0")
+    with pytest.raises(ConnectorPackageError, match="already installed"):
+        deploy_connector(client, root, on_existing_version="error")
+
+
+def test_deploy_first_install_does_not_bump(tmp_path):
+    root = tmp_path / "acme-feed"
+    scaffold_connector("acme-feed", root)
+    client = _FakeClient()
+    client.connectors = _VersionedConnectors(None)  # not installed yet
+    result = deploy_connector(client, root)
+    assert "bumped" not in result
+    assert result["version"] == "1.0.0"
+
+
+def test_scaffold_ops_builds_real_api_foundation(tmp_path):
+    import ast
+    root = tmp_path / "acme-edr"
+    scaffold_connector("acme-edr", root, label="Acme EDR", ops=[
+        {"operation": "get_device", "method": "GET",
+         "parameters": [{"name": "device_id", "required": True}]},
+        {"operation": "isolate_device", "method": "POST",
+         "parameters": [{"name": "device_id", "required": True}]},
+    ])
+    info = json.loads((root / "info.json").read_text())
+    assert [o["operation"] for o in info["operations"]] == ["get_device", "isolate_device"]
+    assert {f["name"] for f in info["configuration"]["fields"]} == {"base_url", "api_key", "verify"}
+    ops_src = (root / "operations.py").read_text()
+    ast.parse(ops_src)  # valid python
+    # antipattern-clean by construction: TLS verify from config, quoted path, no bypass
+    assert "verify=config.get(\"verify\", True)" in ops_src
+    assert "quote(" in ops_src
+    assert "verify=False" not in ops_src
+    # a handler + a dispatch entry per op
+    assert "def get_device(config, params):" in ops_src
+    assert "'isolate_device': isolate_device" in ops_src
+
+
+def test_scaffold_default_is_still_minimal_ping(tmp_path):
+    root = tmp_path / "plain"
+    scaffold_connector("plain", root)
+    info = json.loads((root / "info.json").read_text())
+    assert [o["operation"] for o in info["operations"]] == ["ping"]
+
+
+def test_package_version_override_injects_into_bundle(tmp_path):
+    root = tmp_path / "acme-feed"
+    scaffold_connector("acme-feed", root)
+    tgz = package_connector(root, version="9.9.9")
+    assert tgz.name == "acme-feed-9.9.9.tgz"
+    assert _installed_info_version(tgz) == "9.9.9"
+    assert json.loads((root / "info.json").read_text())["version"] == "1.0.0"
+
+
 def test_deploy_packages_installs_and_configures(tmp_path):
     root = tmp_path / "acme-feed"
     scaffold_connector("acme-feed", root)
