@@ -1,5 +1,7 @@
 """Unit tests for UsersAPI typed (Pydantic User) return values."""
 
+import pytest
+
 from pyfsr.api.users import UsersAPI
 from pyfsr.models import User
 
@@ -135,6 +137,7 @@ def test_deactivate_without_linked_login_raises_before_any_write():
 def test_create_returns_typed_user(mocker):
     api = UsersAPI(_Rec(post_response=_PERSON))
     mocker.patch.object(api, "_resolve_roles", return_value=["role-uuid"])
+    mocker.patch.object(api, "_resolve_teams", return_value=["/api/3/teams/team-uuid"])
     out = api.create(
         loginid="j.smith",
         password="Str0ng!Pass",
@@ -142,6 +145,7 @@ def test_create_returns_typed_user(mocker):
         lastname="Smith",
         email="j.smith@corp.example",
         roles=["SOC Analyst"],
+        team_uuids=["team-uuid"],
     )
     assert isinstance(out, User)
     assert out.email == "admin@example.com"
@@ -150,6 +154,7 @@ def test_create_returns_typed_user(mocker):
 def test_create_typed_false_returns_raw_dict(mocker):
     api = UsersAPI(_Rec(post_response=_PERSON))
     mocker.patch.object(api, "_resolve_roles", return_value=["role-uuid"])
+    mocker.patch.object(api, "_resolve_teams", return_value=["/api/3/teams/team-uuid"])
     out = api.create(
         loginid="j.smith",
         password="Str0ng!Pass",
@@ -157,6 +162,7 @@ def test_create_typed_false_returns_raw_dict(mocker):
         lastname="Smith",
         email="j.smith@corp.example",
         roles=["SOC Analyst"],
+        team_uuids=["team-uuid"],
         typed=False,
     )
     assert out == _PERSON
@@ -187,6 +193,7 @@ def test_create_marks_login_active_and_sets_password(mocker):
     rec = _RecCapture(post_response=_PERSON)
     api = UsersAPI(rec)
     mocker.patch.object(api, "_resolve_roles", return_value=["role-uuid"])
+    mocker.patch.object(api, "_resolve_teams", return_value=["/api/3/teams/team-uuid"])
     api.create(
         loginid="j.smith",
         password="Str0ng!Pass",
@@ -194,6 +201,7 @@ def test_create_marks_login_active_and_sets_password(mocker):
         lastname="Smith",
         email="j.smith@corp.example",
         roles=["SOC Analyst"],
+        team_uuids=["team-uuid"],
         typed=False,
     )
     people = next(d for e, d in rec.posts if e == "/api/3/people")
@@ -206,6 +214,7 @@ def test_create_inactive_sets_status_2(mocker):
     rec = _RecCapture(post_response=_PERSON)
     api = UsersAPI(rec)
     mocker.patch.object(api, "_resolve_roles", return_value=["role-uuid"])
+    mocker.patch.object(api, "_resolve_teams", return_value=["/api/3/teams/team-uuid"])
     api.create(
         loginid="j.smith",
         password="p",
@@ -213,6 +222,7 @@ def test_create_inactive_sets_status_2(mocker):
         lastname="S",
         email="j@x.example",
         roles=["SOC Analyst"],
+        team_uuids=["team-uuid"],
         active=False,
         typed=False,
     )
@@ -263,3 +273,12 @@ def test_lookup_unknown_login_400_raises_lookup_error():
         assert "nobody" in str(e)
     else:
         raise AssertionError("expected LookupError")
+
+
+def test_create_refuses_a_teamless_user_before_posting(mocker):
+    rec = _RecCapture(post_response=_PERSON)
+    api = UsersAPI(rec)
+    mocker.patch.object(api, "_resolve_roles", return_value=["role-uuid"])
+    with pytest.raises(ValueError, match="no team"):
+        api.create(loginid="j", password="p", firstname="J", lastname="S", email="j@x.example", roles=["SOC Analyst"])
+    assert rec.posts == []
