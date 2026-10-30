@@ -1,0 +1,133 @@
+pyfsr.api.teams
+===============
+
+.. py:module:: pyfsr.api.teams
+
+.. autoapi-nested-parse::
+
+   Team CRUD (``/api/3/teams``).
+
+   A FortiSOAR **team** owns records (the ``owners`` relationship) and scopes
+   visibility. Teams are their own ``/api/3/teams`` collection - first-class on the
+   client as ``client.teams`` ��� and accept uuids **or** friendly names anywhere a
+   team is referenced, resolved via a per-instance cache populated on first use.
+
+   Reads come back as typed :class:`~pyfsr.models.Team` records (dict-compatible,
+   so ``t["name"]`` / ``t.get("uuid")`` keep working). The role/team name→uuid
+   resolution helpers here are the single source of truth -
+   :meth:`pyfsr.api.users.UsersAPI.list_teams` and friends delegate to this class.
+
+   .. rubric:: Example
+
+   >>> team = client.teams.create("Tier 1 SOC", description="front-line triage")
+   >>> [t.name for t in client.teams.list() if t.description]
+   ['Tier 1 SOC']
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.teams.TeamsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: TeamsAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Team discovery and creation (``/api/3/teams``).
+
+
+   .. py:method:: team_map() -> dict[str, str]
+
+      Return ``{name: uuid}`` for all teams, cached for the instance lifetime.
+
+
+
+   .. py:method:: team_uuid_by_name(name: str) -> str | None
+
+      Look up a team UUID by display name (case-sensitive); ``None`` if absent.
+
+
+
+   .. py:method:: list(params: dict[str, Any] | None = None) -> list[pyfsr.models.Team]
+
+      List all teams (``GET /api/3/teams``) as typed :class:`~pyfsr.models.Team` records.
+
+      Doctest:
+
+          >>> from pyfsr._testing import demo_client
+          >>> client = demo_client()
+          >>> teams = client.teams.list()
+          >>> len(teams)
+          1
+          >>> teams[0].name
+          'SOC Team'
+
+
+
+   .. py:method:: get(team: str) -> pyfsr.models.Team
+
+      Fetch one team by uuid or name as a :class:`~pyfsr.models.Team`.
+
+
+
+   .. py:method:: create(name: str, *, description: str | None = None, parents: collections.abc.Sequence[str] | None = None, children: collections.abc.Sequence[str] | None = None, siblings: collections.abc.Sequence[str] | None = None) -> pyfsr.models.Team
+
+      Create a team (``POST /api/3/teams``).
+
+      Only ``name`` is required. ``parents``/``children``/``siblings`` place it in
+      the team hierarchy (names, uuids or IRIs): members of a *parent* team see
+      and edit the records its child teams own, child teams do not see each
+      other, and siblings share records both ways. Live-verified on 8.0.0: with
+      "SOC Team" as parent of per-student teams, the Playbook appliance (a SOC
+      Team member) can update a student's alert, and other students still get 403.
+
+
+
+   .. py:method:: get_or_create(name: str, *, description: str | None = None, parents: collections.abc.Sequence[str] | None = None) -> tuple[pyfsr.models.Team, bool]
+
+      Idempotently ensure team ``name`` exists; return ``(team, created)``.
+
+      If a team with that name already exists, it is returned unchanged (its
+      ``description`` is **not** modified), except that ``parents`` it lacks are
+      added. Returns ``created=True`` only when the team was newly created.
+
+
+
+   .. py:method:: update(team: str, *, name: str | None = None, description: str | None = None, parents: collections.abc.Sequence[str] | None = None, children: collections.abc.Sequence[str] | None = None, siblings: collections.abc.Sequence[str] | None = None) -> pyfsr.models.Team
+
+      Update a team (``PUT /api/3/teams/<uuid>``).
+
+      ``team`` is a uuid or current name. Only the given fields are sent (a
+      partial update). ``parents``/``children``/``siblings`` REPLACE that list
+      (``[]`` clears it; see :meth:`add_parents` to add one); omitted, a list is
+      left as it is. Returns the full updated :class:`~pyfsr.models.Team`.
+
+
+
+   .. py:method:: hierarchy(team: str) -> pyfsr.models.Team
+
+      The team read with ``$relationships=true``: its ``parents``/``children``/
+      ``siblings`` as :class:`~pyfsr.models.TeamRef` rows (``parent_names`` etc.).
+
+
+
+   .. py:method:: add_parents(team: str, parents: collections.abc.Sequence[str]) -> pyfsr.models.Team
+
+      Add ``parents`` to ``team``'s parent teams, keeping the ones it has.
+
+
+
+   .. py:method:: delete(team: str) -> None
+
+      Delete a team (``DELETE /api/3/teams/<uuid>``). ``team`` is a uuid or name.
+
+
+

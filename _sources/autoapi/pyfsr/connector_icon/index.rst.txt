@@ -1,0 +1,112 @@
+pyfsr.connector_icon
+====================
+
+.. py:module:: pyfsr.connector_icon
+
+.. autoapi-nested-parse::
+
+   Make a FortiSOAR connector's two icon PNGs from an SVG.
+
+   A connector ships ``icon_large_name`` (80x80) and ``icon_small_name`` (32x32) PNGs,
+   named in its ``info.json``. Fortinet's icon library (https://icons.fortinet.com)
+   hands out SVGs, so this turns one into the pair FortiSOAR wants, laid out like
+   the stock Fortinet connector icons: the artwork on a white square, with the
+   FORTINET wordmark beneath it.
+
+       from pyfsr.connector_icon import make_connector_icons
+       make_connector_icons("FortiAIGate.svg", "my-connector/")
+
+   or ``pyfsr connector icon FortiAIGate.svg --connector my-connector/``.
+
+   Two pieces are deliberately not bundled:
+
+   * **A rasteriser.** The SVG is drawn by the first of ``rsvg-convert``, ``cairosvg``,
+     macOS Quick Look (``qlmanage``) or headless Chrome/Chromium that is installed.
+   * **The wordmark.** It is Fortinet's trademark, so it is copied from an icon you
+     already have (the connector's current PNGs, or ``wordmark_from=``), never shipped
+     here. Without one the icon is just the artwork, centred.
+
+   Needs Pillow (``pip install 'pyfsr[icons]'``).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.connector_icon.LARGE
+   pyfsr.connector_icon.SMALL
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.connector_icon.IconSpec
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.connector_icon.rasterize_svg
+   pyfsr.connector_icon.build_icon
+   pyfsr.connector_icon.make_connector_icons
+
+
+Module Contents
+---------------
+
+.. py:class:: IconSpec
+
+   Geometry of one icon size, in its own pixels (matches the stock Fortinet icons).
+
+
+   .. py:attribute:: size
+      :type:  int
+
+
+   .. py:attribute:: art_top
+      :type:  int
+
+
+   .. py:attribute:: art_height
+      :type:  int
+
+
+   .. py:attribute:: wordmark_rows
+      :type:  tuple[int, int]
+
+
+   .. py:attribute:: wordmark_cols
+      :type:  tuple[int, int]
+
+
+.. py:data:: LARGE
+
+.. py:data:: SMALL
+
+.. py:function:: rasterize_svg(svg: str | pathlib.Path, *, size: int = 800, rasterizer: Rasterizer | None = None) -> PIL.Image.Image
+
+   Draw ``svg`` to a ``size``-px RGB image on white, using the first available rasteriser.
+
+
+.. py:function:: build_icon(art: PIL.Image.Image, spec: IconSpec, wordmark: PIL.Image.Image | None = None) -> PIL.Image.Image
+
+   Place the artwork (and wordmark, if given) on a white ``spec.size`` square.
+
+
+.. py:function:: make_connector_icons(svg: str | pathlib.Path, connector: str | pathlib.Path, *, wordmark_from: str | pathlib.Path | None = None, wordmark: bool = True, rasterizer: Rasterizer | None = None) -> list[pathlib.Path]
+
+   Write the large and small icon PNGs for the connector at ``connector``.
+
+   ``connector`` is the connector folder (the one holding ``info.json``); the PNGs
+   go to its ``images/`` using the names ``info.json`` gives. The wordmark comes from
+   the PNGs already there, or from ``wordmark_from`` (a folder with the same file
+   names, or a connector folder), so re-running is stable. ``wordmark=False`` leaves
+   it off. Returns the paths written.
+
+

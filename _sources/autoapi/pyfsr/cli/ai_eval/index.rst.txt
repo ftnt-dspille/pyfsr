@@ -1,0 +1,60 @@
+pyfsr.cli.ai_eval
+=================
+
+.. py:module:: pyfsr.cli.ai_eval
+
+.. autoapi-nested-parse::
+
+   ``pyfsr ai-eval`` -- scored, repeatable FortiAI investigation runs (8.0.1+).
+
+   Subcommands:
+
+   - ``deploy`` -- install the stub connector, load the suite's fixtures, register
+     its MCP servers and allow them for the suite's agents (idempotent).
+   - ``run [--scenario ID ...] [--runs N] [--out FILE]`` -- investigate each
+     scenario's alert N times and print the scorecard.
+   - ``log [--clear]`` -- the stub servers' own call log.
+   - ``teardown [--uninstall]`` -- unregister the suite's MCP servers.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.ai_eval.print_report
+   pyfsr.cli.ai_eval.cmd_deploy
+   pyfsr.cli.ai_eval.cmd_run
+   pyfsr.cli.ai_eval.cmd_cost
+   pyfsr.cli.ai_eval.cmd_balance
+   pyfsr.cli.ai_eval.cmd_log
+   pyfsr.cli.ai_eval.cmd_teardown
+   pyfsr.cli.ai_eval.build_subparser
+
+
+Module Contents
+---------------
+
+.. py:function:: print_report(summary: dict[str, Any]) -> None
+
+.. py:function:: cmd_deploy(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_run(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_cost(args: argparse.Namespace) -> int
+
+   Token use and cost of finished investigations, per agent.
+
+
+.. py:function:: cmd_balance(args: argparse.Namespace) -> int
+
+   FortiAI token allowance and what is left.
+
+
+.. py:function:: cmd_log(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_teardown(args: argparse.Namespace) -> int
+
+.. py:function:: build_subparser(sub: argparse._SubParsersAction) -> None
+

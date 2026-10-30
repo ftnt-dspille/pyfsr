@@ -1,0 +1,56 @@
+pyfsr.cli.llm
+=============
+
+.. py:module:: pyfsr.cli.llm
+
+.. autoapi-nested-parse::
+
+   ``pyfsr llm`` -- which LLM FortiAI uses, and swapping it for a third-party one.
+
+   ::
+
+       pyfsr llm status --instance lab
+       OPENAI_API_KEY=... pyfsr llm setup --instance lab --profile "OpenAI GPT-4.1" --model GPT-4.1
+       pyfsr llm assign --instance lab "OpenAI GPT-4.1"          # every agent; saves a snapshot
+       pyfsr llm restore --instance lab <snapshot.json>          # back to what it was
+
+   The API key is read from an environment variable (``--api-key-env``, default
+   ``OPENAI_API_KEY``) or a file (``--api-key-file``), never from the command line.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.cli.llm.SNAPSHOT_DIR
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.llm.cmd_status
+   pyfsr.cli.llm.cmd_setup
+   pyfsr.cli.llm.cmd_assign
+   pyfsr.cli.llm.cmd_restore
+   pyfsr.cli.llm.build_subparser
+
+
+Module Contents
+---------------
+
+.. py:data:: SNAPSHOT_DIR
+
+.. py:function:: cmd_status(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_setup(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_assign(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_restore(args: argparse.Namespace) -> int
+
+.. py:function:: build_subparser(sub: argparse._SubParsersAction) -> None
+
