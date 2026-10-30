@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.31.1] - 2026-10-30
+
+### Fixed
+
+- **`upsert_playbooks` restores soft-deleted steps and routes instead of colliding on them.**
+  Deleting a playbook leaves its deterministic step uuids (notably the trigger step) in the
+  recycle bin, where a plain GET 404s. Shipping the playbook again treated them as new and
+  POSTed a duplicate uuid, so the publish failed. They are now restored (`deletedAt` cleared)
+  and adopted in place, like a soft-deleted playbook already was.
+
 ## [0.30.1] - 2026-10-27
 
 ### Added

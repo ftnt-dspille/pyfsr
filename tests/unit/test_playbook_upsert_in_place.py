@@ -34,6 +34,7 @@ class FakeServer:
             for item in items:
                 self.rows[entity][item["uuid"]] = dict(item)
                 self.attached[key].append(item["uuid"])
+        self.deleted_rows = {"workflow_steps": {}, "workflow_routes": {}}  # recycle bin
         self.calls = []
         self.drop_relations = drop_relations  # simulate a server that ignores the relation PUT
 
@@ -56,6 +57,8 @@ class FakeServer:
                 u = endpoint[len(prefix) :]
                 if u in rows:
                     return rows[u]
+                if u in self.deleted_rows[entity] and (params or {}).get("$showDeleted") == "true":
+                    return {**self.deleted_rows[entity][u], "deletedAt": 1790000000.0}
                 raise RuntimeError("404 Not Found")
         raise AssertionError(f"unexpected GET {endpoint}")
 
@@ -77,6 +80,7 @@ class FakeServer:
                     u = _uuid(ref)
                     if isinstance(ref, dict):
                         assert u not in self.rows[entity], f"409: {u} already exists"
+                        assert u not in self.deleted_rows[entity], f"409: {u} is in the recycle bin"
                         self.rows[entity][u] = dict(ref)
                     keep.append(u)
                 for u in set(self.attached[key]) - set(keep):
@@ -86,7 +90,13 @@ class FakeServer:
         for entity, rows in self.rows.items():
             prefix = f"/api/3/{entity}/"
             if endpoint.startswith(prefix):
-                rows[endpoint[len(prefix) :]].update(data or {})
+                u = endpoint[len(prefix) :]
+                if u in self.deleted_rows[entity]:
+                    assert (kw.get("params") or {}).get("$showDeleted") == "true", "PUT on a deleted row 404s"
+                    if (data or {}).get("deletedAt", 1) is None:
+                        rows[u] = self.deleted_rows[entity].pop(u)
+                    return {}
+                rows[u].update(data or {})
                 return {}
         raise AssertionError(f"unexpected PUT {endpoint}")
 
@@ -216,3 +226,17 @@ def test_playbook_in_recycle_bin_is_restored_and_updated():
     assert res == {"created": [], "updated": [WF]}
     assert srv.attached["steps"] == ["s-start", "s-a", "s-x", "s-b"]
     assert not [c for c in srv.calls if c[0] == "POST"]
+
+
+def test_soft_deleted_step_is_restored_and_adopted_not_recreated():
+    """A deleted playbook's deterministic trigger-step uuid stays in the recycle bin;
+    shipping the playbook again must restore it, not POST a duplicate that 409s."""
+    srv = FakeServer(V1_STEPS, V1_ROUTES)
+    srv.deleted_rows["workflow_steps"]["s-x"] = _step("s-x", "X")  # soft-deleted, invisible to a plain GET
+
+    PlaybooksAPI(srv).upsert_playbooks([_row(V2_STEPS, V2_ROUTES)])
+
+    assert srv.attached["steps"] == ["s-start", "s-a", "s-x", "s-b"]
+    assert "s-x" not in srv.deleted_rows["workflow_steps"]
+    sent = next(c[2] for c in srv.calls if c[0] == "PUT" and c[1] == WF_IRI and "steps" in (c[2] or {}))
+    assert "/api/3/workflow_steps/s-x" in sent["steps"]

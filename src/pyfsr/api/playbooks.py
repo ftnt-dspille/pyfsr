@@ -1637,10 +1637,30 @@ class PlaybooksAPI(BaseAPI):
         return resp if isinstance(resp, dict) else {}
 
     def _row_exists(self, entity: str, uuid: str) -> bool:
+        """True when the row is live, restoring it first if it is in the recycle bin.
+
+        A soft-deleted step/route 404s on a plain GET but still owns its uuid, so
+        re-creating it 409s/500s on the uniqueness constraint (the deterministic
+        trigger-step uuid of a playbook deleted and shipped again). Clearing
+        ``deletedAt`` brings it back to be adopted and updated in place, the same
+        way :meth:`_live_or_restored` handles a soft-deleted playbook.
+        """
         try:
-            return bool(self.client.get(f"/api/3/{entity}/{uuid}"))
-        except Exception:  # noqa: BLE001 - 404 means it does not exist
+            if self.client.get(f"/api/3/{entity}/{uuid}"):
+                return True
+        except Exception:  # noqa: BLE001 - 404 when absent or soft-deleted
+            pass
+        try:
+            row = self.client.get(f"/api/3/{entity}/{uuid}", params={"$showDeleted": "true"})
+        except Exception:  # noqa: BLE001 - genuinely absent
             return False
+        if not isinstance(row, dict) or not row.get("deletedAt"):
+            return False
+        try:
+            self.client.put(f"/api/3/{entity}/{uuid}", data={"deletedAt": None}, params={"$showDeleted": "true"})
+        except Exception:  # noqa: BLE001 - could not restore; let the caller's create surface the real error
+            return False
+        return True
 
     def _relation_refs(
         self,
