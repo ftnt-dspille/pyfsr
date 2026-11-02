@@ -473,7 +473,7 @@ class SchedulesAPI(BaseAPI):
         )
         enabled = bool(row.get("enabled"))
         due = _first_fire_due(row, cron, crontab.get("timezone"))
-        pending = enabled and not ever_fired and due is not None and due > _dt.datetime.now(_dt.UTC)
+        pending = enabled and not ever_fired and due is not None and due > _dt.datetime.now(_dt.timezone.utc)
         problems: list[str] = []
         if not enabled:
             problems.append("schedule is DISABLED -- the cron will never fire it")
@@ -522,11 +522,11 @@ def _first_fire_due(row: dict[str, Any], cron: str, timezone: str | None) -> _dt
     except (ValueError, KeyError):
         return None
     if since.tzinfo is None:
-        since = since.replace(tzinfo=_dt.UTC)
+        since = since.replace(tzinfo=_dt.timezone.utc)
     fire = next_fire(cron, since.astimezone(tz).replace(tzinfo=None))
     if fire is None:
         return None
-    return fire.replace(tzinfo=tz).astimezone(_dt.UTC) + _dt.timedelta(seconds=FIRE_GRACE_SECONDS)
+    return fire.replace(tzinfo=tz).astimezone(_dt.timezone.utc) + _dt.timedelta(seconds=FIRE_GRACE_SECONDS)
 
 
 def _after(created: Any, changed: Any) -> bool:
@@ -537,7 +537,7 @@ def _after(created: Any, changed: Any) -> bool:
             d = _dt.datetime.fromisoformat(str(v).replace("Z", "+00:00"))
         except ValueError:
             return None
-        return d if d.tzinfo else d.replace(tzinfo=_dt.UTC)
+        return d if d.tzinfo else d.replace(tzinfo=_dt.timezone.utc)
 
     c, ch = parse(created), parse(changed)
     return c is None or ch is None or c >= ch  # an unreadable time is not evidence against

@@ -5,7 +5,7 @@ Each case mirrors what a live appliance does with the raw value (see
 or answers with an error that points the wrong way.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -14,7 +14,7 @@ from pyfsr.field_values import check_record, check_value
 from pyfsr.records import RecordSet
 
 ISO = "2026-01-02T03:04:05Z"
-EPOCH = int(datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC).timestamp())
+EPOCH = int(datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc).timestamp())
 
 
 @pytest.mark.parametrize(

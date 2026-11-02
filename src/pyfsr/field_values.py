@@ -24,7 +24,7 @@ from __future__ import annotations
 import difflib
 import ipaddress
 import re
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from .exceptions import ValidationError
@@ -72,11 +72,11 @@ def check_value(form_type: str, value: Any) -> tuple[Any, str | None, str | None
 def _date(value: Any) -> tuple[Any, str | None, str | None]:
     if isinstance(value, str) and not value.strip().lstrip("-").isdigit():
         try:
-            dt = datetime.fromisoformat(value.strip())
+            dt = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
         except ValueError:
             return value, None, f"{value!r} is not a date: send epoch seconds or ISO 8601"
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=UTC)
+            dt = dt.replace(tzinfo=timezone.utc)
         return int(dt.timestamp()), "ISO date -> epoch seconds", None
     if isinstance(value, (int, float)) and not isinstance(value, bool) and abs(value) >= EPOCH_MS_FLOOR:
         return int(value // 1000), "epoch milliseconds -> seconds", None

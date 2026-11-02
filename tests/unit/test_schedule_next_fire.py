@@ -34,7 +34,7 @@ def test_a_rare_cron_beyond_the_horizon_is_unknown():
 def test_first_fire_due_adds_the_grace_in_utc():
     row = {"date_changed": "2026-03-02T10:30:15Z"}
     due = _first_fire_due(row, "0 * * * *", "UTC")
-    assert due == dt.datetime(2026, 3, 2, 11, 0, tzinfo=dt.UTC) + dt.timedelta(seconds=FIRE_GRACE_SECONDS)
+    assert due == dt.datetime(2026, 3, 2, 11, 0, tzinfo=dt.timezone.utc) + dt.timedelta(seconds=FIRE_GRACE_SECONDS)
     assert _first_fire_due({}, "0 * * * *", "UTC") is None
 
 

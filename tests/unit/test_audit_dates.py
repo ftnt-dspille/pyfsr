@@ -19,7 +19,7 @@ MS = 1893456000000  # 2030-01-01T00:00:00Z
         "2030-01-01T00:00:00Z",
         "2030-01-01T00:00:00",
         "2030-01-01",
-        dt.datetime(2030, 1, 1, tzinfo=dt.UTC),
+        dt.datetime(2030, 1, 1, tzinfo=dt.timezone.utc),
     ],
 )
 def test_every_form_reaches_the_same_instant(val):

@@ -43,7 +43,7 @@ def _to_epoch_ms(val: Any) -> int | None:
     a date the API never receives is not a filter, and the query would quietly
     return every event.
     """
-    from datetime import UTC, datetime
+    from datetime import datetime, timezone
 
     if val is None:
         return None
@@ -58,7 +58,7 @@ def _to_epoch_ms(val: Any) -> int | None:
             raise ValueError(f"{val!r} is not a date: pass epoch seconds/ms or ISO-8601") from None
     if isinstance(val, datetime):
         if val.tzinfo is None:
-            val = val.replace(tzinfo=UTC)
+            val = val.replace(tzinfo=timezone.utc)
         return int(val.timestamp() * 1000)
     raise ValueError(f"{val!r} is not a date: pass epoch seconds/ms or ISO-8601")
 
