@@ -1,0 +1,110 @@
+pyfsr.api.notifications
+=======================
+
+.. py:module:: pyfsr.api.notifications
+
+.. autoapi-nested-parse::
+
+   System (bell-icon) notifications -- ``/api/rule/api/system-notification/notifications/``.
+
+   The per-user notifications the platform raises for record events (task
+   assignments, approvals, SLA breaches, ...). Accessed as ``client.notifications``.
+
+   This is a ``rule`` API entity, not a ``/api/3`` module: the listing is fetched
+   with ``POST`` (the UI posts to the endpoint), returns a hydra envelope
+   (``hydra:member`` + ``hydra:totalItems`` + paging links), and each row is a
+   :class:`~pyfsr.models.Notification`. ``id_iri``/``record_type`` stay ``None`` --
+   use ``uuid`` as the identity.
+
+   .. rubric:: Example
+
+   >>> unread = client.notifications.list(read=False)
+   >>> unread[0].content
+   '<p>A task, Notify asset owner ...</p>'
+   >>> client.notifications.count(read=False)
+   18206
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.notifications.NotificationsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: NotificationsAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   List, count, and page through the caller's system notifications.
+
+
+   .. py:method:: list(*, read: bool | None = None, entity_type: str | collections.abc.Sequence[str] | None = None, search: str | None = None, limit: int | None = None, offset: int = 0, typed: bool = True) -> list[pyfsr.models._system.Notification] | list[dict[str, Any]]
+
+      Return the caller's notifications, newest first.
+
+      :param read: filter by read state -- ``False`` for unread only, ``True`` for
+                   read only, ``None`` (default) for all.
+      :param entity_type: restrict to one or more source entity types (the
+                          endpoint's ``entity_type__in`` filter), e.g. ``"comments"`` or
+                          ``["approvals", "manualinput"]``. ``None`` (default) for all types.
+      :param search: free-text filter over the notification ``content`` (the
+                     endpoint's ``search`` query param); ``None`` (default) for no filter.
+      :param limit: page size. ``None`` (default) fetches every page (following
+                    ``hydra:nextPage`` until exhausted); pass an int for a single page.
+      :param offset: starting offset for a single-page fetch (ignored when
+                     ``limit`` is ``None`` and all pages are pulled).
+      :param typed: parse rows into :class:`~pyfsr.models.Notification` (default);
+                    pass ``False`` for raw dicts.
+
+      .. rubric:: Example
+
+      >>> client.notifications.list(read=False, entity_type="comments")
+      >>> client.notifications.list(entity_type=["approvals", "manualinput"])
+
+      Doctest:
+
+          >>> from pyfsr._testing import demo_client
+          >>> client = demo_client()
+          >>> notifications = client.notifications.list(limit=10)
+          >>> len(notifications)
+          2
+          >>> notifications[0].entity_type
+          'tasks'
+
+
+
+   .. py:method:: count(*, read: bool | None = None, entity_type: str | collections.abc.Sequence[str] | None = None, search: str | None = None) -> int
+
+      Total notification count (``hydra:totalItems``) for the given filters.
+
+      A single-row fetch -- only the envelope total is used, not the members.
+
+
+
+   .. py:method:: purge(*, read: bool | None = None) -> pyfsr.models._system.NotificationPurge
+
+      Bulk-delete notifications (``POST .../system-notification/purge/``).
+
+      Kicks off an **asynchronous** server-side purge and returns immediately
+      with a :class:`~pyfsr.models.NotificationPurge` ack (``result`` +
+      ``status``); the rows are removed in the background, so a following
+      :meth:`count` may still report the old total briefly.
+
+      :param read: scope the purge by read state -- ``True`` purges only already-read
+                   notifications (the safe default the UI's "clear read" uses),
+                   ``False`` purges unread, ``None`` purges all. **There is no undo.**
+
+      .. rubric:: Example
+
+      >>> client.notifications.purge(read=True)
+      {'result': 'System Notification purge started', 'status': 'started'}
+
+
+

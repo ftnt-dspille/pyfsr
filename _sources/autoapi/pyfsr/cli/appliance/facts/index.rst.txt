@@ -1,0 +1,106 @@
+pyfsr.cli.appliance.facts
+=========================
+
+.. py:module:: pyfsr.cli.appliance.facts
+
+.. autoapi-nested-parse::
+
+   Appliance facts — resolve the magic values once and memoize them.
+
+   This is the anti-session-waste core (plan §Implementation): device UUID (= the
+   Postgres/ES password), the install-specific content DB name, and the major
+   version. Everything is resolved lazily through a :class:`Transport` and cached on
+   the :class:`Facts` instance for the life of one CLI invocation.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.facts.FIXED_ROLE_DBS
+   pyfsr.cli.appliance.facts.CONTENT_ROLE
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.facts.Facts
+
+
+Module Contents
+---------------
+
+.. py:data:: FIXED_ROLE_DBS
+   :type:  dict[str, str]
+
+.. py:data:: CONTENT_ROLE
+   :value: 'content'
+
+
+.. py:class:: Facts
+
+   Lazily-resolved, memoized appliance facts over a transport.
+
+
+   .. py:attribute:: transport
+      :type:  pyfsr.cli.appliance.transport.Transport
+
+
+   .. py:method:: device_uuid() -> str
+
+      The 32-char device UUID. This doubles as the ``cyberpgsql`` /
+      ``elastic`` password, so it is read into memory and never logged.
+
+      Primary source is the on-disk ``/home/csadmin/device_uuid`` file, which
+      holds the **original install-time UUID** that the Postgres/ES passwords
+      were provisioned with. ``csadm license --get-device-uuid`` is only a
+      fallback: on a box whose entitlement has been re-issued (FortiCloud
+      drift) it returns the *current* device UUID, which differs from the file
+      and **fails** ``cyberpgsql`` auth (verified live on a lab appliance,
+      2026-06-20). The file is csadmin-readable (no sudo needed).
+
+
+
+   .. py:property:: db_password
+      :type: str
+
+
+      Postgres ``cyberpgsql`` password (= device UUID).
+
+
+   .. py:method:: resolve_db(role: str | None = None, db: str | None = None) -> str
+
+      Resolve a target DB name from an explicit ``db`` or a ``role``.
+
+      Explicit ``--db`` wins. A fixed role maps directly. The ``content`` role
+      (default) is discovered by fingerprinting for ``model_metadatas``.
+
+
+
+   .. py:method:: content_db() -> str
+
+      Discover the install-specific content DB (the one holding
+      ``model_metadatas``). Cached after first resolution.
+
+
+
+   .. py:method:: psql(sql: str, *, db: str, tuples_only: bool = True, timeout: float = 60.0) -> list[list[str]]
+
+      Run SQL via ``psql`` against ``db`` and return rows as lists of cells.
+
+      Uses ``-F$'\x1f'`` (unit separator) as the field delimiter so values
+      containing commas/pipes parse cleanly. Password goes via ``PGPASSWORD``
+      env, never argv.
+
+
+
+   .. py:method:: fsr_version() -> str | None
+
+      Best-effort FortiSOAR version from the installed RPM.
+
+
+

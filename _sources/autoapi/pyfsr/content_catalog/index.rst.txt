@@ -1,0 +1,324 @@
+pyfsr.content_catalog
+=====================
+
+.. py:module:: pyfsr.content_catalog
+
+.. autoapi-nested-parse::
+
+   Build and validate a self-hosted Content Hub catalog (``content-hub.json``).
+
+   FortiSOAR's Content Hub sync (``csadm package content-hub sync``) reads **one**
+   manifest from **one** host: ``GET https://{REPOSERVER}/content-hub/content-hub.json``.
+   That file is a flat JSON array of entries (connectors, widgets, solution packs,
+   ai_agents). There is no native multi-repo — so "see both Fortinet's store and
+   ours" is produced by serving a *merged* ``content-hub.json`` from our own host
+   (``OFFLINEREPO=true``, ``REPOSERVER`` pointed at our VM).
+
+   This module is the no-appliance, no-FDN-cert piece pyfsr owns (Option C in
+   ``docs/plans/CONTENT_HUB_SELF_HOSTED_REPO_PLAN.md``): take an upstream catalog,
+   splice in our own local entries, validate every entry against the live schema,
+   and emit a spec-valid ``content-hub.json`` plus the directory tree the sync's
+   fetch contract expects.
+
+   The fetch contract a served mirror must satisfy (all live-verified on 8.0.0)::
+
+       /content-hub/content-hub.json                                  # this manifest
+       /content-hub/{name}-{version}/{buildNumber}/info.json          # per-item detail
+       /content-hub/{name}-{version}/{buildNumber}/{name}-{version}.zip   # artifact
+       /content-hub/{name}-{version}/{buildNumber}/images/fsr-icon-large.png
+
+   Every one of those per-item files is written to a ``latest/`` alias as well as the
+   numbered build dir::
+
+       /content-hub/{name}-{version}/latest/info.json
+       /content-hub/{name}-{version}/latest/{name}-{version}.zip
+       /content-hub/{name}-{version}/latest/images/fsr-icon-large.png
+
+   The ``latest/`` artifact is **load-bearing, not a convenience**: an install request
+   that omits ``buildNumber`` makes the appliance fetch the literal ``latest`` path
+   (cyops-api ``SolutionPackController``: ``$requestBody->buildNumber ?? "latest"``).
+   A tree carrying only numbered builds 404s that download, which the appliance
+   misreports as ``"Please check the network connection to <repo>"``.
+
+   Typical use::
+
+       from pyfsr.content_catalog import ContentCatalog, build_entry
+
+       cat = ContentCatalog.from_url("my-mirror.example.com")        # crawl a live mirror
+       # ...or from a saved file: ContentCatalog.from_file("upstream-content-hub.json")
+       cat.add(build_entry(
+           name="myConnector", type="connector", version="1.0.0", buildNumber=1,
+           label="My Connector", description="in-house", publisher="Acme",
+       ))
+       problems = cat.validate()          # {} when clean
+       cat.write_tree("/srv/repo")        # -> /srv/repo/content-hub/content-hub.json + item dirs
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.content_catalog.CATALOG_TYPES
+   pyfsr.content_catalog.SOLUTION_PACK_CATEGORIES
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.content_catalog.ContentCatalog
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.content_catalog.info_path
+   pyfsr.content_catalog.icon_path
+   pyfsr.content_catalog.artifact_path
+   pyfsr.content_catalog.fetch_catalog
+   pyfsr.content_catalog.build_entry
+   pyfsr.content_catalog.read_artifact_info
+   pyfsr.content_catalog.entry_from_artifact
+   pyfsr.content_catalog.validate_entry
+
+
+Module Contents
+---------------
+
+.. py:data:: CATALOG_TYPES
+
+.. py:data:: SOLUTION_PACK_CATEGORIES
+
+.. py:function:: info_path(name: str, version: str, build_number: int | str) -> str
+
+   Return the ``infoPath`` for an item, per the live path convention.
+
+   ``/content-hub/{name}-{version}/{buildNumber}`` — ``buildNumber`` is the real
+   integer build, not ``"latest"`` (both the numbered dir and a ``latest/`` copy
+   exist on the wire).
+
+
+.. py:function:: icon_path(name: str, version: str, build_number: int | str) -> str
+
+   Return the ``iconLarge`` path for an item (served from ``OSSERVER``).
+
+
+.. py:function:: artifact_path(name: str, version: str, build_number: int | str) -> str
+
+   Return the artifact-zip path the sync fetches for an item.
+
+
+.. py:function:: fetch_catalog(host: str, *, timeout: float = 30.0, verify: bool = True, cert: str | tuple[str, str] | None = None) -> list[dict[str, Any]]
+
+   Crawl a live ``content-hub.json`` from ``host`` and return its entry list.
+
+   ``host`` may be a bare host (``secops-content.forticloud.com``), a
+   ``scheme://host`` base, or a full URL ending in ``content-hub.json`` — the
+   manifest path (``_CATALOG_PATH``) is appended unless already present, and
+   a bare host defaults to ``https://``. This is the upstream half of the merge:
+   fetch Fortinet's (or any mirror's) catalog, then splice your local entries in
+   via :meth:`ContentCatalog.merge`.
+
+   The official ``secops-content.forticloud.com`` host requires a mutual-TLS FDN
+   client certificate in online mode (see the plan doc). Pass ``cert`` — a
+   combined PEM path, or a ``(cert, key)`` pair — to present it (this is how the
+   Option-B mirror crawls the entitled upstream). Without it, a bare fetch of the
+   official host fails the handshake; a plain ``OFFLINEREPO`` mirror needs no cert.
+
+   Raises :class:`~pyfsr.exceptions.RepoUnreachableError` on a transport failure
+   (DNS/TLS/timeout/refused), :class:`~pyfsr.exceptions.RepoArtifactNotFoundError`
+   on a 404, or ``ValueError`` if the host answers with something that isn't a
+   JSON array.
+
+
+.. py:function:: build_entry(*, name: str, type: str, version: str, buildNumber: int, label: str, description: str = '', publisher: str = '', certified: bool = False, category: list[str] | str | None = None, availableVersions: list[str] | None = None, **extra: Any) -> dict[str, Any]
+
+   Construct a spec-valid catalog entry with path fields filled in.
+
+   Only ``name``/``type``/``version``/``buildNumber``/``label`` are truly
+   required; the rest default to empty-but-valid. ``infoPath`` and ``iconLarge``
+   are synthesized from the path convention (:func:`info_path` / :func:`icon_path`)
+   unless you pass them in ``extra``. Any additional keys — ``operations`` for a
+   connector, ``contents``/``dependencies`` for a solution pack, ``inputformat``
+   for an ai_agent — are merged verbatim, so this composes with type-specific
+   fields.
+
+   The returned dict is the exact shape :meth:`ContentCatalog.add` and
+   :func:`validate_entry` expect. It does not itself raise on a bad ``type``;
+   run it through :func:`validate_entry` to catch that.
+
+
+.. py:function:: read_artifact_info(path: str) -> dict[str, Any]
+
+   Extract and parse the ``info.json`` bundled inside an artifact archive.
+
+   Works on a connector/widget ``.tgz`` (gzipped tar) or a solution-pack
+   ``.zip``. Returns the shallowest ``info.json`` found (connectors nest theirs
+   one dir deep, widgets/SPs keep it at the root). Raises ``ValueError`` if the
+   archive has no ``info.json`` or isn't a recognized archive type.
+
+
+.. py:function:: entry_from_artifact(path: str, *, type: str | None = None, buildNumber: int = 1, **overrides: Any) -> dict[str, Any]
+
+   Build a catalog entry directly from a connector/widget/SP artifact file.
+
+   Reads the archive's bundled ``info.json`` (:func:`read_artifact_info`), maps
+   its fields onto a spec-valid entry via :func:`build_entry`, and infers the
+   ``type`` (``_infer_type``) unless you pass one. ``buildNumber`` and any
+   other keyword ``overrides`` (e.g. ``publisher=``, ``certified=``) win over the
+   values read from the archive — so a repackaged in-house build can stamp its
+   own build number.
+
+   Raises ``ValueError`` if the archive lacks a usable ``info.json`` or the
+   ``name``/``version`` needed to place it. The returned entry still carries the
+   synthesized ``infoPath``/``iconLarge`` paths; feed it to
+   :meth:`ContentCatalog.add` and, for a downloadable artifact, copy the file to
+   the tree via :meth:`ContentCatalog.write_tree` (``artifacts=``).
+
+
+.. py:function:: validate_entry(entry: Any) -> list[str]
+
+   Return a list of problems with a single catalog entry (empty == valid).
+
+   Checks structural requirements the sync relies on, not editorial quality:
+
+   * entry is a JSON object;
+   * every key in ``_REQUIRED_KEYS`` is present and non-empty;
+   * ``type`` is one of :data:`CATALOG_TYPES`;
+   * ``buildNumber`` is an int (the sync builds numeric artifact paths from it);
+   * ``availableVersions``, when present, is a list; ``category`` is a list or
+     string (it is a list for solutionpacks, a string for other types on the wire);
+   * ``version`` appears in ``availableVersions`` when that list is non-empty.
+
+   Never raises — a non-dict input is reported as a problem string.
+
+
+.. py:class:: ContentCatalog(entries: collections.abc.Iterable[dict[str, Any]] | None = None)
+
+   A mutable, ordered collection of Content Hub entries.
+
+   Backed by a ``(type, name) -> entry`` mapping, so adding an entry with the
+   same type+name **replaces** the earlier one (last-write-wins) — this is what
+   makes "splice ours over Fortinet's" a one-liner: load upstream, then
+   :meth:`add` your overrides. Iteration and :meth:`to_list` preserve insertion
+   order.
+
+
+   .. py:method:: from_list(data: list[dict[str, Any]]) -> ContentCatalog
+      :classmethod:
+
+
+      Build from an in-memory list of entries (a parsed ``content-hub.json``).
+
+
+
+   .. py:method:: from_file(path: str) -> ContentCatalog
+      :classmethod:
+
+
+      Load a ``content-hub.json`` file (a flat JSON array of entries).
+
+
+
+   .. py:method:: from_url(host: str, *, timeout: float = 30.0, verify: bool = True, cert: str | tuple[str, str] | None = None) -> ContentCatalog
+      :classmethod:
+
+
+      Crawl a live ``content-hub.json`` from ``host`` into a catalog.
+
+      Thin wrapper over :func:`fetch_catalog` — see it for the ``host`` forms,
+      the FDN-cert caveat on the official host (pass ``cert`` to present the
+      mutual-TLS client certificate), and the error contract. ``verify`` controls
+      TLS verification (default on); set False only for a self-signed internal mirror.
+
+
+
+   .. py:method:: add(entry: dict[str, Any]) -> None
+
+      Add or replace an entry (keyed by ``type`` + ``name``).
+
+
+
+   .. py:method:: merge(other: ContentCatalog | collections.abc.Iterable[dict[str, Any]], *, bump_published: bool = True) -> None
+
+      Splice another catalog in, its entries winning on ``type``+``name`` collisions.
+
+      Use to union Fortinet's mirrored catalog with your local one: build the
+      upstream catalog, then ``upstream.merge(local)`` to let your local entries
+      win — merge always lets the argument (``other``) win, so order the call to
+      match your intent.
+
+      With ``bump_published=True`` (default), any incoming entry that *replaces*
+      an existing one is given a ``publishedDate`` strictly newer than the entry
+      it overrides, so a *scheduled* (non-``--force``) appliance sync actually
+      applies the override instead of silently keeping the upstream item (an
+      override that already carries a newer date is left untouched). Pass
+      ``False`` to splice verbatim.
+
+
+
+   .. py:method:: remove(*, type: str, name: str) -> bool
+
+      Drop an entry by type+name; return whether one was present.
+
+
+
+   .. py:method:: to_list() -> list[dict[str, Any]]
+
+      Return the entries as a plain list, in insertion order.
+
+
+
+   .. py:method:: to_json(*, indent: int | None = 2) -> str
+
+      Serialize to a ``content-hub.json`` string (a flat JSON array).
+
+
+
+   .. py:method:: counts() -> dict[str, int]
+
+      Return a ``type -> count`` breakdown (matches the live catalog's tally).
+
+
+
+   .. py:method:: validate() -> dict[str, list[str]]
+
+      Validate every entry; return ``"{type}/{name}" -> [problems]`` for bad ones.
+
+      An empty dict means the whole catalog is spec-valid. Duplicate identities
+      can't occur (they collapse on :meth:`add`), so this only surfaces
+      per-entry structural problems from :func:`validate_entry`.
+
+
+
+   .. py:method:: write_tree(root: str, *, artifacts: dict[tuple[str, str], str] | None = None, icons: dict[tuple[str, str], str] | None = None, validate: bool = True) -> str
+
+      Write a served-ready directory tree under ``root`` and return its manifest path.
+
+      Lays out, per the fetch contract::
+
+          {root}/content-hub/content-hub.json
+          {root}/content-hub/{name}-{version}/{buildNumber}/info.json
+          {root}/content-hub/{name}-{version}/{buildNumber}/build.json
+          {root}/content-hub/{name}-{version}/latest/info.json
+
+      Each entry's own dict is written as its ``info.json`` at both the numbered
+      build dir and the ``latest/`` copy (matching the live layout where both
+      exist), alongside a ``build.json`` (``{"buildNumber": N}``) the appliance
+      reads. If ``artifacts`` / ``icons`` map an entry's ``(type, name)`` to a
+      local file, that file is copied to the ``.zip`` artifact / icon path the
+      sync expects (:func:`artifact_path` / :func:`icon_path`) — in **both** the
+      numbered build dir and ``latest/``, because an install that omits
+      ``buildNumber`` fetches the ``latest`` path (see the module docstring).
+
+      With ``validate=True`` (default) a non-empty :meth:`validate` raises
+      ``ValueError`` before anything is written, so a bad catalog never produces
+      a half-built tree.
+
+
+

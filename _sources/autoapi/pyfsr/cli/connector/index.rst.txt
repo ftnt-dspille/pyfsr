@@ -1,0 +1,53 @@
+pyfsr.cli.connector
+===================
+
+.. py:module:: pyfsr.cli.connector
+
+.. autoapi-nested-parse::
+
+   ``pyfsr connector`` command group -- the local ConnectorsV2 dev loop.
+
+   Subcommands:
+
+   - ``scaffold <name> [--dir DIR]`` -- write a minimal, installable connector skeleton
+     (info.json, connector.py, operations.py, requirements.txt). See
+     :mod:`pyfsr.connector_dev`.
+   - ``package [DIR]`` -- build ``dist/<name>-<version>.tgz`` from a checkout
+     (git-tracked files preferred; tests and packaging furniture excluded).
+   - ``deploy <DIR|TGZ>`` -- package if needed, install on the appliance from the
+     ``FSR_*`` environment (``--env-file`` to load one), wait for activation,
+     optionally ``--config-json`` a default configuration, and healthcheck.
+   - ``icon <svg> --connector DIR`` -- build the connector's large (80x80) and small (32x32)
+     icon PNGs from an SVG (e.g. one from https://icons.fortinet.com), laid out like the
+     stock Fortinet connector icons. See :mod:`pyfsr.connector_icon`.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.connector.cmd_icon
+   pyfsr.cli.connector.cmd_scaffold
+   pyfsr.cli.connector.cmd_package
+   pyfsr.cli.connector.cmd_deploy
+   pyfsr.cli.connector.build_subparser
+
+
+Module Contents
+---------------
+
+.. py:function:: cmd_icon(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_scaffold(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_package(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_deploy(args: argparse.Namespace) -> int
+
+.. py:function:: build_subparser(sub: argparse._SubParsersAction) -> None
+
+   Wire the ``connector`` subcommands onto an existing subparsers object.
+
+

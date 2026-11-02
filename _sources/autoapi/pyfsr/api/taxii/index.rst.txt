@@ -1,0 +1,172 @@
+pyfsr.api.taxii
+===============
+
+.. py:module:: pyfsr.api.taxii
+
+.. autoapi-nested-parse::
+
+   TAXII 2.1 threat-intel sharing server (``/api/taxii/1``).
+
+   Read access to FortiSOAR's TAXII collections -- the discovery descriptor, the
+   collection list, per-collection manifests, and the STIX objects themselves.
+   Accessed as ``client.taxii``.
+
+   Typed models are returned (:class:`~pyfsr.models.TaxiiDiscovery`,
+   :class:`~pyfsr.models.TaxiiCollection`, :class:`~pyfsr.models.TaxiiManifest`,
+   :class:`~pyfsr.models.TaxiiObjectsEnvelope`), but all stay dict-compatible
+   (``resp["key"]``, ``resp.get(...)``) so existing call sites keep working.
+
+   Note the object endpoints return a FortiSOAR-specific ``{totalItems, objects:[]}``
+   envelope, **not** the standard TAXII 2.1 ``more``/``next`` cursor -- paginate with
+   ``limit`` + ``added_after``. The ``objects`` list is parsed into typed
+   :class:`~pyfsr.models.StixObject` subclasses when the STIX ``type`` is known
+   (indicator, malware, threat-actor, ...), falling back to the base
+   :class:`~pyfsr.models.StixObject` for unknown types.
+
+   Writing to a collection is not done through this API -- FortiSOAR's TAXII
+   server is read-only (``can_write`` is ``False``). To *publish* a feed, create
+   a dataset via ``client.system_queries.ensure(module="threat_intel_feeds", ...)``;
+   a dataset's uuid *is* the TAXII collection id. See
+   :class:`~pyfsr.models.SystemQuery` and the
+   ``taxii_threat_feed_to_fortigate.py`` example.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> client.taxii.discovery().title
+   'FortiSOAR TAXII Server'
+   >>> cols = client.taxii.collections()
+   >>> cols[0].id
+   'malware-samples'
+   >>> env = client.taxii.objects(cols[0].id, limit=50)
+   >>> env.total_items
+   1
+   >>> env.objects[0].type
+   'malware'
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.taxii.TaxiiAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: TaxiiAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Read FortiSOAR's TAXII 2.1 collections and STIX objects.
+
+
+   .. py:method:: discovery() -> pyfsr.models._taxii.TaxiiDiscovery
+
+      Fetch the TAXII server descriptor (``GET /api/taxii/1/``).
+
+      Returns title, supported TAXII versions, and the max content length the
+      server accepts -- clients call this first to confirm protocol compatibility.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.taxii.discovery().max_content_length
+      10485760
+
+
+
+   .. py:method:: collections() -> list[pyfsr.models._taxii.TaxiiCollection]
+
+      List TAXII collections the caller may see (``GET .../collections``).
+
+      Each entry carries ``id``, ``can_read``/``can_write``, and accepted media
+      types. Returns the ``collections`` array as typed
+      :class:`~pyfsr.models.TaxiiCollection` objects.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> cols = client.taxii.collections()
+      >>> [c.id for c in cols]
+      ['malware-samples', 'threat-actors']
+      >>> cols[0].can_read
+      True
+
+
+
+   .. py:method:: collection(uuid: str) -> pyfsr.models._taxii.TaxiiCollection
+
+      Fetch one collection's metadata (``GET .../collections/{uuid}``).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.taxii.collection("malware-samples").title
+      'Malware Samples'
+
+
+
+   .. py:method:: manifest(uuid: str, *, limit: int | None = None, added_after: str | None = None) -> pyfsr.models._taxii.TaxiiManifest
+
+      Fetch a collection manifest -- one entry per object, no bodies.
+
+      ``GET .../collections/{uuid}/manifest``. Cheap "what's new since X" poll:
+      each entry has id, date added, version, media type. ``added_after`` is an
+      ISO timestamp; ``limit`` caps the page.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> manifest = client.taxii.manifest("malware-samples")
+      >>> manifest.objects[0].media_type
+      'application/stix+json;version=2.1'
+
+
+
+   .. py:method:: objects(uuid: str, *, limit: int | None = None, added_after: str | None = None) -> pyfsr.models._taxii.TaxiiObjectsEnvelope
+
+      Fetch STIX 2.1 objects from a collection.
+
+      ``GET .../collections/{uuid}/objects``. Returns the FortiSOAR
+      ``{totalItems, objects: []}`` envelope; paginate with ``limit`` +
+      ``added_after`` (there is no TAXII ``more``/``next`` cursor here).
+      Objects are parsed into typed :class:`~pyfsr.models.StixObject`
+      subclasses (indicator, malware, ...) when the ``type`` is recognized.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> env = client.taxii.objects("malware-samples", limit=50)
+      >>> env.total_items
+      1
+      >>> env.objects[0].type
+      'malware'
+
+
+
+   .. py:method:: object(uuid: str, stix_id: str) -> pyfsr.models._taxii.TaxiiObjectsEnvelope
+
+      Fetch a single STIX object by id.
+
+      ``GET .../collections/{uuid}/objects/{stix_id}`` -- same
+      ``{totalItems, objects: []}`` envelope, filtered to the one object.
+
+      .. note::
+          Known issue on FSR 7.6.5: this route can return an empty envelope;
+          fall back to :meth:`objects` and filter client-side if so.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> stix_id = "malware--31b7aa16-6a19-4d5e-9e1a-3a5c9f6a2b40"
+      >>> env = client.taxii.object("malware-samples", stix_id)
+      >>> env.objects[0].name
+      'example-malware'
+
+
+

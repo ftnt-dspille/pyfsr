@@ -1,0 +1,64 @@
+pyfsr.cli.jinja
+===============
+
+.. py:module:: pyfsr.cli.jinja
+
+.. autoapi-nested-parse::
+
+   ``pyfsr jinja`` — query the FSR Jinja reference store (offline, no appliance).
+
+   The reference DB (``fsr_reference.db``) ships with the ``fsr_playbooks``
+   package and contains 170+ FortiSOAR-custom Jinja filters, 15 globals, 39
+   tests — all introspected from a live appliance with full signatures,
+   parameter docs, and 1,690 real usage examples from 1,669 playbooks.
+
+   Subcommands:
+     find NAME     show a filter/global/test by name (signature + doc + examples)
+     search QUERY  full-text search across filter names, docs, and examples
+     list          list all filters (or --kind globals / --kind tests)
+     examples NAME show real-world usage examples from the playbook corpus
+     idioms        show common Jinja patterns from the idioms reference
+
+   Usage::
+
+       pyfsr jinja find picklist
+       pyfsr jinja search "query body"
+       pyfsr jinja list --kind globals
+       pyfsr jinja examples picklist
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.jinja.cmd_find
+   pyfsr.cli.jinja.cmd_search
+   pyfsr.cli.jinja.cmd_list
+   pyfsr.cli.jinja.cmd_examples
+   pyfsr.cli.jinja.cmd_idioms
+   pyfsr.cli.jinja.build_subparser
+
+
+Module Contents
+---------------
+
+.. py:function:: cmd_find(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_search(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_list(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_examples(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_idioms(args: argparse.Namespace) -> int
+
+   Print key Jinja idioms from the idioms reference doc.
+
+
+.. py:function:: build_subparser(sub: argparse._SubParsersAction) -> None
+
+   Register ``pyfsr jinja`` subcommands (find, search, list, examples, idioms).
+
+

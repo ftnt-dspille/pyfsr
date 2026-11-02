@@ -1,0 +1,169 @@
+pyfsr.playbook_lint
+===================
+
+.. py:module:: pyfsr.playbook_lint
+
+.. autoapi-nested-parse::
+
+   Playbook lint — live-target preflight for compiled playbooks (AGENT_DX D3).
+
+   The compiler validates a playbook's *shape* offline, but a connector step
+   compiles and validates fine and then fails at **run time** with
+   ``INTEGRATION-12: could not find a connector configuration`` when the referenced
+   connector has no configuration on the target box. The friendly ``code:`` form
+   hides that a ``code-snippet`` connector config is even needed; every connector
+   step shares this failure mode.
+
+   This module closes that gap with a two-step, mostly-offline lint:
+
+   - :func:`connector_refs` walks a compiled ``workflow_collections`` envelope and
+     yields every connector-bearing step (the Connector step type and the SMTP
+     *Send Email* shortcut). Pure — no client, unit-testable against a fixture.
+   - :func:`check_connector_configs` diffs those refs against what
+     ``client.connectors.list_configured()`` reports and returns warn-level findings
+     (``not-installed`` / ``no-config`` / ``config-missing``). The only part that
+     touches the network, and it batches a single connector listing.
+
+   Findings are **warnings, never errors**: deploying a playbook before its
+   connector configs exist is a legitimate workflow (land the automation, then wire
+   credentials). The value is a named, actionable warning whose ``fix_hint`` points
+   at the one-liner — ``client.connectors.create_configuration(name,
+   client.connectors.default_config(name), name="default", default=True)`` (the A1
+   ``default_config`` helper).
+
+   See ``docs/plans/PLAYBOOK_LINT_DESIGN.md``.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.playbook_lint.STEP_CONNECTOR
+   pyfsr.playbook_lint.STEP_SEND_EMAIL
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.playbook_lint.ConnectorRef
+   pyfsr.playbook_lint.LintFinding
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.playbook_lint.connector_refs
+   pyfsr.playbook_lint.check_connector_configs
+
+
+Module Contents
+---------------
+
+.. py:data:: STEP_CONNECTOR
+   :value: '0bfed618-0316-11e7-93ae-92361f002671'
+
+
+.. py:data:: STEP_SEND_EMAIL
+   :value: '4c0019b2-055c-44d0-968c-678a0c2d762e'
+
+
+.. py:class:: ConnectorRef(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A single connector-bearing step found in a compiled playbook.
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: connector
+      :type:  str
+
+
+   .. py:attribute:: operation
+      :type:  str | None
+
+
+   .. py:attribute:: version
+      :type:  str | None
+
+
+   .. py:attribute:: config
+      :type:  str | None
+
+
+   .. py:attribute:: workflow
+      :type:  str
+
+
+   .. py:attribute:: step
+      :type:  str
+
+
+.. py:class:: LintFinding(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One warn-level connector-config problem against a live target.
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: severity
+      :type:  str
+
+
+   .. py:attribute:: connector
+      :type:  str
+
+
+   .. py:attribute:: code
+      :type:  str
+
+
+   .. py:attribute:: message
+      :type:  str
+
+
+   .. py:attribute:: fix_hint
+      :type:  str
+
+
+.. py:function:: connector_refs(fsr_json: dict[str, Any]) -> list[ConnectorRef]
+
+   Every connector-bearing step in a compiled ``workflow_collections`` envelope.
+
+   Walks ``data[].workflows[].steps[]`` (tolerating ``collections`` as an alias
+   for ``data``), keying off each step's ``stepType`` UUID. Steps without an
+   ``arguments.connector`` are skipped even if the UUID matches. Offline-pure.
+
+
+.. py:function:: check_connector_configs(client: pyfsr.client.FortiSOAR, refs: list[ConnectorRef]) -> list[LintFinding]
+
+   Diff connector ``refs`` against what the target has installed + configured.
+
+   One :meth:`~pyfsr.api.connectors.ConnectorsAPI.list_configured` call backs the
+   whole pass. Per distinct connector:
+
+   - not present at all → ``not-installed``;
+   - installed but no configurations → ``no-config``;
+   - a ref pins a ``config`` UUID absent from the connector's configurations →
+     ``config-missing``.
+
+   Returns warn-level findings, deduped by ``(connector, code, config)``.
+
+
