@@ -426,7 +426,9 @@ class SchedulesAPI(BaseAPI):
             problems.append("schedule is DISABLED -- the cron will never fire it")
         if not wf_exists:
             problems.append(f"target workflow {wf_iri or '<none>'} does not exist (deleted?)")
-        if enabled and not ever_fired:
+        # Beat saves last_run_at/total_run_count to the DB a few minutes after it fires, so a
+        # zero counter next to existing runs is lag, not a schedule that never fires.
+        if enabled and not ever_fired and not runs:
             problems.append("enabled but has never fired -- created recently, or beat is not picking it up")
         if runs and runs[0]["status"] not in ("finished",):
             problems.append(f"most recent run is {runs[0]['status']!r}, not finished")
