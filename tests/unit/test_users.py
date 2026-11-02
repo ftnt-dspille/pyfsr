@@ -217,7 +217,7 @@ def test_create_inactive_sets_status_2(mocker):
     mocker.patch.object(api, "_resolve_teams", return_value=["/api/3/teams/team-uuid"])
     api.create(
         loginid="j.smith",
-        password="p",
+        password="Str0ng!Pass",
         firstname="J",
         lastname="S",
         email="j@x.example",
@@ -280,5 +280,7 @@ def test_create_refuses_a_teamless_user_before_posting(mocker):
     api = UsersAPI(rec)
     mocker.patch.object(api, "_resolve_roles", return_value=["role-uuid"])
     with pytest.raises(ValueError, match="no team"):
-        api.create(loginid="j", password="p", firstname="J", lastname="S", email="j@x.example", roles=["SOC Analyst"])
+        api.create(
+            loginid="j", password="Str0ng!Pass", firstname="J", lastname="S", email="j@x.example", roles=["SOC Analyst"]
+        )
     assert rec.posts == []

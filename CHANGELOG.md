@@ -4,6 +4,77 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-02
+
+pyfsr now refuses values and requests that FortiSOAR accepts and then mishandles.
+Each rule below was observed on a live 8.0.1 appliance; the opt-in integration
+tests under `tests/integration/` reproduce them.
+
+### Changed
+
+- **`connectors.install_from_file` no longer reinstalls the same version in place by default.**
+  Reinstalling a connector at an installed version leaves the integrations workers
+  serving the old code: minutes later most calls still ran it, and uninstalling
+  first did not help. A new version takes effect on the first call. The new
+  `on_existing_version` argument (also on `install_from_dir`) defaults to
+  `"bump_patch"`: a copy of the bundle is installed with the patch version bumped,
+  and the result carries `bumped`. `"error"` refuses; `"allow"` keeps the old
+  behaviour (follow it with `republish()`). `deploy_connector` can now bump a
+  prebuilt `.tgz` too.
+- **Record writes refuse a field the module does not have.** FortiSOAR answers
+  200 and drops the key, so a misspelt field (`descriptoin`) looked written.
+  `RecordSet.create`/`update`/`upsert`/bulk writes raise `ValidationError`
+  naming the field and the closest real one. System keys (`uuid`, `recordTags`,
+  `owners`, `@`/`__` keys) pass.
+- **`users.create` checks the password before creating anything.** das sets the
+  password after the People record exists, so a password it refused left an
+  account that could not log in. Needs a capital letter and one of `~!@#$%^&*|?_-`.
+- **Audit date filters reject what they cannot read.** An epoch passed as a
+  string reached the API as no filter at all, so a "since" query returned the
+  whole history. Digit strings are now parsed, a date without a zone is UTC, and
+  anything else raises `ValueError`.
+- **`schedules.audit` no longer reports a new schedule as broken.** It adds
+  `pending` and `first_fire_due` (from the cron, plus the time beat takes to
+  record a fire), counts a run as a fire, and ignores runs of the target playbook
+  from before the schedule existed.
+
+### Added
+
+- `pyfsr.field_values` (`check_value`, `check_record`, `unknown_fields_problem`):
+  values FortiSOAR would corrupt are converted (ISO dates and epoch milliseconds to
+  epoch seconds, `"yes"`/`"no"` to booleans) or refused (a 64-bit integer, which
+  answers 500; a malformed IP, email, URL or JSON value, which is stored as given).
+  `RecordSet.prepare_values` runs them before every write; `last_conversions` lists
+  what changed.
+- `RecordSet.verify_write`, `where_body` (predicate strings such as
+  `"status=Open"`, lowered to `status.itemValue` because a bare picklist `eq`
+  matches nothing) and `restore_if_deleted`.
+- `pyfsr.predicate` (`parse_predicate`, `parse_sort`).
+- `query_models.check_filter_body`: query bodies missing a `field` or `logic`
+  (silently dropped by the box, so they returned every record) or using an
+  unknown operator (500) are fixed or refused before sending.
+- `ModulesAdminAPI.field_from_spec` / `fields_from_specs`: build fields from
+  simple specs (`{"name", "type": "string"|"date"|"picklist", "picklist": [...]}`),
+  creating the picklist from its values.
+- `users.identify()` (works under a JWT or an API key), `users.generate_password()`
+  and `password_problem()`.
+- `schedules.next_fire(cron, after)`.
+
+### Fixed
+
+- **A field's default length rule broke every non-text field.** `maxlength`
+  10485760 added a string rule, so date, integer and checkbox fields refused
+  every value. The default is now 10485761, the platform's "no limit", and a
+  length rule on a non-string field is refused.
+- **Datetime fields store epoch seconds,** not milliseconds (milliseconds landed
+  in 2008); the docs and checks say so.
+- **A picklist field whose list name was a list** made every publish on the box
+  fail; it is refused before staging.
+- **`create_module` refuses a module whose delete has not been published**,
+  which made every later publish fail on duplicate keys.
+- **`roles.grant_module_permissions` finds a module published after the client
+  first listed modules** (the list was cached for the client's life).
+
 ## [0.31.1] - 2026-10-30
 
 ### Fixed

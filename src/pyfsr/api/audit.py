@@ -37,25 +37,30 @@ _BASE = "/api/gateway/audit"
 def _to_epoch_ms(val: Any) -> int | None:
     """Coerce a date/time value to epoch milliseconds (what the wire expects).
 
-    Accepts:
-      - ``int`` / ``float`` — assumed to already be epoch seconds or ms.
-      - ``str`` — ISO-8601 (e.g. ``2026-07-24T20:09:02Z``).
-    Returns ``None`` for ``None``.
+    Accepts epoch seconds or milliseconds (number or digit string; ``>= 10**12``
+    is milliseconds), a ``datetime``, or ISO-8601 (a value without a zone is
+    UTC). Returns ``None`` for ``None``. Anything else raises ``ValueError``:
+    a date the API never receives is not a filter, and the query would quietly
+    return every event.
     """
+    from datetime import UTC, datetime
+
     if val is None:
         return None
-    if isinstance(val, (int, float)):
-        # Heuristic: < 10^12 is seconds, >= 10^12 is milliseconds
+    if isinstance(val, str) and val.strip().lstrip("-").replace(".", "", 1).isdigit():
+        val = float(val.strip())
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
         return int(val) if val >= 1e12 else int(val * 1000)
     if isinstance(val, str):
         try:
-            from datetime import datetime
-
-            dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
-            return int(dt.timestamp() * 1000)
-        except Exception:
-            return None
-    return None
+            val = datetime.fromisoformat(val.strip().replace("Z", "+00:00"))
+        except ValueError:
+            raise ValueError(f"{val!r} is not a date: pass epoch seconds/ms or ISO-8601") from None
+    if isinstance(val, datetime):
+        if val.tzinfo is None:
+            val = val.replace(tzinfo=UTC)
+        return int(val.timestamp() * 1000)
+    raise ValueError(f"{val!r} is not a date: pass epoch seconds/ms or ISO-8601")
 
 
 class AuditAPI(BaseAPI):

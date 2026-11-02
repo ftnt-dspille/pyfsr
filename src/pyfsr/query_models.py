@@ -182,3 +182,46 @@ class QueryBody(BaseModel):
         if not data.get("sort"):
             data.pop("sort", None)
         return data
+
+
+def check_filter_body(body: dict[str, Any], *, module: str = "") -> dict[str, Any]:
+    """Refuse a query body the appliance would silently widen or answer with a 500.
+
+    Live on 8.0.1 (``tests/integration/test_query_filter_matrix_integration.py``):
+    a body with no ``logic``, or a leaf with no ``field``, is silently dropped and
+    returns **every** record; a leaf with no ``operator``, an unknown operator, or a
+    ``logic`` other than AND/OR answers HTTP 500. (An unknown field name is refused
+    by the appliance itself with a clear message, so it is not re-checked here.)
+
+    A missing ``logic`` is set to ``"AND"`` (what the caller meant by one list of
+    conditions); the rest raise :class:`~pyfsr.exceptions.ValidationError` naming
+    the bad filter. Extra leaf keys (``type``, ...) are left alone. Returns ``body``.
+    """
+    from .exceptions import ValidationError
+
+    where = f" for {module}" if module else ""
+
+    def walk(group: dict[str, Any], path: str) -> None:
+        if "logic" not in group:
+            group["logic"] = "AND"
+        if str(group["logic"]).upper() not in ("AND", "OR"):
+            raise ValidationError(f"query{where}: {path}logic must be AND or OR, not {group['logic']!r}")
+        group["logic"] = str(group["logic"]).upper()
+        filters = group.get("filters", [])
+        if not isinstance(filters, list):
+            raise ValidationError(f"query{where}: {path}filters must be a list")
+        for i, leaf in enumerate(filters):
+            at = f"{path}filters[{i}]"
+            if not isinstance(leaf, dict):
+                raise ValidationError(f"query{where}: {at} must be an object, got {leaf!r}")
+            if "filters" in leaf:
+                walk(leaf, at + ".")
+                continue
+            if not leaf.get("field") or not leaf.get("operator"):
+                raise ValidationError(f"query{where}: {at} needs both 'field' and 'operator', got {leaf!r}")
+            if leaf["operator"] not in OPERATORS:
+                raise ValidationError(f"query{where}: {at}: {operator_error(leaf['operator'])}")
+
+    if "filters" in body or "logic" in body:
+        walk(body, "")
+    return body

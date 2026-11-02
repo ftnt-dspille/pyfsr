@@ -22,6 +22,37 @@ from .types import RecordIRI
 # ---------------------------------------------------------------------------
 
 
+# FortiSOAR's "no length limit" value. The editor writes it (or -1, or no
+# maxlength at all) on every field without a length rule. Any other maxlength,
+# or a minlength above 0, makes the platform add a *string* length rule.
+NO_LENGTH_LIMIT = 10485761
+_UNLIMITED = (None, -1, NO_LENGTH_LIMIT)
+
+
+def length_limit_problem(storage_type: str | None, validation: Any) -> str | None:
+    """Why this ``validation`` would break a field of ``storage_type``, or ``None``.
+
+    A length rule on a non-string field makes the platform refuse every value with
+    "This value should be of type string" (a datetime, integer or checkbox can then
+    never be written). Strings may carry real limits.
+    """
+    if storage_type == "string" or not isinstance(validation, dict):
+        return None
+    maxlength = validation.get("maxlength")
+    minlength = validation.get("minlength")
+    if maxlength not in _UNLIMITED:
+        return (
+            f"maxlength={maxlength} on a {storage_type!r} field adds a string length rule, "
+            f"so every value is refused; use {NO_LENGTH_LIMIT} (no limit)"
+        )
+    if minlength not in (None, 0):
+        return (
+            f"minlength={minlength} on a {storage_type!r} field adds a string length rule, "
+            "so every value is refused; use 0"
+        )
+    return None
+
+
 class AttributeValidation(BaseRecord):
     """``validation`` sub-object on an attribute."""
 
@@ -108,6 +139,30 @@ class AttributeMetadata(BaseRecord):
         if self.descriptions:
             return self.descriptions.get("singular") or self.display_name
         return self.display_name
+
+    @property
+    def picklist_name(self) -> str | None:
+        """The picklist list name this field binds to (e.g. ``"AlertStatus"``), or ``None``.
+
+        Read from ``dataSource.query.filters`` (the ``listName__name`` filter), so it
+        works on exported/offline metadata as well as live.
+        """
+        from ..api.picklists import _picklist_name_from_attr
+
+        ds = self.data_source if isinstance(self.data_source, dict) else None
+        return _picklist_name_from_attr({"dataSource": ds}) if ds else None
+
+    @property
+    def length_problem(self) -> str | None:
+        """Why this field's length rule makes it unwritable, or ``None``.
+
+        Reported, not raised: platform modules are parsed with this model too, and a
+        read must not fail. The write path (``ModulesAdminAPI``) refuses it instead.
+        """
+        v = self.validation
+        if isinstance(v, AttributeValidation):
+            v = {"maxlength": v.maxlength, "minlength": v.minlength}
+        return length_limit_problem(self.type, v)
 
     @property
     def is_relationship(self) -> bool:

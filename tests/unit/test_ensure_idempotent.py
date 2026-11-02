@@ -214,7 +214,7 @@ def test_users_get_or_create_existing_returns_not_created():
     c = _users_client(existing=True)
     user, created = UsersAPI(c).get_or_create(
         loginid="j.smith",
-        password="<test-pw>",
+        password="<Test-pw>",
         firstname="Jane",
         lastname="Smith",
         email="jane@corp.example",
@@ -229,7 +229,7 @@ def test_users_get_or_create_absent_creates():
     c = _users_client(existing=False)
     user, created = UsersAPI(c).get_or_create(
         loginid="b.jones",
-        password="<test-pw>",
+        password="<Test-pw>",
         firstname="Bob",
         lastname="Jones",
         email="bob@corp.example",

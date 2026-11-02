@@ -110,6 +110,12 @@ class RolesAPI(BaseAPI):
             return module
         rec = self._module_by_type().get(module)
         if not rec:
+            # The map is cached for the client's lifetime, so a module published
+            # after the first lookup is missing from it: re-fetch once before
+            # calling it absent. Retrying a grant used to hit the same stale map.
+            self.invalidate_module_cache()
+            rec = self._module_by_type().get(module)
+        if not rec:
             raise ValueError(
                 f"module {module!r} not found in /api/3/modules; "
                 "it may not be published yet — call modules_admin.publish() first"

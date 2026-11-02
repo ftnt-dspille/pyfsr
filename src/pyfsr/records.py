@@ -21,12 +21,15 @@ Run offline against a replay capture (``demo_client``) -- a typed ``Alert``:
 
 from __future__ import annotations
 
+import copy
+import json
 import re
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, overload
 
 from pydantic import BaseModel, ConfigDict
 
+from .exceptions import ValidationError
 from .models import AggregateRow, BaseRecord, model_for
 from .pagination import HydraPage, paginate
 from .projection import project
@@ -132,10 +135,65 @@ class RecordSet(Generic[T]):
         module: str,
         *,
         model: type[T] | None = None,
+        check_values: bool = True,
     ) -> None:
         self.client = client
         self.module = module
         self.model = model or model_for(module)  # type: ignore[assignment]
+        self.check_values = check_values
+        #: Conversions the last write applied (e.g. ``"seenOn: ISO date -> epoch seconds"``).
+        self.last_conversions: list[str] = []
+
+    def where_body(self, where: str, *, sort: str | list[dict[str, str]] | None = None) -> dict[str, Any]:
+        """Compile a terse predicate (``"status=Open and name~Agent"``) to a query body.
+
+        See :mod:`pyfsr.predicate`. The module's picklist fields come from its cached
+        schema, so ``status=Open`` becomes ``status.itemValue=Open`` (a bare picklist
+        comparison silently matches nothing). Pass the result to :meth:`query`.
+        """
+        from .predicate import parse_predicate, parse_sort
+
+        try:
+            fields = self.client.modules.describe(self.module).get("fields") or []
+        except Exception:  # noqa: BLE001 - no schema: compile without .itemValue rewriting
+            fields = []
+        picklists = {
+            f["name"]
+            for f in fields
+            if isinstance(f, dict)
+            and f.get("name")
+            and (
+                str(f.get("type") or "").lower() == "picklists"
+                or str(f.get("form_type") or "").lower() in ("picklist", "multiselectpicklist")
+            )
+        }
+        filters, logic = parse_predicate(where, picklists)
+        body: dict[str, Any] = {"logic": logic, "filters": filters}
+        if sort:
+            body["sort"] = parse_sort(sort) if isinstance(sort, str) else sort
+        return body
+
+    def prepare_values(self, data: Any) -> Any:
+        """Fix or refuse values the box would corrupt or reject unhelpfully.
+
+        See :mod:`pyfsr.field_values`. Raises
+        :class:`~pyfsr.exceptions.ValidationError` before anything is sent.
+        Skipped when ``check_values=False`` or the module has no readable schema.
+        """
+        self.last_conversions = []
+        if not self.check_values or not isinstance(data, dict):
+            return data
+        try:
+            fields = self.client.modules.describe(self.module).get("fields") or []
+        except Exception:  # noqa: BLE001 - no schema to check against; send as given
+            return data
+        forms = {f["name"]: f.get("form_type") or "" for f in fields if isinstance(f, dict) and f.get("name")}
+        from .field_values import check_record, unknown_fields_problem
+
+        if forms and (problem := unknown_fields_problem(forms, data)):
+            raise ValidationError(f"refused before writing for {self.module}: {problem}")
+        out, self.last_conversions = check_record(forms, data, module=self.module)
+        return out
 
     # -- parsing ------------------------------------------------------------
     def _parse(self, obj: Any, *, raw: bool) -> Any:
@@ -510,7 +568,12 @@ class RecordSet(Generic[T]):
         ``$limit``/``$page``/``$search`` drive pagination as params; everything
         else (logic/filters/sort/__selectFields…) stays in the body.
         """
-        body = query.to_body() if isinstance(query, Query) else dict(query)
+        if isinstance(query, Query):
+            body = query.to_body()
+        else:
+            from .query_models import check_filter_body
+
+            body = check_filter_body(copy.deepcopy(dict(query)))
         params: dict[str, Any] = {"$page": page}
         limit = page_size if page_size is not None else body.pop("limit", None)
         if page_size is not None:
@@ -645,6 +708,7 @@ class RecordSet(Generic[T]):
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
+        data = self.prepare_values(data)
         if resolve_picklists:
             data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
         resp = self.client.post(f"/api/3/{self.module}", data=data)
@@ -698,6 +762,7 @@ class RecordSet(Generic[T]):
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
+        data = self.prepare_values(data)
         if resolve_picklists:
             data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
         path = resolve_record_path(self.module, ref)
@@ -866,6 +931,7 @@ class RecordSet(Generic[T]):
 
         # When no custom key is specified, use the FortiSOAR natural-key upsert endpoint
         if key is None:
+            data = self.prepare_values(data)
             if resolve_picklists:
                 data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
             resp = self.client.post(f"/api/3/upsert/{self.module}", data=data)
@@ -966,6 +1032,7 @@ class RecordSet(Generic[T]):
         for row in rows:
             if isinstance(row, BaseRecord):
                 row = row.to_dict(exclude_none=True)
+            row = self.prepare_values(row)
             if resolve_picklists:
                 row = self.client.picklists.resolve_record_fields(self.module, row, strict=strict_picklists)
             payload.append(row)
@@ -1049,6 +1116,7 @@ class RecordSet(Generic[T]):
         for row in rows:
             if isinstance(row, BaseRecord):
                 row = row.to_dict(exclude_none=True)
+            row = self.prepare_values(row)
             if resolve_picklists:
                 row = self.client.picklists.resolve_record_fields(self.module, row, strict=strict_picklists)
             payload.append(row)
@@ -1181,6 +1249,57 @@ class RecordSet(Generic[T]):
         body["deletedAt"] = None
         restored = self.client.put(path, data=body, params={"$showDeleted": "true"})
         return self._parse(restored, raw=raw)
+
+    def verify_write(self, ref: str, sent: dict[str, Any], returned: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Read a record back and compare it with what a write sent.
+
+        A key the record does not have comes back as ``<absent>``; with
+        ``returned`` (the write's response), a field whose stored value differs
+        from what the write answered is reported too. Returns
+        ``{"verified": bool | None, "mismatches"?: {...}, "note"?: str}``;
+        ``verified`` is ``None`` when the record could not be read.
+        """
+        try:
+            fresh = self.get(ref, raw=True)
+        except Exception as exc:  # noqa: BLE001 - say what could not be checked
+            return {"verified": None, "note": f"read-back failed: {exc}"}
+        if not isinstance(fresh, dict):
+            return {"verified": None, "note": "read-back returned no record"}
+        returned = returned or {}
+        mismatches: dict[str, Any] = {}
+        for k in sent:
+            if k not in fresh:
+                mismatches[k] = {"stored": "<absent: not a field of this module?>"}
+            elif k in returned and _comparable(fresh[k]) != _comparable(returned[k]):
+                mismatches[k] = {"returned": returned[k], "stored": fresh[k]}
+        out: dict[str, Any] = {"verified": not mismatches}
+        if mismatches:
+            out["mismatches"] = mismatches
+        return out
+
+    def restore_if_deleted(self, ref: str) -> bool:
+        """Restore ``ref`` only if it is in the recycle bin; ``True`` when it was restored.
+
+        A recycle-bin row 404s on a plain GET yet still owns its uuid, so reusing the
+        uuid (a redeploy, an import) collides with it (live-verified on 8.0.1 with a
+        deleted playbook: plain GET 404, ``$showDeleted`` GET shows ``deletedAt``,
+        :meth:`restore` brings it back). A live record, or one that is genuinely gone
+        (a module without a recycle bin hard-deletes), returns ``False``.
+        """
+        path = self._single_record_path(ref, action="restore")
+        try:
+            if self.client.get(path):
+                return False
+        except Exception:  # noqa: BLE001, S110 - 404: absent or in the recycle bin
+            pass
+        try:
+            row = self.client.get(path, params={"$showDeleted": "true"})
+        except Exception:  # noqa: BLE001 - genuinely absent
+            return False
+        if not (isinstance(row, dict) and row.get("deletedAt")):
+            return False
+        self.restore(ref, raw=True)
+        return True
 
     @staticmethod
     def _resolve_related_iri(related: str) -> str:
@@ -1501,3 +1620,12 @@ class RecordSet(Generic[T]):
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         return f"RecordSet(module={self.module!r})"
+
+
+def _comparable(v: Any) -> Any:
+    """A stored value reduced to what identifies it (IRI, picklist value, uuid)."""
+    if isinstance(v, dict):
+        return v.get("@id") or v.get("itemValue") or v.get("uuid") or json.dumps(v, sort_keys=True)
+    if isinstance(v, list):
+        return sorted(str(_comparable(x)) for x in v)
+    return v

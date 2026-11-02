@@ -52,7 +52,7 @@ The display type → storage mapping is exposed in code as
 | `ipv4` | `string` | IP field |
 | `file` | `string` | file attachment (`dataSource.model = "files"`) |
 | `integer` | `integer` | whole number |
-| `datetime` | `integer` | **stored as epoch-millis integer** -- not a bug |
+| `datetime` | `integer` | **stored as epoch seconds** -- not a bug; epoch millis is accepted and stored as a date in 2008 |
 | `checkbox` | `boolean` | true/false |
 | `object` | `object` | arbitrary JSON object |
 | `picklist` | `picklists` | single-select -- see [Picklist fields](#picklist-fields) |

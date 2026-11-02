@@ -73,7 +73,7 @@ class _FakeConnectors:
     def __init__(self):
         self.calls = []
 
-    def install_from_file(self, path, *, replace=False, wait=False):
+    def install_from_file(self, path, *, replace=False, wait=False, on_existing_version="bump_patch"):
         self.calls.append(("install", path, replace, wait))
         return {"status": "finished"}
 

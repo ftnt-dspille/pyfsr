@@ -31,6 +31,34 @@ from ..pagination import extract_members
 from ..utils.validation import is_uuid as _is_uuid
 from .base import BaseAPI
 
+# The special characters das accepts (from its refusal message, 8.0.1).
+PASSWORD_SPECIALS = "~!@#$%^&*|?_-"
+
+
+def password_problem(password: str) -> str | None:
+    """Why das would refuse ``password``, or ``None``.
+
+    Checks the rules das was seen enforcing on a live appliance: at least one
+    capital letter and one special character from :data:`PASSWORD_SPECIALS`.
+    """
+    if not any(ch.isupper() for ch in password):
+        return "the password must contain at least one capital letter"
+    if not any(ch in PASSWORD_SPECIALS for ch in password):
+        return f"the password must contain one special character from {PASSWORD_SPECIALS}"
+    return None
+
+
+def generate_password(length: int = 20) -> str:
+    """A random password das accepts: upper, lower, digit and a special character."""
+    import secrets
+    import string
+
+    pools = (string.ascii_uppercase, string.ascii_lowercase, string.digits, PASSWORD_SPECIALS)
+    chars = [secrets.choice(pool) for pool in pools]
+    chars += [secrets.choice("".join(pools)) for _ in range(max(length, 8) - len(chars))]
+    secrets.SystemRandom().shuffle(chars)
+    return "".join(chars)
+
 
 def complete_initial_password_reset(
     base_url: str,
@@ -232,6 +260,10 @@ class UsersAPI(BaseAPI):
         """
         effective_roles = role_uuids if role_uuids is not None else roles
         effective_teams = team_uuids if team_uuids is not None else teams
+        if problem := password_problem(password):
+            # das sets the password AFTER the People record exists, so a refused
+            # password used to leave an account that cannot log in.
+            raise ValueError(f"cannot create user {loginid!r}: {problem}")
 
         if not effective_teams:
             # A team is REQUIRED. The wire would accept a teamless user (das
@@ -620,6 +652,30 @@ class UsersAPI(BaseAPI):
             "user_id": actor["userId"],
             "email": actor.get("email"),
             "name": " ".join(filter(None, (actor.get("firstname"), actor.get("lastname")))),
+        }
+
+    def identify(self) -> dict[str, Any]:
+        """Identify the caller under either auth mode.
+
+        :meth:`whoami` plus ``"auth_mode": "jwt"`` for a user login. Under an API
+        key (where :meth:`whoami` is refused) the key's ``ApiKey`` actor from
+        ``GET /api/3/actors/current``: ``{"auth_mode": "api_key", "loginid": None,
+        "principal_type", "name", "person_uuid", "user_id", "email": None}``.
+        """
+        from ..exceptions import UnsupportedAuthOperationError
+
+        try:
+            return {**self.whoami(), "auth_mode": "jwt"}
+        except UnsupportedAuthOperationError:
+            actor = self.client.get("/api/3/actors/current")
+        return {
+            "auth_mode": "api_key",
+            "loginid": None,
+            "principal_type": actor.get("@type") or actor.get("userType"),
+            "name": actor.get("name"),
+            "person_uuid": actor.get("uuid"),
+            "user_id": actor.get("userId"),
+            "email": None,
         }
 
     def change_password(self, old_password: str, new_password: str) -> dict[str, Any]:

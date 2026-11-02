@@ -69,7 +69,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import requests
 
 from ..exceptions import FortiSOARException, describe_migrate_failure, is_migrate_transient
-from ..models import AttributeMetadata, NavItem, NavRequire, NavState
+from ..models import NO_LENGTH_LIMIT, AttributeMetadata, NavItem, NavRequire, NavState, length_limit_problem
 from ..pagination import extract_members
 from ..utils.validation import is_uuid
 from .base import BaseAPI
@@ -149,13 +149,34 @@ DISPLAY_STORAGE_TYPE: dict[str, str] = {
     "file": "string",
     "integer": "integer",
     "decimal": "float",  # the Decimal Field display type stores a 'float' column
-    "datetime": "integer",  # stored as an epoch-millis integer
+    "datetime": "integer",  # epoch SECONDS; millis are stored as a date in 2008
     "checkbox": "boolean",
     "picklist": "picklists",
     "multiselectpicklist": "picklists",
     "json": "object",  # the JSON display type; distinct from the raw 'object' one
     "object": "object",
     "array": "array",
+}
+
+# Names a caller (often an agent) reaches for that are not display types: storage
+# types, Python types and near-misses. Mapped instead of refused, so a spec in the
+# natural shape works; anything else is refused with the valid list.
+SPEC_TYPE_ALIASES: dict[str, str] = {
+    "string": "text",
+    "str": "text",
+    "int": "integer",
+    "float": "decimal",
+    "number": "decimal",
+    "bool": "checkbox",
+    "boolean": "checkbox",
+    "date": "datetime",
+    "timestamp": "datetime",
+    "dict": "json",
+    "list": "array",
+    "select": "picklist",
+    "picklist_field": "picklist",
+    "multiselect": "multiselectpicklist",
+    "multi_picklist": "multiselectpicklist",
 }
 
 # Backward-compatible alias for the pre-0.x name (the constant was previously framed in
@@ -568,7 +589,7 @@ class ModulesAdminAPI(BaseAPI):
         default_value: Any = None,
         tooltip: str | None = None,
         minlength: int = 0,
-        maxlength: int = 10485760,
+        maxlength: int = NO_LENGTH_LIMIT,
         enable_range: bool = False,
         bulk_edit: bool = False,
         **extra: Any,
@@ -601,7 +622,11 @@ class ModulesAdminAPI(BaseAPI):
           "Visible by Condition", or a :class:`~pyfsr.query.Query`.
         - ``default_value`` / ``tooltip`` — the Default Value and Tooltip inputs.
         - ``minlength`` / ``maxlength`` / ``enable_range`` — **Length Constraints**
-          ("Add minimum/maximum range" sets ``enable_range``).
+          ("Add minimum/maximum range" sets ``enable_range``). ``maxlength`` defaults to
+          ``NO_LENGTH_LIMIT`` (10485761), the platform's "no limit" value. Any other
+          ``maxlength`` (or a ``minlength`` above 0) adds a *string* length rule, so it is
+          refused on a non-string field: the platform would then reject every valid
+          value with "This value should be of type string".
         - ``bulk_edit`` — UI "Allow Bulk Edit" (maps to ``bulkAction.allow``).
 
         Extra keys override the defaults (e.g. ``collection=True``, ``dataSource={...}``).
@@ -629,6 +654,9 @@ class ModulesAdminAPI(BaseAPI):
         }
         if enable_range:
             validation["_enableRange"] = True
+        problem = length_limit_problem(db_type, validation)
+        if problem:
+            raise ValueError(f"field {name!r}: {problem}")
         if grid_column is None:
             # Visible in the list/grid view by default — except for the types that are
             # never grid columns in practice (see _NON_GRID_FORM_TYPES). A caller can
@@ -671,6 +699,76 @@ class ModulesAdminAPI(BaseAPI):
         only the keys ``field`` actually set, extras included).
         """
         return cls.field(*args, **kwargs).model_dump(by_alias=True, exclude_unset=True)
+
+    @classmethod
+    def field_from_spec(cls, spec: dict[str, Any]) -> dict[str, Any]:
+        """Build one field from a simple spec: ``{name[, type][, picklist][, required][, label]...}``.
+
+        ``type`` (default ``text``) is a display type (``text``, ``datetime``, ``picklist``, ...) or a common
+        alias (``string``, ``int``, ``bool``, ... see :data:`SPEC_TYPE_ALIASES`). A
+        ``picklist`` / ``multiselectpicklist`` needs ``picklist``: the list *name* here
+        (use :meth:`fields_from_specs` to create one from a list of values). Remaining
+        keys are :meth:`field` options. A spec that already carries ``formType`` is full
+        metadata and is only shape-checked.
+
+        Raises ``ValueError`` for an unknown type or a picklist field with no list,
+        instead of building a field the platform would refuse at publish or 500 on.
+        """
+        if not isinstance(spec, dict):
+            raise ValueError(f"a field spec must be a dict, got {type(spec).__name__}")
+        if "formType" in spec:
+            return cls._to_field_dict(spec)
+        spec = dict(spec)
+        name = spec.pop("name", None)
+        raw_type = str(spec.pop("type", "") or "text").strip().lower()  # create_module's own default
+        if not name:
+            raise ValueError(f"field spec needs a 'name', got {spec}")
+        ftype = SPEC_TYPE_ALIASES.get(raw_type, raw_type)
+        picklist = spec.pop("picklist", None)
+        if ftype in ("picklist", "multiselectpicklist") or picklist:
+            if not isinstance(picklist, str) or not picklist.strip():
+                raise ValueError(
+                    f"field {name!r}: a picklist field needs 'picklist' set to a picklist name "
+                    "(fields_from_specs also accepts a list of values and creates the list)"
+                )
+            return cls._to_field_dict(cls.picklist_field(name, picklist, multi=ftype == "multiselectpicklist", **spec))
+        if ftype not in DISPLAY_STORAGE_TYPE:
+            raise ValueError(
+                f"field {name!r}: unknown type {raw_type!r}; use one of " + ", ".join(sorted(DISPLAY_STORAGE_TYPE))
+            )
+        return cls._to_field_dict(cls.typed_field(name, ftype, **spec))
+
+    def fields_from_specs(self, module: str, specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Build fields from simple specs, creating any picklist given as a list of values.
+
+        A spec like ``{"name": "status", "type": "picklist", "picklist": ["Open", "Closed"]}``
+        gets a picklist named ``"<module> <name>"`` (created if absent; missing values are
+        added to an existing one) and is bound to it. Everything else follows
+        :meth:`field_from_spec`. Every spec is checked before any picklist is created.
+        """
+        prepared: list[tuple[dict[str, Any], list[str] | None]] = []
+        for spec in specs or []:
+            values = spec.get("picklist") if isinstance(spec, dict) else None
+            if isinstance(values, (list, tuple)):
+                if not values or not all(isinstance(v, str) and v.strip() for v in values):
+                    raise ValueError(f"field {spec.get('name')!r}: picklist values must be non-empty strings")
+                list_name = f"{module} {spec.get('name')}"
+                self.field_from_spec({**spec, "picklist": list_name})  # validate before creating
+                prepared.append(({**spec, "picklist": list_name}, list(values)))
+            else:
+                self.field_from_spec(spec)
+                prepared.append((spec, None))
+        out = []
+        for spec, values in prepared:
+            if values is not None:
+                pl, created = self.client.picklists.get_or_create_picklist(spec["picklist"], options=values)
+                if not created:
+                    have = {o.get("itemValue") for o in self.client.picklists.values(spec["picklist"])}
+                    for v in values:
+                        if v not in have:
+                            self.client.picklists.add_option(pl.iri or pl.uuid, v)
+            out.append(self.field_from_spec(spec))
+        return out
 
     @classmethod
     def picklist_field(
@@ -764,7 +862,7 @@ class ModulesAdminAPI(BaseAPI):
 
     @classmethod
     def datetime_field(cls, name: str, *, label: str | None = None, **opts: Any) -> AttributeMetadata:
-        """Build a date/time field. Stored as an epoch-millis ``integer`` — that storage
+        """Build a date/time field. Stored as an epoch-seconds ``integer`` — that storage
         type is intentional, not a bug."""
         return cls.typed_field(name, "datetime", label=label, **opts)
 
@@ -930,6 +1028,18 @@ class ModulesAdminAPI(BaseAPI):
             raise ValueError(f"field needs a non-empty string 'name', got {name!r}")
         if not isinstance(attr.get("type"), str) or not attr["type"].strip():
             raise ValueError(f"field {name!r} needs a non-empty string 'type' (its storage type)")
+        problem = length_limit_problem(attr["type"], attr.get("validation"))
+        if problem:
+            raise ValueError(f"field {name!r}: {problem}")
+        ds = attr.get("dataSource") if isinstance(attr.get("dataSource"), dict) else {}
+        for flt in (ds.get("query") or {}).get("filters") or []:
+            if isinstance(flt, dict) and flt.get("field") == "listName__name" and not isinstance(flt.get("value"), str):
+                # Live: a non-string list name stops EVERY publish on the appliance
+                # (MetadataHelper::extractPicklistNameFromFilter must return ?string).
+                raise ValueError(
+                    f"field {name!r}: its picklist name must be a string, got {flt.get('value')!r}; "
+                    "use fields_from_specs to create a picklist from a list of values"
+                )
 
         desc = attr.get("descriptions")
         if desc is None or desc == [] or desc == {}:
@@ -1338,6 +1448,14 @@ class ModulesAdminAPI(BaseAPI):
             raise ValueError(f"module name {module!r} exceeds {_MAX_NAME_LEN} characters")
         if facts is not None:
             self._guard_orphan_table_collision(module, facts)
+        if self.get_staging(module) is None and self.get_published(module) is not None:
+            # A delete whose publish has not landed: staging a new module of this type
+            # gets a new uuid, and the next publish fails for EVERY module with a
+            # "field_model_uniques" duplicate key on the type until the draft is dropped.
+            raise ValueError(
+                f"module {module!r} is still published (its delete has not been published); "
+                "call publish() to finish the delete, then create it again"
+            )
         if fields is not None and not fields:
             raise ValueError("a module needs at least one field; pass fields=None for a default 'name'")
         label = label or module
@@ -2406,6 +2524,10 @@ class ModulesAdminAPI(BaseAPI):
         # The schema is now live — apply role grants and nav entries deferred from create_module.
         self._flush_pending_grants()
         self._flush_pending_nav()
+        # A publish adds, removes or re-ids modules: drop the roles module map.
+        invalidate = getattr(getattr(self.client, "roles", None), "invalidate_module_cache", None)
+        if invalidate is not None:
+            invalidate()
         return self._maybe_reset_stale_log(result, reset_stale_log)
 
     def _wait_until_idle(self, deadline: float, poll_interval: float, progress: Callable[[str], None] | None) -> None:

@@ -24,7 +24,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from pyfsr.api.connectors import ConnectorPackageError
+from pyfsr.api.connectors import (  # noqa: F401 - moved; kept importable
+    ConnectorPackageError,
+    _bump_version,
+    _tgz_identity,
+)
 
 #: Files every installable connector bundle must contain.
 REQUIRED_FILES = ("info.json", "connector.py", "operations.py", "requirements.txt")
@@ -367,26 +371,6 @@ def _bundle_files(root: Path) -> list[str]:
     return [f for f in files if not _EXCLUDE.search(f)]
 
 
-def _bump_version(version: str, part: str = "patch") -> str:
-    """Increment a ``MAJOR.MINOR.PATCH`` version. Non-semver input gets a numeric
-    suffix bumped if present, else ``.1`` appended -- never raises, so a reupload
-    can always be made distinct to avoid a ghost connector."""
-    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(.*)", version.strip())
-    if m:
-        major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        if part == "major":
-            major, minor, patch = major + 1, 0, 0
-        elif part == "minor":
-            minor, patch = minor + 1, 0
-        else:
-            patch += 1
-        return f"{major}.{minor}.{patch}"
-    tail = re.search(r"(\d+)(\D*)$", version)
-    if tail:
-        return version[: tail.start(1)] + str(int(tail.group(1)) + 1) + tail.group(2)
-    return f"{version}.1"
-
-
 def package_connector(
     directory: str | Path = ".", *, out_dir: str | Path | None = None, version: str | None = None
 ) -> Path:
@@ -450,15 +434,6 @@ def wait_for_active(client, name: str, timeout: float = 180.0, interval: float =
     raise TimeoutError(f"{name} did not activate within {int(timeout)}s (check the import job)")
 
 
-def _tgz_identity(tgz: Path) -> tuple[str, str]:
-    """(name, version) read from a built bundle's archived info.json."""
-    with tarfile.open(tgz, "r:gz") as tar:
-        name = tar.getnames()[0].split("/", 1)[0]
-        member = tar.extractfile(f"{name}/info.json")
-        version = json.loads(member.read())["version"] if member else ""
-    return name, version
-
-
 def _installed_version(client, name: str) -> str | None:
     """The version of ``name`` already on the box, or None. Degrades to None when
     the client cannot report it, so the guard never blocks a valid first install."""
@@ -492,8 +467,8 @@ def deploy_connector(
     new code. ``on_existing_version`` controls what happens when the box already
     has this connector at the version being deployed:
 
-    - ``"bump_patch"`` (default): bump the patch and ship that instead (only for a
-      directory source, which can be repackaged); the result records ``bumped``.
+    - ``"bump_patch"`` (default): bump the patch and ship that instead (a
+      directory is repackaged, a built ``.tgz`` re-versioned); the result records ``bumped``.
     - ``"error"``: raise, so the caller bumps info.json deliberately.
     - ``"allow"``: install over it anyway (the old behaviour).
     """
@@ -515,12 +490,6 @@ def deploy_connector(
                 f"before redeploying or a ghost connector may result "
                 f"(or pass on_existing_version='bump_patch'/'allow')."
             )
-        if not src.is_dir():
-            raise ConnectorPackageError(
-                f"{name} {version} is already installed and the source is a prebuilt "
-                f"bundle that cannot be re-versioned; rebuild from the directory with "
-                f"a higher version, or pass on_existing_version='allow'."
-            )
         bumped_to = _bump_version(version)
         version = bumped_to
 
@@ -528,7 +497,14 @@ def deploy_connector(
     if not tgz.exists():
         raise FileNotFoundError(f"{tgz} does not exist")
 
-    client.connectors.install_from_file(str(tgz), replace=replace, wait=True)
+    # A prebuilt bundle is re-versioned by install_from_file itself; a packaged
+    # directory already carries the bumped version.
+    client.connectors.install_from_file(
+        str(tgz),
+        replace=replace,
+        wait=True,
+        on_existing_version="bump_patch" if bumped_to and not src.is_dir() else "allow",
+    )
     wait_for_active(client, name, timeout)
     result: dict[str, Any] = {"installed": name, "bundle": str(tgz), "version": version}
     if bumped_to is not None:

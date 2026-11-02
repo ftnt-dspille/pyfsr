@@ -84,6 +84,53 @@ def _utc_offset(timezone: str) -> str | None:
     return f"UTC{sign}{total // 3600:02d}:{(total % 3600) // 60:02d}"
 
 
+# Live: a new every-minute schedule's first run row appeared within the minute,
+# while beat's total_run_count/last_run_at showed it about a minute later.
+FIRE_GRACE_SECONDS = 120
+
+
+def _cron_values(field: str, low: int, high: int) -> set[int]:
+    out: set[int] = set()
+    for part in field.split(","):
+        rng, _, step = part.partition("/")
+        if rng in ("*", ""):
+            start, end = low, high
+        elif "-" in rng:
+            start, end = (int(x) for x in rng.split("-", 1))
+        else:
+            start = end = int(rng)
+            if step:
+                end = high
+        out.update(range(start, end + 1, int(step) if step else 1))
+    return out
+
+
+def next_fire(cron: str, after: _dt.datetime, *, horizon_days: int = 8) -> _dt.datetime | None:
+    """The first minute after ``after`` that a 5-field cron matches, or ``None``.
+
+    Supports ``*``, ``a-b``, ``*/n``, ``a-b/n`` and lists; day-of-month and
+    day-of-week combine with OR when both are restricted (cron's rule). Searches
+    ``horizon_days`` ahead; a rarer cron returns ``None``.
+    """
+    try:
+        minute, hour, dom, month, dow = cron.split()
+        mins, hours = _cron_values(minute, 0, 59), _cron_values(hour, 0, 23)
+        doms, months = _cron_values(dom, 1, 31), _cron_values(month, 1, 12)
+        dows = {d % 7 for d in _cron_values(dow, 0, 7)}
+    except ValueError:
+        return None
+    dom_any, dow_any = dom == "*", dow == "*"
+    t = after.replace(second=0, microsecond=0) + _dt.timedelta(minutes=1)
+    for _ in range(horizon_days * 24 * 60):
+        if t.month in months and t.hour in hours and t.minute in mins:
+            dom_ok, dow_ok = t.day in doms, (t.isoweekday() % 7) in dows
+            day_ok = (dom_ok and dow_ok) if dom_any or dow_any else (dom_ok or dow_ok)
+            if day_ok:
+                return t
+        t += _dt.timedelta(minutes=1)
+    return None
+
+
 class SchedulesAPI(BaseAPI):
     """List, enable/disable, create, and trigger workflow-engine periodic tasks."""
 
@@ -419,17 +466,22 @@ class SchedulesAPI(BaseAPI):
                     break
             runs = runs[:run_limit]
 
-        ever_fired = bool(row.get("total_run_count"))
+        # Runs are matched by playbook name, so a run from before this schedule
+        # existed (a manual run, an earlier schedule) is not evidence it fires.
+        ever_fired = bool(row.get("total_run_count")) or any(
+            _after(r.get("created"), row.get("date_changed")) for r in runs
+        )
         enabled = bool(row.get("enabled"))
+        due = _first_fire_due(row, cron, crontab.get("timezone"))
+        pending = enabled and not ever_fired and due is not None and due > _dt.datetime.now(_dt.UTC)
         problems: list[str] = []
         if not enabled:
             problems.append("schedule is DISABLED -- the cron will never fire it")
         if not wf_exists:
             problems.append(f"target workflow {wf_iri or '<none>'} does not exist (deleted?)")
-        # Beat saves last_run_at/total_run_count to the DB a few minutes after it fires, so a
-        # zero counter next to existing runs is lag, not a schedule that never fires.
-        if enabled and not ever_fired and not runs:
-            problems.append("enabled but has never fired -- created recently, or beat is not picking it up")
+        # Runs count as firing: beat writes its counter about a minute after a run.
+        if enabled and not ever_fired and not pending:
+            problems.append("enabled but has never fired, though a fire was due -- beat is not picking it up")
         if runs and runs[0]["status"] not in ("finished",):
             problems.append(f"most recent run is {runs[0]['status']!r}, not finished")
         if wf_name and not runs and ever_fired:
@@ -451,7 +503,41 @@ class SchedulesAPI(BaseAPI):
             "workflow_exists": wf_exists,
             "ever_fired": ever_fired,
             "firing": enabled and ever_fired,
+            "pending": pending,
+            "first_fire_due": due.isoformat() if due and pending else None,
             "last_run_status": runs[0]["status"] if runs else None,
             "runs": runs,
             "problems": problems,
         }
+
+
+def _first_fire_due(row: dict[str, Any], cron: str, timezone: str | None) -> _dt.datetime | None:
+    """When the first fire after the schedule's last change should be visible (UTC)."""
+    changed = row.get("date_changed")
+    if not changed:
+        return None
+    try:
+        since = _dt.datetime.fromisoformat(str(changed).replace("Z", "+00:00"))
+        tz = ZoneInfo(timezone or "UTC")
+    except (ValueError, KeyError):
+        return None
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=_dt.UTC)
+    fire = next_fire(cron, since.astimezone(tz).replace(tzinfo=None))
+    if fire is None:
+        return None
+    return fire.replace(tzinfo=tz).astimezone(_dt.UTC) + _dt.timedelta(seconds=FIRE_GRACE_SECONDS)
+
+
+def _after(created: Any, changed: Any) -> bool:
+    """Whether a run's ``created`` time is at or after the schedule's last change."""
+
+    def parse(v: Any) -> _dt.datetime | None:
+        try:
+            d = _dt.datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return d if d.tzinfo else d.replace(tzinfo=_dt.UTC)
+
+    c, ch = parse(created), parse(changed)
+    return c is None or ch is None or c >= ch  # an unreadable time is not evidence against

@@ -45,6 +45,7 @@ Example:
 from __future__ import annotations
 
 import difflib
+import io
 import json
 import mimetypes
 import re
@@ -548,6 +549,56 @@ def _is_remote_action(raw: Any) -> bool:
     )
 
 
+def _bump_version(version: str, part: str = "patch") -> str:
+    """Increment a ``MAJOR.MINOR.PATCH`` version. Non-semver input gets a numeric
+    suffix bumped if present, else ``.1`` appended -- never raises, so a reupload
+    can always be made distinct to avoid a ghost connector."""
+    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(.*)", version.strip())
+    if m:
+        major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if part == "major":
+            major, minor, patch = major + 1, 0, 0
+        elif part == "minor":
+            minor, patch = minor + 1, 0
+        else:
+            patch += 1
+        return f"{major}.{minor}.{patch}"
+    tail = re.search(r"(\d+)(\D*)$", version)
+    if tail:
+        return version[: tail.start(1)] + str(int(tail.group(1)) + 1) + tail.group(2)
+    return f"{version}.1"
+
+
+def _tgz_identity(tgz: str | Path) -> tuple[str, str]:
+    """(name, version) read from a built bundle's archived info.json."""
+    with tarfile.open(tgz, "r:gz") as tar:
+        name = tar.getnames()[0].split("/", 1)[0]
+        member = tar.extractfile(f"{name}/info.json")
+        version = json.loads(member.read())["version"] if member else ""
+    return name, version
+
+
+def _rebundle_with_version(tgz: str | Path, version: str) -> str:
+    """Copy of a built bundle with ``info.json``'s version set to ``version``.
+
+    Written to a fresh temporary directory; the source bundle is untouched.
+    """
+    src = Path(tgz)
+    out = Path(tempfile.mkdtemp(prefix="pyfsr-bump-")) / src.name
+    with tarfile.open(src, "r:gz") as tin, tarfile.open(out, "w:gz") as tout:
+        for member in tin.getmembers():
+            data = tin.extractfile(member) if member.isfile() else None
+            if data is not None and member.name.count("/") == 1 and member.name.endswith("/info.json"):
+                info = json.loads(data.read())
+                info["version"] = version
+                raw = json.dumps(info, indent=2).encode()
+                member.size = len(raw)
+                tout.addfile(member, io.BytesIO(raw))
+            else:
+                tout.addfile(member, data)
+    return str(out)
+
+
 class ConnectorsAPI(BaseAPI):
     """Live connector listing, healthcheck, and operation execution."""
 
@@ -621,6 +672,7 @@ class ConnectorsAPI(BaseAPI):
         wait: bool = False,
         interval: float = 3.0,
         timeout: float = 300.0,
+        on_existing_version: str = "bump_patch",
     ) -> dict[str, Any]:
         """Install a connector by uploading its ``.tgz`` bundle.
 
@@ -640,6 +692,18 @@ class ConnectorsAPI(BaseAPI):
             wait: block until the import job reaches a terminal status.
             interval: seconds between polls when ``wait`` (default 3).
             timeout: give up waiting after this many seconds (default 300).
+            on_existing_version: what to do when the box already has this
+                connector at the bundle's version (the "ghost connector" case).
+                Reinstalling the same version leaves the integrations workers
+                serving the previously loaded code -- on a live appliance most
+                calls still ran the old code minutes later, and an uninstall
+                plus fresh install did not clear it; a new version took effect
+                on the first call. ``"bump_patch"`` (default) installs a copy of
+                the bundle with the patch version bumped (the result records
+                ``bumped``; configurations carry over to the new version).
+                ``"error"`` raises :class:`ConnectorPackageError`. ``"allow"``
+                installs over it anyway; follow with :meth:`republish` to recycle
+                the workers.
 
         Returns:
             With ``wait=False``, the install response (the connector record,
@@ -666,6 +730,34 @@ class ConnectorsAPI(BaseAPI):
             >>> result
             (42, 'demo-connector', '1.0.0')
         """
+        if on_existing_version not in ("bump_patch", "error", "allow"):
+            raise ValueError(
+                f"on_existing_version must be 'bump_patch', 'error' or 'allow', not {on_existing_version!r}"
+            )
+        if not Path(path).exists():
+            raise FileNotFoundError(path)
+        bumped = None
+        if on_existing_version != "allow":
+            try:
+                name, version = _tgz_identity(path)
+            except (tarfile.TarError, KeyError, ValueError, OSError, EOFError):
+                name = version = None  # not a readable bundle; let the box judge it
+            installed = None
+            if name and version:
+                try:
+                    installed = self.resolve_version(name)
+                except Exception:  # noqa: BLE001 - not installed (or unreadable): a first install
+                    installed = None
+            if installed and installed == version:
+                if on_existing_version == "error":
+                    raise ConnectorPackageError(
+                        f"{name} {version} is already installed. Reinstalling the same version leaves the "
+                        f"box's workers running the old code; bump the version in info.json, pass "
+                        f"on_existing_version='bump_patch', or 'allow' and then call republish({name!r})."
+                    )
+                bumped = _bump_version(version)
+                path = _rebundle_with_version(path, bumped)
+                replace = False
         mime_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
         # NOTE: kept on the mimetypes-guessed content-type (unlike widgets, which
         # default to the live-verified "application/gzip") to avoid changing this
@@ -673,12 +765,11 @@ class ConnectorsAPI(BaseAPI):
         # real connector bundle -- see upload_solutionpack's docstring.
         resp = upload_solutionpack(self.client, path, type_="connector", replace=replace, content_type=mime_type)
         self.clear_cache()
-        if not wait:
-            return resp
-        job_id = _import_job_id(resp)
-        if not job_id:
-            return resp
-        return self.wait_for_install(job_id, interval=interval, timeout=timeout)
+        if wait and (job_id := _import_job_id(resp)):
+            resp = self.wait_for_install(job_id, interval=interval, timeout=timeout)
+        if bumped and isinstance(resp, dict):
+            resp = {**resp, "bumped": bumped}
+        return resp
 
     @requires_jwt(
         BaseAuth.OPERATION_SOLUTIONPACK_INSTALL,
@@ -693,6 +784,7 @@ class ConnectorsAPI(BaseAPI):
         wait: bool = False,
         interval: float = 3.0,
         timeout: float = 300.0,
+        on_existing_version: str = "bump_patch",
     ) -> dict[str, Any]:
         """Pack a connector source folder and upload it in one step.
 
@@ -706,7 +798,14 @@ class ConnectorsAPI(BaseAPI):
         """
         with tempfile.TemporaryDirectory() as tmp:
             tgz = pack_connector(source_dir, output=str(Path(tmp) / "bundle.tgz"))
-            return self.install_from_file(tgz, replace=replace, wait=wait, interval=interval, timeout=timeout)
+            return self.install_from_file(
+                tgz,
+                replace=replace,
+                wait=wait,
+                interval=interval,
+                timeout=timeout,
+                on_existing_version=on_existing_version,
+            )
 
     def install_status(self, job_id: str) -> InstallJobStatus:
         """Fetch a connector install's import-job progress.
