@@ -292,10 +292,16 @@ class WorkflowCollectionsAPI(BaseAPI):
         for raw_col in data["data"]:
             col = self._clean_item(raw_col)
             if replace:
+                # A UI import assigns the collection a NEW uuid, so a copy someone
+                # imported by hand only matches by name -- and the name is unique,
+                # so leaving it makes the POST fail on the uniqueness constraint.
                 col_uuid = col.get("uuid")
-                if col_uuid and self.exists(col_uuid):
-                    self._make_playbooks_public(col_uuid)
-                    self.delete(col_uuid)
+                doomed = {col_uuid} if col_uuid and self.exists(col_uuid) else set()
+                if col.get("name"):
+                    doomed |= {c.get("uuid") for c in self.list(relationships=False) if c.get("name") == col["name"]}
+                for uuid in filter(None, doomed):
+                    self._make_playbooks_public(uuid)
+                    self.delete(uuid)
             results.append(_as_collection(self.client.post(_BASE, data=col)))
         return results
 

@@ -345,3 +345,17 @@ def test_audit_flags_failing_last_run():
     )
     a = SchedulesAPI(c).audit("nightly")
     assert any("'failed'" in p for p in a["problems"])
+
+
+def test_audit_zero_counter_with_runs_is_beat_lag_not_never_fired():
+    # Beat saves total_run_count a few minutes after it fires: a fresh schedule
+    # can show 0 while its first run already exists.
+    c = _AuditClient(
+        sched_row=_sched_row(total_run_count=0, last_run_at=None),
+        wf={"name": "Nightly Recon"},
+        live_runs=[{"name": "Nightly Recon", "status": "finished", "created": "t1"}],
+    )
+    assert SchedulesAPI(c).audit("nightly")["problems"] == []
+    # with no runs either, it is still flagged
+    c2 = _AuditClient(sched_row=_sched_row(total_run_count=0, last_run_at=None), wf={"name": "Nightly Recon"})
+    assert any("never fired" in p for p in SchedulesAPI(c2).audit("nightly")["problems"])

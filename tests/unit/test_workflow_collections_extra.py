@@ -183,10 +183,26 @@ def test_make_public_swallows_put_failure():
 
 def test_replace_skips_delete_when_collection_absent():
     # uuid present in the export but not on the appliance: exists()->False, no delete
-    c = RecordingClient(get_raises=True)  # exists() probe raises -> False, so delete is skipped
+    c = RecordingClient()
     a = WorkflowCollectionsAPI(c)
+    a.exists = lambda uuid: False
+    a.list = lambda **kw: [{"uuid": "other", "name": "Other"}]
     a.import_export({"type": "workflow_collections", "data": [{"uuid": UUID, "name": "Pack"}]}, replace=True)
     assert not any(call[0] == "DELETE" for call in c.calls)
+    assert c.calls[-1][0] == "POST"
+
+
+def test_replace_deletes_same_name_collection_with_other_uuid():
+    # a UI import gives the collection a new uuid; replace must still clear it by name
+    c = RecordingClient()
+    a = WorkflowCollectionsAPI(c)
+    a.exists = lambda uuid: False
+    a.list = lambda **kw: [{"uuid": "ui-imported", "name": "Pack"}]
+    deleted = []
+    a._make_playbooks_public = lambda uuid: None
+    a.delete = deleted.append
+    a.import_export({"type": "workflow_collections", "data": [{"uuid": UUID, "name": "Pack"}]}, replace=True)
+    assert deleted == ["ui-imported"]
     assert c.calls[-1][0] == "POST"
 
 
