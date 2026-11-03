@@ -3001,6 +3001,15 @@ class ConnectorsAPI(BaseAPI):
         the source :meth:`data_ingest_wizard` clones from. Returns its uuid, or
         ``None`` when the connector ships no sample playbooks (in which case
         there is nothing to ingest with and the wizard cannot proceed).
+
+        When SEVERERal sample-named collections match the label+version --
+        live-caught on 8.0.1: a connector release that ships an operational
+        companion collection (``... Use Cases - <version>``) whose name embeds
+        the same label and version suffix -- the content decides: the wizard's
+        source is the candidate whose playbooks carry the ingestion tags (the
+        deliberate reason the companion collection is without them). Only when
+        no candidate has them does the first name match win, preserving the
+        pre-companion behaviour.
         """
         version = version or self.resolve_version(connector)
         resp = self.client.get(
@@ -3012,17 +3021,30 @@ class ConnectorsAPI(BaseAPI):
         hit = self._find_configured(connector)
         if hit is not None:
             label = hit.label
-        candidates = []
+        matched: list[dict[str, Any]] = []
+        candidates: list[dict[str, Any]] = []
         for row in rows:
             name = str(row.get("name") or "")
             if not name.lower().startswith("sample - "):
                 continue
             if version and name.rstrip().endswith(f"- {version}"):
                 if label and label.lower() in name.lower():
-                    return str(row.get("uuid"))
-                candidates.append(row)
+                    matched.append(row)
+                else:
+                    candidates.append(row)
             elif label and label.lower() in name.lower():
                 candidates.append(row)
+        if len(matched) == 1:
+            return str(matched[0]["uuid"])
+        if matched:
+            for row in matched:
+                uuid = str(row.get("uuid"))
+                try:
+                    if self._dataingestion_playbooks(uuid, connector):
+                        return uuid
+                except Exception:  # noqa: BLE001 -- a candidate's playbooks unreadable; try the next
+                    continue
+            return str(matched[0]["uuid"])
         return str(candidates[0]["uuid"]) if candidates else None
 
     def ingestion_playbooks(

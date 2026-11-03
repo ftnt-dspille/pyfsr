@@ -651,3 +651,44 @@ def test_wizard_preserves_functional_tags_on_clones():
     for src in (_FETCH_PB, _INGEST_PB):
         clone_def = client.playbooks.definitions[f"clone-of-{src['uuid']}"]
         assert clone_def.get("recordTags") == src["recordTags"]
+
+
+class _AmbiguousClient(FakeClient):
+    """A connector release that ships a companion collection too: TWO
+    sample-named collections embed the same label and version suffix, and only
+    one carries the ingestion-tagged playbooks (the companion has none -- by
+    design, so the wizard never offers it)."""
+
+    def get(self, endpoint, params=None, **kw):
+        if endpoint == "/api/3/workflow_collections":
+            return {
+                "hydra:member": [
+                    {"name": "Sample - Fortinet FortiSIEM Use Cases - 6.1.1", "uuid": "sample-usecases"},
+                    {"name": "Sample - Fortinet FortiSIEM - 6.1.1", "uuid": "sample-ingest"},
+                ]
+            }
+        return super().get(endpoint, params, **kw)
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        if endpoint.startswith("/api/query/workflows"):
+            if (data["filters"][0]["value"],) == ("sample-usecases",):
+                return {"hydra:member": []}  # the companion has no ingestion playbooks
+        return super().post(endpoint, data, params, **kw)
+
+
+def test_find_sample_prefers_the_collection_that_carries_ingestion_playbooks():
+    """Live-caught on 8.0.1: with 'Sample - <Label> Use Cases - <version>' listed
+    next to 'Sample - <Label> - <version>', the locator settled on the companion
+    -- which has no fetch playbook to clone. Among name-matching candidates the
+    content decides: the collection whose playbooks carry the ingestion tags."""
+    api = ConnectorsAPI(_AmbiguousClient())
+    assert api.find_sample_ingestion_collection("fortinet-fortisiem") == "sample-ingest"
+
+
+def test_find_sample_falls_back_to_first_match_when_no_candidate_has_playbooks():
+    """No candidate carries ingestion-tagged playbooks (e.g. both queried
+    unreadable): the first name match wins, preserving the pre-companion
+    first-match behavior."""
+    api = ConnectorsAPI(_AmbiguousClient())
+    api.client._source = []
+    assert api.find_sample_ingestion_collection("fortinet-fortisiem") == "sample-usecases"

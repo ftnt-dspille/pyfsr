@@ -17,6 +17,18 @@ All notable changes to this project will be documented in this file.
   workflow_reference child sorted first, its pk was resolved, and a 180s
   gate poll timed out while the parent's approval sat pending.
 
+- **`connectors.find_sample_ingestion_collection` disambiguates sibling sample
+  collections by content.** A connector release that ships an operational
+  companion collection (``Sample - <Label> Use Cases - <version>``) puts TWO
+  sample-named collections in the list -- both embed the same label and version
+  suffix, and the locator returned whichever the listing served first
+  (live-caught on 8.0.1: it settled on the Use Cases companion, which has no
+  fetch-tagged playbook to clone, so ``ensure_ingestion``/``data_ingest_wizard``
+  could not proceed). Among label+version-matching candidates the one whose
+  playbooks carry the ingestion tags -- the deliberate reason the companion
+  collection is shipped without them -- now wins; with no content match the
+  first name match still does.
+
 - **`connectors.ensure_ingestion` hydrates the get-path result.** When ingestion
   already exists, the returned `IngestionSetupResult` carried
   `collection_name=None` and `version=None` -- dead fields on exactly the path
