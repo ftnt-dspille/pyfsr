@@ -56,7 +56,7 @@ class Workflow(BaseRecord):
     synchronous: bool | None = None
     triggerLimit: Any | None = None
     parameters: list[str] | None = None  # declared input names, e.g. ["ip4AddressList"] (live-verified)
-    lastModifyDate: int | None = None
+    lastModifyDate: float | None = None  # epoch seconds; fractional part seen live on 8.0.1
     collection: str | None = None
     triggerStep: str | None = None
     priority: PicklistIRI | None = None

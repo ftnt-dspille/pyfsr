@@ -16,6 +16,14 @@ All notable changes to this project will be documented in this file.
   playbooks); the name now reads off that collection's record and the version
   off the installed connector.
 
+- **`models.Workflow.lastModifyDate` accepts fractional epochs.** The workflow
+  listing can return the last-modify stamp with a fractional part
+  (live-observed via `playbooks.get_definition` on 8.0.1: the float failed the
+  field's `int` annotation and raised a pydantic `ValidationError` on every
+  definition read). The field now mirrors its epoch siblings
+  `createDate`/`modifyDate`, which are already `float`; whole-second ints still
+  validate.
+
 ### Changed
 
 - **`playbooks.trigger_action` documents two live-observed 8.0.1 facts.** The
@@ -24,6 +32,13 @@ All notable changes to this project will be documented in this file.
   known. And `env` keys merged into the body do NOT populate `vars.request`,
   so wizard-preview conditions (`vars.request.env_setup`) cannot be entered
   through this route -- only the UI's own delivery reaches those branches.
+
+- **`playbooks.search_executions` documents a live-observed 8.0.1 gap.** The
+  underlying `log_list` route returned no rows for a playbook whose every run
+  had been archived to the historical run table, while
+  `execution_history`/`last_run` (which merge the live and historical run
+  tables through `/api/wf/api/workflows/`) saw them. The docstring now points
+  exhaustive listings at those.
 
 ## [0.32.0] - 2026-11-02
 

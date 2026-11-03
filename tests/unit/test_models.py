@@ -1,7 +1,7 @@
 """Unit tests for the typed Pydantic record models."""
 
 from pyfsr import Alert, BaseRecord, Incident, RecordSet, model_for
-from pyfsr.models import MODEL_REGISTRY
+from pyfsr.models import MODEL_REGISTRY, Workflow
 
 
 class _NoopPicklists:
@@ -78,6 +78,17 @@ def test_typed_alert_fields():
     alert = Alert.model_validate({"uuid": "a1", "name": "Phish", "severity": "/api/3/picklists/x"})
     assert alert.name == "Phish"
     assert alert.severity == "/api/3/picklists/x"
+
+
+def test_workflow_lastmodifydate_accepts_fractional_epoch():
+    """A workflow listing can carry a fractional lastModifyDate (live-observed
+    on 8.0.1 via playbooks.get_definition, where the float broke the old `int`
+    annotation); the field is float like its epoch siblings, so whole-second
+    ints must keep validating too."""
+    frac = Workflow.model_validate({"lastModifyDate": 1234.5678})
+    assert frac.lastModifyDate == 1234.5678
+    whole = Workflow.model_validate({"lastModifyDate": 1234})
+    assert whole.lastModifyDate == 1234
 
 
 # -- RecordSet integration --------------------------------------------------

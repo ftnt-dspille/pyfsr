@@ -1978,6 +1978,12 @@ class PlaybooksAPI(BaseAPI):
         Queries ``POST /api/wf/api/workflows/log_list/`` and returns shaped run
         dicts. All filters are optional and combinable.
 
+        Live-observed on 8.0.1: ``log_list`` returns no rows for runs that have
+        been archived to the historical table (a playbook whose every execution
+        was historical listed empty, while :meth:`execution_history` /
+        :meth:`last_run` -- which merge the live and historical run tables --
+        saw them). When a listing must be exhaustive, use those instead.
+
         Args:
             query: free-text search across playbook name / run metadata
                 (forwarded as ``search=``).
