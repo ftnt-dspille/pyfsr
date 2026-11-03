@@ -3262,6 +3262,12 @@ class ConnectorsAPI(BaseAPI):
         :meth:`data_ingest_wizard` directly to add or change a schedule on an
         existing setup.
 
+        The get path is as descriptive as the make path: ``collection_name``
+        reads off the per-configuration collection's record and ``version``
+        off the installed connector, so inspecting a pre-existing setup never
+        shows ``None`` for fields that exist (live-observed: a verification
+        driver printed the collection name on this path and got ``None``).
+
         Args:
             connector: connector name.
             config: config name or ``config_id``; defaults to the default
@@ -3299,11 +3305,22 @@ class ConnectorsAPI(BaseAPI):
                 seen.add(key)
                 playbooks.append(pb)
         ingest = status.playbooks.ingest
+        # Describe it as fully as the make path would: the collection's uuid
+        # is the config_id (the wizard's identity convention), and its name
+        # comes off that same collection record -- a live verification driver
+        # prints these fields, and a None there reads like a broken lookup.
+        collection_name: str | None = None
+        if status.collection_exists:
+            record = self.client.get(f"/api/3/workflow_collections/{status.config_id}")
+            if isinstance(record, dict):
+                collection_name = record.get("name")
         return IngestionSetupResult(
             connector=connector,
+            version=self.resolve_version(connector),
             config_id=status.config_id,
             config_name=(status.metadata.name if status.metadata else None),
             collection_uuid=status.config_id,
+            collection_name=collection_name,
             playbooks=playbooks,
             ingest_playbook_iri=(ingest.id_iri or f"/api/3/workflows/{ingest.uuid}") if ingest else None,
             schedule_id=status.schedule_id,

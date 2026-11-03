@@ -560,6 +560,12 @@ def test_ensure_ingestion_gets_existing_without_writing():
     assert result.config_id == CONFIG_ID
     assert result.ingest_playbook_iri == _INGEST_PB["@id"]
     assert result.scheduled is True
+    # the get path describes what exists: uuid is the config_id (the wizard's
+    # identity convention), name comes off the collection's record, version
+    # off the installed connector -- never None on a live box
+    assert result.collection_uuid == CONFIG_ID
+    assert result.collection_name == "existing"
+    assert result.version == "6.1.1"
     # ingest+create share one uuid -> deduped to a single playbook
     assert [str(p.uuid) for p in result.playbooks] == [_FETCH_PB["uuid"], _INGEST_PB["uuid"]]
     # nothing was built

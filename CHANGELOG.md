@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`connectors.ensure_ingestion` hydrates the get-path result.** When ingestion
+  already exists, the returned `IngestionSetupResult` carried
+  `collection_name=None` and `version=None` -- dead fields on exactly the path
+  a verification script prints (live-observed while driving a deployed
+  ingestion chain: the "already configured" result printed its collection as
+  None). The uuid convention was already right (the per-config collection's
+  uuid IS the config_id, how the UI locates a configuration's ingestion
+  playbooks); the name now reads off that collection's record and the version
+  off the installed connector.
+
+### Changed
+
+- **`playbooks.trigger_action` documents two live-observed 8.0.1 facts.** The
+  action route refuses a body without `__uuid` (`playbook_uuid`) --
+  `Workflow UUID Not Found In Request` -- so pass it whenever the playbook is
+  known. And `env` keys merged into the body do NOT populate `vars.request`,
+  so wizard-preview conditions (`vars.request.env_setup`) cannot be entered
+  through this route -- only the UI's own delivery reaches those branches.
+
 ## [0.32.0] - 2026-11-02
 
 pyfsr now refuses values and requests that FortiSOAR accepts and then mishandles.

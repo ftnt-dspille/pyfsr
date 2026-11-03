@@ -3581,9 +3581,17 @@ class PlaybooksAPI(BaseAPI):
             route_uuid: the trigger step's route uuid.
             module: the module name (e.g. ``"alerts"``).
             record_uuid: uuid of the record to run against.
-            playbook_uuid: if provided, added to the body as ``__uuid`` (the playbook
-                being triggered). Some appliance versions require it.
-            env: extra keys merged into the POST body verbatim.
+            playbook_uuid: added to the body as ``__uuid`` (the playbook being
+                triggered). Live-verified on 8.0.1: the route REFUSES a body
+                without it -- ``Workflow UUID Not Found In Request`` -- so pass
+                it whenever the trigger's playbook is known.
+            env: extra keys merged into the POST body verbatim. They do NOT
+                populate ``vars.request`` (live-verified on 8.0.1: an
+                ``env_setup`` key sent on this route left a wizard-style
+                playbook's ``{{ vars.request.env_setup }}`` condition false), so
+                branches driven by the UI's own envelopes -- the Data Ingestion
+                Wizard's mapping-preview conditions -- cannot be entered from
+                this route.
 
         Returns:
             The trigger response. Live-verified -- **this route answers**
