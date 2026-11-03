@@ -6,6 +6,22 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`playbooks.wait_for_task` settles a run that ENDS in `finished with
+  error`.** A run can wear that status while still executing (the
+  `_TERMINAL_STATUSES` note records the 8.0.0 pass-through), but a run can
+  also END in it -- live-caught on 8.0.1: a degradation-wrapped evidence run
+  (offline collector, retrieval wrapped in its audit comment) completed in
+  13s and sat at `finished with error` stably while the wait burned its
+  whole 900s and raised "did not finish ... currently 'finished with
+  error'". With `steps=True` and `detailed=True` the tree's content is
+  observable, so the wait now settles on it: returns once every visible
+  status (the run's, each child's, each step's) holds still for
+  `_SETTLE_SECONDS` -- the tree-side stand-in for the run-table `modified`
+  stamp `wait()` settles on, since `RunNode` carries none. A run genuinely
+  still executing keeps flipping something observable, so the wait still
+  never returns mid-flight; without both flags the old polling behavior
+  stands.
+
 - **`manual_input.pending_for_run` resolves the TOP-LEVEL run, not the child.**
   Child playbook runs share their parent's task_id and the workflow log lists
   newest-first, so resolving with `log_list(limit=1)` picked the child's pk

@@ -175,6 +175,72 @@ def test_wait_for_task_on_poll_early_stop():
     assert tree.status == "executing"  # returned pre-terminal, no timeout raised
 
 
+def test_wait_for_task_settles_when_run_ends_in_finished_with_error(monkeypatch):
+    """A run can END wearing 'finished with error' (not just pass through it --
+    see the _TERMINAL_STATUSES note). Live-caught on 8.0.1: a degradation-wrapped
+    evidence run completed in 13s, sat at that status stably, and the wait
+    burned the caller's whole 900s before raising "currently 'finished with
+    error'". With steps+detailed the tree's content is observable, so the wait
+    settles: returns once every visible status holds still for
+    _SETTLE_SECONDS."""
+    monkeypatch.setattr("pyfsr.api.playbooks._SETTLE_SECONDS", 0.005)
+    runs = {
+        "10": {
+            "name": "P",
+            "status": "finished with error",
+            "parent": None,
+            "steps": {"Collect File": "finished with error", "Collection Failed Audit": "finished"},
+        }
+    }
+    api = PlaybooksAPI(TreeClient(runs))
+
+    tree = api.wait_for_task("10", timeout=5, poll_interval=0.01, steps=True, detailed=True)
+    assert tree.status == "finished with error"  # returned settled, not raised
+
+
+def test_wait_for_task_does_not_settle_while_the_run_still_works(monkeypatch):
+    """The settle must not return mid-flight: the 8.0.0 pass-through case has
+    a run wearing 'finished with error' while later steps keep finishing. A
+    moving fingerprint means the run is still executing, so the wait keeps
+    polling until a truly terminal status arrives."""
+    monkeypatch.setattr("pyfsr.api.playbooks._SETTLE_SECONDS", 0.005)
+    runs = {
+        "10": {
+            "name": "P",
+            "status": "finished with error",
+            "parent": None,
+            "steps": {},  # a later step keeps flipping -- filled per-poll below
+        }
+    }
+    api = PlaybooksAPI(TreeClient(runs))
+
+    polls = {"n": 0}
+    real_run_tree = api.run_tree
+
+    def flip(*a, **kw):
+        polls["n"] += 1
+        if polls["n"] < 4:
+            runs["10"]["steps"][f"Step {polls['n']}"] = "finished"
+        if polls["n"] >= 4:
+            runs["10"]["status"] = "finished"
+        return real_run_tree(*a, **kw)
+
+    monkeypatch.setattr(api, "run_tree", flip)
+    tree = api.wait_for_task("10", timeout=5, poll_interval=0.01, steps=True, detailed=True)
+    assert tree.status == "finished"  # never returned early on the settling status
+    assert polls["n"] == 4
+
+
+def test_wait_for_task_never_settles_without_observable_content():
+    """steps+detailed is what makes the settling signal observable; without
+    both, a 'finished with error' run may be mid-flight and the wait must keep
+    polling (the pre-settle behavior)."""
+    runs = {"10": {"name": "P", "status": "finished with error", "parent": None, "steps": {"a": "finished"}}}
+    api = PlaybooksAPI(TreeClient(runs))
+    with pytest.raises(TimeoutError, match="finished with error"):
+        api.wait_for_task("10", timeout=0.05, poll_interval=0.01)  # default flags
+
+
 def test_run_env_resolves_task_id():
     # run_env must accept a task_id (not just a numeric pk) and resolve it the
     # same way step_status does -- otherwise the uuid is sent as a pk and the

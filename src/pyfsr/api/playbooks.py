@@ -485,6 +485,25 @@ def _run_failure_from_full(full: Any, pk: str | None) -> RunFailure:
     )
 
 
+def _run_tree_fingerprint(node: Any) -> tuple:
+    """The observable status content of a run tree: the run's status, each
+    child's status, and every step's (name, status) pair, recursing.
+
+    ``wait_for_task`` settles a run wearing ``finished with error`` on this
+    holding still (see the ``_TERMINAL_STATUSES`` note: a pass-through run
+    keeps flipping later steps to ``finished`` after the status flips, so a
+    moving fingerprint means the run is still executing). ``RunNode``
+    carries no modified stamp -- this is the tree-side stand-in for the
+    run-table stamp :meth:`PlaybooksAPI.wait` settles on."""
+    steps = tuple(
+        sorted(
+            (str(getattr(s, "name", None)), str(getattr(s, "status", None))) for s in getattr(node, "steps", []) or []
+        )
+    )
+    children = tuple(_run_tree_fingerprint(c) for c in getattr(node, "children", []) or [])
+    return (str(getattr(node, "status", None)), steps, children)
+
+
 def _shape_run(m: dict[str, Any]) -> RunSummary:
     """Wrap a raw workflow-run record in a typed :class:`RunSummary`.
 
@@ -2866,10 +2885,22 @@ class PlaybooksAPI(BaseAPI):
         Raises:
             TimeoutError: if the run doesn't finish within ``timeout`` seconds.
 
+        Note:
+            A run that ENDS in ``finished with error`` (not every run that
+            reports it is still executing -- see ``_TERMINAL_STATUSES``)
+            settles: with ``steps=True`` **and** ``detailed=True`` the wait
+            returns once the tree's content -- every visible status: the
+            run's, each child's, each step's -- holds still for
+            ``_SETTLE_SECONDS``. Without both flags the settling signal is
+            not observable and the wait polls to the timeout, status quo.
+            Without the settle, a degradation-wrapped run that completes in
+            seconds burns the caller's whole timeout and raises with
+            "currently 'finished with error'" (live-measured on 8.0.1:
+            900s spent on a run that ended in 13s).
+
         Example::
 
             >>> resp = client.playbooks.trigger_action(route, module="alerts", record_uuid=uuid)  # doctest: +SKIP
-            >>> client.records("alerts").update(uuid, {"dueBy": ...})  # unblock mid-flight  # doctest: +SKIP
             >>> tree = client.playbooks.wait_for_task(resp.task_ids[0], detailed=True)  # doctest: +SKIP
             >>> tree.status  # doctest: +SKIP
             'finished'
@@ -2885,10 +2916,29 @@ class PlaybooksAPI(BaseAPI):
         deadline = time.monotonic() + timeout
         started = time.monotonic()
         poll_count = 0
+        settled_since: float | None = None
+        last_fingerprint: tuple | None = None
         while True:
             tree = self.run_tree(task_id, steps=steps, detailed=detailed)
             poll_count += 1
             is_terminal = tree.status in _TERMINAL_STATUSES
+            if not is_terminal and tree.status in _SETTLING_STATUSES and steps and detailed:
+                # A run can also END wearing 'finished with error' (the
+                # _TERMINAL_STATUSES note records the pass-through case; it
+                # is not the only one) and then polling to the caller's
+                # whole timeout is pure waste. RunNode has no modified stamp
+                # to reuse wait()'s settle, so settle on the tree's own
+                # content: terminal once every visible status holds still
+                # for _SETTLE_SECONDS. A run genuinely still executing keeps
+                # flipping something -- later steps finish (8.0.0-measured),
+                # children change -- so the fingerprint keeps moving and the
+                # wait does not return mid-flight.
+                fingerprint = _run_tree_fingerprint(tree)
+                now = time.monotonic()
+                if fingerprint != last_fingerprint:
+                    last_fingerprint, settled_since = fingerprint, now
+                elif settled_since is not None and now - settled_since >= _SETTLE_SECONDS:
+                    is_terminal = True
             if on_poll is not None:
                 verdict = on_poll(
                     WaitProgress(
