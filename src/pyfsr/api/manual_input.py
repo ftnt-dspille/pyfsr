@@ -329,7 +329,10 @@ class ManualInputAPI(BaseAPI):
         Resolves ``task_id`` -> the run's primary key, then lists the
         manual-wf-input queue scoped to that run via the ``workflow`` query
         filter -- the same filter the FortiSOAR UI uses to show a run's pending
-        inputs in its execution history. This is the reliable run -> pending-
+        inputs in its execution history. The resolved pk is the *top-level*
+        run's: child playbook runs share the parent's task_id and sort
+        newest-first in the log, so the resolver takes the row with no
+        ``parent_wf``. This is the reliable run -> pending-
         input join: :meth:`list` returns every pending input instance-wide and
         each row's ``workflow`` field is an opaque Fernet token, so it cannot be
         filtered by task_id client-side.
@@ -395,15 +398,26 @@ class ManualInputAPI(BaseAPI):
         # task_id -> run pk (the @id path's trailing segment). The run shows up
         # in the log store a beat after trigger() answers, so re-check until
         # `wait` elapses (the default 0 keeps the old single-shot behaviour).
+        #
+        # limit > 1, and pick the TOP-LEVEL run: child playbook runs share
+        # their parent's task_id and the log lists newest first, so the first
+        # row is often a child, not the run that was triggered (live-caught on
+        # 8.0.1: a workflow_reference child sorted first, the child's pk got
+        # resolved, and the parent's paused approval gate stayed invisible to
+        # a run-scoped poll). The playbooks-side task->pk resolver
+        # discriminates the same way (`_resolve_run_pk`: the row with no
+        # ``parent_wf``).
         deadline = time.monotonic() + max(0.0, wait)
         rpk = None
         while True:
-            resp = self.client.playbooks.log_list(task_id=task_id, limit=1)
+            resp = self.client.playbooks.log_list(task_id=task_id, limit=50)
             members = (
                 resp.get("hydra:member", []) if isinstance(resp, dict) else (resp if isinstance(resp, list) else [])
             )
-            if members and isinstance(members[0], dict):
-                rpk = uuid_from_iri(members[0].get("@id"))
+            members = [m for m in members if isinstance(m, dict)]
+            root = next((m for m in members if not m.get("parent_wf")), members[0] if members else None)
+            if root is not None:
+                rpk = uuid_from_iri(root.get("@id"))
                 if rpk:
                     break
             if time.monotonic() >= deadline:

@@ -192,15 +192,25 @@ def test_answer_bad_option_index_raises():
 
 
 class _FakePlaybooks:
-    """Stand-in for client.playbooks.log_list(task_id=...) -> run @id."""
+    """Stand-in for client.playbooks.log_list(task_id=...) -> run rows.
 
-    def __init__(self, run_pk=42):
+    Renders the live ordering: child runs share the parent's task_id and
+    sort newest-first, so a child row lists BEFORE the top-level run's.
+    """
+
+    def __init__(self, run_pk=42, child_pk=None):
         self._run_pk = run_pk
+        self._child_pk = child_pk if child_pk is not None else run_pk + 1
         self.log_calls = []
 
     def log_list(self, *, task_id=None, limit=None, **kw):
         self.log_calls.append({"task_id": task_id, "limit": limit})
-        return {"hydra:member": [{"@id": f"/wf/api/workflows/{self._run_pk}/"}]}
+        return {
+            "hydra:member": [
+                {"@id": f"/wf/api/workflows/{self._child_pk}/", "parent_wf": f"/wf/api/workflows/{self._run_pk}/"},
+                {"@id": f"/wf/api/workflows/{self._run_pk}/"},
+            ]
+        }
 
 
 class _RunScopedFakeClient(FakeClient):
@@ -234,7 +244,7 @@ def test_pending_for_run_resolves_task_id_to_run_pk_and_filters():
     client = _RunScopedFakeClient(pending=[_pending_doc()], run_pk=149763)
     out = ManualInputAPI(client).pending_for_run("105189fa-task-id")
     # task_id -> log_list -> run pk 149763
-    assert client.playbooks.log_calls == [{"task_id": "105189fa-task-id", "limit": 1}]
+    assert client.playbooks.log_calls == [{"task_id": "105189fa-task-id", "limit": 50}]
     # GET manual-wf-input with the workflow=<run_pk> filter
     ep, params = client.gets[-1]
     assert ep == "/api/wf/api/manual-wf-input/"
@@ -252,6 +262,19 @@ def test_pending_for_run_resolves_task_id_to_run_pk_and_filters():
     assert out[0].input.schema_.title == "Approve ingestion?"
     assert out[0].input.schema_.inputVariables[0].name == "analyst_comment"
     assert out[0].response_mapping.options[0].option == "approve"
+
+
+def test_pending_for_run_picks_parent_run_not_the_child_that_shares_its_task_id():
+    """The 8.0.1 gate-poll miss, as it happened live: a workflow_reference
+    child's row sorted newest-first, the CHILD's pk got resolved, and the
+    parent's paused approval gate never surfaced to a run-scoped poll."""
+    client = _RunScopedFakeClient(pending=[_pending_doc()], run_pk=54747)
+    client.playbooks._child_pk = 54748
+    out = ManualInputAPI(client).pending_for_run("d489eea7-parent-task")
+
+    _ep, params = client.gets[-1]
+    assert params["workflow"] == "54747"  # the parent -- not the child 54748
+    assert [m.id for m in out] == [51]
 
 
 def test_pending_for_run_is_approval_filter_is_client_side():

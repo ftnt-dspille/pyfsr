@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`manual_input.pending_for_run` resolves the TOP-LEVEL run, not the child.**
+  Child playbook runs share their parent's task_id and the workflow log lists
+  newest-first, so resolving with `log_list(limit=1)` picked the child's pk
+  whenever the trigger's run had referenced children -- the run-scoped
+  ``workflow`` filter then read the child's (empty) queue and the parent's
+  paused manual-input/approval gate never surfaced. The resolver now pulls
+  enough rows and takes the row with no ``parent_wf`` (the discrimination the
+  playbooks-side task->pk mapping already uses). Live-caught on 8.0.1: a
+  workflow_reference child sorted first, its pk was resolved, and a 180s
+  gate poll timed out while the parent's approval sat pending.
+
 - **`connectors.ensure_ingestion` hydrates the get-path result.** When ingestion
   already exists, the returned `IngestionSetupResult` carried
   `collection_name=None` and `version=None` -- dead fields on exactly the path
