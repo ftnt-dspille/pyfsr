@@ -51,6 +51,20 @@ All notable changes to this project will be documented in this file.
   tables through `/api/wf/api/workflows/`) saw them. The docstring now points
   exhaustive listings at those.
 
+### Added
+
+- **`validate_connector_source` names the importer's 1000-character
+  operation-description cap.** Over the cap the importer's serializer rejects
+  the WHOLE package upload -- and reports it only as the meaningless
+  "Connector with same name is already active.", because the import pipeline's
+  own formatting of the DRF ValidationError crashes first
+  (`ValueError: cannot switch from manual field specification to automatic
+  field numbering` wrapping `Ensure this field has no more than 1000
+  characters`; live-established on 8.0.1, `connectors.log`). The new blocking
+  check names the operation and its length before the upload. Parameter-level
+  strings on the same path are NOT capped -- stock connectors ship
+  ~3000-character parameter tooltips and import fine.
+
 ## [0.32.0] - 2026-11-02
 
 pyfsr now refuses values and requests that FortiSOAR accepts and then mishandles.

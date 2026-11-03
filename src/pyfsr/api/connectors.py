@@ -244,6 +244,11 @@ def validate_connector_source(source_dir: str, *, strict: bool = True, blocking_
     * ``configuration`` is not ``null`` (absent or ``{}`` is fine).
     * every ``operations`` entry has an ``operation`` and a ``title``, and no
       two share an ``operation``.
+    * every operation ``description`` is at most 1000 characters -- the
+      importer's serializer caps the field at 1000 and rejects the whole
+      import over it (live-established on 8.0.1). Parameter-level strings
+      (tooltips, descriptions) are NOT capped on this path; stock
+      connectors ship ~3000-character ones.
 
     Advisory -- accepted by the importer but wrong or dangerous anyway:
     a declared operation with no implementation in ``operations.py`` (installs
@@ -348,6 +353,16 @@ def validate_connector_source(source_dir: str, *, strict: bool = True, blocking_
             continue
         if not operation.get("title"):
             problems.append(f"operations[{index}] ({op_name}) has no 'title' -- the importer rejects that")
+        desc = operation.get("description")
+        if isinstance(desc, str) and len(desc) > 1000:
+            problems.append(
+                f"operations[{index}] ({op_name}) description is {len(desc)} characters -- "
+                "the importer's serializer caps an operation description at 1000 and "
+                "rejects the WHOLE import over it. The rejection surfaces only as the "
+                "meaningless 'Connector with same name is already active.' (the import "
+                "pipeline's own formatting of the validation error crashes first), so "
+                "this cannot be diagnosed server-side -- live-established on 8.0.1"
+            )
         if op_name in seen:
             problems.append(f"duplicate operation {op_name!r}")
         seen.add(op_name)

@@ -231,3 +231,23 @@ def test_declared_operation_missing_from_operations_py_is_advisory(tmp_path):
     (src / "operations.py").write_text("def other(config, params):\n    return {}\n")
     assert any("does not appear" in p for p in validate_connector_source(str(src), strict=False))
     assert validate_connector_source(str(src), strict=False, blocking_only=True) == []
+
+
+def test_operation_description_over_1000_chars_is_blocking(tmp_path):
+    # The importer's serializer caps an operation description at 1000
+    # characters; over it the WHOLE import is rejected -- and the answer is
+    # only the meaningless "Connector with same name is already active.",
+    # because the pipeline's own formatting of the validation error crashes
+    # first (live-established on 8.0.1 via connectors.log). So it cannot be
+    # diagnosed from the response -- only pre-upload.
+    src = _source(tmp_path, operations=[{"operation": "run", "title": "Run", "description": "d" * 1001}])
+    problems = validate_connector_source(str(src), strict=False, blocking_only=True)
+    assert any("description is 1001 characters" in p for p in problems)
+    with pytest.raises(ConnectorPackageError, match="1000"):
+        pack_connector(str(src), output=str(tmp_path / "over.tgz"))
+
+
+def test_operation_description_at_1000_chars_clears(tmp_path):
+    # At the cap exactly, the importer accepts -- only over it rejects.
+    src = _source(tmp_path, operations=[{"operation": "run", "title": "Run", "description": "d" * 1000}])
+    assert validate_connector_source(str(src), strict=False, blocking_only=True) == []
