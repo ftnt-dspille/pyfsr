@@ -112,7 +112,7 @@ def test_agents_installer_returns_bytes():
 
 
 def test_agents_install_connector_builds_body():
-    c = RecordingClient(post_payload={"ok": True})
+    c = RecordingClient(members=[{"agentId": "a1", "uuid": "uuid-a1", "name": "a1"}], post_payload={"ok": True})
     AgentsAPI(c).install_connector("a1", name="cyops_utilities", version="3.7.1")
     method, endpoint, data = c.calls[-1]
     assert method == "POST" and endpoint == "/api/integration/install-connector/?format=json"
@@ -126,12 +126,12 @@ def test_connector_install_status_filters_by_agent():
         {"agent": "a1", "status": "Completed"},
         {"agent": "a2", "status": "awaiting"},
     ]
-    c = RecordingClient(post_payload=rows)
+    c = RecordingClient(members=[{"agentId": "a1", "uuid": "uuid-a1", "name": "a1"}], post_payload=rows)
     out = AgentsAPI(c).connector_install_status("cyops_utilities", "3.7.1", agent_id="a1")
     assert len(out) == 1
     assert out[0].agent == "a1"
     assert out[0].status == "Completed"
-    endpoint = c.calls[-1][1]
+    endpoint = [k[1] for k in c.calls if k[0] == "POST"][-1]
     assert endpoint == ("/api/integration/connectors/agents/cyops_utilities/3.7.1/?format=json&active=true")
 
 
@@ -165,7 +165,7 @@ def test_routers_first_none_when_empty():
 
 # ------------------------------------------- connector upgrade/uninstall/heartbeat
 def test_upgrade_connector_puts_spec_body():
-    c = RecordingClient(post_payload={"status": "ok"})
+    c = RecordingClient(members=[{"agentId": "hash-1", "uuid": "u1", "name": "hash-1"}], post_payload={"status": "ok"})
     AgentsAPI(c).upgrade_connector("hash-1", name="hello-world", version="1.0.4")
     # 8.0.0 rejects the route without an rpm name (400 "No connector rpm name
     # or rpm_full_name was provided"), so the default carries {name}-{version}.rpm.
@@ -177,7 +177,7 @@ def test_upgrade_connector_puts_spec_body():
 
 
 def test_upgrade_connector_passes_explicit_rpm_name():
-    c = RecordingClient(post_payload={"status": "ok"})
+    c = RecordingClient(members=[{"agentId": "hash-1", "uuid": "u1", "name": "hash-1"}], post_payload={"status": "ok"})
     AgentsAPI(c).upgrade_connector(
         "hash-1", name="hello-world", version="1.0.4", rpm_full_name="hello_world-1.0.4-x86_64.rpm"
     )
@@ -185,7 +185,7 @@ def test_upgrade_connector_passes_explicit_rpm_name():
 
 
 def test_uninstall_connector_deletes_with_body():
-    c = RecordingClient(post_payload={"status": "ok"})
+    c = RecordingClient(members=[{"agentId": "hash-1", "uuid": "u1", "name": "hash-1"}], post_payload={"status": "ok"})
     AgentsAPI(c).uninstall_connector("hash-1", name="hello-world", version="1.0.4")
     # Same 8.0.0 validation as the PUT ("No connector rpm name was provided").
     assert c.calls[-1] == (

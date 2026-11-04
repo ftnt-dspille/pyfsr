@@ -263,7 +263,9 @@ class AgentsAPI(BaseAPI):
         """Register/activate a connector on a specific agent.
 
         ``POST /api/integration/install-connector/?format=json`` - the call the FSoC *Agents →
-        Connectors* view makes so the connector shows as installed on ``agent_id``. ``name``
+        Connectors* view makes so the connector shows as installed on ``agent_id``. ``agent_id``
+        accepts the agent's name, hex ``agentId`` or record uuid (resolved via
+        :func:`resolve_agent_id`; the raw endpoint only knows the hex id). ``name``
         and ``version`` **must match the appliance's connector catalog** (look it up via
         ``GET /api/integration/connectors/?name=<name>&format=json``); a version the catalog
         doesn't know returns a bare 500. Poll :meth:`connector_install_status` for progress.
@@ -281,6 +283,10 @@ class AgentsAPI(BaseAPI):
         """
         if not isinstance(agent_id, str) or not agent_id.strip():
             raise ValueError("install_connector() requires a non-empty agent_id")
+        # The endpoint wants the integration-side hex agentId. Accept a name,
+        # agentId or /api/3 uuid here (a bare record uuid 400s with
+        # "Object with agent_id=<uuid> does not exist." otherwise).
+        agent_id = resolve_agent_id(self.client, agent_id)
         body = {
             "name": name,
             "label": label or name,
@@ -321,6 +327,7 @@ class AgentsAPI(BaseAPI):
         """
         if not isinstance(agent_id, str) or not agent_id.strip():
             raise ValueError("upgrade_connector() requires a non-empty agent_id")
+        agent_id = resolve_agent_id(self.client, agent_id)
         body = {
             "name": name,
             "version": version,
@@ -356,6 +363,7 @@ class AgentsAPI(BaseAPI):
         """
         if not isinstance(agent_id, str) or not agent_id.strip():
             raise ValueError("uninstall_connector() requires a non-empty agent_id")
+        agent_id = resolve_agent_id(self.client, agent_id)
         body = {
             "name": name,
             "version": version,
@@ -426,6 +434,7 @@ class AgentsAPI(BaseAPI):
             rows = rows.get("data") or rows.get("hydra:member") or []
         rows = [r for r in (rows or []) if isinstance(r, dict)]
         if agent_id is not None:
+            agent_id = resolve_agent_id(self.client, agent_id)
             rows = [r for r in rows if r.get("agent") == agent_id]
         return [AgentConnectorStatus.model_validate(r) for r in rows]
 
