@@ -15,10 +15,13 @@ not part of the command string a transport logs.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shlex
 import shutil
 import subprocess
+import tempfile
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -28,6 +31,38 @@ DEFAULT_TIMEOUT = 60.0
 
 # Marker file that means "this host *is* a FortiSOAR appliance".
 _ONBOX_MARKER = "/opt/cyops"
+
+# Env var that carries the SSH password into the ssh child process. The askpass
+# helper prints it; it is never placed in argv.
+_ASKPASS_PASSWORD_VAR = "PYFSR_SSH_PASSWORD"
+# Static helper script: holds no secret, only echoes the env var above.
+_ASKPASS_SCRIPT = "#!/bin/sh\nprintf '%s\\n' \"$" + _ASKPASS_PASSWORD_VAR + '"\n'
+
+
+@contextlib.contextmanager
+def _askpass_env(password: str) -> Iterator[dict[str, str]]:
+    """Yield env vars that make OpenSSH take ``password`` from an SSH_ASKPASS helper.
+
+    Native replacement for ``sshpass``: plain ``ssh`` asks the helper for the
+    password (``SSH_ASKPASS_REQUIRE=force``), so no terminal output is scraped.
+    The helper lives in a private 0700 temp dir that is removed when the context
+    exits, including on error. The password only travels in the child's env.
+    """
+    tmp_dir = tempfile.mkdtemp(prefix="pyfsr-askpass-")
+    try:
+        os.chmod(tmp_dir, 0o700)
+        helper = os.path.join(tmp_dir, "askpass")
+        fd = os.open(helper, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o700)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(_ASKPASS_SCRIPT)
+        yield {
+            "SSH_ASKPASS": helper,
+            "SSH_ASKPASS_REQUIRE": "force",
+            "DISPLAY": os.environ.get("DISPLAY") or ":0",
+            _ASKPASS_PASSWORD_VAR: password,
+        }
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def _sudo_wrap(argv: list[str], env: dict[str, str] | None) -> list[str]:
@@ -138,8 +173,9 @@ class LocalTransport(Transport):
 class SSHTransport(Transport):
     """Run commands on a remote appliance over ``ssh``.
 
-    Uses key-based auth by default. If ``password`` is set, ``sshpass`` is used
-    when available (and required if no key is loaded). Each command is sent as a
+    Uses key-based auth by default. If ``password`` is set (and no ``key_path``),
+    the password is supplied through OpenSSH's SSH_ASKPASS hook, so no external
+    helper binary is needed. Each command is sent as a
     single remote shell string; ``env`` vars are exported remotely (never placed
     in local argv) so secrets stay off the local process table.
     """
@@ -187,13 +223,14 @@ class SSHTransport(Transport):
         if self.key_path:
             opts += ["-i", self.key_path]
         opts += self.extra_ssh_opts
-        base = ["ssh", *opts, f"{self.user}@{self.host}"]
+        # Password auth needs no argv change: run() supplies it via _askpass_env.
+        return ["ssh", *opts, f"{self.user}@{self.host}"]
+
+    def _askpass(self) -> contextlib.AbstractContextManager[dict[str, str]]:
+        """Askpass env for password auth; a no-op context for key/agent auth."""
         if self.password and not self.key_path:
-            if not shutil.which("sshpass"):
-                raise TransportError("password auth needs `sshpass` on PATH (or use --key/an agent key)")
-            # Pass the password via env (-e) so it never lands in argv.
-            return ["sshpass", "-e", *base]
-        return base
+            return _askpass_env(self.password)
+        return contextlib.nullcontext({})
 
     def run(
         self,
@@ -214,29 +251,28 @@ class SSHTransport(Transport):
             exports = "".join(f"export {k}={shlex.quote(v)}; " for k, v in (env or {}).items())
             remote_cmd = exports + shlex.join(argv)
 
-        local_env = dict(os.environ)
-        if self.password and not self.key_path:
-            local_env["SSHPASS"] = self.password
-
         stdin = input_text
         if sudo and self.sudo_password is not None:
             stdin = f"{self.sudo_password}\n{input_text or ''}"
 
         cmd = [*self._ssh_prefix(), remote_cmd]
-        try:
-            proc = subprocess.run(
-                cmd,
-                input=stdin,
-                env=local_env,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-        except FileNotFoundError as exc:  # pragma: no cover - env dependent
-            raise TransportError(f"executable not found: {cmd[0]}") from exc
-        except subprocess.TimeoutExpired as exc:
-            raise TransportError(f"ssh command timed out after {timeout}s") from exc
-        # Don't leak SSHPASS in the echoed argv.
+        # The askpass helper's temp dir exists only for the duration of ssh.
+        with self._askpass() as askpass_env:
+            local_env = {**os.environ, **askpass_env}
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    input=stdin,
+                    env=local_env,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+            except FileNotFoundError as exc:  # pragma: no cover - env dependent
+                raise TransportError(f"executable not found: {cmd[0]}") from exc
+            except subprocess.TimeoutExpired as exc:
+                raise TransportError(f"ssh command timed out after {timeout}s") from exc
+        # The password never appears in the echoed argv (it is only in the env).
         echoed = [*self._ssh_prefix(), remote_cmd]
         return CommandResult(argv=echoed, returncode=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
 

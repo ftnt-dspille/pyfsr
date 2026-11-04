@@ -8,6 +8,9 @@ RabbitMQ queue/consumer/vhost/permission checks, and log tail/scan.
 
 from __future__ import annotations
 
+import os
+import subprocess
+
 import pytest
 
 from pyfsr._testing.appliance_captures import DEVICE_UUID as UUID
@@ -27,6 +30,7 @@ from pyfsr.cli.appliance.transport import (
     make_transport,
 )
 
+_PW = "-".join(["pct", "%", "pw"])  # throwaway value with a shell-special char
 US = "\x1f"  # the unit-separator field delimiter Facts.psql uses
 
 
@@ -273,12 +277,88 @@ def test_local_sudo_pipes_password_and_wraps(monkeypatch):
     assert captured["input"].startswith("pw\n")
 
 
-def test_ssh_password_never_in_argv(monkeypatch):
-    monkeypatch.setattr("pyfsr.cli.appliance.transport.shutil.which", lambda x: "/usr/bin/sshpass")
+def test_ssh_password_never_in_argv():
     t = SSHTransport(host="h", user="u", password="secret")
     prefix = t._ssh_prefix()
     assert "secret" not in " ".join(prefix)
-    assert prefix[0] == "sshpass"
+    assert prefix[0] == "ssh"
+    assert "sshpass" not in prefix
+
+
+def test_ssh_password_auth_uses_askpass_env(monkeypatch):
+    captured = {}
+    real_run = subprocess.run  # the fake below replaces subprocess.run module-wide
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        captured["env"] = kw["env"]
+        # The helper prints the password verbatim, with no argv involvement.
+        captured["helper_out"] = real_run(
+            [kw["env"]["SSH_ASKPASS"]],
+            env={"PYFSR_SSH_PASSWORD": _PW},
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        captured["helper_mode"] = os.stat(kw["env"]["SSH_ASKPASS"]).st_mode & 0o777
+        captured["helper_dir_mode"] = os.stat(os.path.dirname(kw["env"]["SSH_ASKPASS"])).st_mode & 0o777
+
+        class P:
+            returncode = 255
+            stdout = ""
+            stderr = "Permission denied (password)."
+
+        return P()
+
+    monkeypatch.setattr("pyfsr.cli.appliance.transport.subprocess.run", fake_run)
+    t = SSHTransport(host="h", user="u", password=_PW)
+    res = t.run(["uname", "-r"])
+
+    assert res.returncode == 255 and "Permission denied" in res.stderr
+    assert captured["cmd"][0] == "ssh"
+    assert all("s3cr3t" not in part for part in captured["cmd"])
+    env = captured["env"]
+    assert env["SSH_ASKPASS_REQUIRE"] == "force"
+    assert env["DISPLAY"]
+    assert env["PYFSR_SSH_PASSWORD"] == _PW
+    assert captured["helper_mode"] == 0o700
+    assert captured["helper_dir_mode"] == 0o700
+    assert captured["helper_out"] == _PW + "\n"
+    # The temp dir is removed once ssh returns.
+    assert not os.path.exists(os.path.dirname(env["SSH_ASKPASS"]))
+
+
+def test_ssh_askpass_dir_removed_on_timeout(monkeypatch):
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen["helper"] = kw["env"]["SSH_ASKPASS"]
+        raise subprocess.TimeoutExpired(cmd, 1)
+
+    monkeypatch.setattr("pyfsr.cli.appliance.transport.subprocess.run", fake_run)
+    t = SSHTransport(host="h", user="u", password="secret")
+    with pytest.raises(TransportError, match="timed out"):
+        t.run(["uname"])
+    assert not os.path.exists(os.path.dirname(seen["helper"]))
+
+
+def test_ssh_key_auth_has_no_askpass_env(monkeypatch):
+    monkeypatch.delenv("SSH_ASKPASS", raising=False)
+    captured = {}
+
+    class P:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(cmd, **kw):
+        captured["env"] = kw["env"]
+        return P()
+
+    monkeypatch.setattr("pyfsr.cli.appliance.transport.subprocess.run", fake_run)
+    SSHTransport(host="h", user="u", password="secret", key_path="/k").run(["uname"])
+    assert "SSH_ASKPASS" not in captured["env"]
+    assert "PYFSR_SSH_PASSWORD" not in captured["env"]
 
 
 # --------------------------------------------------------------- P2: service
