@@ -13,6 +13,7 @@ from pyfsr.models import (
     ApiKeyUser,
     LicenseIdentity,
     StixBundleResult,
+    StixIndicator,
     StixMalware,
     StixObject,
     TaxiiCollection,
@@ -209,6 +210,35 @@ def test_taxii_object_single():
     assert env.objects[0].name == "example-malware"
 
 
+def test_taxii_envelope_raw_totalitem_key_survives_aliasing():
+    # Regression: the server serves {totalItems, objects}; the model aliases
+    # totalItems -> total_items, which consumed the raw key and broke the
+    # documented dict-compat promise (.get("totalItems") returned None and
+    # ["totalItems"] raised KeyError on a healthy response).
+    c = FakeClient(get_resp={"totalItems": 3, "objects": []})
+    env = TaxiiAPI(c).objects("c1")
+    assert env.total_items == 3
+    assert env.get("totalItems") == 3
+    assert env["totalItems"] == 3
+    assert "totalItems" in env
+    assert "total_items" in env
+
+
+def test_taxii_manifest_raw_totalitem_key_survives_aliasing():
+    c = FakeClient(
+        get_resp={
+            "totalItems": 2,
+            "objects": [
+                {"id": "indicator--1", "date_added": "d", "version": "v", "media_type": "m"},
+            ],
+        }
+    )
+    man = TaxiiAPI(c).manifest("c1")
+    assert man.total_items == 2
+    assert man.get("totalItems") == 2
+    assert man["totalItems"] == 2
+
+
 # --------------------------------------------------------------- stix models
 def test_parse_stix_object_dispatches_by_type():
     obj = parse_stix_object({"type": "threat-actor", "id": "threat-actor--1", "name": "APT28"})
@@ -223,6 +253,55 @@ def test_parse_stix_object_unknown_type_preserves_fields():
     assert obj.type == "x-foo"
     assert obj["custom_field"] == 42
     assert "custom_field" in obj
+
+
+def test_taxii_objects_parse_fortisoc_module_record_shape():
+    # Live shape on an unpatched tenant (FortiSOC cloud): the served "objects"
+    # are the raw threat_intel_feeds MODULE records -- bare-uuid id (no
+    # indicator-- prefix), camelCase STIX keys, pattern set when the record
+    # carries one. The typed fields must populate from the camelCase forms
+    # while the originals stay reachable as raw keys.
+    c = FakeClient(
+        get_resp={
+            "totalItems": 1,
+            "objects": [
+                {
+                    "@id": "/api/3/threat_intel_feeds/abc",
+                    "@type": "ThreatIntel",
+                    "type": "indicator",
+                    "id": "7f3c2a91-5b8e-4d24-9a10-3c6e88f2b701",
+                    "specVersion": "2.1",
+                    "patternType": "stix",
+                    "patternVersion": "2.1",
+                    "pattern": "[ipv4-addr:value = '192.0.2.123']",
+                    "validFrom": "2026-01-01T00:00:00.000000Z",
+                    "value": "192.0.2.123",
+                    "name": "192.0.2.123",
+                    "sourceData": {"id": "indicator--7f3c2a91", "pattern": "[ipv4-addr:value = '192.0.2.123']"},
+                },
+            ],
+        }
+    )
+    env = TaxiiAPI(c).objects("c1")
+    obj = env.objects[0]
+    assert isinstance(obj, StixIndicator)
+    assert obj.type == "indicator"
+    assert obj.value == "192.0.2.123"
+    assert obj.pattern == "[ipv4-addr:value = '192.0.2.123']"
+    assert obj.spec_version == "2.1"
+    assert obj.pattern_type == "stix"
+    assert obj.valid_from == "2026-01-01T00:00:00.000000Z"
+    # the originals stay reachable raw
+    assert obj["specVersion"] == "2.1"
+    assert obj["validFrom"] == "2026-01-01T00:00:00.000000Z"
+    assert obj.get("sourceData")["id"] == "indicator--7f3c2a91"
+
+
+def test_parse_stix_object_snake_case_wins_over_camel():
+    # A patched appliance serves snake_case; when both forms arrive the typed
+    # snake_case value must win.
+    obj = parse_stix_object({"type": "indicator", "specVersion": "9.9", "spec_version": "2.1"})
+    assert obj.spec_version == "2.1"
 
 
 # --------------------------------------------------------------------- audit

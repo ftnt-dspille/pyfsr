@@ -50,9 +50,16 @@ Notes / gotchas this script encodes (all live-verified):
 * **The vendor Block List filter is a rolling 24h window**
   (``createDate > now-24h``), which doubles as indicator expiry: an indicator
   ages out of the feed on its own. Pass ``--no-expiry`` to drop that filter.
-* **Objects carry a clean scalar ``value``** (``pattern`` is null), so a
-  FortiGate maps them with ``object-array-path $.objects`` +
-  ``address-data-field $.value`` — no STIX pattern parsing required.
+* **Two FGT feed types -- pick by record shape.** Records that carry a STIX
+  ``pattern`` (as ``add_indicator`` writes) work with the primary config:
+  ``stix://`` + ``type address``. FortiOS drives the collection as a TAXII 2.1
+  endpoint and parses each pattern into an address, which makes the RESOURCE
+  NAME referenceable in a firewall policy (``set dstaddr "<feed name>"``) --
+  proven live on 7.6.x against both serving shapes. Records without a
+  ``pattern`` only work via the ``generic-address`` importer
+  (``object-array-path $.objects`` + ``address-data-field $.value``), whose
+  per-entry address objects are NOT reachable through the resource name (a
+  policy ``set dstaddr "<resource>"`` fails ``value parse error``).
 """
 
 from __future__ import annotations
@@ -64,6 +71,7 @@ import os
 import ssl
 import sys
 import urllib.request
+from urllib.parse import urlsplit
 
 from pyfsr import FortiSOAR
 
@@ -161,7 +169,9 @@ def create_dataset(client: FortiSOAR, *, expiry: bool = True):
 # --------------------------------------------------------------------------- #
 def add_indicator(client: FortiSOAR, ip: str, *, source: str) -> dict:
     """Add one malicious IP. It must clear the dataset filter to appear:
-    typeOfFeed=IP Address, confidence >= 70, reputation=Malicious."""
+    typeOfFeed=IP Address, confidence >= 70, reputation=Malicious. The STIX
+    pattern fields are what a FortiGate's ``stix://`` threat feed parses into
+    addresses, so they are set here too."""
     fields = client.picklists.resolve_record_fields(
         FEED_MODULE,
         {
@@ -172,6 +182,9 @@ def add_indicator(client: FortiSOAR, ip: str, *, source: str) -> dict:
             "confidence": 90,
             "source": source,
             "description": "Added by the pyfsr TAXII threat-feed example.",
+            "pattern": f"[ipv4-addr:value = '{ip}']",
+            "patternType": "stix",
+            "patternVersion": "2.1",
         },
     )
     rec = client.post(f"/api/3/{FEED_MODULE}", data=fields)
@@ -211,16 +224,44 @@ def fetch_as_fortigate(base_url: str, dataset_uuid: str, key_name: str, key: str
 
 
 def print_fortigate_config(base_url: str, dataset_uuid: str, key_name: str, key: str) -> None:
-    """The matching FortiOS config. `generic-address` (type 7) parses JSON via
-    JSONPath — which is why a STIX/JSON feed works at all."""
-    url = f"{base_url.rstrip('/')}/api/taxii/1/collections/{dataset_uuid}/objects"
+    """The matching FortiOS configs -- the primary form first.
+
+    ``stix://`` + ``type address`` is the form that makes the feed's RESOURCE
+    NAME referenceable in a firewall policy: FortiOS drives the collection as a
+    TAXII 2.1 endpoint and builds an address per STIX pattern. It parses both
+    serving shapes -- the legacy ``{totalItems, objects}`` envelope, and (on a
+    patched appliance, via the ``?stix=2.1`` query) a proper STIX 2.1 bundle.
+
+    The ``generic-address`` alternative imports each JSON entry as its OWN
+    address object, named from ``address-name-field``; the resource name itself
+    is then not an address, so a policy ``set dstaddr "<feed name>"`` fails
+    with ``value parse error``. Use it only for records that carry no
+    ``pattern``.
+    """
+    netloc = urlsplit(base_url if "://" in base_url else f"https://{base_url}").netloc
+    stix_url = f"stix://{netloc}/api/taxii/1/collections/{dataset_uuid}/objects?stix=2.1"
+    plain_url = f"{base_url.rstrip('/')}/api/taxii/1/collections/{dataset_uuid}/objects"
     print(
         f"""
+# Primary -- records carry a STIX pattern; the feed name is policy-referenceable:
 config system external-resource
     edit "FortiSOAR-BlockList-IP"
         set status enable
+        set type address
+        set resource "{stix_url}"
+        set username "X-API-KEY-{key_name}"
+        set password "{key}"
+        set refresh-rate 5
+    next
+end
+
+# Alternative -- records WITHOUT a pattern; imports one address object per
+# entry (the resource name itself is NOT referenceable in a policy):
+config system external-resource
+    edit "FortiSOAR-BlockList-IP-generic"
+        set status enable
         set type generic-address
-        set resource "{url}"
+        set resource "{plain_url}"
         set object-array-path "$.objects"
         set address-data-field "$.value"
         set address-name-field "$.name"

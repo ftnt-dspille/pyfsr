@@ -16,6 +16,13 @@ envelope, **not** the standard TAXII 2.1 ``more``/``next`` cursor -- paginate wi
 (indicator, malware, threat-actor, ...), falling back to the base
 :class:`~pyfsr.models.StixObject` for unknown types.
 
+Two serving shapes parse into the same models: an unpatched appliance (and
+FortiSOC cloud) serves the raw ``threat_intel_feeds`` module records --
+bare-uuid ``id``, camelCase STIX keys, ``pattern`` set when the record carries
+one -- while the appliance-only TAXII 2.1 patch serves proper
+``indicator--``-prefixed snake_case STIX objects. The models normalize the
+camelCase keys into the typed snake_case fields either way.
+
 Writing to a collection is not done through this API -- FortiSOAR's TAXII
 server is read-only (``can_write`` is ``False``). To *publish* a feed, create
 a dataset via ``client.system_queries.ensure(module="threat_intel_feeds", ...)``;

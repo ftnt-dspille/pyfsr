@@ -10,6 +10,18 @@ These models are lenient (``extra="allow"``) and dict-compatible (``.get()``,
 ``obj["key"]``, ``"key" in obj``), matching the :class:`~pyfsr.models.BaseRecord`
 pattern. Unknown STIX extensions and vendor-specific fields are preserved.
 
+Two serving shapes exist and both parse into the same models:
+
+* **Unpatched appliance / FortiSOC cloud** -- the objects are the raw
+  ``threat_intel_feeds`` module records: scalar ``value``, ``pattern`` set when
+  the record carries one (the block-list records do), a **bare-uuid ``id``**
+  (no ``indicator--`` prefix) and camelCase STIX keys (``specVersion``,
+  ``validFrom``). The camelCase forms are copied into the snake_case typed
+  fields; the originals stay reachable as extras / raw dict keys.
+* **Patched appliance** (the appliance-only TAXII 2.1 patch) -- proper STIX 2.1
+  objects: ``indicator--``-prefixed ids and snake_case keys, with a
+  ``?stix=2.1`` query switching the response to a bundle.
+
 Shapes are live-verified on 8.0.0; the STIX 2.1 spec fields are curated for the
 SDO types FortiSOAR ingests (indicator, malware, threat-actor, campaign,
 attack-pattern, intrusion-set, tool, vulnerability, report).
@@ -21,42 +33,89 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+_MISSING = object()
+
 
 class _Lenient(BaseModel):
     """Dict-compatible base for STIX/TAXII response shapes.
 
     Not module records (no ``@id``), but still dict-compatible so existing
     ``.get(...)``-style call sites keep working alongside attribute access.
+    Raw server keys resolve even when a typed field consumed them through a
+    pydantic alias (FortiSOAR's ``{totalItems, objects}`` envelope fills the
+    ``total_items`` field): the dict-compat promise is against the *server's*
+    keys, so ``.get("totalItems")`` must return the served value, not the
+    default.
     """
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    def get(self, key: str, default: Any = None) -> Any:
-        return getattr(self, key, self.model_extra.get(key, default) if self.model_extra else default)
+    def _field_for_alias(self, key: str) -> str | None:
+        """The field name populated from the raw key ``key`` via an alias."""
+        for name, field in type(self).model_fields.items():
+            if field.alias == key:
+                return name
+        return None
 
-    def __getitem__(self, key: str) -> Any:
+    def get(self, key: str, default: Any = None) -> Any:
         if hasattr(self, key):
             return getattr(self, key)
+        name = self._field_for_alias(key)
+        if name is not None:
+            return getattr(self, name)
         if self.model_extra and key in self.model_extra:
             return self.model_extra[key]
-        raise KeyError(key)
+        return default
+
+    def __getitem__(self, key: str) -> Any:
+        value = self.get(key, _MISSING)
+        if value is _MISSING:
+            raise KeyError(key)
+        return value
 
     def __contains__(self, key: object) -> bool:
         if not isinstance(key, str):
             return False
-        return hasattr(self, key) or bool(self.model_extra and key in self.model_extra)
+        return self.get(key, _MISSING) is not _MISSING
+
+
+# FortiSOAR's unpatched TAXII endpoint (and FortiSOC cloud) serves the raw
+# threat_intel_feeds module records, whose STIX properties are camelCase
+# ("specVersion", "validFrom"); a patched appliance serves proper snake_case
+# STIX. The camelCase forms are copied into the typed snake_case fields --
+# never the other way around, and the originals are kept (extras / raw keys).
+_CAMEL_TO_STIX_FIELD = {
+    "specVersion": "spec_version",
+    "patternType": "pattern_type",
+    "validFrom": "valid_from",
+    "validUntil": "valid_until",
+    "killChainPhases": "kill_chain_phases",
+    "malwareTypes": "malware_types",
+    "threatActorTypes": "threat_actor_types",
+    "toolTypes": "tool_types",
+    "reportTypes": "report_types",
+    "objectRefs": "object_refs",
+    "externalReferences": "external_references",
+    "firstSeen": "first_seen",
+    "lastSeen": "last_seen",
+    "isFamily": "is_family",
+    "resourceLevel": "resource_level",
+    "primaryMotivation": "primary_motivation",
+}
 
 
 class StixObject(_Lenient):
     """Base for every STIX 2.1 object (SDO, SCO, SRO).
 
     Carries the common STIX 2.1 properties. FortiSOAR's TAXII server also stamps
-    a scalar ``value`` (the indicator value) and leaves ``pattern`` null, so
-    those are exposed here rather than only on :class:`StixIndicator`.
+    a scalar ``value`` (the indicator value), so both it and ``pattern`` are
+    exposed here rather than only on :class:`StixIndicator`.
 
     Attributes:
         type: STIX object type (``"indicator"``, ``"malware"``, ``"threat-actor"``, ...).
-        id: STIX identifier (``"<type>--<uuid>"``).
+        id: STIX identifier (``"<type>--<uuid>"``). The unpatched endpoint (and
+            FortiSOC cloud) serves the **bare record uuid** without the prefix;
+            a patched appliance serves the proper prefixed form.
         spec_version: STIX spec version (``"2.1"``).
         created: creation timestamp (ISO 8601).
         modified: last-modified timestamp (ISO 8601).
@@ -65,8 +124,10 @@ class StixObject(_Lenient):
         value: FortiSOAR's scalar indicator value (an IP, hash, domain, etc.).
             Present on objects served from the TAXII endpoint; null on standard
             STIX SDOs that use ``pattern`` instead.
-        pattern: STIX pattern expression. Typically null on FortiSOAR-served
-            objects (``value`` carries the indicator instead).
+        pattern: STIX pattern expression. Set when the record carries one
+            (FortiSOC block-list records and FortiGuard-served objects do);
+            null on records created without one (``value`` still carries the
+            indicator).
     """
 
     type: str
@@ -78,6 +139,22 @@ class StixObject(_Lenient):
     description: str | None = None
     value: str | None = None
     pattern: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_camel_case_keys(cls, data: Any) -> Any:
+        """Copy FortiSOAR's camelCase STIX keys into the snake_case fields.
+
+        The unpatched endpoint serves module records (``specVersion``,
+        ``validFrom``, ...); without this the typed fields silently read None
+        while the data sits in extras. Snake_case (a patched appliance) always
+        wins when both are present.
+        """
+        if isinstance(data, dict):
+            for camel, snake in _CAMEL_TO_STIX_FIELD.items():
+                if camel in data and data.get(snake) is None:
+                    data[snake] = data[camel]
+        return data
 
 
 class StixIndicator(StixObject):
