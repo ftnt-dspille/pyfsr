@@ -23,6 +23,7 @@ Live (credentials from the environment, never this file)::
 
     FSR_BASE_URL=fortisoar.example.com FSR_PASSWORD='<your-password>' \\
       .venv/bin/python examples/nvd_data_ingestion_template.py --deploy
+    .venv/bin/python examples/nvd_data_ingestion_template.py --deploy --env-file <path/to/.env>
 
 Data Ingestion Wizard note: the wizard lists ingestion collections per
 INSTALLED connector. ``nvd-cve`` is only a tag here (the fetch runs through the
@@ -33,10 +34,11 @@ for its action and tag the collection with its name, and the wizard picks it up.
 NVD rate limits keyless clients (5 requests / 30 s) and caps a lastMod window at
 120 days; the default 7-day backfill and a schedule of every 15 minutes or
 slower stay well inside both. The Fetch playbook pages: the first request
-reports totalResults, the remaining pages are read in one for_each. A window
-whose total exceeds Maximum Records Per Run (10000, i.e. 5 pages: NVD's whole
-keyless budget) fails the run rather than skip CVEs. With an NVD API key
-(header ``apiKey``, 50 requests / 30 s) the cap can go higher.
+reports totalResults, the remaining pages are read in one for_each. With the
+KEV filter a window is a handful of CVEs, so a run is one page and creates its
+alerts one at a time (no bulk), firing any on-create alert playbooks. A window
+whose total exceeds Maximum Records Per Run (500) fails the run rather than skip
+CVEs.
 """
 
 from __future__ import annotations
@@ -59,6 +61,11 @@ SPEC = {
     "query_params": {
         "lastModStartDate": "{{ vars.window_from }}",
         "lastModEndDate": "{{ vars.curr_timestamp }}",
+        # Only CVEs in CISA's Known Exploited Vulnerabilities catalog: the ones that
+        # deserve an alert. Unfiltered, NVD modifies ~10k CVEs a week (10856 in one
+        # live window); KEV-only, the same week held 13. NVD takes the flag as
+        # `hasKev=` (empty value), live-verified through Make REST API Call.
+        "hasKev": "",
     },
     # NVD pages with startIndex/resultsPerPage and reports totalResults on every page.
     "page_param": "startIndex",
@@ -77,8 +84,7 @@ SPEC = {
     "severity_map": {"CRITICAL": "Critical", "HIGH": "High", "MEDIUM": "Medium", "LOW": "Low"},
     "default_severity": "Minimal",
     "backfill_days": 7,
-    # 5 pages of 2000: also NVD's keyless budget (5 requests / 30 s) for one run.
-    "max_items": 10000,
+    "max_items": 500,
     "sample_record": {
         "cve": {
             "id": "CVE-2026-0001",
@@ -94,6 +100,8 @@ SPEC = {
 def _client(args):
     from pyfsr import FortiSOAR
 
+    if args.env_file:
+        return FortiSOAR.from_env_file(args.env_file)
     host = args.host or os.environ.get("FSR_BASE_URL")
     password = os.environ.get("FSR_PASSWORD")
     if not (host and password):
@@ -110,6 +118,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--deploy", action="store_true", help="import, run Ingest once, count alerts")
     ap.add_argument("--host", help="appliance host (FSR_BASE_URL)")
+    ap.add_argument("--env-file", help="log in from a pyfsr env file instead of FSR_* variables")
     ap.add_argument("--out", type=Path, default=OUT, help=f"where to write the YAML (default {OUT})")
     args = ap.parse_args()
 
@@ -145,7 +154,7 @@ def main() -> int:
     print("imported           :", [c.get("name") for c in created])
     nvd = Query().eq("source", "NVD")
     before = client.records("alerts").count(nvd)
-    run = client.playbooks.trigger(INGEST, follow=True, timeout=600)
+    run = client.playbooks.trigger(INGEST, follow=True, timeout=1800)
     print("run                :", run.get("status"), run.get("error_message") or "")
     print("NVD alerts         :", before, "->", client.records("alerts").count(nvd))
     return 0 if run.get("status") == "finished" else 1

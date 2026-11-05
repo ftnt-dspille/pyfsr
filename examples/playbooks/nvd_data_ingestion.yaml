@@ -105,7 +105,7 @@ playbooks:
       visible: true
       type: text
       name: max_items
-      value: '10000'
+      value: '500'
       tooltip: Safety cap. A window that reaches it FAILS the run instead of silently skipping records;
         raise it or shorten the schedule rather than let it bind.
     next: Configuration
@@ -116,7 +116,7 @@ playbooks:
       never share a watermark.
     vars:
       backfill_days: '7'
-      max_items: '10000'
+      max_items: '500'
       NVDMacroName: NVDLastPullTime_{{vars['audit_info']['cyops_playbook_iri'].split('/')[-1].replace('-','_')}}
     next: Get Macro Value
   - name: Get Macro Value
@@ -198,7 +198,7 @@ playbooks:
       url: https://services.nvd.nist.gov/rest/json/cves/2.0
       method: GET
       params: '{"lastModStartDate": "{{ vars.window_from }}", "lastModEndDate": "{{ vars.curr_timestamp
-        }}", "startIndex": "0", "resultsPerPage": "2000"}'
+        }}", "hasKev": "", "startIndex": "0", "resultsPerPage": "2000"}'
       verify: true
   - name: Paging Plan
     type: set_variable
@@ -278,7 +278,7 @@ playbooks:
       url: https://services.nvd.nist.gov/rest/json/cves/2.0
       method: GET
       params: '{"lastModStartDate": "{{ vars.window_from }}", "lastModEndDate": "{{ vars.curr_timestamp
-        }}", "startIndex": "{{ vars.item }}", "resultsPerPage": "2000"}'
+        }}", "hasKev": "", "startIndex": "{{ vars.item }}", "resultsPerPage": "2000"}'
       verify: true
   - name: Save Result
     type: set_variable
