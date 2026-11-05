@@ -139,6 +139,57 @@ def _load_decompiler() -> Any:
     return decompile_to_yaml
 
 
+def data_ingestion_template(
+    slug: str,
+    label: str,
+    url: str,
+    *,
+    compile: bool = False,
+    client: _AuthoringClient | None = None,
+    **spec: Any,
+) -> str | CompiledPlaybook:
+    """Generate a Data Ingestion Wizard playbook collection (Init Macros / Fetch / Ingest).
+
+    The logic lives in ``fsr_playbooks.ingestion_template``; this is the pyfsr
+    entry point. The Fetch step is a Utilities > Make REST API Call
+    (``cyops_utilities`` / ``api_call``) stand-in against ``url``: swap it for
+    the real connector action once one exists. Everything else follows the
+    wizard contract and ingestion best practices (tags, configuration form,
+    UUID-scoped watermark macro, env_setup mapping preview, upsert on the
+    natural key, ``__fieldsToUpdate``, watermark advanced last).
+
+    Args:
+        slug: connector API name, used as the discovery tag (``acme-edr``).
+        label: human name used in playbook names (``Acme EDR``).
+        url: REST endpoint the stand-in Fetch step calls.
+        compile: return a :class:`CompiledPlaybook` instead of the YAML text.
+        client: forwarded to :func:`compile_playbook_yaml` when ``compile``.
+        **spec: any other ``fsr_playbooks.ingestion_template.IngestionSpec``
+            field (``method``, ``query_params``, ``headers``, ``records_path``,
+            ``module``, ``source_id_field``, ``severity_map``, ``extra_fields``,
+            ``bulk``, ``sample_record`` ...).
+
+    Example::
+
+        from pyfsr.authoring import data_ingestion_template
+
+        yaml_text = data_ingestion_template(
+            "acme-edr", "Acme EDR", "https://edr.example.com/api/v1/detections",
+            records_path="items", source_id_field="id",
+        )
+        compiled = data_ingestion_template(..., compile=True)
+        client.workflow_collections.import_export(compiled.fsr_json)
+    """
+    try:
+        from fsr_playbooks.ingestion_template import IngestionSpec, render_ingestion_yaml
+    except ImportError as exc:
+        raise PlaybooksExtraNotInstalled(exc) from exc
+    text = render_ingestion_yaml(IngestionSpec(slug=slug, label=label, url=url, **spec))
+    if compile:
+        return compile_playbook_yaml(text, client=client)
+    return text
+
+
 def decompile_playbook_yaml(
     fsr_json: dict[str, Any],
     *,
