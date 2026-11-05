@@ -252,10 +252,14 @@ class Pack:
         ]
         if connectors or (self.path / "connectors").exists():
             contents["connectors"] = connectors
+        else:
+            contents.pop("connectors", None)  # directory removed: the claim goes with it
 
         widgets = [{"name": r.get("name")} for r in self.data_manifest("widgets")]
         if widgets or (self.path / "widgets").exists():
             contents["widgets"] = widgets
+        else:
+            contents.pop("widgets", None)
 
         dash_dir = self.path / "dashboards"
         if dash_dir.exists():
