@@ -169,17 +169,29 @@ class Pack:
 
     # -- exported content ----------------------------------------------------
 
-    def absorb_export(self, zip_path: str | Path, sections: list[str]) -> dict[str, int]:
+    def absorb_export(self, zip_path: str | Path, sections: list[str] | None = None) -> dict[str, int]:
         """Copy sections out of an appliance export zip into the pack.
 
         ``sections`` are contents keys (``dashboards``, ``recordSets``,
         ``playbooks``); anything the export carries for them is copied under
-        this pack's section directory, preserving subpaths.
+        this pack's section directory, preserving subpaths. With ``None``,
+        every top-level directory the export carries is absorbed -- the
+        general path for wizard-surface content (``modules/`` view-template
+        layouts, ``picklists/``, ``roles/``, ...).
+
+        The export's own ``info.json`` ``contents`` map is merged in either
+        way: the exporter is the authority on how what-it-exported must be
+        claimed (dict-shaped for ``modules`` / ``viewTemplates`` / ``views``,
+        list-shaped elsewhere). Categories whose contents this pack derives
+        from its directories (connectors, widgets, dashboards, recordSets,
+        playbooks) are re-derived on the next :meth:`sync_contents`, so a
+        merge cannot go stale for them.
         """
         counts: dict[str, int] = {}
         with Export.open(zip_path) as ex:
-            for section in sections:
-                directory = SECTION_DIRS[section]
+            wanted = sections if sections is not None else sorted(ex.directories())
+            for section in wanted:
+                directory = SECTION_DIRS.get(section, section)
                 n = 0
                 for member in ex.members:
                     if member == directory or member.startswith(directory + "/"):
@@ -190,7 +202,33 @@ class Pack:
                         if member.endswith(".json"):
                             n += 1
                 counts[section] = n
+            self._merge_export_contents(ex.info)
         return counts
+
+    def _merge_export_contents(self, export_info: dict) -> None:
+        """Merge an export's ``contents`` claims into this pack's info.json.
+
+        List categories dedupe by identity (``apiName`` or ``name``); dict
+        categories (``modules`` / ``viewTemplates`` / ``views``) merge by key.
+        """
+        merged = dict(self.info.get("contents") or {})
+        for key, val in (export_info.get("contents") or {}).items():
+            if isinstance(val, dict):
+                base = dict(merged.get(key)) if isinstance(merged.get(key), dict) else {}
+                base.update(val)
+                merged[key] = base
+            elif isinstance(val, list):
+                base = list(merged.get(key) or [])
+                seen = {(e.get("apiName") or e.get("name")) if isinstance(e, dict) else e for e in base}
+                for entry in val:
+                    ident = (entry.get("apiName") or entry.get("name")) if isinstance(entry, dict) else entry
+                    if ident not in seen:
+                        base.append(entry)
+                        seen.add(ident)
+                merged[key] = base
+            elif val is not None:
+                merged[key] = val
+        self.info["contents"] = merged
 
     # -- contents + build ------------------------------------------------------
 
@@ -203,6 +241,10 @@ class Pack:
         (``modules``, ``roles``, ...) are left untouched.
         """
         contents = dict(self.info.get("contents") or {})
+        # An empty claim is noise (the exporter emits them when a category was
+        # selected but carried nothing, e.g. view templates without module
+        # schemas); drop them so the validator does not flag empty categories.
+        contents = {k: v for k, v in contents.items() if v}
 
         connectors = [
             {"apiName": r.get("name"), "name": r.get("label") or r.get("name")}
@@ -405,6 +447,91 @@ def add_playbook_collection(client, pack: Pack, collection: str) -> dict:
     zip_path, info = export_live(client, template, f"playbooks-{collection[:40]}")
     counts = pack.absorb_export(zip_path, ["playbooks"])
     return {"collection": collection, "files": counts["playbooks"], "export_contents": info.get("contents")}
+
+
+#: (cli flag kind, builder call). The export wizard's content surface, as the
+#: typed :class:`~pyfsr.api.export_config.ExportTemplate` builder covers it.
+_SELECTOR_KINDS = {
+    "module": lambda t, v, c: t.add_module(v),
+    "module-fields": lambda t, v, c: t.add_module(*_split_fields(v)),
+    "view-template": lambda t, v, c: _add_view_template(t, v),
+    "picklist": lambda t, v, c: t.add_picklist(v),
+    "connector": lambda t, v, c: t.add_connector(v),
+    "widget": lambda t, v, c: t.add_widget(v),
+    "dashboard": lambda t, v, c: t.add_dashboard(_resolve_dashboard(c, v)[0]),
+    "playbook-collection": lambda t, v, c: t.add_playbook_collection(v),
+    "global-variable": lambda t, v, c: t.add_global_variable(v),
+    "playbook-block": lambda t, v, c: t.add_playbook_block(v),
+    "role": lambda t, v, c: t.add_role(v),
+    "team": lambda t, v, c: t.add_team(v),
+    "actor": lambda t, v, c: t.add_actor(v),
+    "navigation": lambda t, v, c: _add_navigation(t, v),
+    "report": lambda t, v, c: t.add_report(v),
+    "rule": lambda t, v, c: t.add_rule(v),
+    "rule-channel": lambda t, v, c: t.add_rule_channel(v),
+    "preprocessing-rule": lambda t, v, c: t.add_preprocessing_rule(v),
+    "app-setting": lambda t, v, c: t.add_app_setting(v),
+    "export-template": lambda t, v, c: t.add_export_template(v),
+    "ai-agent": lambda t, v, c: t.add_ai_agent(v),
+    "mcp-configuration": lambda t, v, c: t.add_mcp_configuration(v),
+}
+
+
+def _split_fields(value: str) -> tuple[str, list[str] | None]:
+    """``NAME`` or ``NAME=f1,f2`` for add_module(fields=...)."""
+    if "=" in value:
+        name, _, fields = value.partition("=")
+        return name, [f for f in fields.split(",") if f]
+    return value, None
+
+
+def _add_view_template(template, value: str):
+    """``MODULE`` exports all three layouts; ``MODULE:detail,form`` a subset."""
+    module, _, kinds = value.partition(":")
+    if not module:
+        raise PackError("--view-template needs MODULE[:detail,form,list]")
+    known = ("list", "detail", "form")
+    kwargs: dict[str, bool] = {"list_view": False, "detail": False, "form": False}
+    for kind in kinds.split(",") if kinds else known:
+        kind = kind.strip()
+        if kind not in known:
+            raise PackError(f"view-template kind {kind!r} not one of {', '.join(known)}")
+        kwargs[{"list": "list_view"}.get(kind, kind)] = True
+    return template.add_view_templates(module, **kwargs)
+
+
+def _add_navigation(template, value: str):
+    sections, _, flag = value.partition(":")
+    names = [s for s in sections.split(",") if s]
+    if not names:
+        raise PackError("--navigation needs SECTION[,SECTION][:replace]")
+    return template.add_navigation(*names, replace=flag == "replace")
+
+
+def add_content(client, pack: Pack, selectors: list[tuple[str, str]]) -> dict:
+    """Add anything the export wizard supports, then absorb everything it emits.
+
+    ``selectors`` are ``(kind, value)`` pairs -- see ``_SELECTOR_KINDS`` for the
+    covered surface (modules, view templates, picklists, connectors, widgets,
+    dashboards, playbook collections, roles, teams, actors, navigation, reports,
+    rules, AI agents, app settings, export templates, MCP configurations).
+    Record sets go through :func:`add_records`, which carries the query and
+    limit handling. Whatever the export engine emits for the selection is
+    absorbed whole (including the module layout files a view template ships
+    as), and the export's own ``contents`` map is merged into the pack, so a
+    view-template addition claims itself correctly.
+    """
+    if not selectors:
+        raise PackError("nothing selected -- pass at least one --<kind> flag")
+    template = _new_template()
+    for kind, value in selectors:
+        handler = _SELECTOR_KINDS.get(kind)
+        if not handler:
+            raise PackError(f"unknown content kind {kind!r}")
+        handler(template, value, client)
+    zip_path, info = export_live(client, template, "content")
+    counts = pack.absorb_export(zip_path)
+    return {"files": counts, "export_contents": info.get("contents")}
 
 
 # ---------------------------------------------------------------------------

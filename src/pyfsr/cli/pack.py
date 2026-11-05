@@ -123,6 +123,47 @@ def cmd_add_playbooks(args: argparse.Namespace) -> int:
     return 0
 
 
+_REPEAT_KINDS = (
+    "module",
+    "module-fields",
+    "view-template",
+    "picklist",
+    "connector",
+    "widget",
+    "dashboard",
+    "playbook-collection",
+    "global-variable",
+    "playbook-block",
+    "role",
+    "team",
+    "actor",
+    "navigation",
+    "report",
+    "rule",
+    "rule-channel",
+    "preprocessing-rule",
+    "app-setting",
+    "export-template",
+    "ai-agent",
+    "mcp-configuration",
+)
+
+
+@_guarded
+def cmd_add_content(args: argparse.Namespace) -> int:
+    client = _make_client(args)
+    _print_target(client)
+    pack = packtools.Pack(args.pack)
+    selectors = [(kind, value) for kind in _REPEAT_KINDS for value in getattr(args, kind.replace("-", "_"))]
+    result = packtools.add_content(client, pack, selectors)
+    pack.save()
+    copied = ", ".join(f"{k}: {v}" for k, v in sorted(result["files"].items()) if v)
+    print(f"absorbed: {copied or '(nothing)'}")
+    claimed = ", ".join(sorted(result["export_contents"] or {}))
+    print(f"contents claimed by the export: {claimed or '(none)'}")
+    return 0
+
+
 @_guarded
 def cmd_soc_demo(args: argparse.Namespace) -> int:
     client = _make_client(args)
@@ -196,6 +237,57 @@ def build_subparser(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--pack", required=True)
     add_connection_args(p)
     p.set_defaults(func=cmd_add_playbooks)
+
+    p = sub.add_parser(
+        "add-content",
+        help="add anything the export wizard supports: modules, view templates, "
+        "picklists, roles, reports, navigation, ...",
+        description=(
+            "Repeatable selectors build one export template; whatever the export "
+            "engine emits is absorbed whole and its contents map merged. Examples:\n"
+            "  pyfsr pack add-content --pack P --view-template alerts:detail\n"
+            "  pyfsr pack add-content --pack P --module assets --picklist AlertType --role Analyst"
+        ),
+    )
+    p.add_argument("--pack", required=True)
+    p.add_argument(
+        "--module", action="append", default=[], metavar="NAME", help="export a module's schema (repeatable)"
+    )
+    p.add_argument(
+        "--module-fields",
+        action="append",
+        default=[],
+        metavar="NAME=F1,F2",
+        help="export a module schema limited to these fields (repeatable)",
+    )
+    p.add_argument(
+        "--view-template",
+        action="append",
+        default=[],
+        metavar="MODULE[:KINDS]",
+        help="module layouts: detail,form,list; bare MODULE means all three (repeatable)",
+    )
+    p.add_argument("--picklist", action="append", default=[], metavar="NAME")
+    p.add_argument("--connector", action="append", default=[], metavar="NAME")
+    p.add_argument("--widget", action="append", default=[], metavar="NAME")
+    p.add_argument("--dashboard", action="append", default=[], metavar="UUID_OR_NAME")
+    p.add_argument("--playbook-collection", action="append", default=[], metavar="NAME")
+    p.add_argument("--global-variable", action="append", default=[], metavar="NAME")
+    p.add_argument("--playbook-block", action="append", default=[], metavar="UUID")
+    p.add_argument("--role", action="append", default=[], metavar="NAME")
+    p.add_argument("--team", action="append", default=[], metavar="NAME")
+    p.add_argument("--actor", action="append", default=[], metavar="TITLE")
+    p.add_argument("--navigation", action="append", default=[], metavar="SECTION[,S][:replace]")
+    p.add_argument("--report", action="append", default=[], metavar="NAME")
+    p.add_argument("--rule", action="append", default=[], metavar="NAME")
+    p.add_argument("--rule-channel", action="append", default=[], metavar="NAME")
+    p.add_argument("--preprocessing-rule", action="append", default=[], metavar="NAME")
+    p.add_argument("--app-setting", action="append", default=[], metavar="NAME")
+    p.add_argument("--export-template", action="append", default=[], metavar="NAME_OR_UUID")
+    p.add_argument("--ai-agent", action="append", default=[], metavar="NAME")
+    p.add_argument("--mcp-configuration", action="append", default=[], metavar="NAME_OR_UUID")
+    add_connection_args(p)
+    p.set_defaults(func=cmd_add_content)
 
     p = sub.add_parser("soc-demo", help="generate the SOC-simulator demo playbook + scenario record")
     p.add_argument("module")
