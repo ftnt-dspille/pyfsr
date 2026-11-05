@@ -113,9 +113,11 @@ mcp = [
 # they all `pip install` and resolve fresh -- so the lock constrains nothing in
 # CI today. Ceiling widened past 0.7 for 0.25.0: the 0.7 series is verified
 # compatible (compiler/decompiler entry points unchanged; the library suite
-# runs green against the 0.7 wheel lineage).
+# runs green against the 0.7 wheel lineage). Floor raised to 0.10.3 for
+# authoring.data_ingestion_template (fsr_playbooks.ingestion_template first
+# ships there); the full unit suite runs green against the 0.10.3 wheel.
 playbooks = [
-    "fsr_playbooks>=0.6.22,<0.8",
+    "fsr_playbooks>=0.10.3,<0.11",
 ]
 
 [project.scripts]
