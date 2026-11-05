@@ -5,4 +5,8 @@ Small, dependency-light utilities: file upload/download
 (:mod:`~pyfsr.utils.iri`), and input validation
 (:mod:`~pyfsr.utils.validation`). These support the higher-level client and API
 layers and are rarely imported directly.
+
+Also home to content-assembly tooling that is not a REST namespace:
+:mod:`~pyfsr.utils.packtools` assembles solution packs from live appliance
+content and bundled installers (exposed as the ``pyfsr pack`` CLI commands).
 """

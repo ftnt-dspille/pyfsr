@@ -508,6 +508,13 @@ def build_parser() -> argparse.ArgumentParser:
     widget_sub = p_widget.add_subparsers(dest="widget_command", required=True)
     widget_cmds.build_subparser(widget_sub)
 
+    # --- pack group (solution-pack assembly from live content + bundled installers) ---
+    from . import pack as pack_cmds
+
+    p_pack = sub.add_parser("pack", help="build solution packs (dashboard/records/playbooks/soc-demo)")
+    pack_sub = p_pack.add_subparsers(dest="pack_command", required=True)
+    pack_cmds.build_subparser(pack_sub)
+
     # --- records group (top-level; API-based record CRUD) ---
     p_rec = sub.add_parser("records", help="query and manage FortiSOAR records (alerts, incidents, etc.)")
     recsub = p_rec.add_subparsers(dest="records_command", required=True)
