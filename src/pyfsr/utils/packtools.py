@@ -255,7 +255,11 @@ class Pack:
         else:
             contents.pop("connectors", None)  # directory removed: the claim goes with it
 
-        widgets = [{"name": r.get("name")} for r in self.data_manifest("widgets")]
+        # The importer lists a widget only from {apiName, name: <title>}; a bare
+        # {name} entry leaves the pack's widget list empty (live-verified on 8.0.0).
+        widgets = [
+            {"apiName": r.get("name"), "name": r.get("title") or r.get("name")} for r in self.data_manifest("widgets")
+        ]
         if widgets or (self.path / "widgets").exists():
             contents["widgets"] = widgets
         else:

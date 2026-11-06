@@ -43,14 +43,23 @@ Example:
 
 from __future__ import annotations
 
+import json
+import tempfile
 import time
+import zipfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from ..auth.base import BaseAuth
 from ..auth.guards import requires_jwt
-from ..exceptions import FortiSOARException, describe_migrate_failure, is_migrate_transient
+from ..exceptions import (
+    FortiSOARException,
+    WidgetNotInstalled,
+    describe_migrate_failure,
+    is_migrate_transient,
+)
 from ..exports import Export, ExportKind, Finding
 from ..models._integration import ImportJobResult
 from .base import BaseAPI
@@ -492,6 +501,11 @@ class ImportConfigAPI(BaseAPI):
                 f"unknown resolve strategy {resolve!r}; choose one of {sorted(_RESOLVERS)} or pass modify_options=..."
             )
 
+        # Fail fast on bundled widgets the box will refuse: through the Import
+        # Wizard the appliance swallows that rejection and still reports
+        # "Import Complete".
+        self.check_bundled_widgets(zip_path)
+
         uploaded = self.client.files.upload(zip_path)
         file_iri = uploaded.get("@id")
         if not file_iri:
@@ -546,9 +560,54 @@ class ImportConfigAPI(BaseAPI):
             # index wedge). Raise it with remediation guidance rather than handing
             # back a job the caller has to remember to inspect.
             raise FortiSOARException(describe_migrate_failure(final.status, final.errorMessage))
+        if verify and str(final.status or "").strip().lower() in _IMPORT_TERMINAL:
+            self._verify_bundled_widgets(final)
         if final.jobUuid is None:
             final.jobUuid = job_uuid
         return final
+
+    def check_bundled_widgets(self, zip_path: str) -> None:
+        """Raise :class:`~pyfsr.exceptions.WidgetIncompatible` for any bundled tgz widget this box refuses."""
+        if not (Path(zip_path).is_file() and zipfile.is_zipfile(zip_path)):
+            return  # files.upload reports a bad path
+        with zipfile.ZipFile(zip_path) as zf:
+            for manifest in (n for n in zf.namelist() if n.endswith("widgets/data.json")):
+                rows = json.loads(zf.read(manifest))
+                base = manifest[: -len("data.json")]
+                for row in rows if isinstance(rows, list) else []:
+                    if row.get("install_mode") != "tgz" or not row.get("installer_path"):
+                        continue
+                    member = base + row["installer_path"]
+                    if member not in zf.namelist():
+                        continue  # the export validator reports a missing installer
+                    with tempfile.TemporaryDirectory() as tmp:
+                        tgz = Path(tmp) / Path(member).name
+                        tgz.write_bytes(zf.read(member))
+                        self.client.widgets.check_compatible(tgz)
+
+    def _verify_bundled_widgets(self, job: ImportJobResult) -> None:
+        """Every tgz widget the job was told to install must be on the box afterwards."""
+        section = (job.options or {}).get("widgets") if isinstance(job.options, dict) else None
+        if not isinstance(section, dict) or not section.get("include"):
+            return
+        wanted = [
+            v
+            for v in section.get("values") or []
+            if v.get("install_mode") == "tgz" and v.get("include") and not v.get("exists")
+        ]
+        missing = [
+            f"{v.get('name')} {v.get('version')}"
+            for v in wanted
+            if not any(r.version == v.get("version") for r in self.client.widgets.list(name=v.get("name")))
+        ]
+        if missing:
+            raise WidgetNotInstalled(
+                "import finished but these bundled widgets are not on the box: "
+                + ", ".join(missing)
+                + ". The appliance skips a refused widget silently; upload it with "
+                "client.widgets.upload(<tgz>) to see the reason.",
+                names=missing,
+            )
 
 
 def connectors_only(options: dict[str, Any]) -> dict[str, Any]:

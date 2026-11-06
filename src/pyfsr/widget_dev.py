@@ -124,3 +124,51 @@ def pack_widget(source_dir: str, output: str | None = None) -> str:
         # what the developer happened to call their working folder.
         tar.add(src, arcname=root, filter=_filter)
     return str(out)
+
+
+def _dotless(version: str) -> int | None:
+    """The appliance's version number: dots dropped, build suffix ignored (``"8.0.1"`` -> 801)."""
+    core = str(version).strip().split("-", 1)[0]
+    digits = core.replace(".", "")
+    return int(digits) if digits.isdigit() else None
+
+
+def widget_compatibility_error(compatibility: list[str] | str | None, platform_version: str) -> str | None:
+    """Why the box would refuse a widget with this ``metadata.compatibility``, or ``None``.
+
+    Mirrors ``WidgetController::checkCompatibilityVersion`` (live-read on
+    8.0.0-6034): take the **highest** listed version, drop the dots, and refuse
+    when it is below 702 or above the box's own version. A list is therefore
+    *not* "any of these": ``["8.0.0", "8.0.1"]`` is refused by an 8.0.0 box.
+    An unparseable platform version (e.g. a ``dev`` build) or an empty list is
+    not judged.
+    """
+    platform = _dotless(platform_version)
+    if platform is None:
+        return None
+    listed = [compatibility] if isinstance(compatibility, str) else list(compatibility or [])
+    numbers = [n for n in (_dotless(v) for v in listed) if n is not None]
+    if not numbers:
+        return None  # nothing to judge; leave it to the box
+    top = max(numbers)
+    if top < 702:
+        return f"metadata.compatibility {listed!r}: highest version is below 7.0.2; the box refuses it"
+    if top > platform:
+        newest = listed[numbers.index(top)] if len(numbers) == len(listed) else str(top)
+        return (
+            f"metadata.compatibility {listed!r} lists {newest}, newer than the box's {platform_version}; "
+            "the box refuses a widget whose HIGHEST listed version is above its own "
+            f"(list only versions <= {platform_version.split('-', 1)[0]})"
+        )
+    return None
+
+
+def widget_info_from_tgz(tgz: str | Path) -> dict:
+    """The ``info.json`` of a widget ``.tgz`` (single ``<name>-<version>/`` root)."""
+    with tarfile.open(tgz, "r:gz") as tf:
+        hits = [m for m in tf.getmembers() if m.isfile() and m.name.count("/") == 1 and m.name.endswith("/info.json")]
+        if len(hits) != 1:
+            raise ValueError(f"{Path(tgz).name}: expected exactly one <root>/info.json, found {len(hits)}")
+        fh = tf.extractfile(hits[0])
+        assert fh is not None
+        return json.loads(fh.read())

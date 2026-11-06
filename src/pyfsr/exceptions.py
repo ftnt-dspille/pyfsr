@@ -243,6 +243,38 @@ class WidgetUploadConflict(WidgetError):
         super().__init__(message or f"widget {name!r} version {version!r} already exists in the workspace")
 
 
+class WidgetIncompatible(WidgetError):
+    """A widget's ``metadata.compatibility`` will be refused by the target box.
+
+    Raised *before* anything is uploaded, from the same rule the appliance
+    applies (``WidgetController::checkCompatibilityVersion``): the **highest**
+    listed version must be >= 7.0.2 and <= the box's version. Through the Import
+    Wizard the appliance swallows this rejection, so the import reports
+    "Import Complete" with the widget silently missing -- hence the fail-fast.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        name: str | None = None,
+        compatibility: list[str] | None = None,
+        platform_version: str | None = None,
+    ):
+        self.name = name
+        self.compatibility = compatibility
+        self.platform_version = platform_version
+        super().__init__(message)
+
+
+class WidgetNotInstalled(WidgetError):
+    """An import was told to install a bundled widget, finished, and the widget is not on the box."""
+
+    def __init__(self, message: str, *, names: list[str] | None = None):
+        self.names = names or []
+        super().__init__(message)
+
+
 class WidgetPublishError(WidgetError):
     """A widget publish did not settle live (``draft:false, installed:true``).
 

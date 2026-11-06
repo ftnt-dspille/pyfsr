@@ -6,6 +6,26 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Widget compatibility fail-fast.** `widget_dev.widget_compatibility_error`
+  mirrors the appliance's `WidgetController::checkCompatibilityVersion`: the
+  **highest** version in `metadata.compatibility` must be >= 7.0.2 and <= the
+  box's version, so `["8.0.0", "8.0.1"]` is refused by an 8.0.0 box (a list is
+  not "any of these"). `widgets.upload` now raises `WidgetIncompatible` before
+  sending, and `import_config.import_file` checks every bundled tgz widget
+  before creating the job. Through the Import Wizard the appliance swallows the
+  refusal and still reports "Import Complete".
+- **`import_file` verifies bundled widgets landed.** With `verify=True` (the
+  default), a tgz widget the job was told to install that is not on the box
+  afterwards raises `WidgetNotInstalled`, naming it.
+
+### Fixed
+
+- **`Pack.sync_contents` widget claims.** `info.json` `contents.widgets` is now
+  `{apiName, name: <title>}`; the bare `{name}` it wrote left the importer's
+  widget list empty.
+
+### Added (earlier)
+
 - **`widget_dev.pack_widget` + `pyfsr widget pack DIR` + folder support in
   `widgets.upload` / `widgets.deploy` / `widgets.ensure_deployed`.** Bundles a
   widget source folder into a SOAR-importable ``.tgz`` the way the Content Hub

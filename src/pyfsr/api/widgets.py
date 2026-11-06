@@ -49,10 +49,10 @@ import json
 import time
 from pathlib import Path
 
-from ..exceptions import APIError, WidgetPublishError, WidgetUploadConflict
+from ..exceptions import APIError, WidgetIncompatible, WidgetPublishError, WidgetUploadConflict
 from ..models._widgets import WidgetRecord
 from ..pagination import extract_members
-from ..widget_dev import pack_widget
+from ..widget_dev import pack_widget, widget_compatibility_error, widget_info_from_tgz
 from ._solutionpacks import upload_solutionpack
 from .base import BaseAPI
 
@@ -88,6 +88,30 @@ class WidgetsAPI(BaseAPI):
         return max(records, key=lambda r: _version_key(r.version))
 
     # ---------------------------------------------------------------- upload
+    def check_compatible(self, tgz: str | Path) -> None:
+        """Raise :class:`~pyfsr.exceptions.WidgetIncompatible` if this box would refuse the widget.
+
+        Same rule as the appliance's upload check (see
+        :func:`pyfsr.widget_dev.widget_compatibility_error`). A box whose version
+        cannot be read is not judged.
+        """
+        version_tuple = getattr(self.client, "version_tuple", None)
+        vt = version_tuple() if callable(version_tuple) else None
+        if vt is None:
+            return
+        platform = ".".join(map(str, vt))
+        info = widget_info_from_tgz(tgz)
+        compat = (info.get("metadata") or {}).get("compatibility")
+        why = widget_compatibility_error(compat, platform)
+        if why:
+            name = info.get("name")
+            raise WidgetIncompatible(
+                f"widget {name!r} {info.get('version')}: {why}",
+                name=name,
+                compatibility=compat,
+                platform_version=platform,
+            )
+
     def upload(self, path: str, *, replace: bool = True) -> WidgetRecord:
         """Upload a widget ``.tgz`` (or pack a widget **folder** first) — step 1 of deploy.
 
@@ -143,6 +167,7 @@ class WidgetsAPI(BaseAPI):
         """
         if Path(path).is_dir():
             path = pack_widget(path)
+        self.check_compatible(path)
         try:
             resp = upload_solutionpack(self.client, path, type_="widget", replace=replace)
         except APIError as exc:
