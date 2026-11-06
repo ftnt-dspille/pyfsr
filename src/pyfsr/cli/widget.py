@@ -129,9 +129,11 @@ def cmd_export_dashboard(args: argparse.Namespace) -> int:
         print(f"connector {c}  (used by {', '.join(sorted(set(users)))})")
     for m in res.version_mismatch:
         print(f"warning: {m}", file=sys.stderr)
+    for comp, users in sorted(res.unresolved_components.items()):
+        print(f"error: <{comp}> used by {', '.join(users)} is registered by no installed widget", file=sys.stderr)
     for m in res.missing:
         print(f"error: dashboard places {m}, not on this box", file=sys.stderr)
-    return 1 if res.missing else 0
+    return 1 if res.missing or res.unresolved_components else 0
 
 
 def cmd_rm(args: argparse.Namespace) -> int:

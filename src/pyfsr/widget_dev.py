@@ -365,6 +365,12 @@ _NESTED_TYPE_RE = re.compile(r"""['"]([A-Za-z][A-Za-z0-9_]*)-(\d+\.\d+\.\d+)['"]
 # The connector passed first to an execute helper, e.g.
 # ``executeAction('fortinet-fortiguard-outbreak', ...)``.
 _CONNECTOR_CALL_RE = re.compile(r"""execute\w*\(\s*['"]([a-z0-9][a-z0-9_-]*)['"]""", re.IGNORECASE)
+# Custom elements a template uses, e.g. ``<progress-card-component ...>``.
+_ELEMENT_RE = re.compile(r"<([a-z][a-z0-9]*(?:-[a-z0-9]+)+)[\s>/]")
+# Components / directives a script registers, e.g. ``.component('progressCardComponent', ...)``.
+_REGISTER_RE = re.compile(r"""\.(?:component|directive)\(\s*['"]([A-Za-z][A-Za-z0-9_]*)['"]""")
+#: Element prefixes the platform (or AngularJS / ui-bootstrap) defines itself.
+PLATFORM_ELEMENT_PREFIXES = ("cs-", "ng-", "ui-", "uib-", "data-", "x-", "md-", "fs-")
 
 
 def dashboard_widget_refs(dashboard: dict | list) -> set[tuple[str, str]]:
@@ -406,14 +412,25 @@ def _widget_code_texts(tgz: str | Path):
             if m.isfile() and m.name.endswith((".js", ".html")):
                 f = tar.extractfile(m)
                 if f is not None:
-                    yield f.read().decode("utf-8", errors="replace")
+                    yield m.name, f.read().decode("utf-8", errors="replace")
+
+
+def _camel(tag: str) -> str:
+    head, *rest = tag.split("-")
+    return head + "".join(p[:1].upper() + p[1:] for p in rest)
 
 
 def widget_code_refs(tgz: str | Path) -> dict[str, set]:
     """Candidate dependencies named in a widget archive's ``.js``/``.html``.
 
     Returns ``{"widgets": {name, ...}, "widget_types": {(name, version), ...},
-    "connectors": {name, ...}}``. These are *candidates* read from source text:
+    "connectors": {name, ...}, "provides": {component, ...},
+    "needs_components": {component, ...}}``. ``needs_components`` are custom
+    elements its templates use (camelCased) that its own scripts do not
+    register and that are not platform elements (``cs-*`` etc.): some other
+    installed widget must register them, since the platform loads every
+    installed widget's scripts globally (e.g. ``<progress-card-component>``
+    comes from the ``utilities`` widget). These are *candidates* read from source text:
     check them against the box's installed widgets / connectors before
     trusting them (see :meth:`pyfsr.api.widgets.WidgetsAPI.export_dashboard`).
     The widget's own name is left out.
@@ -422,13 +439,26 @@ def widget_code_refs(tgz: str | Path) -> dict[str, set]:
     widgets: set[str] = set()
     types: set[tuple[str, str]] = set()
     connectors: set[str] = set()
-    for text in _widget_code_texts(tgz):
-        widgets.update(_NESTED_NAME_RE.findall(text))
-        types.update(_NESTED_TYPE_RE.findall(text))
-        connectors.update(_CONNECTOR_CALL_RE.findall(text))
+    elements: set[str] = set()
+    provides: set[str] = set()
+    for name, text in _widget_code_texts(tgz):
+        if name.endswith(".js"):
+            widgets.update(_NESTED_NAME_RE.findall(text))
+            types.update(_NESTED_TYPE_RE.findall(text))
+            connectors.update(_CONNECTOR_CALL_RE.findall(text))
+            provides.update(_REGISTER_RE.findall(text))
+        else:
+            elements.update(t for t in _ELEMENT_RE.findall(text) if not t.startswith(PLATFORM_ELEMENT_PREFIXES))
     widgets.discard(own)
     types = {t for t in types if t[0] != own}
-    return {"widgets": widgets, "widget_types": types, "connectors": connectors}
+    needs = {_camel(t) for t in elements} - provides
+    return {
+        "widgets": widgets,
+        "widget_types": types,
+        "connectors": connectors,
+        "provides": provides,
+        "needs_components": needs,
+    }
 
 
 def set_widget_compatibility(tgz: str | Path, compatibility: list[str]) -> bool:

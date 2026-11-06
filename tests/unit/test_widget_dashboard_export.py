@@ -152,3 +152,65 @@ def test_pack_set_widget_compatibility(tmp_path: Path):
     with tarfile.open(out) as tf:
         assert "w-1.0.0/view.controller.js" in tf.getnames()
     assert pack.set_widget_compatibility(["7.6.0"]) == []
+
+
+class _ComponentClient(_Client):
+    """Analytics uses <progress-card-component>; only `utilities` registers it."""
+
+    ARCH = {
+        "u-ana": _tgz(
+            "analytics",
+            "1.0.0",
+            {"view.html": '<cs-spinner></cs-spinner><progress-card-component card-config="c">', "v.js": ""},
+        ),
+        "u-util": _tgz(
+            "utilities",
+            "1.0.0",
+            {"c.js": "angular.module('cybersponse').component('progressCardComponent', {});"},
+        ),
+        "u-other": _tgz("other", "2.0.0", {"o.js": "var x;"}),
+        "u-orphan": _tgz("orphan", "1.0.0", {"view.html": "<ghost-thing></ghost-thing>"}),
+    }
+
+    def __init__(self, dashboard):
+        super().__init__()
+        self.dashboard = dashboard
+
+    def get(self, endpoint, params=None, **_):
+        if endpoint.startswith("/api/3/dashboard/"):
+            return self.dashboard
+        rows = [("u-ana", "analytics", "1.0.0"), ("u-other", "other", "2.0.0"), ("u-util", "utilities", "1.0.0")]
+        rows.append(("u-orphan", "orphan", "1.0.0"))
+        return {"hydra:member": [{"uuid": u, "name": n, "version": v, "installed": True} for u, n, v in rows]}
+
+    def request(self, method, endpoint, **_):
+        uuid = endpoint.rsplit("/", 1)[-1]
+        self.exported.append(uuid)
+        return SimpleNamespace(content=self.ARCH[uuid])
+
+
+def _dash(*types):
+    return {"config": {"rows": [{"columns": [{"widgets": [{"type": t} for t in types]}]}]}}
+
+
+def test_code_refs_component_needs(tmp_path: Path):
+    p = tmp_path / "a.tgz"
+    p.write_bytes(_ComponentClient.ARCH["u-ana"])
+    refs = widget_code_refs(p)
+    assert refs["needs_components"] == {"progressCardComponent"}  # cs-spinner is platform
+
+
+def test_export_dashboard_finds_component_owner(tmp_path: Path):
+    client = _ComponentClient(_dash("analytics-1.0.0"))
+    res = client.widgets.export_dashboard("d", tmp_path / "out")
+    got = {(w.name, w.via) for w in res.widgets}
+    assert got == {("analytics", "dashboard"), ("utilities", "<progressCardComponent> in analytics")}
+    assert res.unresolved_components == {}
+    assert (tmp_path / "out/utilities-1.0.0.tgz").is_file()
+    assert client.exported.count("u-util") == 1  # scanned copy reused, not exported twice
+
+
+def test_export_dashboard_reports_unresolved_component(tmp_path: Path):
+    res = _ComponentClient(_dash("orphan-1.0.0")).widgets.export_dashboard("d", tmp_path / "out")
+    assert res.unresolved_components == {"ghostThing": ["orphan"]}
+    assert [w.name for w in res.widgets] == ["orphan"]

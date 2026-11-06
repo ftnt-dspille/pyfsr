@@ -412,6 +412,7 @@ def add_dashboard(client, pack: Pack, uuid_or_name: str, *, dependencies: bool =
         "connectors": [],
         "missing": [],
         "version_mismatch": [],
+        "unresolved_components": {},
     }
     if not dependencies:
         return result
@@ -427,6 +428,7 @@ def add_dashboard(client, pack: Pack, uuid_or_name: str, *, dependencies: bool =
         result["connectors"].append({"name": row["name"], "version": row["version"], "used_by": deps.connectors[name]})
     result["missing"] = deps.missing
     result["version_mismatch"] = deps.version_mismatch
+    result["unresolved_components"] = deps.unresolved_components
     return result
 
 

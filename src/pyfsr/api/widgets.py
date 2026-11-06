@@ -46,6 +46,7 @@ Example:
 from __future__ import annotations
 
 import json
+import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -80,6 +81,8 @@ class DashboardExport:
     missing: list[str] = field(default_factory=list)
     """Widgets the dashboard places that the box does not have."""
     version_mismatch: list[str] = field(default_factory=list)
+    unresolved_components: dict[str, list[str]] = field(default_factory=dict)
+    """Custom elements a widget uses that no installed widget registers -> the widgets using them."""
 
 
 _UPLOAD_CONFLICT_MARKER = "already exists in widget workspace"
@@ -445,6 +448,13 @@ class WidgetsAPI(BaseAPI):
         Candidates read from code are kept only when the box has a widget by that
         name, so stray strings never become exports.
 
+        A widget can also use a custom element that another widget registers
+        (the platform loads every installed widget's scripts globally): for
+        example FortiGuard Threat Analytics renders ``<progress-card-component>``,
+        which the ``utilities`` widget defines. Such components are found by
+        scanning the box's other installed widgets, and their owners are
+        exported too; any still unfound land in ``unresolved_components``.
+
         Connector names the widgets pass to an execute helper are collected
         (checked against the installed connectors) but not exported; see
         ``connectors`` on the result.
@@ -474,7 +484,22 @@ class WidgetsAPI(BaseAPI):
             (n, v, "dashboard") for n, v in sorted(dashboard_widget_refs(record))
         ]
         seen: set[str] = set()
-        while queue:
+        needs: dict[str, list[str]] = {}  # component -> widgets that use it
+        provided: set[str] = set()
+        scanned: dict[str, tuple[WidgetRecord, Path, set[str]]] = {}  # key -> (record, tgz, provides)
+        searched = False
+        while True:
+            if not queue:
+                missing = {c: u for c, u in needs.items() if c not in provided}
+                if not (nested and missing) or searched:
+                    result.unresolved_components = {c: sorted(set(u)) for c, u in missing.items()}
+                    break
+                searched = True
+                for comp, users in sorted(missing.items()):
+                    owner = self._find_component_owner(comp, by_name, seen, scanned)
+                    if owner is not None:
+                        queue.append((owner.name or "", owner.version, f"<{comp}> in {', '.join(sorted(set(users)))}"))
+                continue
             name, version, via = queue.pop(0)
             candidates = by_name.get(name, [])
             exact = [r for r in candidates if version and r.version == version]
@@ -492,9 +517,15 @@ class WidgetsAPI(BaseAPI):
             if version and rec.version != version:
                 result.version_mismatch.append(f"{name}: dashboard wants {version}, box has {rec.version}")
             dest = out_dir / f"{key}.tgz"
-            self.export(rec.uuid, str(dest))
+            if key in scanned:
+                shutil.copyfile(scanned[key][1], dest)
+            else:
+                self.export(rec.uuid, str(dest))
             result.widgets.append(ExportedWidget(name=rec.name, version=rec.version, path=str(dest), via=via))
             refs = widget_code_refs(dest)
+            provided |= refs["provides"]
+            for comp in refs["needs_components"]:
+                needs.setdefault(comp, []).append(rec.name or "")
             if refs["connectors"]:
                 if installed_connectors is None:
                     installed_connectors = {c.name for c in self.client.connectors.list_configured() if c.name}
@@ -506,6 +537,46 @@ class WidgetsAPI(BaseAPI):
                     if n in by_name:
                         queue.append((n, v, rec.name))
         return result
+
+    def _find_component_owner(
+        self,
+        component: str,
+        by_name: dict[str, list[WidgetRecord]],
+        exported: set[str],
+        scanned: dict[str, tuple[WidgetRecord, Path, set[str]]],
+    ) -> WidgetRecord | None:
+        """The installed widget whose scripts register ``component``.
+
+        Exports the newest installed version of each widget not already
+        exported, one at a time (parallel exports can 502 the appliance), and
+        caches what each provides so several missing components cost one pass.
+        """
+        import tempfile
+
+        from ..widget_dev import widget_code_refs
+
+        for key, (rec, _path, provides) in scanned.items():
+            if component in provides and key not in exported:
+                return rec
+        tmp = Path(tempfile.mkdtemp(prefix="pyfsr-widget-scan-"))
+        for name in sorted(by_name):
+            live = [r for r in by_name[name] if r.installed and r.uuid]
+            if not live:
+                continue
+            rec = max(live, key=lambda r: _version_key(r.version))
+            key = f"{rec.name}-{rec.version}"
+            if key in exported or key in scanned:
+                continue
+            path = tmp / f"{key}.tgz"
+            try:
+                self.export(rec.uuid or "", str(path))
+                provides = widget_code_refs(path)["provides"]
+            except Exception:
+                continue
+            scanned[key] = (rec, path, provides)
+            if component in provides:
+                return rec
+        return None
 
     # ---------------------------------------------------------------- remove
     def remove(self, uuid: str) -> None:

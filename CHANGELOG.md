@@ -18,6 +18,12 @@ All notable changes to this project will be documented in this file.
   itself) and exports those too. Also reports the installed connectors the
   widgets call, widgets the box is missing, and version mismatches. Pure
   scanners `dashboard_widget_refs` / `widget_code_refs` live in `widget_dev`.
+  It also finds widgets that provide a custom element another widget uses: the
+  platform loads every installed widget's scripts globally, so FortiGuard
+  Threat Analytics renders `<progress-card-component>` from the `utilities`
+  widget without naming it. The other installed widgets are exported one at a
+  time to find the one that registers each such component; any left unfound
+  are reported in `unresolved_components` (CLI exits 1).
 - **`pyfsr pack add-dashboard` bundles the dashboard's dependencies**: every
   widget it needs (nested included) and every installed connector those
   widgets call, as tgz installers. `--no-dependencies` keeps the old
