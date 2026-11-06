@@ -39,7 +39,9 @@ Or with named instances (`~/.pyfsr/instances.toml`):
 ```bash
 pyfsr instances list                 # every alias: base URL, auth kind
 pyfsr instances show 206             # one instance's resolved settings
-pyfsr instances check                # connect to each box; exit 1 if any fails
+pyfsr instances check                # connect to each box; exit 1 if any fails (--offline: resolve only)
+pyfsr instances env 206              # FSR_*/PYFSR_APPLIANCE_* as KEY=VALUE (--format shell|json, --field, --env-file-path)
+pyfsr instances ssh-target 206       # ssh args for the box (appliance subtable, else base_url host)
 ```
 
 ## Playbook authoring + deployment (pyfsr CLI)

@@ -216,6 +216,8 @@ class InstanceRegistry:
     configs: dict[str, EnvConfig]
     default: str | None = None
     appliance_specs: dict[str, ApplianceSpec] = field(default_factory=dict)
+    # alias -> absolute path of the backing ``env_file`` (absent for inline entries).
+    env_files: dict[str, Path] = field(default_factory=dict)
     _clients: dict[str, FortiSOAR] = field(default_factory=dict, repr=False, compare=False)
 
     # -- constructors -------------------------------------------------------
@@ -259,6 +261,7 @@ class InstanceRegistry:
         base_dir = path.parent
         configs: dict[str, EnvConfig] = {}
         appliance_specs: dict[str, ApplianceSpec] = {}
+        env_files: dict[str, Path] = {}
         for alias, spec in raw.items():
             if not isinstance(spec, dict):
                 raise ValueError(f"{path}: [instances.{alias}] must be a table")
@@ -271,6 +274,7 @@ class InstanceRegistry:
                 # in the process would override every instance identically.
                 file_vars = _parse_env_text(ef.read_text(encoding="utf-8"))
                 configs[alias] = EnvConfig.from_env(file_vars)
+                env_files[alias] = ef
             else:
                 configs[alias] = EnvConfig.from_mapping(spec, source=f"{path} [instances.{alias}]")
 
@@ -291,7 +295,7 @@ class InstanceRegistry:
             raise ValueError(f"{path}: default = {default!r} is not a defined instance")
         if default is None and len(configs) == 1:
             default = next(iter(configs))
-        return cls(configs=configs, default=default, appliance_specs=appliance_specs)
+        return cls(configs=configs, default=default, appliance_specs=appliance_specs, env_files=env_files)
 
     @classmethod
     def from_single_env(cls, env: dict[str, str] | None = None) -> InstanceRegistry:
