@@ -214,3 +214,11 @@ def test_export_dashboard_reports_unresolved_component(tmp_path: Path):
     res = _ComponentClient(_dash("orphan-1.0.0")).widgets.export_dashboard("d", tmp_path / "out")
     assert res.unresolved_components == {"ghostThing": ["orphan"]}
     assert [w.name for w in res.widgets] == ["orphan"]
+
+
+def test_safe_filename_blocks_traversal():
+    from pyfsr.api.widgets import _safe_filename
+
+    assert _safe_filename("../../etc/x-1.0.0.tgz") == "_.._etc_x-1.0.0.tgz"
+    assert "/" not in _safe_filename("a/b-1.0.0.tgz")
+    assert _safe_filename("..") == "widget.tgz"

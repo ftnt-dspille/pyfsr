@@ -46,6 +46,7 @@ Example:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import time
 from dataclasses import dataclass, field
@@ -516,7 +517,7 @@ class WidgetsAPI(BaseAPI):
             seen.add(key)
             if version and rec.version != version:
                 result.version_mismatch.append(f"{name}: dashboard wants {version}, box has {rec.version}")
-            dest = out_dir / f"{key}.tgz"
+            dest = out_dir / _safe_filename(f"{key}.tgz")
             if key in scanned:
                 shutil.copyfile(scanned[key][1], dest)
             else:
@@ -567,7 +568,7 @@ class WidgetsAPI(BaseAPI):
             key = f"{rec.name}-{rec.version}"
             if key in exported or key in scanned:
                 continue
-            path = tmp / f"{key}.tgz"
+            path = tmp / _safe_filename(f"{key}.tgz")
             try:
                 self.export(rec.uuid or "", str(path))
                 provides = widget_code_refs(path)["provides"]
@@ -582,6 +583,12 @@ class WidgetsAPI(BaseAPI):
     def remove(self, uuid: str) -> None:
         """Delete a widget record — ``DELETE /api/3/delete/widgets`` with ``{"ids": [uuid]}``."""
         self.client.request("DELETE", "/api/3/delete/widgets", data={"ids": [uuid]})
+
+
+def _safe_filename(name: str) -> str:
+    """``name`` made safe as one path component (appliance-supplied names/versions)."""
+    cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", name).lstrip(".")
+    return cleaned or "widget.tgz"
 
 
 def _version_key(version: str | None) -> tuple:
