@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Widget upload/deploy works with an API key** (FortiSOC tenants). The
+  Content-Hub installer route answers an API key with 401, so an API-key client
+  now uploads through `POST /api/3/widgets/import` (the Import Wizard's own
+  route), which installs the widget live in one step; `deploy` then skips the
+  publish. Live-verified with `pyfsr widget deploy` on a FortiSOC 7.6.6 tenant.
 - **`import_file` re-versions bundled installers the box would skip**
   (`bump_existing=True`, default). The importer skips a tgz widget whose exact
   name+version is installed, and a tgz connector unless the pack's version beats

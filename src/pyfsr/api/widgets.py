@@ -49,6 +49,7 @@ import json
 import time
 from pathlib import Path
 
+from ..auth.api_key import APIKeyAuth
 from ..exceptions import APIError, WidgetIncompatible, WidgetPublishError, WidgetUploadConflict
 from ..models._widgets import WidgetRecord
 from ..pagination import extract_members
@@ -115,11 +116,16 @@ class WidgetsAPI(BaseAPI):
     def upload(self, path: str, *, replace: bool = True) -> WidgetRecord:
         """Upload a widget ``.tgz`` (or pack a widget **folder** first) — step 1 of deploy.
 
-        Posts to the shared solution-pack installer (``POST
-        /api/3/solutionpacks/install?$type=widget``) — there is no dedicated
-        ``widgets/import`` endpoint. Lands the widget in the *development*
-        workspace (``draft:true, installed:false``); it is **not live** until
-        :meth:`publish`.
+        With a username/password (JWT) client, posts to the shared solution-pack
+        installer (``POST /api/3/solutionpacks/install?$type=widget``). That
+        lands the widget in the *development* workspace (``draft:true,
+        installed:false``); it is **not live** until :meth:`publish`.
+
+        With an **API-key** client, that route answers 401 (live-verified on a
+        FortiSOC 7.6.6 tenant), so the upload goes through ``POST
+        /api/3/widgets/import`` instead -- the route the Import Wizard uses for a
+        bundled widget. It installs the widget **live** in one step and returns
+        the installed record, so :meth:`deploy` skips the publish step.
 
         A **directory** path is packed first with :func:`pyfsr.widget_dev.pack_widget`
         (required-file check, junk/AppleDouble exclusion, ``<name>-<version>``
@@ -153,7 +159,7 @@ class WidgetsAPI(BaseAPI):
         Example:
             >>> import io, tarfile, tempfile
             >>> from pathlib import Path
-            >>> client = demo_client()
+            >>> client = demo_client_jwt()  # username/password: the draft-upload path
             >>> with tempfile.TemporaryDirectory() as tmp:
             ...     tgz = Path(tmp) / "jinjaEditorWidget-1.1.3.tgz"
             ...     with tarfile.open(tgz, "w:gz") as tar:
@@ -168,6 +174,8 @@ class WidgetsAPI(BaseAPI):
         if Path(path).is_dir():
             path = pack_widget(path)
         self.check_compatible(path)
+        if _is_api_key(self.client):
+            return self._import_live(path, replace=replace)
         try:
             resp = upload_solutionpack(self.client, path, type_="widget", replace=replace)
         except APIError as exc:
@@ -175,6 +183,31 @@ class WidgetsAPI(BaseAPI):
                 raise WidgetUploadConflict(exc.message) from exc
             raise
         return WidgetRecord.model_validate(resp)
+
+    def _import_live(self, path: str | Path, *, replace: bool = True) -> WidgetRecord:
+        """Install a widget ``.tgz`` through ``POST /api/3/widgets/import`` (API-key path).
+
+        The Content-Hub installer route (``/api/3/solutionpacks/install``) answers
+        an API key with 401 "An authentication exception occurred." on FortiSOC
+        (live-verified on 7.6.6). ``/api/3/widgets/import`` is the route the
+        Import Wizard itself calls for a bundled widget (``WidgetConfig::
+        importFromFile``); it accepts an API key and installs the widget **live**
+        in one step (``installed:true, draft:false``), so there is nothing to
+        publish afterwards. Returns the installed record.
+        """
+        info = widget_info_from_tgz(path)
+        name, version = str(info.get("name")), str(info.get("version"))
+        with open(path, "rb") as fh:
+            self.client.request(
+                "POST",
+                "/api/3/widgets/import",
+                data={"replace": "true" if replace else "false"},
+                files={"file": (Path(path).name, fh, "application/gzip")},
+            )
+        record = next((r for r in self.list(name=name) if r.version == version), None)
+        if record is None:
+            raise WidgetPublishError(host=self.client.base_url, name=name, version=version)
+        return record
 
     # --------------------------------------------------------------- publish
     def publish(self, uuid: str, *, replace: bool = True, go_live: bool = True) -> WidgetRecord:
@@ -267,6 +300,9 @@ class WidgetsAPI(BaseAPI):
             WidgetPublishError: ``wait=True`` and the widget never settled live.
         """
         uploaded = self.upload(path, replace=replace)
+        if uploaded.published:
+            # API-key upload goes through /api/3/widgets/import, which installs live.
+            return uploaded
         published = self.publish(uploaded.uuid, replace=replace, go_live=True)
         if not wait:
             return published
@@ -409,3 +445,8 @@ def _peek_widget_manifest(path: str, _tarfile) -> tuple[str | None, str | None]:
             return data.get("name"), data.get("version")
     except Exception:
         return None, None
+
+
+def _is_api_key(client: object) -> bool:
+    """True when ``client`` authenticates with an API key (no JWT)."""
+    return isinstance(getattr(client, "auth", None), APIKeyAuth)

@@ -95,3 +95,41 @@ def test_import_postcheck_passes_when_installed_or_not_requested():
     ImportConfigAPI(_Client(installed=[("mapDemo", "1.0.0")]))._verify_bundled_widgets(_job(wanted))
     skipped = [{**wanted[0], "exists": True, "include": False}]
     ImportConfigAPI(_Client())._verify_bundled_widgets(_job(skipped))
+
+
+# -- API-key upload path ----------------------------------------------------------
+
+
+def test_api_key_upload_uses_widgets_import_and_deploy_skips_publish(tmp_path: Path):
+    from pyfsr.auth.api_key import APIKeyAuth
+
+    tgz = tmp_path / "mapDemo-1.0.0.tgz"
+    tgz.write_bytes(_tgz_bytes("mapDemo", ["7.6.0"]))
+    calls = []
+
+    class _KeyClient:
+        base_url = "https://fsoc.example.com"
+        auth = APIKeyAuth.__new__(APIKeyAuth)
+
+        def __init__(self):
+            self.widgets = WidgetsAPI(self)
+
+        def version_tuple(self, **_):
+            return (7, 6, 6)
+
+        def request(self, method, endpoint, data=None, files=None, **_):
+            calls.append((method, endpoint, data, sorted(files or {})))
+
+        def get(self, endpoint, params=None, **_):
+            return {
+                "hydra:member": [
+                    {"uuid": "u1", "name": "mapDemo", "version": "1.0.0", "installed": True, "draft": False}
+                ]
+            }
+
+        def put(self, *a, **k):
+            raise AssertionError("publish must not run for an API-key upload")
+
+    rec = _KeyClient().widgets.deploy(str(tgz))
+    assert calls == [("POST", "/api/3/widgets/import", {"replace": "true"}, ["file"])]
+    assert rec.published and rec.version == "1.0.0"
