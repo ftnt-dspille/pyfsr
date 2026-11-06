@@ -6,6 +6,29 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`import_file` re-versions bundled installers the box would skip**
+  (`bump_existing=True`, default). The importer skips a tgz widget whose exact
+  name+version is installed, and a tgz connector unless the pack's version beats
+  the installed one with the dots dropped (`1.0.10` beats `1.1.0`). So a
+  re-import of changed code at the same version used to keep the old code
+  silently. Such a widget or connector now gets the next free patch version
+  first, starting from the newest version on the box and skipping dotless
+  collisions (`1.0.11` vs `10.1.1`). Widgets are rewritten with the widget
+  harness's rules: `<name><digits>[Dev]Ctrl` / `edit<Name><digits>[Dev]Ctrl`
+  in every case form (the `Dev` suffix kept as found), `<name>-X.Y.Z` paths and
+  bare ids (extensions such as `.tgz` kept, which the harness regex dropped), and
+  info.json. A controller check (the harness's `validateControllers`) refuses a
+  re-versioned widget whose registrations still carry other digits. Every other
+  JSON file in the zip that names `<name>-<old>`, such as a dashboard's widget
+  type, follows. The source zip is not modified; `result.bumpedInstallers` lists
+  what changed. New helpers in `widget_dev`: `rewrite_widget_text`,
+  `rewrite_widget_version`, `rebundle_widget_with_version`, `next_free_version`,
+  `widget_controller_problems`.
+- **`import_file` retires superseded widget versions** (`retire_superseded=True`).
+  After a bumped widget is confirmed installed, every other installed version of
+  it is removed unless a dashboard still names it. Every installed version's
+  scripts load on every page and register their directives/services globally,
+  so the old copies kept running.
 - **Widget compatibility fail-fast.** `widget_dev.widget_compatibility_error`
   mirrors the appliance's `WidgetController::checkCompatibilityVersion`: the
   **highest** version in `metadata.compatibility` must be >= 7.0.2 and <= the
@@ -20,6 +43,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`pack_widget` creates a missing output folder** instead of failing to open the archive.
 - **`Pack.sync_contents` widget claims.** `info.json` `contents.widgets` is now
   `{apiName, name: <title>}`; the bare `{name}` it wrote left the importer's
   widget list empty.

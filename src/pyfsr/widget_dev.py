@@ -22,6 +22,7 @@ Pitfalls this packing rules out:
 from __future__ import annotations
 
 import json
+import re
 import tarfile
 from pathlib import Path
 
@@ -102,6 +103,7 @@ def pack_widget(source_dir: str, output: str | None = None) -> str:
     out = Path(output) if output else src.parent / f"{root}.tgz"
     if out.is_dir() or (not out.suffix and not out.exists()):
         out = out / f"{root}.tgz"
+    out.parent.mkdir(parents=True, exist_ok=True)
 
     def _filter(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
         parts = Path(info.name).parts
@@ -172,3 +174,179 @@ def widget_info_from_tgz(tgz: str | Path) -> dict:
         fh = tf.extractfile(hits[0])
         assert fh is not None
         return json.loads(fh.read())
+
+
+# --------------------------------------------------------------------------
+# Version bumping. A widget's version is baked into more than info.json: the
+# controller registrations are ``<name><dotless-version>[Dev]Ctrl`` and
+# ``edit<Name><dotless-version>[Dev]Ctrl`` (the platform derives the expected
+# name from info.json at install time, so a mismatch mounts nothing, with no
+# error), and asset paths / bare widget ids carry ``<name>-X.Y.Z``. These rules
+# mirror the widget harness's ``rewriteForVersion`` (packager.js).
+# --------------------------------------------------------------------------
+
+_TEXT_SUFFIXES = (".js", ".html", ".htm", ".css", ".json", ".ts")
+
+
+def _variations(name: str) -> list[str]:
+    out: list[str] = []
+    for v in (name, name[:1].upper() + name[1:], name[:1].lower() + name[1:]):
+        if v and v not in out:
+            out.append(v)
+    return out
+
+
+def rewrite_widget_text(text: str, name: str, version: str, *, dev: bool | None = None) -> str:
+    """Point every version-bearing reference in ``text`` at ``version``.
+
+    - ``<name>-X.Y.Z`` followed by ``/`` or a non-version character (asset
+      paths and bare widget ids) becomes ``<name>-<version>``;
+    - ``edit<Name><digits>[Dev]Ctrl`` and ``<name><digits>[Dev]Ctrl`` (every
+      case form of the name) get the new dotless version. The ``Dev`` suffix
+      is kept as found unless ``dev`` forces it on or off;
+    - a bare ``<name>Ctrl`` / ``edit<Name>Ctrl`` gets the version inserted.
+
+    Idempotent: running it twice with the same version changes nothing.
+    """
+    num = _dotless_str(version)
+    # `<name>-X.Y[.Z]` with no suffix group: the harness's rewrite regex had an
+    # optional `[-.][A-Za-z0-9.]+` tail that also swallowed `.tgz`/`.min`, so
+    # `<name>-1.0.0.tgz` lost its extension. Stop at the last numeric segment.
+    path_re = re.compile(rf"\b{re.escape(name)}-\d+(?:\.\d+)+(?![\d])")
+    text = path_re.sub(f"{name}-{version}", text)
+
+    def suffix(found: str | None) -> str:
+        if dev is None:
+            return found or ""
+        return "Dev" if dev else ""
+
+    for w in _variations(name):
+        esc = re.escape(w)
+        text = re.sub(rf"edit{esc}\d+(Dev)?Ctrl", lambda m, w=w: f"edit{w}{num}{suffix(m.group(1))}Ctrl", text)
+        text = re.sub(rf"(?<!edit){esc}\d+(Dev)?Ctrl", lambda m, w=w: f"{w}{num}{suffix(m.group(1))}Ctrl", text)
+        text = re.sub(rf"\bedit{esc}Ctrl\b", lambda m, w=w: f"edit{w}{num}{suffix(None)}Ctrl", text)
+        text = re.sub(rf"(?<!edit)\b{esc}Ctrl\b", lambda m, w=w: f"{w}{num}{suffix(None)}Ctrl", text)
+    return text
+
+
+def _dotless_str(version: str) -> str:
+    return str(version).split("-", 1)[0].replace(".", "")
+
+
+def rewrite_widget_version(widget_dir: str | Path, version: str) -> list[Path]:
+    """Re-version a widget folder in place: info.json plus every text reference.
+
+    Returns the files that changed. The folder itself is not renamed; the
+    ``<name>-<version>`` archive root comes from :func:`pack_widget`.
+    """
+    root = Path(widget_dir)
+    info_path = root / "info.json"
+    info = json.loads(info_path.read_text(encoding="utf-8"))
+    name = info["name"]
+    changed: list[Path] = []
+    for p in sorted(root.rglob("*")):
+        if not p.is_file() or p.name == "info.json" or not p.name.endswith(_TEXT_SUFFIXES):
+            continue
+        if any(part in _EXCLUDE_DIRS for part in p.relative_to(root).parts) or p.name.startswith("._"):
+            continue
+        try:
+            before = p.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        after = rewrite_widget_text(before, name, version)
+        if after != before:
+            p.write_text(after, encoding="utf-8")
+            changed.append(p)
+    info["version"] = version
+    info_path.write_text(json.dumps(info, indent=4) + "\n", encoding="utf-8")
+    changed.append(info_path)
+    return changed
+
+
+def rebundle_widget_with_version(tgz: str | Path, version: str, out_dir: str | Path | None = None) -> str:
+    """A copy of a widget ``.tgz`` re-versioned to ``version`` (source untouched).
+
+    Extracts, runs :func:`rewrite_widget_version`, and re-packs with
+    :func:`pack_widget`, so the archive root becomes ``<name>-<version>/``.
+    """
+    import tempfile
+
+    work = Path(tempfile.mkdtemp(prefix="pyfsr-widget-bump-"))
+    with tarfile.open(tgz, "r:gz") as tf:
+        tf.extractall(work, filter="data")
+    roots = [p for p in work.iterdir() if p.is_dir() and (p / "info.json").exists()]
+    if len(roots) != 1:
+        raise ValueError(f"{Path(tgz).name}: expected one <name>-<version>/ root with info.json, found {len(roots)}")
+    rewrite_widget_version(roots[0], version)
+    problems = widget_controller_problems(roots[0])
+    if problems:
+        raise ValueError(f"{Path(tgz).name} re-versioned to {version} but: " + "; ".join(problems))
+    dest = Path(out_dir) if out_dir else Path(tempfile.mkdtemp(prefix="pyfsr-widget-out-"))
+    return pack_widget(str(roots[0]), str(dest))
+
+
+def next_free_version(current: str, taken: list[str] | set[str], *, must_exceed: list[str] | None = None) -> str:
+    """Patch-bump ``current`` until it is free on the box.
+
+    Free means: not an existing version, no existing version with the same
+    dotless number (``1.0.10`` and ``10.1.0`` both register ``...1010Ctrl``), and,
+    when ``must_exceed`` is given, a dotless number above every one of those
+    (the connector importer only installs over an older version, compared as
+    dotless integers, so ``1.0.10`` beats ``1.1.0``).
+    """
+    taken_set = {str(t) for t in taken}
+    taken_num = {_dotless(t) for t in taken_set} - {None}
+    floor = max((n for n in (_dotless(v) for v in (must_exceed or [])) if n is not None), default=None)
+
+    def semver(v: str) -> list[int]:
+        out = [int(x) if x.isdigit() else 0 for x in str(v).split("-", 1)[0].split(".")]
+        return (out + [0, 0, 0])[:3]
+
+    # Start from the highest version anyone holds, so a pack at 1.0.0 against
+    # an installed 1.1.0 lands on 1.1.1, not 1.0.11.
+    parts = max([semver(current)] + [semver(v) for v in taken_set | set(must_exceed or [])])
+    for _ in range(10_000):
+        parts[2] += 1
+        cand = ".".join(map(str, parts[:3]))
+        n = _dotless(cand)
+        if cand in taken_set or n in taken_num:
+            continue
+        if floor is not None and (n is None or n <= floor):
+            continue
+        return cand
+    raise ValueError(f"no free version found above {current}")
+
+
+def widget_controller_problems(widget_dir: str | Path) -> list[str]:
+    """Controller registrations that do not match info.json's version.
+
+    The platform resolves ``<name><dotless>[Dev]Ctrl`` / ``edit<Name><dotless>[Dev]Ctrl``
+    from info.json; a registration with other digits mounts nothing, silently.
+    Mirrors the widget harness's ``validateControllers``. Empty list = consistent.
+    """
+    root = Path(widget_dir)
+    info = json.loads((root / "info.json").read_text(encoding="utf-8"))
+    name, version = str(info.get("name") or ""), str(info.get("version") or "")
+    if not name or not version:
+        return ["info.json has no name/version"]
+    digits = _dotless_str(version)
+    alt = "|".join(re.escape(v) for v in _variations(name))
+    pats = {
+        "view.controller.js": re.compile(rf"^(?:{alt})(\d+)(?:Dev)?Ctrl$"),
+        "edit.controller.js": re.compile(rf"^edit(?:{alt})(\d+)(?:Dev)?Ctrl$"),
+    }
+    out: list[str] = []
+    for fname, pat in pats.items():
+        p = root / fname
+        if not p.exists():
+            out.append(f"{fname} missing")
+            continue
+        regs = re.findall(r"\.controller\(\s*['\"]([^'\"]+)['\"]", p.read_text(encoding="utf-8"))
+        ours = [(r, pat.match(r)) for r in regs]
+        matched = [(r, m) for r, m in ours if m]
+        if not matched:
+            out.append(f"{fname} registers no controller shaped like {pat.pattern} (found {regs})")
+        for r, m in matched:
+            if m.group(1) != digits:
+                out.append(f"{fname} registers {r}, digits {m.group(1)} != {digits} from version {version}")
+    return out

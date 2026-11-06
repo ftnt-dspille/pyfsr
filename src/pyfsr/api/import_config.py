@@ -44,6 +44,7 @@ Example:
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import time
 import zipfile
@@ -431,6 +432,8 @@ class ImportConfigAPI(BaseAPI):
         options_timeout: float = 120.0,
         settle: bool = True,
         settle_timeout: float = 300.0,
+        bump_existing: bool = True,
+        retire_superseded: bool = True,
     ) -> ImportJobResult:
         """Import a Configuration-Export ``.zip`` end-to-end.
 
@@ -482,6 +485,26 @@ class ImportConfigAPI(BaseAPI):
                 ``wait=False``.
             settle_timeout: give up waiting on the schema cache to settle after
                 this many seconds (default 300); does not raise.
+            bump_existing: re-version bundled installers the box would skip
+                (default True). The importer skips a tgz widget whose exact
+                name+version is installed, and a tgz connector unless the pack's
+                version beats the installed one (dots dropped, compared as
+                integers) -- so a re-import of changed code at the same version
+                silently keeps the old code. With this on, such a widget or
+                connector gets the next free patch version first (the widget's
+                controllers and ``<name>-X.Y.Z`` references are rewritten to
+                match, and every other file in the zip that names
+                ``<name>-<old>`` -- e.g. a dashboard's widget type -- follows).
+                What changed is on the result's ``bumpedInstallers``. The
+                source zip is never modified.
+            retire_superseded: after a bumped widget is confirmed installed,
+                remove the version it replaced (default True). Every installed
+                version's scripts load on every page, and a widget's directives
+                and services register globally, so the old and new copies would
+                both run. Every other installed version of that widget is
+                removed unless a dashboard on the box still names
+                ``<name>-<version>``; each bump entry records ``retired`` (the
+                versions removed) and ``kept`` (``{version: reason}``).
 
         Returns:
             With ``wait=True``, the final job record (check ``status ==
@@ -505,6 +528,9 @@ class ImportConfigAPI(BaseAPI):
         # Wizard the appliance swallows that rejection and still reports
         # "Import Complete".
         self.check_bundled_widgets(zip_path)
+        bumps: list[dict[str, Any]] = []
+        if bump_existing:
+            zip_path, bumps = self.bump_bundled_installers(zip_path)
 
         uploaded = self.client.files.upload(zip_path)
         file_iri = uploaded.get("@id")
@@ -546,6 +572,7 @@ class ImportConfigAPI(BaseAPI):
             # ``result["jobUuid"]`` -- declared field, not __pydantic_extra__).
             if job.jobUuid is None:
                 job.jobUuid = job_uuid
+            job.bumpedInstallers = bumps or None
             return job
 
         final = self.wait_for_import(job_uuid, interval=interval, timeout=timeout)
@@ -562,9 +589,128 @@ class ImportConfigAPI(BaseAPI):
             raise FortiSOARException(describe_migrate_failure(final.status, final.errorMessage))
         if verify and str(final.status or "").strip().lower() in _IMPORT_TERMINAL:
             self._verify_bundled_widgets(final)
+        if retire_superseded and bumps and str(final.status or "").strip().lower() in _IMPORT_TERMINAL:
+            self._retire_superseded_widgets(bumps)
         if final.jobUuid is None:
             final.jobUuid = job_uuid
+        final.bumpedInstallers = bumps or None
         return final
+
+    def _retire_superseded_widgets(self, bumps: list[dict[str, Any]]) -> None:
+        """Remove every other installed version of a bumped widget no dashboard names.
+
+        Records ``retired`` (versions removed) and ``kept`` (``{version: reason}``)
+        on each widget bump entry.
+        """
+        widget_bumps = [b for b in bumps if b.get("kind") == "widget"]
+        if not widget_bumps:
+            return
+        resp = self.client.get("/api/3/dashboard", params={"$limit": 1000})
+        dashboards = resp.get("hydra:member", []) if isinstance(resp, dict) else []
+        configs = [(str(d.get("displayName") or d.get("uuid")), json.dumps(d.get("config"))) for d in dashboards]
+        for b in widget_bumps:
+            name, new = b["name"], b["to"]
+            records = self.client.widgets.list(name=name)
+            b["retired"], b["kept"] = [], {}
+            if not any(r.version == new and r.installed for r in records):
+                b["kept"] = {str(r.version): f"{name} {new} is not installed" for r in records}
+                continue
+            for r in records:
+                if r.version == new or not r.uuid:
+                    continue
+                ref = re.compile(rf"\b{re.escape(name)}-{re.escape(str(r.version))}(?!\.?\d)")
+                users = [title for title, cfg in configs if ref.search(cfg)]
+                if users:
+                    b["kept"][str(r.version)] = f"still used by dashboard(s): {', '.join(users)}"
+                    continue
+                self.client.widgets.remove(r.uuid)
+                b["retired"].append(str(r.version))
+
+    def bump_bundled_installers(self, zip_path: str) -> tuple[str, list[dict[str, Any]]]:
+        """Copy of ``zip_path`` with every bundled installer the box would skip re-versioned.
+
+        See ``bump_existing`` on :meth:`import_file`. Returns ``(path, bumps)``;
+        ``path`` is ``zip_path`` itself when nothing needed a bump.
+        """
+        from ..widget_dev import next_free_version, rebundle_widget_with_version, widget_info_from_tgz
+        from .connectors import _rebundle_with_version, _tgz_identity
+
+        if not (Path(zip_path).is_file() and zipfile.is_zipfile(zip_path)):
+            return zip_path, []
+        replace: dict[str, tuple[str, bytes]] = {}  # old member -> (new member, bytes)
+        manifests: dict[str, list[dict[str, Any]]] = {}
+        renames: list[tuple[str, str, str]] = []  # (widget name, old, new)
+        bumps: list[dict[str, Any]] = []
+        work = Path(tempfile.mkdtemp(prefix="pyfsr-import-bump-"))
+        with zipfile.ZipFile(zip_path) as zf:
+            names = zf.namelist()
+            for manifest in names:
+                kind = (
+                    "widgets"
+                    if manifest.endswith("widgets/data.json")
+                    else ("connectors" if manifest.endswith("connectors/data.json") else None)
+                )
+                if kind is None:
+                    continue
+                rows = json.loads(zf.read(manifest))
+                if not isinstance(rows, list):
+                    continue
+                base = manifest[: -len("data.json")]
+                changed = False
+                for row in rows:
+                    member = base + str(row.get("installer_path") or "")
+                    if row.get("install_mode") != "tgz" or member not in names:
+                        continue
+                    src = work / Path(member).name
+                    src.write_bytes(zf.read(member))
+                    if kind == "widgets":
+                        info = widget_info_from_tgz(src)
+                        name, old = str(info["name"]), str(info["version"])
+                        on_box = [str(r.version) for r in self.client.widgets.list(name=name)]
+                        if old not in on_box:
+                            continue
+                        new = next_free_version(old, on_box)
+                        new_tgz = Path(rebundle_widget_with_version(src, new, work / f"out-{name}"))
+                        new_member = base + new_tgz.name
+                        renames.append((name, old, new))
+                    else:
+                        name, old = _tgz_identity(src)
+                        installed = [
+                            str(c.version)
+                            for c in self.client.connectors.list_configured(refresh=True)
+                            if c.name == name and c.version
+                        ]
+                        old_n = _dotless_int(old)
+                        if not installed or old_n is None or all((_dotless_int(v) or 0) < old_n for v in installed):
+                            continue
+                        new = next_free_version(old, installed, must_exceed=installed)
+                        new_tgz = Path(_rebundle_with_version(src, new))
+                        new_member = member  # the connector importer reads the version from the row
+                    replace[member] = (new_member, new_tgz.read_bytes())
+                    row["version"] = new
+                    row["installer_path"] = Path(new_member).name
+                    bumps.append({"kind": kind[:-1], "name": name, "from": old, "to": new})
+                    changed = True
+                if changed:
+                    manifests[manifest] = rows
+            if not bumps:
+                return zip_path, []
+            out = work / Path(zip_path).name
+            with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+                for item in zf.infolist():
+                    if item.filename in replace:
+                        new_member, data = replace[item.filename]
+                        zout.writestr(new_member, data)
+                    elif item.filename in manifests:
+                        zout.writestr(item.filename, json.dumps(manifests[item.filename], indent=2))
+                    elif renames and item.filename.endswith(".json"):
+                        text = zf.read(item.filename).decode("utf-8")
+                        for wname, old, new in renames:
+                            text = re.sub(rf"\b{re.escape(wname)}-{re.escape(old)}(?!\.?\d)", f"{wname}-{new}", text)
+                        zout.writestr(item.filename, text)
+                    else:
+                        zout.writestr(item, zf.read(item.filename))
+        return str(out), bumps
 
     def check_bundled_widgets(self, zip_path: str) -> None:
         """Raise :class:`~pyfsr.exceptions.WidgetIncompatible` for any bundled tgz widget this box refuses."""
@@ -608,6 +754,11 @@ class ImportConfigAPI(BaseAPI):
                 "client.widgets.upload(<tgz>) to see the reason.",
                 names=missing,
             )
+
+
+def _dotless_int(version: str) -> int | None:
+    digits = str(version).split("-", 1)[0].replace(".", "")
+    return int(digits) if digits.isdigit() else None
 
 
 def connectors_only(options: dict[str, Any]) -> dict[str, Any]:

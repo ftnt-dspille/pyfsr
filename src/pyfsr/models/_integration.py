@@ -724,6 +724,9 @@ class ImportJobResult(ApiResult):
     # ``result["jobUuid"]`` still get it. Declared here (typed) instead of
     # stashed into ``__pydantic_extra__`` so the field is visible on the model.
     jobUuid: str | None = None
+    #: Bundled widgets/connectors ``import_file`` re-versioned before upload
+    #: because the box already held that version: ``[{kind, name, from, to}]``.
+    bumpedInstallers: list[dict[str, Any]] | None = None
 
 
 class ExportJobResult(ApiResult):
