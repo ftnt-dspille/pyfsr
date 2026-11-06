@@ -88,10 +88,18 @@ def cmd_add_dashboard(args: argparse.Namespace) -> int:
     client = _make_client(args)
     _print_target(client)
     pack = packtools.Pack(args.pack)
-    result = packtools.add_dashboard(client, pack, args.dashboard)
+    result = packtools.add_dashboard(client, pack, args.dashboard, dependencies=not args.no_dependencies)
     pack.save()
     print(f"added dashboard {result['name']!r} ({result['files']} file(s))")
-    return 0
+    for w in result["widgets"]:
+        print(f"  widget {w['name']} {w['version']} (via {w['via']})")
+    for c in result["connectors"]:
+        print(f"  connector {c['name']} {c['version']} (used by {', '.join(sorted(set(c['used_by'])))})")
+    for m in result["version_mismatch"]:
+        print(f"warning: {m}", file=sys.stderr)
+    for m in result["missing"]:
+        print(f"error: dashboard places {m}, not on this box", file=sys.stderr)
+    return 1 if result["missing"] else 0
 
 
 @_guarded
@@ -218,6 +226,7 @@ def build_subparser(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("add-dashboard", help="export a dashboard from the appliance into the pack")
     p.add_argument("dashboard", help="dashboard uuid or exact displayName")
     p.add_argument("--pack", required=True)
+    p.add_argument("--no-dependencies", action="store_true", help="only the dashboard, not its widgets and connectors")
     add_connection_args(p)
     p.set_defaults(func=cmd_add_dashboard)
 

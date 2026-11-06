@@ -107,3 +107,32 @@ def test_export_dashboard_follows_nested(tmp_path: Path):
 def test_no_nested(tmp_path: Path):
     res = _Client().widgets.export_dashboard("d", tmp_path, nested=False)
     assert "killchainphases" not in {w.name for w in res.widgets}
+
+
+def test_pack_add_dashboard_bundles_dependencies(tmp_path: Path, monkeypatch):
+    from pyfsr.utils import packtools
+
+    monkeypatch.setattr(packtools, "_resolve_dashboard", lambda client, v: ("dash-uuid", "Demo"))
+    monkeypatch.setattr(packtools, "export_live", lambda client, t, tag: (tmp_path / "x.zip", {"contents": {}}))
+    monkeypatch.setattr(packtools.Pack, "absorb_export", lambda self, z, s: {"dashboards": 1})
+
+    client = _Client()
+
+    def export_connector(name, dest):
+        out = Path(dest) / f"{name}-4_2_0.tgz"
+        out.write_bytes(_tgz(name, "4.2.0", {}))
+        return str(out)
+
+    client.connectors.export = export_connector
+    pack = packtools.Pack.init(tmp_path / "pack", name="demo", label="Demo", version="1.0.0")
+    res = packtools.add_dashboard(client, pack, "Demo")
+
+    widgets = {r["name"] for r in pack.data_manifest("widgets")}
+    assert widgets == {"fortiGuardThreatLandscape", "mapDemo", "killchainphases"}
+    assert [r["name"] for r in pack.data_manifest("connectors")] == ["fortinet-fortiguard-threat-intelligence"]
+    assert (tmp_path / "pack/widgets/killchainphases-2.0.0.tgz").is_file()
+    assert res["missing"] == ["gone-3.0.0"]
+
+    bare = packtools.Pack.init(tmp_path / "bare", name="d", label="D", version="1.0.0")
+    assert packtools.add_dashboard(_Client(), bare, "Demo", dependencies=False)["widgets"] == []
+    assert bare.data_manifest("widgets") == []

@@ -13,6 +13,10 @@ All notable changes to this project will be documented in this file.
   itself) and exports those too. Also reports the installed connectors the
   widgets call, widgets the box is missing, and version mismatches. Pure
   scanners `dashboard_widget_refs` / `widget_code_refs` live in `widget_dev`.
+- **`pyfsr pack add-dashboard` bundles the dashboard's dependencies**: every
+  widget it needs (nested included) and every installed connector those
+  widgets call, as tgz installers. `--no-dependencies` keeps the old
+  dashboard-only behavior; exits 1 when the box lacks a widget the dashboard places.
 - **Widget upload/deploy works with an API key** (FortiSOC tenants). The
   Content-Hub installer route answers an API key with 401, so an API-key client
   now uploads through `POST /api/3/widgets/import` (the Import Wizard's own

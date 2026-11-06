@@ -381,17 +381,42 @@ def export_live(client, template, tag: str) -> tuple[Path, dict]:
             pass
 
 
-def add_dashboard(client, pack: Pack, uuid_or_name: str) -> dict:
-    """Export one dashboard (by uuid or exact displayName) into the pack."""
+def add_dashboard(client, pack: Pack, uuid_or_name: str, *, dependencies: bool = True) -> dict:
+    """Export one dashboard (by uuid or exact displayName) into the pack.
+
+    With ``dependencies`` (the default) the pack also gets every widget the
+    dashboard needs, nested widgets included (see
+    :meth:`pyfsr.api.widgets.WidgetsAPI.export_dashboard`), and every
+    installed connector those widgets call, each bundled as a tgz installer.
+    """
     dash_uuid, display_name = _resolve_dashboard(client, uuid_or_name)
     zip_path, info = export_live(client, _new_template().add_dashboard(dash_uuid), f"dashboard-{display_name}")
     counts = pack.absorb_export(zip_path, ["dashboards"])
-    return {
+    result: dict = {
         "uuid": dash_uuid,
         "name": display_name,
         "files": counts["dashboards"],
         "export_contents": info.get("contents"),
+        "widgets": [],
+        "connectors": [],
+        "missing": [],
+        "version_mismatch": [],
     }
+    if not dependencies:
+        return result
+    tmp = Path(tempfile.mkdtemp(prefix="pyfsr-packtools-deps-"))
+    deps = client.widgets.export_dashboard(dash_uuid, tmp / "widgets")
+    for w in deps.widgets:
+        pack.add_installer("widgets", w.path)
+        result["widgets"].append({"name": w.name, "version": w.version, "via": w.via})
+    (tmp / "connectors").mkdir()
+    for name in sorted(deps.connectors):
+        path = client.connectors.export(name, str(tmp / "connectors"))
+        row = pack.add_installer("connectors", path)
+        result["connectors"].append({"name": row["name"], "version": row["version"], "used_by": deps.connectors[name]})
+    result["missing"] = deps.missing
+    result["version_mismatch"] = deps.version_mismatch
+    return result
 
 
 def add_records(
