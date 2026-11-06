@@ -1836,20 +1836,70 @@ class ConnectorsAPI(BaseAPI):
                 )
 
     # ------------------------------------------------------------- configure
-    def _team_iris(self, teams: list[str]) -> list[str]:
-        """Owner teams as the ``/api/3/teams/<uuid>`` IRIs a configuration takes."""
-        if isinstance(teams, str):
+    def _team_iris(self, teams: Any) -> list[str]:
+        """Owner teams as the ``/api/3/teams/<uuid>`` IRIs a configuration takes.
+
+        Accepts names, uuids, IRIs, team dicts or models (singly or in a list).
+        The appliance ACCEPTS bare uuids in ``teams`` but silently stores ``[]``,
+        which makes a private configuration public, so only IRIs are ever sent.
+        Raises ``ValueError`` when non-empty input resolves to nothing.
+        """
+        if isinstance(teams, (str, dict)) or not isinstance(teams, (list, tuple, set, frozenset)):
             teams = [teams]
-        bare = [t.rsplit("/", 1)[-1] if str(t).startswith("/api/3/teams/") else t for t in teams]
+        if not teams:
+            return []
         try:
-            uuids = self.client.teams._resolve_teams(bare)
+            uuids = self.client.teams._resolve_teams(list(teams))
         except FSRPermissionError as e:
             # A uuid needs no lookup; a name does, and many roles cannot list teams.
             raise ValueError(
-                f"cannot resolve team names {bare!r}: this user may not read /api/3/teams "
+                f"cannot resolve team names {list(teams)!r}: this user may not read /api/3/teams "
                 "(needs Security: Read); pass the team uuid or /api/3/teams/<uuid> IRI instead"
             ) from e
-        return [f"/api/3/teams/{u}" for u in uuids]
+        iris = [f"/api/3/teams/{u}" for u in uuids if u]
+        if not iris:
+            raise ValueError(f"teams {list(teams)!r} resolved to no team; refusing to send an empty owner list")
+        return iris
+
+    @staticmethod
+    def _team_uuid_set(teams: Any) -> set[str]:
+        """Uuids in a ``teams`` value as the server returns it (uuids, IRIs or records)."""
+        out: set[str] = set()
+        for t in teams or []:
+            ref = (t.get("uuid") or t.get("@id")) if isinstance(t, dict) else t
+            ref = str(ref or "")
+            if ref:
+                out.add(ref.rstrip("/").rsplit("/", 1)[-1])
+        return out
+
+    def _guard_not_going_public(self, config_id: str, *, allow_public: bool) -> None:
+        """Refuse ``teams=[]`` on a configuration that currently has owner teams."""
+        if allow_public:
+            return
+        cur = self.client.get(f"/api/integration/configuration/{config_id}/")
+        owners = self._team_uuid_set(cur.get("teams")) if isinstance(cur, dict) else set()
+        if owners:
+            raise ValueError(
+                f"refusing to set teams=[] on private configuration {config_id!r} "
+                f"(owned by {len(owners)} team(s)): that makes it public. "
+                "Pass allow_public=True if that is intended."
+            )
+
+    def _verify_teams_saved(self, config_id: str, sent: list[str], echo: Any) -> None:
+        """Raise unless the saved owner teams equal ``sent`` (echo first, then a GET)."""
+        rec = echo if isinstance(echo, dict) and "teams" in echo else None
+        if rec is None:
+            got = self.client.get(f"/api/integration/configuration/{config_id}/")
+            rec = got if isinstance(got, dict) and "teams" in got else None
+        if rec is None:
+            return  # the appliance reported no teams at all; nothing to compare
+        want, have = self._team_uuid_set(sent), self._team_uuid_set(rec["teams"])
+        if want != have:
+            raise ValueError(
+                f"configuration {config_id!r}: the appliance saved teams {sorted(have)!r} but "
+                f"{sorted(want)!r} were sent. It silently drops teams it does not accept "
+                "(send /api/3/teams/<uuid> IRIs); check the configuration's visibility."
+            )
 
     def create_configuration(
         self,
@@ -2022,6 +2072,7 @@ class ConnectorsAPI(BaseAPI):
         default: bool = False,
         agent: str | None = None,
         teams: list[str] | None = None,
+        allow_public: bool = False,
         validate: bool = True,
         autofill: bool = True,
         refuse_unknown: bool | None = None,
@@ -2057,12 +2108,15 @@ class ConnectorsAPI(BaseAPI):
             agent: run the connector on a remote agent -- name, ``agentId`` or
                 uuid (omit to keep existing).
             teams: owner teams -- names, uuids or ``/api/3/teams/<uuid>`` IRIs.
-                Omit to keep the current ones; ``[]`` makes it public. A
+                Omit to keep the current ones; ``[]`` makes it public (refused
+                for a private configuration unless ``allow_public=True``). A
                 configuration with owner teams is *Private* in the UI: only
                 members of those teams see it in the connector's page and may
                 run actions with it (others get ``CS-INTEGRATION-5``; live-verified
                 on 8.0.0). Note ``GET /api/integration/configuration/`` still lists
                 it, with its non-secret fields, to anyone with Connectors read.
+            allow_public: permit ``teams=[]`` on a configuration that currently
+                has owner teams (default ``False``: raises ``ValueError``).
             validate: structurally check ``config`` against the schema first
                 (default ``True``).
             autofill: fill any schema-defaulted fields ``config`` omits (default ``True``).
@@ -2126,7 +2180,11 @@ class ConnectorsAPI(BaseAPI):
             body["agent"] = agent
         if teams is not None:  # omitted, the PUT keeps the current owner teams (live-verified on 8.0.0)
             body["teams"] = self._team_iris(teams)
+            if not body["teams"]:
+                self._guard_not_going_public(config_id, allow_public=allow_public)
         resp = self.client.put(f"/api/integration/configuration/{config_id}/", data=body)
+        if "teams" in body:
+            self._verify_teams_saved(config_id, body["teams"], resp)
         if refresh:
             self.clear_cache()
         raw = resp if isinstance(resp, dict) else {"result": resp}
@@ -2260,6 +2318,9 @@ class ConnectorsAPI(BaseAPI):
             "config_id": config_id,
             "config": cur.get("config"),
         }
+        if cur.get("teams"):
+            # Same trap as agent: re-send the owners (as IRIs) so the PUT cannot reset them.
+            body["teams"] = self._team_iris(list(cur["teams"]))
         if cur.get("agent"):
             # A connector bound to a remote agent loses that binding if the PUT
             # omits it, which silently moves execution back to the self-agent.
