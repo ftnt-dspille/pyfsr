@@ -58,6 +58,7 @@ autoapi/pyfsr/appliance/index
 autoapi/pyfsr/repo/index
 autoapi/pyfsr/content_catalog/index
 autoapi/pyfsr/connector_dev/index
+autoapi/pyfsr/widget_dev/index
 ```
 
 ```{toctree}
