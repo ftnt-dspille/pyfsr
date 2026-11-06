@@ -10,6 +10,10 @@ Subcommands:
 - ``deploy <DIR|TGZ>`` -- package if needed, install on the appliance from the
   ``FSR_*`` environment (``--env-file`` to load one), wait for activation,
   optionally ``--config-json`` a default configuration, and healthcheck.
+- ``export <NAME> [DEST]`` -- download an installed connector's ``.tgz`` off the
+  appliance (the Connectors page *Download*). Defaults to
+  ``<name>-<version-with-underscores>.tgz`` in the current directory, which
+  ``connector deploy`` can re-install as-is.
 - ``icon <svg> --connector DIR`` -- build the connector's large (80x80) and small (32x32)
   icon PNGs from an SVG (e.g. one from https://icons.fortinet.com), laid out like the
   stock Fortinet connector icons. See :mod:`pyfsr.connector_icon`.
@@ -99,6 +103,24 @@ def cmd_deploy(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export(args: argparse.Namespace) -> int:
+    from ..config import EnvConfig
+
+    try:
+        cfg = EnvConfig.from_env_file(args.env_file) if args.env_file else EnvConfig.from_env()
+        client = cfg.client()
+    except Exception as exc:  # noqa: BLE001 - config problems reported, not raised
+        print(f"error: cannot build a client from the environment: {exc}", file=sys.stderr)
+        return 1
+    try:
+        path = client.connectors.export(args.connector, args.dest)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(path)
+    return 0
+
+
 def build_subparser(sub: argparse._SubParsersAction) -> None:
     """Wire the ``connector`` subcommands onto an existing subparsers object."""
     p_scaffold = sub.add_parser("scaffold", help="write a minimal installable connector skeleton")
@@ -121,6 +143,17 @@ def build_subparser(sub: argparse._SubParsersAction) -> None:
     p_deploy.add_argument("--no-replace", action="store_true", help="fail instead of replacing the same version")
     p_deploy.add_argument("--timeout", type=float, default=180.0, help="activation wait in seconds (default 180)")
     p_deploy.set_defaults(func=cmd_deploy)
+
+    p_export = sub.add_parser("export", help="download an installed connector's .tgz off the appliance")
+    p_export.add_argument("connector", help="connector machine name as installed (e.g. fortinet-fortiguard-outbreak)")
+    p_export.add_argument(
+        "dest",
+        nargs="?",
+        default=None,
+        help="destination .tgz path or directory (default: <name>-<version-with-underscores>.tgz in cwd)",
+    )
+    p_export.add_argument("--env-file", help="load FSR_* from this env file instead of the environment")
+    p_export.set_defaults(func=cmd_export)
 
     p_icon = sub.add_parser("icon", help="make a connector's 80x80 + 32x32 icon PNGs from an SVG")
     p_icon.add_argument("svg", help="the icon SVG (e.g. downloaded from icons.fortinet.com)")

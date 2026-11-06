@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`connectors.export` + `pyfsr connector export NAME [DEST]`.** Downloads an
+  installed connector's `.tgz` off the appliance -- the Connectors page
+  *Download*, `GET /api/integration/connector/development/entity/{install_id}/export/?format=json`
+  (the numeric id is the connector's integer install id, the same id the
+  Connector Studio dev workspace uses). The response body is the raw gzip
+  archive; the endpoint does not negotiate binary `Accept` values
+  (`application/octet-stream` answers 406), so no `Accept` override is sent.
+  The default destination is `<name>-<version-with-underscores>.tgz` in the
+  current directory -- the one-dot filename `install_from_file` needs to
+  re-install the bundle -- and a directory destination gets that name appended.
+  Widget parity already existed (`client.widgets.export` / `pyfsr widget
+  export`); note the box-exported connector archive is the *runtime-shaped*
+  package (`.so` sets under `binaries/py<ver>/`, no `tests/`), which differs
+  from the Content Hub distribution tgz for the same version.
+
 ### Fixed
 
 - **`playbooks.wait_for_task` settles a run that ENDS in `finished with

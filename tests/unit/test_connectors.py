@@ -58,14 +58,16 @@ def _agent_install_rows(endpoint):
 
 
 class FakeClient:
-    def __init__(self, *, get_map=None, post_resp=None, raiser=None):
+    def __init__(self, *, get_map=None, post_resp=None, raiser=None, request_resp=None):
         self.get_calls = []
         self.post_calls = []
         self.put_calls = []
         self.delete_calls = []
+        self.request_calls = []
         self._get_map = get_map or {}
         self._post_resp = post_resp or {}
         self._raiser = raiser
+        self._request_resp = request_resp
 
     def get(self, endpoint, params=None, **kwargs):
         if (agents := _agent_records(endpoint)) is not None:
@@ -94,6 +96,10 @@ class FakeClient:
     def delete(self, endpoint, params=None, **kwargs):
         self.delete_calls.append((endpoint, params))
         return None
+
+    def request(self, method, endpoint, data=None, params=None, **kwargs):
+        self.request_calls.append({"method": method, "endpoint": endpoint, "data": data, "params": params})
+        return self._request_resp
 
 
 def _api(**kw):
@@ -2505,3 +2511,41 @@ def test_find_configuration_by_name_stops_when_pages_are_exhausted(monkeypatch):
     monkeypatch.setattr(api, "_install_name", lambda install_id: "virustotal")
     assert api._find_configuration_by_name("virustotal", "Lab", agent="ag-2") is None
     assert len([c for c in client.get_calls if c[0] == "/api/integration/configuration/"]) <= 3
+
+
+# -- export -----------------------------------------------------------------
+class _FakeResponse:
+    def __init__(self, content: bytes):
+        self.content = content
+
+
+def test_export_downloads_the_install_id_endpoint_and_defaults_the_filename(tmp_path, monkeypatch):
+    api, client = _api(request_resp=_FakeResponse(b"\x1f\x8bgzip-bytes"))
+    monkeypatch.chdir(tmp_path)
+    out = api.export("virustotal")  # id 16, version 3.1.0 in _CONFIGURED
+
+    assert out.endswith("virustotal-3_1_0.tgz")
+    assert (tmp_path / "virustotal-3_1_0.tgz").read_bytes() == b"\x1f\x8bgzip-bytes"
+    (call,) = client.request_calls
+    assert call["method"] == "GET"
+    assert call["endpoint"] == "/api/integration/connector/development/entity/16/export/"
+    assert call["params"] == {"format": "json"}
+
+
+def test_export_writes_to_an_explicit_path_or_directory(tmp_path):
+    api, client = _api(request_resp=_FakeResponse(b"gz"))
+
+    out = api.export("virustotal", str(tmp_path / "custom.tgz"))
+    assert out == str(tmp_path / "custom.tgz")
+    assert (tmp_path / "custom.tgz").read_bytes() == b"gz"
+
+    out = api.export("virustotal", str(tmp_path))  # a directory gets the default name
+    assert out == str(tmp_path / "virustotal-3_1_0.tgz")
+    assert len(client.request_calls) == 2  # one fetch per export
+
+
+def test_export_not_installed_raises():
+    api, client = _api(request_resp=_FakeResponse(b"gz"))
+    with pytest.raises(ValueError, match="not installed"):
+        api.export("ghost-connector")
+    assert client.request_calls == []

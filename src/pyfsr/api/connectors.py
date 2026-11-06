@@ -2368,6 +2368,49 @@ class ConnectorsAPI(BaseAPI):
         if refresh:
             self.clear_cache()
 
+    # ------------------------------------------------------------- export
+    def export(self, connector: str, dest: str | None = None) -> str:
+        """Download an installed connector's ``.tgz`` (the Connectors page *Download*).
+
+        ``GET /api/integration/connector/development/entity/{install_id}/export/?format=json``
+        -- the same call the UI makes; the response body is the raw gzip archive.
+        The numeric id in the path is the connector's **integer install id**
+        (:meth:`resolve_connector_id`), the same id the Connector Studio dev
+        workspace uses. The server does not negotiate binary ``Accept`` values
+        here (``application/octet-stream`` answers 406), so no ``Accept``
+        override is sent.
+
+        Args:
+            connector: the connector's machine name as installed (e.g.
+                ``fortinet-fortiguard-outbreak``).
+            dest: filesystem path to write the ``.tgz`` to. A directory gets
+                the archive appended to it. ``None`` (or an empty string)
+                defaults to ``<name>-<version-with-underscores>.tgz`` in the
+                current directory -- the one-dot filename convention
+                :meth:`install_from_file` needs to re-install the bundle.
+
+        Returns:
+            The path the archive was written to.
+
+        Raises:
+            ValueError: ``connector`` is not installed on the appliance.
+        """
+        connector_id = self.resolve_connector_id(connector)
+        if connector_id is None:
+            raise ValueError(f"{connector!r} is not installed")
+        response = self.client.request(
+            "GET",
+            f"{self._DEV_BASE}/{connector_id}/export/",
+            params={"format": "json"},
+        )
+        version = self.resolve_version(connector)
+        default_name = f"{connector}-{version.replace('.', '_')}.tgz" if version else f"{connector}.tgz"
+        dest_path = Path(dest) if dest else Path(default_name)
+        if dest_path.is_dir():
+            dest_path = dest_path / default_name
+        dest_path.write_bytes(response.content)
+        return str(dest_path)
+
     def republish(self, connector: str, *, replace: bool = True, discard: bool = True) -> dict[str, Any]:
         """Recycle the integrations workers onto a connector's installed code.
 
