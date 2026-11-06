@@ -350,3 +350,82 @@ def widget_controller_problems(widget_dir: str | Path) -> list[str]:
             if m.group(1) != digits:
                 out.append(f"{fname} registers {r}, digits {m.group(1)} != {digits} from version {version}")
     return out
+
+
+# --------------------------------------------------------------------------- #
+# Dependency discovery (dashboard -> widgets -> nested widgets / connectors)   #
+# --------------------------------------------------------------------------- #
+
+_WIDGET_TYPE_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)-(\d+(?:\.\d+)+)$")
+# A widget's code that finds another installed widget by name, e.g.
+# ``widgets.find(w => w.name === 'killchainphases')``.
+_NESTED_NAME_RE = re.compile(r"""\.name\s*===?\s*['"]([A-Za-z][A-Za-z0-9_]*)['"]""")
+# A widget referenced by its full type string, e.g. ``type: 'recordSummary-2.1.0'``.
+_NESTED_TYPE_RE = re.compile(r"""['"]([A-Za-z][A-Za-z0-9_]*)-(\d+\.\d+\.\d+)['"]""")
+# The connector passed first to an execute helper, e.g.
+# ``executeAction('fortinet-fortiguard-outbreak', ...)``.
+_CONNECTOR_CALL_RE = re.compile(r"""execute\w*\(\s*['"]([a-z0-9][a-z0-9_-]*)['"]""", re.IGNORECASE)
+
+
+def dashboard_widget_refs(dashboard: dict | list) -> set[tuple[str, str]]:
+    """``(name, version)`` of every widget a dashboard record places.
+
+    Walks the whole record (rows, tabs, nested layouts) for ``type`` values
+    shaped ``<name>-X.Y.Z``.
+
+    Example:
+        >>> sorted(dashboard_widget_refs({"config": {"rows": [{"columns": [
+        ...     {"widgets": [{"type": "fortiGuardThreatLandscape-1.0.0"}]},
+        ...     {"widgets": [{"type": "chart-3.2.1"}, {"type": "not a widget"}]}]}]}}))
+        [('chart', '3.2.1'), ('fortiGuardThreatLandscape', '1.0.0')]
+    """
+    found: set[tuple[str, str]] = set()
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            t = node.get("type")
+            if isinstance(t, str):
+                m = _WIDGET_TYPE_RE.match(t)
+                if m:
+                    found.add((m.group(1), m.group(2)))
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(dashboard)
+    return found
+
+
+def _widget_code_texts(tgz: str | Path):
+    import tarfile
+
+    with tarfile.open(tgz, mode="r:gz") as tar:
+        for m in tar.getmembers():
+            if m.isfile() and m.name.endswith((".js", ".html")):
+                f = tar.extractfile(m)
+                if f is not None:
+                    yield f.read().decode("utf-8", errors="replace")
+
+
+def widget_code_refs(tgz: str | Path) -> dict[str, set]:
+    """Candidate dependencies named in a widget archive's ``.js``/``.html``.
+
+    Returns ``{"widgets": {name, ...}, "widget_types": {(name, version), ...},
+    "connectors": {name, ...}}``. These are *candidates* read from source text:
+    check them against the box's installed widgets / connectors before
+    trusting them (see :meth:`pyfsr.api.widgets.WidgetsAPI.export_dashboard`).
+    The widget's own name is left out.
+    """
+    own = widget_info_from_tgz(tgz).get("name")
+    widgets: set[str] = set()
+    types: set[tuple[str, str]] = set()
+    connectors: set[str] = set()
+    for text in _widget_code_texts(tgz):
+        widgets.update(_NESTED_NAME_RE.findall(text))
+        types.update(_NESTED_TYPE_RE.findall(text))
+        connectors.update(_CONNECTOR_CALL_RE.findall(text))
+    widgets.discard(own)
+    types = {t for t in types if t[0] != own}
+    return {"widgets": widgets, "widget_types": types, "connectors": connectors}

@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..auth.api_key import APIKeyAuth
@@ -56,6 +57,30 @@ from ..pagination import extract_members
 from ..widget_dev import pack_widget, widget_compatibility_error, widget_info_from_tgz
 from ._solutionpacks import upload_solutionpack
 from .base import BaseAPI
+
+
+@dataclass
+class ExportedWidget:
+    """One widget archive written by :meth:`WidgetsAPI.export_dashboard`."""
+
+    name: str | None
+    version: str | None
+    path: str
+    via: str
+    """``"dashboard"`` when the dashboard places it, else the widget that loads it."""
+
+
+@dataclass
+class DashboardExport:
+    """What :meth:`WidgetsAPI.export_dashboard` exported and what it could not."""
+
+    widgets: list[ExportedWidget] = field(default_factory=list)
+    connectors: dict[str, list[str]] = field(default_factory=dict)
+    """Installed connector name -> the widgets that call it."""
+    missing: list[str] = field(default_factory=list)
+    """Widgets the dashboard places that the box does not have."""
+    version_mismatch: list[str] = field(default_factory=list)
+
 
 _UPLOAD_CONFLICT_MARKER = "already exists in widget workspace"
 
@@ -402,6 +427,85 @@ class WidgetsAPI(BaseAPI):
         dest_path = Path(dest)
         dest_path.write_bytes(response.content)
         return str(dest_path)
+
+    def export_dashboard(
+        self,
+        dashboard: str | dict,
+        dest_dir: str | Path,
+        *,
+        nested: bool = True,
+    ) -> DashboardExport:
+        """Export every widget a dashboard needs, nested widgets included.
+
+        Reads the dashboard record (``GET /api/3/dashboard/<uuid>``, or pass the
+        record itself), exports each widget it places, then scans each exported
+        archive's code for widgets it loads at runtime (for example a widget that
+        looks up ``killchainphases`` from the installed list and renders it
+        inside itself) and exports those too, until nothing new turns up.
+        Candidates read from code are kept only when the box has a widget by that
+        name, so stray strings never become exports.
+
+        Connector names the widgets pass to an execute helper are collected
+        (checked against the installed connectors) but not exported; see
+        ``connectors`` on the result.
+
+        Args:
+            dashboard: dashboard uuid, or a dashboard record dict.
+            dest_dir: folder for the ``<name>-<version>.tgz`` files (created).
+            nested: follow widgets found in widget code (default ``True``).
+
+        Returns:
+            a :class:`DashboardExport`.
+        """
+        from ..widget_dev import dashboard_widget_refs, widget_code_refs
+
+        record = self.client.get(f"/api/3/dashboard/{dashboard}") if isinstance(dashboard, str) else dashboard
+        out_dir = Path(dest_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        by_name: dict[str, list[WidgetRecord]] = {}
+        for r in self.list():
+            if r.name:
+                by_name.setdefault(r.name, []).append(r)
+        installed_connectors: set[str] | None = None
+
+        result = DashboardExport()
+        queue: list[tuple[str, str | None, str]] = [
+            (n, v, "dashboard") for n, v in sorted(dashboard_widget_refs(record))
+        ]
+        seen: set[str] = set()
+        while queue:
+            name, version, via = queue.pop(0)
+            candidates = by_name.get(name, [])
+            exact = [r for r in candidates if version and r.version == version]
+            live = [r for r in candidates if r.installed]
+            pick = exact or live or candidates or [None]
+            rec = max(pick, key=lambda r: _version_key(r.version)) if pick[0] is not None else None
+            if rec is None or not rec.uuid:
+                if via == "dashboard":
+                    result.missing.append(f"{name}-{version}" if version else name)
+                continue
+            key = f"{rec.name}-{rec.version}"
+            if key in seen:
+                continue
+            seen.add(key)
+            if version and rec.version != version:
+                result.version_mismatch.append(f"{name}: dashboard wants {version}, box has {rec.version}")
+            dest = out_dir / f"{key}.tgz"
+            self.export(rec.uuid, str(dest))
+            result.widgets.append(ExportedWidget(name=rec.name, version=rec.version, path=str(dest), via=via))
+            refs = widget_code_refs(dest)
+            if refs["connectors"]:
+                if installed_connectors is None:
+                    installed_connectors = {c.name for c in self.client.connectors.list_configured() if c.name}
+                for c in sorted(refs["connectors"] & installed_connectors):
+                    result.connectors.setdefault(c, []).append(rec.name)
+            if nested:
+                wanted = {(n, None) for n in refs["widgets"]} | {(n, v) for n, v in refs["widget_types"]}
+                for n, v in sorted(wanted, key=lambda t: (t[0], t[1] or "")):
+                    if n in by_name:
+                        queue.append((n, v, rec.name))
+        return result
 
     # ---------------------------------------------------------------- remove
     def remove(self, uuid: str) -> None:

@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Export every widget a dashboard needs**: `client.widgets.export_dashboard(uuid, dest_dir)`
+  and `pyfsr widget export-dashboard <uuid> <dir>`. Exports each widget the
+  dashboard places, then scans each archive's code for widgets it loads at
+  runtime (e.g. FortiGuard Threat Landscape renders `killchainphases` inside
+  itself) and exports those too. Also reports the installed connectors the
+  widgets call, widgets the box is missing, and version mismatches. Pure
+  scanners `dashboard_widget_refs` / `widget_code_refs` live in `widget_dev`.
 - **Widget upload/deploy works with an API key** (FortiSOC tenants). The
   Content-Hub installer route answers an API key with 401, so an API-key client
   now uploads through `POST /api/3/widgets/import` (the Import Wizard's own

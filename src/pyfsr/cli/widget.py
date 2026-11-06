@@ -15,6 +15,8 @@ Subcommands:
   appliance): validates the required files and emits the Content-Hub layout
   (one ``<name>-<version>/`` top-level dir, no macOS AppleDouble junk).
 - ``export <uuid> <dest.tgz> [--development]`` -- download a widget archive.
+- ``export-dashboard <dashboard-uuid> <dest-dir> [--no-nested]`` -- download every widget a
+  dashboard uses, plus the widgets those load at runtime; lists the connectors they call.
 - ``rm <uuid>`` — delete a widget record.
 """
 
@@ -118,6 +120,20 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export_dashboard(args: argparse.Namespace) -> int:
+    client = _make_client(args)
+    res = client.widgets.export_dashboard(args.dashboard, args.dest_dir, nested=not args.no_nested)
+    for w in res.widgets:
+        print(f"{w.path}  (via {w.via})")
+    for c, users in sorted(res.connectors.items()):
+        print(f"connector {c}  (used by {', '.join(sorted(set(users)))})")
+    for m in res.version_mismatch:
+        print(f"warning: {m}", file=sys.stderr)
+    for m in res.missing:
+        print(f"error: dashboard places {m}, not on this box", file=sys.stderr)
+    return 1 if res.missing else 0
+
+
 def cmd_rm(args: argparse.Namespace) -> int:
     client = _make_client(args)
     _print_target(client)
@@ -181,6 +197,13 @@ def build_subparser(sub: argparse._SubParsersAction) -> None:
     p_export.add_argument("--development", action="store_true", help="export the dev-workspace copy, not installed")
     add_connection_args(p_export)
     p_export.set_defaults(func=cmd_export)
+
+    p_dash = sub.add_parser("export-dashboard", help="download every widget a dashboard uses, nested widgets included")
+    p_dash.add_argument("dashboard", help="dashboard uuid")
+    p_dash.add_argument("dest_dir", help="folder for the widget .tgz files")
+    p_dash.add_argument("--no-nested", action="store_true", help="only the widgets the dashboard places")
+    add_connection_args(p_dash)
+    p_dash.set_defaults(func=cmd_export_dashboard)
 
     p_rm = sub.add_parser("rm", help="delete a widget record")
     p_rm.add_argument("uuid", help="widget uuid")
