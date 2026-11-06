@@ -1,9 +1,13 @@
 """Unit tests for WidgetsAPI (upload / publish / deploy wire shapes)."""
 
+import json
+import tarfile
+
 import pytest
 
 from pyfsr.api.widgets import WidgetsAPI
 from pyfsr.exceptions import APIError, WidgetPublishError, WidgetUploadConflict
+from pyfsr.widget_dev import pack_widget
 
 _DEV_MANIFEST = {
     "hydra:member": [
@@ -215,3 +219,146 @@ def test_remove_sends_delete_by_ids():
     assert method == "DELETE"
     assert endpoint == "/api/3/delete/widgets"
     assert data == {"ids": ["abc-123"]}
+
+
+# -- pack (widget folder -> .tgz) ---------------------------------------
+def _widget_dir(tmp_path, *, name="my-widget", version="1.2.0", extra=None):
+    d = tmp_path / "widget-src"
+    d.mkdir()
+    info = {"name": name, "version": version, "title": "My Widget"}
+    (d / "info.json").write_text(json.dumps(info))
+    for f in ("view.html", "edit.html", "view.controller.js", "edit.controller.js"):
+        (d / f).write_text("// widget\n")
+    assets = d / "widgetAssets" / "js"
+    assets.mkdir(parents=True)
+    (assets / "service.js").write_text("// asset\n")
+    # Junk that must never reach the archive.
+    (d / ".DS_Store").write_bytes(b"junk")
+    (d / "._info.json").write_bytes(b"appledouble")
+    (d / "node_modules").mkdir()
+    (d / "node_modules" / "x.js").write_text("// dep\n")
+    for path in extra or []:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x")
+    return d
+
+
+def test_pack_widget_bundles_content_hub_layout(tmp_path):
+    d = _widget_dir(tmp_path)
+    out = pack_widget(str(d))
+    assert out == str(tmp_path / "my-widget-1.2.0.tgz")
+
+    with tarfile.open(out, "r:gz") as tar:
+        members = tar.getmembers()
+    tops = {m.name.split("/")[0] for m in members}
+    assert tops == {"my-widget-1.2.0"}
+    names = {m.name for m in members}
+    assert "my-widget-1.2.0/info.json" in names
+    assert "my-widget-1.2.0/view.controller.js" in names
+    assert "my-widget-1.2.0/widgetAssets/js/service.js" in names
+    # No junk, ever: AppleDouble entries break the importer's info.json walk.
+    assert not any("._" in m or m.endswith(".DS_Store") for m in names)
+    assert not any("node_modules" in m for m in names)
+    # Numeric owner only, like the box's own packages.
+    assert all(m.uid == 0 and m.gid == 0 and m.uname == "" and m.gname == "" for m in members)
+
+
+def test_pack_widget_arcname_uses_info_json_not_folder_name(tmp_path):
+    d = _widget_dir(tmp_path, name="fortiGuardThreatMap", version="1.0.0")
+    d = d.rename(d.parent / "wip-copy")  # working folder named something else
+    out = pack_widget(str(d))
+    with tarfile.open(out, "r:gz") as tar:
+        tops = {m.name.split("/")[0] for m in tar.getmembers()}
+    assert tops == {"fortiGuardThreatMap-1.0.0"}
+    assert out.endswith("fortiGuardThreatMap-1.0.0.tgz")
+
+
+def test_pack_widget_out_may_be_a_directory(tmp_path):
+    d = _widget_dir(tmp_path)
+    dest = tmp_path / "dist"
+    dest.mkdir()
+    out = pack_widget(str(d), str(dest))
+    assert out == str(dest / "my-widget-1.2.0.tgz")
+    assert (dest / "my-widget-1.2.0.tgz").exists()
+
+
+def test_pack_widget_missing_info_json_raises(tmp_path):
+    d = tmp_path / "not-a-widget"
+    d.mkdir()
+    (d / "view.html").write_text("x")
+    with pytest.raises(ValueError, match="no info.json"):
+        pack_widget(str(d))
+
+
+def test_pack_widget_missing_required_file_names_it(tmp_path):
+    d = tmp_path / "partial-widget"
+    d.mkdir()
+    (d / "info.json").write_text('{"name": "w", "version": "1.0.0"}')
+    (d / "view.html").write_text("x")
+    with pytest.raises(ValueError, match="edit.html"):
+        pack_widget(str(d))
+
+
+def test_pack_widget_missing_folder_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        pack_widget(str(tmp_path / "nope"))
+
+
+# -- upload/deploy accept a folder ---------------------------------------
+def test_upload_packs_a_folder_before_posting(tmp_path):
+    d = _widget_dir(tmp_path)
+    api, client = _api(post_resp={"uuid": "abc-123", "name": "my-widget", "version": "1.2.0", "draft": True})
+    record = api.upload(str(d), replace=True)
+    assert record.name == "my-widget"
+    endpoint, _, files, params = client.post_calls[0]
+    assert endpoint == "/api/3/solutionpacks/install"
+    assert params == {"$type": "widget", "$replace": "true"}
+    assert "file" in files
+
+
+def test_ensure_deployed_reads_a_folder(tmp_path, monkeypatch):
+    d = _widget_dir(tmp_path)
+    api, client = _api(
+        get_map={
+            "/api/3/widgets": {
+                "hydra:member": [
+                    {
+                        "uuid": "u-1",
+                        "name": "my-widget",
+                        "version": "1.0.0",
+                        "draft": False,
+                        "installed": True,
+                        "published": False,
+                    }
+                ]
+            }
+        }
+    )
+    monkeypatch.setattr(api, "deploy", lambda path, **kw: "deployed")
+    assert api.ensure_deployed(str(d)) == "deployed"  # version differs -> deploys
+    assert client.get_calls  # looked up the existing record
+
+
+def test_ensure_deployed_folder_already_live_skips(tmp_path):
+    d = _widget_dir(tmp_path)  # my-widget 1.2.0
+    api, _ = _api(
+        get_map={
+            "/api/3/widgets": {
+                "hydra:member": [
+                    {
+                        "uuid": "u-1",
+                        "name": "my-widget",
+                        "version": "1.2.0",
+                        "draft": False,
+                        "installed": True,
+                        "published": True,
+                    }
+                ]
+            }
+        }
+    )
+    calls = []
+    api.deploy = lambda path, **kw: calls.append(path)  # must not fire
+    out = api.ensure_deployed(str(d))
+    assert out.name == "my-widget" and out.version == "1.2.0"
+    assert calls == []

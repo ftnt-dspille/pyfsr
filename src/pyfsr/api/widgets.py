@@ -45,12 +45,14 @@ Example:
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
 from ..exceptions import APIError, WidgetPublishError, WidgetUploadConflict
 from ..models._widgets import WidgetRecord
 from ..pagination import extract_members
+from ..widget_dev import pack_widget
 from ._solutionpacks import upload_solutionpack
 from .base import BaseAPI
 
@@ -87,13 +89,18 @@ class WidgetsAPI(BaseAPI):
 
     # ---------------------------------------------------------------- upload
     def upload(self, path: str, *, replace: bool = True) -> WidgetRecord:
-        """Upload a widget ``.tgz`` — step 1 of deploy.
+        """Upload a widget ``.tgz`` (or pack a widget **folder** first) — step 1 of deploy.
 
         Posts to the shared solution-pack installer (``POST
         /api/3/solutionpacks/install?$type=widget``) — there is no dedicated
         ``widgets/import`` endpoint. Lands the widget in the *development*
         workspace (``draft:true, installed:false``); it is **not live** until
         :meth:`publish`.
+
+        A **directory** path is packed first with :func:`pyfsr.widget_dev.pack_widget`
+        (required-file check, junk/AppleDouble exclusion, ``<name>-<version>``
+        layout), so ``upload``/``deploy`` take a widget folder or a ``.tgz``
+        interchangeably.
 
         Args:
             path: filesystem path to the widget ``.tgz``.
@@ -134,6 +141,8 @@ class WidgetsAPI(BaseAPI):
             >>> (record.name, record.version, record.draft, record.installed)
             ('jinjaEditorWidget', '1.1.3', True, False)
         """
+        if Path(path).is_dir():
+            path = pack_widget(path)
         try:
             resp = upload_solutionpack(self.client, path, type_="widget", replace=replace)
         except APIError as exc:
@@ -216,7 +225,8 @@ class WidgetsAPI(BaseAPI):
         pass against a delayed reconciler revert).
 
         Args:
-            path: filesystem path to the widget ``.tgz``.
+            path: filesystem path to the widget ``.tgz``, or to a widget
+                folder (packed first -- see :meth:`upload`).
             replace: passed to both :meth:`upload` (``$replace``) and
                 :meth:`publish` (``replace``) — see the plan doc for why
                 these are independent flags that usually agree.
@@ -279,7 +289,8 @@ class WidgetsAPI(BaseAPI):
         no-op; a version bump deploys the new one.
 
         Args:
-            path: filesystem path to the widget ``.tgz``.
+            path: filesystem path to the widget ``.tgz``, or to a widget
+                folder (packed first -- see :meth:`upload`).
             replace: passed to :meth:`deploy` (and through to upload/publish).
             wait: settle-poll after publish.
             interval: seconds between settle polls.
@@ -291,8 +302,14 @@ class WidgetsAPI(BaseAPI):
         """
         import tarfile
 
-        # Peek the widget name + version from the .tgz manifest without uploading.
-        name, version = _peek_widget_manifest(path, tarfile)
+        if Path(path).is_dir():
+            # A folder: read name+version straight from its info.json, then
+            # fall through to deploy (which packs before uploading).
+            info = json.loads((Path(path) / "info.json").read_text(encoding="utf-8"))
+            name, version = info.get("name"), info.get("version")
+        else:
+            # Peek the widget name + version from the .tgz manifest without uploading.
+            name, version = _peek_widget_manifest(path, tarfile)
         if name is not None:
             existing = self.get(name)
             if existing is not None and existing.version == version and existing.installed and existing.published:

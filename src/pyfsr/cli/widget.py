@@ -6,11 +6,15 @@ mutating, so a wrong-target deploy can't quietly look successful.
 Subcommands:
 
 - ``list [--installed] [--name N]`` — list widget records.
-- ``upload <tgz> [--no-replace]`` — stage a widget in the dev workspace (not live).
-- ``publish <uuid> [--as-draft] [--no-replace]`` — flip a staged widget live.
-- ``deploy <tgz> [--no-replace] [--timeout N]`` — upload + publish + settle, the
+- ``upload <tgz|dir> [--no-replace]`` -- stage a widget in the dev workspace (not live).
+  A folder is packed first (see ``pack``).
+- ``publish <uuid> [--as-draft] [--no-replace]`` -- flip a staged widget live.
+- ``deploy <tgz|dir> [--no-replace] [--timeout N]`` -- upload + publish + settle, the
   common path.
-- ``export <uuid> <dest.tgz> [--development]`` — download a widget archive.
+- ``pack <dir> [out]`` -- bundle a widget folder into a deployable ``.tgz`` (no
+  appliance): validates the required files and emits the Content-Hub layout
+  (one ``<name>-<version>/`` top-level dir, no macOS AppleDouble junk).
+- ``export <uuid> <dest.tgz> [--development]`` -- download a widget archive.
 - ``rm <uuid>`` — delete a widget record.
 """
 
@@ -46,7 +50,7 @@ def cmd_upload(args: argparse.Namespace) -> int:
     _print_target(client)
     try:
         record = client.widgets.upload(args.path, replace=not args.no_replace)
-    except WidgetError as exc:
+    except (WidgetError, ValueError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"uploaded {record.name} {record.version} (uuid={record.uuid}, draft={record.draft})")
@@ -81,10 +85,22 @@ def cmd_deploy(args: argparse.Namespace) -> int:
             replace=not args.no_replace,
             timeout=args.timeout,
         )
-    except WidgetError as exc:
+    except (WidgetError, ValueError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"deployed {record.name} {record.version} (live={record.published})")
+    return 0
+
+
+def cmd_pack(args: argparse.Namespace) -> int:
+    from ..widget_dev import pack_widget
+
+    try:
+        path = pack_widget(args.dir, args.out)
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(path)
     return 0
 
 
@@ -126,7 +142,7 @@ def build_subparser(sub: argparse._SubParsersAction) -> None:
     p_list.set_defaults(func=cmd_list)
 
     p_upload = sub.add_parser("upload", help="stage a widget .tgz in the dev workspace (not live)")
-    p_upload.add_argument("path", help="path to the widget .tgz")
+    p_upload.add_argument("path", help="path to the widget .tgz, or to a widget folder (packed first)")
     p_upload.add_argument(
         "--no-replace",
         action="store_true",
@@ -134,6 +150,16 @@ def build_subparser(sub: argparse._SubParsersAction) -> None:
     )
     add_connection_args(p_upload)
     p_upload.set_defaults(func=cmd_upload)
+
+    p_pack = sub.add_parser("pack", help="bundle a widget folder into a deployable .tgz (no appliance)")
+    p_pack.add_argument("dir", help="widget folder (the one containing info.json)")
+    p_pack.add_argument(
+        "out",
+        nargs="?",
+        default=None,
+        help="destination .tgz path or directory (default: <name>-<version>.tgz next to the folder)",
+    )
+    p_pack.set_defaults(func=cmd_pack)
 
     p_publish = sub.add_parser("publish", help="flip a staged widget live")
     p_publish.add_argument("uuid", help="widget uuid, or a widget name to resolve its newest staged version")
@@ -143,7 +169,7 @@ def build_subparser(sub: argparse._SubParsersAction) -> None:
     p_publish.set_defaults(func=cmd_publish)
 
     p_deploy = sub.add_parser("deploy", help="upload + publish + settle in one call (the common path)")
-    p_deploy.add_argument("path", help="path to the widget .tgz")
+    p_deploy.add_argument("path", help="path to the widget .tgz, or to a widget folder (packed first)")
     p_deploy.add_argument("--no-replace", action="store_true", help="see upload/publish --no-replace")
     p_deploy.add_argument("--timeout", type=float, default=60.0, help="settle-poll timeout in seconds (default 60)")
     add_connection_args(p_deploy)

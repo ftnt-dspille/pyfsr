@@ -6,6 +6,22 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`widget_dev.pack_widget` + `pyfsr widget pack DIR` + folder support in
+  `widgets.upload` / `widgets.deploy` / `widgets.ensure_deployed`.** Bundles a
+  widget source folder into a SOAR-importable ``.tgz`` the way the Content Hub
+  ships them: one top-level ``<name>-<version>/`` directory (name+version from
+  the folder's ``info.json``, not the folder's own name), the five required
+  files validated up front (``info.json``, ``view.html``, ``edit.html``,
+  ``view.controller.js``, ``edit.controller.js``), junk excluded, and every
+  entry normalized to uid/gid 0. The exclusion list exists because the widget
+  importer walks the extracted tree looking for ``info.json``: a stray macOS
+  AppleDouble ``._<dir>/`` entry makes it resolve the wrong root and the upload
+  fails with a 500 whose ``prod.log`` reads ``max(): Argument #1 ($value) must
+  contain at least one element`` (live-verified on 8.0.0). ``deploy`` /
+  ``ensure_deployed`` now take a widget folder or a ``.tgz`` interchangeably.
+
+### Fixed
+
 - **`connectors.export` + `pyfsr connector export NAME [DEST]`.** Downloads an
   installed connector's `.tgz` off the appliance -- the Connectors page
   *Download*, `GET /api/integration/connector/development/entity/{install_id}/export/?format=json`
