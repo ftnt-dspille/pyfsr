@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Content Hub install refuses a pack that bundles connectors/widgets**:
+  `solution_packs.install_from_file` raises `BundledInstallersSkipped` before
+  uploading, listing each bundled installer it would skip and pointing to
+  `client.import_config.import_file(path)` (the Import Wizard). `force=True`
+  installs without them.
 - **Export every widget a dashboard needs**: `client.widgets.export_dashboard(uuid, dest_dir)`
   and `pyfsr widget export-dashboard <uuid> <dir>`. Exports each widget the
   dashboard places, then scans each archive's code for widgets it loads at

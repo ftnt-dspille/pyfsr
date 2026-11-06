@@ -20,7 +20,7 @@ from typing import Any
 
 from ..auth.base import BaseAuth
 from ..auth.guards import requires_jwt
-from ..exceptions import APIError
+from ..exceptions import APIError, BundledInstallersSkipped
 from ..models._integration import InstallJobStatus
 from ..models._system import SolutionPackInstallResponse
 from ._solutionpacks import upload_solutionpack
@@ -129,6 +129,7 @@ class SolutionPackAPI(BaseAPI):
             wait: block until the import job reaches a terminal status.
             interval: seconds between polls when ``wait`` (default 3).
             timeout: give up waiting after this many seconds (default 300).
+            force: install even though bundled connectors/widgets will be skipped.
 
         Returns:
             :class:`~pyfsr.models.SolutionPackInstallResponse` (the SolutionPack
@@ -322,8 +323,15 @@ class SolutionPackAPI(BaseAPI):
         wait: bool = False,
         interval: float = 3.0,
         timeout: float = 300.0,
+        force: bool = False,
     ) -> SolutionPackInstallResponse | InstallJobStatus:
         """Install a solution pack from a local ``.zip``/``.tgz`` bundle.
+
+        Content Hub skips connector/widget ``.tgz`` installers bundled in the
+        pack, so a pack that carries any raises
+        :class:`~pyfsr.exceptions.BundledInstallersSkipped` before uploading.
+        Import such a pack with ``client.import_config.import_file(path)``
+        instead, or pass ``force=True`` to install it without them.
 
         Uploads the archive to ``POST /api/3/solutionpacks/install`` (``$type``
         defaults to ``solutionpack`` server-side), the same multipart endpoint the
@@ -349,6 +357,8 @@ class SolutionPackAPI(BaseAPI):
 
                 client.solution_packs.install_from_file("MyPack-1.0.0.zip", wait=True)
         """
+        if not force:
+            _refuse_bundled_installers(path)
         resp = upload_solutionpack(self.client, path, type_="solutionpack", replace=replace)
         parsed = SolutionPackInstallResponse.model_validate(resp)
         if not wait:
@@ -396,4 +406,28 @@ class SolutionPackAPI(BaseAPI):
             wait=wait,
             interval=interval,
             timeout=timeout,
+        )
+
+
+def _refuse_bundled_installers(path: str) -> None:
+    """Raise BundledInstallersSkipped when ``path`` bundles connector/widget tgz installers."""
+    from ..exports import Export, ExportError
+
+    try:
+        with Export.open(path) as ex:
+            bundled = [
+                f"{i.category[:-1]} {i.name} {i.version or ''}".strip()
+                for i in ex.installers()
+                if i.install_mode == "tgz" and i.member and i.category in ("connectors", "widgets")
+            ]
+    except (ExportError, OSError):
+        return  # not a readable export zip: let the appliance judge it
+    if bundled:
+        raise BundledInstallersSkipped(
+            f"{path} bundles {len(bundled)} connector/widget installer(s) that a Content Hub install "
+            f"would NOT install: {', '.join(bundled)}. Import it with the Import Wizard instead: "
+            f"client.import_config.import_file({str(path)!r}). "
+            "Pass force=True to install the pack without them.",
+            path=str(path),
+            installers=bundled,
         )

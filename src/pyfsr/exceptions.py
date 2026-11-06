@@ -267,6 +267,23 @@ class WidgetIncompatible(WidgetError):
         super().__init__(message)
 
 
+class BundledInstallersSkipped(FortiSOARException):
+    """A Content Hub install of a pack whose bundled connectors/widgets it would skip.
+
+    Raised by :meth:`pyfsr.api.solution_packs.SolutionPacksAPI.install_from_file`
+    *before* uploading. Content Hub imports a pack as a "SolutionPack Import",
+    which installs bundled ``tgz`` connectors and widgets only from Fortinet's
+    catalog, never from the zip. Import the same zip with
+    ``client.import_config.import_file(path)`` (the Import Wizard), or pass
+    ``force=True`` to install without them.
+    """
+
+    def __init__(self, message: str, *, path: str | None = None, installers: list[str] | None = None):
+        self.path = path
+        self.installers = installers or []
+        super().__init__(message)
+
+
 class WidgetNotInstalled(WidgetError):
     """An import was told to install a bundled widget, finished, and the widget is not on the box."""
 
