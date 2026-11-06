@@ -135,3 +135,28 @@ def test_check_offline_fails_when_env_file_missing(config, tmp_path, capfd):
     (tmp_path / ".env.box").unlink()
     assert main(["instances", "check", "--offline", "--config", config]) != 0
     assert "No such file" in capfd.readouterr().err
+
+
+def test_write_env_file_replaces_symlink_and_world_readable_target(tmp_path):
+    """--out must never write secrets through a symlink or into a file with a loose mode."""
+    import os
+    import stat
+
+    from pyfsr.cli.instances import _write_env_file
+
+    victim = tmp_path / "victim.txt"
+    victim.write_text("untouched\n")
+    link = tmp_path / "out.env"
+    link.symlink_to(victim)
+    _write_env_file(link, {"FSR_API_KEY": "s3cret"})
+    assert victim.read_text() == "untouched\n"  # symlink not followed
+    assert not link.is_symlink()
+    assert stat.S_IMODE(os.stat(link).st_mode) == 0o600
+
+    loose = tmp_path / "loose.env"
+    loose.write_text("old\n")
+    os.chmod(loose, 0o644)
+    _write_env_file(loose, {"FSR_API_KEY": "s3cret"})
+    assert stat.S_IMODE(os.stat(loose).st_mode) == 0o600
+    assert "s3cret" in loose.read_text()
+    assert not [p for p in tmp_path.iterdir() if p.name.startswith(".pyfsr-env-")]

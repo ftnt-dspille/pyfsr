@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import contextlib
 import os
 import shlex
 import tempfile
@@ -309,12 +310,28 @@ def _env_vars(reg: InstanceRegistry, alias: str, *, with_secrets: bool) -> dict[
 
 
 def _write_env_file(path: Path, env: dict[str, str]) -> None:
-    """Write ``env`` as a sourceable file, created 0600 before any secret lands in it."""
-    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        for k, v in env.items():
-            fh.write(f"{k}={shlex.quote(v)}\n")
-    os.chmod(path, 0o600)
+    """Write ``env`` as a sourceable file that is 0600 before any secret lands in it.
+
+    The secrets go into a FRESH temp file in the target directory (mkstemp: created
+    O_EXCL at 0600, never an existing file or a symlink), which then atomically
+    replaces ``path``. Writing into an existing ``--out`` file would keep its old,
+    possibly world-readable mode while the secrets are written, and would follow a
+    symlink planted at that path.
+    """
+    import tempfile
+
+    path = Path(path)
+    fd, tmp = tempfile.mkstemp(prefix=".pyfsr-env-", dir=str(path.parent or Path(".")))
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            for k, v in env.items():
+                fh.write(f"{k}={shlex.quote(v)}\n")
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
 
 
 def _pick_field(values: dict[str, Any], name: str) -> str:
