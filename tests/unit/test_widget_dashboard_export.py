@@ -222,3 +222,15 @@ def test_safe_filename_blocks_traversal():
     assert _safe_filename("../../etc/x-1.0.0.tgz") == "_.._etc_x-1.0.0.tgz"
     assert "/" not in _safe_filename("a/b-1.0.0.tgz")
     assert _safe_filename("..") == "widget.tgz"
+
+
+def test_connector_name_in_a_constant_is_found(tmp_path: Path):
+    p = tmp_path / "c.tgz"
+    p.write_bytes(
+        _tgz(
+            "demo",
+            "1.0.0",
+            {"s.js": "var CONNECTOR = 'fortinet-fortiguard-threat-intelligence'; svc.execute(CONNECTOR, 'x');"},
+        )
+    )
+    assert "fortinet-fortiguard-threat-intelligence" in widget_code_refs(p)["connectors"]

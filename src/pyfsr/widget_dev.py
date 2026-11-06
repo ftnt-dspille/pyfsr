@@ -365,6 +365,9 @@ _NESTED_TYPE_RE = re.compile(r"""['"]([A-Za-z][A-Za-z0-9_]*)-(\d+\.\d+\.\d+)['"]
 # The connector passed first to an execute helper, e.g.
 # ``executeAction('fortinet-fortiguard-outbreak', ...)``.
 _CONNECTOR_CALL_RE = re.compile(r"""execute\w*\(\s*['"]([a-z0-9][a-z0-9_-]*)['"]""", re.IGNORECASE)
+# Any quoted machine-name-shaped string; kept only if it names an installed
+# connector (widgets often keep the name in a constant, not inline in the call).
+_CONNECTOR_NAME_RE = re.compile(r"""['"]([a-z0-9]+(?:-[a-z0-9]+)+)['"]""")
 # Custom elements a template uses, e.g. ``<progress-card-component ...>``.
 _ELEMENT_RE = re.compile(r"<([a-z][a-z0-9]*(?:-[a-z0-9]+)+)[\s>/]")
 # Components / directives a script registers, e.g. ``.component('progressCardComponent', ...)``.
@@ -446,6 +449,7 @@ def widget_code_refs(tgz: str | Path) -> dict[str, set]:
             widgets.update(_NESTED_NAME_RE.findall(text))
             types.update(_NESTED_TYPE_RE.findall(text))
             connectors.update(_CONNECTOR_CALL_RE.findall(text))
+            connectors.update(_CONNECTOR_NAME_RE.findall(text))
             provides.update(_REGISTER_RE.findall(text))
         else:
             elements.update(t for t in _ELEMENT_RE.findall(text) if not t.startswith(PLATFORM_ELEMENT_PREFIXES))
