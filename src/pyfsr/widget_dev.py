@@ -429,3 +429,32 @@ def widget_code_refs(tgz: str | Path) -> dict[str, set]:
     widgets.discard(own)
     types = {t for t in types if t[0] != own}
     return {"widgets": widgets, "widget_types": types, "connectors": connectors}
+
+
+def set_widget_compatibility(tgz: str | Path, compatibility: list[str]) -> bool:
+    """Rewrite ``metadata.compatibility`` inside a widget ``.tgz``, in place.
+
+    Returns ``False`` (archive untouched) when it already holds exactly
+    ``compatibility``. The appliance refuses a widget whose highest entry is
+    above its own version, so lowering the tag (e.g. to ``["7.6.0"]``) lets an
+    8.0-tagged widget install on 7.6; it does not make 8.0-only code work there.
+    """
+    import tempfile
+
+    tgz = Path(tgz)
+    info = widget_info_from_tgz(tgz)
+    if (info.get("metadata") or {}).get("compatibility") == list(compatibility):
+        return False
+    work = Path(tempfile.mkdtemp(prefix="pyfsr-widget-compat-"))
+    with tarfile.open(tgz, "r:gz") as tf:
+        tf.extractall(work, filter="data")
+    roots = [p for p in work.iterdir() if p.is_dir() and (p / "info.json").exists()]
+    if len(roots) != 1:
+        raise ValueError(f"{tgz.name}: expected one <name>-<version>/ root with info.json, found {len(roots)}")
+    info_path = roots[0] / "info.json"
+    data = json.loads(info_path.read_text())
+    data.setdefault("metadata", {})["compatibility"] = list(compatibility)
+    info_path.write_text(json.dumps(data, indent=4) + "\n")
+    with tarfile.open(tgz, "w:gz") as tf:
+        tf.add(roots[0], arcname=roots[0].name)
+    return True

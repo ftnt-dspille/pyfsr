@@ -207,6 +207,16 @@ def cmd_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_set_compat(args: argparse.Namespace) -> int:
+    pack = packtools.Pack(args.pack)
+    changed = pack.set_widget_compatibility(args.versions)
+    for name in changed:
+        print(f"set {name} compatibility to {args.versions}")
+    if not changed:
+        print("no widget needed a change")
+    return 0
+
+
 def build_subparser(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("init", help="scaffold a solution pack directory")
     p.add_argument("directory")
@@ -222,6 +232,11 @@ def build_subparser(sub: argparse._SubParsersAction) -> None:
         p.add_argument("tgz")
         p.add_argument("--pack", required=True)
         p.set_defaults(func=cmd_add_installer, category=category + "s")
+
+    p = sub.add_parser("set-compat", help="set metadata.compatibility on every bundled widget")
+    p.add_argument("versions", nargs="+", help="e.g. 7.6.0")
+    p.add_argument("--pack", required=True)
+    p.set_defaults(func=cmd_set_compat)
 
     p = sub.add_parser("add-dashboard", help="export a dashboard from the appliance into the pack")
     p.add_argument("dashboard", help="dashboard uuid or exact displayName")

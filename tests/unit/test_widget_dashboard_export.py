@@ -136,3 +136,19 @@ def test_pack_add_dashboard_bundles_dependencies(tmp_path: Path, monkeypatch):
     bare = packtools.Pack.init(tmp_path / "bare", name="d", label="D", version="1.0.0")
     assert packtools.add_dashboard(_Client(), bare, "Demo", dependencies=False)["widgets"] == []
     assert bare.data_manifest("widgets") == []
+
+
+def test_pack_set_widget_compatibility(tmp_path: Path):
+    from pyfsr.utils import packtools
+    from pyfsr.widget_dev import widget_info_from_tgz
+
+    src = tmp_path / "w-1.0.0.tgz"
+    src.write_bytes(_tgz("w", "1.0.0", {"view.controller.js": "x"}))
+    pack = packtools.Pack.init(tmp_path / "pack", name="d", label="D", version="1.0.0")
+    pack.add_installer("widgets", src)
+    assert pack.set_widget_compatibility(["7.6.0"]) == ["w-1.0.0.tgz"]
+    out = tmp_path / "pack/widgets/w-1.0.0.tgz"
+    assert widget_info_from_tgz(out)["metadata"]["compatibility"] == ["7.6.0"]
+    with tarfile.open(out) as tf:
+        assert "w-1.0.0/view.controller.js" in tf.getnames()
+    assert pack.set_widget_compatibility(["7.6.0"]) == []

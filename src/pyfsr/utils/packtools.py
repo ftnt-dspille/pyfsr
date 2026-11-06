@@ -160,6 +160,17 @@ class Pack:
         (section / "data.json").write_text(json.dumps(rows, indent=2) + "\n")
         return row
 
+    def set_widget_compatibility(self, compatibility: list[str]) -> list[str]:
+        """Set ``metadata.compatibility`` on every bundled widget tgz; returns the files changed."""
+        from ..widget_dev import set_widget_compatibility
+
+        changed = []
+        for row in self.data_manifest("widgets"):
+            path = self.path / SECTION_DIRS["widgets"] / row["installer_path"]
+            if path.is_file() and set_widget_compatibility(path, compatibility):
+                changed.append(path.name)
+        return changed
+
     def data_manifest(self, category: str) -> list[dict]:
         data = self.path / SECTION_DIRS[category] / "data.json"
         if not data.exists():

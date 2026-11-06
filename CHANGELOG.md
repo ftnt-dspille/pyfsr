@@ -17,6 +17,9 @@ All notable changes to this project will be documented in this file.
   widget it needs (nested included) and every installed connector those
   widgets call, as tgz installers. `--no-dependencies` keeps the old
   dashboard-only behavior; exits 1 when the box lacks a widget the dashboard places.
+- **`pyfsr pack set-compat <versions...> --pack <dir>`** (`Pack.set_widget_compatibility`,
+  `widget_dev.set_widget_compatibility`): rewrite `metadata.compatibility` in every
+  bundled widget tgz, e.g. `7.6.0` so 8.0-tagged widgets install on 7.6.
 - **Widget upload/deploy works with an API key** (FortiSOC tenants). The
   Content-Hub installer route answers an API key with 401, so an API-key client
   now uploads through `POST /api/3/widgets/import` (the Import Wizard's own
