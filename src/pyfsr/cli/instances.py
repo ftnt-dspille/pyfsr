@@ -48,8 +48,8 @@ the auth column reports only the *kind* of credential in use.
 from __future__ import annotations
 
 import argparse
-import json
 import contextlib
+import json
 import os
 import shlex
 import tempfile
