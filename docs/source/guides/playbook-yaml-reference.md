@@ -743,6 +743,8 @@ into your YAML, a human `message`, and a `severity` (`error` or `warning`):
 ... playbooks:
 ...   - name: P
 ...     steps:
+...       - name: Start
+...         type: start
 ...       - name: S
 ...         type: not_a_real_type
 ... ''')
@@ -752,9 +754,9 @@ into your YAML, a human `message`, and a `severity` (`error` or `warning`):
 ['unknown_step_type']
 >>> diag = bad.errors[0]
 >>> (diag["severity"], diag["path"])
-('error', 'playbooks[0].steps[0].type')
+('error', 'playbooks[0].steps[1].type')
 >>> format_diagnostic(diag)              # the line `validate` prints
-"[ERROR] unknown_step_type at playbooks[0].steps[0].type: unknown step type: 'not_a_real_type'"
+"[ERROR] unknown_step_type at playbooks[0].steps[1].type: unknown step type: 'not_a_real_type'"
 ```
 
 The `code` is the stable machine identifier to branch on (e.g.
