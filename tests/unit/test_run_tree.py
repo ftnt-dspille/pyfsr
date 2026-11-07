@@ -398,3 +398,67 @@ def test_step_timeline_applies_slow_threshold_ms():
     api = PlaybooksAPI(TreeClient(runs))
     assert api.step_timeline(10)[0].is_slow is False  # 5s < 30s default
     assert api.step_timeline(10, slow_threshold_ms=1_000)[0].is_slow is True  # 5s > 1s
+
+
+# The record-action trigger answers `task_ids: [...]`, and TriggerResponse
+# keeps it as a list in `task_id`. Passing that straight on used to make
+# run_tree str() the list ("['…']"), resolve nothing, and wait_for_task poll
+# a None status until its timeout -- a run that failed in 10s "timed out" at 420s.
+def test_run_tree_accepts_single_task_id_list():
+    runs = {"10": {"name": "P", "status": "finished", "parent": None}}
+    tid = "12345678-1234-1234-1234-123456789abc"
+    tree = PlaybooksAPI(TreeClient(runs, task_map={tid: "10"})).run_tree([tid])
+    assert tree.pk == "10" and tree.status == "finished"
+    assert tree.task_id == tid
+
+
+def test_wait_for_task_accepts_single_task_id_list():
+    runs = {"10": {"name": "P", "status": "failed", "parent": None}}
+    tid = "12345678-1234-1234-1234-123456789abc"
+    tree = PlaybooksAPI(TreeClient(runs, task_map={tid: "10"})).wait_for_task([tid], timeout=1, poll_interval=0)
+    assert tree.status == "failed"
+
+
+@pytest.mark.parametrize("call", ["run_tree", "wait_for_task", "wait"])
+def test_several_task_ids_are_refused_by_name(call):
+    a, b = "12345678-1234-1234-1234-123456789abc", "22345678-1234-1234-1234-123456789abc"
+    with pytest.raises(ValueError, match="task_ids"):
+        getattr(PlaybooksAPI(TreeClient({})), call)([a, b])
+
+
+class RevokeClient(TreeClient):
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.revoked = []
+
+    def get(self, endpoint, params=None, **kw):
+        if endpoint == "/api/3/actors/current":
+            return {"@id": "/api/3/api_keys/abc"}
+        return super().get(endpoint, params=params, **kw)
+
+    def post(self, endpoint, data=None, params=None, **kw):
+        if "revoke/tasks" in endpoint:
+            self.revoked.append(data)
+            return {"message": "Success."}
+        return super().post(endpoint, data=data, params=params, **kw)
+
+
+@pytest.mark.parametrize(
+    "run",
+    [
+        "10",
+        10,
+        "/api/wf/api/workflows/10/",
+        "12345678-1234-1234-1234-123456789abc",
+        ["12345678-1234-1234-1234-123456789abc"],
+    ],
+)
+def test_terminate_posts_revoke_with_pk_and_caller(run):
+    c = RevokeClient({}, task_map={"12345678-1234-1234-1234-123456789abc": "10"})
+    assert PlaybooksAPI(c).terminate(run) == {"message": "Success."}
+    assert c.revoked == [{"wfLogId": 10, "user": "/api/3/api_keys/abc"}]
+
+
+def test_terminate_unresolvable_run_raises():
+    with pytest.raises(ValueError, match="could not resolve"):
+        PlaybooksAPI(RevokeClient({})).terminate("12345678-1234-1234-1234-123456789abc")

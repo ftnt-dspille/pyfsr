@@ -201,6 +201,25 @@ TRIGGER_TYPE_NAMES: dict[str, str] = {
 _looks_like_uuid = is_uuid
 
 
+def _one_task_id(task_id: Any) -> Any:
+    """Unwrap a one-element task-id list; refuse a longer one.
+
+    The record-action trigger answers ``task_ids: [...]`` and
+    :class:`~pyfsr.models.TriggerResponse` keeps it as a list in ``task_id``.
+    Passed on as-is, the list stringified to ``"['…']"``, resolved to no run,
+    and :meth:`PlaybooksAPI.wait_for_task` polled a ``None`` status until its
+    timeout (a run that failed in 10s reported a 420s timeout).
+    """
+    if isinstance(task_id, (list, tuple)):
+        if len(task_id) == 1:
+            return task_id[0]
+        raise ValueError(
+            f"got {len(task_id)} task_ids {list(task_id)!r}; wait on one at a time "
+            "(TriggerResponse.task_ids lists every run the trigger started)"
+        )
+    return task_id
+
+
 _STEP_PREVIEW_LIMIT = 500
 
 
@@ -2285,6 +2304,7 @@ class PlaybooksAPI(BaseAPI):
                 for s in child.steps:
                     print(f"  {s.name:40} {s.duration_ms}ms")
         """
+        run = _one_task_id(run)
         pk = self._resolve_run_pk(run)
         task_id = str(run) if _looks_like_uuid(str(run)) else None
         if pk is None:
@@ -2639,6 +2659,36 @@ class PlaybooksAPI(BaseAPI):
             return self.wait(task_id, timeout=timeout, interval=interval)
         return TriggerResponse(**resp) if isinstance(resp, dict) else resp
 
+    # ------------------------------------------------------------- terminate
+    def terminate(self, run: str | int | RunSummary | builtins.list[str]) -> dict[str, Any]:
+        """Terminate a running or awaiting playbook run, as the UI's Terminate does.
+
+        ``POST /api/wf/workflow/revoke/tasks/`` with ``{"wfLogId": <run pk>,
+        "user": <caller IRI>}`` -- the route behind the Executed Playbook Logs
+        "Terminate current instance" button (read from the 7.6.6 UI bundle;
+        live-verified under an API key, where the caller IRI is the key's
+        ``/api/3/api_keys/<uuid>``). The run then reads ``terminated``. Use it
+        to clear a run parked ``awaiting`` that will never resume.
+
+        Args:
+            run: a run pk / ``@id`` / ``task_id`` (or a one-element ``task_id``
+                list, as a record-action trigger returns).
+
+        Returns:
+            The appliance's answer (``{"message": "Success."}``).
+
+        Raises:
+            ValueError: ``run`` resolves to no run.
+        """
+        pk = self._resolve_run_pk(_one_task_id(run))
+        if pk is None:
+            raise ValueError(f"could not resolve a run for {run!r}")
+        user = self.client.get("/api/3/actors/current").get("@id")
+        return self.client.post(
+            "/api/wf/workflow/revoke/tasks/?format=json",
+            data={"wfLogId": int(pk), "user": user},
+        )
+
     # ------------------------------------------------------------------ wait
     def wait(
         self,
@@ -2662,6 +2712,7 @@ class PlaybooksAPI(BaseAPI):
         Returns:
             A shaped run dict (``{task_id, name, status, error_message, ...}``).
         """
+        task_id = _one_task_id(task_id)
         if not isinstance(task_id, str) or not task_id.strip():
             raise ValueError("wait() requires a non-empty task_id")
         deadline = time.monotonic() + timeout
@@ -2913,6 +2964,7 @@ class PlaybooksAPI(BaseAPI):
             ...         client.manual_input.answer(input_id=gate, option=0)
             >>> tree = client.playbooks.wait_for_task(task_id, on_poll=drive)  # doctest: +SKIP
         """
+        task_id = _one_task_id(task_id)
         deadline = time.monotonic() + timeout
         started = time.monotonic()
         poll_count = 0
