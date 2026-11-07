@@ -635,6 +635,42 @@ def warm_catalog(
                     _stamp("connectors")
             _lap("connectors", _t)
 
+        # `agents` + agent-scoped `connector_configs` (LAST: the connectors section
+        # above rewrites connector_configs hub-only) -- a step's `on_remote:` agent
+        # name and `config:` name resolve to the agentId and the config UUID on
+        # THAT agent. Unwarmed, the compiler refuses an agent name (the hub routes
+        # by agentId only: a name on the wire fails "No agent found"), and a config
+        # name alone cannot pick its agent. Delegates to fsr_playbooks' warmup,
+        # which pages every hub + per-agent configuration.
+        if _fresh("agents"):
+            summary["agents"] = _count("agents")
+            summary["agents_ms"] = 0
+            summary["agents_skipped"] = 1
+        else:
+            _t = time.perf_counter()
+            try:
+                from fsr_playbooks.warmup import (  # type: ignore[import-not-found]
+                    apply_migrations,
+                    fetch_all_connector_configs,
+                    write_agents,
+                    write_connector_configs,
+                )
+
+                apply_migrations(conn)  # older caches: agents table + agent_id column
+                members, agents, self_id = fetch_all_connector_configs(client)
+                summary["agents"] = write_agents(conn, agents, self_id)
+                # write_connector_configs REPLACES the table; the fetch is hub +
+                # every agent, so it is a superset of the connectors section's
+                # rows -- but an empty fetch must not erase them.
+                if members:
+                    summary["connector_configs"] = write_connector_configs(conn, members)[1]
+            except Exception as exc:
+                summary["agents"] = 0
+                logger.warning("warm_catalog: agents section failed, not marking fresh: %s", exc)
+            else:
+                _stamp("agents")
+            _lap("agents", _t)
+
         conn.commit()
         summary["total_ms"] = int((time.perf_counter() - t_start) * 1000)
     finally:

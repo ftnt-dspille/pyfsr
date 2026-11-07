@@ -1231,6 +1231,52 @@ class ConnectorsAPI(BaseAPI):
         hit = self._find_configured(connector)
         return hit.configurations if hit else []
 
+    def configurations_by_location(self, connector: str) -> list[dict[str, Any]]:
+        """Every configuration of ``connector`` on the hub AND on each remote agent.
+
+        :meth:`configurations` reads the hub's own install only, so a connector
+        installed just on agents (live: a FortiSOC tenant whose AD lived only on
+        agents) lists nothing. Each agent holds its own install of the connector
+        -- a separate install id (``conn_id``) -- and a configuration's
+        ``connector`` field carries the id of the install it belongs to. This maps
+        those ids back to their location.
+
+        Returns ``[{"name", "config_id", "default", "agent"}]``; ``agent`` is the
+        hex agentId, ``""`` for the hub.
+        """
+        catalog = self.client.get("/api/integration/connectors/", params={"name": connector, "format": "json"})
+        rows = catalog.get("data") if isinstance(catalog, dict) else catalog
+        location: dict[int, str] = {}
+        for row in rows or []:
+            if not isinstance(row, dict) or row.get("name", connector) != connector:
+                continue
+            if row.get("id") is not None:
+                location[int(row["id"])] = ""
+            version = row.get("version")
+            if not version:
+                continue
+            installs = self.client.post(
+                f"/api/integration/connectors/agents/{connector}/{version}/?format=json&active=true", data={}
+            )
+            installs = installs.get("data") if isinstance(installs, dict) else installs
+            for inst in installs or []:
+                if isinstance(inst, dict) and inst.get("conn_id") and inst.get("agent"):
+                    location[int(inst["conn_id"])] = inst["agent"]
+        out: list[dict[str, Any]] = []
+        for cfg in self.list_configurations(page_size=500):
+            d = cfg if isinstance(cfg, dict) else cfg.model_dump()
+            conn = d.get("connector")
+            if isinstance(conn, int) and conn in location:
+                out.append(
+                    {
+                        "name": d.get("name"),
+                        "config_id": d.get("config_id"),
+                        "default": bool(d.get("default")),
+                        "agent": d.get("agent") or location[conn],
+                    }
+                )
+        return out
+
     def resolve_version(self, connector: str) -> str | None:
         """The configured version of ``connector`` (``None`` if not configured)."""
         hit = self._find_configured(connector)

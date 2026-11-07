@@ -648,3 +648,48 @@ playbooks:
     wf = result.fsr_json["data"][0]["workflows"][0]
     assert wf["isPrivate"] is True
     assert wf["owners"] == ["/api/3/teams/d34aff9d-3b61-413e-8ced-854743e8ddcc"]
+
+
+@requires_compiler
+def test_warm_catalog_warms_agents_and_agent_configs_last(tmp_path, monkeypatch):
+    """Agents + agent-scoped configs land in the catalog, AFTER the connectors
+    section (which rewrites connector_configs hub-only), so `on_remote:` names
+    and agent config names resolve."""
+    import sqlite3
+
+    import fsr_playbooks.warmup as fw
+
+    from pyfsr.authoring import warm_catalog
+
+    if not hasattr(fw, "fetch_all_connector_configs"):
+        pytest.skip("installed fsr_playbooks predates agent-scoped config warming")
+    agent = "a" * 32
+    monkeypatch.setattr(
+        fw,
+        "fetch_all_connector_configs",
+        lambda client: (
+            [
+                {
+                    "name": "activedirectory",
+                    "_agent_id": agent,
+                    "configuration": [{"name": "Lab AD", "config_id": "u-1", "default": True}],
+                }
+            ],
+            {"branch-agent": agent},
+            "5" * 32,
+        ),
+    )
+    client = _WarmFakeClient(teams=[], picklists={}, tags_resp={"hydra:member": []})
+    db = tmp_path / "warmed.db"
+    summary = warm_catalog(client, db)
+    assert summary["agents"] >= 1 and summary["connector_configs"] >= 1
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT agent_id FROM agents WHERE name='branch-agent'").fetchone()[0] == agent
+    assert (
+        conn.execute(
+            "SELECT config_id FROM connector_configs WHERE connector='activedirectory' "
+            "AND config_name='Lab AD' AND agent_id=?",
+            (agent,),
+        ).fetchone()[0]
+        == "u-1"
+    )
