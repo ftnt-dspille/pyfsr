@@ -11,7 +11,7 @@ import pytest
 
 from pyfsr.cli.__main__ import main
 
-SECRET_KEY = "k-envfile-SECRET"
+SECRET_KEY = "fake-envfile-secret"
 SECRET_PW = "inline-pw-SECRET"
 SSH_PW = "ssh-pw-SECRET"
 
