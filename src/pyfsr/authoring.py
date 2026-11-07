@@ -303,8 +303,12 @@ def warm_catalog(
         """True when ``section`` was warmed within ``max_age`` seconds (skip it)."""
         if max_age is None or not meta_ok[0]:
             return False
-        row = conn.execute("SELECT warmed_at FROM _pyfsr_warm_meta WHERE section = ?", (section,)).fetchone()
-        return bool(row and row[0] is not None and (now - row[0]) < max_age)
+        row = conn.execute("SELECT warmed_at, source FROM _pyfsr_warm_meta WHERE section = ?", (section,)).fetchone()
+        if not row or row[0] is None or (now - row[0]) >= max_age:
+            return False
+        # Warmed from another instance (an explicit db_path reused across boxes):
+        # its rows are not this box's, so never skip on them.
+        return not (src_path and row[1] and row[1] != "live" and row[1] != src_path)
 
     def _stamp(section: str) -> None:
         """Record ``section``'s warm time + provenance for future ``max_age`` skips."""
@@ -869,14 +873,45 @@ def _normalize_lax_codes(lax_codes: Any) -> set | None:
     return out
 
 
-def _default_cache_db() -> Path:
-    """A writable per-user cache location for the warmed reference catalog."""
+#: Seconds a section of the seamless per-instance cache stays fresh before the
+#: next compile re-pulls it. Override with ``PYFSR_CATALOG_MAX_AGE`` (``0`` = re-warm
+#: every call, the pre-0.x behaviour). A compile that fails after a skipped section
+#: re-warms fully and retries once, so a just-installed connector or new team is
+#: never hidden by the cache.
+DEFAULT_CATALOG_MAX_AGE = 300.0
+
+
+def _catalog_max_age() -> float | None:
+    raw = os.environ.get("PYFSR_CATALOG_MAX_AGE")
+    try:
+        age = float(raw) if raw not in (None, "") else DEFAULT_CATALOG_MAX_AGE
+    except ValueError:
+        age = DEFAULT_CATALOG_MAX_AGE
+    return age if age > 0 else None
+
+
+def _default_cache_db(client: _AuthoringClient | None = None) -> Path:
+    """A writable per-user cache for the warmed reference catalog, ONE PER INSTANCE.
+
+    Keyed by the client's base URL: a shared file let box A's custom connectors,
+    agents and agent configs (upserted, never pruned) resolve while compiling for
+    box B.
+    """
     base = os.environ.get("XDG_CACHE_HOME")
-    if base:
-        cache = Path(base)
-    else:
-        cache = Path.home() / ".cache"
-    return cache / "pyfsr" / "fsr_reference.db"
+    cache = (Path(base) if base else Path.home() / ".cache") / "pyfsr"
+    url = str(getattr(client, "base_url", "") or "") if client is not None else ""
+    if not url:
+        return cache / "fsr_reference.db"
+    import hashlib
+
+    return cache / f"fsr_reference-{hashlib.sha1(url.encode()).hexdigest()[:12]}.db"
+
+
+def _warm_cache(client: _AuthoringClient, *, full: bool = False) -> tuple[Path, bool]:
+    """Warm the client's per-instance cache; returns (path, any_section_skipped)."""
+    cache = _default_cache_db(client)
+    summary = warm_catalog(client, cache, max_age=None if full else _catalog_max_age())
+    return cache, any(k.endswith("_skipped") and v for k, v in summary.items())
 
 
 def compile_playbook_yaml(
@@ -895,8 +930,10 @@ def compile_playbook_yaml(
     Pass ``client`` to make warming **seamless**: a per-user cache catalog is
     warmed from the live instance (teams/picklists/tags) before compiling, so
     author-friendly tokens like ``owners: ["TeamA"]`` resolve to IRIs without
-    the caller ever touching SQLite or a ``db_path``. The cache is refreshed
-    on every call with a client so freshly-created teams are picked up.
+    the caller ever touching SQLite or a ``db_path``. The cache is one file per
+    instance; a section warmed in the last ``PYFSR_CATALOG_MAX_AGE`` seconds
+    (default 300) is reused, and a compile that fails on a reused section re-warms
+    fully and retries once, so freshly-created teams or connectors still resolve.
 
     Args:
         text: the playbook YAML source.
@@ -925,8 +962,13 @@ def compile_playbook_yaml(
         # Seamless warm: refresh the per-user cache from the live instance so
         # author-friendly tokens (team names, picklists, tags) resolve without
         # the caller knowing about SQLite. The user never passes a db_path.
-        resolved = _default_cache_db()
-        warm_catalog(client, resolved)
+        resolved, skipped = _warm_cache(client)
+        result = compile_yaml(text, resolved, lax_codes=_normalize_lax_codes(lax_codes))
+        if not result.ok and skipped:  # maybe stale: re-pull everything, compile once more
+            resolved, _ = _warm_cache(client, full=True)
+            result = compile_yaml(text, resolved, lax_codes=_normalize_lax_codes(lax_codes))
+        errors = [e.to_dict() for e in result.errors]
+        return CompiledPlaybook(fsr_json=result.fsr_json, errors=errors, ok=result.ok)
     else:
         resolved = default_db_path()
     result = compile_yaml(text, resolved, lax_codes=_normalize_lax_codes(lax_codes))
@@ -942,9 +984,7 @@ def _resolve_catalog(client: _AuthoringClient | None, db_path: str | Path | None
     if db_path is not None:
         return Path(db_path)
     if client is not None:
-        cache = _default_cache_db()
-        warm_catalog(client, cache)
-        return cache
+        return _warm_cache(client)[0]
     return default_db_path()
 
 
