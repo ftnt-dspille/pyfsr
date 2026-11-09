@@ -4,7 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-09
+
+### Changed
+
+- **Playbook compiles warm only what the playbook uses** (requires
+  `fsr_playbooks>=0.11`): `compile_playbook_yaml(text, client=...)` warms the
+  connectors, modules and picklists that playbook refers to through the library's
+  per-box catalog; a failed compile retries once after a full warm, and a warm the
+  library cannot complete falls back to pyfsr's section warm. One catalog file per
+  box whatever the URL spelling. On soar-ga a first compile went from 81 HTTP calls
+  to 19, and a repeat inside the recheck window makes none.
+- **Bulk writes and the pre-write check**: with `parse=True`, `bulk_upsert` /
+  `bulk_insert` list a row the schema check refuses as a failed row (input index and
+  reason) and still send the rest; server failure indexes map back to the caller's
+  rows. Without `parse` a refusal raises.
+
 ### Fixed
+
+- A `model_metadatas` member with no field list no longer becomes a schema with zero
+  fields (which refused every field).
+- Replay/demo clients keep schemas in memory only and never read or clear the
+  user's schema cache.
+- The section warm force-refreshes picklists when that section is due, and an
+  `fsr_playbooks` without agent warming is reported as unsupported, not as a failure.
 
 - **Connector configuration owner teams can no longer silently go public**:
   the appliance accepts bare uuids in `teams` on `PUT /api/integration/configuration/`
