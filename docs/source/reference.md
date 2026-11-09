@@ -24,6 +24,7 @@ nested under the `pyfsr` package) so every module is one click from here.
 
 autoapi/pyfsr/client/index
 autoapi/pyfsr/records/index
+autoapi/pyfsr/schema/index
 autoapi/pyfsr/query/index
 autoapi/pyfsr/pagination/index
 autoapi/pyfsr/fields/index

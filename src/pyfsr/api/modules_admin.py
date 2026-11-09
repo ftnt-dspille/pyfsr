@@ -2382,7 +2382,7 @@ class ModulesAdminAPI(BaseAPI):
         reset_stale_log: bool | Any = False,
         progress: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
-        """Commit all pending staged schema changes to live; see :meth:`_publish` for details.
+        """Commit all pending staged schema changes to live; see ``_publish`` for details.
 
         Whatever the outcome, the client's cached schema for this instance is dropped
         afterwards (``client.schema`` and ``client.modules``): a publish is
