@@ -937,8 +937,12 @@ def _warm_cache(client: _AuthoringClient, *, full: bool = False, playbook: str |
     """
     box_catalog = _library_box_catalog()
     if box_catalog is not None:
-        path = box_catalog(client, playbook=None if full else playbook, full=full)
-        return Path(path), not full
+        try:
+            path = box_catalog(client, playbook=None if full else playbook, full=full)
+        except Exception as exc:  # a failed warm must not stop the compile
+            logger.warning("box_catalog warm failed, using pyfsr's section warm: %s", exc)
+        else:
+            return Path(path), not full
     cache = _default_cache_db(client)
     summary = warm_catalog(client, cache, max_age=None if full else _catalog_max_age())
     return cache, any(k.endswith("_skipped") and v for k, v in summary.items())

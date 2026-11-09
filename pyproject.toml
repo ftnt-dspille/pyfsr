@@ -115,9 +115,10 @@ mcp = [
 # compatible (compiler/decompiler entry points unchanged; the library suite
 # runs green against the 0.7 wheel lineage). Floor raised to 0.10.3 for
 # authoring.data_ingestion_template (fsr_playbooks.ingestion_template first
-# ships there); the full unit suite runs green against the 0.10.3 wheel.
+# ships there). Floor raised to 0.11.0 for leveled box_catalog warming; the full
+# unit suite runs green against the 0.11.0 wheel.
 playbooks = [
-    "fsr_playbooks>=0.10.3,<0.11",
+    "fsr_playbooks>=0.11.0,<0.12",
 ]
 
 [project.scripts]

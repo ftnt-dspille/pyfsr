@@ -591,7 +591,7 @@ wheels = [
 
 [[package]]
 name = "fsr-playbooks"
-version = "0.10.3"
+version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jinja2" },
@@ -600,7 +600,7 @@ dependencies = [
     { name = "ruamel-yaml" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ce/29/b2939c4571f34b25c1a4761c2c6fce3587b94a8cd48c620e75504fb26ac6/fsr_playbooks-0.10.3-py3-none-any.whl", hash = "sha256:29b95e225328674ee58c7750691ec4e27fc266e8edf0f8d3425d44e2a8a48ff5", size = 1648003, upload-time = "2026-11-05T23:41:37.891Z" },
+    { url = "https://files.pythonhosted.org/packages/73/47/23c98b0a08b6969a03c820ea57e6969ebc57daadecea1bfb3253944b6a75/fsr_playbooks-0.11.0-py3-none-any.whl", hash = "sha256:c23b8df49706fcf2c67086e0289e3aecea337f3f8a374fdeea3c74bd1cd35c2d", size = 1564635, upload-time = "2026-11-09T16:32:32.015Z" },
 ]
 
 [[package]]
@@ -1493,7 +1493,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "coverage", marker = "extra == 'test'", specifier = ">=7.6.9" },
-    { name = "fsr-playbooks", marker = "extra == 'playbooks'", specifier = ">=0.10.3,<0.11" },
+    { name = "fsr-playbooks", marker = "extra == 'playbooks'", specifier = ">=0.11.0,<0.12" },
     { name = "furo", marker = "extra == 'docs'", specifier = ">=2024.8.6" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2,<3" },
     { name = "mcp", marker = "extra == 'test'", specifier = ">=2,<3" },

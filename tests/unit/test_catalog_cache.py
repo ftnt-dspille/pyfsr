@@ -44,6 +44,7 @@ def _fake_compiler(monkeypatch, results):
 
 def test_failed_compile_on_skipped_cache_rewarms_fully_and_retries(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setattr(authoring, "_library_box_catalog", lambda: None)
     warms = []
 
     def warm(client, db, *, max_age=None, connectors=True):
@@ -59,7 +60,36 @@ def test_failed_compile_on_skipped_cache_rewarms_fully_and_retries(tmp_path, mon
 
 def test_failed_compile_after_full_warm_is_not_retried(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setattr(authoring, "_library_box_catalog", lambda: None)
     monkeypatch.setattr(authoring, "warm_catalog", lambda *a, **k: {"teams": 1})
     calls = _fake_compiler(monkeypatch, [False])
     assert not authoring.compile_playbook_yaml("x", client=_client("https://a.example.com")).ok
     assert len(calls) == 1
+
+
+def test_library_warm_gets_the_playbook_then_a_full_warm_on_failure(tmp_path, monkeypatch):
+    warms = []
+
+    def box_catalog(client, *, playbook=None, full=False):
+        warms.append((playbook, full))
+        return tmp_path / "catalog.db"
+
+    monkeypatch.setattr(authoring, "_library_box_catalog", lambda: box_catalog)
+    calls = _fake_compiler(monkeypatch, [False, True])
+    res = authoring.compile_playbook_yaml("steps: []", client=_client("https://a.example.com"))
+    assert res.ok and calls == [tmp_path / "catalog.db"] * 2
+    assert warms == [("steps: []", False), (None, True)]
+
+
+def test_a_failed_library_warm_falls_back_to_the_section_warm(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+
+    def box_catalog(client, **kw):
+        raise RuntimeError("box unreachable")
+
+    fallback = []
+    monkeypatch.setattr(authoring, "_library_box_catalog", lambda: box_catalog)
+    monkeypatch.setattr(authoring, "warm_catalog", lambda *a, **k: fallback.append(1) or {"teams": 1})
+    _fake_compiler(monkeypatch, [True])
+    assert authoring.compile_playbook_yaml("x", client=_client("https://a.example.com")).ok
+    assert fallback == [1]
