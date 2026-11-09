@@ -38,6 +38,9 @@ All notable changes to this project will be documented in this file.
 
 - Environment values passed to an appliance command (database passwords) are masked
   in `CommandResult.argv` and in error messages; they were echoed for sudo commands.
+  The device UUID (the DB/ES password) and the SSH/sudo passwords are always masked,
+  and the ES checks send the elastic credentials as a curl config on stdin instead
+  of `-u` in the command line.
 - A `model_metadatas` member with no field list no longer becomes a schema with zero
   fields (which refused every field).
 - Replay/demo clients keep schemas in memory only and never read or clear the

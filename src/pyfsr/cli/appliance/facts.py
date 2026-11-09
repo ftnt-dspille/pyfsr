@@ -64,6 +64,7 @@ class Facts:
                 + ("\n(run `pyfsr appliance doctor` to see which step fails)" if res.diagnosis else "")
             )
         self._device_uuid = uuid
+        self.transport.add_secret(uuid)  # it is the DB/ES password: never echo it
         return uuid
 
     @property

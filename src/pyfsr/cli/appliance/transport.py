@@ -147,15 +147,23 @@ def diagnose_failure(returncode: int, stderr: str, *, ssh: bool, sudo: bool) -> 
 
 def _redact(cmd: list[str], secrets: list[str]) -> list[str]:
     out = []
+    ordered = sorted({x for x in secrets if x}, key=len, reverse=True)
     for part in cmd:
-        for sec in secrets:
+        for sec in ordered:
             if sec:
                 part = part.replace(sec, "***")
         out.append(part)
     return out
 
 
-def _debug_line(target: str, cmd: list[str], result: CommandResult | None, seconds: float, note: str = "") -> None:
+def _debug_line(
+    target: str,
+    cmd: list[str],
+    result: CommandResult | None,
+    seconds: float,
+    note: str = "",
+    secrets: list[str] | None = None,
+) -> None:
     head = f"[pyfsr ssh] {target} ({seconds:.2f}s)"
     if result is None:
         print(f"{head} {note}: {shlex.join(cmd)}", file=sys.stderr)
@@ -165,7 +173,7 @@ def _debug_line(target: str, cmd: list[str], result: CommandResult | None, secon
         print(f"[pyfsr ssh]   reason: {result.diagnosis}", file=sys.stderr)
     if result.returncode != 0 and result.stderr.strip():
         tail = result.stderr.strip().splitlines()[-8:]
-        for line in tail:
+        for line in _redact(tail, secrets or []):
             print(f"[pyfsr ssh]   stderr: {line}", file=sys.stderr)
 
 
@@ -204,6 +212,20 @@ class Transport:
     target: str = "<unknown>"
     #: Log each command to stderr (see :func:`debug_from_env`).
     debug: bool = False
+
+    def add_secret(self, value: str | None) -> None:
+        """Mask ``value`` wherever this transport echoes a command (results, errors, debug log)."""
+        if value:
+            secrets = self.__dict__.setdefault("_secrets", set())
+            secrets.add(value)
+
+    def _mask(self, cmd: list[str], env: dict[str, str] | None) -> list[str]:
+        return _redact(cmd, self._secret_values(env))
+
+    def _secret_values(self, env: dict[str, str] | None) -> list[str]:
+        values = list((env or {}).values()) + sorted(self.__dict__.get("_secrets", ()))
+        values += [getattr(self, a, None) or "" for a in ("password", "sudo_password")]
+        return [shlex.quote(v) for v in values if v] + [v for v in values if v]
 
     def run(
         self,
@@ -253,7 +275,7 @@ class LocalTransport(Transport):
                 stdin = f"{self.sudo_password}\n{input_text or ''}"
         else:
             cmd = list(argv)
-        shown = _redact(cmd, list((env or {}).values()))
+        shown = self._mask(cmd, env)
         t0 = time.perf_counter()
         try:
             proc = subprocess.run(
@@ -278,7 +300,7 @@ class LocalTransport(Transport):
             diagnosis=diagnose_failure(proc.returncode, proc.stderr, ssh=False, sudo=sudo),
         )
         if self.debug:
-            _debug_line(self.target, shown, result, time.perf_counter() - t0)
+            _debug_line(self.target, shown, result, time.perf_counter() - t0, secrets=self._secret_values(env))
         return result
 
 
@@ -374,7 +396,7 @@ class SSHTransport(Transport):
         cmd = [*self._ssh_prefix(), remote_cmd]
         # The password never appears in argv (it is only in the env); env values
         # (DB passwords and the like) are masked in what is echoed or logged.
-        echoed = _redact(cmd, [shlex.quote(v) for v in (env or {}).values()] + list((env or {}).values()))
+        echoed = self._mask(cmd, env)
         t0 = time.perf_counter()
         # The askpass helper's temp dir exists only for the duration of ssh.
         with self._askpass() as askpass_env:
@@ -405,7 +427,13 @@ class SSHTransport(Transport):
             diagnosis=diagnose_failure(proc.returncode, proc.stderr, ssh=True, sudo=sudo),
         )
         if self.debug:
-            _debug_line(f"{self.target}:{self.port}", echoed, result, time.perf_counter() - t0)
+            _debug_line(
+                f"{self.target}:{self.port}",
+                echoed,
+                result,
+                time.perf_counter() - t0,
+                secrets=self._secret_values(env),
+            )
         return result
 
 

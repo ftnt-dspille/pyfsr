@@ -130,3 +130,28 @@ def test_doctor_reports_a_refused_port(monkeypatch):
     monkeypatch.setattr(doctor.socket, "create_connection", refuse)
     report = doctor.run(_Box(host="fsr.example.com", port=2222))
     assert report.first_failure.name == "reach host" and "2222 refused" in report.first_failure.detail
+
+
+def test_registered_secrets_and_passwords_never_reach_the_debug_log(monkeypatch, capsys):
+    _fake_run(monkeypatch, code=7, stderr="auth failed for elastic:0123456789abcdef with pw <your-password>")
+    t = SSHTransport(host="fsr.example.com", password="<your-password>", debug=True)
+    t.add_secret("0123456789abcdef")
+    r = t.run(["curl", "-u", "elastic:0123456789abcdef", "http://localhost:9200/"])
+    err = capsys.readouterr().err
+    for secret in ("0123456789abcdef", "<your-password>"):
+        assert secret not in err and secret not in " ".join(r.argv)
+
+
+def test_es_credentials_go_on_stdin_not_argv(monkeypatch):
+    from pyfsr.cli.appliance import es
+
+    seen = {}
+
+    class T(SSHTransport):
+        def run(self, argv, **kw):
+            seen.update(argv=argv, input=kw.get("input_text"))
+            return CommandResult(argv=argv, returncode=0, stdout="{}", stderr="")
+
+    facts = SimpleNamespace(transport=T(host="fsr.example.com"), device_uuid=lambda: "0123456789abcdef")
+    es._curl_es(facts, "/_cluster/health")
+    assert "0123456789abcdef" not in " ".join(seen["argv"]) and "0123456789abcdef" in seen["input"]
