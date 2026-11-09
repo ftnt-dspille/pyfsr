@@ -17,11 +17,14 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
-from collections.abc import Iterator
+import time
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -81,6 +84,91 @@ def _sudo_wrap(argv: list[str], env: dict[str, str] | None) -> list[str]:
     return [*prefix, *argv]
 
 
+_DEBUG_VAR = "PYFSR_SSH_DEBUG"
+_TRUTHY_DEBUG = {"1", "true", "yes", "y", "on"}
+
+
+def debug_from_env(env: Mapping[str, str] | None = None) -> bool:
+    """``PYFSR_SSH_DEBUG`` as a bool (off unless set to 1/true/yes/on)."""
+    e = os.environ if env is None else env
+    return (e.get(_DEBUG_VAR) or "").strip().lower() in _TRUTHY_DEBUG
+
+
+# (pattern in ssh/sudo stderr, plain-language reason). First match wins.
+_SSH_REASONS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"Could not resolve hostname", re.I), "host name does not resolve (check the host / DNS)"),
+    (re.compile(r"Connection refused", re.I), "nothing is listening on that SSH port (wrong port, or sshd is down)"),
+    (
+        re.compile(r"(Connection timed out|Operation timed out|No route to host)", re.I),
+        "cannot reach the host on that port (network, VPN or firewall)",
+    ),
+    (
+        re.compile(r"REMOTE HOST IDENTIFICATION HAS CHANGED|Host key verification failed", re.I),
+        "the host key changed or is not trusted (box rebuilt? remove the old key from ~/.ssh/known_hosts)",
+    ),
+    (re.compile(r"Permission denied \(", re.I), "SSH login rejected: wrong user, password or key"),
+    (
+        re.compile(r"Too many authentication failures", re.I),
+        "SSH gave up after offering too many keys (pass --key, or use password auth)",
+    ),
+    (re.compile(r"Connection (closed|reset) by", re.I), "the server closed the connection during login"),
+]
+_SUDO_REASONS: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(r"incorrect password|Sorry, try again", re.I),
+        "sudo password rejected (set the right sudo password; it may differ from the SSH password)",
+    ),
+    (
+        re.compile(r"no password was provided|a password is required|no tty present", re.I),
+        "sudo needs a password and none was given (set a sudo password)",
+    ),
+    (
+        re.compile(r"not in the sudoers file|is not allowed to (execute|run)|may not run sudo", re.I),
+        "this user is not allowed to use sudo for that command",
+    ),
+]
+
+
+def diagnose_failure(returncode: int, stderr: str, *, ssh: bool, sudo: bool) -> str | None:
+    """A plain-language reason for a failed command, or ``None`` if it is the command's own failure."""
+    if returncode == 0:
+        return None
+    if sudo:
+        for rx, why in _SUDO_REASONS:
+            if rx.search(stderr):
+                return why
+    if ssh and returncode == 255:
+        for rx, why in _SSH_REASONS:
+            if rx.search(stderr):
+                return why
+        return "ssh itself failed before the command ran (exit 255)"
+    return None
+
+
+def _redact(cmd: list[str], secrets: list[str]) -> list[str]:
+    out = []
+    for part in cmd:
+        for sec in secrets:
+            if sec:
+                part = part.replace(sec, "***")
+        out.append(part)
+    return out
+
+
+def _debug_line(target: str, cmd: list[str], result: CommandResult | None, seconds: float, note: str = "") -> None:
+    head = f"[pyfsr ssh] {target} ({seconds:.2f}s)"
+    if result is None:
+        print(f"{head} {note}: {shlex.join(cmd)}", file=sys.stderr)
+        return
+    print(f"{head} exit {result.returncode}: {shlex.join(cmd)}", file=sys.stderr)
+    if result.diagnosis:
+        print(f"[pyfsr ssh]   reason: {result.diagnosis}", file=sys.stderr)
+    if result.returncode != 0 and result.stderr.strip():
+        tail = result.stderr.strip().splitlines()[-8:]
+        for line in tail:
+            print(f"[pyfsr ssh]   stderr: {line}", file=sys.stderr)
+
+
 class CommandResult(BaseModel):
     """Outcome of a single transport command."""
 
@@ -88,6 +176,8 @@ class CommandResult(BaseModel):
     returncode: int
     stdout: str
     stderr: str
+    #: Why it failed, in plain words, when the cause is SSH or sudo rather than the command.
+    diagnosis: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -96,7 +186,10 @@ class CommandResult(BaseModel):
     def check(self) -> CommandResult:
         """Raise :class:`TransportError` unless the command exited 0."""
         if not self.ok:
-            raise TransportError(f"command failed ({self.returncode}): {shlex.join(self.argv)}\n{self.stderr.strip()}")
+            reason = f"{self.diagnosis}\n" if self.diagnosis else ""
+            raise TransportError(
+                f"{reason}command failed ({self.returncode}): {shlex.join(self.argv)}\n{self.stderr.strip()}"
+            )
         return self
 
 
@@ -109,6 +202,8 @@ class Transport:
 
     #: Human label for the target, echoed before mutating ops.
     target: str = "<unknown>"
+    #: Log each command to stderr (see :func:`debug_from_env`).
+    debug: bool = False
 
     def run(
         self,
@@ -132,6 +227,11 @@ class LocalTransport(Transport):
 
     sudo_password: str | None = None
     target: str = "localhost"
+    debug: bool = False
+
+    def __init__(self, sudo_password: str | None = None, *, debug: bool = False) -> None:
+        self.sudo_password = sudo_password
+        self.debug = debug
 
     def run(
         self,
@@ -153,6 +253,8 @@ class LocalTransport(Transport):
                 stdin = f"{self.sudo_password}\n{input_text or ''}"
         else:
             cmd = list(argv)
+        shown = _redact(cmd, list((env or {}).values()))
+        t0 = time.perf_counter()
         try:
             proc = subprocess.run(
                 cmd,
@@ -165,8 +267,19 @@ class LocalTransport(Transport):
         except FileNotFoundError as exc:  # pragma: no cover - env dependent
             raise TransportError(f"executable not found: {cmd[0]}") from exc
         except subprocess.TimeoutExpired as exc:
-            raise TransportError(f"command timed out after {timeout}s: {shlex.join(cmd)}") from exc
-        return CommandResult(argv=cmd, returncode=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
+            if self.debug:
+                _debug_line(self.target, shown, None, time.perf_counter() - t0, f"timed out after {timeout}s")
+            raise TransportError(f"command timed out after {timeout}s: {shlex.join(shown)}") from exc
+        result = CommandResult(
+            argv=shown,
+            returncode=proc.returncode,
+            stdout=proc.stdout,
+            stderr=proc.stderr,
+            diagnosis=diagnose_failure(proc.returncode, proc.stderr, ssh=False, sudo=sudo),
+        )
+        if self.debug:
+            _debug_line(self.target, shown, result, time.perf_counter() - t0)
+        return result
 
 
 @dataclass
@@ -192,6 +305,9 @@ class SSHTransport(Transport):
     #: (accept-new) trusts a key on first sight and pins it in ~/.ssh/known_hosts.
     insecure_skip_host_key_check: bool = False
     extra_ssh_opts: list[str] = field(default_factory=list)
+    #: Print each command, its exit code, time and (on failure) stderr and reason to
+    #: stderr, and let ssh report its own connection steps. Secrets are masked.
+    debug: bool = False
 
     def __post_init__(self) -> None:
         if not self.host:
@@ -216,7 +332,7 @@ class SSHTransport(Transport):
             opts = ["-o", "StrictHostKeyChecking=accept-new"]
         opts += [
             "-o",
-            "LogLevel=ERROR",
+            "LogLevel=VERBOSE" if self.debug else "LogLevel=ERROR",
             "-p",
             str(self.port),
         ]
@@ -256,6 +372,10 @@ class SSHTransport(Transport):
             stdin = f"{self.sudo_password}\n{input_text or ''}"
 
         cmd = [*self._ssh_prefix(), remote_cmd]
+        # The password never appears in argv (it is only in the env); env values
+        # (DB passwords and the like) are masked in what is echoed or logged.
+        echoed = _redact(cmd, [shlex.quote(v) for v in (env or {}).values()] + list((env or {}).values()))
+        t0 = time.perf_counter()
         # The askpass helper's temp dir exists only for the duration of ssh.
         with self._askpass() as askpass_env:
             local_env = {**os.environ, **askpass_env}
@@ -271,10 +391,22 @@ class SSHTransport(Transport):
             except FileNotFoundError as exc:  # pragma: no cover - env dependent
                 raise TransportError(f"executable not found: {cmd[0]}") from exc
             except subprocess.TimeoutExpired as exc:
-                raise TransportError(f"ssh command timed out after {timeout}s") from exc
-        # The password never appears in the echoed argv (it is only in the env).
-        echoed = [*self._ssh_prefix(), remote_cmd]
-        return CommandResult(argv=echoed, returncode=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
+                if self.debug:
+                    _debug_line(self.target, echoed, None, time.perf_counter() - t0, f"timed out after {timeout}s")
+                raise TransportError(
+                    f"ssh command timed out after {timeout}s on {self.target}:{self.port} "
+                    "(host unreachable, or the command hung; run `pyfsr appliance doctor` to see which)"
+                ) from exc
+        result = CommandResult(
+            argv=echoed,
+            returncode=proc.returncode,
+            stdout=proc.stdout,
+            stderr=proc.stderr,
+            diagnosis=diagnose_failure(proc.returncode, proc.stderr, ssh=True, sudo=sudo),
+        )
+        if self.debug:
+            _debug_line(f"{self.target}:{self.port}", echoed, result, time.perf_counter() - t0)
+        return result
 
 
 def is_onbox() -> bool:
@@ -291,12 +423,16 @@ def make_transport(
     key_path: str | None = None,
     sudo_password: str | None = None,
     insecure_skip_host_key_check: bool = False,
+    debug: bool | None = None,
 ) -> Transport:
     """Pick a transport: explicit ``host`` → SSH; else local if on-box.
 
     Env fallbacks (used when the matching arg is None): ``PYFSR_APPLIANCE_HOST``,
-    ``PYFSR_APPLIANCE_USER``, ``PYFSR_APPLIANCE_PASSWORD``.
+    ``PYFSR_APPLIANCE_USER``, ``PYFSR_APPLIANCE_PASSWORD``, ``PYFSR_SSH_DEBUG``
+    (``debug``; off by default).
     """
+    if debug is None:
+        debug = debug_from_env()
     host = host or os.environ.get("PYFSR_APPLIANCE_HOST")
     if host:
         return SSHTransport(
@@ -307,9 +443,10 @@ def make_transport(
             key_path=key_path,
             sudo_password=sudo_password,
             insecure_skip_host_key_check=insecure_skip_host_key_check,
+            debug=debug,
         )
     if is_onbox():
-        return LocalTransport(sudo_password=sudo_password or password)
+        return LocalTransport(sudo_password=sudo_password or password, debug=debug)
     raise TransportError(
         "no appliance target: not running on a FortiSOAR box (/opt/cyops absent) and no "
         "--host / PYFSR_APPLIANCE_HOST given"
@@ -348,4 +485,5 @@ def transport_from_env(env: dict[str, str] | None = None) -> Transport:
         key_path=(e.get("PYFSR_APPLIANCE_KEY_PATH") or "").strip() or None,
         sudo_password=e.get("PYFSR_APPLIANCE_SUDO_PASSWORD") or None,
         insecure_skip_host_key_check=_env_truthy(e.get("PYFSR_APPLIANCE_INSECURE_SKIP_HOST_KEY_CHECK")),
+        debug=debug_from_env(e),
     )

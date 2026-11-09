@@ -6,6 +6,20 @@ All notable changes to this project will be documented in this file.
 
 ## [0.33.0] - 2026-11-09
 
+### Added
+
+- **`pyfsr appliance doctor`** checks the SSH path one read-only step at a time
+  (configuration, reach host, ssh login, FortiSOAR appliance, sudo, csadm), stops at
+  the first failure and says what to fix. `--json` for scripts; exits 1 on a failure.
+- **SSH debug logging**, off by default: `--debug` on any appliance verb,
+  `PYFSR_SSH_DEBUG=1`, or `debug = true` (or `PYFSR_SSH_DEBUG=1` in the `env_file`) in
+  an instance's `[appliance]` subtable. Each command is logged to stderr with its
+  exit code, time, stderr tail and reason, and ssh reports its own connection steps.
+- **Failures say why**: `CommandResult.diagnosis` names the cause when it is SSH or
+  sudo rather than the command (host does not resolve, port refused, unreachable,
+  host key changed, login rejected, sudo password rejected, sudo not allowed), and
+  `check()` and the device-UUID error lead with it.
+
 ### Changed
 
 - **Playbook compiles warm only what the playbook uses** (requires
@@ -22,6 +36,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Environment values passed to an appliance command (database passwords) are masked
+  in `CommandResult.argv` and in error messages; they were echoed for sudo commands.
 - A `model_metadatas` member with no field list no longer becomes a schema with zero
   fields (which refused every field).
 - Replay/demo clients keep schemas in memory only and never read or clear the

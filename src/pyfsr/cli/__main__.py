@@ -60,6 +60,13 @@ def _add_connection_args(p: argparse.ArgumentParser) -> None:
         action="store_true",
         help="disable SSH host-key verification (MITM-exposed; only for churning lab boxes)",
     )
+    g.add_argument(
+        "--debug",
+        action="store_true",
+        default=None,
+        help="log every SSH command, its exit code, time and why it failed to stderr "
+        "(secrets masked; also PYFSR_SSH_DEBUG=1 or debug = true in the instance's [appliance])",
+    )
 
 
 def _add_target_args(p: argparse.ArgumentParser) -> None:
@@ -75,7 +82,10 @@ def _make_transport(args: argparse.Namespace) -> Transport:
         # MCP server's --instance. Takes precedence over --host/--user/--password.
         from ..instances import InstanceRegistry
 
-        return InstanceRegistry.load().transport(instance)
+        t = InstanceRegistry.load().transport(instance)
+        if getattr(args, "debug", None):
+            t.debug = True
+        return t
     return make_transport(
         host=args.host,
         user=args.user,
@@ -84,6 +94,7 @@ def _make_transport(args: argparse.Namespace) -> Transport:
         port=args.port,
         key_path=args.key_path,
         insecure_skip_host_key_check=args.insecure_skip_host_key_check,
+        debug=getattr(args, "debug", None),
     )
 
 
@@ -435,6 +446,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_certs_regen.add_argument("hostname", help="FQDN to issue the cert for (the cert CN)")
     p_certs_regen.add_argument("--yes", action="store_true", help="skip confirmation")
     p_certs_regen.set_defaults(func=cmd_certs_regenerate)
+
+    # --- doctor ---
+    p_doctor = asub.add_parser(
+        "doctor",
+        help="check the SSH path step by step (reach, login, FortiSOAR, sudo, csadm) and say which step fails",
+    )
+    _add_connection_args(p_doctor)
+    _add_fmt(p_doctor)
+    p_doctor.set_defaults(func=cmd_doctor)
 
     # --- diagnose ---
     p_diag = asub.add_parser("diagnose", help="run fsr_diagnose.sh on the appliance")
@@ -1081,6 +1101,17 @@ def cmd_certs_regenerate(args: argparse.Namespace) -> int:
 
 
 # --- diagnose handler ----------------------------------------------------
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from .appliance import doctor as doctor_cmds
+
+    report = doctor_cmds.run(_make_transport(args))
+    if getattr(args, "fmt", "table") == "json":
+        print(report.model_dump_json(indent=2))
+    else:
+        print(report.render())
+    return 0 if report.ok else 1
+
+
 def cmd_diagnose(args: argparse.Namespace) -> int:
     print(diagnose_cmds.run(_make_transport(args), path=args.script), end="")
     return 0

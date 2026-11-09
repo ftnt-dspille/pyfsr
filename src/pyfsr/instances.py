@@ -140,6 +140,8 @@ class ApplianceSpec(BaseModel):
     key_path: str | None = None
     sudo_password: str | None = None
     insecure_skip_host_key_check: bool = False
+    #: ``debug = true`` (or ``PYFSR_SSH_DEBUG=1`` in the env_file) logs every SSH command.
+    debug: bool = False
 
 
 def _appliance_spec_from_table(
@@ -191,6 +193,8 @@ def _appliance_spec_from_table(
     sudo_password = pick("sudo_password", "PYFSR_APPLIANCE_SUDO_PASSWORD") or None
     insecure_raw = pick("insecure_skip_host_key_check", "PYFSR_APPLIANCE_INSECURE_SKIP_HOST_KEY_CHECK")
     insecure = bool(insecure_raw and str(insecure_raw).strip().lower() in _APPLIANCE_TRUTHY)
+    debug_raw = pick("debug", "PYFSR_SSH_DEBUG")
+    debug = bool(debug_raw and str(debug_raw).strip().lower() in _APPLIANCE_TRUTHY)
     return ApplianceSpec(
         host=str(host),
         user=str(user),
@@ -199,6 +203,7 @@ def _appliance_spec_from_table(
         key_path=key_path,
         sudo_password=sudo_password,
         insecure_skip_host_key_check=insecure,
+        debug=debug,
     )
 
 
@@ -381,4 +386,6 @@ class InstanceRegistry:
             key_path=spec.key_path,
             sudo_password=spec.sudo_password,
             insecure_skip_host_key_check=spec.insecure_skip_host_key_check,
+            # The profile turns it on; PYFSR_SSH_DEBUG=1 turns it on for any profile.
+            debug=True if spec.debug else None,
         )

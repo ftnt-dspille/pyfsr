@@ -46,8 +46,8 @@ class Facts:
         were provisioned with. ``csadm license --get-device-uuid`` is only a
         fallback: on a box whose entitlement has been re-issued (FortiCloud
         drift) it returns the *current* device UUID, which differs from the file
-        and **fails** ``cyberpgsql`` auth (verified live on a lab appliance,
-        2026-06-20). The file is csadmin-readable (no sudo needed)."""
+        and **fails** ``cyberpgsql`` auth (verified live on a lab appliance). The file is csadmin-readable
+        (no sudo needed)."""
         if self._device_uuid:
             return self._device_uuid
         # Primary: the install-time file (the actual DB/ES password). Fallback:
@@ -58,7 +58,11 @@ class Facts:
             res = self.transport.run(["csadm", "license", "--get-device-uuid"], sudo=True)
             uuid = _extract_uuid(res.stdout) if res.ok else None
         if not uuid:
-            raise TransportError("could not resolve device UUID (/home/csadmin/device_uuid + csadm both failed)")
+            why = res.diagnosis or (res.stderr.strip().splitlines() or [f"exit {res.returncode}"])[-1]
+            raise TransportError(
+                f"could not resolve device UUID (/home/csadmin/device_uuid + csadm both failed): {why}"
+                + ("\n(run `pyfsr appliance doctor` to see which step fails)" if res.diagnosis else "")
+            )
         self._device_uuid = uuid
         return uuid
 
