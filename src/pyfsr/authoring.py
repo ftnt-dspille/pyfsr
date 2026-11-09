@@ -384,7 +384,7 @@ def warm_catalog(
                 # One bulk fetch (2 HTTP calls) backs every picklist + its items --
                 # was 1 list() + N values(). See PicklistsAPI.all().
                 item_rows: list[tuple[str, str, str]] = []
-                for nm, items in client.picklists.all().items():
+                for nm, items in client.picklists.all(refresh=True).items():
                     for item in items:
                         iri, val = item.iri, item.itemValue
                         if iri and val is not None:
@@ -653,12 +653,15 @@ def warm_catalog(
         else:
             _t = time.perf_counter()
             try:
-                from fsr_playbooks.warmup import (  # type: ignore[import-not-found, unused-ignore]
-                    apply_migrations,
-                    fetch_all_connector_configs,
-                    write_agents,
-                    write_connector_configs,
-                )
+                try:
+                    from fsr_playbooks.warmup import (  # type: ignore[import-not-found, unused-ignore]
+                        apply_migrations,
+                        fetch_all_connector_configs,
+                        write_agents,
+                        write_connector_configs,
+                    )
+                except ImportError:  # library too old for agents: nothing to warm, not a failure
+                    raise _AgentsUnsupported from None
 
                 apply_migrations(conn)  # older caches: agents table + agent_id column
                 members, agents, self_id = fetch_all_connector_configs(client)
@@ -668,6 +671,9 @@ def warm_catalog(
                 # rows -- but an empty fetch must not erase them.
                 if members:
                     summary["connector_configs"] = write_connector_configs(conn, members)[1]
+            except _AgentsUnsupported:
+                summary["agents"] = 0
+                summary["agents_unsupported"] = 1
             except Exception as exc:
                 summary["agents"] = 0
                 logger.warning("warm_catalog: agents section failed, not marking fresh: %s", exc)
@@ -680,6 +686,10 @@ def warm_catalog(
     finally:
         conn.close()
     return summary
+
+
+class _AgentsUnsupported(Exception):
+    """The installed fsr_playbooks cannot warm agents."""
 
 
 def _flatten_op_params(params: Any) -> Iterator[tuple[dict[str, Any], str | None, str | None]]:
@@ -907,8 +917,28 @@ def _default_cache_db(client: _AuthoringClient | None = None) -> Path:
     return cache / f"fsr_reference-{hashlib.sha1(url.encode()).hexdigest()[:12]}.db"
 
 
-def _warm_cache(client: _AuthoringClient, *, full: bool = False) -> tuple[Path, bool]:
-    """Warm the client's per-instance cache; returns (path, any_section_skipped)."""
+def _library_box_catalog() -> Any:
+    """fsr_playbooks' leveled ``box_catalog`` when the installed library has it (>=0.11)."""
+    try:
+        from fsr_playbooks import warmup  # type: ignore[import-not-found, unused-ignore]
+    except ImportError:
+        return None
+    if hasattr(warmup, "box_catalog_path") and hasattr(warmup, "warm_for_playbook"):
+        return warmup.box_catalog
+    return None
+
+
+def _warm_cache(client: _AuthoringClient, *, full: bool = False, playbook: str | None = None) -> tuple[Path, bool]:
+    """Warm the client's per-instance cache; returns (path, may_be_incomplete).
+
+    With a library that supports warm levels, a playbook warms only the connectors,
+    modules and picklists it uses; ``full`` reads everything. Older libraries use
+    pyfsr's own section warm.
+    """
+    box_catalog = _library_box_catalog()
+    if box_catalog is not None:
+        path = box_catalog(client, playbook=None if full else playbook, full=full)
+        return Path(path), not full
     cache = _default_cache_db(client)
     summary = warm_catalog(client, cache, max_age=None if full else _catalog_max_age())
     return cache, any(k.endswith("_skipped") and v for k, v in summary.items())
@@ -962,7 +992,7 @@ def compile_playbook_yaml(
         # Seamless warm: refresh the per-user cache from the live instance so
         # author-friendly tokens (team names, picklists, tags) resolve without
         # the caller knowing about SQLite. The user never passes a db_path.
-        resolved, skipped = _warm_cache(client)
+        resolved, skipped = _warm_cache(client, playbook=text)
         result = compile_yaml(text, resolved, lax_codes=_normalize_lax_codes(lax_codes))
         if not result.ok and skipped:  # maybe stale: re-pull everything, compile once more
             resolved, _ = _warm_cache(client, full=True)
