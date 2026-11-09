@@ -294,3 +294,12 @@ def test_a_member_without_attributes_is_not_a_schema():
     summary = {"type": "incidents", "module": "incidents"}
     assert _pick([summary], "incidents") is None
     assert _pick([{**summary, "attributes": []}], "incidents") is not None
+
+
+def test_demo_clients_never_touch_the_disk_cache(tmp_path, monkeypatch):
+    from pyfsr._testing import demo_client
+
+    monkeypatch.setenv("PYFSR_SCHEMA_CACHE_DIR", str(tmp_path))
+    c = demo_client()
+    c.schema.get("alerts")
+    assert not any(tmp_path.iterdir())

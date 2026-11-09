@@ -181,7 +181,9 @@ that raw dict -- `.ok`, `.succeeded` (typed records), and `.failed` (one
 
 ```{doctest}
 >>> client = demo_client_jwt()
->>> result = client.records("alerts").bulk_upsert(
+>>> alerts = client.records("alerts")
+>>> alerts.check_values = False     # show the server's own per-row answer
+>>> result = alerts.bulk_upsert(
 ...     [{"name": "good alert", "severity": "Low"},
 ...      {"name": "bad alert", "severity": "not-a-real-severity"}],
 ...     parse=True,
@@ -195,6 +197,11 @@ False
 >>> "does not match any of the options" in result.failed[0].message
 True
 ```
+
+With the pre-write check on (the default), pyfsr refuses a row like `bad alert`
+itself before sending: it appears in `.failed` with its input `index` and the
+reason, and the other rows are still sent. Without `parse=True` the refusal raises
+{class}`~pyfsr.exceptions.ValidationError` instead, as a single write does.
 
 `.raw` keeps the untouched server response if you need a field the result
 class doesn't surface. To delete a known set of records, the mirror of a bulk

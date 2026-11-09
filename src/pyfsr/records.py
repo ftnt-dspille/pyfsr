@@ -25,7 +25,7 @@ import copy
 import json
 import logging
 import re
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, overload
 
 from pydantic import BaseModel, ConfigDict
@@ -1048,14 +1048,11 @@ class RecordSet(Generic[T]):
         >>> (result.ok, len(result.succeeded), len(result.failed))
         (False, 1, 1)
         """
-        payload: list[dict[str, Any]] = []
-        for row in rows:
-            if isinstance(row, BaseRecord):
-                row = row.to_dict(exclude_none=True)
-            row = self.prepare_values(row, op="update")
-            if resolve_picklists:
-                row = self.client.picklists.resolve_record_fields(self.module, row, strict=strict_picklists)
-            payload.append(row)
+        payload, positions, refused = self._bulk_rows(
+            rows, op="update", parse=parse, resolve_picklists=resolve_picklists, strict_picklists=strict_picklists
+        )
+        if not payload and refused:
+            return BulkUpsertResult(succeeded=[], failed=refused, raw={"success": [], "failure": []})
         resp = self.client.post(f"/api/3/bulkupsert/{self.module}", data=payload)
         if not parse:
             return resp
@@ -1065,7 +1062,7 @@ class RecordSet(Generic[T]):
             for row in raw_resp.get("success", [])
             if isinstance(row, dict)
         ]
-        failed = [BulkUpsertFailure.from_raw(msg) for msg in raw_resp.get("failure", []) if isinstance(msg, str)]
+        failed = self._bulk_failures(raw_resp, positions, refused)
         return BulkUpsertResult(succeeded=succeeded, failed=failed, raw=raw_resp)
 
     @overload
@@ -1132,14 +1129,11 @@ class RecordSet(Generic[T]):
         >>> (result.ok, len(result.succeeded))
         (True, 1)
         """
-        payload: list[dict[str, Any]] = []
-        for row in rows:
-            if isinstance(row, BaseRecord):
-                row = row.to_dict(exclude_none=True)
-            row = self.prepare_values(row)
-            if resolve_picklists:
-                row = self.client.picklists.resolve_record_fields(self.module, row, strict=strict_picklists)
-            payload.append(row)
+        payload, positions, refused = self._bulk_rows(
+            rows, op="create", parse=parse, resolve_picklists=resolve_picklists, strict_picklists=strict_picklists
+        )
+        if not payload and refused:
+            return BulkUpsertResult(succeeded=[], failed=refused, raw={"success": [], "failure": []})
         resp = self.client.post(f"/api/3/insert/{self.module}", data={"data": payload})
         if not parse:
             return resp
@@ -1154,8 +1148,57 @@ class RecordSet(Generic[T]):
             for row in raw_resp.get("success", [])
             if isinstance(row, dict)
         ]
-        failed = [BulkUpsertFailure.from_raw(msg) for msg in raw_resp.get("failure", []) if isinstance(msg, str)]
+        failed = self._bulk_failures(raw_resp, positions, refused)
         return BulkUpsertResult(succeeded=succeeded, failed=failed, raw=raw_resp)
+
+    def _bulk_rows(
+        self,
+        rows: Iterable[Any],
+        *,
+        op: str,
+        parse: bool,
+        resolve_picklists: bool,
+        strict_picklists: bool,
+    ) -> tuple[list[dict[str, Any]], list[int], list[BulkUpsertFailure]]:
+        """Prepare bulk rows: (payload, input index of each payload row, rows refused).
+
+        With ``parse=True`` a row the pre-write check refuses is reported as a
+        failed row and left out, so the rest of the batch still goes; without it
+        the check raises, as a single write does.
+        """
+        payload: list[dict[str, Any]] = []
+        positions: list[int] = []
+        refused: list[BulkUpsertFailure] = []
+        for i, row in enumerate(rows):
+            if isinstance(row, BaseRecord):
+                row = row.to_dict(exclude_none=True)
+            try:
+                row = self.prepare_values(row, op=op)
+            except ValidationError as exc:
+                if not parse:
+                    raise
+                refused.append(BulkUpsertFailure(index=i, message=str(exc)))
+                continue
+            if resolve_picklists:
+                row = self.client.picklists.resolve_record_fields(self.module, row, strict=strict_picklists)
+            payload.append(row)
+            positions.append(i)
+        return payload, positions, refused
+
+    @staticmethod
+    def _bulk_failures(
+        raw_resp: dict[str, Any], positions: list[int], refused: list[BulkUpsertFailure]
+    ) -> list[BulkUpsertFailure]:
+        """Server failures with their index mapped back to the caller's rows, plus refused rows."""
+        failed = list(refused)
+        for msg in raw_resp.get("failure", []):
+            if not isinstance(msg, str):
+                continue
+            f = BulkUpsertFailure.from_raw(msg)
+            if f.index is not None and 0 <= f.index < len(positions):
+                f = BulkUpsertFailure(index=positions[f.index], message=f.message)
+            failed.append(f)
+        return sorted(failed, key=lambda f: (f.index is None, f.index or 0))
 
     def _single_record_path(self, ref: str, *, action: str) -> str:
         """Resolve ``ref`` to a single-record path, refusing collection-wide refs.

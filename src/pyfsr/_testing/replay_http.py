@@ -677,6 +677,7 @@ def demo_client(
     replay.verify = False
     replay.headers.update(client.auth.get_auth_headers())
     client.session = replay
+    client.schema.use_disk = False  # never read or clear the user's real schema cache
     return client
 
 
@@ -722,4 +723,5 @@ def demo_client_jwt(
     replay.verify = False
     replay.headers.update(client.auth.get_auth_headers())
     client.session = replay
+    client.schema.use_disk = False  # never read or clear the user's real schema cache
     return client

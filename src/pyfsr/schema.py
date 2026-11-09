@@ -339,6 +339,8 @@ class SchemaCache:
         self._mem: dict[str, ModuleSchema] = {}
         self._missing: set[str] = set()
         self._switch_checked = False
+        #: ``False`` keeps this client's schemas in memory only (replay/demo clients).
+        self.use_disk = True
         #: Network fetches made (for tests and ``pyfsr schema`` output).
         self.fetches = 0
 
@@ -352,7 +354,7 @@ class SchemaCache:
         return _cache_root() / instance_key(self._base_url)
 
     def _disk_enabled(self) -> bool:
-        return bool(self._base_url) and _ttl() > 0
+        return self.use_disk and bool(self._base_url) and _ttl() > 0
 
     def _manifest(self) -> dict[str, Any]:
         try:
