@@ -63,6 +63,7 @@ _BATCH_THRESHOLD = 6
 # FortiSOAR stamps this "no limit" sentinel on most text fields.
 _MAXLENGTH_UNSET = 10485761
 DEFAULT_TTL = 600.0
+_SAFE_NAME = re.compile(r"^[A-Za-z0-9_]{1,128}$")
 _IRI = re.compile(r"^/api/3/([A-Za-z0-9_]+)/[0-9a-fA-F-]{36}$")
 _RELATION_FORMS = frozenset({"lookup", "manyToMany", "oneToMany", "manyToOne", "oneToOne"})
 _PICKLIST_FORMS = frozenset({"picklist", "multiselectpicklist"})
@@ -394,10 +395,23 @@ class SchemaCache:
                 logger.warning("pyfsr schema: re-warm after instance switch failed: %s", exc)
 
     # ---- load
+    def _cache_file(self, module: str) -> Path | None:
+        """The disk path for ``module``, or ``None`` when the name isn't a plain identifier.
+
+        Module names come from callers and from the server; anything that could
+        leave the cache directory (``../x``, separators) is never used as a path.
+        """
+        if not _SAFE_NAME.match(module):
+            return None
+        p = self._dir / f"{module}.json"
+        return p if p.resolve().parent == self._dir.resolve() else None
+
     def _from_disk(self, module: str) -> ModuleSchema | None:
         if not self._disk_enabled():
             return None
-        p = self._dir / f"{module}.json"
+        p = self._cache_file(module)
+        if p is None:
+            return None
         try:
             if time.time() - p.stat().st_mtime > _ttl():
                 return None
@@ -410,8 +424,10 @@ class SchemaCache:
             self._mem[key.lower()] = schema
         if self._disk_enabled():
             with contextlib.suppress(OSError):
-                _atomic_write(self._dir / f"{schema.type}.json", schema.model_dump_json())
-                self._write_manifest([*(self._manifest().get("modules") or []), schema.type])
+                p = self._cache_file(schema.type)
+                if p is not None:
+                    _atomic_write(p, schema.model_dump_json())
+                    self._write_manifest([*(self._manifest().get("modules") or []), schema.type])
 
     def _fetch_one(self, module: str) -> ModuleSchema | None:
         want = module.strip().lower()

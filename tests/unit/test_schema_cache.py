@@ -270,3 +270,19 @@ def test_publish_clears_the_schema_cache_even_when_it_fails(monkeypatch):
     with pytest.raises(RuntimeError):
         admin.publish()
     assert not c.schema.is_cached("alerts")
+
+
+# ---------------------------------------------------------------- cache paths
+@pytest.mark.parametrize("bad", ["../escape", "a/b", "..", "x.json", ""])
+def test_unsafe_module_names_never_touch_the_disk(disk, bad):
+    c = _Client()
+    assert c.schema._cache_file(bad) is None
+    assert c.schema._from_disk(bad) is None
+
+
+def test_a_server_type_with_path_characters_is_kept_in_memory_only(disk):
+    evil = _module("../../escape", ownable=True, attrs=[_attr("x", "text")])
+    c = _Client(modules=[evil])
+    assert c.schema.get("../../escape") is not None  # usable in memory
+    assert not any(disk.rglob("*escape*"))
+    assert c.schema.cached_modules() == []
