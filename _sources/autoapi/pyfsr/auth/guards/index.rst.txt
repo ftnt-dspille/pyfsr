@@ -1,0 +1,85 @@
+pyfsr.auth.guards
+=================
+
+.. py:module:: pyfsr.auth.guards
+
+.. autoapi-nested-parse::
+
+   Fail-fast guards for operations that only work with a JWT (username/password) client.
+
+   Some FortiSOAR endpoints reject an API key, and the failure is rarely legible:
+   ``/api/3/bulkupsert/*`` answers a misleading ``Invalid credentials.`` 500, the
+   built-in MCP servers answer 401 from deep inside fsr-ai. :func:`requires_jwt`
+   marks the pyfsr methods that hit those endpoints so an API-key client gets a
+   :class:`~pyfsr.exceptions.UnsupportedAuthOperationError` that says why, before
+   any request is sent.
+
+   The check reads the auth strategy's ``unsupported_operations``
+   (:class:`~pyfsr.auth.base.BaseAuth`), so it follows the auth class rather than
+   sniffing for "is this an API key": a new auth strategy opts in by listing the
+   operation.
+
+   .. rubric:: Example
+
+   >>> from pyfsr.auth.base import BaseAuth
+   >>> from pyfsr.auth.guards import requires_jwt
+   >>> class Thing:
+   ...     @requires_jwt(BaseAuth.OPERATION_AUTH, "the DAS /api/auth routes reject API keys")
+   ...     def go(self):
+   ...         return "ok"
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.auth.guards.F
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.auth.guards.ensure_jwt
+   pyfsr.auth.guards.requires_jwt
+   pyfsr.auth.guards.jwt_only
+
+
+Module Contents
+---------------
+
+.. py:data:: F
+
+.. py:function:: ensure_jwt(obj: Any, operation: str, reason: str, *, what: str | None = None) -> None
+
+   Raise ``UnsupportedAuthOperationError`` if ``obj``'s auth cannot do ``operation``.
+
+   ``obj`` is a client, an API shortcut (anything with ``.client``) or an auth
+   strategy. Use this for a check that depends on arguments (for example only
+   some MCP servers need a forwarded JWT); use :func:`requires_jwt` when the
+   whole method is JWT-only.
+
+
+.. py:function:: requires_jwt(operation: str, reason: str) -> collections.abc.Callable[[F], F]
+
+   Mark a method JWT-only: an API-key client raises before any request is sent.
+
+   :param operation: a ``BaseAuth.OPERATION_*`` constant the API-key strategy lists as unsupported.
+   :param reason: why, in a sentence (goes into the error and the docstring note).
+
+   Works on methods of API shortcuts (``self.client.auth``) and of the client
+   (``self.auth``), sync or ``async``. The wrapped function gets a
+   ``__requires_jwt__`` attribute and a ``.. note::`` in its docstring.
+
+
+.. py:function:: jwt_only(operation: str, reason: str) -> collections.abc.Callable[[type], type]
+
+   Class decorator: apply :func:`requires_jwt` to every public method the class defines.
+
+   For API shortcuts whose whole surface is JWT-only (everything under
+   ``/api/auth/*``). Private methods, properties and inherited methods are left alone.
+
+

@@ -1,0 +1,432 @@
+pyfsr.schema
+============
+
+.. py:module:: pyfsr.schema
+
+.. autoapi-nested-parse::
+
+   Live module schema: one cache, one pre-write check.
+
+   ``client.schema`` fetches a module's **published** metadata the first time a write
+   touches it -- one module per call (``GET /api/3/model_metadatas?type=<module>``,
+   ~0.2 MB) instead of every module (~1.3 MB, several seconds) -- and keeps it:
+
+   - **in memory** for the client's lifetime, so a loop of creates fetches once;
+   - **on disk** under ``~/.cache/pyfsr/schema/<instance>/`` for
+     ``PYFSR_SCHEMA_TTL`` seconds (default 600; ``0`` turns the disk layer off;
+     ``PYFSR_SCHEMA_CACHE_DIR`` moves it), so
+     separate processes (CLI runs, workers) share it. One directory per instance, so
+     boxes never mix.
+
+   The cache is dropped when it can no longer be trusted:
+
+   - a module publish through pyfsr clears the instance's schema (publish is
+     appliance-wide);
+   - **switching instance** (the first client for a different box than the last one
+     used) clears that box's disk cache and re-warms the modules it had cached;
+   - a check that fails against a *cached* schema on an unknown field or picklist
+     value refetches the module once and checks again, so a field added in the UI
+     costs one extra fetch, not a false refusal;
+   - ``client.schema.clear()`` / ``pyfsr schema clear`` by hand.
+
+   :meth:`SchemaCache.check` reports every problem in a payload at once, before
+   anything is sent: unknown fields, ``owners`` on a module that is not team-ownable
+   (FortiSOAR answers 200 and drops it), missing required fields on create, values
+   over the field's max length, read-only fields, picklist values not in the list,
+   relationship IRIs that point at the wrong module, and the value rules in
+   :mod:`pyfsr.field_values`.
+
+   :meth:`ModuleSchema.record_model` builds a pydantic class for the module as it
+   exists on *this* box (``pydantic.create_model``), for callers that want typed
+   validation of their own.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.schema.logger
+   pyfsr.schema.DEFAULT_TTL
+   pyfsr.schema.Op
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   pyfsr.schema.OwnershipNotSupported
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.schema.FieldSchema
+   pyfsr.schema.ModuleSchema
+   pyfsr.schema.Problem
+   pyfsr.schema.CheckResult
+   pyfsr.schema.SchemaCache
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.schema.instance_key
+   pyfsr.schema.clear_disk
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: DEFAULT_TTL
+   :value: 600.0
+
+
+.. py:data:: Op
+
+.. py:class:: FieldSchema(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One attribute of a module, as the box defines it.
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: type
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: form_type
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: title
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: required
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: max_length
+      :type:  int | None
+      :value: None
+
+
+
+   .. py:attribute:: unique
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: writeable
+      :type:  bool
+      :value: True
+
+
+
+   .. py:attribute:: encrypted
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: collection
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: default
+      :type:  Any
+      :value: None
+
+
+
+   .. py:attribute:: picklist
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: target
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:property:: is_relation
+      :type: bool
+
+
+
+   .. py:property:: is_picklist
+      :type: bool
+
+
+
+.. py:class:: ModuleSchema(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   A published module's flags and fields.
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: type
+      :type:  str
+
+
+   .. py:attribute:: module
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: label
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: ownable
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: user_ownable
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: queueable
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: taggable
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: writable
+      :type:  bool
+      :value: True
+
+
+
+   .. py:attribute:: unique_constraints
+      :type:  list[list[str]]
+      :value: None
+
+
+
+   .. py:attribute:: fields
+      :type:  dict[str, FieldSchema]
+      :value: None
+
+
+
+   .. py:attribute:: fetched_at
+      :type:  float
+      :value: 0.0
+
+
+
+   .. py:method:: from_metadata(meta: dict[str, Any]) -> ModuleSchema
+      :classmethod:
+
+
+      Build from one ``model_metadatas`` member (``$relationships=true``).
+
+
+
+   .. py:method:: record_model(*, op: Op = 'update') -> type[pydantic.BaseModel]
+
+      A pydantic model of this module as it exists on this box.
+
+      ``op="create"`` makes required fields required; ``"update"`` (default)
+      makes every field optional, for partial updates. Unknown keys are
+      forbidden, so a misspelt field fails instead of being dropped by the box.
+      System keys (``uuid``, ``owners`` ...) are accepted.
+
+
+
+.. py:class:: Problem(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One reason a payload would be refused, dropped or stored wrongly.
+
+
+   .. py:attribute:: field
+      :type:  str
+
+
+   .. py:attribute:: code
+      :type:  str
+
+
+   .. py:attribute:: message
+      :type:  str
+
+
+.. py:class:: CheckResult(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   What :meth:`SchemaCache.check` found. ``data`` is the payload to send.
+
+
+   .. py:attribute:: module
+      :type:  str
+
+
+   .. py:attribute:: op
+      :type:  Op
+
+
+   .. py:attribute:: data
+      :type:  dict[str, Any]
+
+
+   .. py:attribute:: problems
+      :type:  list[Problem]
+      :value: None
+
+
+
+   .. py:attribute:: conversions
+      :type:  list[str]
+      :value: None
+
+
+
+   .. py:attribute:: refetched
+      :type:  bool
+      :value: False
+
+
+
+   .. py:property:: ok
+      :type: bool
+
+
+
+   .. py:method:: raise_for_problems() -> None
+
+
+.. py:exception:: OwnershipNotSupported(message: str = None, response=None, *, error_type: str | None = None)
+
+   Bases: :py:obj:`pyfsr.exceptions.ValidationError`
+
+
+   ``owners`` sent to a module that is not team-ownable (FortiSOAR drops it with a 200).
+
+
+.. py:function:: instance_key(base_url: str) -> str
+
+   Short, stable directory name for one box (hash of its base URL).
+
+
+.. py:function:: clear_disk(base_url: str | None = None) -> int
+
+   Delete cached schema files for one instance (or every instance). Returns files removed.
+
+
+.. py:class:: SchemaCache(client: Any)
+
+   Per-client schema cache (memory + per-instance disk). Accessed as ``client.schema``.
+
+
+   .. py:attribute:: client
+
+
+   .. py:attribute:: use_disk
+      :value: True
+
+
+
+   .. py:attribute:: fetches
+      :value: 0
+
+
+
+   .. py:method:: get(module: str, *, refresh: bool = False) -> ModuleSchema | None
+
+      The module's published schema, or ``None`` if the box has no such module.
+
+
+
+   .. py:method:: warm(modules: list[str] | tuple[str, Ellipsis], *, refresh: bool = False) -> dict[str, bool]
+
+      Load several modules up front. Picks one full fetch when that is cheaper.
+
+      Returns ``{module: found}``.
+
+
+
+   .. py:method:: clear(*, disk: bool = True) -> int
+
+      Drop this instance's cached schemas (memory, and disk unless ``disk=False``).
+
+
+
+   .. py:method:: cached_modules() -> list[str]
+
+      Module types currently cached on disk for this instance (fresh or not).
+
+
+
+   .. py:method:: is_cached(module: str) -> bool
+
+
+   .. py:method:: check(module: str, data: dict[str, Any], *, op: Op = 'create') -> CheckResult
+
+      Check a payload against the module's live schema. Never sends anything.
+
+      Returns a :class:`CheckResult` with every problem found and the payload
+      to send (values converted where the meaning is clear, e.g. ISO date to
+      epoch seconds). Call :meth:`CheckResult.raise_for_problems` to refuse.
+      If the module isn't on the box, the result has no problems and the data
+      unchanged (the server will answer for itself).
+
+
+

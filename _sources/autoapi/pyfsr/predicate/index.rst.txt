@@ -1,0 +1,85 @@
+pyfsr.predicate
+===============
+
+.. py:module:: pyfsr.predicate
+
+.. autoapi-nested-parse::
+
+   A terse predicate surface that compiles DOWN to the FortiSOAR query filter
+   structure the pyfsr query API already consumes.
+
+   A caller (often an agent) should filter records without knowing the Hydra
+   schema. It writes ``status=Open and severity=High`` and this
+   module lowers it to the ``{logic, filters:[{field, operator, value}]}`` body
+   ``records().query`` takes -- owning the quirks in one place:
+
+   - ``~`` (contains) wraps the value in SQL wildcards (``%value%``), because a bare
+     FortiSOAR ``like`` silently matches nothing without them (live: ``name like
+     "Agent Lab"`` -> 0 rows, ``"%Agent Lab%"`` -> 20).
+   - a picklist field compared by ``=``/``!=``/``in`` gets ``.itemValue`` appended,
+     because a bare picklist comparison silently matches nothing (live: ``status eq
+     "Open"`` -> 0 rows, ``status.itemValue eq "Open"`` -> 19).
+
+   Use it through :meth:`pyfsr.records.RecordSet.where_body`, which supplies the
+   module's picklist fields.
+
+   This is a thin translator, not a query engine: it emits the exact filter JSON the
+   existing API consumes, and the caller passes the result straight to
+   ``records().query``.
+
+   Grammar (one level, no parentheses):
+
+       predicate := clause ((" and " | " or ") clause)*
+       clause    := field OP value | field " in " value ("," value)*
+       OP        := "!=" | ">=" | "<=" | "~" | "=" | ">" | "<"
+
+   ``and``/``or`` must not be mixed in one predicate (a FortiSOAR query body carries
+   a single ``logic``). Values may be single- or double-quoted to include spaces or
+   an operator character.
+
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   pyfsr.predicate.PredicateError
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.predicate.parse_predicate
+   pyfsr.predicate.parse_sort
+
+
+Module Contents
+---------------
+
+.. py:exception:: PredicateError(message: str = None, response=None, *, error_type: str | None = None)
+
+   Bases: :py:obj:`pyfsr.exceptions.ValidationError`, :py:obj:`ValueError`
+
+
+   A predicate string that could not be parsed. The message names the fix.
+
+
+.. py:function:: parse_predicate(where: str, picklist_fields: set[str] | None = None) -> tuple[list[dict[str, Any]], str]
+
+   Compile ``where`` to ``(filters, logic)`` for ``records().query``.
+
+   ``picklist_fields`` is the set of picklist field names on the module, so a
+   bare ``status=Open`` lowers to ``status.itemValue=Open``. Omit it and no
+   ``.itemValue`` rewriting happens (callers that already pass ``field.itemValue``
+   need nothing). Raises :class:`PredicateError` on a malformed predicate.
+
+
+.. py:function:: parse_sort(sort: str) -> list[dict[str, str]]
+
+   Compile a terse sort (``"createDate desc, severity asc"``) to the query
+   ``sort`` array. A bare field sorts ascending.
+
+

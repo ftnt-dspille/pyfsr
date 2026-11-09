@@ -1,0 +1,72 @@
+pyfsr.cli.appliance.users
+=========================
+
+.. py:module:: pyfsr.cli.appliance.users
+
+.. autoapi-nested-parse::
+
+   ``appliance.users`` -- login accounts that only the appliance can manage.
+
+   Deleting a People record through the API leaves the user's login (the das
+   account) behind, and ``DELETE /api/auth/users`` is refused even for an
+   administrator. Fortinet ships ``/opt/cyops/scripts/userDelete`` for this: it
+   removes every login UUID listed in ``usersToDelete.txt``. :func:`delete_logins`
+   drives that script and restores the list file afterwards.
+
+   The login UUID is the People record's ``userId`` -- read it (for example with
+   ``client.users.lookup(loginid)["user_id"]``) *before* deleting the People record.
+
+   :func:`logged_in` and :func:`logout` wrap ``csadm user``.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.users.SCRIPTS_DIR
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.users.delete_logins
+   pyfsr.cli.appliance.users.logged_in
+   pyfsr.cli.appliance.users.logout
+
+
+Module Contents
+---------------
+
+.. py:data:: SCRIPTS_DIR
+   :value: '/opt/cyops/scripts'
+
+
+.. py:function:: delete_logins(facts: pyfsr.cli.appliance.facts.Facts, user_ids: list[str], *, yes: bool = False, timeout: float = 300.0) -> str
+
+   Remove login accounts with Fortinet's ``userDelete`` script.
+
+   :param user_ids: Login UUIDs (the People record's ``userId``), not People UUIDs.
+   :param yes: confirmation gate; without it the call raises rather than run.
+
+   Returns the script's output. Raises :class:`~pyfsr.cli.appliance.transport.TransportError` if the script
+   fails or any login is still present afterwards (the script prints
+   ``DELETE 0`` for rows it had nothing to do with, so its output is not proof).
+
+
+.. py:function:: logged_in(transport: pyfsr.cli.appliance.transport.Transport, *, access_type: str = 'Concurrent', limit: int = 10) -> list[str]
+
+   Login IDs with a live session (``csadm user show-logged-in-users``).
+
+   ``access_type`` is ``"Concurrent"`` (csadm's default) or ``"Named"``;
+   ``limit`` is 1-30.
+
+
+.. py:function:: logout(transport: pyfsr.cli.appliance.transport.Transport, username: str, *, yes: bool = False) -> str
+
+   End every session of ``username`` (``csadm user logout-user``). Returns csadm's message.
+
+

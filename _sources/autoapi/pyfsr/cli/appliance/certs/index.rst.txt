@@ -1,0 +1,43 @@
+pyfsr.cli.appliance.certs
+=========================
+
+.. py:module:: pyfsr.cli.appliance.certs
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance certs`` — appliance TLS certificate verbs (``csadm certs``).
+
+   The self-signed certificate FortiSOAR ships with is valid for one year; once it
+   expires the DAS/API layer starts failing with ``Unable to load API credentials
+   from cache or DAS``. The documented fix is to regenerate it with
+   ``csadm certs --generate <hostname>`` and restart services — that's what
+   :func:`regenerate` wraps. All ``csadm certs`` subcommands need root (sudo).
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.certs.regenerate
+
+
+Module Contents
+---------------
+
+.. py:function:: regenerate(transport: pyfsr.cli.appliance.transport.Transport, hostname: str, *, yes: bool = False, timeout: float = 120.0) -> str
+
+   Regenerate the appliance's self-signed cert (``csadm certs --generate <hostname>``).
+
+   This replaces the on-disk certificate; services must be restarted afterwards
+   (``service restart`` / ``csadm services --restart``) for the new cert to take
+   effect. Because it mutates appliance state, it refuses without ``yes=True``.
+
+   :param hostname: the FQDN to issue the cert for (typically the appliance's
+                    ``hostname`` — the cert CN clients will validate against).
+   :param yes: confirmation gate; without it the call raises rather than run.
+
+   :returns: The ``csadm`` output (stripped).
+
+

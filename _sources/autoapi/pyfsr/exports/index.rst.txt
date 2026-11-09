@@ -1,0 +1,355 @@
+pyfsr.exports
+=============
+
+.. py:module:: pyfsr.exports
+
+.. autoapi-nested-parse::
+
+   Read and validate FortiSOAR Export Wizard bundles -- offline, no appliance needed.
+
+   A FortiSOAR ``.zip`` comes in two flavours that share one payload format:
+
+   * a **configuration export** -- ``info.json`` carries ``exported_from`` /
+     ``exported_by`` and nothing that names the bundle. It installs through
+     :meth:`~pyfsr.api.import_config.ImportConfigAPI.import_file`.
+   * a **solution pack** -- the same payload plus an *identity* (``name`` +
+     ``version``, which is what makes a bundle installable by name, upgradable and
+     uninstallable) and publishing metadata (``label``, ``publisher``,
+     ``dependencies``, ``iconLarge``, ``postInstallConfig``, ...). It installs
+     through :meth:`~pyfsr.api.solution_packs.SolutionPackAPI.install_from_file`.
+
+   Everything under the single ``export_<uuid>/`` root directory follows the same
+   rules in both: one directory per content category, a ``data.json`` manifest in
+   the categories that need installers, and payload JSON named after the record.
+
+   What this module checks is *structural* -- that the manifest and the files agree,
+   that every declared installer resolves, that category keys map to directories
+   that exist. It deliberately does **not** try to decide whether a field is valid
+   for some target, because that depends on the target's schema; for that, run the
+   export through :meth:`~pyfsr.api.import_config.ImportConfigAPI.dry_run`, which
+   lets the appliance itself analyse the bundle.
+
+   .. rubric:: Example
+
+   >>> from pyfsr.exports import Export
+   >>> arc = Export.open("myPack-1.0.0.zip")          # doctest: +SKIP
+   >>> arc.kind                                        # doctest: +SKIP
+   <ExportKind.SOLUTION_PACK: 'solutionpack'>
+   >>> [f.code for f in arc.problems() if f.is_error]  # doctest: +SKIP
+   []
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.exports.CATEGORY_DIRS
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   pyfsr.exports.ExportError
+   pyfsr.exports.ExportValidationError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.exports.ExportKind
+   pyfsr.exports.Severity
+   pyfsr.exports.Finding
+   pyfsr.exports.Installer
+   pyfsr.exports.Export
+
+
+Module Contents
+---------------
+
+.. py:exception:: ExportError
+
+   Bases: :py:obj:`Exception`
+
+
+   The file could not be read as a FortiSOAR export bundle at all.
+
+
+.. py:exception:: ExportValidationError(findings: list[Finding])
+
+   Bases: :py:obj:`Exception`
+
+
+   :meth:`Export.validate` found error-severity problems.
+
+
+   .. py:attribute:: findings
+
+
+.. py:class:: ExportKind
+
+   Bases: :py:obj:`str`, :py:obj:`enum.Enum`
+
+
+   Which of the two bundle flavours an export is.
+
+
+   .. py:attribute:: CONFIG_EXPORT
+      :value: 'export'
+
+
+
+   .. py:attribute:: SOLUTION_PACK
+      :value: 'solutionpack'
+
+
+
+.. py:class:: Severity
+
+   Bases: :py:obj:`str`, :py:obj:`enum.Enum`
+
+
+   str(object='') -> str
+   str(bytes_or_buffer[, encoding[, errors]]) -> str
+
+   Create a new string object from the given object. If encoding or
+   errors is specified, then the object must expose a data buffer
+   that will be decoded using the given encoding and error handler.
+   Otherwise, returns the result of object.__str__() (if defined)
+   or repr(object).
+   encoding defaults to 'utf-8'.
+   errors defaults to 'strict'.
+
+
+   .. py:attribute:: ERROR
+      :value: 'error'
+
+
+
+   .. py:attribute:: WARNING
+      :value: 'warning'
+
+
+
+   .. py:attribute:: INFO
+      :value: 'info'
+
+
+
+.. py:class:: Finding
+
+   One problem found in an export.
+
+   ``code`` is stable and machine-matchable; ``message`` is for humans.
+
+
+   .. py:attribute:: severity
+      :type:  Severity
+
+
+   .. py:attribute:: code
+      :type:  str
+
+
+   .. py:attribute:: message
+      :type:  str
+
+
+   .. py:attribute:: path
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:property:: is_error
+      :type: bool
+
+
+
+.. py:data:: CATEGORY_DIRS
+   :type:  dict[str, str]
+
+.. py:class:: Installer
+
+   An entry in a category ``data.json`` that carries or references a payload.
+
+   ``install_mode == "tgz"`` means the tarball travels *inside* the export at
+   ``<category>/<installer_path>``; ``"rpm"`` means the target fetches it from a
+   repository, so nothing is bundled and nothing can be checked offline.
+
+
+   .. py:attribute:: category
+      :type:  str
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: version
+      :type:  str | None
+
+
+   .. py:attribute:: install_mode
+      :type:  str | None
+
+
+   .. py:attribute:: installer_path
+      :type:  str | None
+
+
+   .. py:attribute:: member
+      :type:  str | None
+
+
+.. py:class:: Export
+
+   An opened FortiSOAR export bundle.
+
+   Use :meth:`open`. The zip stays open for the object's lifetime; use it as a
+   context manager, or call :meth:`close`, if you care about the handle.
+
+
+   .. py:attribute:: path
+      :type:  pathlib.Path
+
+
+   .. py:attribute:: zf
+      :type:  zipfile.ZipFile
+
+
+   .. py:attribute:: root
+      :type:  str
+
+
+   .. py:attribute:: info
+      :type:  dict[str, Any]
+
+
+   .. py:attribute:: members
+      :type:  list[str]
+      :value: []
+
+
+
+   .. py:method:: open(path: str | pathlib.Path) -> Export
+      :classmethod:
+
+
+      Open ``path`` and parse its ``info.json``.
+
+      Raises :class:`ExportError` if the file is not a zip, has no
+      ``info.json``, or has more than one export root.
+
+
+
+   .. py:method:: close() -> None
+
+
+   .. py:property:: kind
+      :type: ExportKind
+
+
+      Solution pack (has an identity) or plain configuration export.
+
+
+   .. py:property:: name
+      :type: str | None
+
+
+
+   .. py:property:: version
+      :type: str | None
+
+
+
+   .. py:property:: label
+      :type: str | None
+
+
+
+   .. py:property:: min_compatibility
+      :type: str | None
+
+
+
+   .. py:property:: contents
+      :type: dict[str, Any]
+
+
+      The raw ``contents`` map. Values are lists for most categories and
+      dicts keyed by apiName for ``modules`` / ``viewTemplates`` / ``views``.
+
+
+   .. py:method:: entries(category: str) -> list[Any]
+
+      The entries of one ``contents`` category, list- or dict-shaped alike.
+
+
+
+   .. py:method:: directories() -> set[str]
+
+      Top-level directories present under the export root.
+
+
+
+   .. py:method:: read_json(member: str) -> Any
+
+      Read one member (path relative to the export root) as JSON.
+
+
+
+   .. py:method:: data_manifest(category: str) -> list[dict[str, Any]]
+
+      The ``<category>/data.json`` rows, or ``[]`` when there is no manifest.
+
+
+
+   .. py:method:: installers() -> list[Installer]
+
+      Every installer entry declared by a category ``data.json``.
+
+
+
+   .. py:method:: playbook_members() -> collections.abc.Iterator[str]
+
+      Every playbook payload file (skips the collection metadata sidecars).
+
+
+
+   .. py:method:: problems(*, target_version: str | None = None) -> list[Finding]
+
+      Every structural problem found, most severe first.
+
+      ``target_version`` enables the ``fsrMinCompatibility`` check against the
+      appliance you intend to import into.
+
+
+
+   .. py:method:: validate(*, target_version: str | None = None, strict: bool = False) -> list[Finding]
+
+      Like :meth:`problems`, but raises on errors.
+
+      Returns the non-fatal findings so a caller can log them. With
+      ``strict=True`` warnings are fatal too.
+
+      :raises ExportValidationError: if any error (or, when strict, warning) was found.
+
+
+
+   .. py:method:: external_connectors() -> set[str]
+
+      Connectors the content calls that the export does not account for.
+
+      Not a defect -- shipped Fortinet packs rely on the target already having
+      these -- but it *is* the install prerequisite list, and nothing else
+      computes it. Platform builtins and Jinja-templated (dynamically
+      dispatched) connector names are excluded.
+
+
+

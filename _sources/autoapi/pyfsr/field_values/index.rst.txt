@@ -1,0 +1,90 @@
+pyfsr.field_values
+==================
+
+.. py:module:: pyfsr.field_values
+
+.. autoapi-nested-parse::
+
+   Check record values against their field's display type before a write.
+
+   FortiSOAR stores several wrong values without complaint and answers others with a
+   message that points the wrong way. Each rule below was observed on a live
+   appliance (``tests/integration/test_field_type_matrix_integration.py`` records them):
+
+   - datetime: epoch **milliseconds** are stored as a date in 2008; an ISO string is
+     refused with "Could not convert PHP value '' of type 'boolean' to type 'datetime'".
+   - checkbox: any string is stored as ``true`` (so ``"no"`` reads back true).
+   - integer: above the 32-bit range, or a non-whole float, answers HTTP 500.
+   - ipv4 / ipv6 / email / url / json: a malformed value is stored as given.
+   - a field name the module does not have (``descriptoin``) answers 200 and is
+     dropped without a word, so the write looks done.
+
+   Values with one clear meaning are converted (ISO date and millis -> epoch seconds,
+   ``"yes"``/``"no"`` -> bool, ``5.0`` -> ``5``); the rest are refused with
+   :class:`~pyfsr.exceptions.ValidationError` naming every bad field, before anything
+   is sent. Rules key on the display type (``form_type``): a datetime *stores* as
+   ``integer``, so the storage type cannot tell a date from a count.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.field_values.DATE_FORM_TYPES
+   pyfsr.field_values.INT32_MAX
+   pyfsr.field_values.EPOCH_MS_FLOOR
+   pyfsr.field_values.SYSTEM_KEYS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.field_values.check_value
+   pyfsr.field_values.check_record
+   pyfsr.field_values.unknown_fields_problem
+
+
+Module Contents
+---------------
+
+.. py:data:: DATE_FORM_TYPES
+
+.. py:data:: INT32_MAX
+   :value: 2147483647
+
+
+.. py:data:: EPOCH_MS_FLOOR
+   :value: 100000000000
+
+
+.. py:function:: check_value(form_type: str, value: Any) -> tuple[Any, str | None, str | None]
+
+   Check one value against a display type.
+
+   Returns ``(value_to_send, conversion_note, refusal)``; at most one of the last
+   two is set. Unknown display types and ``None`` pass through unchanged.
+
+
+.. py:function:: check_record(form_types: dict[str, str], data: dict[str, Any], *, module: str = '') -> tuple[dict[str, Any], list[str]]
+
+   Check every field of ``data`` whose display type is known.
+
+   Returns ``(data_to_send, conversion_notes)``. Raises
+   :class:`~pyfsr.exceptions.ValidationError` listing every refused field, so one
+   call reports all of them. Fields not in ``form_types`` pass through.
+
+
+.. py:data:: SYSTEM_KEYS
+
+.. py:function:: unknown_fields_problem(field_names: Any, data: dict[str, Any]) -> str | None
+
+   Name every key of ``data`` the module does not have, with the closest field.
+
+   ``@``/``__`` keys and :data:`SYSTEM_KEYS` are allowed. Returns ``None`` when
+   every key is a field.
+
+

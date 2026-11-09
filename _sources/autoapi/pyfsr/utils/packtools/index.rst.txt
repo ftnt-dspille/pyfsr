@@ -1,0 +1,238 @@
+pyfsr.utils.packtools
+=====================
+
+.. py:module:: pyfsr.utils.packtools
+
+.. autoapi-nested-parse::
+
+   Solution-pack toolkit: assemble a pack from live appliance content and
+   bundled installers, without hand-knowing the wire formats.
+
+   Every convention encoded here was established against a live 8.0.x appliance
+   (most of it the hard way, building the FortiEDR demo pack):
+
+   - ``info.json`` needs ``type: "solutionpack"`` and a ``contents`` map claiming
+     every section directory; connectors' contents entries key on ``apiName``,
+     recordSets' on ``apiName`` with a ``count``, everything else on ``name``.
+   - A bundled connector/widget tgz is declared in its section's ``data.json``
+     with ``install_mode: "tgz"`` and ``installer_path`` pointing at the archive
+     file inside the same section directory. Such a pack installs ONLY through
+     the Import Wizard path (``import_config.import_file``); the Content Hub path
+     silently installs none of them. Bundled widgets install live (not drafts).
+   - Dashboards export as one file per dashboard (exporter field set, uuid kept),
+     fetched from the hidden system entity at ``/api/3/dashboard`` (singular).
+   - Records export server-side as ``records/<apiName>/<file>.json`` (a list of
+     records); the export engine emits records only when the record-set query
+     carries a ``limit``.
+   - Playbooks export as record-shaped JSON per workflow plus a
+     ``collection.metadata.json`` sidecar per collection directory (and a
+     ``tags.json`` when the collection has tags).
+   - The SOC-simulator demo pattern (Vulnerability Management / Threat Intel
+     Management packs): ship demo-creator playbooks plus a ``scenario`` recordSet
+     whose ``steps.Steps[].playbookIRI`` references them; the scenario playbooks
+     are *abstract* ("Referenced") triggers, which is what a start step without a
+     ``module:`` compiles to.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.utils.packtools.SECTION_DIRS
+   pyfsr.utils.packtools.DEFAULT_SIMULATED_IGNORE
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   pyfsr.utils.packtools.PackError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.utils.packtools.Pack
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.utils.packtools.stable_id
+   pyfsr.utils.packtools.export_live
+   pyfsr.utils.packtools.add_dashboard
+   pyfsr.utils.packtools.add_records
+   pyfsr.utils.packtools.add_playbook_collection
+   pyfsr.utils.packtools.add_content
+   pyfsr.utils.packtools.soc_demo
+
+
+Module Contents
+---------------
+
+.. py:data:: SECTION_DIRS
+
+.. py:function:: stable_id(*parts: str) -> str
+
+.. py:data:: DEFAULT_SIMULATED_IGNORE
+   :value: 'uuid,@id,@type,@context,id,sourceId,state,respDueDate,ackDate,respDate,dueBy,createDate,modifyDa...
+
+
+.. py:exception:: PackError
+
+   Bases: :py:obj:`Exception`
+
+
+   Common base class for all non-exit exceptions.
+
+
+.. py:class:: Pack(path: str | pathlib.Path)
+
+   A solution pack directory on disk (``info.json`` + section dirs).
+
+
+   .. py:attribute:: path
+
+
+   .. py:method:: init(path: str | pathlib.Path, *, name: str, label: str, version: str, description: str = '', publisher: str = '') -> Pack
+      :classmethod:
+
+
+
+   .. py:method:: save() -> None
+
+
+   .. py:method:: add_installer(category: str, tgz_path: str | pathlib.Path) -> dict
+
+      Declare a bundled connector/widget tgz: data.json row + file copy.
+
+      Reads the archive's own ``info.json`` for the identity fields, so the
+      row cannot drift from what will actually install.
+
+
+
+   .. py:method:: set_widget_compatibility(compatibility: list[str]) -> list[str]
+
+      Set ``metadata.compatibility`` on every bundled widget tgz; returns the files changed.
+
+
+
+   .. py:method:: data_manifest(category: str) -> list[dict]
+
+
+   .. py:method:: absorb_export(zip_path: str | pathlib.Path, sections: list[str] | None = None) -> dict[str, int]
+
+      Copy sections out of an appliance export zip into the pack.
+
+      ``sections`` are contents keys (``dashboards``, ``recordSets``,
+      ``playbooks``); anything the export carries for them is copied under
+      this pack's section directory, preserving subpaths. With ``None``,
+      every top-level directory the export carries is absorbed -- the
+      general path for wizard-surface content (``modules/`` view-template
+      layouts, ``picklists/``, ``roles/``, ...).
+
+      The export's own ``info.json`` ``contents`` map is merged in either
+      way: the exporter is the authority on how what-it-exported must be
+      claimed (dict-shaped for ``modules`` / ``viewTemplates`` / ``views``,
+      list-shaped elsewhere). Categories whose contents this pack derives
+      from its directories (connectors, widgets, dashboards, recordSets,
+      playbooks) are re-derived on the next :meth:`sync_contents`, so a
+      merge cannot go stale for them.
+
+
+
+   .. py:method:: sync_contents() -> dict
+
+      Re-derive ``info.json``'s ``contents`` from what the pack actually ships.
+
+      The directory is the truth; the contents map must claim it or the
+      importer ignores the files (and the pack validator flags them
+      unclaimed). Keys the pack carries that this derives nothing for
+      (``modules``, ``roles``, ...) are left untouched.
+
+
+
+   .. py:method:: build(out: str | pathlib.Path | None = None, *, strict: bool = True) -> pathlib.Path
+
+      Zip the pack in the appliance exporter's layout and validate it.
+
+      Validation always runs. With ``strict=True`` (the default) ERROR
+      findings fail the build; WARNINGs are reported either way -- the
+      expected ``pack.bundled_installers_need_import_wizard`` advisory is a
+      WARNING, so a normal bundled-installer pack builds clean. With
+      ``strict=False`` the build never fails; findings are report-only.
+
+
+
+.. py:function:: export_live(client, template, tag: str) -> tuple[pathlib.Path, dict]
+
+   Create an export template, run the export, delete the template.
+
+   Returns ``(zip_path, exported_info)``. The template is deleted so repeated
+   runs do not litter the appliance's export-template list.
+
+
+.. py:function:: add_dashboard(client, pack: Pack, uuid_or_name: str, *, dependencies: bool = True) -> dict
+
+   Export one dashboard (by uuid or exact displayName) into the pack.
+
+   With ``dependencies`` (the default) the pack also gets every widget the
+   dashboard needs, nested widgets included (see
+   :meth:`pyfsr.api.widgets.WidgetsAPI.export_dashboard`), and every
+   installed connector those widgets call, each bundled as a tgz installer.
+
+
+.. py:function:: add_records(client, pack: Pack, module: str, *, record_uuid: str | None = None, filter_json: str | None = None, limit: int = 100) -> dict
+
+   Export a module's records as a record set.
+
+   Exactly one of ``record_uuid`` / ``filter_json`` selects the records. The
+   query MUST carry a limit -- the export engine emits nothing without one
+   (live-verified on 8.0.0).
+
+
+.. py:function:: add_playbook_collection(client, pack: Pack, collection: str) -> dict
+
+   Export a playbook collection (with its playbooks) into the pack.
+
+
+.. py:function:: add_content(client, pack: Pack, selectors: list[tuple[str, str]]) -> dict
+
+   Add anything the export wizard supports, then absorb everything it emits.
+
+   ``selectors`` are ``(kind, value)`` pairs -- see ``_SELECTOR_KINDS`` for the
+   covered surface (modules, view templates, picklists, connectors, widgets,
+   dashboards, playbook collections, roles, teams, actors, navigation, reports,
+   rules, AI agents, app settings, export templates, MCP configurations).
+   Record sets go through :func:`add_records`, which carries the query and
+   limit handling. Whatever the export engine emits for the selection is
+   absorbed whole (including the module layout files a view template ships
+   as), and the export's own ``contents`` map is merged into the pack, so a
+   view-template addition claims itself correctly.
+
+
+.. py:function:: soc_demo(client, pack: Pack, module: str, record_uuid: str, *, title: str, collection: str, playbook_name: str | None = None, yaml_out: str | pathlib.Path | None = None, fields_to_ignore: str = DEFAULT_SIMULATED_IGNORE, deploy: bool = True) -> dict
+
+   Generate (and deploy) the SOC-simulator demo playbook + scenario record.
+
+   The full Fortinet pattern, in one command:
+
+   1. fetch the live record (e.g. an alert captured from the real source),
+   2. render an abstract-trigger playbook that replays it through the SOC
+      Simulator's ``create_simulated_alert`` (identity/SLA fields ignored),
+   3. compile and deploy it to the appliance,
+   4. export the playbook collection into the pack (record-shaped JSON),
+   5. ship a ``scenario`` recordSet whose step runs the playbook -- the
+      "Run" button in the SOC Simulator UI.
+
+   Without FortiEDR (or whatever source) connected, importing the pack and
+   running the scenario reproduces the demo data.
+
+

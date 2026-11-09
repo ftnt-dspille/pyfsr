@@ -1,0 +1,104 @@
+pyfsr.cli.instances
+===================
+
+.. py:module:: pyfsr.cli.instances
+
+.. autoapi-nested-parse::
+
+   ``pyfsr instances`` command group -- inspect the named-instance registry.
+
+   :class:`~pyfsr.instances.InstanceRegistry` already answers "which box, and where
+   are its credentials" for every pyfsr caller. It had no command-line surface,
+   though, so the answer was only visible to code that already knew the registry
+   existed -- and consumers that did not know kept their own ``alias -> env file``
+   maps, which drifted (one such map could not reach three boxes that were
+   registered for every other tool).
+
+   These subcommands make the registry inspectable without writing a script:
+
+   - ``list`` -- every configured alias with its base URL, auth kind and whether it
+     carries an SSH profile. This is the answer to "what can I pass to
+     ``--instance``".
+   - ``show <alias>`` -- one instance's resolved settings as an identity card,
+     including the SSH profile when present.
+   - ``check [alias ...]`` -- actually connect: probe each box's version endpoint
+     and then an authenticated read, so a registered-but-broken alias is visible
+     *before* a demo script fails on it.
+
+   - ``env <alias>`` -- the resolved ``FSR_*`` / ``PYFSR_APPLIANCE_*`` settings as
+     ``KEY=VALUE`` (or ``export`` lines, or JSON) for make, shell and JS callers.
+     Secrets only with ``--with-secrets``; ``--env-file-path`` hands out a *file*
+     holding them instead, so no credential ever rides on a command line.
+   - ``ssh-target <alias>`` -- host/user/port/key for ``ssh``, from the appliance
+     subtable (falling back to the ``base_url`` host), so callers need no
+     ``~/.ssh/config`` alias.
+
+   Recommended make pattern (no secret in ``ps``, no ``~/.ssh/config`` alias)::
+
+       BOX ?=
+       ifeq ($(BOX),)
+       $(error BOX=<alias> required; see `pyfsr instances list`)
+       endif
+       # non-secret settings, safe in make variables and logs
+       $(eval $(shell pyfsr instances env $(BOX) --format env | sed 's/^/export /'))
+       # secrets stay in a file the recipe sources (backing env_file, or a 0600 temp)
+       BOX_ENV_FILE := $(shell pyfsr instances env $(BOX) --env-file-path)
+       target:
+           set -a; . "$(BOX_ENV_FILE)"; set +a; ./do_thing.sh
+           ssh $(shell pyfsr instances ssh-target $(BOX) --format ssh) 'uname -a'
+
+   Nothing here prints a credential unless ``--with-secrets`` is passed. Values are rendered through
+   :mod:`pyfsr.cli._output`, which masks anything under a secret-looking key, and
+   the auth column reports only the *kind* of credential in use.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.instances.cmd_list
+   pyfsr.cli.instances.cmd_show
+   pyfsr.cli.instances.cmd_check
+   pyfsr.cli.instances.cmd_env
+   pyfsr.cli.instances.cmd_ssh_target
+   pyfsr.cli.instances.build_subparser
+
+
+Module Contents
+---------------
+
+.. py:function:: cmd_list(args: argparse.Namespace) -> int
+
+   Print every configured alias -- the valid values for ``--instance``.
+
+
+.. py:function:: cmd_show(args: argparse.Namespace) -> int
+
+   Print one instance's resolved settings, including its SSH profile.
+
+
+.. py:function:: cmd_check(args: argparse.Namespace) -> int
+
+   Connect to each named instance (default: all) and report what answered.
+
+   Exits nonzero if any checked instance is not ``ok``, so this is usable as a
+   pre-flight step in a demo script or CI job.
+
+
+.. py:function:: cmd_env(args: argparse.Namespace) -> int
+
+   Print an instance's resolved settings for make / shell / JS consumption.
+
+
+.. py:function:: cmd_ssh_target(args: argparse.Namespace) -> int
+
+   Print the ssh host/user/port/key for an instance (no ``~/.ssh/config`` alias needed).
+
+
+.. py:function:: build_subparser(sub: argparse._SubParsersAction) -> None
+
+   Register the ``instances`` subcommands on ``sub``.
+
+

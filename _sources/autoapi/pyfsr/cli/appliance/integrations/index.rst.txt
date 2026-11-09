@@ -1,0 +1,171 @@
+pyfsr.cli.appliance.integrations
+================================
+
+.. py:module:: pyfsr.cli.appliance.integrations
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance integrations`` -- the connector runtime's pip index.
+
+   When a connector is installed the platform pip-installs its ``requirements.txt``
+   into the integrations environment, using that environment's own ``pip.conf``.
+   Out of the box the file names only Fortinet's content mirror as ``index-url``,
+   so a connector that depends on a package the mirror does not carry (anything
+   published only to PyPI) installs with its dependency missing. Some appliances
+   carry PyPI as ``extra-index-url``; others do not, and no REST API or UI setting
+   writes the file -- it has to be edited on the box.
+
+   The file ships **immutable** (``chattr +i``), so a plain write fails with
+   "Operation not permitted". :func:`ensure_extra_index` clears the flag, writes,
+   and puts the flag back in a ``finally`` so a failed write never leaves the file
+   unlocked. It is idempotent: a URL already listed is a no-op that touches
+   nothing.
+
+   The new content is passed as a command argument, never on stdin: the
+   transports put the sudo password on stdin, and with passwordless sudo nothing
+   consumes it, so it would land in the file.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.integrations.PIP_CONF
+   pyfsr.cli.appliance.integrations.PYPI_SIMPLE
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.integrations.PipIndex
+   pyfsr.cli.appliance.integrations.IndexChange
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.integrations.parse
+   pyfsr.cli.appliance.integrations.add_extra_index
+   pyfsr.cli.appliance.integrations.pip_index
+   pyfsr.cli.appliance.integrations.ensure_extra_index
+
+
+Module Contents
+---------------
+
+.. py:data:: PIP_CONF
+   :value: '/opt/cyops/configs/integrations/packages/integrations_env/pip.conf'
+
+
+.. py:data:: PYPI_SIMPLE
+   :value: 'https://pypi.org/simple/'
+
+
+.. py:class:: PipIndex(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   The index settings in the integrations ``pip.conf``.
+
+
+   .. py:attribute:: path
+      :type:  str
+
+
+   .. py:attribute:: index_url
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: extra_index_urls
+      :type:  list[str]
+      :value: None
+
+
+
+   .. py:attribute:: immutable
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: text
+      :type:  str
+      :value: ''
+
+
+
+.. py:class:: IndexChange(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Outcome of :func:`ensure_extra_index`.
+
+
+   .. py:attribute:: url
+      :type:  str
+
+
+   .. py:attribute:: changed
+      :type:  bool
+
+
+   .. py:attribute:: before
+      :type:  PipIndex
+
+
+   .. py:attribute:: after
+      :type:  PipIndex
+
+
+   .. py:attribute:: backup
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:property:: ok
+      :type: bool
+
+
+      The URL is listed now, and the immutable flag is as it was before.
+
+
+.. py:function:: parse(text: str, *, path: str = PIP_CONF, immutable: bool = False) -> PipIndex
+
+   Read ``index-url`` / ``extra-index-url`` from pip.conf text (``[global]`` or bare keys).
+
+
+.. py:function:: add_extra_index(text: str, url: str) -> str
+
+   Return pip.conf ``text`` with ``url`` added as an extra index.
+
+   pip reads a whitespace-separated list, so an existing ``extra-index-url``
+   line is extended in place; otherwise a new line goes at the end of
+   ``[global]`` (or the end of the file when there are no sections).
+
+
+.. py:function:: pip_index(transport: pyfsr.cli.appliance.transport.Transport, *, path: str = PIP_CONF) -> PipIndex
+
+   Read the integrations pip index settings and the file's immutable flag. Read-only.
+
+
+.. py:function:: ensure_extra_index(transport: pyfsr.cli.appliance.transport.Transport, url: str = PYPI_SIMPLE, *, path: str = PIP_CONF, yes: bool = False) -> IndexChange
+
+   Add ``url`` as an extra pip index for the connector runtime. Gated by ``yes``.
+
+   A no-op (no ``yes`` needed, nothing run but reads) when ``url`` is already
+   listed. Otherwise it backs the file up to ``<path>.bak``, clears the
+   immutable flag if set, writes, restores the flag in a ``finally``, then
+   re-reads the file so the result reports what is actually on disk.
+
+

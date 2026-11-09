@@ -1,0 +1,73 @@
+pyfsr.cli.pack
+==============
+
+.. py:module:: pyfsr.cli.pack
+
+.. autoapi-nested-parse::
+
+   ``pyfsr pack`` command group — assemble a solution pack from live content
+   and bundled installers, without hand-knowing the wire formats.
+
+   Subcommands:
+
+   - ``init <dir> --name N --label L --version V`` — scaffold a pack.
+   - ``add-connector <tgz> --pack <dir>`` / ``add-widget <tgz> --pack <dir>`` —
+     bundle an installer (data.json row from the tgz's own info.json + file copy).
+   - ``add-dashboard <uuid|name> --pack <dir>`` — export a dashboard from the
+     live appliance into the pack.
+   - ``add-records <module> --pack <dir> (--uuid U | --filter-json J) [--limit N]``
+     — export records as a record set (the query always carries a limit; the
+     export engine emits nothing without one).
+   - ``add-playbooks <collection> --pack <dir>`` — export a playbook collection.
+   - ``soc-demo <module> <uuid> --pack <dir> --title T --collection C`` — the
+     SOC-simulator demo pattern end to end: generate + deploy an abstract-trigger
+     playbook replaying the record through create_simulated_alert, ship the
+     collection into the pack, and add a scenario recordSet that runs it.
+   - ``build <dir> [--out zip]`` — sync contents from the directories, zip in the
+     appliance exporter's layout, validate.
+
+   Bundled-installer packs install ONLY via the Import Wizard path
+   (``import_config.import_file``); the Content Hub path silently installs none.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.pack.cmd_init
+   pyfsr.cli.pack.cmd_add_installer
+   pyfsr.cli.pack.cmd_add_dashboard
+   pyfsr.cli.pack.cmd_add_records
+   pyfsr.cli.pack.cmd_add_playbooks
+   pyfsr.cli.pack.cmd_add_content
+   pyfsr.cli.pack.cmd_soc_demo
+   pyfsr.cli.pack.cmd_build
+   pyfsr.cli.pack.cmd_set_compat
+   pyfsr.cli.pack.build_subparser
+
+
+Module Contents
+---------------
+
+.. py:function:: cmd_init(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_add_installer(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_add_dashboard(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_add_records(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_add_playbooks(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_add_content(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_soc_demo(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_build(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_set_compat(args: argparse.Namespace) -> int
+
+.. py:function:: build_subparser(sub: argparse._SubParsersAction) -> None
+

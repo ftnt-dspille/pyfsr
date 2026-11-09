@@ -1,0 +1,51 @@
+pyfsr.cli.schema
+================
+
+.. py:module:: pyfsr.cli.schema
+
+.. autoapi-nested-parse::
+
+   ``pyfsr schema`` -- the live module-schema cache behind every pre-write check.
+
+   ::
+
+       pyfsr schema show alerts --instance lab          # flags + fields (ownable, required, max length ...)
+       pyfsr schema warm alerts comments --instance lab # fetch now; later writes and processes reuse it
+       pyfsr schema check alerts payload.json --instance lab [--update]
+       pyfsr schema status                              # what is cached, per instance
+       pyfsr schema clear [--instance lab | --all]      # drop cached schemas
+
+   The cache lives under ``~/.cache/pyfsr/schema/<instance>/`` for ``PYFSR_SCHEMA_TTL``
+   seconds (default 600). Switching to another instance clears and re-warms that
+   box's cache automatically; ``clear`` is for when you know a box changed.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.schema.cmd_show
+   pyfsr.cli.schema.cmd_warm
+   pyfsr.cli.schema.cmd_check
+   pyfsr.cli.schema.cmd_status
+   pyfsr.cli.schema.cmd_clear
+   pyfsr.cli.schema.build_subparser
+
+
+Module Contents
+---------------
+
+.. py:function:: cmd_show(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_warm(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_check(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_status(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_clear(args: argparse.Namespace) -> int
+
+.. py:function:: build_subparser(sub: argparse._SubParsersAction) -> None
+

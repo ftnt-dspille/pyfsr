@@ -1,0 +1,86 @@
+pyfsr.cli.appliance.content_hub
+===============================
+
+.. py:module:: pyfsr.cli.appliance.content_hub
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance content-hub`` — Content Hub sync verbs.
+
+   Wraps ``csadm package content-hub sync`` — the Symfony ``app:contenthub:sync``
+   command that pulls the catalog + artifacts from the configured ``REPOSERVER``
+   (``product_yum_server``; ``OFFLINEREPO=true`` points it at a self-hosted
+   mirror). A ``--force`` sync re-fetches every entry regardless of its
+   ``publishedDate`` (the gate a *scheduled* sync uses to decide "is this
+   newer?"), so it is how an appliance picks up a freshly-published override
+   without waiting for the scheduler.
+
+   ``csadm`` exits 0 even when the sync does nothing useful (the same unreliable
+   exit-code behavior the ``service`` verbs see), so success is folded together
+   with an output-text check rather than trusted to the return code alone.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.content_hub.SyncResult
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.content_hub.sync
+
+
+Module Contents
+---------------
+
+.. py:class:: SyncResult(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Outcome of a Content Hub sync.
+
+   ``ok`` folds together the exit code and an output-text signal (``csadm``'s
+   exit code is unreliable). ``output`` keeps the raw csadm text for
+   diagnostics (it carries the per-entry fetch log).
+
+
+   .. py:attribute:: force
+      :type:  bool
+
+
+   .. py:attribute:: ok
+      :type:  bool
+
+
+   .. py:attribute:: output
+      :type:  str
+
+
+.. py:function:: sync(transport: pyfsr.cli.appliance.transport.Transport, *, force: bool = True, yes: bool = False) -> SyncResult
+
+   Run ``csadm package content-hub sync`` on the appliance. Gated by ``yes``.
+
+   A *scheduled* sync (the default ``csadm`` runs on its cadence) only applies
+   an override whose ``publishedDate`` is newer than the synced one; a **forced**
+   sync (``--force``, the default here) re-fetches everything regardless. Use
+   ``force=True`` (default) to pick up a freshly-published connector from a
+   mirror immediately; pass ``force=False`` to run the same cadence gate the
+   scheduler does.
+
+   Mutating-ish (it rewrites the appliance's cached catalog + installs newly
+   advertised connectors), so it is gated behind ``yes`` — pass ``--yes`` on
+   the CLI.
+
+   ``csadm`` exits 0 even when the sync logs an error (unreachable mirror,
+   untrusted cert), so the returned ``ok`` folds a failure-text check in: a
+   non-zero exit OR a ``_SYNC_FAIL`` line ⇒ ``ok=False``.
+
+

@@ -1,0 +1,35 @@
+pyfsr.models.types
+==================
+
+.. py:module:: pyfsr.models.types
+
+.. autoapi-nested-parse::
+
+   Semantic string NewTypes for FortiSOAR IRI fields.
+
+   Both types are transparent at runtime (zero cost) but give type-checkers and
+   IDEs distinct names so a function that expects a ``PicklistIRI`` won't silently
+   accept a module record IRI, and vice-versa.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.models.types.PicklistIRI
+   pyfsr.models.types.RecordIRI
+
+
+Module Contents
+---------------
+
+.. py:data:: PicklistIRI
+
+   IRI of a picklist item — e.g. ``/api/3/picklists/<uuid>``.
+
+.. py:data:: RecordIRI
+
+   IRI of a module record — e.g. ``/api/3/<module>/<uuid>``.
+

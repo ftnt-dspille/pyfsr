@@ -1,0 +1,197 @@
+pyfsr.widget_dev
+================
+
+.. py:module:: pyfsr.widget_dev
+
+.. autoapi-nested-parse::
+
+   Widget packaging -- build a deployable ``.tgz`` from a widget folder.
+
+   The connector flow has :mod:`pyfsr.connector_dev`; widgets get the same
+   treatment here. :func:`pack_widget` validates a widget source folder and
+   bundles it exactly the way the Content Hub ships widgets: a single top-level
+   ``<name>-<version>/`` directory (taken from the folder's ``info.json``, not
+   the folder's own name) holding the widget files.
+
+   Pitfalls this packing rules out:
+
+   * **macOS AppleDouble entries** (``._*``, ``__MACOSX/``): the widget importer
+     walks the extracted tree looking for ``info.json``; a stray
+     ``._<dir>/info.json`` miss makes it resolve the wrong root and the upload
+     fails with a 500 whose ``prod.log`` reads ``max(): Argument #1 ($value)
+     must contain at least one element`` (live-verified on 8.0.0).
+   * **Junk** (``.DS_Store``, caches, VCS/IDE folders, ``node_modules``) that
+     bloats the bundle and can confuse the importer's file walk.
+   * **Non-numeric owners**: entries are normalized to uid/gid 0 with empty
+     owner names, matching the box's own packages.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.widget_dev.REQUIRED_WIDGET_FILES
+   pyfsr.widget_dev.PLATFORM_ELEMENT_PREFIXES
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.widget_dev.pack_widget
+   pyfsr.widget_dev.widget_compatibility_error
+   pyfsr.widget_dev.widget_info_from_tgz
+   pyfsr.widget_dev.rewrite_widget_text
+   pyfsr.widget_dev.rewrite_widget_version
+   pyfsr.widget_dev.rebundle_widget_with_version
+   pyfsr.widget_dev.next_free_version
+   pyfsr.widget_dev.widget_controller_problems
+   pyfsr.widget_dev.dashboard_widget_refs
+   pyfsr.widget_dev.widget_code_refs
+   pyfsr.widget_dev.set_widget_compatibility
+
+
+Module Contents
+---------------
+
+.. py:data:: REQUIRED_WIDGET_FILES
+   :value: ('info.json', 'view.html', 'edit.html', 'view.controller.js', 'edit.controller.js')
+
+
+.. py:function:: pack_widget(source_dir: str, output: str | None = None) -> str
+
+   Bundle a widget source folder into a SOAR-importable ``.tgz``.
+
+   The archive contains exactly one top-level directory named
+   ``<name>-<version>`` (from the folder's ``info.json``), e.g.
+   ``fortiGuardThreatMap-1.0.0/info.json`` -- the layout every Content Hub
+   widget archive uses and the layout the importer's file walk expects.
+
+   :param source_dir: path to the widget folder (the one containing ``info.json``).
+   :param output: destination ``.tgz`` path, or a directory to write
+                  ``<name>-<version>.tgz`` into. Defaults to ``<name>-<version>.tgz``
+                  next to the source folder.
+
+   :returns: The path to the written ``.tgz``.
+
+   :raises FileNotFoundError: if ``source_dir`` doesn't exist.
+   :raises ValueError: if ``source_dir`` has no/invalid ``info.json``, or is
+       missing one of the required widget files.
+
+
+.. py:function:: widget_compatibility_error(compatibility: list[str] | str | None, platform_version: str) -> str | None
+
+   Why the box would refuse a widget with this ``metadata.compatibility``, or ``None``.
+
+   Mirrors ``WidgetController::checkCompatibilityVersion`` (live-read on
+   8.0.0-6034): take the **highest** listed version, drop the dots, and refuse
+   when it is below 702 or above the box's own version. A list is therefore
+   *not* "any of these": ``["8.0.0", "8.0.1"]`` is refused by an 8.0.0 box.
+   An unparseable platform version (e.g. a ``dev`` build) or an empty list is
+   not judged.
+
+
+.. py:function:: widget_info_from_tgz(tgz: str | pathlib.Path) -> dict
+
+   The ``info.json`` of a widget ``.tgz`` (single ``<name>-<version>/`` root).
+
+
+.. py:function:: rewrite_widget_text(text: str, name: str, version: str, *, dev: bool | None = None) -> str
+
+   Point every version-bearing reference in ``text`` at ``version``.
+
+   - ``<name>-X.Y.Z`` followed by ``/`` or a non-version character (asset
+     paths and bare widget ids) becomes ``<name>-<version>``;
+   - ``edit<Name><digits>[Dev]Ctrl`` and ``<name><digits>[Dev]Ctrl`` (every
+     case form of the name) get the new dotless version. The ``Dev`` suffix
+     is kept as found unless ``dev`` forces it on or off;
+   - a bare ``<name>Ctrl`` / ``edit<Name>Ctrl`` gets the version inserted.
+
+   Idempotent: running it twice with the same version changes nothing.
+
+
+.. py:function:: rewrite_widget_version(widget_dir: str | pathlib.Path, version: str) -> list[pathlib.Path]
+
+   Re-version a widget folder in place: info.json plus every text reference.
+
+   Returns the files that changed. The folder itself is not renamed; the
+   ``<name>-<version>`` archive root comes from :func:`pack_widget`.
+
+
+.. py:function:: rebundle_widget_with_version(tgz: str | pathlib.Path, version: str, out_dir: str | pathlib.Path | None = None) -> str
+
+   A copy of a widget ``.tgz`` re-versioned to ``version`` (source untouched).
+
+   Extracts, runs :func:`rewrite_widget_version`, and re-packs with
+   :func:`pack_widget`, so the archive root becomes ``<name>-<version>/``.
+
+
+.. py:function:: next_free_version(current: str, taken: list[str] | set[str], *, must_exceed: list[str] | None = None) -> str
+
+   Patch-bump ``current`` until it is free on the box.
+
+   Free means: not an existing version, no existing version with the same
+   dotless number (``1.0.10`` and ``10.1.0`` both register ``...1010Ctrl``), and,
+   when ``must_exceed`` is given, a dotless number above every one of those
+   (the connector importer only installs over an older version, compared as
+   dotless integers, so ``1.0.10`` beats ``1.1.0``).
+
+
+.. py:function:: widget_controller_problems(widget_dir: str | pathlib.Path) -> list[str]
+
+   Controller registrations that do not match info.json's version.
+
+   The platform resolves ``<name><dotless>[Dev]Ctrl`` / ``edit<Name><dotless>[Dev]Ctrl``
+   from info.json; a registration with other digits mounts nothing, silently.
+   Mirrors the widget harness's ``validateControllers``. Empty list = consistent.
+
+
+.. py:data:: PLATFORM_ELEMENT_PREFIXES
+   :value: ('cs-', 'ng-', 'ui-', 'uib-', 'data-', 'x-', 'md-', 'fs-')
+
+
+.. py:function:: dashboard_widget_refs(dashboard: dict | list) -> set[tuple[str, str]]
+
+   ``(name, version)`` of every widget a dashboard record places.
+
+   Walks the whole record (rows, tabs, nested layouts) for ``type`` values
+   shaped ``<name>-X.Y.Z``.
+
+   .. rubric:: Example
+
+   >>> sorted(dashboard_widget_refs({"config": {"rows": [{"columns": [
+   ...     {"widgets": [{"type": "fortiGuardThreatLandscape-1.0.0"}]},
+   ...     {"widgets": [{"type": "chart-3.2.1"}, {"type": "not a widget"}]}]}]}}))
+   [('chart', '3.2.1'), ('fortiGuardThreatLandscape', '1.0.0')]
+
+
+.. py:function:: widget_code_refs(tgz: str | pathlib.Path) -> dict[str, set]
+
+   Candidate dependencies named in a widget archive's ``.js``/``.html``.
+
+   Returns ``{"widgets": {name, ...}, "widget_types": {(name, version), ...},
+   "connectors": {name, ...}, "provides": {component, ...},
+   "needs_components": {component, ...}}``. ``needs_components`` are custom
+   elements its templates use (camelCased) that its own scripts do not
+   register and that are not platform elements (``cs-*`` etc.): some other
+   installed widget must register them, since the platform loads every
+   installed widget's scripts globally (e.g. ``<progress-card-component>``
+   comes from the ``utilities`` widget). These are *candidates* read from source text:
+   check them against the box's installed widgets / connectors before
+   trusting them (see :meth:`pyfsr.api.widgets.WidgetsAPI.export_dashboard`).
+   The widget's own name is left out.
+
+
+.. py:function:: set_widget_compatibility(tgz: str | pathlib.Path, compatibility: list[str]) -> bool
+
+   Rewrite ``metadata.compatibility`` inside a widget ``.tgz``, in place.
+
+   Returns ``False`` (archive untouched) when it already holds exactly
+   ``compatibility``. The appliance refuses a widget whose highest entry is
+   above its own version, so lowering the tag (e.g. to ``["7.6.0"]``) lets an
+   8.0-tagged widget install on 7.6; it does not make 8.0-only code work there.
+
+
