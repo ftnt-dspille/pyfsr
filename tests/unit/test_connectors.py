@@ -2549,3 +2549,109 @@ def test_export_not_installed_raises():
     with pytest.raises(ValueError, match="not installed"):
         api.export("ghost-connector")
     assert client.request_calls == []
+
+
+# -- owner teams: IRIs only, no silent public, read-back ----------------------
+class _TeamEchoClient(FakeClient):
+    """PUT echoes ``teams`` as the server stored it; GET /configuration/<id>/ serves ``current``."""
+
+    def __init__(self, *, current=None, stored=None):
+        super().__init__()
+        self.current = current or {}
+        self.stored = stored  # None -> echo what was sent
+
+    def get(self, endpoint, params=None, **kwargs):
+        if endpoint.startswith("/api/integration/configuration/"):
+            self.get_calls.append((endpoint, params))
+            return self.current
+        return super().get(endpoint, params, **kwargs)
+
+    def put(self, endpoint, data=None, params=None, **kwargs):
+        super().put(endpoint, data, params, **kwargs)
+        teams = data["teams"] if self.stored is None and "teams" in data else self.stored
+        out = {"config_id": data["config_id"], "name": data["name"], "status": 1}
+        if teams is not None:
+            out["teams"] = teams
+        return out
+
+
+def _team_api(**kw):
+    from pyfsr.api.teams import TeamsAPI
+
+    c = _TeamEchoClient(**kw)
+    c.teams = TeamsAPI(c)
+    c.teams._team_cache = {"s00-team": {"name": "s00-team", "uuid": _TEAM_UUID}}
+    return ConnectorsAPI(c), c
+
+
+def _upd(api, **kw):
+    return api.update_configuration("virustotal", "cfg-1", {"key": "v"}, name="c", validate=False, autofill=False, **kw)
+
+
+def test_update_bare_uuid_is_sent_as_iri():
+    api, client = _team_api()
+    _upd(api, teams=[_TEAM_UUID])
+    assert client.put_calls[-1][1]["teams"] == [f"/api/3/teams/{_TEAM_UUID}"]
+
+
+def test_update_mixed_team_inputs_all_become_iris():
+    api, client = _team_api()
+    other = "11111111-2222-3333-4444-555555555555"
+    _upd(api, teams=["s00-team", f"/api/3/teams/{other}", {"uuid": other, "name": "x"}, _TEAM_UUID])
+    assert client.put_calls[-1][1]["teams"] == [
+        f"/api/3/teams/{_TEAM_UUID}",
+        f"/api/3/teams/{other}",
+        f"/api/3/teams/{other}",
+        f"/api/3/teams/{_TEAM_UUID}",
+    ]
+
+
+def test_blank_team_entry_raises_instead_of_sending_empty():
+    api, client = _team_api()
+    with pytest.raises(ValueError, match="cannot read a team"):
+        _upd(api, teams=[""])
+    assert client.put_calls == []
+
+
+def test_empty_teams_on_private_config_refused_unless_allowed():
+    api, client = _team_api(current={"teams": [_TEAM_UUID]})
+    with pytest.raises(ValueError, match="allow_public"):
+        _upd(api, teams=[])
+    assert client.put_calls == []
+    _upd(api, teams=[], allow_public=True)
+    assert client.put_calls[-1][1]["teams"] == []
+
+
+def test_empty_teams_on_already_public_config_is_fine():
+    api, client = _team_api(current={"teams": []})
+    _upd(api, teams=[])
+    assert client.put_calls[-1][1]["teams"] == []
+
+
+def test_readback_mismatch_raises():
+    api, _ = _team_api(stored=[])  # server accepted but stored nothing
+    with pytest.raises(ValueError, match="saved teams"):
+        _upd(api, teams=[_TEAM_UUID])
+
+
+def test_readback_falls_back_to_get_when_echo_lacks_teams():
+    api, client = _team_api(current={"teams": []})
+    client.put = lambda e, data=None, **k: {"config_id": "cfg-1", "name": "c", "status": 1}
+    with pytest.raises(ValueError, match="saved teams"):
+        _upd(api, teams=[_TEAM_UUID])
+
+
+def test_readback_matches_when_server_returns_uuids_or_records():
+    api, _ = _team_api(stored=[_TEAM_UUID])
+    _upd(api, teams=[_TEAM_UUID])  # bare uuid echo == IRI sent
+    api, _ = _team_api(stored=[f"/api/3/teams/{_TEAM_UUID}"])
+    _upd(api, teams=[_TEAM_UUID])
+
+
+def test_set_default_resends_owner_teams_as_iris():
+    from pyfsr.api.teams import TeamsAPI
+
+    api, client = _api(get_map={"/api/integration/configuration/fg-1/": {**_FG_RECORD, "teams": [_TEAM_UUID]}})
+    client.teams = TeamsAPI(client)
+    api.set_default_configuration("fortigate-firewall", "fg-1")
+    assert client.put_calls[-1][1]["teams"] == [f"/api/3/teams/{_TEAM_UUID}"]

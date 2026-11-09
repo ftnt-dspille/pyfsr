@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Connector configuration owner teams can no longer silently go public**:
+  the appliance accepts bare uuids in `teams` on `PUT /api/integration/configuration/`
+  but stores `[]`. `update_configuration` / `upsert_configuration` now accept
+  names, uuids, IRIs or team records, always send `/api/3/teams/<uuid>` IRIs,
+  refuse `teams=[]` on a private configuration unless `allow_public=True`, and
+  raise if the saved teams differ from what was sent. `set_default_configuration`
+  re-sends the row's owner teams.
+
 ### Added
 
 - **Content Hub updates**: `client.content_hub.updates(types=None)` lists installed

@@ -30,6 +30,26 @@ from .base import BaseAPI
 _BASE = "/api/3/teams"
 
 
+def team_ref(team: Any) -> str:
+    """Reduce a team given as a uuid, IRI, name, record dict or model to one string.
+
+    A record contributes its ``uuid`` (else its ``@id`` IRI, else its ``name``).
+    Raises ``ValueError`` for anything that yields nothing, so a blank entry
+    can never be turned into an empty ``teams`` list further down.
+    """
+    if isinstance(team, str):
+        ref = team.strip()
+    else:
+        get = team.get if isinstance(team, dict) else lambda k: getattr(team, k, None)
+        try:
+            ref = str(get("uuid") or get("@id") or get("name") or "").strip()
+        except Exception:  # noqa: BLE001 - an exotic object is just "not a team"
+            ref = ""
+    if not ref:
+        raise ValueError(f"cannot read a team from {team!r}: pass a uuid, IRI, name or team record")
+    return ref
+
+
 class TeamsAPI(BaseAPI):
     """Team discovery and creation (``/api/3/teams``)."""
 
@@ -40,8 +60,9 @@ class TeamsAPI(BaseAPI):
             self._team_cache = {t["name"]: t for t in self.list() if t.get("name")}
         return self._team_cache
 
-    def _resolve_team_uuid(self, team: str) -> str:
-        """Accept a team uuid, IRI (``/api/3/teams/<uuid>``) or name and return the uuid."""
+    def _resolve_team_uuid(self, team: Any) -> str:
+        """Accept a team uuid, IRI (``/api/3/teams/<uuid>``), name, dict or model; return the uuid."""
+        team = team_ref(team)
         if team.startswith("/api/3/teams/"):
             team = uuid_from_iri(team) or team
         if _is_uuid(team):
@@ -60,7 +81,7 @@ class TeamsAPI(BaseAPI):
         """Look up a team UUID by display name (case-sensitive); ``None`` if absent."""
         return self.team_map().get(name)
 
-    def _resolve_teams(self, teams: list[str]) -> list[str]:
+    def _resolve_teams(self, teams: Sequence[Any]) -> list[str]:
         """Accept team UUIDs, IRIs or names; return UUIDs. Raises ``ValueError`` for unknown names."""
         return [self._resolve_team_uuid(t) for t in teams]
 
