@@ -130,3 +130,14 @@ def pytest_configure(config):
         "markers",
         "requires_extra(name): skip unless the named optional extra (see EXTRA_IMPORTS) is installed",
     )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_schema_cache(tmp_path_factory, monkeypatch):
+    """Keep the schema disk cache (pyfsr.schema) out of the real ~/.cache.
+
+    The disk layer is off by default in tests (PYFSR_SCHEMA_TTL=0); a test that
+    exercises it sets the TTL itself and gets a private cache root.
+    """
+    monkeypatch.setenv("PYFSR_SCHEMA_TTL", "0")
+    monkeypatch.setenv("PYFSR_SCHEMA_CACHE_DIR", str(tmp_path_factory.mktemp("schema-cache")))

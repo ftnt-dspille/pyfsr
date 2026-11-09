@@ -2382,6 +2382,39 @@ class ModulesAdminAPI(BaseAPI):
         reset_stale_log: bool | Any = False,
         progress: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
+        """Commit all pending staged schema changes to live; see :meth:`_publish` for details.
+
+        Whatever the outcome, the client's cached schema for this instance is dropped
+        afterwards (``client.schema`` and ``client.modules``): a publish is
+        appliance-wide, so any cached module may have changed.
+        """
+        try:
+            return self._publish(
+                timeout=timeout,
+                poll_interval=poll_interval,
+                precheck=precheck,
+                reset_stale_log=reset_stale_log,
+                progress=progress,
+            )
+        finally:
+            for name in ("schema", "modules"):
+                cache = getattr(self.client, name, None)
+                clear = getattr(cache, "clear", None) or getattr(cache, "clear_cache", None)
+                if callable(clear):
+                    try:
+                        clear()
+                    except Exception:  # noqa: BLE001 - cache cleanup never masks the publish result
+                        pass
+
+    def _publish(
+        self,
+        *,
+        timeout: float = 600.0,
+        poll_interval: float = 10.0,
+        precheck: bool = True,
+        reset_stale_log: bool | Any = False,
+        progress: Callable[[str], None] | None = None,
+    ) -> dict[str, Any]:
         """Commit **all** pending staged schema changes to live (``PUT /api/publish``).
 
         **A box already mid-publish is waited out, not reported as an error.** While a

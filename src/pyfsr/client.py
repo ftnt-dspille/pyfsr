@@ -350,6 +350,11 @@ class FortiSOAR:
         # Module / field schema discovery
         self.modules: ModulesAPI = ModulesAPI(self)
 
+        # Live published schema: one cache (memory + per-instance disk) behind every pre-write check
+        from .schema import SchemaCache
+
+        self.schema: SchemaCache = SchemaCache(self)
+
         # Module / field schema administration (create, alter fields, publish)
         self.modules_admin: ModulesAdminAPI = ModulesAdminAPI(self)
 

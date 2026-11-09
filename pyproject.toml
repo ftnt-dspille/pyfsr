@@ -186,6 +186,7 @@ files = [
     "src/pyfsr/instances.py",
     "src/pyfsr/authoring.py",
     "src/pyfsr/concurrency.py",
+    "src/pyfsr/schema.py",
     "src/pyfsr/playbook_lint.py",
     "src/pyfsr/playbook_match.py",
     "src/pyfsr/playbook_library.py",

@@ -6,6 +6,25 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Live schema cache and one pre-write check** (`pyfsr.schema`, `client.schema`):
+  every record write is checked against the module's *published* schema before
+  anything is sent, and all problems are reported at once: `owners` on a module
+  that is not team-ownable (FortiSOAR answers 200 and drops it, which reads like
+  a permission problem), unknown fields, required fields on create, max length,
+  read-only fields, picklist values not in the list (with the valid ones), and
+  relationship IRIs pointing at the wrong module, plus the existing value rules.
+  Schemas are fetched one module at a time (~0.3s vs ~2.3s for the whole
+  catalog) and cached in memory and on disk per instance
+  (`~/.cache/pyfsr/schema/`, `PYFSR_SCHEMA_TTL`, default 600s), so a loop of
+  creates or separate processes fetch once. The cache is cleared after every
+  publish, when switching to another instance (that box is cleared and
+  re-warmed), and refetched once when a cached schema doesn't know a field or
+  picklist value. `ModuleSchema.record_model()` builds a pydantic model of the
+  module as it exists on the box. New CLI: `pyfsr schema show|warm|check|status|clear`.
+  `scripts/bench_schema.py` measures it against the old full-catalog fetch,
+  including switching between two instances.
+- **Faster `modules.describe`**: fetches only the requested module instead of
+  every module's metadata.
 - **Content Hub install refuses a pack that bundles connectors/widgets**:
   `solution_packs.install_from_file` raises `BundledInstallersSkipped` before
   uploading, listing each bundled installer it would skip and pointing to

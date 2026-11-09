@@ -33,6 +33,8 @@ logger = logging.getLogger("pyfsr")
 _META_BASE = "/api/3/staging_model_metadatas?$limit=2147483647&$orderby=type"
 # $relationships=true exposes each attribute's dataSource (picklist binding).
 _META_FULL = _META_BASE + "&$relationships=true"
+# Single-module fetch: params carry type=/module= and $relationships.
+_META_SINGLE = "/api/3/staging_model_metadatas"
 
 
 def _friendly(*candidates: Any) -> str:
@@ -118,13 +120,24 @@ class ModulesAPI(BaseAPI):
         if not refresh and want in self._described:
             base = self._described[want]
             return self._with_picklist_values(base) if with_values else base
-        data = self.client.get(_META_FULL)
-        members = extract_members(data)
-        hit = next(
-            (m for m in members if str(m.get("type", "")).lower() == want or str(m.get("module", "")).lower() == want),
-            None,
-        )
+        # One module per fetch (~0.2 MB) rather than the whole catalog (~1.3 MB, seconds);
+        # the full listing is only needed to name the alternatives when nothing matches.
+        hit = None
+        for key in ("type", "module"):
+            data = self.client.get(_META_SINGLE, params={key: module, "$relationships": "true", "$limit": 5})
+            members = extract_members(data)
+            hit = next(
+                (
+                    m
+                    for m in members
+                    if str(m.get("type", "")).lower() == want or str(m.get("module", "")).lower() == want
+                ),
+                None,
+            )
+            if hit is not None:
+                break
         if hit is None:
+            members = extract_members(self.client.get(_META_BASE))
             types = sorted({m.get("type") for m in members if m.get("type")})
             return {"error": f"module {module!r} not found", "available": types}
         fields = []

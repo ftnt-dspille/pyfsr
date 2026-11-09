@@ -18,6 +18,7 @@ from . import jinja as jinja_cmds
 from . import llm as llm_cmds
 from . import playbook as playbook_cmds
 from . import repo as repo_cmds
+from . import schema as schema_cmds
 from . import widget as widget_cmds
 from .appliance import certs as certs_cmds
 from .appliance import content_hub as content_hub_cmds
@@ -489,6 +490,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_llm = sub.add_parser("llm", help="FortiAI reasoning profiles: status, add a third-party LLM, switch agents")
     llm_sub = p_llm.add_subparsers(dest="llm_command", required=True)
     llm_cmds.build_subparser(llm_sub)
+
+    # --- schema group (top-level; live module-schema cache behind pre-write checks) ---
+    p_schema = sub.add_parser("schema", help="live module schema: show, warm, dry-run check, cache status/clear")
+    schema_sub = p_schema.add_subparsers(dest="schema_command", required=True)
+    schema_cmds.build_subparser(schema_sub)
 
     # --- repo group (top-level; public content repo, no appliance) ---
     p_repo = sub.add_parser(

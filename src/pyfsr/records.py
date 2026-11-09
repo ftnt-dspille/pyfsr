@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import re
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, overload
@@ -34,6 +35,8 @@ from .models import AggregateRow, BaseRecord, model_for
 from .pagination import HydraPage, paginate
 from .projection import project
 from .query import Query
+
+logger = logging.getLogger("pyfsr")
 
 if TYPE_CHECKING:
     from .client import FortiSOAR
@@ -173,16 +176,33 @@ class RecordSet(Generic[T]):
             body["sort"] = parse_sort(sort) if isinstance(sort, str) else sort
         return body
 
-    def prepare_values(self, data: Any) -> Any:
-        """Fix or refuse values the box would corrupt or reject unhelpfully.
+    def prepare_values(self, data: Any, *, op: str = "create") -> Any:
+        """Fix or refuse values the box would corrupt, drop or reject unhelpfully.
 
-        See :mod:`pyfsr.field_values`. Raises
-        :class:`~pyfsr.exceptions.ValidationError` before anything is sent.
-        Skipped when ``check_values=False`` or the module has no readable schema.
+        Checks ``data`` against the module's live schema (``client.schema``, cached
+        per instance; see :mod:`pyfsr.schema`): unknown fields, ``owners`` on a
+        module that is not team-ownable, required fields on create, max lengths,
+        read-only fields, picklist values, relationship targets, and the value
+        rules in :mod:`pyfsr.field_values`. Raises
+        :class:`~pyfsr.exceptions.ValidationError` naming every problem before
+        anything is sent. Skipped when ``check_values=False`` or the module has
+        no readable schema.
         """
         self.last_conversions = []
         if not self.check_values or not isinstance(data, dict):
             return data
+        schema = getattr(self.client, "schema", None)
+        if schema is not None and hasattr(schema, "check"):
+            try:
+                result = schema.check(self.module, data, op="update" if op == "update" else "create")
+            except ValidationError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - schema unreadable: fall back to the field-type check
+                logger.debug("schema check unavailable for %s: %s", self.module, exc)
+            else:
+                result.raise_for_problems()
+                self.last_conversions = result.conversions
+                return result.data
         try:
             fields = self.client.modules.describe(self.module).get("fields") or []
         except Exception:  # noqa: BLE001 - no schema to check against; send as given
@@ -762,7 +782,7 @@ class RecordSet(Generic[T]):
         """
         if isinstance(data, BaseRecord):
             data = data.to_dict(exclude_none=True)
-        data = self.prepare_values(data)
+        data = self.prepare_values(data, op="update")
         if resolve_picklists:
             data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
         path = resolve_record_path(self.module, ref)
@@ -931,7 +951,7 @@ class RecordSet(Generic[T]):
 
         # When no custom key is specified, use the FortiSOAR natural-key upsert endpoint
         if key is None:
-            data = self.prepare_values(data)
+            data = self.prepare_values(data, op="update")
             if resolve_picklists:
                 data = self.client.picklists.resolve_record_fields(self.module, data, strict=strict_picklists)
             resp = self.client.post(f"/api/3/upsert/{self.module}", data=data)
@@ -1032,7 +1052,7 @@ class RecordSet(Generic[T]):
         for row in rows:
             if isinstance(row, BaseRecord):
                 row = row.to_dict(exclude_none=True)
-            row = self.prepare_values(row)
+            row = self.prepare_values(row, op="update")
             if resolve_picklists:
                 row = self.client.picklists.resolve_record_fields(self.module, row, strict=strict_picklists)
             payload.append(row)

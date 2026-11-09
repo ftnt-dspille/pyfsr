@@ -145,6 +145,17 @@ class PicklistsAPI(BaseAPI):
         want = module.strip().lower()
         if want in self._module_fields:
             return self._module_fields[want]
+        # Share the client's per-instance schema cache (one module per fetch) when present.
+        schema_cache = getattr(self.client, "schema", None)
+        if schema_cache is not None and hasattr(schema_cache, "get"):
+            try:
+                schema = schema_cache.get(module)
+            except Exception:  # noqa: BLE001 - fall back to the staging listing below
+                schema = None
+            if schema is not None:
+                fmap_live = {name: f.picklist for name, f in schema.fields.items()}
+                self._module_fields[want] = fmap_live
+                return fmap_live
         data = self.client.get(_META_PATH)
         members = extract_members(data)
         hit = next(
