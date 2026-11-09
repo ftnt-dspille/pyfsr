@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- `pyfsr appliance es health|shards` called Elasticsearch over http; 8.x appliances
+  serve it only over TLS, so every call got an empty reply. They now use https
+  (live-verified on 8.0.1).
+- The device UUID (the DB/ES password) is read with sudo when the SSH login cannot
+  read `/home/csadmin/device_uuid` (e.g. `admin`), before falling back to
+  `csadm license --get-device-uuid`, which can return a drifted UUID that the
+  databases reject.
+
 ## [0.33.0] - 2026-11-09
 
 ### Added

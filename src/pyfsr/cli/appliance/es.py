@@ -29,7 +29,7 @@ def _curl_es(facts: Facts, path: str, *, timeout: float = 15.0) -> str:
     # Credentials go in a curl config on stdin (-K -), never in argv, so they stay
     # out of the remote process table and out of anything the transport logs.
     res = facts.transport.run(
-        ["curl", "-sk", "--max-time", str(int(timeout)), "-K", "-", f"http://localhost:9200{path}"],
+        ["curl", "-sk", "--max-time", str(int(timeout)), "-K", "-", f"https://localhost:9200{path}"],
         input_text=f'user = "elastic:{uuid}"\n',
         timeout=timeout + 5,
     )

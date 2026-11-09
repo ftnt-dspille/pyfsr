@@ -55,6 +55,10 @@ class Facts:
         res = self.transport.run(["cat", "/home/csadmin/device_uuid"])
         uuid = _extract_uuid(res.stdout) if res.ok else None
         if not uuid:
+            # A login other than csadmin (e.g. admin) cannot read the file; sudo can.
+            res = self.transport.run(["cat", "/home/csadmin/device_uuid"], sudo=True)
+            uuid = _extract_uuid(res.stdout) if res.ok else None
+        if not uuid:
             res = self.transport.run(["csadm", "license", "--get-device-uuid"], sudo=True)
             uuid = _extract_uuid(res.stdout) if res.ok else None
         if not uuid:

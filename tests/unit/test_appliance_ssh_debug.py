@@ -155,3 +155,34 @@ def test_es_credentials_go_on_stdin_not_argv(monkeypatch):
     facts = SimpleNamespace(transport=T(host="fsr.example.com"), device_uuid=lambda: "0123456789abcdef")
     es._curl_es(facts, "/_cluster/health")
     assert "0123456789abcdef" not in " ".join(seen["argv"]) and "0123456789abcdef" in seen["input"]
+
+
+def test_es_calls_use_https():
+    from pyfsr.cli.appliance import es
+
+    seen = {}
+
+    class T(SSHTransport):
+        def run(self, argv, **kw):
+            seen["argv"] = argv
+            return CommandResult(argv=argv, returncode=0, stdout="{}", stderr="")
+
+    es._curl_es(SimpleNamespace(transport=T(host="fsr.example.com"), device_uuid=lambda: "x" * 32), "/_cluster/health")
+    assert seen["argv"][-1] == "https://localhost:9200/_cluster/health"
+
+
+def test_device_uuid_is_read_with_sudo_before_falling_back_to_csadm():
+    from pyfsr.cli.appliance.facts import Facts
+
+    uuid = "0123456789abcdef0123456789abcdef"
+    calls = []
+
+    class T(SSHTransport):
+        def run(self, argv, *, sudo=False, **kw):
+            calls.append((argv[0], sudo))
+            if argv[0] == "cat" and not sudo:
+                return CommandResult(argv=argv, returncode=1, stdout="", stderr="Permission denied")
+            return CommandResult(argv=argv, returncode=0, stdout=uuid + "\n", stderr="")
+
+    assert Facts(T(host="fsr.example.com", user="admin")).device_uuid() == uuid
+    assert calls == [("cat", False), ("cat", True)]
