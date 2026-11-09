@@ -6,6 +6,26 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Content Hub updates**: `client.content_hub.updates(types=None)` lists installed
+  solution packs, connectors and widgets with a newer version, using the Content
+  Hub page's *Update available* filter (development connectors excluded unless
+  `include_development=True`). `update(name_or_label)` applies one the way the
+  *Update* button does (`POST /api/3/solutionpacks/update`) and waits for the
+  import job; it refuses while a module publish is running and for a pack whose
+  update needs a newer FortiSOAR (compared as real versions, not the GUI's
+  digit concatenation). No backup is taken; for a connector the result reports its configuration
+  count before and after and says so if the update dropped any. Refusals from the
+  Content Hub service ("Content not available", premium, not allowed) are
+  reported as `unavailable` with a plain explanation. `update_all()` applies everything
+  in order: packs (each after the packs it depends on), then connectors, then
+  widgets, re-reading the list after the packs so bundled items are not updated
+  twice; `dry_run=True` returns the plan. Strictly one install at a time: each
+  update first waits for any import already running on the box (GUI, Import
+  Wizard, another session; `running_installs()`), then waits for its own job;
+  `update_all` rejects `wait=False` and stops if a job is still running at its
+  timeout instead of starting the next. `types` takes one or several of
+  `solutionpack`/`connector`/`widget` (CLI: repeat `--type`). New CLI: `pyfsr hub updates` and
+  `pyfsr hub update NAME... | --all [--type ...] [--dry-run] [--yes]`.
 - **Live schema cache and one pre-write check** (`pyfsr.schema`, `client.schema`):
   every record write is checked against the module's *published* schema before
   anything is sent, and all problems are reported at once: `owners` on a module

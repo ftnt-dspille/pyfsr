@@ -13,6 +13,7 @@ import sys
 from . import _output
 from . import ai_eval as ai_eval_cmds
 from . import connector as connector_cmds
+from . import hub as hub_cmds
 from . import instances as instances_cmds
 from . import jinja as jinja_cmds
 from . import llm as llm_cmds
@@ -490,6 +491,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_llm = sub.add_parser("llm", help="FortiAI reasoning profiles: status, add a third-party LLM, switch agents")
     llm_sub = p_llm.add_subparsers(dest="llm_command", required=True)
     llm_cmds.build_subparser(llm_sub)
+
+    # --- hub group (top-level; Content Hub updates for installed content) ---
+    p_hub = sub.add_parser("hub", help="Content Hub: list and install updates for packs, connectors, widgets")
+    hub_sub = p_hub.add_subparsers(dest="hub_command", required=True)
+    hub_cmds.build_subparser(hub_sub)
 
     # --- schema group (top-level; live module-schema cache behind pre-write checks) ---
     p_schema = sub.add_parser("schema", help="live module schema: show, warm, dry-run check, cache status/clear")
