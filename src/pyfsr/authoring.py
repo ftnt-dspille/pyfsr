@@ -653,7 +653,7 @@ def warm_catalog(
         else:
             _t = time.perf_counter()
             try:
-                from fsr_playbooks.warmup import (  # type: ignore[import-not-found]
+                from fsr_playbooks.warmup import (  # type: ignore[import-not-found, unused-ignore]
                     apply_migrations,
                     fetch_all_connector_configs,
                     write_agents,
@@ -882,9 +882,9 @@ DEFAULT_CATALOG_MAX_AGE = 300.0
 
 
 def _catalog_max_age() -> float | None:
-    raw = os.environ.get("PYFSR_CATALOG_MAX_AGE")
+    raw = os.environ.get("PYFSR_CATALOG_MAX_AGE") or ""
     try:
-        age = float(raw) if raw not in (None, "") else DEFAULT_CATALOG_MAX_AGE
+        age = float(raw) if raw else DEFAULT_CATALOG_MAX_AGE
     except ValueError:
         age = DEFAULT_CATALOG_MAX_AGE
     return age if age > 0 else None
