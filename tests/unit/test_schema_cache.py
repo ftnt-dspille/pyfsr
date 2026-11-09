@@ -286,3 +286,11 @@ def test_a_server_type_with_path_characters_is_kept_in_memory_only(disk):
     assert c.schema.get("../../escape") is not None  # usable in memory
     assert not any(disk.rglob("*escape*"))
     assert c.schema.cached_modules() == []
+
+
+def test_a_member_without_attributes_is_not_a_schema():
+    from pyfsr.schema import _pick
+
+    summary = {"type": "incidents", "module": "incidents"}
+    assert _pick([summary], "incidents") is None
+    assert _pick([{**summary, "attributes": []}], "incidents") is not None

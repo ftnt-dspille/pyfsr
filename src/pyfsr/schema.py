@@ -653,8 +653,13 @@ def _relation_problem(f: FieldSchema, value: Any) -> str | None:
 
 
 def _pick(members: list[dict[str, Any]], want: str) -> dict[str, Any] | None:
+    """The member describing ``want``, only when it carries its field list.
+
+    A member without ``attributes`` (a summary listing) says nothing about the
+    module's fields; building a schema from it would refuse every field.
+    """
     for key in ("type", "module"):
         for m in members:
-            if str(m.get(key, "")).lower() == want:
+            if str(m.get(key, "")).lower() == want and isinstance(m.get("attributes"), list):
                 return m
     return None
