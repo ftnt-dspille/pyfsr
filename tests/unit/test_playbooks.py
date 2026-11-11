@@ -435,7 +435,7 @@ def test_find_booleans_and_substrings():
     PlaybooksAPI(c).find(active=True, private=False, name_contains="phish", tag="ioc")
     p = c.calls[-1][2]
     assert p["isActive"] == "true" and p["isPrivate"] == "false"
-    assert p["name$like"] == "%phish%" and p["tag$like"] == "%ioc%"
+    assert p["name$like"] == "%phish%" and p["recordTags"] == "ioc"
 
 
 def test_find_using_connector_and_operation():

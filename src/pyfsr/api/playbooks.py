@@ -683,7 +683,8 @@ class PlaybooksAPI(BaseAPI):
             name: exact playbook name.
             name_contains: case-insensitive substring of the name (``name$like``).
             collection: collection uuid or ``/api/3/workflow_collections/<uuid>`` IRI.
-            tag: a tag substring (``tag$like``).
+            tag: a tag name, exact match on the playbook's ``recordTags`` (the
+                designer's tags -- e.g. ``"IP_Enrichment"``).
             active: ``True`` for active playbooks only, ``False`` for disabled.
             private: ``True`` for private (owner-scoped) playbooks, ``False`` for public.
             trigger_type: filter on the **start step** -- a friendly alias from
@@ -729,7 +730,12 @@ class PlaybooksAPI(BaseAPI):
         if name_contains is not None:
             q["name$like"] = f"%{name_contains}%"
         if tag is not None:
-            q["tag$like"] = f"%{tag}%"
+            # The tags live in the ``recordTags`` JSON array column (the ``tag``
+            # column stays null), and the API answers an equality filter on it --
+            # ``tag$like`` matched nothing and ``recordTags$like`` 500s server-side
+            # (live-verified on 8.0.1: recordTags=IP_Enrichment returns both
+            # IP_Enrichment playbooks). Exact tag name, not a substring.
+            q["recordTags"] = tag
         if active is not None:
             q["isActive"] = "true" if active else "false"
         if private is not None:
