@@ -462,3 +462,83 @@ def test_terminate_posts_revoke_with_pk_and_caller(run):
 def test_terminate_unresolvable_run_raises():
     with pytest.raises(ValueError, match="could not resolve"):
         PlaybooksAPI(RevokeClient({})).terminate("12345678-1234-1234-1234-123456789abc")
+
+
+def _fake_clock(monkeypatch, step=5.0):
+    """A monotonic clock that advances `step` seconds per reading."""
+    import time
+
+    state = {"t": 0.0}
+
+    def _now():
+        state["t"] += step
+        return state["t"]
+
+    monkeypatch.setattr(time, "monotonic", _now)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+
+def test_wait_for_task_settles_finished_with_error_without_detailed(monkeypatch):
+    """The settle gate must not require detailed=True.
+
+    A run that ENDS in `finished with error` is not terminal on its own, so
+    wait_for_task settles on the tree's content holding still. The gate used to
+    demand `detailed=True` on top of `steps=True` -- but run_and_wait polls with
+    the default shape (steps=True, detailed=False), so a degradation-wrapped run
+    that failed in seconds burned its whole timeout and raised "did not finish
+    ... currently 'finished with error'". Root step snapshots are the observable
+    state of a childless run; a child's own status flip is hashed even slim, the
+    same stillness signal wait() reads off the run row's modified stamp.
+    """
+    _fake_clock(monkeypatch)
+    runs = {
+        "10": {
+            "name": "IP Address > VirusTotal > Enrichment",
+            "status": "finished with error",
+            "parent": None,
+            "steps": {"Start": "finished", "Get Reputation from VT": "finished with error"},
+        },
+    }
+    c = TreeClient(runs, task_map={"12345678-1234-1234-1234-123456789abc": "10"})
+    tree = PlaybooksAPI(c).wait_for_task(
+        "12345678-1234-1234-1234-123456789abc", timeout=10_000, poll_interval=0, steps=True
+    )
+    assert tree.status == "finished with error"
+    assert [s.name for s in tree.steps] == ["Start", "Get Reputation from VT"]
+
+
+def test_wait_for_task_keeps_polling_while_finished_with_error_is_still_moving(monkeypatch):
+    """A moving tree is still executing: the settle must not fire on sight.
+
+    A step failing under ignore_errors flips the run to `finished with error`
+    while the rest of the branch is still executing; later root steps finishing
+    keep the fingerprint moving until the run is really done.
+    """
+    _fake_clock(monkeypatch)
+    full_steps = {"Start": "finished", "Enrich": "finished with error", "Report": "finished"}
+    running_steps = {"Start": "finished", "Enrich": "finished with error"}
+
+    class MovingClient(TreeClient):
+        """Serves the run without its last step on the first poll, with it after."""
+
+        def __init__(self, runs):
+            super().__init__(runs)
+            self.polls = 0
+
+        def get(self, endpoint, params=None, **kw):
+            if "step_detail=true" in endpoint:
+                self.polls += 1
+                if self.polls == 1:
+                    self.runs["10"]["steps"] = running_steps
+                else:
+                    self.runs["10"]["steps"] = full_steps
+            return super().get(endpoint, params=params, **kw)
+
+    runs = {"10": {"name": "PB", "status": "finished with error", "parent": None, "steps": full_steps}}
+    c = MovingClient(runs)
+    c.task_map = {"12345678-1234-1234-1234-123456789abc": "10"}
+    tree = PlaybooksAPI(c).wait_for_task(
+        "12345678-1234-1234-1234-123456789abc", timeout=10_000, poll_interval=0, steps=True
+    )
+    assert tree.status == "finished with error"
+    assert c.polls >= 2  # it did not return on the first (still-moving) sighting

@@ -2939,11 +2939,15 @@ class PlaybooksAPI(BaseAPI):
         Note:
             A run that ENDS in ``finished with error`` (not every run that
             reports it is still executing -- see ``_TERMINAL_STATUSES``)
-            settles: with ``steps=True`` **and** ``detailed=True`` the wait
-            returns once the tree's content -- every visible status: the
-            run's, each child's, each step's -- holds still for
-            ``_SETTLE_SECONDS``. Without both flags the settling signal is
-            not observable and the wait polls to the timeout, status quo.
+            settles: with ``steps=True`` the wait returns once the tree's
+            visible content -- the run's status, each child's status, and
+            (with the step snapshots that flag carries) every root step's
+            (name, status) -- holds still for ``_SETTLE_SECONDS``. A child's
+            *internal* step flips are hashed only with ``detailed=True`` as
+            well; without it a child's own status flip is the stillness
+            signal, the same one ``wait()`` reads off the run row's
+            ``modified`` stamp. Without ``steps=True`` the settling signal
+            is not observable and the wait polls to the timeout, status quo.
             Without the settle, a degradation-wrapped run that completes in
             seconds burns the caller's whole timeout and raises with
             "currently 'finished with error'" (live-measured on 8.0.1:
@@ -2974,7 +2978,7 @@ class PlaybooksAPI(BaseAPI):
             tree = self.run_tree(task_id, steps=steps, detailed=detailed)
             poll_count += 1
             is_terminal = tree.status in _TERMINAL_STATUSES
-            if not is_terminal and tree.status in _SETTLING_STATUSES and steps and detailed:
+            if not is_terminal and tree.status in _SETTLING_STATUSES and steps:
                 # A run can also END wearing 'finished with error' (the
                 # _TERMINAL_STATUSES note records the pass-through case; it
                 # is not the only one) and then polling to the caller's
@@ -2983,8 +2987,13 @@ class PlaybooksAPI(BaseAPI):
                 # content: terminal once every visible status holds still
                 # for _SETTLE_SECONDS. A run genuinely still executing keeps
                 # flipping something -- later steps finish (8.0.0-measured),
-                # children change -- so the fingerprint keeps moving and the
-                # wait does not return mid-flight.
+                # children change status -- so the fingerprint keeps moving
+                # and the wait does not return mid-flight. Root step
+                # snapshots (``steps=True``) hash every step the root owns;
+                # a child's *internal* step flips are only hashed with
+                # ``detailed=True``, but a child's own status flip is always
+                # hashed, which is the stillness signal ``wait()``'s
+                # run-row ``modified`` stamp would see anyway.
                 fingerprint = _run_tree_fingerprint(tree)
                 now = time.monotonic()
                 if fingerprint != last_fingerprint:
