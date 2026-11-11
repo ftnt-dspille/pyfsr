@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`examples/relicense_from_fortiflex.py`** licenses (or re-licenses) a FortiSOAR
+  from FortiFlex, unifying pyfortiflex and pyfsr: the login acts as the license
+  oracle, `pyfortiflex.mint_token` allocates the owner's entitlement and mints the
+  single-use token, pyfsr redeems it on the unauthenticated license API
+  (`system.deploy_flex_license`), and the result is proven by a real login whose
+  license details show the redeemed serial (`get_status` can read `finished` left
+  over from a previous deployment). Reports the per-device FortiAI token pool,
+  which is keyed to the license serial and can lag the deployment by minutes.
+
 ### Fixed
 
 - `pyfsr appliance es health|shards` called Elasticsearch over http; 8.x appliances

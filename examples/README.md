@@ -29,6 +29,7 @@ self-describing: `<domain>_<action>_<detail>.py`. Most scripts talk to a
 | ...register an external MCP server | [`register_and_call_public_mcp_server.py`](register_and_call_public_mcp_server.py) |
 | ...wire FortiSIEM into FortiAI via MCP | [`fortisiem_mcp_setup_and_test.py`](fortisiem_mcp_setup_and_test.py) |
 | ...tune a brand-new appliance | [`tune_new_instance.py`](tune_new_instance.py) |
+| ...license / re-license from FortiFlex (mint + redeem + verify) | [`relicense_from_fortiflex.py`](relicense_from_fortiflex.py) |
 | ...run appliance CLI commands (service/mq/db) | [`appliance_cli_tour.py`](appliance_cli_tour.py) |
 | ...serve a TAXII threat feed to FortiGate | [`taxii_threat_feed_to_fortigate.py`](taxii_threat_feed_to_fortigate.py) |
 | ...mint an API key + provision agents | [`agent_provisioning_matrix.py`](agent_provisioning_matrix.py) |
@@ -111,6 +112,7 @@ docstring states which it expects.
 |---|---|---|
 | [`appliance_cli_tour.py`](appliance_cli_tour.py) | Every `pyfsr appliance` command against a live box (service/mq/logs/db) | live |
 | [`tune_new_instance.py`](tune_new_instance.py) | Apply the standard tuning every new FortiSOAR instance needs | live |
+| [`relicense_from_fortiflex.py`](relicense_from_fortiflex.py) | License (or re-license) from FortiFlex: mint an entitlement token (pyfortiflex), redeem it on the unauthenticated license API, prove it by login + serial, report the FortiAI token pool | live |
 | [`agent_provisioning_matrix.py`](agent_provisioning_matrix.py) | Mint an API key, verify agent registration over the message bus, and prove the round trip (install connector on remote agent, execute an op on its host) | live |
 | [`user_password_lifecycle.py`](user_password_lifecycle.py) | Admin creates a user and sets its password, the user logs in and changes its own password (`users.reset_password` / `whoami` / `change_password`) | live |
 
