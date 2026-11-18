@@ -550,6 +550,7 @@ class Export:
                     path=inst.member,
                 )
             ]
+        widget_src: dict[str, str] = {}
         with tf:
             manifest = next((m for m in tf.getnames() if posixpath.basename(m) == "info.json"), None)
             if manifest is None:
@@ -573,6 +574,21 @@ class Export:
                         path=inst.member,
                     )
                 ]
+            if inst.category == "widgets":
+                # Pull the controller sources and bundled libs out while the tar is
+                # open; the bootstrap checks below run on them after the block.
+                for m in tf.getnames():
+                    base = posixpath.basename(m)
+                    is_ctrl = base in ("view.controller.js", "edit.controller.js")
+                    is_asset = m.endswith(".js") and "/widgetAssets/" in ("/" + m)
+                    if not (is_ctrl or is_asset):
+                        continue
+                    try:
+                        fh = tf.extractfile(m)
+                        if fh is not None:
+                            widget_src[m] = fh.read().decode("latin-1", "replace")
+                    except (tarfile.TarError, OSError):
+                        continue
         out: list[Finding] = []
         inner_version = str(inner.get("version") or "")
         if inst.version and inner_version and inner_version != str(inst.version):
@@ -597,7 +613,29 @@ class Export:
                         path=inst.member,
                     )
                 )
+        if inst.category == "widgets" and inner_name and inner_version:
+            out += self._check_widget_bootstrap(inst, str(inner_name), inner_version, widget_src)
         return out
+
+    def _check_widget_bootstrap(self, inst: Installer, name: str, version: str, src: dict[str, str]) -> list[Finding]:
+        """Reject a bundled widget tgz that would upload but fail to bootstrap on the box.
+
+        Mirrors the harness linter (controller-form / edit-controller-form /
+        umd-anonymous-define); the shared detection lives in :mod:`pyfsr.widget_dev`
+        so every ship layer rejects the same breakers. Both shipped a broken widget
+        to a box through this very import path.
+        """
+        from .widget_dev import widget_bootstrap_problems
+
+        return [
+            Finding(
+                Severity.ERROR,
+                f"widget.{code}",
+                f"{name}: {message}",
+                path=inst.member,
+            )
+            for code, message in widget_bootstrap_problems(name, str(version), src)
+        ]
 
     def _check_payload_json(self) -> list[Finding]:
         out: list[Finding] = []

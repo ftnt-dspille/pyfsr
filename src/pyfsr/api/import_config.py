@@ -58,6 +58,7 @@ from ..auth.guards import requires_jwt
 from ..exceptions import (
     FortiSOARException,
     WidgetNotInstalled,
+    WidgetWontBootstrap,
     describe_migrate_failure,
     is_migrate_transient,
 )
@@ -713,7 +714,15 @@ class ImportConfigAPI(BaseAPI):
         return str(out), bumps
 
     def check_bundled_widgets(self, zip_path: str) -> None:
-        """Raise :class:`~pyfsr.exceptions.WidgetIncompatible` for any bundled tgz widget this box refuses."""
+        """Fail fast on any bundled tgz widget this box would refuse or fail to render.
+
+        Raises :class:`~pyfsr.exceptions.WidgetIncompatible` (box refuses the
+        upload) or :class:`~pyfsr.exceptions.WidgetWontBootstrap` (box accepts it
+        but it renders as raw template text). The Import Wizard swallows both and
+        still reports "Import Complete", so they are caught here instead.
+        """
+        from ..widget_dev import widget_bootstrap_problems_from_tgz, widget_info_from_tgz
+
         if not (Path(zip_path).is_file() and zipfile.is_zipfile(zip_path)):
             return  # files.upload reports a bad path
         with zipfile.ZipFile(zip_path) as zf:
@@ -730,6 +739,19 @@ class ImportConfigAPI(BaseAPI):
                         tgz = Path(tmp) / Path(member).name
                         tgz.write_bytes(zf.read(member))
                         self.client.widgets.check_compatible(tgz)
+                        # A widget the box ACCEPTS can still fail to bootstrap
+                        # (wrong controller form / a UMD lib that aborts the AMD
+                        # loader) -- it then renders as raw template text. The
+                        # Import Wizard swallows that too, so fail fast here.
+                        problems = widget_bootstrap_problems_from_tgz(tgz)
+                        if problems:
+                            widget_name = widget_info_from_tgz(tgz).get("name")
+                            raise WidgetWontBootstrap(
+                                f"bundled widget {widget_name!r} would upload but not render on the box: "
+                                + "; ".join(msg for _code, msg in problems),
+                                name=widget_name,
+                                problems=problems,
+                            )
 
     def _verify_bundled_widgets(self, job: ImportJobResult) -> None:
         """Every tgz widget the job was told to install must be on the box afterwards."""

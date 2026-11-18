@@ -267,6 +267,31 @@ class WidgetIncompatible(WidgetError):
         super().__init__(message)
 
 
+class WidgetWontBootstrap(WidgetError):
+    """A widget would upload cleanly but fail to render on the box.
+
+    Raised *before* anything is uploaded, from the same static rules the widget
+    harness linter enforces (controller must be in the ``DevCtrl`` form the
+    platform publish derives the live ``Ctrl`` from; no bundled library may call
+    ``define()`` on its UMD AMD branch). Unlike :class:`WidgetIncompatible` the
+    appliance accepts the upload -- the widget just renders as raw template text
+    ({{ }}) because its controller never registers under the name the platform
+    looks up, or its bundled lib aborts widget bootstrap. ``problems`` carries the
+    ``(code, message)`` pairs from :func:`pyfsr.widget_dev.widget_bootstrap_problems`.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        name: str | None = None,
+        problems: list[tuple[str, str]] | None = None,
+    ):
+        self.name = name
+        self.problems = problems or []
+        super().__init__(message)
+
+
 class BundledInstallersSkipped(FortiSOARException):
     """A Content Hub install of a pack whose bundled connectors/widgets it would skip.
 

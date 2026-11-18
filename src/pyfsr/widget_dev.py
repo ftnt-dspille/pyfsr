@@ -22,6 +22,7 @@ Pitfalls this packing rules out:
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 import tarfile
 from pathlib import Path
@@ -315,6 +316,92 @@ def next_free_version(current: str, taken: list[str] | set[str], *, must_exceed:
             continue
         return cand
     raise ValueError(f"no free version found above {current}")
+
+
+# A widget can UPLOAD cleanly yet fail to BOOTSTRAP on the box -- it then renders
+# as raw template text ({{ }}). These two static defects cause that, and neither is
+# caught by widget_controller_problems (which, like the harness's old
+# validateControllers, accepts either controller form and never looks at bundled
+# libs). Mirrors the widget-harness linter rules controller-form /
+# edit-controller-form / umd-anonymous-define (fortisoar-widget-harness
+# scripts/lint-angular.ts) so every ship layer rejects the same breakers.
+_CTRL_REGISTER_RE = re.compile(r"""\.controller\(\s*['"]([^'"]+)['"]""")
+_UMD_AMD_ACTIVE_RE = re.compile(
+    r"""(?:["']function["']\s*===?\s*typeof\s+define"""
+    r"""|typeof\s+define\s*===?\s*["']function["'])"""
+    r"""\s*&&\s*[\w.$]*define\.amd\s*\?\s*[\w.$]*define\("""
+)
+
+
+def widget_bootstrap_problems(name: str, version: str, members: dict[str, str]) -> list[tuple[str, str]]:
+    """Static reasons a packaged widget will fail to bootstrap on a box.
+
+    ``members`` maps a tgz (or dir) member path to its text. Returns ``(code,
+    message)`` pairs, empty when clean:
+
+    - ``controller_form`` / ``edit_controller_form``: the view/edit controller is
+      not in the ``DevCtrl`` form the platform publish derives the live
+      ``<name><dotless>Ctrl`` from. Any other form registers a controller the
+      appliance never looks up, so the template is never compiled.
+    - ``umd_anonymous_define``: a bundled ``widgetAssets`` library still calls
+      ``define()`` on its UMD AMD branch; it collides with the platform's own AMD
+      loader (monaco) and aborts bootstrap.
+    """
+    if not name or not version:
+        return []
+    digits = _dotless_str(version)
+    exp_view = f"{name}{digits}DevCtrl"
+    exp_edit = f"edit{name[:1].upper()}{name[1:]}{digits}DevCtrl"
+    out: list[tuple[str, str]] = []
+    for member, body in members.items():
+        base = posixpath.basename(member)
+        if base == "view.controller.js":
+            got = _CTRL_REGISTER_RE.findall(body)
+            if got and exp_view not in got:
+                out.append(("controller_form", f"view.controller.js registers {', '.join(got)}, expected {exp_view}"))
+        elif base == "edit.controller.js":
+            got = _CTRL_REGISTER_RE.findall(body)
+            if got and exp_edit not in got:
+                out.append(
+                    ("edit_controller_form", f"edit.controller.js registers {', '.join(got)}, expected {exp_edit}")
+                )
+    for member, body in members.items():
+        if "/widgetAssets/" in ("/" + member) and _UMD_AMD_ACTIVE_RE.search(body):
+            out.append(
+                (
+                    "umd_anonymous_define",
+                    f"bundled library {posixpath.basename(member)} calls define() on its UMD AMD branch "
+                    "(collides with the platform AMD loader and aborts bootstrap)",
+                )
+            )
+    return out
+
+
+def _widget_bootstrap_members(tf: tarfile.TarFile) -> dict[str, str]:
+    """Pull the controller sources and bundled libs out of an open widget tarball."""
+    members: dict[str, str] = {}
+    for m in tf.getnames():
+        base = posixpath.basename(m)
+        is_ctrl = base in ("view.controller.js", "edit.controller.js")
+        is_asset = m.endswith(".js") and "/widgetAssets/" in ("/" + m)
+        if not (is_ctrl or is_asset):
+            continue
+        try:
+            fh = tf.extractfile(m)
+            if fh is not None:
+                members[m] = fh.read().decode("latin-1", "replace")
+        except (tarfile.TarError, OSError):
+            continue
+    return members
+
+
+def widget_bootstrap_problems_from_tgz(tgz: str | Path) -> list[tuple[str, str]]:
+    """``widget_bootstrap_problems`` for a packaged ``.tgz`` (reads name/version from info.json)."""
+    info = widget_info_from_tgz(tgz)
+    name, version = str(info.get("name") or ""), str(info.get("version") or "")
+    with tarfile.open(tgz, "r:gz") as tf:
+        members = _widget_bootstrap_members(tf)
+    return widget_bootstrap_problems(name, version, members)
 
 
 def widget_controller_problems(widget_dir: str | Path) -> list[str]:
