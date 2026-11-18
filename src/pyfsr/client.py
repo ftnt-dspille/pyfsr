@@ -36,6 +36,7 @@ from .api.log_forwarding import LogForwardingAPI
 from .api.manual_input import ManualInputAPI
 from .api.modules import ModulesAPI
 from .api.modules_admin import ModulesAdminAPI
+from .api.multitenancy import MultitenancyAPI
 from .api.native_mcp import NativeMCPApi
 from .api.notifications import NotificationsAPI
 from .api.picklists import PicklistsAPI
@@ -406,6 +407,8 @@ class FortiSOAR:
         self.roles: RolesAPI = RolesAPI(self)
         self.teams: TeamsAPI = TeamsAPI(self)
         self.routers: RoutersAPI = RoutersAPI(self)
+        # Dedicated-tenant setup (master + tenant side); needs agents, routers and teams above
+        self.multitenancy: MultitenancyAPI = MultitenancyAPI(self)
 
         # The actors union (people + appliances + API keys share one table)
         self.actors: ActorsAPI = ActorsAPI(self)

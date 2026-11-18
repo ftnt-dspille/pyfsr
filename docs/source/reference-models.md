@@ -1156,6 +1156,22 @@ name is what gives `pyfsr.models.X` a resolvable target. Without it every
    :show-inheritance:
 ```
 
+## Multitenancy
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.Tenant
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+```{eval-rst}
+.. autoclass:: pyfsr.models.TenantStatus
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
 ## App configuration
 
 ```{eval-rst}

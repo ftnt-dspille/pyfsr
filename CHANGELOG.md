@@ -6,6 +6,18 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Master -> tenant playbooks** on `client.multitenancy`: `push_playbooks(collections,
+  tenants, replace=True)` (Tenant Manager > Push Playbooks; the push also creates the
+  playbook alias), `playbook_alias(name)` (uuid + mapped tenants, the
+  `playbook_alias_id` a Trigger Tenant Playbook step takes) and `tenant_id(name)`.
+  Example: `examples/multitenancy_remote_playbook.py` with the two playbooks in
+  `examples/playbooks/mt_health/`.
+
+- **`client.multitenancy`** wraps dedicated-tenant setup: on the master,
+  `add_dedicated_tenant`, `wait_for_health`, `export_config`, `encryption_key`,
+  `delete_tenant`; on the tenant, `configure_master` (leftover-router detection,
+  `replace_leftover=True` to clear it) and `status`. `export_config` returns a dict
+  whose repr masks secrets.
 - **`examples/relicense_from_fortiflex.py`** licenses (or re-licenses) a FortiSOAR
   from FortiFlex, unifying pyfortiflex and pyfsr: the login acts as the license
   oracle, `pyfortiflex.mint_token` allocates the owner's entitlement and mints the
@@ -14,6 +26,11 @@ All notable changes to this project will be documented in this file.
   license details show the redeemed serial (`get_status` can read `finished` left
   over from a previous deployment). Reports the per-device FortiAI token pool,
   which is keyed to the license serial and can lag the deployment by minutes.
+
+### Changed
+
+- `pyfsr[playbooks]` now needs `fsr_playbooks>=0.12.1,<0.13` for the playbook-level
+  `remote_executable` flag.
 
 ### Fixed
 

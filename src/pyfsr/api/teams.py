@@ -57,7 +57,12 @@ class TeamsAPI(BaseAPI):
 
     def _team_by_name(self) -> dict[str, Team]:
         if self._team_cache is None:
-            self._team_cache = {t["name"]: t for t in self.list() if t.get("name")}
+            # Explicit $limit: with no params the server returns only its default
+            # page (30 records on 8.0.x), so teams beyond page 1 silently vanish
+            # from this cache -- name resolution false-misses ("team 'x' not
+            # found") and get_or_create 409s on teams that do exist.
+            # Live-verified on 8.0.0.
+            self._team_cache = {t["name"]: t for t in self.list(params={"$limit": 1000}) if t.get("name")}
         return self._team_cache
 
     def _resolve_team_uuid(self, team: Any) -> str:

@@ -31,6 +31,7 @@ GROUPS = {
     "_rules": "Rules",
     "_schedules": "Schedules",
     "_widgets": "Widgets",
+    "_multitenancy": "Multitenancy",
     "_app_config": "App configuration",
     "base": "Base classes",
     "types": "Types",

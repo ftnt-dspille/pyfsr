@@ -1,0 +1,32 @@
+# MT Health - tenant side.
+#
+# Authored on the MASTER, then pushed to each dedicated tenant (Tenant Manager >
+# Push Playbooks) and mapped to an alias (Playbook Mapping). The master's
+# "MT Health - Master" playbook runs it remotely with a Trigger Tenant Playbook step.
+#
+# Rules from the multi-tenancy guide that shape it:
+#   * remote_executable: true  -- without it the master cannot run the tenant copy.
+#   * no input parameters      -- they are not passed to the tenant; the run fails.
+#
+# It creates one marker alert on the tenant it runs on. The alert replicates back
+# to the master, so a health check sees the full loop: master -> tenant (trigger)
+# and tenant -> master (replication).
+collection: MT Health - Tenant
+description: Marker playbook the master triggers on each tenant to prove remote execution.
+playbooks:
+  - name: MT Health Marker
+    description: Create one marker alert on this tenant. Run remotely from the master.
+    remote_executable: true
+    steps:
+      - name: Start
+        type: start
+        next: Create Marker Alert
+      - name: Create Marker Alert
+        type: create_record
+        module: alerts
+        fields:
+          name: "MT health marker - remote run"
+          description: "Created by the MT Health Marker playbook, triggered from the master."
+        next: Done
+      - name: Done
+        type: end

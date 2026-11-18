@@ -1177,14 +1177,22 @@ def build_and_deploy(
             stacklevel=2,
         )
         prune = True
-    catalog = _resolve_catalog(client, db_path)
+    # Warm for THIS playbook (not the generic warm): the targeted warm refetches any
+    # connector/module/picklist the playbook uses that the cached catalog lacks. The
+    # generic warm only notices module totals / connector-config changes, so a
+    # connector installed after the last warm stayed "unknown" until the cache file
+    # was deleted by hand.
+    catalog = Path(db_path) if db_path is not None else _warm_cache(client, playbook=text)[0]
     verified = verify_playbook_yaml(text, db_path=catalog, live_probe=live_probe, skip=skip)
     if not verified.ready and not force:
         return DeployedPlaybook(verified=verified, stopped_at="verify")
     # Pass skip as lax_codes so the compile gate doesn't hard-stop on the
     # same diagnostics the verify gate already suppressed.
     lax = set(skip) if skip else None
-    compiled = compile_playbook_yaml(text, client=client, db_path=catalog, lax_codes=lax)
+    # Without an explicit db_path, compile through the client so a failure on the
+    # (possibly stale) catalog re-warms in full and compiles once more. Passing the
+    # catalog as db_path here skipped that retry.
+    compiled = compile_playbook_yaml(text, client=client, db_path=db_path, lax_codes=lax)
     if not compiled.ok:
         return DeployedPlaybook(verified=verified, compiled=compiled, stopped_at="compile")
     response = client.workflow_collections.deploy(

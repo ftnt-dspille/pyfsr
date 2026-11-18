@@ -155,3 +155,30 @@ def test_find_operation_returns_matches_shape():
     res = find_operation("nist-nvd", "cve", db_path=_slim_db())
     assert isinstance(res, dict)
     assert "matches" in res or "error" in res or "code" in res
+
+
+@requires_compiler
+def test_build_and_deploy_warms_for_the_playbook_and_keeps_the_retry(monkeypatch):
+    """A connector installed after the last warm must not stay "unknown".
+
+    build_and_deploy used the generic warm and then handed the catalog to the
+    compiler as db_path, which bypassed both the playbook-targeted warm (it
+    refetches connectors the playbook uses that the catalog lacks) and the
+    compile's re-warm-and-retry on failure.
+    """
+    import pyfsr.authoring as a
+
+    calls = []
+    from fsr_playbooks._db import default_db_path
+
+    real_db = default_db_path()
+
+    def fake_warm(client, *, full=False, playbook=None):
+        calls.append({"full": full, "targeted": playbook is not None})
+        return real_db, False
+
+    monkeypatch.setattr(a, "_warm_cache", fake_warm)
+    client = _FakeDeployClient()
+    result = a.build_and_deploy(GOOD_YAML, client=client)
+    assert result.deployed
+    assert calls and all(c["targeted"] or c["full"] for c in calls), calls

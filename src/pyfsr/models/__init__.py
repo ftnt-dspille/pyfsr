@@ -105,6 +105,7 @@ from ._modules_admin import (
     StagingModelMetadata,
     length_limit_problem,
 )
+from ._multitenancy import Tenant, TenantStatus
 from ._playbooks import (
     ApprovalRequest,
     CreatePlaybookRequest,
@@ -262,6 +263,9 @@ __all__ = [
     "ConnectorSelection",
     "PlaybookCollectionSelection",
     "ViewTemplateSelection",
+    # multitenancy
+    "Tenant",
+    "TenantStatus",
     # agent records
     "Agent",
     "AgentConnectorStatus",
