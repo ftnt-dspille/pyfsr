@@ -614,10 +614,14 @@ class Export:
                     )
                 )
         if inst.category == "widgets" and inner_name and inner_version:
-            out += self._check_widget_bootstrap(inst, str(inner_name), inner_version, widget_src)
+            out += self._check_widget_bootstrap(
+                inst, str(inner_name), inner_version, widget_src, inner.get("development")
+            )
         return out
 
-    def _check_widget_bootstrap(self, inst: Installer, name: str, version: str, src: dict[str, str]) -> list[Finding]:
+    def _check_widget_bootstrap(
+        self, inst: Installer, name: str, version: str, src: dict[str, str], development: bool | None = None
+    ) -> list[Finding]:
         """Reject a bundled widget tgz that would upload but fail to bootstrap on the box.
 
         Mirrors the harness linter (controller-form / edit-controller-form /
@@ -634,7 +638,7 @@ class Export:
                 f"{name}: {message}",
                 path=inst.member,
             )
-            for code, message in widget_bootstrap_problems(name, str(version), src)
+            for code, message in widget_bootstrap_problems(name, str(version), src, development)
         ]
 
     def _check_payload_json(self) -> list[Finding]:

@@ -20,6 +20,7 @@ from pathlib import Path
 from test_exports import build_export, codes
 
 from pyfsr.widget_dev import (
+    to_published_form,
     widget_bootstrap_problems,
     widget_bootstrap_problems_from_tgz,
     widget_controller_problems,
@@ -81,6 +82,44 @@ def test_flags_edit_controller_form():
 def test_silent_on_devctrl_form_and_neutralized_umd():
     probs = widget_bootstrap_problems("myw", "2.0.0", _members("myw200DevCtrl", "editMyw200DevCtrl", _UMD_NEUTRAL))
     assert probs == []
+
+
+def test_published_form_is_accepted_when_development_is_false():
+    probs = widget_bootstrap_problems(
+        "myw", "2.0.0", _members("myw200Ctrl", "editMyw200Ctrl", _UMD_NEUTRAL), development=False
+    )
+    assert probs == []
+
+
+def test_wrong_form_for_the_development_flag_is_rejected():
+    # A package that says it is published but registers DevCtrl names controllers
+    # the box never looks up; and the reverse for a development package.
+    probs = widget_bootstrap_problems(
+        "myw", "2.0.0", _members("myw200DevCtrl", "editMyw200DevCtrl", _UMD_NEUTRAL), development=False
+    )
+    assert {c for c, _ in probs} == {"controller_form", "edit_controller_form"}
+    probs = widget_bootstrap_problems(
+        "myw", "2.0.0", _members("myw200Ctrl", "editMyw200Ctrl", _UMD_NEUTRAL), development=True
+    )
+    assert {c for c, _ in probs} == {"controller_form", "edit_controller_form"}
+
+
+def test_to_published_form_rewrites_a_dev_package_into_one_that_validates(tmp_path: Path):
+    src = tmp_path / "myw-2.0.0.tgz"
+    src.write_bytes(_widget_tgz("myw200DevCtrl", "editMyw200DevCtrl", _UMD_NEUTRAL))
+    # a development package: info.json carries no/true development flag, DevCtrl form
+    assert widget_bootstrap_problems_from_tgz(src) == []
+    out = to_published_form(src, tmp_path / "pub.tgz")
+    with tarfile.open(out) as tf:
+        info = json.loads(tf.extractfile("myw-2.0.0/info.json").read())
+        view = tf.extractfile("myw-2.0.0/view.controller.js").read().decode()
+        lib = tf.extractfile("myw-2.0.0/widgetAssets/lib/x.js").read().decode()
+    assert info["development"] is False and info["name"] == "myw"
+    assert "myw200Ctrl" in view and "DevCtrl" not in view
+    assert lib == _UMD_NEUTRAL  # untouched
+    assert widget_bootstrap_problems_from_tgz(out) == []  # accepted as development: false
+    # and the converted package is NOT valid as a development one
+    assert {c for c, _ in widget_bootstrap_problems("myw", "2.0.0", _members("myw200Ctrl", "editMyw200Ctrl", ""), True)}
 
 
 def test_from_tgz_reads_name_version_and_flags(tmp_path: Path):

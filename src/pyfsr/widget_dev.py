@@ -21,6 +21,7 @@ Pitfalls this packing rules out:
 
 from __future__ import annotations
 
+import io
 import json
 import posixpath
 import re
@@ -333,16 +334,22 @@ _UMD_AMD_ACTIVE_RE = re.compile(
 )
 
 
-def widget_bootstrap_problems(name: str, version: str, members: dict[str, str]) -> list[tuple[str, str]]:
+def widget_bootstrap_problems(
+    name: str, version: str, members: dict[str, str], development: bool | None = None
+) -> list[tuple[str, str]]:
     """Static reasons a packaged widget will fail to bootstrap on a box.
 
     ``members`` maps a tgz (or dir) member path to its text. Returns ``(code,
     message)`` pairs, empty when clean:
 
-    - ``controller_form`` / ``edit_controller_form``: the view/edit controller is
-      not in the ``DevCtrl`` form the platform publish derives the live
-      ``<name><dotless>Ctrl`` from. Any other form registers a controller the
-      appliance never looks up, so the template is never compiled.
+    - ``controller_form`` / ``edit_controller_form``: the view/edit controller does
+      not match the package's ``development`` flag. A development package
+      (``development`` true, or unstated) must register the ``DevCtrl`` form the
+      platform publish derives the live ``<name><dotless>Ctrl`` from. A published
+      package (``development`` false, what Content Hub ships and what imports live
+      with no publish step) must register the plain ``Ctrl`` form. Any other form
+      registers a controller the appliance never looks up, so the template is
+      never compiled.
     - ``umd_anonymous_define``: a bundled ``widgetAssets`` library still calls
       ``define()`` on its UMD AMD branch; it collides with the platform's own AMD
       loader (monaco) and aborts bootstrap.
@@ -350,8 +357,9 @@ def widget_bootstrap_problems(name: str, version: str, members: dict[str, str]) 
     if not name or not version:
         return []
     digits = _dotless_str(version)
-    exp_view = f"{name}{digits}DevCtrl"
-    exp_edit = f"edit{name[:1].upper()}{name[1:]}{digits}DevCtrl"
+    suffix = "Ctrl" if development is False else "DevCtrl"
+    exp_view = f"{name}{digits}{suffix}"
+    exp_edit = f"edit{name[:1].upper()}{name[1:]}{digits}{suffix}"
     out: list[tuple[str, str]] = []
     for member, body in members.items():
         base = posixpath.basename(member)
@@ -401,7 +409,50 @@ def widget_bootstrap_problems_from_tgz(tgz: str | Path) -> list[tuple[str, str]]
     name, version = str(info.get("name") or ""), str(info.get("version") or "")
     with tarfile.open(tgz, "r:gz") as tf:
         members = _widget_bootstrap_members(tf)
-    return widget_bootstrap_problems(name, version, members)
+    return widget_bootstrap_problems(name, version, members, info.get("development"))
+
+
+def to_published_form(src: str | Path, dest: str | Path | None = None) -> str:
+    """Rewrite a development-form widget ``.tgz`` into the published form a pack should ship.
+
+    Source folders stay in the ``DevCtrl`` form (the harness needs it) with
+    ``development: true``. The platform's publish converts that to plain ``Ctrl``
+    names and ``development: false``; a package imported in the development form
+    lands as a *draft* that someone must publish by hand. Shipping the already
+    converted form (what Content Hub widgets look like) imports live with no
+    publish step. This does the same rewrite at pack time: ``<digits>DevCtrl`` to
+    ``<digits>Ctrl`` in ``view.controller.js`` / ``edit.controller.js`` and
+    ``development`` to false in ``info.json``. Nothing else changes.
+
+    Args:
+        src: the development-form ``.tgz``.
+        dest: where to write the result (default: replace ``src`` in place).
+
+    Returns:
+        The path written.
+    """
+    import os
+
+    src = Path(src)
+    out = Path(dest) if dest is not None else src
+    tmp = out.with_name(out.name + ".part")
+    with tarfile.open(src, "r:gz") as tin, tarfile.open(tmp, "w:gz") as tout:
+        for member in tin.getmembers():
+            data = None
+            if member.isfile():
+                fh = tin.extractfile(member)
+                data = fh.read() if fh is not None else b""
+                base = posixpath.basename(member.name)
+                if base == "info.json":
+                    info = json.loads(data)
+                    info["development"] = False
+                    data = (json.dumps(info, indent=2) + "\n").encode()
+                elif base in ("view.controller.js", "edit.controller.js"):
+                    data = re.sub(rb"(\d+)DevCtrl", rb"\1Ctrl", data)
+                member.size = len(data)
+            tout.addfile(member, io.BytesIO(data) if data is not None else None)
+    os.replace(tmp, out)
+    return str(out)
 
 
 def widget_controller_problems(widget_dir: str | Path) -> list[str]:
