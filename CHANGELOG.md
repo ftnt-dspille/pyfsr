@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-18
+
 ### Added
 
 - **Master -> tenant playbooks** on `client.multitenancy`: `push_playbooks(collections,
