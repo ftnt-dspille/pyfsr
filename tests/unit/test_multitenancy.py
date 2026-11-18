@@ -202,6 +202,7 @@ def _add_routes(*, agent_post=None, tenant_post=None, tenants=None):
         ("GET", "/api/3/tenants"): tenants if tenants is not None else _tenant_list(),
         ("POST", "/api/3/tenants"): tenant_post if tenant_post is not None else tenant_rec,
         ("POST", "/api/3/agents"): agent_post if agent_post is not None else agent_rec,
+        ("GET", "/api/3/picklists/a-basic"): {"@id": BASIC, "uuid": "a-basic", "itemValue": "Basic Auth"},
     }
 
 
@@ -211,15 +212,21 @@ def test_add_dedicated_tenant_posts_tenant_then_agent_with_resolved_picklists():
 
     assert tenant.name == "branch-7" and tenant.isDedicated is True
     tenant_post = next(c for c in client.calls if c[:2] == ("POST", "/api/3/tenants"))[2]
-    assert tenant_post == {"name": "branch-7", "isDedicated": True, "tenantId": TENANT_ID, "owners": [SOC]}
+    assert {k: v for k, v in tenant_post.items() if k != "owners"} == {
+        "name": "branch-7",
+        "isDedicated": True,
+        "tenantId": TENANT_ID,
+    }
+    assert [o["name"] for o in tenant_post["owners"]] == ["SOC Team"]  # full team objects, as the UI sends
 
     agent_post = next(c for c in client.calls if c[:2] == ("POST", "/api/3/agents"))[2]
     assert agent_post["agentId"] == TENANT_ID
     assert agent_post["version"] == "8.0.1"  # build number stripped
-    assert agent_post["agentType"] == FSR_NODE and agent_post["authType"] == BASIC
+    assert agent_post["agentType"] == "t-fsr-node"  # the bare uuid, as the UI sends it
+    assert agent_post["authType"]["@id"] == BASIC and agent_post["authType"]["display"] == "Basic Auth"
     assert agent_post["router"] == SME
-    assert agent_post["tenants"] == ["/api/3/tenants/t-1"]
-    assert agent_post["owners"] == [SOC]
+    assert agent_post["tenants"] == "/api/3/tenants/t-1"  # a single IRI, as the UI sends it
+    assert [o["name"] for o in agent_post["owners"]] == ["SOC Team"]
     # the agent's secrets never come back out of the returned model
     assert "encryptionKey" not in agent.model_dump(by_alias=True)
     assert PW not in repr(agent) and KEY not in repr(agent)
@@ -375,32 +382,45 @@ def test_encryption_key_missing_is_an_error():
 
 
 # ------------------------------------------------------------- delete_tenant
-def test_delete_tenant_deletes_the_tenant_then_its_leftover_agent():
-    client = FakeClient(
-        {
-            ("GET", "/api/3/tenants"): _members({"name": "branch-7", "uuid": "t-1"}),
-            ("GET", "/api/3/agents"): _members({"name": "branch-7", "uuid": "ag-1"}),
-            ("DELETE", "/api/3/tenants/t-1"): None,
-            ("DELETE", "/api/3/agents/ag-1"): None,
-        }
-    )
+def _delete_routes(*, agents, agent_delete=..., bulk_works=True):
+    """Routes for delete_tenant: the tenant is listed until the UI's bulk delete (or the per-row one) removes it."""
+    state = {"gone": False}
+    routes = {
+        ("GET", "/api/3/tenants"): lambda _: (
+            _members() if state["gone"] else _members({"name": "branch-7", "uuid": "t-1"})
+        ),
+        ("GET", "/api/3/agents"): agents,
+        ("DELETE", "/api/3/delete/tenants"): lambda _: state.update(gone=bulk_works),
+        ("DELETE", "/api/3/tenants/t-1"): lambda _: state.update(gone=True),
+    }
+    if agent_delete is not ...:
+        routes[("DELETE", "/api/3/agents/ag-1")] = agent_delete
+    return routes
+
+
+def test_delete_tenant_uses_the_ui_bulk_route_then_removes_a_leftover_agent():
+    client = FakeClient(_delete_routes(agents=_members({"name": "branch-7", "uuid": "ag-1"}), agent_delete=None))
     MultitenancyAPI(client).delete_tenant("branch-7")
     assert client.mutations() == [
-        ("DELETE", "/api/3/tenants/t-1", None),
+        ("DELETE", "/api/3/delete/tenants", {"ids": ["t-1"]}),
         ("DELETE", "/api/3/agents/ag-1", None),
     ]
 
 
 def test_delete_tenant_skips_agent_cleanup_when_the_tenant_delete_removed_it():
-    client = FakeClient(
-        {
-            ("GET", "/api/3/tenants"): _members({"name": "branch-7", "uuid": "t-1"}),
-            ("GET", "/api/3/agents"): _members(),
-            ("DELETE", "/api/3/tenants/t-1"): None,
-        }
-    )
+    client = FakeClient(_delete_routes(agents=_members()))
     MultitenancyAPI(client).delete_tenant("branch-7")
-    assert client.mutations() == [("DELETE", "/api/3/tenants/t-1", None)]
+    assert client.mutations() == [("DELETE", "/api/3/delete/tenants", {"ids": ["t-1"]})]
+
+
+def test_delete_tenant_falls_back_to_the_per_row_delete_when_the_bulk_delete_removes_nothing():
+    """API-key auth decomposes a bulk delete into per-row calls keyed on uuid, so it deletes nothing."""
+    client = FakeClient(_delete_routes(agents=_members(), bulk_works=False))
+    MultitenancyAPI(client).delete_tenant("branch-7")
+    assert client.mutations() == [
+        ("DELETE", "/api/3/delete/tenants", {"ids": ["t-1"]}),
+        ("DELETE", "/api/3/tenants/t-1", None),
+    ]
 
 
 def test_delete_tenant_unknown_name_sends_nothing():
@@ -723,27 +743,15 @@ def test_delete_tenant_tolerates_the_agent_vanishing_before_its_own_delete():
 
     def agents(_):
         seen["agents"] += 1  # present for the lookup, gone once the master has cleaned it up itself
-        return _members({"name": "branch-7", "uuid": "a-1"}) if seen["agents"] == 1 else _members()
+        return _members({"name": "branch-7", "uuid": "ag-1"}) if seen["agents"] == 1 else _members()
 
-    client = FakeClient(
-        {
-            ("GET", "/api/3/tenants"): _members({"name": "branch-7", "uuid": "t-1"}),
-            ("GET", "/api/3/agents"): agents,
-            ("DELETE", "/api/3/tenants/t-1"): None,
-            ("DELETE", "/api/3/agents/a-1"): _api_error(500, "Internal Server Error"),
-        }
-    )
+    client = FakeClient(_delete_routes(agents=agents, agent_delete=_api_error(500, "Internal Server Error")))
     MultitenancyAPI(client).delete_tenant("branch-7")
 
 
 def test_delete_tenant_fails_if_the_agent_is_still_there_after_a_failed_delete():
     client = FakeClient(
-        {
-            ("GET", "/api/3/tenants"): _members({"name": "branch-7", "uuid": "t-1"}),
-            ("GET", "/api/3/agents"): _members({"name": "branch-7", "uuid": "a-1"}),
-            ("DELETE", "/api/3/tenants/t-1"): None,
-            ("DELETE", "/api/3/agents/a-1"): _api_error(500, "boom"),
-        }
+        _delete_routes(agents=_members({"name": "branch-7", "uuid": "ag-1"}), agent_delete=_api_error(500, "boom"))
     )
     with pytest.raises(APIError):
         MultitenancyAPI(client).delete_tenant("branch-7")

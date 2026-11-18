@@ -64,6 +64,7 @@ from .base import BaseAPI
 _logger = logging.getLogger(__name__)
 
 _TENANTS = "/api/3/tenants"
+_BULK_DELETE_TENANTS = "/api/3/delete/tenants"
 _AGENTS = "/api/3/agents"
 _ROUTERS = "/api/3/routers"
 _AGENT_INSTALLER = "/api/integration/agent-installer/?format=json"
@@ -209,16 +210,16 @@ class MultitenancyAPI(BaseAPI):
         if self._tenant_by_name(name) is not None:
             raise MultitenancyError(f"a tenant named {name!r} already exists; delete it or pick another name")
 
-        owner_iris = self._owner_iris(owners)
+        owner_objects = self._owner_objects(owners)
         router_iri = self._router_iri(sme)
         master_version = version or self._master_version()
-        agent_type = self._pick("agents", "agentType", DEFAULT_AGENT_TYPE)
-        auth_type = self._pick("agents", "authType", DEFAULT_AUTH_TYPE)
+        agent_type = self._pick("agents", "agentType", DEFAULT_AGENT_TYPE).rsplit("/", 1)[-1]  # bare uuid, as the UI
+        auth_type = self._picklist_object(self._pick("agents", "authType", DEFAULT_AUTH_TYPE))
 
         try:
             tenant_rec = self.client.post(
                 _TENANTS,
-                data={"name": name, "isDedicated": True, "tenantId": tenant_ref, "owners": owner_iris},
+                data={"name": name, "isDedicated": True, "tenantId": tenant_ref, "owners": owner_objects},
             )
         except FortiSOARException as exc:
             if _status(exc) == 409:
@@ -233,11 +234,11 @@ class MultitenancyAPI(BaseAPI):
                     "name": name,
                     "agentId": tenant_ref,
                     "version": master_version,
-                    "owners": owner_iris,
+                    "owners": owner_objects,
                     "agentType": agent_type,
                     "router": router_iri,
                     "authType": auth_type,
-                    "tenants": [tenant_iri],
+                    "tenants": tenant_iri,  # a single IRI, as the UI sends it
                 },
             )
         except FortiSOARException as exc:
@@ -328,11 +329,10 @@ class MultitenancyAPI(BaseAPI):
     def delete_tenant(self, name: str) -> None:
         """Delete dedicated tenant ``name`` and its agent record.
 
-        ``DELETE /api/3/tenants/<uuid>``, then ``DELETE /api/3/agents/<uuid>`` for the agent of
-        the same name if it is still there. The UI uses the bulk route
-        ``DELETE /api/3/delete/tenants``, which this module avoids: under API-key auth the client
-        decomposes bulk deletes into per-row calls keyed on ``uuid``, so an ``{"ids": [...]}``
-        body silently deletes nothing.
+        ``DELETE /api/3/delete/tenants`` with ``{"ids": [<uuid>]}``, the call the UI makes, then
+        ``DELETE /api/3/agents/<uuid>`` for the agent of the same name if it is still there. If the
+        tenant is still listed afterwards (API-key auth turns a bulk delete into a no-op) it is deleted
+        per row.
 
         Example:
             >>> client = demo_client()
@@ -342,7 +342,13 @@ class MultitenancyAPI(BaseAPI):
         tenant = self._tenant_by_name(name)
         if tenant is None or not tenant.get("uuid"):
             raise MultitenancyError(f"no tenant named {name!r}")
-        self.client.delete(f"{_TENANTS}/{tenant['uuid']}")
+        # The UI deletes through the bulk route; it also tears down the tenant's message-exchange vhost,
+        # which the per-row DELETE leaves behind. Under API-key auth the client decomposes a bulk delete
+        # into per-row calls keyed on ``uuid`` and an ``{"ids": [...]}`` body deletes nothing, so verify
+        # the tenant is gone and fall back to the per-row delete.
+        self.client.request("DELETE", _BULK_DELETE_TENANTS, data={"ids": [tenant["uuid"]]})
+        if self._tenant_by_name(name) is not None:
+            self.client.delete(f"{_TENANTS}/{tenant['uuid']}")
         agent = self._agent_by_name(name)
         if agent is not None and agent.get("uuid"):
             try:
@@ -724,6 +730,11 @@ class MultitenancyAPI(BaseAPI):
                 }
             )
         return objects
+
+    def _picklist_object(self, iri: str) -> dict[str, Any]:
+        """A picklist item as the full object the UI sends (the record plus ``display``)."""
+        item = self.client.get(f"/api/3/picklists/{iri.rsplit('/', 1)[-1]}")
+        return {**item, "display": item.get("itemValue")}
 
     def _router_iri(self, sme: str | Mapping[str, Any] | None) -> str:
         if sme is None:

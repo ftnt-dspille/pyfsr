@@ -14,7 +14,11 @@ All notable changes to this project will be documented in this file.
 - A tenant node's `Master` agent, router and tenant are hidden from the list endpoints. `status("Master")` and the
   leftover check in `configure_master` now find them through the query API, so `replace_leftover=True` also
   replaces records the UI made (random uuids) and the `Master` tenant, deleting agents before routers before tenants.
-- `delete_tenant` no longer fails when the master removes the agent itself first (404 or 500 on the second delete).
+- `delete_tenant` uses the UI's bulk route (`DELETE /api/3/delete/tenants`), which also removes the tenant's
+  message-exchange vhost on the masters (the per-row delete left it behind); it falls back to the per-row delete if
+  the tenant is still listed (API-key auth), and no longer fails when the master removes the agent itself first.
+- `add_dedicated_tenant` sends the UI's bodies: owners as full team objects, `agentType` as the bare uuid, `authType`
+  as the picklist object, and `tenants` as a single IRI.
 
 ### Added
 
