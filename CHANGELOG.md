@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`multitenancy.configure_master` now sends the UI's body**, the only one that connects on 8.0.1: the fixed
+  `Master` router/agent uuids (the same on every tenant, not derived), router status `Not Configured`, the agent's
+  `router` as the bare uuid, owners as full team objects, `role: "master"`, and the `Master` tenant inline, which is
+  then activated. The earlier body was accepted but the tenant's routing agent never connected (`ACCESS_REFUSED`).
+  `role` is now a plain string defaulting to `"master"`.
+- A tenant node's `Master` agent, router and tenant are hidden from the list endpoints. `status("Master")` and the
+  leftover check in `configure_master` now find them through the query API, so `replace_leftover=True` also
+  replaces records the UI made (random uuids) and the `Master` tenant, deleting agents before routers before tenants.
+- `delete_tenant` no longer fails when the master removes the agent itself first (404 or 500 on the second delete).
+
+### Added
+
+- `multitenancy.remove_master()` detaches a tenant node: deletes its `Master` agent, router and tenant record.
+
 ### Changed
 
 - **Widgets bundled into a pack are always in the ready (published) form.**

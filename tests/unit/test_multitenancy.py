@@ -19,6 +19,7 @@ SME = "/api/3/routers/sme-1"
 FSR_NODE = "/api/3/picklists/t-fsr-node"
 BASIC = "/api/3/picklists/a-basic"
 CONF = "/api/3/picklists/c-configured"
+NOTCONF = "/api/3/picklists/c-notconfigured"
 VERIFIED = "/api/3/picklists/c-verified"
 HEALTH_CONNECTED = "/api/3/picklists/h-connected"
 HEALTH_WAIT = "/api/3/picklists/h-awaiting"
@@ -47,8 +48,16 @@ def _members(*records):
     return {"hydra:member": list(records)}
 
 
+class _FakeTeam:
+    def __init__(self, name):
+        self.name, self.description = name, "Management team"
+
+
 class FakeTeams:
     known = {"SOC Team": SOC, "Own": OWN}
+
+    def get(self, uuid):
+        return _FakeTeam({"soc": "SOC Team", "own": "Own"}.get(uuid, uuid))
 
     def _resolve_teams(self, teams):
         out = []
@@ -81,7 +90,7 @@ class FakePicklists:
     VALUES = {
         "AgentType": {"FSR Node": FSR_NODE},
         "AuthType": {"Basic Auth": BASIC},
-        "ConfigStatus": {"Configured": CONF, "Connection Verified": VERIFIED},
+        "ConfigStatus": {"Configured": CONF, "Not Configured": NOTCONF, "Connection Verified": VERIFIED},
         "Health": {"Remote Node Connected": HEALTH_CONNECTED, "Awaiting Remote Node Connection": HEALTH_WAIT},
     }
 
@@ -110,7 +119,13 @@ class FakeClient:
     """
 
     def __init__(self, routes=None, *, sme=True, version="8.0.1-6034"):
-        self.routes = dict(routes or {})
+        # The query API is the fallback for records a tenant's list endpoint hides; empty unless a test says otherwise.
+        self.routes = {
+            ("POST", "/api/query/agents"): _members(),
+            ("POST", "/api/query/routers"): _members(),
+            ("POST", "/api/query/tenants"): _members(),
+        }
+        self.routes.update(routes or {})
         self.calls: list[tuple[str, str, object]] = []
         self.teams = FakeTeams()
         self.routers = FakeRouters(sme=sme)
@@ -151,7 +166,7 @@ class FakeClient:
         return [m for m, *_ in self.calls]
 
     def mutations(self):
-        return [(m, e, p) for m, e, p in self.calls if m != "GET"]
+        return [(m, e, p) for m, e, p in self.calls if m != "GET" and not e.startswith("/api/query/")]
 
 
 def _tenant_list(*extra):
@@ -439,17 +454,17 @@ def test_configure_master_creates_router_then_agent_with_the_key_and_master_iris
     assert router_post["uuid"] == router_uuid and router_post["name"] == "Master"
     assert router_post["apiPort"] == 15671 and router_post["tcpPort"] == 443
     assert router_post["username"] == "router" and router_post["encryptionKey"] == KEY
-    assert router_post["configstatus"] == CONF
+    assert router_post["configstatus"] == NOTCONF
 
     agent_call = next(c for c in client.calls if c[0] == "POST" and c[1].startswith("/api/3/agents"))
     assert agent_call[1] == "/api/3/agents?$relationships=true&$asJson=true"
     body = agent_call[2]
     assert body["agentId"] == MASTER_AGENT_ID and body["name"] == "Master"
-    assert body["router"] == f"/api/3/routers/{router_uuid}"
-    assert body["owners"] == [SOC]
+    assert body["router"] == router_uuid  # the bare uuid, as the UI sends it
+    assert [o["name"] for o in body["owners"]] == ["SOC Team"]  # full team objects, as the UI sends
     assert body["authType"] == BASIC and body["agentType"] == FSR_NODE
     assert body["encryptionKey"] == KEY and body["active"] is True and body["isLocal"] is False
-    assert "role" not in body and "tenants" not in body  # only sent when given
+    assert body["role"] == "master" and body["tenants"][0]["name"] == "Master"  # the UI body, by default
 
     # the returned record has its secrets stripped
     assert "encryptionKey" not in agent.model_dump(by_alias=True)
@@ -458,10 +473,32 @@ def test_configure_master_creates_router_then_agent_with_the_key_and_master_iris
 
 def test_configure_master_sends_role_and_tenants_when_given():
     client = FakeClient(_configure_routes())
-    MultitenancyAPI(client).configure_master(_config(), KEY, role="Master", tenants=["/api/3/tenants/t-9"])
+    MultitenancyAPI(client).configure_master(_config(), KEY, role="master-x", tenants=["/api/3/tenants/t-9"])
     body = next(c for c in client.calls if c[0] == "POST" and c[1].startswith("/api/3/agents"))[2]
     assert body["tenants"] == ["/api/3/tenants/t-9"]
-    assert "role" in body
+    assert body["role"] == "master-x"
+
+
+def test_configure_master_defaults_to_the_ui_agent_body_and_activates_the_master_tenant():
+    """Live 8.0.1: only this shape connects -- role master, the Master tenant inline, then activated."""
+    routes = _configure_routes()
+    created = {"agent": False}  # the Master tenant only exists once the agent POST has made it
+    agent_post = routes[("POST", "/api/3/agents")]
+    routes[("POST", "/api/3/agents")] = lambda data: (created.update(agent=True), agent_post(data))[1]
+    routes[("POST", "/api/query/tenants")] = lambda _: _members(
+        *([{"name": "Master", "role": "master", "uuid": "t-master"}] if created["agent"] else [])
+    )
+    routes[("PUT", "/api/3/tenants/t-master")] = {}
+    client = FakeClient(routes)
+    MultitenancyAPI(client).configure_master(_config(), KEY)
+    body = next(c for c in client.calls if c[0] == "POST" and c[1].startswith("/api/3/agents"))[2]
+    assert body["role"] == "master"
+    (tenant,) = body["tenants"]
+    assert tenant["tenantId"] == MASTER_AGENT_ID and tenant["name"] == "Master" and tenant["role"] == "master"
+    assert tenant["active"] is False and tenant["isDedicated"] is True
+    assert [o["name"] for o in tenant["owners"]] == ["SOC Team"] and tenant["owners"][0]["uuid"] == "soc"
+    assert client.calls[-1][:2] == ("PUT", "/api/3/tenants/t-master")
+    assert client.calls[-1][2] == {"active": True}
 
 
 def test_configure_master_missing_config_keys_fail_before_any_call():
@@ -628,3 +665,85 @@ def test_playbook_alias_missing_says_to_push_first():
     client = FakeClient({("GET", "/api/postman/wf-alias/"): {"count": 0, "results": []}})
     with pytest.raises(MultitenancyError, match="push its collection first"):
         MultitenancyAPI(client).playbook_alias("MT Health Marker")
+
+
+def test_status_finds_a_master_agent_the_list_endpoint_hides():
+    """Live 8.0.1 tenant: GET /api/3/agents is empty, /api/query/agents has the Master record."""
+    client = FakeClient(
+        {
+            ("GET", "/api/3/agents"): _members(),
+            ("POST", "/api/query/agents"): _members(
+                {"name": "Self", "uuid": "u-self"},
+                {"name": "Master", "uuid": "u-master", "agentId": MASTER_AGENT_ID, "configstatus": {"@id": VERIFIED}},
+            ),
+        }
+    )
+    status = MultitenancyAPI(client).status("Master")
+    assert status.uuid == "u-master" and status.agentId == MASTER_AGENT_ID
+
+
+def test_configure_master_replaces_master_records_made_through_the_ui():
+    """UI-made Master records have random uuids, so only a by-name lookup finds them; agent goes first."""
+    routes = _configure_routes()
+    routes[("POST", "/api/query/routers")] = _members({"name": "Master", "uuid": "ui-router"})
+    routes[("POST", "/api/query/agents")] = _members({"name": "Master", "uuid": "ui-agent"})
+    routes[("DELETE", "/api/3/agents/ui-agent")] = None
+    routes[("DELETE", "/api/3/routers/ui-router")] = None
+    client = FakeClient(routes)
+    api = MultitenancyAPI(client)
+
+    with pytest.raises(MultitenancyError, match="replace_leftover=True") as info:
+        api.configure_master(_config(), KEY)
+    assert info.value.leftover_router == "ui-router"
+    assert not [c for c in client.calls if c[0] == "DELETE"]
+
+    api.configure_master(_config(), KEY, replace_leftover=True)
+    deletes = [c[1] for c in client.calls if c[0] == "DELETE"]
+    assert deletes == ["/api/3/agents/ui-agent", "/api/3/routers/ui-router"]
+
+
+def test_remove_master_deletes_agents_then_routers_found_by_name():
+    client = FakeClient(
+        {
+            ("POST", "/api/query/agents"): _members(
+                {"name": "Self", "uuid": "u-self"}, {"name": "Master", "uuid": "a1"}
+            ),
+            ("POST", "/api/query/routers"): _members({"name": "Master", "uuid": "r1"}),
+            ("DELETE", "/api/3/agents/a1"): None,
+            ("DELETE", "/api/3/routers/r1"): None,
+        }
+    )
+    assert MultitenancyAPI(client).remove_master() == ["a1", "r1"]
+    assert client.mutations() == [("DELETE", "/api/3/agents/a1", None), ("DELETE", "/api/3/routers/r1", None)]
+    assert MultitenancyAPI(FakeClient()).remove_master() == []
+
+
+def test_delete_tenant_tolerates_the_agent_vanishing_before_its_own_delete():
+    seen = {"agents": 0}
+
+    def agents(_):
+        seen["agents"] += 1  # present for the lookup, gone once the master has cleaned it up itself
+        return _members({"name": "branch-7", "uuid": "a-1"}) if seen["agents"] == 1 else _members()
+
+    client = FakeClient(
+        {
+            ("GET", "/api/3/tenants"): _members({"name": "branch-7", "uuid": "t-1"}),
+            ("GET", "/api/3/agents"): agents,
+            ("DELETE", "/api/3/tenants/t-1"): None,
+            ("DELETE", "/api/3/agents/a-1"): _api_error(500, "Internal Server Error"),
+        }
+    )
+    MultitenancyAPI(client).delete_tenant("branch-7")
+
+
+def test_delete_tenant_fails_if_the_agent_is_still_there_after_a_failed_delete():
+    client = FakeClient(
+        {
+            ("GET", "/api/3/tenants"): _members({"name": "branch-7", "uuid": "t-1"}),
+            ("GET", "/api/3/agents"): _members({"name": "branch-7", "uuid": "a-1"}),
+            ("DELETE", "/api/3/tenants/t-1"): None,
+            ("DELETE", "/api/3/agents/a-1"): _api_error(500, "boom"),
+        }
+    )
+    with pytest.raises(APIError):
+        MultitenancyAPI(client).delete_tenant("branch-7")

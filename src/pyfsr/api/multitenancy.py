@@ -50,7 +50,6 @@ from __future__ import annotations
 import logging
 import re
 import time
-import uuid as _uuid
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -79,6 +78,10 @@ MASTER_API_PORT = 15671
 DEFAULT_AGENT_TYPE = "FSR Node"
 DEFAULT_AUTH_TYPE = "Basic Auth"
 DEFAULT_CONFIGSTATUS = "Configured"
+#: The UI saves the tenant-side Master *router* as "Not Configured" (the agent carries the real status).
+ROUTER_CONFIGSTATUS = "Not Configured"
+#: The tenant-side agent's ``role``: a plain string, not a picklist.
+MASTER_ROLE = "master"
 
 #: Export/record fields that carry credentials. Masked in :class:`ExportedConfig` reprs and
 #: stripped from the records this module returns.
@@ -147,13 +150,16 @@ def _status(exc: BaseException) -> int | None:
     return getattr(exc, "status_code", None)
 
 
-def _master_uuid(agent_id: str, kind: str) -> str:
-    """Deterministic uuid for the tenant-side ``kind`` (``router``/``agent``) of one master.
+#: The uuids the UI gives the tenant-side ``Master`` router and agent. They are the same on every tenant
+#: and master (live-verified on 8.0.1): the tenant's routing agent only connects when the records carry
+#: them -- records with any other uuid are accepted but never connect (``ACCESS_REFUSED``).
+MASTER_ROUTER_UUID = "d134a192-2a3e-4bd9-a4b9-11db811803f6"
+MASTER_AGENT_UUID = "cd6ec33c-c4f7-42d7-8ab1-3934df772669"
 
-    Derived from the master's ``agentId`` so a re-run addresses the same records and a leftover
-    from an earlier attempt is found by uuid rather than by a name the router list may hide.
-    """
-    return str(_uuid.uuid5(_uuid.NAMESPACE_URL, f"pyfsr:multitenancy:{kind}:{agent_id}"))
+
+def _master_uuid(agent_id: str, kind: str) -> str:
+    """The fixed uuid of the tenant-side ``kind`` (``router``/``agent``) ``Master`` record."""
+    return MASTER_ROUTER_UUID if kind == "router" else MASTER_AGENT_UUID
 
 
 def _require_text(value: Any, what: str) -> str:
@@ -339,7 +345,14 @@ class MultitenancyAPI(BaseAPI):
         self.client.delete(f"{_TENANTS}/{tenant['uuid']}")
         agent = self._agent_by_name(name)
         if agent is not None and agent.get("uuid"):
-            self.client.delete(f"{_AGENTS}/{agent['uuid']}")
+            try:
+                self.client.delete(f"{_AGENTS}/{agent['uuid']}")
+            except FortiSOARException:
+                # The master removes the agent itself shortly after the tenant goes (live-verified
+                # on 8.0.1), so this delete can 404 or 500 when it races that cleanup. Only fail
+                # if the agent is still there afterwards.
+                if self._agent_by_name(name) is not None:
+                    raise
 
     # ------------------------------------------------------------- tenant side
     def configure_master(
@@ -390,26 +403,34 @@ class MultitenancyAPI(BaseAPI):
         agent_uuid = _master_uuid(agent_id, "agent")
 
         # Resolve everything that can fail on input before touching the box.
-        owner_iris = self._owner_iris(owners)
-        router_configstatus = self._pick("routers", "configstatus", DEFAULT_CONFIGSTATUS)
+        owner_objects = self._owner_objects(owners)
+        router_configstatus = self._pick("routers", "configstatus", ROUTER_CONFIGSTATUS)
         agent_configstatus = self._pick("agents", "configstatus", DEFAULT_CONFIGSTATUS)
         agent_type = self._pick("agents", "agentType", DEFAULT_AGENT_TYPE)
         auth_type = self._pick("agents", "authType", str(cfg["authType"]))
-        role_value = self._pick("agents", "role", role) if role is not None else None
+        role_value = role if role is not None else MASTER_ROLE
 
         leftovers = []
         if self._get_or_none(f"{_AGENTS}/{agent_uuid}") is not None:
             leftovers.append((_AGENTS, agent_uuid))
         if self._get_or_none(f"{_ROUTERS}/{router_uuid}") is not None:
             leftovers.append((_ROUTERS, router_uuid))
+        # Master records made another way (the UI gives them random uuids) are invisible to the
+        # uuid lookups above and to the list endpoint; find them by name through the query API.
+        for path in (_AGENTS, _ROUTERS, _TENANTS):
+            for rec in self._query_by_name(path, MASTER_NAME):
+                if rec.get("uuid") and (path, rec["uuid"]) not in leftovers:
+                    leftovers.append((path, rec["uuid"]))
         if leftovers and not replace_leftover:
-            found = ", ".join(f"{'agent' if path == _AGENTS else 'router'} {uid}" for path, uid in leftovers)
+            kinds = {_AGENTS: "agent", _ROUTERS: "router", _TENANTS: "tenant"}
+            found = ", ".join(f"{kinds[path]} {uid}" for path, uid in leftovers)
             raise MultitenancyError(
                 f"a Master record from an earlier attempt already exists on this box ({found}). "
                 "Re-run with replace_leftover=True to delete it and configure again.",
-                leftover_router=router_uuid if (_ROUTERS, router_uuid) in leftovers else None,
+                leftover_router=next((uid for path, uid in leftovers if path == _ROUTERS), None),
             )
-        for path, uid in leftovers:
+        # Agents first (they point at the router and the Master tenant), then routers, then tenants.
+        for path, uid in sorted(leftovers, key=lambda leftover: (_AGENTS, _ROUTERS, _TENANTS).index(leftover[0])):
             self.client.delete(f"{path}/{uid}")
 
         router_body = {
@@ -426,7 +447,7 @@ class MultitenancyAPI(BaseAPI):
             "configstatus": router_configstatus,
         }
         try:
-            router_rec = self.client.post(_ROUTERS, data=router_body)
+            self.client.post(_ROUTERS, data=router_body)
         except FortiSOARException as exc:
             if _status(exc) == 409:
                 raise MultitenancyError(
@@ -436,7 +457,6 @@ class MultitenancyAPI(BaseAPI):
                     leftover_router=router_uuid,
                 ) from exc
             raise
-        router_iri = (router_rec or {}).get("@id") or f"{_ROUTERS}/{router_uuid}"
 
         agent_body: dict[str, Any] = {
             "uuid": agent_uuid,
@@ -450,15 +470,29 @@ class MultitenancyAPI(BaseAPI):
             "username": cfg["username"],
             "password": cfg["password"],
             "configstatus": agent_configstatus,
-            "router": router_iri,
-            "owners": owner_iris,
+            "router": router_uuid,
+            "owners": owner_objects,
             "authType": auth_type,
             "encryptionKey": key,
         }
-        if role_value is not None:
-            agent_body["role"] = role_value
-        if tenants is not None:
-            agent_body["tenants"] = list(tenants)
+        agent_body["role"] = role_value
+        # The UI creates the "Master" tenant record inline with the agent, inactive, and then
+        # activates it. Without that tenant the master's messages never reach this node.
+        agent_body["tenants"] = (
+            list(tenants)
+            if tenants is not None
+            else [
+                {
+                    "tenantId": agent_id,
+                    "active": False,
+                    "isDedicated": True,
+                    "name": MASTER_NAME,
+                    "allowRemoteMMDModification": True,
+                    "role": MASTER_ROLE,
+                    "owners": owner_objects,
+                }
+            ]
+        )
         try:
             agent_rec = self.client.post(f"{_AGENTS}?$relationships=true&$asJson=true", data=agent_body)
         except FortiSOARException as exc:
@@ -477,8 +511,31 @@ class MultitenancyAPI(BaseAPI):
             else:
                 msg = f"Master agent create failed ({detail}). {left}; re-run with replace_leftover=True"
             raise MultitenancyError(msg, exc.response, leftover_router=router_uuid) from exc
+        for tenant_rec in self._query_by_name(_TENANTS, MASTER_NAME):
+            if tenant_rec.get("uuid") and tenant_rec.get("role") == MASTER_ROLE:
+                self.client.put(f"{_TENANTS}/{tenant_rec['uuid']}", data={"active": True})
         _logger.info("multitenancy: configured the Master router and agent for master agent %s", agent_id)
         return Agent.model_validate(_scrub(agent_rec))
+
+    def remove_master(self) -> list[str]:
+        """Detach this node from its master: delete its ``Master`` agent, router and tenant; return their uuids.
+
+        Run on the tenant box, after :meth:`delete_tenant` on the master. Finds the records by name
+        through the query API (the list endpoint hides them, and a UI-made record has a random
+        uuid), deleting agents before routers. Returns ``[]`` when the node has none.
+
+        Example:
+            >>> tenant = demo_client()  # the tenant box's client
+            >>> tenant.multitenancy.remove_master()  # doctest: +SKIP
+            []
+        """
+        removed: list[str] = []
+        for path in (_AGENTS, _ROUTERS, _TENANTS):
+            for rec in self._query_by_name(path, MASTER_NAME):
+                if rec.get("uuid"):
+                    self.client.delete(f"{path}/{rec['uuid']}")
+                    removed.append(str(rec["uuid"]))
+        return removed
 
     def status(self, name: str) -> TenantStatus:
         """Health of agent ``name`` on this box: ``configurationHealth`` and ``configstatus``.
@@ -615,9 +672,22 @@ class MultitenancyAPI(BaseAPI):
             for a in extract_members(self.client.get(_AGENTS, params={"$limit": _ALL}))
             if isinstance(a, dict) and a.get("name") == name
         ]
+        if not matches:
+            # A tenant node's list endpoint hides its own Master records (live-verified on 8.0.1:
+            # the list is empty while the box is registered and healthy); the query API shows them.
+            matches = self._query_by_name(_AGENTS, name)
         if len(matches) > 1:
             raise MultitenancyError(f"{len(matches)} agents are named {name!r}; use the agent's agentId instead")
         return matches[0] if matches else None
+
+    def _query_by_name(self, path: str, name: str) -> list[dict[str, Any]]:
+        """Records of module ``path`` named ``name``, read through ``/api/query``.
+
+        Filtered client-side: the query API silently ignores some server-side filters.
+        """
+        module = path.rsplit("/", 1)[-1]
+        resp = self.client.post(f"/api/query/{module}", data={"sort": [], "limit": _ALL, "logic": "AND", "filters": []})
+        return [r for r in extract_members(resp) if isinstance(r, dict) and r.get("name") == name]
 
     def _require_agent(self, name: str) -> dict[str, Any]:
         rec = self._agent_by_name(name)
@@ -635,6 +705,25 @@ class MultitenancyAPI(BaseAPI):
     def _owner_iris(self, owners: Sequence[Any] | None) -> list[str]:
         names = [DEFAULT_TEAM] if owners is None else list(owners)
         return self.client.teams._resolve_teams(names)
+
+    def _owner_objects(self, owners: Sequence[Any] | None) -> list[dict[str, Any]]:
+        """Owner teams as the full objects the UI sends on the tenant-side Master records."""
+        names = [DEFAULT_TEAM] if owners is None else list(owners)
+        objects = []
+        for resolved in self.client.teams._resolve_teams(names):
+            uuid = str(resolved).rsplit("/", 1)[-1]
+            team = self.client.teams.get(uuid)
+            objects.append(
+                {
+                    "@id": f"/api/3/teams/{uuid}",
+                    "@type": "Team",
+                    "description": team.description,
+                    "name": team.name,
+                    "uuid": uuid,
+                    "importedBy": [],
+                }
+            )
+        return objects
 
     def _router_iri(self, sme: str | Mapping[str, Any] | None) -> str:
         if sme is None:
