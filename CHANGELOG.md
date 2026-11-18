@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Widgets bundled into a pack are always in the ready (published) form.**
+  `Pack.add_installer("widgets", ...)` (and so `pyfsr pack add-widget` and the dashboard
+  export) now writes the widget with plain `Ctrl` controller names and
+  `development: false` via the new `pyfsr.widget_dev.to_published_form()`. A
+  development-form package (`DevCtrl`, `development: true`) imports as a draft that must
+  be published by hand; the published form imports live. The caller's source tgz is not
+  modified.
+- The bundled-widget bootstrap check (`WidgetWontBootstrap`) follows the package's
+  `development` flag: `DevCtrl` names for a development package, `Ctrl` for a published one.
+
 ## [0.34.0] - 2026-11-18
 
 ### Added

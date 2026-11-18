@@ -130,7 +130,9 @@ class Pack:
         """Declare a bundled connector/widget tgz: data.json row + file copy.
 
         Reads the archive's own ``info.json`` for the identity fields, so the
-        row cannot drift from what will actually install.
+        row cannot drift from what will actually install. A widget tgz is written
+        into the pack in its published form (see
+        :func:`pyfsr.widget_dev.to_published_form`), whatever form it came in.
         """
         if category not in ("connectors", "widgets"):
             raise PackError(f"installer category must be 'connectors' or 'widgets', not {category!r}")
@@ -138,7 +140,15 @@ class Pack:
         inner = _tgz_info(tgz)
         section = self.path / category
         section.mkdir(exist_ok=True)
-        shutil.copy2(tgz, section / tgz.name)
+        if category == "widgets":
+            # A widget must be in the ready (published) form when it lands on the box:
+            # a development-form package imports as a draft someone has to publish by
+            # hand. Already-published packages pass through unchanged.
+            from ..widget_dev import to_published_form
+
+            to_published_form(tgz, section / tgz.name)
+        else:
+            shutil.copy2(tgz, section / tgz.name)
         rows = self.data_manifest(category)
         row = {
             "name": inner.get("name"),
