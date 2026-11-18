@@ -23,7 +23,7 @@ class Tenant(BaseRecord):
 
 
 class TenantStatus(BaseModel):
-    """Health snapshot of one agent record, as :meth:`MultitenancyAPI.status` reports it.
+    """Health snapshot of one agent record, as :meth:`~pyfsr.api.multitenancy.MultitenancyAPI.status` reports it.
 
     Carries no secrets. ``configurationHealth`` and ``configstatus`` are the picklist
     ``itemValue`` strings (e.g. ``"Remote Node Connected"``, ``"Connection Verified"``).
