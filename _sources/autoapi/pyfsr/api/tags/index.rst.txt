@@ -1,0 +1,77 @@
+pyfsr.api.tags
+==============
+
+.. py:module:: pyfsr.api.tags
+
+.. autoapi-nested-parse::
+
+   Tag listing (``/api/3/tags``).
+
+   FortiSOAR stores a tag's human name in its ``uuid`` column — there is no separate name
+   field — and the list endpoint only returns rows when ``$export=true`` is set. This wrapper
+   hides both footguns: :meth:`~pyfsr.api.tags.TagsAPI.list` returns plain tag-name strings.
+   Accessed as ``client.tags``.
+
+   Example::
+
+       client.tags.list()                 # every tag name
+       client.tags.list(prefix="mitre")   # names starting with "mitre"
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.tags.TagsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: TagsAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   List tags by name.
+
+
+   .. py:method:: list(*, prefix: str | None = None, limit: int = 200) -> list[str]
+
+      Return tag **names** (strings), optionally filtered to those starting with
+      ``prefix``.
+
+      ``$export=true`` is always sent — without it the endpoint returns nothing.
+      ``prefix`` filters server-side via ``uuid$like`` (the tag name lives in the ``uuid``
+      column); the ``%`` wildcard is appended and URL-encoded by the client.
+
+      Tolerates both wire shapes: members as bare name strings (seen on 7.6.x
+      demo boxes) or as dicts carrying the name in ``uuid``.
+
+      Doctest:
+
+          >>> from pyfsr._testing import demo_client
+          >>> client = demo_client()
+          >>> tags = client.tags.list()
+          >>> len(tags)
+          3
+          >>> tags[0]
+          '2022 Annual Report'
+          >>> tags[1]
+          '3CX Supply Chain Attack'
+
+
+
+   .. py:method:: map_names(*, limit: int = 2147483647) -> dict[str, str]
+
+      Return ``{tag_name: IRI}`` for every tag — what a writer needs to set a
+      record's ``tags`` to ``/api/3/tags/<uuid>`` from a friendly name.
+
+      Same ``$export=true`` quirk as :meth:`list`. Tolerates both wire shapes:
+      a dict member's IRI is its ``@id``; a bare-string member maps to
+      ``/api/3/tags/<name>`` (the tag name doubles as its uuid).
+
+
+

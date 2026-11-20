@@ -1,0 +1,54 @@
+pyfsr.api.tasks
+===============
+
+.. py:module:: pyfsr.api.tasks
+
+.. autoapi-nested-parse::
+
+   The tasks module — ``client.tasks``.
+
+   Create and manage FortiSOAR tasks, typically attached to a parent record (an
+   alert or incident) via ``record=`` on create. Friendly picklist values (e.g.
+   ``status="Open"``) are resolved to IRIs automatically. See :doc:`/guides/records`
+   for the underlying record semantics.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.tasks.TasksAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: TasksAPI(client)
+
+   Bases: :py:obj:`pyfsr.api._record_module.RecordModuleAPI`
+
+
+   Create and manage FortiSOAR tasks.
+
+   Tasks are typically attached to a parent record (an alert or incident). Pass
+   ``record=`` to link on create; friendly picklist values (e.g.
+   ``status="Open"``) are resolved to IRIs automatically.
+
+   .. rubric:: Example
+
+   .. code-block:: python
+
+       client.tasks.create(
+           name="Verify the source IP reputation",
+           status="Open",
+           record="/api/3/alerts/1234-...",
+       )
+
+
+   .. py:attribute:: module
+      :value: 'tasks'
+
+
+

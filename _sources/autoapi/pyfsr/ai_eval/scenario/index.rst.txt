@@ -1,0 +1,361 @@
+pyfsr.ai_eval.scenario
+======================
+
+.. py:module:: pyfsr.ai_eval.scenario
+
+.. autoapi-nested-parse::
+
+   Evaluation suite model: stub MCP servers with planted ground truth, and the
+   scenarios (alert + expected tool use + facts + verdict) scored against them.
+
+   See ``suites/default.yaml`` for a worked suite.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.ai_eval.scenario.DEFAULT_SUITE
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.ai_eval.scenario.SuiteModel
+   pyfsr.ai_eval.scenario.ToolRule
+   pyfsr.ai_eval.scenario.StubTool
+   pyfsr.ai_eval.scenario.StubServer
+   pyfsr.ai_eval.scenario.ExpectedCall
+   pyfsr.ai_eval.scenario.Fact
+   pyfsr.ai_eval.scenario.Verdict
+   pyfsr.ai_eval.scenario.Scenario
+   pyfsr.ai_eval.scenario.Suite
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.ai_eval.scenario.text_matches
+   pyfsr.ai_eval.scenario.load_suite
+
+
+Module Contents
+---------------
+
+.. py:data:: DEFAULT_SUITE
+
+.. py:function:: text_matches(pattern: str, text: str) -> bool
+
+   True when ``text`` (lower-cased) contains any ``|``-separated alternative.
+
+
+.. py:class:: SuiteModel(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Base for suite models: unknown keys are an error (catches YAML typos).
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+.. py:class:: ToolRule(/, **data: Any)
+
+   Bases: :py:obj:`SuiteModel`
+
+
+   ``match`` maps an argument name (or ``*`` for all) to ``a|b`` substrings.
+
+
+   .. py:attribute:: match
+      :type:  dict[str, str]
+      :value: None
+
+
+
+   .. py:attribute:: result
+      :type:  Any
+      :value: None
+
+
+
+.. py:class:: StubTool(/, **data: Any)
+
+   Bases: :py:obj:`SuiteModel`
+
+
+   Base for suite models: unknown keys are an error (catches YAML typos).
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: description
+      :type:  str
+      :value: ''
+
+
+
+   .. py:attribute:: params
+      :type:  dict[str, dict[str, Any]]
+      :value: None
+
+
+
+   .. py:attribute:: required
+      :type:  list[str]
+      :value: None
+
+
+
+   .. py:attribute:: rules
+      :type:  list[ToolRule]
+      :value: None
+
+
+
+   .. py:attribute:: default
+      :type:  Any
+      :value: None
+
+
+
+   .. py:method:: answer(args: dict[str, Any] | None) -> tuple[Any, int | None]
+
+      What the stub listener returns for ``args``: ``(result, rule_index)``.
+
+      ``rule_index`` is ``None`` when no rule matched (the default answer) --
+      the agent asked about an entity this scenario has no data for. Mirrors
+      ``listener.answer`` so scoring needs no call log.
+
+
+
+.. py:class:: StubServer(/, **data: Any)
+
+   Bases: :py:obj:`SuiteModel`
+
+
+   One stub MCP server, registered in FortiSOAR under ``name``.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: instructions
+      :type:  str
+      :value: ''
+
+
+
+   .. py:attribute:: role
+      :type:  Literal['evidence', 'distractor']
+      :value: 'evidence'
+
+
+
+   .. py:attribute:: envelope
+      :type:  Literal['fsr', 'raw']
+      :value: 'fsr'
+
+
+
+   .. py:attribute:: agents
+      :type:  list[str]
+      :value: None
+
+
+
+   .. py:attribute:: tools
+      :type:  list[StubTool]
+
+
+.. py:class:: ExpectedCall(/, **data: Any)
+
+   Bases: :py:obj:`SuiteModel`
+
+
+   Base for suite models: unknown keys are an error (catches YAML typos).
+
+
+   .. py:attribute:: server
+      :type:  str
+
+
+   .. py:attribute:: tool
+      :type:  str
+
+
+   .. py:attribute:: args
+      :type:  str
+      :value: ''
+
+
+
+   .. py:attribute:: chain
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: required
+      :type:  bool
+      :value: True
+
+
+
+.. py:class:: Fact(/, **data: Any)
+
+   Bases: :py:obj:`SuiteModel`
+
+
+   Base for suite models: unknown keys are an error (catches YAML typos).
+
+
+   .. py:attribute:: id
+      :type:  str
+
+
+   .. py:attribute:: match
+      :type:  str
+
+
+   .. py:attribute:: source
+      :type:  str
+
+
+   .. py:attribute:: chain
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: required
+      :type:  bool
+      :value: True
+
+
+
+   .. py:attribute:: what
+      :type:  str
+      :value: ''
+
+
+
+.. py:class:: Verdict(/, **data: Any)
+
+   Bases: :py:obj:`SuiteModel`
+
+
+   Base for suite models: unknown keys are an error (catches YAML typos).
+
+
+   .. py:attribute:: expected
+      :type:  list[str]
+
+
+   .. py:attribute:: partial
+      :type:  list[str]
+      :value: None
+
+
+
+   .. py:method:: score(classification: str | None) -> float
+
+
+.. py:class:: Scenario(/, **data: Any)
+
+   Bases: :py:obj:`SuiteModel`
+
+
+   Base for suite models: unknown keys are an error (catches YAML typos).
+
+
+   .. py:attribute:: id
+      :type:  str
+
+
+   .. py:attribute:: title
+      :type:  str
+      :value: ''
+
+
+
+   .. py:attribute:: kind
+      :type:  str
+      :value: ''
+
+
+
+   .. py:attribute:: alert
+      :type:  dict[str, Any]
+
+
+   .. py:attribute:: verdict
+      :type:  Verdict
+
+
+   .. py:attribute:: expected_calls
+      :type:  list[ExpectedCall]
+      :value: None
+
+
+
+   .. py:attribute:: facts
+      :type:  list[Fact]
+      :value: None
+
+
+
+   .. py:method:: alert_text() -> str
+
+
+.. py:class:: Suite(/, **data: Any)
+
+   Bases: :py:obj:`SuiteModel`
+
+
+   Base for suite models: unknown keys are an error (catches YAML typos).
+
+
+   .. py:attribute:: servers
+      :type:  dict[str, StubServer]
+
+
+   .. py:attribute:: scenarios
+      :type:  list[Scenario]
+
+
+   .. py:method:: scenario(scenario_id: str) -> Scenario
+
+
+   .. py:method:: server_key(registered_name: str | None) -> str | None
+
+      Map a trace's ``mcp_server_name`` back to the suite key.
+
+
+
+   .. py:method:: tool_server(tool_name: str) -> str | None
+
+
+   .. py:method:: fixtures() -> dict[str, Any]
+
+      The document the stub listener serves (``load_fixtures`` op).
+
+
+
+.. py:function:: load_suite(path: str | pathlib.Path | None = None) -> Suite
+
+   Load a suite YAML (default: the bundled ``suites/default.yaml``).
+
+

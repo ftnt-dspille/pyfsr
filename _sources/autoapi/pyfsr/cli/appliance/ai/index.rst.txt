@@ -1,0 +1,173 @@
+pyfsr.cli.appliance.ai
+======================
+
+.. py:module:: pyfsr.cli.appliance.ai
+
+.. autoapi-nested-parse::
+
+   ``appliance.ai`` -- the per-agent MCP tool allow-list of the FortiAI runtime (fsr-ai).
+
+   Binding an MCP server to an agent over REST (``AIApi.allow_mcp_server_for_agent``) is
+   not enough for the agent to *use* its tools. At run time each agent's
+   ``ToolExecutionAgent`` loads only the tools named in the agent package's own
+   ``/opt/fsr-ai/ai-agents/<agent>_<version>/config/memory.yaml``::
+
+       allowed_tools:
+         "<mcp-server-uuid>": ["tool_a", "tool_b"]   # [] = the server's tools are blocked
+
+   A server that is bound over REST but absent from that file is silently never called: the
+   investigation completes without it and nothing in the trace says why. No API exposes
+   the file, so it has to be edited on the box. :func:`allow_mcp_tools` does that
+   idempotently (it only ever *adds* tool names), keeps a one-time ``.orig`` backup, and
+   can restart ``fsr-ai`` / ``fsr-ai-celery`` so the agents reload it.
+
+   The new text is passed as a command argument, never on stdin: the transports put the
+   sudo password on stdin, and with passwordless sudo nothing consumes it, so it would
+   land in the file. Live-verified on 8.0.0 and 8.0.1.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.ai.AGENTS_DIR
+   pyfsr.cli.appliance.ai.SERVICES
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.ai.AllowChange
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.ai.parse
+   pyfsr.cli.appliance.ai.add_tools
+   pyfsr.cli.appliance.ai.agent_dir
+   pyfsr.cli.appliance.ai.memory_path
+   pyfsr.cli.appliance.ai.allowed_tools
+   pyfsr.cli.appliance.ai.allow_mcp_tools
+
+
+Module Contents
+---------------
+
+.. py:data:: AGENTS_DIR
+   :value: '/opt/fsr-ai/ai-agents'
+
+
+.. py:data:: SERVICES
+   :value: ('fsr-ai', 'fsr-ai-celery')
+
+
+.. py:class:: AllowChange(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Outcome of :func:`allow_mcp_tools`.
+
+
+   .. py:attribute:: agent
+      :type:  str
+
+
+   .. py:attribute:: path
+      :type:  str
+
+
+   .. py:attribute:: mcp_uuid
+      :type:  str
+
+
+   .. py:attribute:: added
+      :type:  list[str]
+      :value: None
+
+
+
+   .. py:attribute:: before
+      :type:  list[str]
+      :value: None
+
+
+
+   .. py:attribute:: after
+      :type:  list[str]
+      :value: None
+
+
+
+   .. py:attribute:: backup
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: restarted
+      :type:  bool
+      :value: False
+
+
+
+   .. py:property:: changed
+      :type: bool
+
+
+      Whether the file was rewritten (``False`` = every tool was already allowed).
+
+
+   .. py:property:: ok
+      :type: bool
+
+
+      Every requested tool is on the allow-list as read back from the box.
+
+
+.. py:function:: parse(text: str) -> dict[str, list[str]]
+
+   The ``allowed_tools`` mapping (server uuid -> tool names) of a ``memory.yaml`` text.
+
+
+.. py:function:: add_tools(text: str, mcp_uuid: str, tools: list[str], *, comment: str = '') -> str
+
+   Return ``memory.yaml`` ``text`` with ``tools`` allowed on ``mcp_uuid``.
+
+   An existing entry for the server is rewritten in place with the union of its tools
+   (order kept, trailing comment kept); otherwise a new entry is appended to the
+   ``allowed_tools`` block. Nothing is ever removed.
+
+
+.. py:function:: agent_dir(transport: pyfsr.cli.appliance.transport.Transport, agent: str) -> str
+
+   The newest installed package directory of ``agent`` (``siem`` -> ``.../siem_1_0_0``).
+
+
+.. py:function:: memory_path(transport: pyfsr.cli.appliance.transport.Transport, agent: str) -> str
+
+   Path of the agent's ``config/memory.yaml``.
+
+
+.. py:function:: allowed_tools(transport: pyfsr.cli.appliance.transport.Transport, agent: str) -> dict[str, list[str]]
+
+   The agent's allow-list: MCP server uuid -> tool names. Read-only.
+
+
+.. py:function:: allow_mcp_tools(transport: pyfsr.cli.appliance.transport.Transport, agent: str, mcp_uuid: str, tools: list[str], *, comment: str = '', restart: bool = False, yes: bool = False) -> AllowChange
+
+   Allow ``tools`` of the MCP server ``mcp_uuid`` for ``agent``. Gated by ``yes``.
+
+   A no-op (nothing written, no ``yes`` needed) when every tool is already allowed.
+   Otherwise it keeps a one-time ``memory.yaml.orig``, writes the merged file and reads
+   it back so the result reports what is on disk. With ``restart=True`` it restarts
+   ``fsr-ai`` and ``fsr-ai-celery`` afterwards (agents only load the file at start).
+
+

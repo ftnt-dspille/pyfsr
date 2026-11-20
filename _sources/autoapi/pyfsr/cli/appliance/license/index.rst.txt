@@ -1,0 +1,157 @@
+pyfsr.cli.appliance.license
+===========================
+
+.. py:module:: pyfsr.cli.appliance.license
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance license`` — licensing / identity verbs.
+
+   The device UUID is the value that eats sessions: it doubles as the
+   ``cyberpgsql`` / ``elastic`` password, and on a FortiCloud-drifted box the
+   *entitlement* UUID that ``csadm`` reports diverges from the install-time UUID
+   that the DB/ES passwords were provisioned with — so ``csadm``'s value silently
+   fails Postgres auth (see :mod:`.facts`). ``license drift`` makes that mismatch a
+   first-class, gate-able check instead of a half-session mystery.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.license.LicenseDetails
+   pyfsr.cli.appliance.license.DriftReport
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.license.show
+   pyfsr.cli.appliance.license.details
+   pyfsr.cli.appliance.license.device_uuid_from_file
+   pyfsr.cli.appliance.license.device_uuid_from_csadm
+   pyfsr.cli.appliance.license.device_uuid
+   pyfsr.cli.appliance.license.drift
+
+
+Module Contents
+---------------
+
+.. py:class:: LicenseDetails(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Parsed ``csadm license --show-details`` identity card.
+
+   ``total_users`` / ``remaining_days`` are typed ints; ``fields`` keeps every raw
+   ``key: value`` pair so uncommon keys are still reachable.
+
+
+   .. py:attribute:: type
+      :type:  str | None
+
+
+   .. py:attribute:: edition
+      :type:  str | None
+
+
+   .. py:attribute:: role
+      :type:  str | None
+
+
+   .. py:attribute:: total_users
+      :type:  int | None
+
+
+   .. py:attribute:: expiry_date
+      :type:  str | None
+
+
+   .. py:attribute:: remaining_days
+      :type:  int | None
+
+
+   .. py:attribute:: serial_no
+      :type:  str | None
+
+
+   .. py:attribute:: device_uuid
+      :type:  str | None
+
+
+   .. py:attribute:: fields
+      :type:  dict[str, str]
+
+
+.. py:function:: show(transport: pyfsr.cli.appliance.transport.Transport) -> str
+
+   Raw ``csadm license --show-details`` output. For a typed result use :func:`details`.
+
+
+.. py:function:: details(transport: pyfsr.cli.appliance.transport.Transport) -> LicenseDetails
+
+   Typed ``csadm license --show-details`` — edition, expiry, user count, UUID.
+
+
+.. py:function:: device_uuid_from_file(transport: pyfsr.cli.appliance.transport.Transport) -> str | None
+
+   The install-time device UUID from ``/home/csadmin/device_uuid`` (no sudo).
+
+   This is the authoritative DB/ES password value. Returns ``None`` if the file
+   is absent or unreadable.
+
+
+.. py:function:: device_uuid_from_csadm(transport: pyfsr.cli.appliance.transport.Transport) -> str | None
+
+   The *current entitlement* device UUID from ``csadm`` (needs root).
+
+   On a FortiCloud-drifted box this differs from the file value and will fail
+   ``cyberpgsql`` auth. Returns ``None`` if csadm fails.
+
+
+.. py:function:: device_uuid(transport: pyfsr.cli.appliance.transport.Transport) -> str
+
+   The device UUID to use as the DB/ES password: file first, csadm fallback.
+
+   Mirrors :meth:`.facts.Facts.device_uuid` so the verb and the DB layer agree
+   on which value is authoritative.
+
+
+.. py:class:: DriftReport(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Result of comparing the install-time UUID against csadm's entitlement UUID.
+
+
+   .. py:attribute:: file_uuid
+      :type:  str | None
+
+
+   .. py:attribute:: csadm_uuid
+      :type:  str | None
+
+
+   .. py:attribute:: drifted
+      :type:  bool
+
+
+   .. py:attribute:: verdict
+      :type:  str
+
+
+.. py:function:: drift(transport: pyfsr.cli.appliance.transport.Transport) -> DriftReport
+
+   Compare the install-time file UUID against csadm's entitlement UUID.
+
+   A drift means ``csadm``'s value would fail Postgres/ES auth; the file value
+   (used by the DB layer) is the one that still works. Either source missing is
+   reported rather than silently treated as a match.
+
+

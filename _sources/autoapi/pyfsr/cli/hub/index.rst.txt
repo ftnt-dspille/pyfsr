@@ -1,0 +1,43 @@
+pyfsr.cli.hub
+=============
+
+.. py:module:: pyfsr.cli.hub
+
+.. autoapi-nested-parse::
+
+   ``pyfsr hub`` -- Content Hub updates for installed packs, connectors and widgets.
+
+   ::
+
+       pyfsr hub updates --instance lab                       # what has a newer version (GUI "Update available")
+       pyfsr hub updates --type connector --format json --instance lab
+       pyfsr hub update "SOAR Framework" servicenow --instance lab
+       pyfsr hub update --all --type widget --instance lab --dry-run
+       pyfsr hub update --all --instance lab --yes            # packs (dependency order), then connectors, widgets
+
+   Updates use the same call as the Content Hub *Update* button
+   (``POST /api/3/solutionpacks/update``). No backups are taken; for a connector the result
+   shows its configuration count before and after. ``--all`` asks for
+   confirmation unless ``--yes``.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.hub.cmd_updates
+   pyfsr.cli.hub.cmd_update
+   pyfsr.cli.hub.build_subparser
+
+
+Module Contents
+---------------
+
+.. py:function:: cmd_updates(args: argparse.Namespace) -> int
+
+.. py:function:: cmd_update(args: argparse.Namespace) -> int
+
+.. py:function:: build_subparser(sub: argparse._SubParsersAction) -> None
+

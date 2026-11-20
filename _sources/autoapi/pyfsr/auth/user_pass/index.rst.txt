@@ -1,0 +1,81 @@
+pyfsr.auth.user_pass
+====================
+
+.. py:module:: pyfsr.auth.user_pass
+
+.. autoapi-nested-parse::
+
+   Username/password authentication for the FortiSOAR client.
+
+   Exchanges a login id + password for a bearer session token at construction, then
+   supplies that token on every request. Session tokens expire, so this strategy
+   supports refresh: the client re-authenticates and retries on an expired-token
+   response. Selected by passing ``username``/``password`` to
+   :class:`~pyfsr.client.FortiSOAR`.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.auth.user_pass.UserPasswordAuth
+
+
+Module Contents
+---------------
+
+.. py:class:: UserPasswordAuth(base_url: str, username: str, password: str, verify_ssl: bool = True)
+
+   Bases: :py:obj:`pyfsr.auth.base.BaseAuth`
+
+
+   Authenticate with a username and password, holding a refreshable token.
+
+   Fetches a bearer token from ``/auth/authenticate`` on construction. A blank
+   error body on a ``404``/``405``/``502``/``503`` is reported as a connectivity
+   problem (wrong port/scheme or a proxy in the way) rather than bad
+   credentials, since the request likely never reached the auth endpoint.
+
+
+   .. py:attribute:: base_url
+
+
+   .. py:attribute:: username
+
+
+   .. py:attribute:: password
+
+
+   .. py:attribute:: verify_ssl
+      :value: True
+
+
+
+   .. py:attribute:: token
+
+
+   .. py:method:: get_auth_headers() -> dict
+
+      Return the request headers carrying the current bearer token.
+
+
+
+   .. py:method:: refresh() -> dict
+
+      Re-authenticate (mint a fresh session token) and return new headers.
+
+      FortiSOAR session tokens expire; a long-lived client that authenticated
+      once at construction will eventually get ``401``/``403`` ("HMAC signature
+      has expired"). The client calls this to recover and retry the request.
+
+
+
+   .. py:property:: can_refresh
+      :type: bool
+
+
+      ``True`` — this strategy can re-authenticate, so the client retries expired tokens.
+
+

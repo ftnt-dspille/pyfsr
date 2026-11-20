@@ -1,0 +1,27 @@
+pyfsr.cli.mcp_shim
+==================
+
+.. py:module:: pyfsr.cli.mcp_shim
+
+.. autoapi-nested-parse::
+
+   ``pyfsr-mcp``: deprecated. The agent tools and MCP server moved to fsr-agentic-toolkit.
+
+   pyfsr is the SDK only. This entry point hands off to the toolkit's server when it
+   is installed, so existing MCP configs keep working, and otherwise says how to get it.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.mcp_shim.main
+
+
+Module Contents
+---------------
+
+.. py:function:: main(argv: list[str] | None = None) -> int
+
