@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- `client.ai.investigation_report(task_id)` returns an `InvestigationReport`: status, verdict, confidence, the tool calls (traces on 8.0.1+, `llm_activity_logs` on 8.0.0), and the run's LLM-span health (count, tokens, models, failed spans). On 8.0.0 the trace records only LLM-selected calls, so playbook hunts and MCP calls made by code-driven specialists can be missing; 8.0.1+ traces record every call with its agent and server.
+- `client.ai.investigation_report(task_id)` returns an `InvestigationReport`: status, verdict, confidence, the tool calls (traces on 8.0.1+, `llm_activity_logs` on 8.0.0), and the run's LLM-span health (count, tokens, models, failed spans; from the `LLM` trace spans on 8.0.1+, else `llm_activity_logs`). On 8.0.0 the trace records only LLM-selected calls, so playbook hunts and MCP calls made by code-driven specialists can be missing; 8.0.1+ traces record every call with its agent and server.
 - `appliance.ai.allowed_tools(agent)` and `appliance.ai.allow_mcp_tools(agent, mcp_uuid, tools, restart=, yes=)`: read and extend an agent's MCP tool allow-list in `/opt/fsr-ai/ai-agents/<agent>/config/memory.yaml`. Binding an MCP server to an agent over REST is not enough; an agent never calls a server that is missing from this file, and the investigation completes without saying so. Idempotent, only ever adds tools, keeps a one-time `.orig` backup. Live-verified on 8.0.0 and 8.0.1.
 
 ## [0.34.1] - 2026-11-18

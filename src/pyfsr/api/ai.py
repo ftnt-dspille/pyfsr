@@ -3076,15 +3076,16 @@ class AIApi(BaseAPI):
     def investigation_report(self, task_id: str, *, limit: int = 500) -> InvestigationReport:
         """Verdict, tool calls and LLM-span health of one investigation, in one call.
 
-        Reads :meth:`get_status` / :meth:`get_result` for the verdict,
+        Reads :meth:`get_status` / :meth:`get_result` for the verdict and
         :meth:`investigation_tool_calls` for the tools (version-aware: traces on
-        8.0.1+, ``llm_activity_logs`` on 8.0.0) and the run's
-        ``llm_activity_logs`` for the model(s), token total and any failed span.
+        8.0.1+, ``llm_activity_logs`` on 8.0.0). The model(s), token total and any
+        failed span come from the run's ``LLM`` trace spans on 8.0.1+, else from
+        its ``llm_activity_logs``.
 
-        A run can complete with ``tool_calls == []``: the ``siem``,
-        ``asset-enrichment`` and ``ioc-enrichment`` specialists answer from the
-        alert/event data they are handed and never call a tool. Only agents that
-        go through the tool-selection agent (e.g. ``endpoint-telemetry``) do.
+        On 8.0.0 the trace only records tool calls the LLM selected, so playbook
+        hunts and MCP calls made by code-driven specialists can be missing and
+        ``tool_calls`` can be empty for a run that did call tools; 8.0.1+ traces
+        record every call with its agent and server.
         """
         status = self.get_status(task_id)
         result = self.get_result(task_id)
@@ -3095,6 +3096,21 @@ class AIApi(BaseAPI):
         }
         resp = self.client.post("/api/query/llm_activity_logs", params={"$limit": limit}, data=body)
         spans = extract_members(resp) or []
+        llm_spans, total_tokens, models, failed = len(spans), None, None, None
+        if not spans:  # 8.0.1+: LLM calls are tracer spans, not llm_activity_logs rows
+            try:
+                calls = self.traces.llm_calls(task_id)
+            except (APIError, IndexError):
+                calls = []
+            if calls:
+                llm_spans = len(calls)
+                total_tokens = sum(
+                    int((c.attributes or {}).get("input_tokens") or 0)
+                    + int((c.attributes or {}).get("output_tokens") or 0)
+                    for c in calls
+                )
+                models = sorted({self._llm_label(c) for c in calls})
+                failed = sum(1 for c in calls if c.status not in ("OK", "ok", None) or c.error)
         return InvestigationReport(
             task_id=task_id,
             status=status,
@@ -3102,11 +3118,24 @@ class AIApi(BaseAPI):
             confidence=summary.get("confidence"),
             summary=summary.get("highlighted_summary"),
             tool_calls=self.investigation_tool_calls(task_id),
-            llm_spans=len(spans),
-            total_tokens=sum(int(s.get("totalTokens") or 0) for s in spans),
-            models=sorted({f"{s.get('provider')}/{s.get('modelName')}" for s in spans}),
-            failed_spans=sum(1 for s in spans if s.get("status") not in ("success", None)),
+            llm_spans=llm_spans,
+            total_tokens=total_tokens
+            if total_tokens is not None
+            else sum(int(s.get("totalTokens") or 0) for s in spans),
+            models=models
+            if models is not None
+            else sorted({f"{s.get('provider')}/{s.get('modelName')}" for s in spans}),
+            failed_spans=failed
+            if failed is not None
+            else sum(1 for s in spans if s.get("status") not in ("success", None)),
         )
+
+    @staticmethod
+    def _llm_label(span: TraceSpan) -> str:
+        """``provider/model`` of an ``LLM`` trace span (the client sets ``model`` as an attribute)."""
+        out = span.output if isinstance(span.output, dict) else {}
+        model = (span.attributes or {}).get("model") or out.get("model")
+        return f"{out.get('provider') or 'unknown'}/{model}"
 
     def _traced_tool_calls(self, task_id: str) -> list[ToolCall] | None:
         """The investigation's calls from its traces, or ``None`` when there is no trace."""
