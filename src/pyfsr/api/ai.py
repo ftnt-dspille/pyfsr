@@ -128,6 +128,7 @@ from ..models._ai import (
     InsightRecord,
     InvestigationHandle,
     InvestigationQuestion,
+    InvestigationReport,
     InvestigationResult,
     InvestigationTool,
     InvestigationTrace,
@@ -3071,6 +3072,41 @@ class AIApi(BaseAPI):
         """
         traced = self._traced_tool_calls(task_id)
         return traced if traced is not None else self.tool_usage(correlation_id=task_id)
+
+    def investigation_report(self, task_id: str, *, limit: int = 500) -> InvestigationReport:
+        """Verdict, tool calls and LLM-span health of one investigation, in one call.
+
+        Reads :meth:`get_status` / :meth:`get_result` for the verdict,
+        :meth:`investigation_tool_calls` for the tools (version-aware: traces on
+        8.0.1+, ``llm_activity_logs`` on 8.0.0) and the run's
+        ``llm_activity_logs`` for the model(s), token total and any failed span.
+
+        A run can complete with ``tool_calls == []``: the ``siem``,
+        ``asset-enrichment`` and ``ioc-enrichment`` specialists answer from the
+        alert/event data they are handed and never call a tool. Only agents that
+        go through the tool-selection agent (e.g. ``endpoint-telemetry``) do.
+        """
+        status = self.get_status(task_id)
+        result = self.get_result(task_id)
+        summary = result.summary or {}
+        body = {
+            "logic": "AND",
+            "filters": [{"field": "correlationID", "operator": "eq", "value": task_id, "type": "primitive"}],
+        }
+        resp = self.client.post("/api/query/llm_activity_logs", params={"$limit": limit}, data=body)
+        spans = extract_members(resp) or []
+        return InvestigationReport(
+            task_id=task_id,
+            status=status,
+            verdict=summary.get("classification"),
+            confidence=summary.get("confidence"),
+            summary=summary.get("highlighted_summary"),
+            tool_calls=self.investigation_tool_calls(task_id),
+            llm_spans=len(spans),
+            total_tokens=sum(int(s.get("totalTokens") or 0) for s in spans),
+            models=sorted({f"{s.get('provider')}/{s.get('modelName')}" for s in spans}),
+            failed_spans=sum(1 for s in spans if s.get("status") not in ("success", None)),
+        )
 
     def _traced_tool_calls(self, task_id: str) -> list[ToolCall] | None:
         """The investigation's calls from its traces, or ``None`` when there is no trace."""

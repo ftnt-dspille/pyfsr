@@ -296,6 +296,41 @@ class InvestigationResult(_Lenient):
     logs: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class InvestigationReport(_Lenient):
+    """One-call summary of a finished investigation (:meth:`~pyfsr.api.ai.AIApi.investigation_report`).
+
+    Combines the triage verdict, the tool calls the agents made, and the LLM
+    spans the run logged, so a demo or test can assert "completed, a verdict,
+    a tool was called, nothing failed, and it ran on model X" without
+    re-deriving it from three endpoints.
+
+    ``llm_spans`` and ``models`` come from ``llm_activity_logs`` (8.0.0). 8.0.1
+    writes no such logs for investigations, so they are empty there while
+    ``tool_calls`` (from the traces) is still complete.
+    """
+
+    task_id: str | None = None
+    status: str | None = None
+    verdict: str | None = None
+    confidence: Any = None
+    summary: str | None = None
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    llm_spans: int = 0
+    total_tokens: int = 0
+    models: list[str] = Field(default_factory=list)
+    failed_spans: int = 0
+
+    @property
+    def tool_servers(self) -> list[str]:
+        """Distinct MCP servers the run called (``[]`` when none, or on 8.0.0 where the log has no server)."""
+        return sorted({c.server for c in self.tool_calls if c.server})
+
+    @property
+    def conclusive(self) -> bool:
+        """Completed with a verdict other than ``Inconclusive``."""
+        return self.status == "completed" and bool(self.verdict) and self.verdict != "Inconclusive"
+
+
 class AgentRunResult(_Lenient):
     """Result of one *single-agent* run (:meth:`~pyfsr.api.ai.AIApi.run_agent`).
 
