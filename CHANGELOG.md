@@ -4,7 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-20
+
 ### Added
+- `pyfsr instances add [alias]`: register a box under an alias, guided. It asks for what is missing (URL, API key or username and password, whether to verify TLS), connects and makes an authenticated read before saving, and saves nothing if that fails. The secret goes to a 0600 `<alias>.env` beside the registry and `instances.toml` only points at it, so a coding agent's MCP config needs no `FSR_*` values. Works for FortiSOC with an API key. Secrets are prompted without echo, read from `$FSR_API_KEY` / `$FSR_PASSWORD`, or piped on stdin, never taken as arguments. `--env-file` registers an env file you already have; `--default`, `--insecure`, `--no-check`, `--no-input` and `--config` as named.
 - `client.ai.investigation_report(task_id)` returns an `InvestigationReport`: status, verdict, confidence, the tool calls (traces on 8.0.1+, `llm_activity_logs` on 8.0.0), and the run's LLM-span health (count, tokens, models, failed spans; from the `LLM` trace spans on 8.0.1+, else `llm_activity_logs`). On 8.0.0 the trace records only LLM-selected calls, so playbook hunts and MCP calls made by code-driven specialists can be missing; 8.0.1+ traces record every call with its agent and server.
 - `appliance.ai.allowed_tools(agent)` and `appliance.ai.allow_mcp_tools(agent, mcp_uuid, tools, restart=, yes=)`: read and extend an agent's MCP tool allow-list in `/opt/fsr-ai/ai-agents/<agent>/config/memory.yaml`. Binding an MCP server to an agent over REST is not enough; an agent never calls a server that is missing from this file, and the investigation completes without saying so. Idempotent, only ever adds tools, keeps a one-time `.orig` backup. Live-verified on 8.0.0 and 8.0.1.
 

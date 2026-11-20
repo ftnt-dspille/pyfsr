@@ -119,11 +119,12 @@ distinct from any domain-specific FortiSOAR MCP.
 
 Installing pyfsr puts a `pyfsr` command on your path with seven groups.
 
-**`pyfsr instances`** -- inspect the named-instance registry
-(`~/.pyfsr/instances.toml`), which is what every `--instance` flag resolves
-against:
+**`pyfsr instances`** -- add boxes to the named-instance registry
+(`~/.pyfsr/instances.toml`) and inspect it. Every `--instance` flag resolves
+against it:
 
 ```bash
+pyfsr instances add                  # guided: URL, API key or login, TLS; connects before saving
 pyfsr instances list                 # every alias: base URL, auth kind, SSH profile
 pyfsr instances show 206             # one instance's resolved settings (no secrets)
 pyfsr instances check                # connect to each box; exit 1 if any fails
@@ -132,6 +133,12 @@ pyfsr instances check                # connect to each box; exit 1 if any fails
 `check` probes the version endpoint and then an authenticated read, so a
 registered-but-broken alias shows up as `unreachable` or `auth-failed` before a
 script fails on it.
+
+`add` keeps the secret in a 0600 `<alias>.env` beside the registry, never in the
+TOML or on the command line, and saves nothing if the connection fails. The
+first box added becomes the default. For FortiSOC, answer yes to the API-key
+question. Without prompts: `FSR_API_KEY=... pyfsr instances add soc --url
+soc.example.com --no-input`.
 
 **`pyfsr appliance`** -- operational verbs against a FortiSOAR box (most run over
 SSH/sudo and stay dependency-light on the far end):

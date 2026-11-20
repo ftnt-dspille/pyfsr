@@ -51,11 +51,13 @@ import argparse
 import contextlib
 import json
 import os
+import re
 import shlex
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..config import _load_toml
 from ..instances import InstanceRegistry, _hostname_from_base_url, default_search_path
 from . import _output
 
@@ -170,8 +172,13 @@ def _probe(reg: InstanceRegistry, alias: str) -> tuple[str, str, str]:
     alias's stored credential still works. A box that answers the first and not
     the second is the exact case a private ``alias -> env file`` map hid.
     """
+    return _probe_with(lambda: reg.client(alias))
+
+
+def _probe_with(make_client: Any) -> tuple[str, str, str]:
+    """:func:`_probe` for any client factory (``instances add`` probes before it saves)."""
     try:
-        client = reg.client(alias)
+        client = make_client()
     except Exception as exc:  # noqa: BLE001 -- a bad config must not abort the sweep
         # A username/password instance logs in eagerly, so construction is where
         # an unplugged box surfaces. Reporting that as a config error would send
@@ -224,6 +231,179 @@ def cmd_check(args: argparse.Namespace) -> int:
         rows.append([alias, reg.configs[alias].base_url, status, version, ssh, detail])
     _output.render(rows, ["instance", "base_url", "status", "version", "ssh", "detail"], fmt=args.fmt)
     return 1 if failed else 0
+
+
+# -- add ----------------------------------------------------------------------
+
+_ALIAS_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_TRUE = {"1", "true", "yes", "y", "on"}
+
+
+def _ask(prompt: str, default: str | None = None) -> str:
+    """One answer from the terminal; ``default`` when the reader just presses Enter."""
+    suffix = f" [{default}]" if default else ""
+    answer = input(f"{prompt}{suffix}: ").strip()
+    return answer or (default or "")
+
+
+def _ask_yes(prompt: str, default: bool) -> bool:
+    answer = _ask(f"{prompt} (y/n)", "y" if default else "n").lower()
+    return answer in _TRUE
+
+
+def _secret(prompt: str) -> str:
+    """A secret without echo on a terminal; one line of stdin when piped (scripts, CI)."""
+    import getpass
+    import sys
+
+    if sys.stdin.isatty():
+        return getpass.getpass(f"{prompt}: ")
+    return sys.stdin.readline().rstrip("\n")
+
+
+def _secret_from(var: str, prompt: str, interactive: bool) -> str:
+    """``$var`` if set, else a no-echo prompt, else a piped stdin line; never an argv value."""
+    import sys
+
+    if os.environ.get(var):
+        return os.environ[var]
+    if sys.stdin.isatty() and not interactive:
+        return ""  # --no-input on a terminal: refuse rather than prompt
+    return _secret(prompt)
+
+
+def _normalize_url(url: str) -> str:
+    url = url.strip().rstrip("/")
+    if url and "://" not in url:
+        url = "https://" + url
+    return url
+
+
+def _toml_quote(value: str) -> str:
+    return json.dumps(value)  # a JSON string is a valid TOML basic string
+
+
+def _existing_aliases(path: Path) -> tuple[set[str], str | None]:
+    if not path.exists():
+        return set(), None
+    data = _load_toml(path)
+    return set((data.get("instances") or {}).keys()), data.get("default")
+
+
+def _register(path: Path, alias: str, env_file: Path, *, make_default: bool) -> None:
+    """Append ``[instances.<alias>]`` to the registry; set ``default`` when asked.
+
+    Appends rather than re-serialising so the reader's comments and layout in an
+    existing file survive. The env file is stored relative to the registry when
+    it sits beside it, so the pair can be moved together.
+    """
+    try:
+        ref = str(env_file.relative_to(path.parent))
+    except ValueError:
+        ref = str(env_file)
+    block = f"\n[instances.{alias}]\nenv_file = {_toml_quote(ref)}\n"
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    if make_default:
+        line = f"default = {_toml_quote(alias)}"
+        if re.search(r"(?m)^default\s*=.*$", text):
+            text = re.sub(r"(?m)^default\s*=.*$", line, text, count=1)
+        else:
+            text = line + "\n" + text
+    text = text.rstrip("\n") + "\n" + block if text.strip() else text + block.lstrip("\n")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".pyfsr-instances-", dir=str(path.parent))
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+def cmd_add(args: argparse.Namespace) -> int:
+    """Register a box under an alias, guided: ask for what is missing, prove it, save it.
+
+    Credentials go to a 0600 env file beside the registry (``<alias>.env``); the
+    TOML only points at it, so ``instances.toml`` never holds a secret and a
+    coding agent's MCP config needs no ``FSR_*`` values at all. ``--env-file``
+    registers an env file you already have instead of writing one.
+    """
+    from ..config import EnvConfig, _parse_env_text
+
+    path = _config_path(args)
+    aliases, current_default = _existing_aliases(path)
+    interactive = not args.no_input
+
+    alias = args.alias or (interactive and _ask("Name for this box (the alias you will pass as --instance)")) or ""
+    if not _ALIAS_OK.match(alias):
+        raise ValueError(f"alias {alias!r}: use letters, digits, '.', '_' or '-', starting with a letter or digit")
+    if alias in aliases:
+        raise ValueError(f"{path}: instance {alias!r} already exists; pick another name or edit the file")
+
+    if args.env_file:
+        env_file = Path(args.env_file).expanduser().resolve()
+        cfg = EnvConfig.from_env(_parse_env_text(env_file.read_text(encoding="utf-8")))
+        env: dict[str, str] | None = None
+    else:
+        url = args.url or (interactive and _ask("FortiSOAR or FortiSOC URL (e.g. fortisoar.example.com)")) or ""
+        url = _normalize_url(url)
+        if not url:
+            raise ValueError("a URL is required (--url)")
+        auth = args.auth
+        if auth is None:
+            if args.username:
+                auth = "password"
+            elif interactive:
+                use_key = _ask_yes("Sign in with an API key? (FortiSOC uses an API key)", True)
+                auth = "api-key" if use_key else "password"
+            else:
+                auth = "api-key"
+        env = {"FSR_BASE_URL": url}
+        if auth == "api-key":
+            key = _secret_from("FSR_API_KEY", "API key", interactive)
+            if not key.strip():
+                raise ValueError("an API key is required (prompted, piped on stdin, or $FSR_API_KEY)")
+            env["FSR_API_KEY"] = key.strip()
+        else:
+            user = args.username or (interactive and _ask("Username")) or ""
+            if not user:
+                raise ValueError("a username is required (--username)")
+            pw = _secret_from("FSR_PASSWORD", f"Password for {user}", interactive)
+            if not pw:
+                raise ValueError("a password is required (prompted, piped on stdin, or $FSR_PASSWORD)")
+            env["FSR_USERNAME"] = user
+            env["FSR_PASSWORD"] = pw
+        verify = not args.insecure
+        if interactive and not args.insecure:
+            verify = _ask_yes("Verify the TLS certificate? Answer n for a lab box with a self-signed certificate", True)
+        if not verify:
+            env["FSR_VERIFY_SSL"] = "false"
+            env["FSR_SUPPRESS_INSECURE_WARNINGS"] = "true"
+        cfg = EnvConfig.from_env(env)
+        env_file = path.parent / f"{alias}.env"
+        if env_file.exists():
+            raise ValueError(f"{env_file} already exists; remove it or pass --env-file {env_file}")
+
+    if not args.no_check:
+        status, version, detail = _probe_with(cfg.client)
+        if status != "ok":
+            print(f"{alias}: {status} at {cfg.base_url}: {detail}")
+            print("nothing was saved; fix the URL or credential and run it again (or pass --no-check)")
+            return 1
+        print(f"{alias}: connected to {cfg.base_url} (FortiSOAR {version}, {_auth_kind(cfg)})")
+
+    if env is not None:
+        env_file.parent.mkdir(parents=True, exist_ok=True)
+        _write_env_file(env_file, env)
+    make_default = args.default or current_default is None
+    _register(path, alias, env_file, make_default=make_default)
+    print(f"saved {alias} to {path}" + (" as the default" if make_default else ""))
+    print(f"credentials: {env_file} (mode 600)" if env is not None else f"credentials: {env_file} (yours, unchanged)")
+    print(f"use it: --instance {alias}" + ("" if make_default else f", or make it the default: edit default in {path}"))
+    return 0
 
 
 # -- env / ssh-target ---------------------------------------------------------
@@ -442,6 +622,25 @@ def build_subparser(sub: argparse._SubParsersAction) -> None:
     _add_config(p_check)
     _add_fmt(p_check)
     p_check.set_defaults(func=cmd_check)
+
+    p_add = sub.add_parser(
+        "add",
+        help="register a box: asks for the URL and an API key or login, proves it connects, "
+        "keeps the secret in a 0600 env file",
+    )
+    p_add.add_argument("alias", nargs="?", help="name to pass as --instance (asked when omitted)")
+    p_add.add_argument("--url", help="FortiSOAR or FortiSOC URL; https:// is assumed")
+    p_add.add_argument("--auth", choices=("api-key", "password"), help="how to sign in (asked when omitted)")
+    p_add.add_argument("--username", help="login id for --auth password; the password is prompted, never an argument")
+    p_add.add_argument("--insecure", action="store_true", help="skip TLS verification (self-signed lab box)")
+    p_add.add_argument("--env-file", help="register an existing FSR_* env file instead of writing one")
+    p_add.add_argument("--default", action="store_true", help="make this the default instance")
+    p_add.add_argument("--no-check", action="store_true", help="save without connecting first")
+    p_add.add_argument(
+        "--no-input", action="store_true", help="never prompt; take secrets from $FSR_API_KEY / $FSR_PASSWORD or stdin"
+    )
+    _add_config(p_add)
+    p_add.set_defaults(func=cmd_add)
 
     p_env = sub.add_parser(
         "env",
