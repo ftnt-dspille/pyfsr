@@ -13,7 +13,7 @@ when you need the low-level transport directly (e.g. for testing).
 
 from __future__ import annotations
 
-from . import certs, content_hub, db, facts, host, info, integrations, logs, mq, service, transport
+from . import ai, certs, content_hub, db, facts, host, info, integrations, logs, mq, service, transport
 
 __all__ = [
     "certs",
@@ -22,6 +22,7 @@ __all__ = [
     "facts",
     "host",
     "info",
+    "ai",
     "integrations",
     "logs",
     "mq",

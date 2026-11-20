@@ -32,11 +32,13 @@ escape hatch.
 
 from __future__ import annotations
 
+from .cli.appliance import ai as ai_mod
 from .cli.appliance import certs, db, host, info, integrations, logs, mq, service
 from .cli.appliance import es as es_mod
 from .cli.appliance import ha as ha_mod
 from .cli.appliance import license as license_mod
 from .cli.appliance import users as users_mod
+from .cli.appliance.ai import AllowChange
 from .cli.appliance.db import DatabaseInfo, DataClassSize, OrphanTable
 from .cli.appliance.es import ESHealth
 from .cli.appliance.facts import Facts
@@ -59,6 +61,7 @@ __all__ = [
     "EsNamespace",
     "HaNamespace",
     "CertsNamespace",
+    "AiNamespace",
     "IntegrationsNamespace",
     "UsersNamespace",
 ]
@@ -385,6 +388,33 @@ class IntegrationsNamespace:
         return integrations.ensure_extra_index(self._t, url, yes=yes)
 
 
+class AiNamespace:
+    """FortiAI runtime settings (``appliance.ai``)."""
+
+    def __init__(self, t: Transport) -> None:
+        self._t = t
+
+    def allowed_tools(self, agent: str) -> dict[str, list[str]]:
+        """The agent's MCP tool allow-list (server uuid -> tool names) from its ``memory.yaml``."""
+        return ai_mod.allowed_tools(self._t, agent)
+
+    def allow_mcp_tools(
+        self,
+        agent: str,
+        mcp_uuid: str,
+        tools: list[str],
+        *,
+        comment: str = "",
+        restart: bool = False,
+        yes: bool = False,
+    ) -> AllowChange:
+        """Allow ``tools`` of an MCP server for ``agent`` (a REST binding alone is not enough).
+
+        Idempotent; refuses unless ``yes=True`` (a no-op needs none).
+        """
+        return ai_mod.allow_mcp_tools(self._t, agent, mcp_uuid, tools, comment=comment, restart=restart, yes=yes)
+
+
 class Appliance:
     """A connection to a FortiSOAR appliance, exposing the ``pyfsr appliance`` verbs.
 
@@ -401,6 +431,7 @@ class Appliance:
     - :attr:`ha` -- cluster nodes/health/replication
     - :attr:`certs` -- TLS cert regeneration
     - :attr:`integrations` -- connector runtime pip index
+    - :attr:`ai` -- FortiAI per-agent MCP tool allow-list
 
     plus :meth:`info`, :meth:`diagnose`, and :meth:`run` (the escape hatch for
     arbitrary shell commands).
@@ -463,6 +494,8 @@ class Appliance:
     certs: CertsNamespace
     """Appliance TLS certificate verbs -- regenerate the self-signed cert. See :class:`CertsNamespace`."""
 
+    ai: AiNamespace
+    """FortiAI per-agent MCP tool allow-list. See :class:`AiNamespace`."""
     integrations: IntegrationsNamespace
     """Connector runtime settings -- the integrations pip index. See :class:`IntegrationsNamespace`."""
 
@@ -516,6 +549,7 @@ class Appliance:
         self.ha = HaNamespace(t)
         self.certs = CertsNamespace(t)
         self.integrations = IntegrationsNamespace(t)
+        self.ai = AiNamespace(t)
         self.users = UsersNamespace(self._facts)
 
     @property
