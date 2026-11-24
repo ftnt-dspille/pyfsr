@@ -87,7 +87,7 @@ class RuleChannel(BaseRecord):
     config: dict[str, Any] | None = None
     is_active: bool | None = None
     default_params: dict[str, Any] | list[Any] | None = None
-    """Live shapes on 8.0.1: ``{}`` for the built-in fixture channels, a bare
+    """Seen live on 8.0.1 as ``{}`` for the built-in fixture channels, a bare
     empty list ``[]`` for connector-registered channels (Teams/Slack ship
     ``default_params: []``). Normalized to ``{}`` below so callers can always
     ``.get()``; a non-empty list (never observed) is passed through untouched
