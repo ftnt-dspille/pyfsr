@@ -571,17 +571,45 @@ class ManualInputAPI(BaseAPI):
            raises if it is genuinely still pending. The request is never retried:
            a retry would risk resuming the run twice.
 
+           Resubmitting an already-consumed input (the race a bot listener can
+           hit when a user double-clicks a delivered card) is rejected
+           server-side with ``APIError: The linked playbook is either no longer
+           active or has already been resumed.`` (live-verified 8.0.1) -- the
+           message behind the Teams bot's "This input request is already
+           submitted or the relevant playbook is terminated!" reply.
+
         Args:
             workflow_id: the numeric run id -- the ``workflow`` field from
-                :meth:`retrieve` (not the list's encrypted token).
+                :meth:`retrieve` (not the list's encrypted token). It must be the
+                run that owns ``manual_input_id``: the endpoint trusts the URL's
+                run id, and a mismatched pair corrupts **both** runs (the URL run
+                dies with ``CS-WF-2: Either the playbook is invalid or the
+                playbook's start step is not linked to any other step``, while the
+                input's own run is left stuck ``awaiting`` with its input
+                consumed -- live-verified 8.0.1). :meth:`answer`,
+                :meth:`approve` and :meth:`reject` derive both ids from a single
+                :meth:`retrieve` row, so they cannot hit this.
             step_iri: the selected response option's ``step_iri`` (from
                 ``retrieve(...).response_mapping["options"]``); picks which branch
                 the playbook resumes down.
             step_id: the paused step's ``step_id`` (from :meth:`retrieve`/:meth:`list`).
             manual_input_id: the manual input ``id``.
-            user: the submitting user's IRI (``/api/3/people/<uuid>``).
+            user: the submitting user's IRI (``/api/3/people/<uuid>``). Only
+                meaningful for **unauthenticated** flows: on an authenticated
+                call the server ignores this field and attributes the response to
+                the request's own principal -- ``userid``/``username`` on the
+                resumed step's result and the audit row keep the caller, even if
+                ``user`` names a different person (live-verified 8.0.1). This is
+                why the Teams/Slack bot connectors, which resume over the
+                integrations service HMAC, cannot attribute a response to the
+                person who clicked.
             input: collected input values keyed by variable name, e.g.
                 ``{"test": "def"}`` -- omit for an approval/button-only step.
+                Keys beyond the step's ``inputVariables`` are accepted and pass
+                through verbatim into ``vars.steps.<step>.input`` (live-verified
+                8.0.1) -- the seam a bot-channel integration can use to carry
+                responder identity (e.g. the Teams clicker's AAD object id) into
+                the playbook.
             timeout: read timeout in seconds for this submit. Defaults to
                 ``max(client.timeout, 180)`` -- see the note above. Pass a larger
                 value when a branch is known to be slow (a package install, say).

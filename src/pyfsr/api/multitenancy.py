@@ -250,6 +250,41 @@ class MultitenancyAPI(BaseAPI):
         _logger.info("multitenancy: added dedicated tenant %r (agent awaiting the remote node)", name)
         return Tenant.model_validate(tenant_rec or {}), Agent.model_validate(_scrub(agent_rec))
 
+    def add_shared_tenant(
+        self,
+        name: str,
+        *,
+        owners: Sequence[Any] | None = None,
+    ) -> Tenant:
+        """Create a shared tenant on this node and return it.
+
+        A shared tenant lives on the same node as the data it segregates (no separate tenant node,
+        no agent, no router): ``POST /api/3/tenants`` with ``isDedicated: false`` and the owner
+        teams, which is what Multi Tenancy > Tenants > Add > Shared sends. Records are then
+        assigned to the tenant, and the owner teams see only their tenant's records.
+
+        ``owners`` are team names/IRIs (default ``"SOC Team"``). Create the team first with
+        ``client.teams.get_or_create``. Raises :class:`MultitenancyError` when a tenant with that
+        name already exists.
+
+        Example:
+            >>> client = demo_client()
+            >>> client.multitenancy.add_shared_tenant("FortiGate", owners=["FortiGate Team"]).name
+            'FortiGate'
+        """
+        name = _require_text(name, "add_shared_tenant()")
+        if self._tenant_by_name(name) is not None:
+            raise MultitenancyError(f"a tenant named {name!r} already exists; delete it or pick another name")
+        owner_objects = self._owner_objects(owners)
+        try:
+            rec = self.client.post(_TENANTS, data={"name": name, "isDedicated": False, "owners": owner_objects})
+        except FortiSOARException as exc:
+            if _status(exc) == 409:
+                raise MultitenancyError(f"tenant {name!r} already exists (409): {exc}", exc.response) from exc
+            raise
+        _logger.info("multitenancy: added shared tenant %r", name)
+        return Tenant.model_validate(rec or {})
+
     def wait_for_health(
         self,
         name: str,

@@ -116,6 +116,11 @@ class RulesAPI(BaseAPI):
         """List every rule channel (``GET <rule-engine>/channel/``).
 
         Note the collection is singular (``channel/``), unlike ``rules/``.
+        Besides the notification transports, this registry drives **manual-input
+        delivery**: the ``Microsoft Teams`` / ``Slack`` / ``Email`` channels here
+        are what a Manual Input step's ``inline_channel_list`` resolves to --
+        ``config`` carries the connector + operation the prompt is dispatched
+        through (live-verified 8.0.1).
         """
         members = [m for m in extract_members(self.rule_engine_get("channel/")) if isinstance(m, dict)]
         if not typed:

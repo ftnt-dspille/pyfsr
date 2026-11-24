@@ -17,8 +17,8 @@ The cache is dropped when it can no longer be trusted:
   appliance-wide);
 - **switching instance** (the first client for a different box than the last one
   used) clears that box's disk cache and re-warms the modules it had cached;
-- a check that fails against a *cached* schema on an unknown field or picklist
-  value refetches the module once and checks again, so a field added in the UI
+- a check that fails against a *cached* schema on an unknown field, picklist
+  value or a module that is not team-ownable refetches the module once and checks again, so a field added in the UI
   costs one extra fetch, not a false refusal;
 - ``client.schema.clear()`` / ``pyfsr schema clear`` by hand.
 
@@ -525,7 +525,7 @@ class SchemaCache:
         if schema is None:
             return CheckResult(module=module, op=op, data=dict(data))
         result = self._check(schema, module, data, op)
-        stale_codes = {"unknown_field", "picklist"}
+        stale_codes = {"unknown_field", "picklist", "not_ownable"}
         if cached and any(p.code in stale_codes for p in result.problems):
             fresh = self.get(module, refresh=True)
             if fresh is not None:

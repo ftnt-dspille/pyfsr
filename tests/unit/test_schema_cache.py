@@ -229,6 +229,15 @@ def test_a_field_added_on_the_box_refetches_a_cached_schema_once():
     assert r.ok and r.refetched and c.schema.fetches == 2
 
 
+def test_a_module_made_team_ownable_on_the_box_refetches_a_cached_schema_once():
+    c = _Client()
+    c.modules_meta["alerts"] = {**ALERTS, "ownable": False, "userOwnable": False}
+    c.schema.get("alerts")
+    c.modules_meta["alerts"] = {**ALERTS, "ownable": True, "userOwnable": True}
+    r = c.schema.check("alerts", {"owners": [PERSON]}, op="update")
+    assert r.ok and r.refetched and c.schema.fetches == 2
+
+
 def test_an_unknown_module_passes_through_unchecked():
     r = _Client().schema.check("nosuch", {"anything": 1})
     assert r.ok and r.data == {"anything": 1}

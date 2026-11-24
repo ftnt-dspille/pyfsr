@@ -1838,8 +1838,15 @@ class PlaybooksAPI(BaseAPI):
         playbook: str | None = None,
         playbook_uuid: str | None = None,
         limit: int = 20,
+        top_level_only: bool = False,
     ) -> builtins.list[RunSummary]:
-        """List recent playbook executions, newest first (live + historical merged).
+        """List playbook executions, newest first (live + historical merged, async children included).
+
+        Defaults to what a person looking for "what ran" means: every run, including sub-playbooks launched
+        asynchronously (``apply_async`` references and loops record each as its own run linked by ``parent_wf``),
+        from both the live and the archived (historical) table. Pass ``top_level_only=True`` for only the
+        runs that nothing else started -- the old default, which hid a playbook that only ever ran as a child
+        (a poll loop, a render helper) as if it had never run.
 
         Scope to one playbook by ``playbook`` (name, resolved to uuid) or
         ``playbook_uuid``. Returns typed :class:`~pyfsr.models.RunSummary` objects
@@ -1864,7 +1871,9 @@ class PlaybooksAPI(BaseAPI):
                 if not playbook_uuid:
                     return []
             extra = f"&template_iri=/api/3/workflows/{playbook_uuid}"
-        members = self._fetch_runs_both(limit=limit, extra_qs=extra)[:limit]
+        members = self._fetch_runs_both(
+            limit=limit, extra_qs=extra, parent_filter="parent_wf__isnull=True" if top_level_only else ""
+        )[:limit]
         return [_shape_run(m) for m in members]
 
     def child_runs(
@@ -1878,8 +1887,8 @@ class PlaybooksAPI(BaseAPI):
         A loop step with ``parallel`` + ``apply_async`` (or any ``apply_async``
         workflow_reference) records each sub-playbook invocation as its OWN
         execution, linked to the parent by ``parent_wf``. :meth:`execution_history`
-        filters these out (it scopes to ``parent_wf__isnull=True``), so this is the
-        method to retrieve them -- e.g. to measure loop max-parallel concurrency by
+        includes them by default (``top_level_only=True`` filters them out); this is
+        the method to retrieve the children of ONE parent -- e.g. to measure loop max-parallel concurrency by
         feeding the returned runs (``created``/``modified`` timestamps) to
         :func:`pyfsr.concurrency.compute_overlap`.
 
@@ -2016,17 +2025,16 @@ class PlaybooksAPI(BaseAPI):
         limit: int = 20,
         offset: int = 0,
         ordering: str = "-modified",
+        include_historical: bool = True,
     ) -> builtins.list[RunSummary]:
         """Search playbook execution history with human-friendly filters.
 
-        Queries ``POST /api/wf/api/workflows/log_list/`` and returns shaped run
-        dicts. All filters are optional and combinable.
-
-        Live-observed on 8.0.1: ``log_list`` returns no rows for runs that have
-        been archived to the historical table (a playbook whose every execution
-        was historical listed empty, while :meth:`execution_history` /
-        :meth:`last_run` -- which merge the live and historical run tables --
-        saw them). When a listing must be exhaustive, use those instead.
+        Queries ``POST /api/wf/api/workflows/log_list/`` (live runs, children included) and, by default, the
+        archived (historical) table too, merged newest first. ``log_list`` alone returns nothing for runs the
+        platform has already archived (live-observed on 8.0.1: a playbook whose every execution was archived
+        listed empty), so a search that stopped there reported "never ran" for anything older than the archive
+        interval. ``include_historical=False`` restores the live-only listing. The archived table is filtered
+        by ``query``, ``status`` and ``playbook``; ``tags_include`` / ``tags_exclude`` apply to the live table.
 
         Args:
             query: free-text search across playbook name / run metadata
@@ -2069,6 +2077,26 @@ class PlaybooksAPI(BaseAPI):
                 params["template_iri"] = f"/api/3/workflows/{playbook_uuid}"
         resp = self.client.post("/api/wf/api/workflows/log_list/", data={}, params=params)
         members = extract_members(resp)
+        if include_historical:
+            from urllib.parse import urlencode
+
+            hq = "?" + urlencode(
+                {
+                    "format": "json",
+                    "limit": limit,
+                    "offset": offset,
+                    "ordering": ordering,
+                    **{k: params[k] for k in ("search", "status", "template_iri") if k in params},
+                }
+            )
+            try:
+                hist = extract_members(self.client.get(_RUN_PATHS[1] + hq))
+            except Exception:  # noqa: BLE001 - the archive being unavailable must not blank the live results
+                hist = []
+            seen = {str(m.get("pk") or m.get("id") or m.get("@id")) for m in members}
+            members = members + [m for m in hist if str(m.get("pk") or m.get("id") or m.get("@id")) not in seen]
+            members.sort(key=lambda m: m.get("modified") or "", reverse=(not ordering.startswith("modified")))
+            members = members[:limit]
         return [_shape_run(m) for m in members]
 
     def last_run(

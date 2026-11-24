@@ -1088,6 +1088,10 @@ class _SearchRec:
         return {"hydra:member": self._members}
 
 
+def _log_list_call(c):
+    return [call for call in c.calls if call[1] == "/api/wf/api/workflows/log_list/"][-1]
+
+
 def test_search_executions_free_text_query():
     member = {
         "@id": "/api/wf/api/workflows/1/",
@@ -1097,7 +1101,7 @@ def test_search_executions_free_text_query():
     }
     c = _SearchRec(members=[member])
     results = PlaybooksAPI(c).search_executions("High Risk")
-    _, endpoint, _, params = c.calls[-1]
+    _, endpoint, _, params = _log_list_call(c)
     assert endpoint == "/api/wf/api/workflows/log_list/"
     assert params["search"] == "High Risk"
     assert results[0]["name"] == "PB"
@@ -1106,7 +1110,7 @@ def test_search_executions_free_text_query():
 def test_search_executions_tags_include_and_exclude():
     c = _SearchRec()
     PlaybooksAPI(c).search_executions(tags_include=["critical", "phishing"], tags_exclude="noise")
-    _, _, _, params = c.calls[-1]
+    _, _, _, params = _log_list_call(c)
     assert params["tags_include"] == "critical,phishing"
     assert params["tags_exclude"] == "noise"
 
@@ -1114,7 +1118,7 @@ def test_search_executions_tags_include_and_exclude():
 def test_search_executions_status_filter():
     c = _SearchRec()
     PlaybooksAPI(c).search_executions(status="failed", limit=5, offset=10)
-    _, _, _, params = c.calls[-1]
+    _, _, _, params = _log_list_call(c)
     assert params["status"] == "failed"
     assert params["limit"] == 5
     assert params["offset"] == 10
@@ -1123,17 +1127,87 @@ def test_search_executions_status_filter():
 def test_search_executions_by_playbook_name_resolves_uuid():
     c = _SearchRec()
     PlaybooksAPI(c).search_executions(playbook="Block IP")
-    _, _, _, params = c.calls[-1]
+    _, _, _, params = _log_list_call(c)
     assert params["template_iri"] == "/api/3/workflows/pb-uuid"
 
 
 def test_search_executions_by_playbook_uuid_skips_lookup():
     c = _SearchRec()
     PlaybooksAPI(c).search_executions(playbook_uuid="my-uuid")
-    _, _, _, params = c.calls[-1]
+    _, _, _, params = _log_list_call(c)
     assert params["template_iri"] == "/api/3/workflows/my-uuid"
-    get_calls = [call for call in c.calls if call[0] == "GET"]
+    get_calls = [call for call in c.calls if call[0] == "GET" and "/api/3/workflows" in call[1]]
     assert not get_calls  # no name-lookup GET needed
+
+
+class _SearchBoth(_SearchRec):
+    """Live log_list rows plus rows only the archived (historical) table has."""
+
+    def __init__(self, live, historical):
+        super().__init__(members=live)
+        self._hist = historical
+
+    def get(self, endpoint, params=None, **kw):
+        self.calls.append(("GET", endpoint, None, params))
+        if "historical-workflows" in endpoint:
+            return {"hydra:member": self._hist}
+        return super().get(endpoint, params=params, **kw)
+
+
+def test_search_executions_includes_archived_runs_by_default():
+    live = {
+        "@id": "/api/wf/api/workflows/9/",
+        "pk": 9,
+        "name": "Recent",
+        "status": "finished",
+        "modified": "2026-11-22T10:00:00Z",
+    }
+    old = {
+        "@id": "/api/wf/api/historical-workflows/3/",
+        "pk": 3,
+        "name": "Archived",
+        "status": "finished",
+        "modified": "2026-11-20T10:00:00Z",
+    }
+    c = _SearchBoth([live], [old])
+    names = [r["name"] for r in PlaybooksAPI(c).search_executions("x")]
+    assert names == ["Recent", "Archived"]  # newest first, both tables
+    hist = [call for call in c.calls if "historical-workflows" in call[1]][-1]
+    assert "search=x" in hist[1] and "ordering=-modified" in hist[1]
+
+
+def test_search_executions_can_stay_live_only():
+    c = _SearchBoth([], [{"@id": "/h/1/", "pk": 1, "name": "Archived", "status": "finished", "modified": "t"}])
+    assert PlaybooksAPI(c).search_executions("x", include_historical=False) == []
+    assert not [call for call in c.calls if "historical-workflows" in call[1]]
+
+
+def test_search_executions_archive_failure_keeps_live_rows():
+    class Boom(_SearchRec):
+        def get(self, endpoint, params=None, **kw):
+            if "historical-workflows" in endpoint:
+                raise RuntimeError("archive down")
+            return super().get(endpoint, params=params, **kw)
+
+    live = {"@id": "/api/wf/api/workflows/9/", "pk": 9, "name": "Recent", "status": "finished", "modified": "t"}
+    assert [r["name"] for r in PlaybooksAPI(Boom(members=[live])).search_executions()] == ["Recent"]
+
+
+def test_execution_history_includes_async_children_unless_top_level_only():
+    class Rec:
+        def __init__(self):
+            self.urls = []
+
+        def get(self, endpoint, params=None, **kw):
+            self.urls.append(endpoint)
+            return {"hydra:member": []}
+
+    c = Rec()
+    PlaybooksAPI(c).execution_history()
+    assert not any("parent_wf__isnull" in u for u in c.urls) and c.urls
+    c = Rec()
+    PlaybooksAPI(c).execution_history(top_level_only=True)
+    assert all("parent_wf__isnull=True" in u for u in c.urls)
 
 
 def test_trigger_action_rejects_blank_route():

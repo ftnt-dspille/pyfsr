@@ -232,6 +232,26 @@ def test_add_dedicated_tenant_posts_tenant_then_agent_with_resolved_picklists():
     assert PW not in repr(agent) and KEY not in repr(agent)
 
 
+def test_add_shared_tenant_posts_one_tenant_with_isdedicated_false_and_team_owners():
+    rec = {"@id": "/api/3/tenants/t-9", "uuid": "t-9", "name": "FortiGate", "isDedicated": False}
+    client = FakeClient(_add_routes(tenant_post=rec))
+    tenant = MultitenancyAPI(client).add_shared_tenant("FortiGate")
+
+    assert tenant.name == "FortiGate" and tenant.isDedicated is False
+    posts = [c for c in client.calls if c[0] == "POST"]
+    assert [c[1] for c in posts] == ["/api/3/tenants"]  # no agent, no router: a shared tenant has neither
+    body = posts[0][2]
+    assert body["name"] == "FortiGate" and body["isDedicated"] is False and "tenantId" not in body
+    assert [o["name"] for o in body["owners"]] == ["SOC Team"]  # full team objects, as the UI sends
+
+
+def test_add_shared_tenant_refuses_an_existing_name_before_any_write():
+    client = FakeClient(_add_routes(tenants=_tenant_list({"name": "FortiGate", "uuid": "t-0"})))
+    with pytest.raises(MultitenancyError, match="already exists"):
+        MultitenancyAPI(client).add_shared_tenant("FortiGate")
+    assert client.mutations() == []
+
+
 def test_add_dedicated_tenant_requires_the_tenant_nodes_id():
     """The tenantId is the TENANT node's own Self id; the master cannot supply it."""
     import pytest

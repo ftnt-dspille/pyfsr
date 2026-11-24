@@ -216,9 +216,7 @@ def test_playbooks_runs_expose_full_record_in_extra():
 
     client = FakeClient(
         {
-            "/api/wf/api/workflows/?format=json&limit=20&ordering=-modified&parent_wf__isnull=True": {
-                "hydra:member": [_RUN]
-            },
+            "/api/wf/api/workflows/?format=json&limit=20&ordering=-modified": {"hydra:member": [_RUN]},
         }
     )
     runs = PlaybooksAPI(client).execution_history()
@@ -233,9 +231,7 @@ def test_playbooks_runs_default_returns_typed_run_summary():
 
     client = FakeClient(
         {
-            "/api/wf/api/workflows/?format=json&limit=20&ordering=-modified&parent_wf__isnull=True": {
-                "hydra:member": [_RUN]
-            },
+            "/api/wf/api/workflows/?format=json&limit=20&ordering=-modified": {"hydra:member": [_RUN]},
         }
     )
     runs = PlaybooksAPI(client).execution_history()
