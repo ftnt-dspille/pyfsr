@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- `workflow_collections.deploy()` and `import_export()` no longer drop connector step parameters named `id` (or `createDate`, `modifyDate`, `@context`, `deletedAt`, `importedBy`). The identity and audit strip now applies to the collection, workflow and step records only; a step's `arguments` (its parameters) is copied through unchanged.
 - `playbooks.execution_history()` now includes async sub-playbook runs by default (`top_level_only=True` restores the old top-level-only list). A playbook that only ever runs as a child (a poll loop, a render helper) used to look as if it had never run; `last_run()` follows the same default.
 - `playbooks.search_executions()` now also searches the archived (historical) run table by default (`include_historical=False` restores the live-only listing). `log_list` alone returned nothing for runs the platform had already archived.
 - A write refused as "module is not team-ownable" refetches the cached schema once before refusing, so a module made ownable by another process is no longer refused from a stale disk cache.
