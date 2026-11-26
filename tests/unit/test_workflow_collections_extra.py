@@ -623,3 +623,81 @@ def test_deploy_dry_run_reports_the_rename_without_doing_it():
     rep = WorkflowCollectionsAPI(c).deploy(env, dry_run=True)
     assert rep["rename"] == {"from": f"Imported collection {col_uuid[:8]}", "to": "Agent Lab"}
     assert not _writes(c)
+
+
+# -- _clean_item: strip record keys, never step parameters ------------------
+def _export_with_step(arguments):
+    return {
+        "@context": "/api/3/contexts/WorkflowCollection",
+        "uuid": UUID,
+        "name": "Pack",
+        "createDate": "2026-01-01",
+        "id": 7,
+        "workflows": [
+            {
+                "uuid": "wf-1",
+                "@id": "/api/3/workflows/wf-1",
+                "id": 8,
+                "steps": [
+                    {
+                        "uuid": "st-1",
+                        "@id": "/api/3/workflow_steps/st-1",
+                        "id": 9,
+                        "modifyDate": "2026-01-02",
+                        "name": "get_incident",
+                        "arguments": arguments,
+                    }
+                ],
+                "routes": [{"uuid": "rt-1", "id": 10, "sourceStep": "/api/3/workflow_steps/st-1"}],
+            }
+        ],
+    }
+
+
+def test_clean_item_keeps_connector_step_id_param():
+    cleaned = WorkflowCollectionsAPI._clean_item(_export_with_step({"id": "123", "tenant": "t1"}))
+    step = cleaned["workflows"][0]["steps"][0]
+    assert step["arguments"] == {"id": "123", "tenant": "t1"}
+
+
+def test_clean_item_keeps_identity_like_params_inside_arguments():
+    args = {"createDate": "2026-03-01", "modifyDate": "x", "@context": "y", "deletedAt": None, "importedBy": "z"}
+    cleaned = WorkflowCollectionsAPI._clean_item(_export_with_step(args))
+    assert cleaned["workflows"][0]["steps"][0]["arguments"] == args
+
+
+def test_clean_item_keeps_nested_params_under_arguments():
+    args = {"filter": {"id": "5", "items": [{"id": "6"}]}}
+    cleaned = WorkflowCollectionsAPI._clean_item(_export_with_step(args))
+    assert cleaned["workflows"][0]["steps"][0]["arguments"] == args
+
+
+def test_clean_item_still_strips_collection_workflow_step_and_route_record_keys():
+    cleaned = WorkflowCollectionsAPI._clean_item(_export_with_step({"id": "123"}))
+    assert "id" not in cleaned and "createDate" not in cleaned and "@context" not in cleaned
+    wf = cleaned["workflows"][0]
+    assert "id" not in wf
+    step = wf["steps"][0]
+    assert "id" not in step and "modifyDate" not in step
+    assert "id" not in wf["routes"][0]
+    assert step["uuid"] == "st-1" and step["name"] == "get_incident"
+
+
+def test_clean_item_does_not_alias_input_arguments():
+    export = _export_with_step({"id": "123"})
+    cleaned = WorkflowCollectionsAPI._clean_item(export)
+    cleaned["workflows"][0]["steps"][0]["arguments"]["id"] = "changed"
+    assert export["workflows"][0]["steps"][0]["arguments"] == {"id": "123"}
+
+
+def test_deploy_upserts_connector_step_id_param_unchanged(tmp_path):
+    """End to end through deploy(): the step parameter reaches the upsert payload."""
+    col_uuid = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    envelope = {"type": "workflow_collections", "data": [_export_with_step({"id": "123"})]}
+    envelope["data"][0]["uuid"] = col_uuid
+    c = _DeployClient(query_members=[])
+    a = WorkflowCollectionsAPI(c)
+    a.deploy(envelope, backup_dir=str(tmp_path))
+    upserted = a.client.playbooks.upserted[0]
+    assert upserted["steps"][0]["arguments"] == {"id": "123"}
+    assert "id" not in upserted["steps"][0]

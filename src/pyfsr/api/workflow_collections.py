@@ -39,6 +39,7 @@ from YAML: it compiles the YAML to the same export envelope and replays it throu
 
 from __future__ import annotations
 
+import copy
 import json
 import uuid as _uuid
 from pathlib import Path
@@ -234,11 +235,27 @@ class WorkflowCollectionsAPI(BaseAPI):
     # them for cleanliness too.
     _STRIP_KEYS: frozenset[str] = frozenset({"@context", "createDate", "modifyDate", "deletedAt", "importedBy", "id"})
 
+    # Keys whose value is user data, not record structure. A connector step keeps its
+    # parameters under ``arguments`` (a Microsoft 365 Defender ``get_incident`` step's
+    # ``id`` lives there), so the strip set must not reach inside them. Everything else
+    # -- the collection, its workflows, and their steps/routes/groups -- is record
+    # structure, where the server assigns the identity and audit keys above.
+    _PAYLOAD_KEYS: frozenset[str] = frozenset({"arguments", "params"})
+
     @classmethod
     def _clean_item(cls, obj: Any) -> Any:
-        """Recursively strip server-generated / Hydra-meta keys from an export payload."""
+        """Strip server-generated / Hydra-meta keys from the record tree of an export.
+
+        Walks the collection -> workflows -> steps/routes/groups structure and drops
+        ``_STRIP_KEYS`` from every record. It does not descend into ``_PAYLOAD_KEYS``
+        (step parameters), whose values are copied through unchanged.
+        """
         if isinstance(obj, dict):
-            return {k: cls._clean_item(v) for k, v in obj.items() if k not in cls._STRIP_KEYS}
+            return {
+                k: (copy.deepcopy(v) if k in cls._PAYLOAD_KEYS else cls._clean_item(v))
+                for k, v in obj.items()
+                if k not in cls._STRIP_KEYS
+            }
         if isinstance(obj, list):
             return [cls._clean_item(i) for i in obj]
         return obj
