@@ -1,5 +1,9 @@
 """Unit tests for ConnectorsAPI (discovery / health / execute)."""
 
+import io
+import json
+import tarfile
+
 import pytest
 
 from pyfsr.api.connectors import ConnectorsAPI, _import_job_id
@@ -1146,7 +1150,13 @@ def test_operation_tolerates_empty_dict_parameters():
 
 def test_install_from_file_uploads_tgz(tmp_path):
     bundle = tmp_path / "hello-world-1.0.0.tgz"
-    bundle.write_bytes(b"\x1f\x8b\x08fake-tgz")
+    info = json.dumps(
+        {"name": "hello-world", "label": "Hello", "version": "1.0.0", "configuration": {}, "operations": []}
+    ).encode()
+    with tarfile.open(bundle, "w:gz") as tar:
+        ti = tarfile.TarInfo("hello-world/info.json")
+        ti.size = len(info)
+        tar.addfile(ti, io.BytesIO(info))
     api, client = _api(post_resp={"id": 42, "name": "hello-world"})
     out = api.install_from_file(str(bundle), replace=True)
     assert out["id"] == 42
