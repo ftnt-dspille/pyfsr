@@ -49,6 +49,7 @@ import io
 import json
 import mimetypes
 import re
+import shutil
 import tarfile
 import tempfile
 import time
@@ -593,6 +594,43 @@ def _tgz_identity(tgz: str | Path) -> tuple[str, str]:
     return name, version
 
 
+def _precheck_replace_bundle(tgz: str | Path) -> None:
+    """Refuse a replace-install whose bundle the importer will reject, before any server call.
+
+    A ``$replace=true`` upload removes the box's active connector record and its
+    configurations *before* the importer validates the bundle. A bundle the
+    importer rejects (an operation description over 1000 characters, for one)
+    therefore leaves the connector gone, and the caller sees only the catch-all
+    "Connector with same name is already active." Reproduced on 8.0.1 with a
+    throwaway connector under both the default and ``on_existing_version="allow"``.
+    The blocking rules of :func:`validate_connector_source` name these problems
+    locally, so the replace is refused while the existing connector is untouched.
+    """
+    try:
+        with tarfile.open(tgz, "r:gz") as tar:
+            names = tar.getnames()
+            top = names[0].split("/", 1)[0] if names else ""
+            if not top:
+                raise ConnectorPackageError(f"{tgz} is empty; refusing a replace install")
+            staging = tempfile.mkdtemp(prefix="pyfsr-precheck-")
+            if hasattr(tarfile, "data_filter"):
+                tar.extractall(staging, filter="data")
+            else:  # pragma: no cover - Python builds without the tarfile filters
+                tar.extractall(staging)
+    except (tarfile.TarError, OSError, EOFError) as err:
+        raise ConnectorPackageError(
+            f"{tgz} is not a readable connector bundle ({err}); refusing a replace install "
+            "because a replace removes the active connector before the importer reads it"
+        ) from err
+    source = Path(staging) / top
+    try:
+        if not source.is_dir():
+            raise ConnectorPackageError(f"{tgz} does not unpack to a {top!r} folder; refusing a replace install")
+        validate_connector_source(str(source), strict=True, blocking_only=True)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
 def _rebundle_with_version(tgz: str | Path, version: str) -> str:
     """Copy of a built bundle with ``info.json``'s version set to ``version``.
 
@@ -703,7 +741,14 @@ class ConnectorsAPI(BaseAPI):
 
         Args:
             path: filesystem path to the connector ``.tgz``.
-            replace: overwrite an already-installed version of the same name.
+            replace: overwrite an already-installed version of the same name. The
+                bundle is checked locally first (the blocking rules of
+                :func:`validate_connector_source`) and a problem raises
+                :class:`ConnectorPackageError` with the box untouched. The server
+                removes the active connector and its configurations before it
+                validates an upload, and a rejection it finds (which it reports only
+                as "Connector with same name is already active.") is not undone.
+                Dump the configurations first when the bundle is not known good.
             wait: block until the import job reaches a terminal status.
             interval: seconds between polls when ``wait`` (default 3).
             timeout: give up waiting after this many seconds (default 300).
@@ -751,6 +796,9 @@ class ConnectorsAPI(BaseAPI):
             )
         if not Path(path).exists():
             raise FileNotFoundError(path)
+        if replace:
+            # Before anything reaches the box: a replace removes the active record first.
+            _precheck_replace_bundle(path)
         bumped = None
         if on_existing_version != "allow":
             try:

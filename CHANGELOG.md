@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- `connectors.install_from_file(path, replace=True)` checks the bundle against the importer's blocking rules (for example an operation description over 1000 characters) before any server call. The server removes the active connector and its configurations before it validates a replace upload, so a bundle it rejects used to leave the connector gone behind a catch-all "Connector with same name is already active." Such a bundle now raises `ConnectorPackageError` and the box is untouched. Applies with the default `on_existing_version` and with `"allow"`.
+
 ### Changed
 - `workflow_collections.deploy()` and `import_export()` no longer drop connector step parameters named `id` (or `createDate`, `modifyDate`, `@context`, `deletedAt`, `importedBy`). The identity and audit strip now applies to the collection, workflow and step records only; a step's `arguments` (its parameters) is copied through unchanged.
 - `playbooks.execution_history()` now includes async sub-playbook runs by default (`top_level_only=True` restores the old top-level-only list). A playbook that only ever runs as a child (a poll loop, a render helper) used to look as if it had never run; `last_run()` follows the same default.
