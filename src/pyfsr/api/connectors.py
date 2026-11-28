@@ -199,6 +199,22 @@ _PACK_EXCLUDE_FILES: frozenset[str] = frozenset(
 )
 
 
+#: Top-level folders of a connector source that are dev-only and never shipped.
+#: Matched only against the first path segment under the connector root, so a
+#: nested package named ``tools`` is still bundled. Mirrors the ConnectorsV2
+#: ``package.sh`` exclusions. ``reference/`` matters most: it holds stock
+#: connector copies (``reference/stock-*/info.json``), and bundling those makes
+#: the importer reject the install with "Connector with same name is already active."
+_PACK_EXCLUDE_ROOT_DIRS: frozenset[str] = frozenset({"reference", "scripts", "tools", "fixtures", "mocks"})
+
+#: Top-level files never shipped (docs and release notes). ``requirements.txt``
+#: is deliberately kept: pyfsr's connector layout requires it.
+_PACK_EXCLUDE_ROOT_FILES: frozenset[str] = frozenset({"README.md", "release_notes.md"})
+
+#: Playbook *sources* under the top-level ``playbooks/`` folder. The compiled
+#: ``.json`` next to them is what the appliance imports, so only these suffixes go.
+_PACK_EXCLUDE_PLAYBOOK_SUFFIXES: tuple[str, ...] = (".yaml", ".py")
+
 #: info.json keys the importer genuinely requires, established by probing a
 #: live 8.0.0 appliance one mutation at a time (see
 #: ``fortisoar/connectors/probe_info_json.py`` in the Miscellaneous repo).
@@ -411,6 +427,10 @@ def pack_connector(source_dir: str, output: str | None = None, *, validate: bool
     * **VCS / IDE** -- ``.git``, ``.hg``, ``.svn``, ``.idea``, ``.vscode``
     * **Build output** -- ``dist``, ``build``, ``.eggs``, ``node_modules``
     * **OS / editor cruft** -- ``.DS_Store``, ``*.pyc``, ``*.pyo``, ``*.swp``
+    * **Dev-only top-level folders** -- ``reference``, ``scripts``, ``tools``,
+      ``fixtures``, ``mocks`` (matched at the connector root only)
+    * **Docs / release notes** -- top-level ``README.md``, ``release_notes.md``
+    * **Playbook sources** -- ``playbooks/*.yaml`` and ``playbooks/*.py``
 
     Args:
         source_dir: path to the connector folder (the one containing ``info.json``).
@@ -449,6 +469,15 @@ def pack_connector(source_dir: str, output: str | None = None, *, validate: bool
             return None
         if name.endswith(_PACK_EXCLUDE_SUFFIXES):
             return None
+        # Root-relative checks: parts[0] is the connector folder itself.
+        rel = parts[1:]
+        if rel:
+            if rel[0] in _PACK_EXCLUDE_ROOT_DIRS:
+                return None
+            if len(rel) == 1 and rel[0] in _PACK_EXCLUDE_ROOT_FILES:
+                return None
+            if rel[0] == "playbooks" and len(rel) == 2 and rel[1].endswith(_PACK_EXCLUDE_PLAYBOOK_SUFFIXES):
+                return None
         return info
 
     with tarfile.open(out, "w:gz") as tar:

@@ -279,3 +279,24 @@ def test_package_never_ships_secrets_even_when_git_tracked(tmp_path):
     names = {n.removeprefix("acme-feed/") for n in _bundle_names(root)}
     assert not names & set(_SECRETS), names
     assert "connector.py" in names
+
+
+def test_package_drops_dev_only_root_folders(tmp_path):
+    """package_connector (the `pyfsr connector deploy` path) must match pack_connector:
+    a reference/ stock copy or a root tools/ folder is not part of the bundle."""
+    root = tmp_path / "acme-feed"
+    scaffold_connector("acme-feed", root)
+    for folder in ("reference/stock-acme-feed", "tools", "fixtures", "mocks"):
+        (root / folder).mkdir(parents=True)
+        (root / folder / "helper.py").write_text("# dev\n")
+    (root / "reference" / "stock-acme-feed" / "info.json").write_text('{"name": "acme-feed"}')
+    (root / "playbooks").mkdir(exist_ok=True)
+    (root / "playbooks" / "flow.yaml").write_text("x: 1\n")
+
+    tgz = package_connector(root)
+    with tarfile.open(tgz) as tar:
+        names = set(tar.getnames())
+    dev_prefixes = tuple(f"acme-feed/{d}/" for d in ("reference", "tools", "fixtures", "mocks"))
+    assert not any(n.startswith(dev_prefixes) for n in names)
+    assert "acme-feed/playbooks/flow.yaml" not in names
+    assert "acme-feed/info.json" in names
