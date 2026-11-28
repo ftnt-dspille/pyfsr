@@ -42,7 +42,8 @@ _EXCLUDE = re.compile(
     r"|[^/]*\.pyc$|\.DS_Store$|[^/]*\.pem$|[^/]*\.key$|id_rsa[^/]*$|\.pyfsr(/|$)|\.netrc$"
     r"|credentials(\.[^/]*)?$|[^/]*secrets?\.(json|ya?ml|toml|ini)$"
     r")"
-    r"|^(dist/|scripts/|tests/|README\.md$|release_notes\.md$)"
+    r"|^(dist/|scripts/|tests/|reference/|tools/|fixtures/|mocks/|README\.md$|release_notes\.md$"
+    r"|playbooks/[^/]*\.(yaml|py)$)"
 )
 
 #: Outside git, only these connector files ship (an allowlist, so a stray file in

@@ -251,3 +251,55 @@ def test_operation_description_at_1000_chars_clears(tmp_path):
     # At the cap exactly, the importer accepts -- only over it rejects.
     src = _source(tmp_path, operations=[{"operation": "run", "title": "Run", "description": "d" * 1000}])
     assert validate_connector_source(str(src), strict=False, blocking_only=True) == []
+
+
+def test_excludes_dev_only_root_folders_that_break_the_import(tmp_path):
+    """A stock copy under reference/ (with its own info.json) made the importer
+    reject the whole bundle as "Connector with same name is already active."
+    Root-level dev folders and docs must not ship; runtime files must.
+    """
+    src = tmp_path / "demo"
+    src.mkdir()
+    (src / "info.json").write_text('{"name": "demo", "version": "1.0.0", "label": "Demo", "operations": []}')
+    (src / "connector.py").write_text("# x\n")
+    (src / "operations.py").write_text("# x\n")
+    (src / "requirements.txt").write_text("requests\n")
+    (src / "README.md").write_text("docs\n")
+    (src / "release_notes.md").write_text("notes\n")
+    for folder in ("reference/stock-demo", "tools", "fixtures", "mocks", "scripts"):
+        (src / folder).mkdir(parents=True)
+        (src / folder / "helper.py").write_text("# dev\n")
+    (src / "reference" / "stock-demo" / "info.json").write_text('{"name": "demo"}')
+    (src / "playbooks").mkdir()
+    (src / "playbooks" / "flow.yaml").write_text("x: 1\n")
+    (src / "playbooks" / "flow.py").write_text("# src\n")
+    (src / "playbooks" / "flow.json").write_text("{}\n")
+    # Same folder names nested inside the package are real code and must stay.
+    (src / "lib" / "tools").mkdir(parents=True)
+    (src / "lib" / "tools" / "util.py").write_text("# runtime\n")
+
+    out = pack_connector(str(src), output=str(tmp_path / "demo.tgz"), validate=False)
+    with tarfile.open(out) as tar:
+        names = set(tar.getnames())
+
+    for gone in (
+        "demo/reference/stock-demo/info.json",
+        "demo/tools/helper.py",
+        "demo/fixtures/helper.py",
+        "demo/mocks/helper.py",
+        "demo/scripts/helper.py",
+        "demo/README.md",
+        "demo/release_notes.md",
+        "demo/playbooks/flow.yaml",
+        "demo/playbooks/flow.py",
+    ):
+        assert gone not in names, gone
+    for kept in (
+        "demo/info.json",
+        "demo/connector.py",
+        "demo/operations.py",
+        "demo/requirements.txt",
+        "demo/playbooks/flow.json",
+        "demo/lib/tools/util.py",
+    ):
+        assert kept in names, kept
