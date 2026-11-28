@@ -1,0 +1,130 @@
+pyfsr.concurrency
+=================
+
+.. py:module:: pyfsr.concurrency
+
+.. autoapi-nested-parse::
+
+   Maximum concurrent playbook execution analysis.
+
+   Computes the maximum number of simultaneously in-flight playbook executions
+   given a list of runs with start and end timestamps. This is a pure utility for
+   proving loop max-parallel caps in 1273958 Part B.
+
+   The :func:`compute_overlap` function takes a list of execution runs (dicts or
+   dict-like objects from :meth:`~pyfsr.api.playbooks.PlaybooksAPI.execution_history`
+   or :meth:`~pyfsr.api.playbooks.PlaybooksAPI.get_execution`) and sweeps their
+   timestamps to find the peak concurrency and generate a timeline of concurrency
+   events. Timestamps can be ISO8601 strings or Unix epoch floats; missing end
+   times are treated as "still running" (extends to the end of the observation
+   window).
+
+   Example::
+
+       from pyfsr import FortiSOAR
+       from pyfsr.concurrency import compute_overlap
+
+       client = FortiSOAR(...)
+       runs = client.playbooks.execution_history(playbook="Child PB", limit=100)
+       result = compute_overlap(runs)
+       print(f"Max concurrent: {result['max_concurrent']}")
+       print(f"Timeline events: {result['events']}")
+       # On FortiSOAR 8.0 with loop max-parallel=2, expect max_concurrent <= 2
+       # On 7.6.5 (no cap), all runs execute simultaneously
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.concurrency.ConcurrencyResult
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.concurrency.compute_overlap
+
+
+Module Contents
+---------------
+
+.. py:class:: ConcurrencyResult(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Result of a concurrency analysis.
+
+   :ivar max_concurrent: The maximum number of runs in-flight simultaneously.
+   :ivar events: Timeline of concurrency events, sorted by time. Each event is a
+                 dict with keys: ``time`` (ISO8601 string), ``count`` (int, current
+                 concurrent after the event), ``reason`` (string describing the change).
+   :ivar run_count: Total number of runs analyzed.
+
+
+
+   .. py:attribute:: max_concurrent
+      :type:  int
+
+
+   .. py:attribute:: events
+      :type:  list[dict[str, Any]]
+
+
+   .. py:attribute:: run_count
+      :type:  int
+
+
+   .. py:method:: to_dict() -> dict[str, Any]
+
+      Convert to a plain dict (compatible with ApiResult).
+
+      Alias for ``model_dump()``, kept for back-compat with callers that
+      predate the pydantic conversion.
+
+
+
+.. py:function:: compute_overlap(runs: list[dict[str, Any]] | list[Any], *, start_field: str | list[str] | None = None, end_field: str | list[str] | None = None) -> ConcurrencyResult
+
+   Compute maximum concurrent playbook executions from a list of runs.
+
+   This is the classic interval max-overlap sweep algorithm. Creates events for
+   each run's start (+1) and end (-1), sorts by time, and sweeps to find the
+   peak concurrency. Runs without an end time are treated as "still running"
+   (extended to the maximum observed time).
+
+   :param runs: List of execution run dicts (or dict-like objects, e.g. from
+                :meth:`~pyfsr.api.playbooks.PlaybooksAPI.execution_history`). Each
+                run should have a start and (optionally) end timestamp field.
+   :param start_field: Field name(s) to extract the start timestamp. If a list,
+                       tries each in order until one is found. Defaults to trying:
+                       ``["startDate", "start_time", "start", "createDate", "created"]``.
+   :param end_field: Field name(s) to extract the end timestamp. If a list, tries
+                     each in order. Defaults to trying:
+                     ``["endDate", "end_time", "end", "modifyDate", "modified", "completedOnDate"]``.
+
+   :returns:
+
+             - ``max_concurrent``: The peak count of simultaneous runs.
+             - ``events``: Timeline of concurrency-changing events (sorted by time).
+             - ``run_count``: The number of runs with valid start times (processed).
+   :rtype: A :class:`ConcurrencyResult` with
+
+   :raises ValueError: If no runs have valid start times.
+
+   Example::
+
+       from pyfsr.concurrency import compute_overlap
+       from pyfsr import FortiSOAR
+
+       client = FortiSOAR(...)
+       runs = client.playbooks.execution_history(playbook="Child", limit=50)
+       result = compute_overlap(runs)
+       assert result.max_concurrent <= 2, "Loop max-parallel cap failed"
+
+

@@ -1,0 +1,32 @@
+pyfsr.ai_eval
+=============
+
+.. py:module:: pyfsr.ai_eval
+
+.. autoapi-nested-parse::
+
+   Repeatable, scored evaluation of FortiAI alert investigations (8.0.1+).
+
+   A *suite* defines stub MCP servers with planted ground truth (a SIEM, an EDR,
+   identity, CMDB, threat intel, plus distractors) and *scenarios* -- an alert, the
+   tool calls a good investigation makes, the facts it should surface and the
+   right verdict. :func:`~pyfsr.ai_eval.runner.deploy` hosts the stubs on the appliance through the
+   bundled ``fsr-ai-eval-stub`` connector (a local listener, like the Teams
+   connector's bot listener) and registers each as an MCP server;
+   :func:`~pyfsr.ai_eval.runner.run_suite` runs the investigations and scores each one from its trace.
+
+   CLI: ``pyfsr ai-eval deploy|run|log|teardown``.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/pyfsr/ai_eval/runner/index
+   /autoapi/pyfsr/ai_eval/scenario/index
+   /autoapi/pyfsr/ai_eval/score/index
+
+

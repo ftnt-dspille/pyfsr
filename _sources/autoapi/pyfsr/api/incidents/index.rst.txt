@@ -1,0 +1,56 @@
+pyfsr.api.incidents
+===================
+
+.. py:module:: pyfsr.api.incidents
+
+.. autoapi-nested-parse::
+
+   The incidents module — ``client.incidents``.
+
+   Create and manage FortiSOAR incidents. Friendly picklist values (``severity``,
+   ``status``, ``type``) are resolved to IRIs on create/update, and ``record=``
+   links an incident to its source alert. Mirrors the alerts shortcut; see
+   :doc:`/guides/records` for the underlying record semantics.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.incidents.IncidentsAPI
+
+
+Module Contents
+---------------
+
+.. py:class:: IncidentsAPI(client)
+
+   Bases: :py:obj:`pyfsr.api._record_module.RecordModuleAPI`
+
+
+   Create and manage FortiSOAR incidents.
+
+   Mirrors :class:`~pyfsr.api.alerts.AlertsAPI`: friendly picklist values
+   (``severity``, ``status``, ``type``) are resolved to IRIs on create/update,
+   and ``record=`` links the incident to a source alert.
+
+   .. rubric:: Example
+
+   .. code-block:: python
+
+       client.incidents.create(
+           name="INC — Suspicious Login",
+           status="Open",
+           severity="High",
+           type="Malware",
+           record="/api/3/alerts/1234-...",
+       )
+
+
+   .. py:attribute:: module
+      :value: 'incidents'
+
+
+

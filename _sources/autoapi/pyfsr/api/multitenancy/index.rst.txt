@@ -1,0 +1,403 @@
+pyfsr.api.multitenancy
+======================
+
+.. py:module:: pyfsr.api.multitenancy
+
+.. autoapi-nested-parse::
+
+   Dedicated-tenant multitenancy: run a remote FortiSOAR node as a tenant of this master.
+
+   A *dedicated tenant* is a remote FortiSOAR node that this master manages. Setting one up is a
+   two-sided dance that the product's UI performs with a handful of calls; this module wraps them
+   so the same steps can be scripted. Accessed as ``client.multitenancy``.
+
+   **Master side** (the box that owns the tenant):
+
+   1. :meth:`MultitenancyAPI.add_dedicated_tenant` creates the tenant record and its master-side
+      agent record (``isDedicated`` tenant + ``agentId`` = the tenant node's 32-hex ``tenantId``).
+   2. :meth:`MultitenancyAPI.wait_for_health` polls the agent until the remote node connects
+      (``Remote Node Connected``).
+   3. :meth:`MultitenancyAPI.export_config` returns the bundle the tenant needs (address, ports,
+      router and agent credentials, ``agentId`` = this master's id).
+   4. :meth:`MultitenancyAPI.encryption_key` returns the key the tenant must be configured with;
+      it is the agent record's ``encryptionKey`` and changes whenever that record is re-created.
+   5. :meth:`MultitenancyAPI.delete_tenant` removes the tenant (and its agent record with it).
+
+   **Tenant side** (the remote node being attached):
+
+   6. :meth:`MultitenancyAPI.configure_master` creates the ``Master`` router and the ``Master``
+      agent from the exported config and the key from step 4.
+   7. :meth:`MultitenancyAPI.status` shows the ``Master`` agent's ``configstatus``
+      (``Connection Verified`` once the link works).
+
+   **Idempotency.** The product's UI is not idempotent: when the tenant-side agent create fails
+   after the router was created, a retry collides with the leftover router. Router and agent uuids
+   here are derived from the master's ``agentId``, so a leftover is found by uuid and reported as
+   a :class:`MultitenancyError` with ``leftover_router`` set. Pass ``replace_leftover=True`` to
+   delete the leftover and configure again.
+
+   **Secrets.** :meth:`MultitenancyAPI.export_config` returns an :class:`ExportedConfig` whose
+   ``repr``/``str`` mask the password, certificate and key fields. Returned agent/tenant records
+   have the secret fields removed. Nothing here logs secret values.
+
+   .. rubric:: Example
+
+   >>> client = demo_client()
+   >>> tenant, agent = client.multitenancy.add_dedicated_tenant("branch-7")
+   >>> client.multitenancy.wait_for_health("branch-7", "Remote Node Connected", timeout=600)
+   'Remote Node Connected'
+   >>> config = client.multitenancy.export_config("branch-7")
+   >>> key = client.multitenancy.encryption_key("branch-7")
+   >>> # on the tenant box (its own client):
+   >>> tenant_client.multitenancy.configure_master(config, key)  # doctest: +SKIP
+   >>> client.multitenancy.delete_tenant("branch-7")
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   pyfsr.api.multitenancy.MASTER_NAME
+   pyfsr.api.multitenancy.MASTER_API_PORT
+   pyfsr.api.multitenancy.DEFAULT_AGENT_TYPE
+   pyfsr.api.multitenancy.DEFAULT_AUTH_TYPE
+   pyfsr.api.multitenancy.DEFAULT_CONFIGSTATUS
+   pyfsr.api.multitenancy.ROUTER_CONFIGSTATUS
+   pyfsr.api.multitenancy.MASTER_ROLE
+   pyfsr.api.multitenancy.SECRET_FIELDS
+   pyfsr.api.multitenancy.MASTER_ROUTER_UUID
+   pyfsr.api.multitenancy.MASTER_AGENT_UUID
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   pyfsr.api.multitenancy.MultitenancyError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.api.multitenancy.ExportedConfig
+   pyfsr.api.multitenancy.MultitenancyAPI
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.api.multitenancy.mask_secrets
+
+
+Module Contents
+---------------
+
+.. py:data:: MASTER_NAME
+   :value: 'Master'
+
+
+.. py:data:: MASTER_API_PORT
+   :value: 15671
+
+
+.. py:data:: DEFAULT_AGENT_TYPE
+   :value: 'FSR Node'
+
+
+.. py:data:: DEFAULT_AUTH_TYPE
+   :value: 'Basic Auth'
+
+
+.. py:data:: DEFAULT_CONFIGSTATUS
+   :value: 'Configured'
+
+
+.. py:data:: ROUTER_CONFIGSTATUS
+   :value: 'Not Configured'
+
+
+.. py:data:: MASTER_ROLE
+   :value: 'master'
+
+
+.. py:data:: SECRET_FIELDS
+
+.. py:exception:: MultitenancyError(message: str, response: Any = None, *, error_type: str | None = None, leftover_router: str | None = None)
+
+   Bases: :py:obj:`pyfsr.exceptions.FortiSOARException`
+
+
+   A dedicated-tenant step failed.
+
+   ``leftover_router`` is set when an earlier configure attempt left its ``Master`` router
+   behind (the uuid of that router); re-run with ``replace_leftover=True`` to clear it.
+
+
+   .. py:attribute:: leftover_router
+      :value: None
+
+
+
+.. py:function:: mask_secrets(data: collections.abc.Mapping[str, Any]) -> dict[str, Any]
+
+   A copy of ``data`` with every non-empty secret field replaced by ``'***'``.
+
+
+.. py:class:: ExportedConfig
+
+   Bases: :py:obj:`dict`
+
+
+   The parsed master export (:meth:`MultitenancyAPI.export_config`).
+
+   A plain ``dict`` for every purpose except display: ``repr`` and ``str`` mask the password,
+   certificate and key fields so a logged or printed config does not leak them.
+
+
+.. py:data:: MASTER_ROUTER_UUID
+   :value: 'd134a192-2a3e-4bd9-a4b9-11db811803f6'
+
+
+.. py:data:: MASTER_AGENT_UUID
+   :value: 'cd6ec33c-c4f7-42d7-8ab1-3934df772669'
+
+
+.. py:class:: MultitenancyAPI(client: pyfsr.client.FortiSOAR)
+
+   Bases: :py:obj:`pyfsr.api.base.BaseAPI`
+
+
+   Dedicated-tenant setup, health, config export and teardown (``client.multitenancy``).
+
+
+   .. py:method:: add_dedicated_tenant(name: str, tenant_id: str, *, sme: str | collections.abc.Mapping[str, Any] | None = None, owners: collections.abc.Sequence[Any] | None = None, version: str | None = None) -> tuple[pyfsr.models._multitenancy.Tenant, pyfsr.models._agents.Agent]
+
+      Create a dedicated tenant and its master-side agent record; return ``(tenant, agent)``.
+
+      Two calls, as the UI makes them: ``POST /api/3/tenants`` (``isDedicated``, the
+      ``tenantId``, ``owners``) and ``POST /api/3/agents`` (``agentId`` = the same ``tenantId``,
+      ``version``, ``agentType`` = ``"FSR Node"``, ``authType`` = ``"Basic Auth"``, the router,
+      and the tenant IRI). Picklist values are resolved by name, not hard-coded uuids.
+
+      ``tenant_id`` is the 32-hex ``tenantId`` of the tenant node's own ``Self`` tenant. It is required:
+      the master cannot know it (read it on the tenant node). ``sme`` is the SME router
+      (record, IRI or uuid); default is :meth:`~pyfsr.api.routers.RoutersAPI.first`.
+      ``owners`` are team names/IRIs (default ``"SOC Team"``, the team the message router can
+      read). ``version`` defaults to the master's build version without its build number.
+
+      A failure on the agent call leaves the tenant behind; :meth:`delete_tenant` removes it.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> tenant, agent = client.multitenancy.add_dedicated_tenant("branch-7")
+      >>> tenant.name
+      'branch-7'
+
+
+
+   .. py:method:: add_shared_tenant(name: str, *, owners: collections.abc.Sequence[Any] | None = None) -> pyfsr.models._multitenancy.Tenant
+
+      Create a shared tenant on this node and return it.
+
+      A shared tenant lives on the same node as the data it segregates (no separate tenant node,
+      no agent, no router): ``POST /api/3/tenants`` with ``isDedicated: false`` and the owner
+      teams, which is what Multi Tenancy > Tenants > Add > Shared sends. Records are then
+      assigned to the tenant, and the owner teams see only their tenant's records.
+
+      ``owners`` are team names/IRIs (default ``"SOC Team"``). Create the team first with
+      ``client.teams.get_or_create``. Raises :class:`MultitenancyError` when a tenant with that
+      name already exists.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.multitenancy.add_shared_tenant("FortiGate", owners=["FortiGate Team"]).name
+      'FortiGate'
+
+
+
+   .. py:method:: wait_for_health(name: str, state: str, *, timeout: float = 300.0, interval: float = 5.0) -> str
+
+      Poll agent ``name`` until its ``configurationHealth`` equals ``state``; return it.
+
+      The health walks ``Configuration In Progress`` -> ``Awaiting Remote Node Connection``
+      -> ``Remote Node Connected``. Raises :class:`MultitenancyError` after ``timeout``
+      seconds, naming the state it was last in.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.multitenancy.wait_for_health("branch-7", "Remote Node Connected", timeout=600)
+      'Remote Node Connected'
+
+
+
+   .. py:method:: export_config(name_or_agent_id: str) -> ExportedConfig
+
+      Export the config a tenant needs for ``name_or_agent_id`` (its name, ``agentId`` or uuid).
+
+      ``POST /api/integration/agent-installer/?format=json`` with ``{"agent": <agentId>}``.
+      The result has ``address``, ``agentId`` (this master's id), ``authType``,
+      ``certificate``, ``clientCert``, ``clientKey``, ``isDedicated``, ``password``,
+      ``routerUsername``, ``selfId``, ``sni``, ``tcpPort``, ``username``, ``vhost``. It is an
+      :class:`ExportedConfig`, which masks secrets when printed.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> config = client.multitenancy.export_config("branch-7")
+      >>> config["agentId"]  # doctest: +SKIP
+
+
+
+   .. py:method:: encryption_key(name: str) -> str
+
+      The ``encryptionKey`` of agent ``name``'s master record (149 characters on 8.0.1).
+
+      It changes whenever that agent record is re-created, so fetch it again after any
+      re-creation and give the tenant the new one.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> key = client.multitenancy.encryption_key("branch-7")
+      >>> len(key) > 0
+      True
+
+
+
+   .. py:method:: delete_tenant(name: str) -> None
+
+      Delete dedicated tenant ``name`` and its agent record.
+
+      ``DELETE /api/3/delete/tenants`` with ``{"ids": [<uuid>]}``, the call the UI makes, then
+      ``DELETE /api/3/agents/<uuid>`` for the agent of the same name if it is still there. If the
+      tenant is still listed afterwards (API-key auth turns a bulk delete into a no-op) it is deleted
+      per row.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.multitenancy.delete_tenant("branch-7")
+
+
+
+   .. py:method:: configure_master(config: collections.abc.Mapping[str, Any], encryption_key: str, *, owners: collections.abc.Sequence[Any] | None = None, role: str | None = None, tenants: collections.abc.Sequence[Any] | None = None, replace_leftover: bool = False) -> pyfsr.models._agents.Agent
+
+      Attach this node to its master: create the ``Master`` router, then the ``Master`` agent.
+
+      Run on the tenant box. ``config`` is the master's :meth:`export_config` result (a plain
+      mapping works too); ``encryption_key`` is :meth:`encryption_key` from the master.
+
+      1. ``POST /api/3/routers`` with the router uuid (derived from ``config["agentId"]``),
+         ``apiPort`` 15671, the address/sni/ports/credentials from ``config``, the key, and
+         ``configstatus``.
+      2. ``POST /api/3/agents?$relationships=true&$asJson=true`` for the ``Master`` agent, with
+         the same key, the router IRI, ``owners`` (default ``"SOC Team"``), ``authType`` from
+         ``config``, and ``agentType`` ``"FSR Node"``. ``role`` and ``tenants`` are sent only
+         when given.
+
+      Before anything is written, a leftover from an earlier attempt (router or agent with the
+      derived uuid) raises :class:`MultitenancyError` with ``leftover_router`` set. Pass
+      ``replace_leftover=True`` to delete it first. A decrypt failure (``DB Password decrypt
+      failed``, the key does not match the master) or a uuid conflict on the agent step also
+      raises :class:`MultitenancyError`, and the router is left behind for
+      ``replace_leftover=True`` on the retry.
+
+      .. rubric:: Example
+
+      >>> tenant = demo_client()  # the tenant box's client
+      >>> config = {"agentId": "0123456789abcdef0123456789abcdef", "address": "master.example.com",
+      ...           "tcpPort": 443, "sni": "master.example.com", "routerUsername": "router",
+      ...           "password": "<redacted>", "certificate": "<pem>", "username": "agent",
+      ...           "vhost": "/", "authType": "Basic Auth"}
+      >>> tenant.multitenancy.configure_master(config, "<encryption-key>")  # doctest: +SKIP
+
+
+
+   .. py:method:: remove_master() -> list[str]
+
+      Detach this node from its master: delete its ``Master`` agent, router and tenant; return their uuids.
+
+      Run on the tenant box, after :meth:`delete_tenant` on the master. Finds the records by name
+      through the query API (the list endpoint hides them, and a UI-made record has a random
+      uuid), deleting agents before routers. Returns ``[]`` when the node has none.
+
+      .. rubric:: Example
+
+      >>> tenant = demo_client()  # the tenant box's client
+      >>> tenant.multitenancy.remove_master()  # doctest: +SKIP
+      []
+
+
+
+   .. py:method:: status(name: str) -> pyfsr.models._multitenancy.TenantStatus
+
+      Health of agent ``name`` on this box: ``configurationHealth`` and ``configstatus``.
+
+      On the master, ``name`` is the dedicated tenant's name (health walks to ``Remote Node
+      Connected``). On the tenant box, ``name`` is ``"Master"`` (``configstatus`` reaches
+      ``Connection Verified`` once the link works).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.multitenancy.status("branch-7").configurationHealth  # doctest: +SKIP
+
+
+
+   .. py:method:: tenant_id(name: str) -> str
+
+      The 32-hex node id (``agentId``) of dedicated tenant ``name``, as the push and
+      Trigger Tenant Playbook calls expect it.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.multitenancy.tenant_id("branch-7")  # doctest: +SKIP
+      '7e83db46a87b2ab7e06432c034e423c8'
+
+
+
+   .. py:method:: push_playbooks(collections: collections.abc.Sequence[str], tenants: collections.abc.Sequence[str], *, replace: bool = True) -> dict[str, Any]
+
+      Push playbook collections from this master to dedicated tenants.
+
+      The same call the UI's Tenant Manager > Push Playbooks makes. Each tenant gets a copy
+      with the same collection and playbook uuids. Every playbook pushed with
+      ``remoteExecutableFlag`` set also gets a playbook alias, named after the playbook and
+      mapped to each tenant (see :meth:`playbook_alias`).
+
+      :param collections: Collection uuids or exact names on this master.
+      :param tenants: Tenant names (resolved with :meth:`tenant_id`) or 32-hex tenant ids.
+      :param replace: Replace a collection of the same name on the tenant (the UI default).
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.multitenancy.push_playbooks(["MT Health - Tenant"], ["branch-7"])  # doctest: +SKIP
+
+
+
+   .. py:method:: playbook_alias(name: str) -> dict[str, Any]
+
+      The playbook alias named ``name``: ``{"uuid", "name", "tenants": [32-hex ids]}``.
+
+      ``uuid`` is what a Trigger Tenant Playbook step takes as ``playbook_alias_id``;
+      ``tenants`` lists the tenants the alias is mapped on.
+
+      .. rubric:: Example
+
+      >>> client = demo_client()
+      >>> client.multitenancy.playbook_alias("MT Health Marker")["uuid"]  # doctest: +SKIP
+
+
+

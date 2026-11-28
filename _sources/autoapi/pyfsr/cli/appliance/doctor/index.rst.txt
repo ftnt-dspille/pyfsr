@@ -1,0 +1,166 @@
+pyfsr.cli.appliance.doctor
+==========================
+
+.. py:module:: pyfsr.cli.appliance.doctor
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance doctor``: check the SSH path one step at a time.
+
+   Each step needs the one before it, so the report stops at the first failure and
+   names it: the host cannot be reached, the SSH login is refused, the box is not a
+   FortiSOAR appliance, sudo refuses the password, or ``csadm`` is missing. Every
+   step is read-only (``true``, ``test -d``, ``command -v``).
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.doctor.Step
+   pyfsr.cli.appliance.doctor.DoctorReport
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.doctor.run
+
+
+Module Contents
+---------------
+
+.. py:class:: Step(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   !!! abstract "Usage Documentation"
+       [Models](../concepts/models.md)
+
+   A base class for creating Pydantic models.
+
+   :ivar __class_vars__: The names of the class variables defined on the model.
+   :ivar __private_attributes__: Metadata about the private attributes of the model.
+   :ivar __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.
+
+   :ivar __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.
+   :ivar __pydantic_core_schema__: The core schema of the model.
+   :ivar __pydantic_custom_init__: Whether the model has a custom `__init__` function.
+   :ivar __pydantic_decorators__: Metadata containing the decorators defined on the model.
+                                  This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.
+   :ivar __pydantic_generic_metadata__: A dictionary containing metadata about generic Pydantic models.
+                                        The `origin` and `args` items map to the [`__origin__`][genericalias.__origin__]
+                                        and [`__args__`][genericalias.__args__] attributes of [generic aliases][types-genericalias],
+                                        and the `parameter` item maps to the `__parameter__` attribute of generic classes.
+   :ivar __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.
+   :ivar __pydantic_post_init__: The name of the post-init method for the model, if defined.
+   :ivar __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].
+   :ivar __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.
+   :ivar __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.
+
+   :ivar __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.
+   :ivar __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.
+
+   :ivar __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]
+                             is set to `'allow'`.
+   :ivar __pydantic_fields_set__: The names of fields explicitly set during instantiation.
+   :ivar __pydantic_private__: Values of private attributes set on the model instance.
+
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: status
+      :type:  str
+
+
+   .. py:attribute:: detail
+      :type:  str
+      :value: ''
+
+
+
+   .. py:attribute:: hint
+      :type:  str
+      :value: ''
+
+
+
+   .. py:attribute:: seconds
+      :type:  float
+      :value: 0.0
+
+
+
+.. py:class:: DoctorReport(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   !!! abstract "Usage Documentation"
+       [Models](../concepts/models.md)
+
+   A base class for creating Pydantic models.
+
+   :ivar __class_vars__: The names of the class variables defined on the model.
+   :ivar __private_attributes__: Metadata about the private attributes of the model.
+   :ivar __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.
+
+   :ivar __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.
+   :ivar __pydantic_core_schema__: The core schema of the model.
+   :ivar __pydantic_custom_init__: Whether the model has a custom `__init__` function.
+   :ivar __pydantic_decorators__: Metadata containing the decorators defined on the model.
+                                  This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.
+   :ivar __pydantic_generic_metadata__: A dictionary containing metadata about generic Pydantic models.
+                                        The `origin` and `args` items map to the [`__origin__`][genericalias.__origin__]
+                                        and [`__args__`][genericalias.__args__] attributes of [generic aliases][types-genericalias],
+                                        and the `parameter` item maps to the `__parameter__` attribute of generic classes.
+   :ivar __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.
+   :ivar __pydantic_post_init__: The name of the post-init method for the model, if defined.
+   :ivar __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].
+   :ivar __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.
+   :ivar __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.
+
+   :ivar __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.
+   :ivar __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.
+
+   :ivar __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]
+                             is set to `'allow'`.
+   :ivar __pydantic_fields_set__: The names of fields explicitly set during instantiation.
+   :ivar __pydantic_private__: Values of private attributes set on the model instance.
+
+
+
+   .. py:attribute:: target
+      :type:  str
+
+
+   .. py:attribute:: steps
+      :type:  list[Step]
+
+
+   .. py:property:: ok
+      :type: bool
+
+
+
+   .. py:property:: first_failure
+      :type: Step | None
+
+
+
+   .. py:method:: render() -> str
+
+
+.. py:function:: run(t: pyfsr.cli.appliance.transport.Transport, *, timeout: float = 20.0) -> DoctorReport
+
+   Run every step in order, stopping at the first failure. Read-only.
+
+

@@ -1,0 +1,211 @@
+pyfsr.cli.appliance.ha
+======================
+
+.. py:module:: pyfsr.cli.appliance.ha
+
+.. autoapi-nested-parse::
+
+   ``pyfsr appliance ha`` — FortiSOAR HA clustering verbs.
+
+   Thin wrappers over ``csadm ha`` subcommands (all require root). The list/health
+   verbs return typed dataclasses; ``*_raw`` escape hatches give the unparsed text.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.ha.HaNode
+   pyfsr.cli.appliance.ha.ResourceUsage
+   pyfsr.cli.appliance.ha.DiskMount
+   pyfsr.cli.appliance.ha.HaHealth
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   pyfsr.cli.appliance.ha.nodes
+   pyfsr.cli.appliance.ha.nodes_raw
+   pyfsr.cli.appliance.ha.health
+   pyfsr.cli.appliance.ha.health_raw
+   pyfsr.cli.appliance.ha.replication
+
+
+Module Contents
+---------------
+
+.. py:class:: HaNode(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One member of the HA cluster (a row of ``csadm ha list-nodes``).
+
+
+   .. py:attribute:: node_id
+      :type:  str
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: status
+      :type:  str
+
+
+   .. py:attribute:: role
+      :type:  str
+
+
+   .. py:attribute:: comment
+      :type:  str
+
+
+   .. py:attribute:: mode
+      :type:  str
+
+
+   .. py:attribute:: fsr_version
+      :type:  str
+
+
+   .. py:attribute:: is_current
+      :type:  bool
+
+
+.. py:class:: ResourceUsage(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Memory or swap usage from ``csadm ha show-health``.
+
+
+   .. py:attribute:: total
+      :type:  str
+
+
+   .. py:attribute:: used
+      :type:  str
+
+
+   .. py:attribute:: avail
+      :type:  str
+
+
+   .. py:attribute:: percent
+      :type:  float
+
+
+.. py:class:: DiskMount(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   One filesystem row from ``csadm ha show-health``.
+
+
+   .. py:attribute:: mountpoint
+      :type:  str
+
+
+   .. py:attribute:: device
+      :type:  str
+
+
+   .. py:attribute:: total
+      :type:  str
+
+
+   .. py:attribute:: used
+      :type:  str
+
+
+   .. py:attribute:: avail
+      :type:  str
+
+
+   .. py:attribute:: percent
+      :type:  float
+
+
+.. py:class:: HaHealth(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Parsed ``csadm ha show-health`` summary.
+
+
+   .. py:attribute:: node_name
+      :type:  str | None
+
+
+   .. py:attribute:: node_id
+      :type:  str | None
+
+
+   .. py:attribute:: mode
+      :type:  str | None
+
+
+   .. py:attribute:: services_status
+      :type:  str | None
+
+
+   .. py:attribute:: queued_workflows
+      :type:  int | None
+
+
+   .. py:attribute:: uptime
+      :type:  str | None
+
+
+   .. py:attribute:: memory
+      :type:  ResourceUsage | None
+      :value: None
+
+
+
+   .. py:attribute:: swap
+      :type:  ResourceUsage | None
+      :value: None
+
+
+
+   .. py:attribute:: disks
+      :type:  list[DiskMount]
+      :value: None
+
+
+
+.. py:function:: nodes(transport: pyfsr.cli.appliance.transport.Transport) -> list[HaNode]
+
+   Typed ``csadm ha list-nodes`` — the HA cluster members.
+
+
+.. py:function:: nodes_raw(transport: pyfsr.cli.appliance.transport.Transport) -> str
+
+   Unparsed ``csadm ha list-nodes`` text (escape hatch for :func:`nodes`).
+
+
+.. py:function:: health(transport: pyfsr.cli.appliance.transport.Transport) -> HaHealth
+
+   Typed ``csadm ha show-health`` — node mode, service status, mem/swap/disk.
+
+
+.. py:function:: health_raw(transport: pyfsr.cli.appliance.transport.Transport) -> str
+
+   Unparsed ``csadm ha show-health`` text (escape hatch for :func:`health`).
+
+
+.. py:function:: replication(transport: pyfsr.cli.appliance.transport.Transport) -> str
+
+   ``csadm ha get-replication-stat`` — DB replication lag and status (raw text).
+
+
