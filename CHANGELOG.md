@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.36.1] - 2026-11-28
+
 ### Fixed
 - `connectors.install_from_dir()` and `pack_connector()` leave out the dev-only folders the ConnectorsV2 `package.sh` leaves out: a root-level `reference/`, `scripts/`, `tools/`, `fixtures/` and `mocks/`, plus top-level `README.md` and `release_notes.md`, and `playbooks/*.yaml` / `playbooks/*.py` sources. A bundled `reference/stock-*/info.json` made the importer reject the install with the misleading "Connector with same name is already active." `pyfsr connector deploy` (`package_connector`) gets the same exclusions. Folders of the same name nested inside the package are still shipped.
 
